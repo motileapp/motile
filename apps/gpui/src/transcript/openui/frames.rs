@@ -114,6 +114,7 @@ pub fn frame_dump(
                 surface: crate::theme::Surface::Background,
                 sink: Rc::new(|_, _, _| {}),
                 store: None,
+                transcript: None,
             };
             div().w(px(self.width)).child(super::root(&self.tree, &ui_cx, window, cx))
         }

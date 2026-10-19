@@ -161,6 +161,30 @@ impl TranscriptView {
         self.glide.is_some() || self.list(cx).is_following_tail()
     }
 
+    /// Where the rows show in the window, out from under what floats over their end.
+    pub fn shown_area(&self, cx: &App) -> Bounds<Pixels> {
+        let bounds = self.list(cx).viewport_bounds();
+        let height = (bounds.size.height - px(self.bottom_inset)).max(px(0.));
+        Bounds::new(bounds.origin, size(bounds.size.width, height))
+    }
+
+    /// Scrolls a part of the rows, by its bounds in the window, into the shown area (its top, when
+    /// it is taller), and keeps the rows still there. How far it scrolled them.
+    pub fn reveal(&mut self, bounds: Bounds<Pixels>, cx: &mut Context<Self>) -> Pixels {
+        self.hold_still(cx);
+        let area = self.shown_area(cx);
+        let distance = if bounds.top() < area.top() {
+            bounds.top() - area.top()
+        } else {
+            (bounds.bottom() - area.bottom()).max(px(0.)).min(bounds.top() - area.top())
+        };
+        if distance != px(0.) {
+            self.list(cx).scroll_by(distance);
+            cx.notify();
+        }
+        distance
+    }
+
     /// Room under the last row for what floats over its end. More room near the end, as when
     /// the composer grows, keeps the end in view.
     pub fn set_bottom_inset(&mut self, inset: f32, cx: &mut Context<Self>) {

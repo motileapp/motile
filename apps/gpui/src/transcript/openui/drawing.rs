@@ -1,6 +1,5 @@
 //! What core lays out as a canvas scene and the canvas painters draw: Chart, Math and Svg with its
-//! shapes, Flashcard's flip and Celebration's confetti; and HtmlView, until its web view comes, as
-//! a card.
+//! shapes, Flashcard's flip and Celebration's confetti; and HtmlView, in `web`.
 
 use std::sync::Arc;
 use std::time::Instant;
@@ -9,14 +8,13 @@ use gpui_kit::prelude::*;
 use gpui_kit::*;
 use motile_core::render::openui::canvas::Motion;
 use motile_core::render::openui::host::UiEvent;
-use motile_core::render::openui::tree::{Canvas, Slot, TextStyle, UiKind, UiNode};
+use motile_core::render::openui::tree::{Canvas, Slot, UiKind, UiNode};
 
 use super::UiCx;
 use super::layout::slot;
-use super::style::{self, SMALL};
+use super::style;
 use crate::theme::{Layer, Radius, colors};
 use crate::transcript::canvas::{ConfettiOverlay, Prepared, SceneView, laid_out, squashed, turned};
-use crate::ui::Spinner;
 
 const MATH_MARGIN: f32 = 4.;
 const CHART_HEIGHT: f32 = 240.;
@@ -24,7 +22,6 @@ const CARD_MIN_HEIGHT: f32 = 168.;
 const FACE_PADDING: (f32, f32, f32) = (20., 18., 30.);
 const FACE_GAP: f32 = 8.;
 const HINT_BOTTOM: f32 = 10.;
-const HTML_HEIGHT: f32 = 360.;
 
 pub fn drawing(node: &UiNode, cx: &UiCx, window: &mut Window, app: &mut App) -> Stateful<Div> {
     let element = div().id(cx.id(&node.id, "node"));
@@ -72,7 +69,9 @@ pub fn drawing(node: &UiNode, cx: &UiCx, window: &mut Window, app: &mut App) -> 
             flashcard(element, id, front, back, hint, *flipped, canvas, cx, window, app)
         }
         UiKind::Celebration { burst, canvas } => celebration(element, id, *burst, canvas, cx, window, app),
-        UiKind::HtmlView { height, title, streaming, .. } => html(element, *height, title, *streaming, cx, app),
+        UiKind::HtmlView { html, height, title, streaming } => {
+            super::web::html_view(element, id, html, *height, title, *streaming, cx, window, app)
+        }
         _ => element,
     }
 }
@@ -225,40 +224,4 @@ fn celebration(
         return element;
     }
     element.child(ConfettiOverlay::new(Arc::new(confetti.clone()), started))
-}
-
-fn html(
-    element: Stateful<Div>,
-    height: Option<f32>,
-    title: &str,
-    streaming: bool,
-    cx: &UiCx,
-    app: &App,
-) -> Stateful<Div> {
-    let c = colors(app);
-    let title = if title.is_empty() { "Interactive view".to_string() } else { title.to_string() };
-    let words = match streaming {
-        true => "Preparing the interactive view",
-        false => "Runs when opened",
-    };
-    element
-        .w_full()
-        .h(px(height.unwrap_or(HTML_HEIGHT).clamp(80., 2400.)))
-        .rounded(px(Radius::LG))
-        .border_1()
-        .border_color(cx.surface.border(c))
-        .bg(cx.surface.color(c))
-        .overflow_hidden()
-        .flex()
-        .flex_col()
-        .items_center()
-        .justify_center()
-        .gap(px(8.))
-        .px(px(16.))
-        .text_center()
-        .when(streaming, |card| card.child(div().text_color(c.muted_foreground).child(Spinner::regular().render(app))))
-        .when(!streaming, |card| {
-            card.child(style::type_of(TextStyle::CardTitle, false).text_box().text_color(c.foreground).child(title))
-        })
-        .child(SMALL.text_box().text_color(c.muted_foreground).child(words))
 }

@@ -364,29 +364,6 @@ private class TablePolicy(val columns: Int) : MeasurePolicy {
     }
 }
 
-/** Until the web view comes: a card with the video's title, which opens it. */
-@Composable
-fun UiYouTube(node: UiNode, kind: UiKind.YouTube) {
-    val url = kind.url ?: return
-    StandIn(node, kind.title, "YouTube", Symbol.CirclePlay, Modifier.clickable(role = Role.Button) { Platform.open(url) })
-}
-
-/** Until the web view comes: a card with the view's title, or the spinner while the program streams. */
-@Composable
-fun UiHtmlCard(node: UiNode, kind: UiKind.HtmlView) {
-    val palette = LocalPalette.current
-    if (kind.streaming) {
-        Card(node) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Spinner(13f, color = palette.mutedForeground)
-                Text("Preparing the interactive view", style = UiStyle.text(UiTextStyle.Small, false), color = palette.mutedForeground)
-            }
-        }
-        return
-    }
-    StandIn(node, kind.title, "Runs once it opens here", Symbol.Blocks)
-}
-
 /** Until the map comes: a card of the map's height that lists its places. */
 @Composable
 fun UiMapCard(node: UiNode, kind: UiKind.Map) {
@@ -407,20 +384,6 @@ fun UiMapCard(node: UiNode, kind: UiKind.Map) {
                     Text(pin.label, style = UiStyle.text(UiTextStyle.Small, false), color = palette.foreground, maxLines = 1)
                     pin.category?.let { Text(it, style = UiStyle.text(UiTextStyle.Caption, false), color = palette.mutedStrongerForeground, maxLines = 1) }
                 }
-            }
-        }
-    }
-}
-
-@Composable
-private fun StandIn(node: UiNode, title: String, detail: String, symbol: Symbol, modifier: Modifier = Modifier) {
-    val palette = LocalPalette.current
-    Card(node, modifier) {
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(symbol, 16f, color = palette.mutedForeground)
-            Column(Modifier.weight(1f)) {
-                Text(title, style = UiStyle.text(UiTextStyle.CardTitle, false), color = palette.foreground)
-                Text(detail, style = UiStyle.text(UiTextStyle.Caption, false), color = palette.mutedForeground)
             }
         }
     }

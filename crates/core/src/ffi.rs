@@ -8,7 +8,7 @@ use tokio::runtime::Runtime;
 
 use crate::api::{Config, Envelope, Event};
 use crate::core::{self, Handle};
-use crate::render::openui::canvas;
+use crate::render::openui::{canvas, web};
 
 /// Called on a background thread with one event as NUL-terminated JSON. The text is only valid
 /// during the call.
@@ -86,6 +86,15 @@ pub extern "C" fn motile_send(command_json: *const c_char) {
 pub extern "C" fn motile_ui_layout(input_json: *const c_char) -> *mut c_char {
     let scene = canvas::layout_json(&text(input_json).unwrap_or_default());
     CString::new(scene).unwrap_or_default().into_raw()
+}
+
+/// Builds the page an HtmlView or a YouTube shows in a web view: a `web::PageRequest` as JSON in,
+/// its `web::Page` as JSON out. Synchronous and safe on any thread. The answer is the caller's to
+/// free with `motile_free_string`.
+#[unsafe(no_mangle)]
+pub extern "C" fn motile_ui_page(input_json: *const c_char) -> *mut c_char {
+    let page = web::page_json(&text(input_json).unwrap_or_default());
+    CString::new(page).unwrap_or_default().into_raw()
 }
 
 /// Frees a string the core gave the client.

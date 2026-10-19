@@ -1,5 +1,5 @@
-//! Media and data: SearchImage and Image, Icon, Table, and until their web views and maps come,
-//! YouTube as a card that opens the video and Map as a card that lists its places.
+//! Media and data: SearchImage and Image, Icon, Table, YouTube (in `web`), and until the map
+//! comes, Map as a card that lists its places.
 
 use std::time::{Duration, Instant};
 
@@ -38,7 +38,9 @@ pub fn media(node: &UiNode, cx: &UiCx, window: &mut Window, app: &mut App) -> St
             })
         }
         UiKind::Table { columns, rows } => table(element, &node.id, columns, rows, cx, window, app),
-        UiKind::YouTube { url, title } => youtube(element, url.as_deref(), title, cx, app),
+        UiKind::YouTube { url: Some(url), title } => {
+            super::web::youtube(element, &node.id, url, title, cx, window, app)
+        }
         UiKind::Map { pins, height, .. } => map(element, pins, *height, cx, window, app),
         _ => element,
     }
@@ -342,49 +344,6 @@ fn node_width(node: &UiNode, window: &Window) -> f32 {
         UiKind::Icon { size, .. } => *size,
         _ => 0.,
     }
-}
-
-fn youtube(element: Stateful<Div>, url: Option<&str>, title: &str, cx: &UiCx, app: &App) -> Stateful<Div> {
-    let c = colors(app);
-    let Some(url) = url.map(str::to_string) else { return element };
-    let title = if title.is_empty() { "YouTube video".to_string() } else { title.to_string() };
-    let link = div()
-        .id(cx.id(&url, "open"))
-        .flex()
-        .flex_row()
-        .items_center()
-        .gap(px(2.))
-        .cursor_pointer()
-        .text_color(c.primary)
-        .child(SMALL.text_box().child("Watch on YouTube"))
-        .child(svg().path(crate::ui::icons::path("arrow-up-right")).size(px(SMALL.size * 0.85)).text_color(c.primary))
-        .on_click(move |_, _, cx| cx.open_url(&url));
-    element
-        .w_full()
-        .p(px(CARD_PADDING))
-        .rounded(px(Radii::LG))
-        .bg(c.card)
-        .border_1()
-        .border_color(c.border_card)
-        .flex()
-        .flex_row()
-        .items_center()
-        .gap(px(12.))
-        .child(svg().path(crate::ui::icons::path("square-play")).size(px(24.)).flex_none().text_color(c.foreground))
-        .child(
-            div()
-                .flex_1()
-                .min_w_0()
-                .flex()
-                .flex_col()
-                .child(
-                    style::type_of(motile_core::render::openui::tree::TextStyle::CardTitle, false)
-                        .text_box()
-                        .text_color(c.foreground)
-                        .child(title),
-                )
-                .child(link),
-        )
 }
 
 fn map(element: Stateful<Div>, pins: &[MapPin], height: f32, cx: &UiCx, window: &Window, app: &App) -> Stateful<Div> {

@@ -10,6 +10,7 @@ mod media;
 pub mod patch;
 mod style;
 mod text;
+mod web;
 
 use std::rc::Rc;
 
@@ -27,6 +28,7 @@ pub use frames::frame_dump;
 
 use super::model::RowModel;
 use super::rows::{RowContext, error_box, row_key};
+use super::view::TranscriptView;
 use crate::store::Store;
 use crate::theme::Surface;
 
@@ -54,6 +56,8 @@ pub struct UiCx {
     pub surface: Surface,
     pub sink: Sink,
     pub store: Option<Entity<Store>>,
+    /// The transcript the row lies in, which a web view over the row keeps clear of.
+    pub transcript: Option<WeakEntity<TranscriptView>>,
 }
 
 impl UiCx {
@@ -104,6 +108,7 @@ pub fn ui_row(model: &RowModel, ctx: &RowContext, window: &mut Window, cx: &mut 
         surface: Surface::Background,
         sink,
         store: Some(ctx.store.clone()),
+        transcript: Some(ctx.view.clone()),
     };
     let errors = (!ui.errors.is_empty()).then(|| {
         let id = format!("{}-errors", model.row.id);
