@@ -9,6 +9,4 @@ import app.motile.core.UiNode
 import app.motile.core.UiPhotos
 import app.motile.core.UiRadius
 
-@Composable fun UiFlashcard(node: UiNode, kind: UiKind.Flashcard) {}
-@Composable fun UiCelebration(node: UiNode, kind: UiKind.Celebration) {}
 @Composable fun UiCanvasView(node: UiNode, canvas: UiCanvas) {}
