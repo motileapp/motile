@@ -20,24 +20,30 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.WindowCompat
@@ -50,12 +56,15 @@ import app.motile.core.UiKind
 import app.motile.core.UiNode
 import app.motile.core.UiTextStyle
 import app.motile.platform.Platform
+import app.motile.platform.Symbol
 import app.motile.platform.scaled
 import app.motile.theme.LocalDark
 import app.motile.theme.LocalPalette
 import app.motile.theme.LocalSurface
+import app.motile.theme.Palette
 import app.motile.theme.Radius
 import app.motile.theme.Theme
+import app.motile.ui.ActionButton
 import app.motile.ui.Spinner
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -143,6 +152,7 @@ fun UiHtmlView(node: UiNode, kind: UiKind.HtmlView) {
         }
     }
     var reported by remember(key) { mutableFloatStateOf(UiWebHeights.get(key) ?: 0f) }
+    var gone by remember(key) { mutableStateOf(false) }
     val height = kind.height ?: reported.takeIf { it > 0f } ?: page?.start ?: START_HEIGHT
     Box(
         Modifier.uiNode(node).fillMaxWidth().height(height.dp).clip(shape).background(background, shape).border(1.dp, surface.border, shape),
@@ -154,7 +164,8 @@ fun UiHtmlView(node: UiNode, kind: UiKind.HtmlView) {
                 Spinner(13f, color = palette.mutedForeground)
                 Text("Preparing the interactive view", style = UiStyle.text(UiTextStyle.Small, false), color = palette.mutedForeground)
             }
-            loaded != null -> PageView(loaded, Modifier.fillMaxSize(), opensYouTube = false) { reportedHeight ->
+            gone -> Still(kind.title, "Interactive view") { gone = false }
+            loaded != null -> PageView(loaded, Modifier.fillMaxSize(), opensYouTube = false, onGone = { gone = true }) { reportedHeight ->
                 UiWebHeights.set(key, reportedHeight)
                 reported = reportedHeight
             }
@@ -178,8 +189,26 @@ fun UiYouTube(node: UiNode, kind: UiKind.YouTube) {
             )
         }
     }
-    Box(Modifier.uiNode(node).fillMaxWidth().aspectRatio(16f / 9f).clip(shape).background(Color.Black, shape)) {
-        page?.let { PageView(it, Modifier.fillMaxSize(), opensYouTube = true) }
+    var gone by remember(node.id, url) { mutableStateOf(false) }
+    Box(Modifier.uiNode(node).fillMaxWidth().aspectRatio(16f / 9f).clip(shape).background(Color.Black, shape), contentAlignment = Alignment.Center) {
+        val loaded = page
+        when {
+            gone -> CompositionLocalProvider(LocalPalette provides Palette.dark, LocalDark provides true) {
+                Still(kind.title, "YouTube video") { gone = false }
+            }
+            loaded != null -> PageView(loaded, Modifier.fillMaxSize(), opensYouTube = true, onGone = { gone = true })
+        }
+    }
+}
+
+/** What stands in for a page whose renderer went: its title, and a button that builds it again. */
+@Composable
+private fun Still(title: String, kind: String, reload: () -> Unit) {
+    val palette = LocalPalette.current
+    Column(Modifier.padding(horizontal = 16.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (title.isNotEmpty()) Text(title, style = UiStyle.text(UiTextStyle.CardTitle, false), color = palette.foreground, textAlign = TextAlign.Center)
+        Text(kind, style = UiStyle.text(UiTextStyle.Small, false), color = palette.mutedForeground)
+        ActionButton("Reload", Symbol.RotateCw, onClick = reload)
     }
 }
 
@@ -188,9 +217,10 @@ fun UiYouTube(node: UiNode, kind: UiKind.YouTube) {
  * windows, and one channel, for its height. YouTube's links open in the browser.
  */
 @Composable
-private fun PageView(page: UiPage, modifier: Modifier, opensYouTube: Boolean, onHeight: ((Float) -> Unit)? = null) {
+private fun PageView(page: UiPage, modifier: Modifier, opensYouTube: Boolean, onGone: () -> Unit, onHeight: ((Float) -> Unit)? = null) {
+    val gone by rememberUpdatedState(onGone)
     AndroidView(
-        factory = { context -> sandboxed(context, opensYouTube) },
+        factory = { context -> sandboxed(context, opensYouTube) { gone() } },
         modifier = modifier,
         update = { view ->
             if (view.tag == page || view.tag === Gone) return@AndroidView
@@ -213,7 +243,7 @@ private fun PageView(page: UiPage, modifier: Modifier, opensYouTube: Boolean, on
 }
 
 @SuppressLint("SetJavaScriptEnabled")
-private fun sandboxed(context: Context, opensYouTube: Boolean): WebView = WebView(context).apply {
+private fun sandboxed(context: Context, opensYouTube: Boolean, onGone: () -> Unit): WebView = WebView(context).apply {
     setBackgroundColor(android.graphics.Color.TRANSPARENT)
     isVerticalScrollBarEnabled = false
     with(settings) {
@@ -236,12 +266,13 @@ private fun sandboxed(context: Context, opensYouTube: Boolean): WebView = WebVie
             return true
         }
 
-        /** A page whose renderer crashed or was killed goes, instead of taking the app with it. */
+        /** A page whose renderer crashed or was killed goes, instead of taking the app with it, and its still shows. */
         override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
             (view.webChromeClient as? FullScreenChrome)?.leave()
             view.tag = Gone
             (view.parent as? ViewGroup)?.removeView(view)
             view.destroy()
+            onGone()
             return true
         }
     }
