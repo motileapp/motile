@@ -2,6 +2,17 @@
 import UIKit
 import WebKit
 
+/// A web view that leaves dragging to the transcript around it, since its page is as tall as it is
+/// shown.
+final class PageWebView: WKWebView {
+    override init(frame: CGRect, configuration: WKWebViewConfiguration) {
+        super.init(frame: frame, configuration: configuration)
+        scrollView.isScrollEnabled = false
+    }
+
+    required init?(coder: NSCoder) { fatalError("not used") }
+}
+
 extension WKWebView {
     /// Shows the view behind it until the page draws its own background.
     func clearsBackground() {

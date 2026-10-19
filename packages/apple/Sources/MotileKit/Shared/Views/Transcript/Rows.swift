@@ -196,8 +196,10 @@ struct UiContent {
     let limited: Bool
     let cache: ProgramCache
     let generation: Int
+    let rowID: String
 
     init(json: JSON, rowID: String) {
+        self.rowID = rowID
         code = CodeContent(language: "openui-lang", code: json.string("source"), spans: [])
         let errors = json.strings("errors")
         cache = ProgramStore.remember(rowID: rowID, tree: json["tree"] as? JSON, errors: errors)
@@ -210,6 +212,7 @@ struct UiContent {
 
     /// The content after a patch, whose tree and errors the store has.
     init(_ content: UiContent, tree: JSON?, errors: [String], cache: ProgramCache) {
+        rowID = content.rowID
         code = content.code
         complete = content.complete
         limited = content.limited
@@ -222,7 +225,7 @@ struct UiContent {
     /// The program laid out in a column `width` wide.
     func box(width: CGFloat) -> ProgramBox? {
         guard let tree else { return nil }
-        let env = ProgramEnv(column: width, window: TranscriptColumn.window, cache: cache, generation: generation)
+        let env = ProgramEnv(column: width, window: TranscriptColumn.window, row: rowID, cache: cache, generation: generation)
         return ProgramLayout.layout(tree, width: width, env: env)
     }
 }

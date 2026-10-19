@@ -241,8 +241,7 @@ final class ProgramTableView: ProgramNodeView {
     }
 }
 
-/// What stands for a map, a video or a web view until their own views come: a card of its title
-/// and what it holds. A video's opens it in the browser.
+/// What stands for a map until its own view comes: a card of its title and its places.
 final class ProgramCardView: ProgramNodeView {
     private let face = SurfaceView()
 
@@ -250,10 +249,6 @@ final class ProgramCardView: ProgramNodeView {
         super.init(frame: frame)
         face.radius = Radius.lg
         addSubview(face)
-        onPress = { [weak self] _ in
-            guard case .youTube(let video) = self?.box?.node.kind, let url = video.url.flatMap(URL.init(string:)) else { return }
-            self?.open(url)
-        }
     }
 
     required init?(coder: NSCoder) { fatalError("not used") }
@@ -261,7 +256,6 @@ final class ProgramCardView: ProgramNodeView {
     override func configure(_ box: ProgramBox) {
         face.stroke = box.surface.platformBorder
         face.fill = box.surface.platform(.box)
-        if case .youTube = box.node.kind { pointer = .hand }
     }
 
     override func layoutNow() {

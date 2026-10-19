@@ -49,6 +49,18 @@ final class ProgramFramesTests: XCTestCase {
         XCTAssertEqual(ProgramLayout.columns(grid(100), width: 720), 4)
     }
 
+    func testAPageIsAsTallAsItsOwnHeightThenTheOneItReportedThenTheStart() {
+        let video: JSON = ["id": "", "component": "YouTube", "url": "https://www.youtube-nocookie.com/embed/abc", "title": "A video"]
+        XCTAssertEqual(ProgramFrames.frames(tree: video, width: 720)[""]?[3], 405)
+        let page: JSON = ["id": "", "component": "HtmlView", "html": "<p>Hi</p>", "title": "", "streaming": false]
+        XCTAssertEqual(ProgramFrames.frames(tree: page, width: 720)[""]?[3], 360)
+        WebHeights.set(212, row: "", node: "")
+        defer { WebHeights.set(360, row: "", node: "") }
+        XCTAssertEqual(ProgramFrames.frames(tree: page, width: 720)[""]?[3], 212)
+        let sized = page.merging(["height": 150]) { $1 }
+        XCTAssertEqual(ProgramFrames.frames(tree: sized, width: 720)[""]?[3], 150)
+    }
+
     /// The ids of the nodes a program shows in its row: not those of a popover's panel, which shows
     /// over it, nor an Svg's shapes, which have none.
     private static func shownIDs(_ value: Any, inPanel: Bool = false) -> [String] {

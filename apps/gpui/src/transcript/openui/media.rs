@@ -1,6 +1,7 @@
 //! Media and data: SearchImage and Image, Icon, Table, YouTube (in `web`), and until the map
 //! comes, Map as a card that lists its places.
 
+use std::hash::{DefaultHasher, Hash, Hasher};
 use std::time::{Duration, Instant};
 
 use gpui_kit::prelude::*;
@@ -70,7 +71,7 @@ fn image(
     let width = cx.width.max(1.);
     let max_pixels = (width.max(width / aspect_ratio) * window.scale_factor()).ceil() as u32;
     let picture = match (photos.state, src) {
-        (PhotoState::Idle, Some(src)) => web_picture(id, src, cx, window, app),
+        (PhotoState::Idle, Some(src)) => web_picture(id, src, max_pixels, cx, window, app),
         (PhotoState::Found, _) => photo(&photos.media, max_pixels, cx, app),
         (PhotoState::Waiting, _) => Picture::Loading,
         _ => Picture::Failed(crate::media::pictures::Failure::Decode),
@@ -149,29 +150,22 @@ fn photo(media: &[String], max_pixels: u32, cx: &UiCx, app: &mut App) -> Picture
     last
 }
 
-/// A picture at a web address; when it can't be had, core is told so and looks for photos instead.
-fn web_picture(id: &str, src: &str, cx: &UiCx, window: &mut Window, app: &mut App) -> Picture {
-    let source = Resource::Uri(src.to_string().into());
-    match window.use_asset::<ImgResourceLoader>(&source, app) {
-        None => Picture::Loading,
-        Some(Ok(image)) => {
-            let size = image.size(0);
-            Picture::Ready(crate::media::pictures::Shown {
-                image,
-                width: size.width.0 as u32,
-                height: size.height.0 as u32,
-            })
-        }
-        Some(Err(_)) => {
-            let told = window.use_keyed_state(cx.id(id, "fallback"), app, |_, _| false);
-            if !*told.read(app) {
-                told.update(app, |told, _| *told = true);
-                let (sender, node_id) = (cx.clone(), id.to_string());
-                app.defer(move |app| sender.send(&node_id, UiEvent::Fallback, app));
-            }
-            Picture::Loading
-        }
+/// A picture at a web address, fetched once into the temporary folder; when it can't be had, core
+/// is told so and looks for photos instead.
+fn web_picture(id: &str, src: &str, max_pixels: u32, cx: &UiCx, window: &mut Window, app: &mut App) -> Picture {
+    let mut hasher = DefaultHasher::new();
+    src.hash(&mut hasher);
+    let name = format!("{:016x}", hasher.finish());
+    let file = std::env::temp_dir().join("motile-web-images").join(&name);
+    let picture = Pictures::load_web(&format!("web:{name}:{max_pixels}"), src, &file, max_pixels, app);
+    let Picture::Failed(_) = picture else { return picture };
+    let told = window.use_keyed_state(cx.id(id, "fallback"), app, |_, _| false);
+    if !*told.read(app) {
+        told.update(app, |told, _| *told = true);
+        let (sender, node_id) = (cx.clone(), id.to_string());
+        app.defer(move |app| sender.send(&node_id, UiEvent::Fallback, app));
     }
+    Picture::Loading
 }
 
 /// A table's padding: vertical and horizontal, for its header and its cells.

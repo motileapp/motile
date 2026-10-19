@@ -10,6 +10,8 @@ import UIKit
 struct ProgramEnv {
     let column: CGFloat
     let window: CGSize
+    /// The program's row, by which its pages keep the heights they reported.
+    var row = ""
     var surface = Surface.background
     /// How the lines of text line up, set by a column that centres or ends its children.
     var align = NSTextAlignment.natural
@@ -220,10 +222,9 @@ enum ProgramLayout {
         case .map(let map):
             return ProgramCards.map(node, map, width: width, env: env)
         case .youTube(let video):
-            return ProgramCards.card(node, title: video.title.isEmpty ? "YouTube video" : video.title, detail: video.url, width: width, env: env)
+            return ProgramWeb.youTube(node, video, width: width, env: env)
         case .htmlView(let view):
-            let title = view.title.isEmpty ? "Interactive view" : view.title
-            return ProgramCards.card(node, title: title, detail: "Runs when opened", width: width, env: env)
+            return ProgramWeb.htmlView(node, view, width: width, env: env)
         case .g, .circle, .ellipse, .rect, .line, .path, .polyline, .polygon, .svgText:
             return ProgramBox(node, size: .zero, surface: surface)
         }
