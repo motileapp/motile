@@ -2294,6 +2294,7 @@ dependencies = [
  "libc",
  "lru",
  "motile-core",
+ "motile-openui",
  "motile-protocol",
  "pulldown-cmark",
  "rand",

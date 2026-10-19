@@ -1,6 +1,7 @@
 //! The `motile` MCP server, on the loopback interface, which only the agents your server started
-//! can call, each with the token of its thread: `read_thread` reads what a handoff left out, and
-//! the other tools start agents on any of your server's accounts and follow them.
+//! can call, each with the token of its thread: `read_thread` reads what a handoff left out,
+//! `check_ui` checks a program before the agent shows it, and the other tools start agents on any
+//! of your server's accounts and follow them.
 
 use std::collections::HashMap;
 use std::sync::{Arc, Weak};
@@ -32,7 +33,7 @@ use crate::ui;
 
 pub const SERVER_NAME: &str = "motile";
 /// The tools as the agents name them.
-pub const TOOLS: [&str; 7] = [
+pub const TOOLS: [&str; 8] = [
     "mcp__motile__read_thread",
     "mcp__motile__list_accounts",
     "mcp__motile__start_agent",
@@ -40,6 +41,7 @@ pub const TOOLS: [&str; 7] = [
     "mcp__motile__message_agent",
     "mcp__motile__answer_agent",
     "mcp__motile__stop_agent",
+    "mcp__motile__check_ui",
 ];
 /// What Claude Code reads its `Authorization` header from.
 pub const AUTHORIZATION_VARIABLE: &str = "MOTILE_MCP_AUTHORIZATION";
@@ -148,6 +150,24 @@ impl Tools {
     #[tool(name = "read_thread", annotations(title = "Read a thread", read_only_hint = true))]
     async fn read_thread(&self, Parameters(request): Parameters<ReadThread>) -> CallToolResult {
         answered(self.hub().and_then(|hub| read_thread(hub.store(), &request)))
+    }
+
+    /// Checks an openui-lang program, with or without its fence, as Motile's clients will read it:
+    /// whether it is valid, its errors with hints, the names it references and never defines
+    /// (`unresolved`) and the statements root can't reach (`orphans`). One with no root statement
+    /// is a patch, checked merged over this thread's latest program. Call it before sending a
+    /// program you aren't sure of.
+    #[tool(name = "check_ui", annotations(title = "Check a program", read_only_hint = true))]
+    async fn check_ui(
+        &self,
+        Extension(parts): Extension<Parts>,
+        Parameters(request): Parameters<CheckUi>,
+    ) -> CallToolResult {
+        let checked = async {
+            let items = self.hub()?.store().program_items(&caller(&parts)?)?;
+            Ok(ui::check(&request.program, ui::latest(&items).as_deref()))
+        };
+        answered(checked.await)
     }
 
     /// Lists the accounts of your server you can start agents on: other Claude Code logins and
@@ -267,6 +287,12 @@ pub struct StartAgent {
     pub timeout_seconds: Option<u64>,
     /// The same id for each retry of one request, so that a retry doesn't start a second agent.
     pub request_id: Option<String>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+struct CheckUi {
+    /// The program's openui-lang text.
+    program: String,
 }
 
 #[derive(Deserialize, JsonSchema)]

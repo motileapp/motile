@@ -44,7 +44,7 @@ impl AgentState {
     fn of_notice(event: NoticeEvent) -> Self {
         match event {
             NoticeEvent::Finished => Self::Done,
-            NoticeEvent::Failed => Self::Failed,
+            NoticeEvent::Failed | NoticeEvent::ProgramErrors => Self::Failed,
             NoticeEvent::Stopped => Self::Stopped,
             NoticeEvent::Asked => Self::Waiting,
             NoticeEvent::Limited => Self::Limited,
@@ -200,6 +200,7 @@ pub fn noticed(item: &Item, notice: &AgentNotice) -> AgentView {
         NoticeEvent::Stopped => "Stopped",
         NoticeEvent::Asked => "Asks a question",
         NoticeEvent::Limited => "Reached its usage limit",
+        NoticeEvent::ProgramErrors => "Asked to fix",
     };
     AgentView {
         id: item.id.clone(),
