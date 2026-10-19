@@ -479,14 +479,10 @@ mod live {
 
         pub fn open(&self, page: Page, _: Hsla, _: Option<WeakEntity<TranscriptView>>, _: &mut Window, app: &mut App) {
             match page {
-                Page::Html(html) => {
-                    let name = format!("motile-{:016x}.html", hash(&html));
-                    let path = std::env::temp_dir().join(name);
-                    match std::fs::write(&path, html) {
-                        Ok(()) => app.open_url(&format!("file://{}", path.display())),
-                        Err(error) => tracing::warn!("couldn't write a page to open: {error}"),
-                    }
-                }
+                Page::Html(html) => match written(&html) {
+                    Ok(path) => app.open_url(&format!("file://{}", path.display())),
+                    Err(error) => tracing::warn!("couldn't write a page to open: {error}"),
+                },
                 Page::YouTube { url, .. } => {
                     if let Some(watch) = web::watch_url(&url) {
                         app.open_url(&watch);
@@ -496,10 +492,17 @@ mod live {
         }
     }
 
-    fn hash(text: &str) -> u64 {
-        use std::hash::{Hash, Hasher};
-        let mut hasher = std::collections::hash_map::DefaultHasher::new();
-        text.hash(&mut hasher);
-        hasher.finish()
+    /// The page in a file of the temporary folder that only the user reads. Its name can't be
+    /// guessed and the file can't be one that was there, such as another user's link.
+    fn written(html: &str) -> std::io::Result<std::path::PathBuf> {
+        use std::hash::{BuildHasher, RandomState};
+        use std::io::Write;
+        use std::os::unix::fs::OpenOptionsExt;
+
+        let name = format!("motile-{:016x}.html", RandomState::new().hash_one(html));
+        let path = std::env::temp_dir().join(name);
+        let mut file = std::fs::OpenOptions::new().write(true).create_new(true).mode(0o600).open(&path)?;
+        file.write_all(html.as_bytes())?;
+        Ok(path)
     }
 }
