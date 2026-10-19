@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["apps/auth", "apps/server", "crates/protocol", "crates/core", "apps/android/core"]
+members = ["apps/auth", "apps/server", "crates/protocol", "crates/core", "crates/openui", "apps/android/core"]
 
 [workspace.package]
 version = "0.1.267"
@@ -12,6 +12,7 @@ repository = "https://github.com/motileapp/motile"
 motile-protocol = { path = "crates/protocol" }
 motile-core = { path = "crates/core" }
 motile-server = { path = "apps/server" }
+motile-openui = { path = "crates/openui" }
 anyhow = "1"
 base64 = "0.23"
 clap = { version = "4", features = ["derive", "env"] }
