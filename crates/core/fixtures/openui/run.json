@@ -1,0 +1,110 @@
+{
+  "id": "",
+  "a11y": {
+    "role": "group"
+  },
+  "component": "Card",
+  "children": [
+    {
+      "id": "children/0",
+      "component": "Row",
+      "children": [
+        {
+          "id": "children/0/children/0",
+          "component": "Col",
+          "children": [
+            {
+              "id": "children/0/children/0/children/0",
+              "a11y": {
+                "role": "heading",
+                "level": 3
+              },
+              "component": "Title",
+              "text": {
+                "text": "Working tree",
+                "runs": [],
+                "links": []
+              },
+              "style": "card_title",
+              "color": "foreground"
+            },
+            {
+              "id": "children/0/children/0/children/1",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Caption",
+              "text": {
+                "text": "Runs git status --short in this thread's folder",
+                "runs": [],
+                "links": []
+              },
+              "style": "card_subtitle",
+              "color": "muted-foreground"
+            }
+          ],
+          "align": "stretch",
+          "spacing": [
+            0.0,
+            4.0
+          ]
+        },
+        {
+          "id": "children/0/children/1",
+          "a11y": {
+            "role": "hidden"
+          },
+          "component": "Spacer"
+        },
+        {
+          "id": "children/0/children/2",
+          "a11y": {
+            "role": "button",
+            "label": "Run git status"
+          },
+          "component": "Button",
+          "label": "Run git status",
+          "variant": "primary",
+          "tint": null,
+          "size": "small",
+          "icon": {
+            "name": "play",
+            "glyph": ""
+          },
+          "block": false,
+          "disabled": null
+        }
+      ],
+      "gap": 12.0,
+      "align": "center",
+      "justify": "start",
+      "wrap": false,
+      "sizing": [
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": true
+        },
+        {
+          "basis": "zero",
+          "length": null,
+          "grow": 1.0,
+          "shrink": false
+        },
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": false
+        }
+      ]
+    }
+  ],
+  "soft": false,
+  "nested": false,
+  "padding": 16.0,
+  "spacing": [
+    0.0
+  ]
+}

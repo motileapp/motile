@@ -38,7 +38,6 @@ impl NumberFormat {
     }
 
     pub fn format(&self, value: f64) -> String {
-        let sign = if value.is_sign_negative() && !value.is_nan() { "-" } else { "" };
         let body = if value.is_nan() {
             "NaN".to_owned()
         } else if value.is_infinite() {
@@ -46,6 +45,8 @@ impl NumberFormat {
         } else {
             self.digits(value.abs())
         };
+        let shows_sign = value < 0.0 && (value.is_infinite() || body.bytes().any(|byte| matches!(byte, b'1'..=b'9')));
+        let sign = if shows_sign { "-" } else { "" };
         let Some(code) = &self.currency else { return format!("{sign}{body}") };
         let symbol = currency_symbol(code);
         if symbol.chars().last().is_some_and(char::is_alphabetic) {
@@ -538,7 +539,10 @@ mod tests {
             (NumberFormat::decimal(0, 2), 1.005, "1.01"),
             (NumberFormat::decimal(0, 1), 600.0, "600"),
             (NumberFormat::decimal(0, 2), 0.004, "0"),
-            (NumberFormat::decimal(0, 2), -0.004, "-0"),
+            (NumberFormat::decimal(0, 2), -0.004, "0"),
+            (NumberFormat::decimal(0, 2), -0.0, "0"),
+            (NumberFormat::currency("USD", 2, 2), -0.0, "$0.00"),
+            (NumberFormat::currency("USD", 2, 2), -0.001, "$0.00"),
             (NumberFormat::decimal(0, 2), 999.999, "1,000"),
             (NumberFormat::decimal(0, 2), 1e21, "1,000,000,000,000,000,000,000"),
             (NumberFormat::decimal(0, 3), 1.5e-7, "0"),

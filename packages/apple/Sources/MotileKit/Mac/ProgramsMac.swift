@@ -73,7 +73,7 @@ final class CarouselTrack: NSView {
 /// or a scroll of the transcript closes.
 final class ProgramPopoverPanel {
     private weak var anchor: NSView?
-    private let view = ProgramPanelView()
+    private var view: NSView = ProgramPanelView()
     private let onClose: () -> Void
     private var monitor: Any?
 
@@ -83,8 +83,20 @@ final class ProgramPopoverPanel {
     }
 
     func show(_ slot: UiSlot, host: ProgramHost?, surface: Surface) {
+        guard let panel = view as? ProgramPanelView else { return }
+        show { window in panel.show(slot, host: host, window: window) }
+    }
+
+    /// Shows a message's values in its place.
+    func show(_ values: SentValues) {
+        let panel = view as? SentValuesPanel ?? SentValuesPanel()
+        view = panel
+        show { window in panel.show(values, window: window) }
+    }
+
+    private func show(_ fill: (CGSize) -> CGSize) {
         guard let anchor, let content = anchor.window?.contentView else { return }
-        let size = view.show(slot, host: host, window: content.bounds.size)
+        let size = fill(content.bounds.size)
         place(size, anchor: anchor, in: content)
         if view.superview !== content { content.addSubview(view) }
         watch()
@@ -98,12 +110,13 @@ final class ProgramPopoverPanel {
         let up = below < 220 + 8 && above > 240
         var x = min(max(12, trigger.minX), host.bounds.width - 12 - size.width)
         x = max(12, x)
-        let y: CGFloat
+        var y: CGFloat
         if flipped {
             y = up ? trigger.minY - 8 - size.height : trigger.maxY + 8
         } else {
             y = up ? trigger.maxY + 8 : trigger.minY - 8 - size.height
         }
+        y = max(12, min(y, host.bounds.height - 12 - size.height))
         view.frame = NSRect(x: x, y: y, width: size.width, height: size.height)
     }
 

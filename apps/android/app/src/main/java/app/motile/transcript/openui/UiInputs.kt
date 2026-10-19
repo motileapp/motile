@@ -219,7 +219,7 @@ private fun Field(node: UiNode, label: String?, error: String?, content: @Compos
     Column(Modifier.uiNode(node).fillMaxWidth()) {
         if (label != null) Text(label, Modifier.padding(bottom = 8.dp), style = UiStyle.text(UiTextStyle.Label, false), color = palette.foreground)
         content()
-        if (error != null) Text(error, Modifier.padding(top = 6.dp), style = UiStyle.text(UiTextStyle.Caption, false), color = palette.destructive)
+        if (error != null) Text(error, Modifier.padding(top = 4.dp), style = UiStyle.text(UiTextStyle.Caption, false), color = palette.destructive)
     }
 }
 
@@ -363,7 +363,7 @@ fun UiRadioGroup(node: UiNode, kind: UiKind.RadioGroup) {
                 }
             }
         }
-        if (kind.error != null) Text(kind.error, Modifier.padding(top = 6.dp), style = UiStyle.text(UiTextStyle.Caption, false), color = palette.destructive)
+        if (kind.error != null) Text(kind.error, Modifier.padding(top = 4.dp), style = UiStyle.text(UiTextStyle.Caption, false), color = palette.destructive)
     }
 }
 

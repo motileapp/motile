@@ -231,6 +231,14 @@ fn types_into_a_bound_field() {
 }
 
 #[test]
+fn a_field_bound_to_null_is_empty() {
+    let mut thread = Thread::of("$price = null\nroot = Col([Input($price, \"Price\", \"number\")])");
+    thread.ui(PROGRAM);
+    let field = find(&thread.tree(), "Input", "Price").unwrap();
+    assert_eq!(node(&thread.tree(), &field)["value"], "");
+}
+
+#[test]
 fn keeps_an_unbound_field_under_its_label() {
     let mut thread = Thread::of("root = Col([Input(\"\", \"Name\"), Checkbox(false, \"Done\")])");
     thread.ui(PROGRAM);
@@ -398,6 +406,25 @@ fn asks_before_running_a_command_without_full_access() {
     full.ui(PROGRAM);
     let outs = full.event(&button, UiEvent::Press);
     assert!(!calls(&outs)[0].4, "full access runs it without asking");
+}
+
+#[test]
+fn the_run_program_shows_what_its_confirmed_command_printed() {
+    let mut thread = Thread::of(&fixture("run"));
+    thread.programs.full_access = false;
+    thread.ui(PROGRAM);
+    let button = find(&thread.tree(), "Button", "Run git status").unwrap();
+    let outs = thread.event(&button, UiEvent::Press);
+    let Some(Out::Confirm { call_id, command, .. }) = outs.iter().find(|out| matches!(out, Out::Confirm { .. })) else {
+        panic!("{outs:?}")
+    };
+    assert_eq!(command, "git status --short");
+    let (serial, call, ..) = calls(&thread.programs.confirm(PROGRAM, *call_id, true))[0].clone();
+    let printed = json!({"exit_code": 0, "stdout": " M greet.py\n", "stderr": "", "truncated": false});
+    thread.programs.tool_result(PROGRAM, serial, call, Ok(printed));
+    let tree = thread.tree();
+    assert!(nodes(&tree).iter().any(|node| node["component"] == "Code"), "{tree}");
+    assert!(tree.to_string().contains("Exited with 0"), "{tree}");
 }
 
 #[test]

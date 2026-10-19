@@ -47,7 +47,7 @@ class RowModel(
     val above: Float = 0f,
 ) {
     sealed interface Kind {
-        class User(val text: MessageText, val attachments: List<AttachedFile>, val at: Double) : Kind
+        class User(val text: MessageText, val attachments: List<AttachedFile>, val values: SentValues?, val at: Double) : Kind
         class Prose(val content: ProseContent) : Kind
         class Code(val content: CodeContent) : Kind
         /** A program the core runs, drawn from the tree it resolves. */
@@ -115,7 +115,7 @@ class RowModel(
 
         fun parse(json: JSON): RowModel? {
             val kind = when (json.string("kind")) {
-                "user" -> Kind.User(MessageText(json, muted = false), json.objects("attachments").map(::AttachedFile), json.double("at"))
+                "user" -> Kind.User(MessageText(json, muted = false), json.objects("attachments").map(::AttachedFile), json.obj("values")?.let(::SentValues), json.double("at"))
                 "prose" -> Kind.Prose(ProseContent(json))
                 "code" -> Kind.Code(CodeContent(json.string("language"), json.string("code"), json.optionalInts("spans")))
                 "ui" -> Kind.Ui(UiContent(json))
@@ -141,7 +141,7 @@ class RowModel(
         /** A message on its way to the server. One sent while the agent works will wait for it, so it shows as it will once the server has it. */
         fun pending(text: String, attachments: List<AttachedFile>, queued: Boolean, skills: List<SkillSpan> = emptyList()): RowModel {
             val message = MessageText(text, emptyList(), skills, muted = queued)
-            val kind = if (queued) Kind.Queued(QueuedContent(message, attachments, "Queued")) else Kind.User(message, attachments, Time.now())
+            val kind = if (queued) Kind.Queued(QueuedContent(message, attachments, "Queued")) else Kind.User(message, attachments, null, Time.now())
             return RowModel(pendingID, pendingID, false, kind)
         }
     }

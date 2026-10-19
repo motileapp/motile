@@ -6,6 +6,7 @@
 
 pub mod canvas;
 pub mod host;
+pub mod sent;
 pub mod tree;
 pub mod web;
 

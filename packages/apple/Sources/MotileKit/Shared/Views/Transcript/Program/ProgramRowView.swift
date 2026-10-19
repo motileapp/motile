@@ -12,13 +12,12 @@ final class ProgramRowView: RowView, ProgramHost {
     private static let errorGap: CGFloat = 8
     private var content: UiContent?
     private var root: ProgramNodeView?
-    private let errors = ProgramTextView()
     private let source = ProgramCodeBox()
+    private lazy var errors = ErrorBox(in: self)
 
     override init(frame: CGRect) {
         super.init(frame: frame)
         addSubview(source)
-        addSubview(errors)
     }
 
     required init?(coder: NSCoder) { fatalError("not used") }
@@ -32,18 +31,17 @@ final class ProgramRowView: RowView, ProgramHost {
     /// How tall the row is in a column `width` wide; it lays the tree out, off the main thread.
     static func height(_ content: UiContent, width: CGFloat) -> CGFloat {
         let program = content.box(width: width)?.size.height ?? sourceHeight(content, width: width)
-        let errors = errorText(content).map { errorGap + ProgramText.height($0.text, width: width, lineHeight: $0.lineHeight) } ?? 0
-        return program + errors
+        guard let message = errorMessage(content) else { return program }
+        return program + (program > 0 ? errorGap : 0) + ErrorBox.height(message, width: width)
     }
 
     private static func sourceHeight(_ content: UiContent, width: CGFloat) -> CGFloat {
         content.complete && !content.code.code.isEmpty ? ProgramCode.height(content.code, width: width) : 0
     }
 
-    private static func errorText(_ content: UiContent) -> (text: NSAttributedString, lineHeight: CGFloat)? {
+    private static func errorMessage(_ content: UiContent) -> NSAttributedString? {
         guard content.complete, !content.errors.isEmpty else { return nil }
-        let look = ProgramStyle.look(.caption, narrow: false)
-        return (ProgramText.plain(content.errors.joined(separator: "\n"), look: look, color: Theme.destructive), look.lineHeight)
+        return ErrorBox.message(content.errors.joined(separator: "\n"))
     }
 
     override func layout(width: CGFloat) -> CGFloat {
@@ -70,16 +68,14 @@ final class ProgramRowView: RowView, ProgramHost {
             source.frame = CGRect(x: 0, y: 0, width: width, height: height)
             y = height
         }
-        if let error = Self.errorText(content) {
-            let height = ProgramText.height(error.text, width: width, lineHeight: error.lineHeight)
-            errors.part = ProgramTextPart(text: error.text, frame: .zero, lift: ControlText.lift(Theme.smallFont, lineHeight: error.lineHeight))
-            errors.frame = CGRect(x: 0, y: y + Self.errorGap, width: width, height: height)
-            errors.isHidden = false
-            y += Self.errorGap + height
-        } else {
+        guard let message = Self.errorMessage(content) else {
             errors.isHidden = true
+            return y
         }
-        return y
+        if y > 0 { y += Self.errorGap }
+        errors.text.content = message
+        errors.isHidden = false
+        return y + errors.layout(y: y, width: width)
     }
 
     // MARK: ProgramHost

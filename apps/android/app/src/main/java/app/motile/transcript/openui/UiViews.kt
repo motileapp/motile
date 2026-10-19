@@ -106,7 +106,7 @@ fun UiRow(row: RowModel, content: UiContent) {
             if (tree != null) {
                 CompositionLocalProvider(LocalUiHost provides host) { UiProgram(tree, width) }
             }
-            if (errors.isNotEmpty()) ErrorRow(errors.joinToString("\n"), Modifier.padding(top = if (tree != null) 12.dp else 0.dp))
+            if (errors.isNotEmpty()) ErrorRow(errors.joinToString("\n"), Modifier.padding(top = if (tree != null) 8.dp else 0.dp))
         }
     }
 }
@@ -261,10 +261,12 @@ private fun UiCard(node: UiNode, kind: UiKind.Card) {
     val narrow = LocalUiNarrow.current
     val shape = RoundedCornerShape(if (kind.nested) Radius.md else Radius.lg)
     val padding = kind.padding ?: if (kind.nested) 16f else UiStyle.cardPadding(narrow)
+    val radius = if (kind.nested) Radius.md else Radius.lg
+    val clipped = if (padding < radius.value) Modifier.clip(shape) else Modifier
     val frame = if (kind.soft) {
-        Modifier.background(surface.color(Surface.Layer.Box), shape)
+        clipped.background(surface.color(Surface.Layer.Box), shape)
     } else {
-        Modifier.background(palette.card, shape).border(1.dp, palette.borderCard, shape)
+        clipped.background(palette.card, shape).border(1.dp, palette.borderCard, shape)
     }
     val inner = if (kind.soft) surface.inBox else Surface.Card
     CompositionLocalProvider(LocalSurface provides inner) {
@@ -342,7 +344,6 @@ private class CarouselPolicy(val width: Float, val gap: Float, val fill: List<Bo
  */
 @Composable
 private fun UiPopover(node: UiNode, kind: UiKind.Popover) {
-    val palette = LocalPalette.current
     val host = LocalUiHost.current
     var open by remember { mutableStateOf(kind.open) }
     LaunchedEffect(kind.open) { open = kind.open }
@@ -367,28 +368,33 @@ private fun UiPopover(node: UiNode, kind: UiKind.Popover) {
         ) {
             UiSlotView(kind.trigger)
         }
-        if (open) {
-            val window = with(LocalDensity.current) { LocalWindowInfo.current.containerSize.width.toDp().value }
-            Popup(
-                popupPositionProvider = PopoverPlacement(with(LocalDensity.current) { 1.dp.toPx() }),
-                onDismissRequest = { show(false) },
-                properties = PopupProperties(focusable = true),
+        if (open) PopoverPanel(280f, onDismiss = { show(false) }) { UiSlotView(kind.content, popover = true) }
+    }
+}
+
+/** Motile's popover by what it lies in, placed by [PopoverPlacement], at most [most] wide, its content 8 apart. */
+@Composable
+internal fun PopoverPanel(most: Float, onDismiss: () -> Unit, content: @Composable () -> Unit) {
+    val palette = LocalPalette.current
+    val window = with(LocalDensity.current) { LocalWindowInfo.current.containerSize.width.toDp().value }
+    Popup(
+        popupPositionProvider = PopoverPlacement(with(LocalDensity.current) { 1.dp.toPx() }),
+        onDismissRequest = onDismiss,
+        properties = PopupProperties(focusable = true),
+    ) {
+        val shape = RoundedCornerShape(Radius.lg)
+        OnSurface(Surface.Popover) {
+            Column(
+                Modifier
+                    .padding(12.dp)
+                    .widthIn(max = min(most, window - 24f).dp)
+                    .shadow(ShadowSize.Md, shape)
+                    .background(palette.popover, shape)
+                    .border(1.dp, palette.borderPopover, shape)
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                val shape = RoundedCornerShape(Radius.lg)
-                OnSurface(Surface.Popover) {
-                    Column(
-                        Modifier
-                            .padding(12.dp)
-                            .widthIn(max = min(280f, window - 24f).dp)
-                            .shadow(ShadowSize.Md, shape)
-                            .background(palette.popover, shape)
-                            .border(1.dp, palette.borderPopover, shape)
-                            .padding(horizontal = 14.dp, vertical = 12.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        UiSlotView(kind.content, popover = true)
-                    }
-                }
+                content()
             }
         }
     }

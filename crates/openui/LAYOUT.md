@@ -151,6 +151,25 @@ or a Row holding a Button, is 40 below the one before.
 A `Ui` row is spaced from the rows around it as a prose table is: 12 from the paragraph before and
 after (`Typesetter.spaceAbove`'s `table` case and its counterparts).
 
+### A message's values
+
+A user row with `values` (what a program sent with the message, PLAN decision 12) ends its bubble
+with a chip: an `.outline` `.small` `ActionButton` on the bubble's surface with Lucide `braces` and
+core's `label`, at the bubble's start, 8 under the text or the attachments, 14 above the bubble's
+bottom; the bubble is at least as wide as the chip. A press opens Motile's popover (Popover's panel
+below: its chrome, padding, placement and closing; at most min(320, window − 24) wide) listing core's
+`entries` 8 apart: each its `name` in `caption` `muted-foreground` and 2 under it its `value` in
+`small` `foreground`, wrapping.
+
+### Errors
+
+- A field's error (Input, TextArea, Select, DatePicker, Checkbox, RadioGroup): core's text in
+  `caption`, `destructive`, 4 under the control, as wide as the field, wrapping.
+- The row's errors (`errors`, once the program is complete): one line each in the transcript's own
+  error row (the `destructive` wash, `Radius.lg`, Lucide `circle-alert` at 13 and the text at 13 in
+  `destructive`, its paddings), 8 under the program, or alone when there is no tree. A program that
+  can't run as written is an error of the reply, so it reads like the transcript's other errors.
+
 ## Layout
 
 The containers, in terms all three layout systems follow. A child never makes its parent wider than
@@ -442,6 +461,9 @@ control, the pair a column.
   (`border` for grid, `muted-stronger-foreground` ticks in `tick`, `muted-foreground` categories in
   `caption`, `chart-1…6` series, the surface's `row` for a hovered bar band, `border-accent` dashed
   3/3 for the hover guide). Text is drawn by the client at core's anchor (end-, middle-aligned).
+  No label leaves the scene: core estimates a label at 0.7 em a character, makes the y gutter
+  that wide plus 12, and sets an x label that would cross an edge against that edge instead of
+  centring it.
 - Hover (pointer): the band under the pointer is lit and its tooltip shows; leaving hides it. Touch:
   a tap shows the tapped band's, a horizontal drag moves it, a vertical drag scrolls the transcript,
   a tap elsewhere hides it.

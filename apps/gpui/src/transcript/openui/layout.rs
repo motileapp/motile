@@ -1,5 +1,6 @@
 //! The containers: Col, Row, Box, Grid, Card, Carousel and Popover, and Divider and Spacer.
 
+use std::rc::Rc;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -21,7 +22,6 @@ const CAROUSEL_SHARE: f32 = 0.85;
 const CAROUSEL_BLEED: f32 = 4.;
 const CAROUSEL_BUTTON_INSET: f32 = 8.;
 const CAROUSEL_PAGING: Duration = Duration::from_millis(320);
-const POPOVER_GAP: f32 = 8.;
 const POPOVER_WIDTH: f32 = 280.;
 const POPOVER_MARGIN: f32 = 12.;
 
@@ -45,13 +45,16 @@ pub fn layout(node: &UiNode, cx: &UiCx, window: &mut Window, app: &mut App) -> S
                 true => (cx.surface.in_box(), 0.),
                 false => (Surface::Card, 1.),
             };
-            let inner_cx = cx.on(inner).within(cx.width - 2. * (padding + border));
+            let fill = soft.then(|| cx.surface.layer(Layer::Box, c));
+            let inner_cx = cx.on(inner).over(fill).within(cx.width - 2. * (padding + border));
             let element = element
                 .p(px(padding))
                 .rounded(px(radius))
-                .when(*soft, |card| card.bg(cx.surface.layer(Layer::Box, c)))
+                .when_some(fill, |card, fill| card.bg(fill))
                 .when(!soft, |card| card.bg(c.card).border_1().border_color(c.border_card));
-            column(element, children, Align::Stretch, spacing, false, &inner_cx, window, app)
+            let element = column(element, children, Align::Stretch, spacing, false, &inner_cx, window, app);
+            let edge = (!soft).then_some(c.border_card);
+            style::keep_corners(element, children, radius, padding + border, edge, cx, app)
         }
         UiKind::Carousel { children, item_width, gap, fill } => {
             carousel(element, &node.id, children, *item_width, *gap, fill, cx, window, app)
@@ -233,11 +236,12 @@ fn boxed(element: Stateful<Div>, node: &UiNode, cx: &UiCx, window: &mut Window, 
     let own_width = width.map(|width| points(width, cx)).unwrap_or(cx.width).min(cx.width);
     let edge = if *border { 1. } else { 0. };
     let inner = if *inner_surface { cx.surface.in_box() } else { cx.surface };
-    let inner_cx = cx.on(inner).within(own_width - 2. * (padding + edge));
+    let fill = background.as_ref().map(|background| style::color(background, cx, app));
+    let inner_cx = cx.on(inner).over(fill).within(own_width - 2. * (padding + edge));
     let fixed_height = matches!(height, Some(Length { unit: LengthUnit::Points | LengthUnit::Window, .. }));
     let element = element
         .p(px(*padding))
-        .when_some(background.as_ref(), |element, background| element.bg(style::color(background, cx, app)))
+        .when_some(fill, |element, fill| element.bg(fill))
         .when(*border, |element| element.border_1().border_color(cx.surface.border(c)))
         .when_some(radius.as_ref(), |element, radius| element.rounded(px(style::radius(radius))).overflow_hidden())
         .when_some(*width, |element, width| match width.unit {
@@ -250,7 +254,7 @@ fn boxed(element: Stateful<Div>, node: &UiNode, cx: &UiCx, window: &mut Window, 
             LengthUnit::Window => element.h(px(height.value * cx.window_height)),
             LengthUnit::Points => element.h(px(height.value)),
         });
-    match direction {
+    let element = match direction {
         Direction::Col => {
             let element = justified(element, *justify);
             column(element, children, *align, spacing, fixed_height, &inner_cx, window, app)
@@ -259,7 +263,10 @@ fn boxed(element: Stateful<Div>, node: &UiNode, cx: &UiCx, window: &mut Window, 
             let line = Line { gap: *gap, align: *align, justify: *justify, wrap: *wrap };
             row(element, children, sizing, line, &inner_cx, window, app)
         }
-    }
+    };
+    let Some(radius) = radius.as_ref().map(style::radius) else { return element };
+    let edge_color = border.then(|| cx.surface.border(c));
+    style::keep_corners(element, children, radius, padding + edge, edge_color, cx, app)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -433,8 +440,9 @@ fn popover(
         .with_text_style(Some(TextStyleRefinement { color: Some(ink), ..Default::default() }), |window| {
             slot(trigger, &format!("{id}/trigger"), ink, cx, window, app)
         });
-    let (node_id, toggles, closes, escapes) = (id.to_string(), cx.clone(), cx.clone(), cx.clone());
+    let (node_id, toggles) = (id.to_string(), cx.clone());
     let focus = window.use_keyed_state(cx.id(id, "focus"), app, |_, cx| cx.focus_handle()).read(app).clone();
+    let trigger = window.use_keyed_state(cx.id(id, "trigger"), app, |_, _| None);
     let was_open = window.use_keyed_state(cx.id(id, "was-open"), app, |_, _| false);
     if open && !*was_open.read(app) {
         window.focus(&focus, app);
@@ -447,49 +455,12 @@ fn popover(
             .with_text_style(Some(TextStyleRefinement { color: Some(c.foreground), ..Default::default() }), |window| {
                 slot(content, &format!("{id}/content"), c.foreground, &inner_cx, window, app)
             });
-        let (close_id, escape_id, scroll_id) = (id.to_string(), id.to_string(), id.to_string());
-        let scrolls = cx.clone();
-        let closes_on_scroll = canvas(
-            |_, _, _| {},
-            move |bounds, _, window, _| {
-                let (scrolls, scroll_id, sent) = (scrolls.clone(), scroll_id.clone(), std::cell::Cell::new(false));
-                window.on_mouse_event(move |event: &ScrollWheelEvent, phase, _, cx| {
-                    if phase != DispatchPhase::Bubble || bounds.contains(&event.position) || sent.replace(true) {
-                        return;
-                    }
-                    scrolls.send(&scroll_id, UiEvent::Expand { open: false }, cx);
-                });
-            },
-        )
-        .absolute()
-        .inset_0();
-        let card = crate::ui::popover_card(
-            div().py(px(12.)).px(px(14.)).max_w(px(width)).flex().flex_col().gap(px(8.)).text_color(c.foreground),
-            Radius::LG,
-            app,
-        )
-        .id(cx.id(id, "panel"))
-        .role(Role::Dialog)
-        .occlude()
-        .child(closes_on_scroll)
-        .children(parts)
-        .track_focus(&focus)
-        .on_key_down(move |event: &KeyDownEvent, _, cx| {
-            if event.keystroke.key == "escape" {
-                cx.stop_propagation();
-                escapes.send(&escape_id, UiEvent::Expand { open: false }, cx);
-            }
-        })
-        .on_mouse_down_out(move |_, _, cx| closes.send(&close_id, UiEvent::Expand { open: false }, cx));
-        div().absolute().left_0().top_full().child(
-            deferred(
-                anchored()
-                    .snap_to_window_with_margin(px(POPOVER_MARGIN))
-                    .offset(point(px(0.), px(POPOVER_GAP)))
-                    .child(card),
-            )
-            .with_priority(1),
-        )
+        let closes = cx.clone();
+        let close_id = id.to_string();
+        let close =
+            Rc::new(move |_: &mut Window, cx: &mut App| closes.send(&close_id, UiEvent::Expand { open: false }, cx));
+        let card = crate::ui::popover_panel(cx.id(id, "panel"), width, &focus, close, app).children(parts);
+        crate::ui::anchored_popover(*trigger.read(app), card, window)
     });
     element
         .relative()
@@ -508,5 +479,6 @@ fn popover(
             })
         })
         .on_click(move |_, _, cx| toggles.send(&node_id, UiEvent::Expand { open: !open }, cx))
+        .child(crate::ui::tracks_bounds(trigger))
         .children(panel)
 }

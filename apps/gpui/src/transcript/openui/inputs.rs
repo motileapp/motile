@@ -560,15 +560,16 @@ fn pressable(element: Stateful<Div>, item: &UiNode, cx: &UiCx, window: &mut Wind
     let c = colors(app);
     let radius = style::radius(radius);
     let inner = if *inner_surface { cx.surface.in_box() } else { cx.surface };
-    let inner_cx = cx.on(inner).within(cx.width - 2. * padding);
-    let laid: Vec<AnyElement> =
-        children.iter().map(|child| framed(&child.id, node(child, &inner_cx, window, app))).collect();
     let fill = background.as_ref().map(|background| style::color(background, cx, app));
     let rest = match (fill, selected) {
         (Some(fill), _) => fill,
         (None, Some(true)) => cx.surface.layer(Layer::RowSelected, c),
         (None, _) => transparent_black(),
     };
+    let ground = (fill.is_some() || *selected == Some(true)).then_some(rest);
+    let inner_cx = cx.on(inner).over(ground).within(cx.width - 2. * padding);
+    let laid: Vec<AnyElement> =
+        children.iter().map(|child| framed(&child.id, node(child, &inner_cx, window, app))).collect();
     let (lit, pressed) = match fill {
         Some(_) => (c.wash(c.foreground, false), c.wash(c.foreground, true)),
         None => (cx.surface.layer(Layer::Row, c), cx.surface.layer(Layer::RowSelected, c)),
@@ -580,7 +581,7 @@ fn pressable(element: Stateful<Div>, item: &UiNode, cx: &UiCx, window: &mut Wind
     let focus = crate::ui::focus_state(&cx.id(&item.id, "press"), window, app);
     let ring_shown = enabled && crate::ui::focus_shown(&focus, window);
     let overlay = |color: Hsla| div().absolute().inset_0().rounded(px(radius)).bg(color);
-    element
+    let element = element
         .relative()
         .p(px(*padding))
         .rounded(px(radius))
@@ -613,7 +614,8 @@ fn pressable(element: Stateful<Div>, item: &UiNode, cx: &UiCx, window: &mut Wind
                     .active(move |style| style.bg(pressed)),
             )
         })
-        .children(laid)
+        .children(laid);
+    style::keep_corners(element, children, radius, *padding, None, cx, app)
         .when(*ring, |element| {
             element.child(overlay(transparent_black()).border_1().border_color(c.border_accent)).child(
                 div().absolute().top(px(PICKED_MARK_INSET)).right(px(PICKED_MARK_INSET)).child(PickMark::new(

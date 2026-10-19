@@ -151,6 +151,16 @@ fn draw(pixmap: &mut Pixmap, item: &Item, palette: &Palette, transform: Transfor
 /// 3 points on each side, from an ascent above its baseline to a descent below, as x, y, width,
 /// height. A client's picture is compared with the reference's outside these.
 pub fn text_box(text: &Text) -> [f32; 4] {
+    let (size, _) = font_of(&text.font);
+    let (left, right) = text_span(text);
+    let advance = right - left;
+    let pad = advance * 0.2 + 3.0;
+    let (top, bottom) = (text.y - size - 2.0, text.y + size * 0.35 + 2.0);
+    [left - pad, top, advance + pad * 2.0, bottom - top]
+}
+
+/// Where a line of text starts and ends, in DM Sans.
+pub fn text_span(text: &Text) -> (f32, f32) {
     let (size, weight) = font_of(&text.font);
     let face = face(weight);
     let k = size / face.units_per_em() as f32;
@@ -165,9 +175,7 @@ pub fn text_box(text: &Text) -> [f32; 4] {
         Anchor::Middle => text.x - advance / 2.0,
         Anchor::End => text.x - advance,
     };
-    let pad = advance * 0.2 + 3.0;
-    let (top, bottom) = (text.y - size - 2.0, text.y + size * 0.35 + 2.0);
-    [left - pad, top, advance + pad * 2.0, bottom - top]
+    (left, left + advance)
 }
 
 fn font_of(font: &Font) -> (f32, Weight) {

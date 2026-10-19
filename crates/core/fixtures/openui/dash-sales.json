@@ -212,7 +212,7 @@
               },
               "component": "Title",
               "text": {
-                "text": "-$0",
+                "text": "$0",
                 "runs": [],
                 "links": []
               },
@@ -351,7 +351,7 @@
                   },
                   "component": "Title",
                   "text": {
-                    "text": "-$0",
+                    "text": "$0",
                     "runs": [],
                     "links": []
                   },

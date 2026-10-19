@@ -36,6 +36,8 @@ use crate::theme::Surface;
 const NARROW: f32 = 640.;
 /// The row keeps this much from the row above it, as a table in prose does from its paragraph.
 const ABOVE: f32 = 10.;
+/// How far a program's errors are under it.
+const ERROR_GAP: f32 = 8.;
 
 /// Sends an event of the node to core.
 pub type Sink = Rc<dyn Fn(&str, UiEvent, &mut App)>;
@@ -54,6 +56,8 @@ pub struct UiCx {
     /// The size of the text around the node, which a formula is set to.
     pub text_size: f32,
     pub surface: Surface,
+    /// What is painted under the node where it isn't its surface's own colour.
+    pub ground: Option<Hsla>,
     pub sink: Sink,
     pub store: Option<Entity<Store>>,
     /// The transcript the row lies in, which a web view over the row keeps clear of.
@@ -79,7 +83,12 @@ impl UiCx {
     }
 
     pub fn on(&self, surface: Surface) -> Self {
-        Self { surface, ..self.clone() }
+        Self { surface, ground: None, ..self.clone() }
+    }
+
+    /// On a fill of its own over the surface.
+    pub fn over(&self, ground: Option<Hsla>) -> Self {
+        Self { ground: ground.or(self.ground), ..self.clone() }
     }
 }
 
@@ -106,6 +115,7 @@ pub fn ui_row(model: &RowModel, ctx: &RowContext, window: &mut Window, cx: &mut 
         window_height: f32::from(window.viewport_size().height),
         text_size: crate::theme::PROSE_SIZE,
         surface: Surface::Background,
+        ground: None,
         sink,
         store: Some(ctx.store.clone()),
         transcript: Some(ctx.view.clone()),
@@ -118,7 +128,7 @@ pub fn ui_row(model: &RowModel, ctx: &RowContext, window: &mut Window, cx: &mut 
         .pt(px(ABOVE))
         .flex()
         .flex_col()
-        .gap(px(12.))
+        .gap(px(ERROR_GAP))
         .when_some(ui.tree.as_deref(), |row, tree| row.child(root(tree, &ui_cx, window, cx)))
         .children(errors)
         .into_any_element()
