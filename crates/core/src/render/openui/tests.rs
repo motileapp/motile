@@ -545,7 +545,7 @@ fn runs_every_corpus_program_without_errors() {
         .filter_map(|entry| entry.ok()?.file_name().to_str()?.strip_suffix(".oui").map(str::to_string))
         .collect();
     names.sort();
-    assert_eq!(names.len(), 43);
+    assert_eq!(names.len(), 44);
     for name in names {
         let mut thread = Thread::of(&fixture(&name));
         let ui = thread.ui(PROGRAM);
