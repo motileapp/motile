@@ -2325,6 +2325,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "geo-types"
+version = "0.7.20"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "777d18aa0f12f8b285331cd867133ee14422b3f023f6d388034c47d43e28786a"
+dependencies = [
+ "num-traits",
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "gethostname"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4615,11 +4625,16 @@ dependencies = [
  "block2 0.6.2",
  "chrono",
  "core-foundation 0.10.1",
+ "flate2",
  "futures",
+ "geo-types",
  "gpui-kit",
  "image",
+ "lru",
+ "lyon",
  "motile-core",
  "motile-protocol",
+ "mvt-reader",
  "n0-watcher",
  "netwatch",
  "objc2 0.6.4",
@@ -4635,9 +4650,11 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
+ "tiny-skia",
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "ttf-parser",
  "uds_windows",
  "uuid",
  "windows-registry 0.6.1",
@@ -4688,6 +4705,18 @@ name = "multiversion_no_op"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "743fb55ba31b18fb1ecef6bdc9aa2743314978ac084044301a7eee33fb99a20d"
+
+[[package]]
+name = "mvt-reader"
+version = "2.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d59a9ba839816c282311c473b43eb9a0f4516afe3c2c0cb7cda68050c50ddcba"
+dependencies = [
+ "geo-types",
+ "num-traits",
+ "prost",
+ "thiserror 2.0.21",
+]
 
 [[package]]
 name = "n0-dns-resolver"
@@ -6342,6 +6371,29 @@ version = "1.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4488a4a36b9a4ba6b9334a32a39971f77c1436ec82c38707bce707699cc3bbcb"
 dependencies = [
+ "quote",
+ "syn 2.0.119",
+]
+
+[[package]]
+name = "prost"
+version = "0.14.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "528ac67416ff8646872a3c02cad9cc4ee5dc9f9540c9b10771855c95cb2e5ae1"
+dependencies = [
+ "bytes",
+ "prost-derive",
+]
+
+[[package]]
+name = "prost-derive"
+version = "0.14.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b570b25f7617e43d59005d0990ccb79e950a423952cea19671b7a876da390adf"
+dependencies = [
+ "anyhow",
+ "itertools 0.14.0",
+ "proc-macro2",
  "quote",
  "syn 2.0.119",
 ]

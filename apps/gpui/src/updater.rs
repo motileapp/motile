@@ -265,7 +265,7 @@ impl Updater {
 
 /// This client's version, which is the release's: the version of the repository's Cargo.toml,
 /// as the release workflow writes it, and as the Mac app takes its own.
-fn release_version() -> &'static str {
+pub fn release_version() -> &'static str {
     const WORKSPACE: &str = include_str!("../../../Cargo.toml");
     WORKSPACE
         .lines()

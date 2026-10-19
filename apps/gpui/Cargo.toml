@@ -27,6 +27,16 @@ image = { version = "0.25", default-features = false, features = ["png", "jpeg",
 reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider", "json", "form", "query"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+mvt-reader = "2.5"
+geo-types = { version = "0.7", default-features = false }
+flate2 = "1"
+lru = "0.18"
+ttf-parser = "0.25"
+lyon = "1"
+
+[dev-dependencies]
+# The map painter's pictures in the tests.
+tiny-skia = "0.11"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"

@@ -10,7 +10,7 @@ use std::rc::Rc;
 use gpui_kit::prelude::*;
 use gpui_kit::*;
 
-use crate::theme::{Colors, ControlSize, Layer, Opacity, Radius, Surface, colors};
+use crate::theme::{Colors, ControlSize, Layer, Opacity, Radius, ShadowSize, Surface, colors};
 use crate::ui::menu::{Anchor, Menu};
 use crate::ui::{OnClick, tooltip};
 use crate::ui::{icons, motion};
@@ -39,6 +39,9 @@ pub enum Variant {
     Accent,
     /// A secondary button as it is in the dark, over a picture or a video.
     Overlay,
+    /// The surface's colour, a little see-through, edged and lifted by a shadow: a control that
+    /// floats over a map or a picture in either appearance.
+    Glass,
 }
 
 /// What a button shows before its words: a symbol, a picture of its own like a logo, or
@@ -102,6 +105,7 @@ impl Look {
             }
             Variant::Link | Variant::Accent => c.primary,
             Variant::Overlay => c.foreground_over_picture,
+            Variant::Glass => c.foreground,
         }
     }
 
@@ -146,6 +150,13 @@ impl Look {
                     c.control_over_picture
                 }
             }
+            Variant::Glass => {
+                if on {
+                    self.surface.color(c)
+                } else {
+                    c.at(self.surface.color(c), Opacity::Lit)
+                }
+            }
         }
     }
 
@@ -163,6 +174,21 @@ impl Look {
     /// The line around an outline button.
     pub fn border(&self, c: &Colors) -> Option<Hsla> {
         (self.variant == Variant::Outline).then(|| self.surface.border(c))
+    }
+
+    /// The shadow a glass control floats on, with its edge as a hairline that takes no room.
+    pub fn shadow(&self, c: &Colors) -> Option<Vec<BoxShadow>> {
+        if self.variant != Variant::Glass {
+            return None;
+        }
+        let edge = BoxShadow {
+            color: self.surface.border(c),
+            offset: point(px(0.), px(0.)),
+            blur_radius: px(0.),
+            spread_radius: px(1.),
+            inset: false,
+        };
+        Some([vec![edge], c.shadow(ShadowSize::Sm, Opacity::ShadowStronger)].concat())
     }
 
     pub fn radius(&self) -> f32 {
@@ -237,6 +263,8 @@ pub struct ControlLabel {
     pub placeholder: bool,
     /// When it fills, its words are at the start and its chevron at the end.
     pub spread: bool,
+    /// Its symbol stands after its words, as an Expand button's.
+    pub symbol_after: bool,
 }
 
 impl ControlLabel {
@@ -259,6 +287,7 @@ impl ControlLabel {
             tint: None,
             placeholder: false,
             spread: false,
+            symbol_after: false,
         }
     }
 
@@ -275,8 +304,8 @@ impl ControlLabel {
         let size = self.size;
         let wordless = self.wordless();
         let padding = self.padding.unwrap_or(size.padding());
-        let leading = if wordless { 0. } else { padding - if self.icon.is_some() { size.symbol_outset() } else { 0. } };
-        let trailing = if wordless { 0. } else { padding - if self.chevron { size.chevron_outset() } else { 0. } };
+        let (leading, trailing) = self.outsets();
+        let (leading, trailing) = if wordless { (0., 0.) } else { (padding - leading, padding - trailing) };
         let mark = self.icon.as_ref().map(|icon| match icon {
             ControlIcon::Picture(_) => self.symbol_size.unwrap_or(size.symbol_side()),
             ControlIcon::Pictures(_, width) => *width,
@@ -300,6 +329,13 @@ impl ControlLabel {
             false => 0.,
         };
         (leading + self.picture_inset() + stack + chevron + trailing).max(size.height())
+    }
+
+    /// How much nearer its sides its symbol and its chevron stand than its words would.
+    fn outsets(&self) -> (f32, f32) {
+        let symbol = if self.icon.is_some() { self.size.symbol_outset() } else { 0. };
+        let chevron = if self.chevron { self.size.chevron_outset() } else { 0. };
+        if self.symbol_after { (0., symbol.max(chevron)) } else { (symbol, chevron) }
     }
 
     /// A picture smaller than the square stays centred where the square would be.
@@ -327,6 +363,7 @@ impl ControlLabel {
         let tinted = self.tinted.clone().zip(self.tint);
         let placeholder = self.placeholder;
         let spread = self.fills && self.spread;
+        let symbol_after = self.symbol_after;
         let words = |title: Option<SharedString>,
                      tinted: Option<(SharedString, Hsla)>,
                      spins: bool,
@@ -337,6 +374,7 @@ impl ControlLabel {
                 .flex()
                 .items_center()
                 .gap(px(gap))
+                .when(symbol_after, |row| row.flex_row_reverse())
                 .when(spins && !turning, |row| row.child(Spinner::new(mark_size).render(cx)))
                 .when(!spins || turning, |row| {
                     row.when_some(icon, |row, icon| match icon {
@@ -378,8 +416,8 @@ impl ControlLabel {
         };
         let overlay_spinner = self.pending && !has_icon && waiting_title.is_none();
         let text_hidden = self.pending && !spins;
-        let leading = if wordless { 0. } else { side_padding - if has_icon { size.symbol_outset() } else { 0. } };
-        let trailing = if wordless { 0. } else { side_padding - if self.chevron { size.chevron_outset() } else { 0. } };
+        let (leading, trailing) = self.outsets();
+        let (leading, trailing) = if wordless { (0., 0.) } else { (side_padding - leading, side_padding - trailing) };
         div()
             .relative()
             .flex()
@@ -553,6 +591,12 @@ impl ActionButton {
     /// Pictures side by side before its words, `width` wide.
     pub fn pictures(mut self, pictures: impl IntoElement, width: f32) -> Self {
         self.label.icon = Some(ControlIcon::Pictures(pictures.into_any_element(), width));
+        self
+    }
+
+    /// Its symbol after its words.
+    pub fn symbol_after(mut self) -> Self {
+        self.label.symbol_after = true;
         self
     }
 
@@ -813,6 +857,7 @@ impl RenderOnce for ActionButton {
                     .rounded_br(corners.bottom_right)
                     .bg(fill)
                     .when_some(look.border(c), |inner, border| inner.border_1().border_color(border))
+                    .when_some(look.shadow(c), |inner, shadow| inner.shadow(shadow))
                     .text_color(foreground)
                     .when(active, |inner| {
                         inner

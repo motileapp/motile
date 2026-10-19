@@ -1,0 +1,221 @@
+{
+  "layers": {
+    "ferries": {
+      "items": 3,
+      "lines": 22,
+      "points": 303,
+      "width": 0.8
+    },
+    "landcover": {
+      "items": 3,
+      "rings": 29,
+      "points": 2580
+    },
+    "main-roads": {
+      "items": 4,
+      "lines": 413,
+      "points": 946,
+      "width": 3.2
+    },
+    "parks": {
+      "items": 4,
+      "rings": 20,
+      "points": 1546
+    },
+    "route": {
+      "items": 1,
+      "lines": 1,
+      "points": 4,
+      "width": 3.2
+    },
+    "school": {
+      "items": 3,
+      "rings": 5,
+      "points": 78
+    },
+    "streets": {
+      "items": 4,
+      "lines": 4177,
+      "points": 14503,
+      "width": 1.6
+    },
+    "water": {
+      "items": 4,
+      "rings": 10,
+      "points": 1856
+    }
+  },
+  "marks": [
+    {
+      "layer": "city-labels",
+      "lines": [
+        "San Francisco"
+      ],
+      "at": [
+        553.9,
+        372.0
+      ],
+      "size": 14.0
+    },
+    {
+      "layer": "pin-shadow",
+      "circle": [
+        565.6,
+        257.7
+      ],
+      "radius": 14.0
+    },
+    {
+      "layer": "pin-shadow",
+      "circle": [
+        275.6,
+        253.4
+      ],
+      "radius": 18.0
+    },
+    {
+      "layer": "pin-shadow",
+      "circle": [
+        72.0,
+        106.9
+      ],
+      "radius": 18.0
+    },
+    {
+      "layer": "pin-shadow",
+      "circle": [
+        648.0,
+        317.1
+      ],
+      "radius": 18.0
+    },
+    {
+      "layer": "pin",
+      "circle": [
+        565.6,
+        255.7
+      ],
+      "radius": 11.0
+    },
+    {
+      "layer": "pin",
+      "circle": [
+        275.6,
+        251.4
+      ],
+      "radius": 16.0
+    },
+    {
+      "layer": "pin",
+      "circle": [
+        72.0,
+        104.9
+      ],
+      "radius": 16.0
+    },
+    {
+      "layer": "pin",
+      "circle": [
+        648.0,
+        315.1
+      ],
+      "radius": 16.0
+    },
+    {
+      "layer": "pin-selected",
+      "circle": [
+        648.0,
+        315.1
+      ],
+      "radius": 18.0
+    },
+    {
+      "layer": "pin-mark",
+      "lines": [
+        "2"
+      ],
+      "at": [
+        565.6,
+        248.5
+      ],
+      "size": 12.0
+    },
+    {
+      "layer": "pin-mark",
+      "lines": [
+        "🏛️"
+      ],
+      "at": [
+        275.6,
+        240.6
+      ],
+      "size": 18.0
+    },
+    {
+      "layer": "pin-mark",
+      "lines": [
+        "🌉"
+      ],
+      "at": [
+        72.0,
+        94.1
+      ],
+      "size": 18.0
+    },
+    {
+      "layer": "pin-mark",
+      "lines": [
+        "☕"
+      ],
+      "at": [
+        648.0,
+        304.3
+      ],
+      "size": 18.0
+    },
+    {
+      "layer": "pin-label",
+      "lines": [
+        "Coit Tower"
+      ],
+      "at": [
+        565.6,
+        272.5
+      ],
+      "size": 12.0
+    },
+    {
+      "layer": "pin-label",
+      "lines": [
+        "Palace of Fine Arts"
+      ],
+      "at": [
+        275.6,
+        271.8
+      ],
+      "size": 12.0
+    },
+    {
+      "layer": "pin-label",
+      "lines": [
+        "Golden Gate Bridge"
+      ],
+      "at": [
+        72.0,
+        125.3
+      ],
+      "size": 12.0
+    },
+    {
+      "layer": "pin-label",
+      "lines": [
+        "Ferry Building"
+      ],
+      "at": [
+        648.0,
+        335.5
+      ],
+      "size": 12.0
+    }
+  ]
+}
