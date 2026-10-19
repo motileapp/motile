@@ -594,7 +594,8 @@ impl Pass<'_> {
         }
     }
 
-    /// A component call: its arguments mapped to props and checked (§8.4).
+    /// A component call: its arguments mapped to props and checked (§8.4). A prop that is
+    /// absent or null takes its default.
     fn element(&mut self, def: &ComponentDef, args: &[Expr]) -> Node {
         let name = def.name.as_str();
         let signature = def.hint();
@@ -626,7 +627,7 @@ impl Pass<'_> {
             self.error(Code::ExcessArgs, name, "", message, Some(signature_hint(&signature)));
         }
         let mut missing = false;
-        for param in def.props.iter().filter(|param| param.required() && !dropped.contains(&param.name.as_str())) {
+        for param in def.props.iter().filter(|param| !dropped.contains(&param.name.as_str())) {
             let index = props.iter().position(|(prop, _)| *prop == param.name);
             if index.is_some_and(|index| props[index].1 != Node::null()) {
                 continue;
@@ -636,6 +637,9 @@ impl Pass<'_> {
                     Some(index) => props[index].1 = Node::Lit(default.clone()),
                     None => props.push((param.name.clone(), Node::Lit(default.clone()))),
                 }
+                continue;
+            }
+            if !param.required() {
                 continue;
             }
             self.missing(name, &format!("/{}", param.name), index.is_some(), &signature);
@@ -753,4 +757,80 @@ fn fold(node: Node) -> Node {
         return node;
     }
     Node::Lit(eval::constant(&node))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::library::{ComponentDef, LibraryDef};
+    use crate::schema::Schema;
+
+    fn library() -> Library {
+        let node = Schema::array(Schema::Any);
+        Library::new(LibraryDef {
+            root: Some("Stack".into()),
+            components: vec![
+                ComponentDef::new("Stack", "", [node.field("children")]),
+                ComponentDef::new(
+                    "Text",
+                    "",
+                    [
+                        Schema::String.field("text"),
+                        Schema::enumeration(["sm", "md"]).field("size").optional().with_default("md"),
+                    ],
+                ),
+            ],
+            ..LibraryDef::default()
+        })
+        .unwrap()
+    }
+
+    fn root_value(program: &Program) -> Value {
+        eval::constant(program.root.as_ref().unwrap())
+    }
+
+    #[test]
+    fn fills_defaults_and_names_statements() {
+        let program =
+            Program::parse(&library(), "root = Stack([t, Text(\"b\", null), Text(\"c\", \"xl\")])\nt = Text(\"a\")");
+        let root = root_value(&program);
+        let children = root.as_element().unwrap().props["children"].as_array().unwrap();
+        let sizes: Vec<&Value> = children.iter().map(|child| &child.as_element().unwrap().props["size"]).collect();
+        assert_eq!(sizes, [&Value::from("md"); 3]);
+        assert_eq!(children[0].as_element().unwrap().statement.as_deref(), Some("t"));
+        assert_eq!(root.as_element().unwrap().statement.as_deref(), Some("root"));
+        assert_eq!(program.errors.len(), 1);
+        assert_eq!(program.errors[0].code, Code::TypeMismatch);
+    }
+
+    #[test]
+    fn reports_inline_queries_only_in_value_positions() {
+        let program = Program::parse(
+            &library(),
+            "root = Stack([Query(\"t\", {}, {}), Text(Query(\"t\", {}, {}) == null ? \"n\" : \"v\")])",
+        );
+        let codes: Vec<Code> = program.errors.iter().map(|error| error.code).collect();
+        assert_eq!(codes, [Code::InlineReserved]);
+        let children = root_value(&program).as_element().unwrap().props["children"].as_array().unwrap().len();
+        assert_eq!(children, 1);
+    }
+
+    #[test]
+    fn keeps_the_lowering_of_completed_statements_while_streaming() {
+        let library = library();
+        let mut parser = crate::parser::Parser::new();
+        let mut lowerer = Lowerer::default();
+        let element = |program: &Program| match program.root.as_ref().unwrap() {
+            Node::Lit(Value::Element(root)) => root.props["children"].as_array().unwrap()[0].clone(),
+            node => panic!("{node:?}"),
+        };
+        let first = Program::build(
+            &library,
+            &parser.push("root = Stack([t, u])\nt = Text(\"a\")\nu = Text(\"b", false),
+            &mut lowerer,
+        );
+        let second = Program::build(&library, &parser.push("c\")", false), &mut lowerer);
+        let (Value::Element(first), Value::Element(second)) = (element(&first), element(&second)) else { panic!() };
+        assert!(Arc::ptr_eq(&first, &second));
+    }
 }
