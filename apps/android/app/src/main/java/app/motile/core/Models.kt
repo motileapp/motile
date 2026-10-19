@@ -1286,25 +1286,24 @@ object Time {
         return "${date.format(DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM))}, $time"
     }
 
-    /** "850ms", "12s", "3m 5s", "1h 2m". */
+    /** "850ms", "12s", "3m 05s", "1h 02m". */
     fun duration(milliseconds: Int): String {
         if (milliseconds < 1000) return "${milliseconds}ms"
         val seconds = milliseconds / 1000
-        return when {
-            seconds < 60 -> "${seconds}s"
-            seconds < 3600 -> "${seconds / 60}m ${seconds % 60}s"
-            else -> "${seconds / 3600}h ${seconds % 3600 / 60}m"
-        }
+        if (seconds < 60) return "${seconds}s"
+        return minutes(seconds)
     }
 
-    /** A running timer: "5s", "12m", "1h 3m". */
+    /** "3m 05s", "1h 02m": the second unit always takes two digits, so a timer doesn't jump. */
+    private fun minutes(seconds: Int): String =
+        if (seconds < 3600) "${seconds / 60}m ${(seconds % 60).toString().padStart(2, '0')}s"
+        else "${seconds / 3600}h ${(seconds % 3600 / 60).toString().padStart(2, '0')}m"
+
+    /** A running timer: "5s", "12m 03s", "1h 03m". */
     fun elapsed(since: Double, now: Double = now()): String {
         val seconds = max(0, (now - since).toInt())
-        return when {
-            seconds < 60 -> "${seconds}s"
-            seconds < 3600 -> "${seconds / 60}m ${seconds % 60}s"
-            else -> "${seconds / 3600}h ${seconds % 3600 / 60}m"
-        }
+        if (seconds < 60) return "${seconds}s"
+        return minutes(seconds)
     }
 }
 

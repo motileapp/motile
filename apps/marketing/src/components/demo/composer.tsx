@@ -1,5 +1,6 @@
 import {
   ArrowUpIcon,
+  EyeIcon,
   FolderGit2Icon,
   FolderIcon,
   GitBranchIcon,
@@ -49,9 +50,9 @@ export function Composer({
     <div className="mx-auto w-full max-w-[796px]">
       {status.kind === "monitoring" && (
         <Strip edge="top">
-          <span className="mr-2 ml-3.5 size-1.5 rounded-full bg-foreground" />
+          <EyeIcon className="mr-1 ml-[10.5px] size-3.5 shrink-0 text-foreground" />
           <span className="text-[12.5px] font-medium text-foreground tabular-nums">
-            Monitoring for {elapsed(status.since)}
+            Monitoring: {elapsed(status.since)}
           </span>
           <button
             type="button"

@@ -284,12 +284,14 @@ struct SettingsPage: View {
         if store.servers.isEmpty {
             SettingsNote("The accounts your agents work with are set on each of your servers, once you have one.")
         } else {
-            SettingsGroup("agent-accounts", "Accounts", caption: "Each account keeps its sign-in in a folder of its own. A thread works with one and can move to another.", carded: false) {
-                ForEach(store.servers) { server in
-                    VStack(spacing: 0) {
-                        agentAccounts(of: server)
+            SettingsGroup("agent-accounts", "Provider Accounts", caption: "Each account keeps its sign-in in a folder of its own. A thread works with one and can move to another.", carded: false) {
+                VStack(spacing: 24) {
+                    ForEach(store.servers) { server in
+                        VStack(spacing: 0) {
+                            agentAccounts(of: server)
+                        }
+                        .card()
                     }
-                    .card()
                 }
             }
         }

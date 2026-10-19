@@ -30,8 +30,9 @@ class ModelsTest {
     fun durationsReadAsShortAsTheyCan() {
         assertEquals("850ms", Time.duration(850))
         assertEquals("12s", Time.duration(12_000))
-        assertEquals("3m 5s", Time.duration(185_000))
-        assertEquals("1h 2m", Time.duration(3_720_000))
+        assertEquals("3m 05s", Time.duration(185_000))
+        assertEquals("12m 30s", Time.duration(750_000))
+        assertEquals("1h 02m", Time.duration(3_720_000))
         assertEquals("now", Time.ago(100.0, now = 130.0))
         assertEquals("5m", Time.ago(0.0, now = 300.0))
         assertEquals("2d", Time.ago(0.0, now = 2 * 86400.0 + 5))

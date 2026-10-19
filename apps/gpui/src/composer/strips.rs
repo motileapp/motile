@@ -24,7 +24,10 @@ use crate::theme::{self, ControlSize, Radius, Surface, colors};
 use crate::ui::control::{ControlIcon, ControlLabel};
 use crate::ui::menu::{Anchor, MenuIcon};
 use crate::ui::rich_text::RichText;
-use crate::ui::{ActionButton, ActionMenu, AgentAvatars, FadingScroll, Variant, edges, icons, logos, text_width};
+use crate::ui::{
+    ActionButton, ActionMenu, AgentAvatars, FadingScroll, Variant, edges, icons, logos, tabular_numbers,
+    tabular_text_width, text_width,
+};
 
 pub const STRIP_RADIUS: f32 = Radius::LG;
 /// The room between a control and the strip's visible edges.
@@ -70,30 +73,37 @@ pub fn monitoring_strip(
     let children = thread.children.as_ref().filter(|children| children.running_text.is_some());
     let help = if children.is_some() { "Stop monitoring and its agents" } else { "Stop monitoring" };
     let stop = stop_button(store, "stop-monitoring", help, cx);
-    let label = format!("Monitoring for {}", elapsed(thread.monitoring_since()));
+    let label = format!("Monitoring: {}", elapsed(thread.monitoring_since()));
     let size = ControlSize::Regular;
     let room = width
         - strip_sides()
-        - MONITORING_DOT_ROOM
-        - text_width(&label, size.text_size(), FontWeight::MEDIUM, window)
+        - monitoring_eye_room()
+        - tabular_text_width(&label, size.text_size(), FontWeight::MEDIUM, window)
         - AGENTS_DOT
         - agents_button_lead()
         - SPACER
         - stop.natural_width(window, cx);
-    let agents = children.map(|children| agents_button(store, children, room, window, cx));
+    let agents = children.map(|children| agents_button(store, children, false, room, window, cx));
     strip(true, Some(HEIGHT), cx)
-        .child(div().ml(px(14.)).mr(px(8.)).size(px(6.)).rounded_full().bg(c.foreground).flex_shrink_0())
+        .child(
+            div()
+                .ml(px(INSET + agents_button_lead()))
+                .mr(px(SYMBOL_GAP))
+                .flex_shrink_0()
+                .child(icons::symbol("eye", size.symbol()).text_color(c.foreground)),
+        )
         .child(
             div()
                 .flex_shrink_0()
                 .whitespace_nowrap()
                 .text_size(px(size.text_size()))
                 .font_weight(FontWeight::MEDIUM)
+                .font_features(tabular_numbers())
                 .text_color(c.foreground)
                 .child(label),
         )
         .when_some(agents, |strip, agents| {
-            // The button's own room before its avatars is the dot's on its other side.
+            // The button's own room before its symbol is the dot's on its other side.
             strip
                 .child(
                     div()
@@ -122,7 +132,7 @@ pub fn agents_strip(
     let stop = stops.then(|| stop_button(store, "stop-agents", "Stop its agents", cx));
     let room = width - strip_sides() - INSET - SPACER - stop.as_ref().map_or(0., |stop| stop.natural_width(window, cx));
     strip(true, Some(HEIGHT), cx)
-        .child(div().pl(px(INSET)).flex_shrink_0().child(agents_button(store, children, room, window, cx)))
+        .child(div().pl(px(INSET)).flex_shrink_0().child(agents_button(store, children, true, room, window, cx)))
         .child(div().flex_1().min_w(px(SPACER)))
         .children(stop)
 }
@@ -130,12 +140,18 @@ pub fn agents_strip(
 const SPACER: f32 = 8.;
 const AVATAR_SIDE: f32 = 20.;
 const AGENTS_DOT: f32 = 3.;
-/// The monitoring dot and the room either side of it.
-const MONITORING_DOT_ROOM: f32 = 14. + 6. + 8.;
 
 /// The room between the agents button's side and its avatars.
 fn agents_button_lead() -> f32 {
     ControlSize::Regular.padding() - ControlSize::Regular.symbol_outset()
+}
+
+/// The room between the monitoring strip's eye and bot and their words.
+const SYMBOL_GAP: f32 = 4.;
+
+/// The eye before "Monitoring:" and the room either side of it.
+fn monitoring_eye_room() -> f32 {
+    INSET + agents_button_lead() + ControlSize::Regular.symbol_side() + SYMBOL_GAP
 }
 
 /// What a strip's sides take from the composer's width: its distance from the composer's
@@ -157,20 +173,36 @@ fn stop_button(store: &Entity<Store>, id: &'static str, help: &str, cx: &App) ->
     )
 }
 
-/// The agents that work, side by side, as the way to the Agents tab. Where its words don't fit
-/// in `room` it only counts them.
-fn agents_button(store: &Entity<Store>, children: &Children, room: f32, window: &mut Window, cx: &App) -> ActionButton {
+/// The agents that work, side by side or as a bot, as the way to the Agents tab. Where its words
+/// don't fit in `room` it only counts them.
+fn agents_button(
+    store: &Entity<Store>,
+    children: &Children,
+    avatars: bool,
+    room: f32,
+    window: &mut Window,
+    cx: &App,
+) -> ActionButton {
     let text = children.running_text.clone().unwrap_or_default();
     let button = |words: String, tinted: Option<&str>| {
-        let more = (children.running as usize).saturating_sub(children.working.len());
-        let avatars = AgentAvatars::new(children.working.iter().copied().map(Some).collect(), more).side(AVATAR_SIDE);
-        let width = avatars.width();
-        // Taller than the words, they reach into the button's room above and below them.
-        let avatars = div().my(px((ControlSize::Regular.symbol_side() - AVATAR_SIDE) / 2.)).child(avatars);
         let store = store.clone();
-        ActionButton::new("composer-agents", words)
+        let button = ActionButton::new("composer-agents", words);
+        let button = match avatars {
+            true => {
+                let more = (children.running as usize).saturating_sub(children.working.len());
+                let pictures =
+                    AgentAvatars::new(children.working.iter().copied().map(Some).collect(), more).side(AVATAR_SIDE);
+                let width = pictures.width();
+                // Taller than the words, they reach into the button's room above and below them.
+                button.pictures(
+                    div().my(px((ControlSize::Regular.symbol_side() - AVATAR_SIDE) / 2.)).child(pictures),
+                    width,
+                )
+            }
+            false => button.symbol("bot").gap(SYMBOL_GAP),
+        };
+        button
             .when_some(tinted, |button, tinted| button.tinted(tinted.to_string()))
-            .pictures(avatars, width)
             .help(text.clone())
             .ghost()
             .tint(Some(colors(cx).process))
@@ -183,9 +215,10 @@ fn agents_button(store: &Entity<Store>, children: &Children, room: f32, window: 
                 })
             })
     };
-    let full = match &children.running_count {
-        Some(count) => button(count.clone(), Some("working")),
-        None => button(text.clone(), None),
+    let full = match (avatars, &children.running_count) {
+        (false, _) => button(format!("{} working", children.running), None),
+        (true, Some(count)) => button(count.clone(), Some("working")),
+        (true, None) => button(text.clone(), None),
     };
     if full.natural_width(window, cx) <= room {
         return full;

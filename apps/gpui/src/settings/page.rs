@@ -430,18 +430,13 @@ impl SettingsPage {
                 cx,
             )];
         }
-        let cards = servers
-            .iter()
-            .enumerate()
-            .map(|(index, server)| {
-                crate::ui::card_default(div().flex().flex_col(), cx)
-                    .children(self.agent_accounts(index, server, cx))
-                    .into_any_element()
-            })
-            .collect();
+        let cards = servers.iter().enumerate().map(|(index, server)| {
+            crate::ui::card_default(div().flex().flex_col(), cx).children(self.agent_accounts(index, server, cx))
+        });
+        let cards = vec![div().flex().flex_col().gap(px(24.)).children(cards).into_any_element()];
         let caption =
             "Each account keeps its sign-in in a folder of its own. A thread works with one and can move to another.";
-        vec![group("agent-accounts", "Accounts", Some(caption), false, cards, cx)]
+        vec![group("agent-accounts", "Provider Accounts", Some(caption), false, cards, cx)]
     }
 
     fn agent_accounts(&self, index: usize, server: &Server, cx: &mut Context<Self>) -> Vec<AnyElement> {

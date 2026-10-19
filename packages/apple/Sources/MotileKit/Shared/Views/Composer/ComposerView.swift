@@ -142,30 +142,30 @@ struct ComposerView: View {
 
     private func monitoringLabel(now: Double) -> String {
         guard let thread = store.selectedThread else { return "Monitoring" }
-        return "Monitoring for \(Time.elapsed(since: thread.monitoringSince, now: now))"
+        return "Monitoring: \(Time.elapsed(since: thread.monitoringSince, now: now))"
     }
 
     private var monitoringStrip: some View {
         HStack(spacing: 0) {
-            Circle()
-                .fill(Color.themeForeground)
-                .frame(width: 6, height: 6)
-                .padding(.leading, 14)
-                .padding(.trailing, 8)
+            Image(.eye, size: ControlSize.regular.symbol)
+                .foregroundStyle(Color.themeForeground)
+                .padding(.leading, ComposerStrip.inset + Self.agentsButtonLead)
+                .padding(.trailing, Self.symbolGap)
             TimelineView(.periodic(from: .now, by: 1)) { context in
                 Text(monitoringLabel(now: context.date.timeIntervalSince1970))
                     .font(ControlSize.regular.font)
+                    .monospacedDigit()
                     .foregroundStyle(Color.themeForeground)
                     .lineLimit(1)
                     .fixedSize()
             }
             if let children = store.selectedThread?.children, let text = children.runningText {
-                // The button's own room before its avatars is the dot's on its other side.
+                // The button's own room before its symbol is the dot's on its other side.
                 Circle()
                     .fill(Color.themeMutedStrongerForeground)
                     .frame(width: 3, height: 3)
                     .padding(.leading, Self.agentsButtonLead)
-                agentsButton(text, children: children)
+                agentsButton(text, children: children, avatars: false)
             }
             Spacer(minLength: 8)
             ActionButton("Stop", help: store.shortcuts.help(stopHelp, "thread.stop"), variant: .ghost, margin: ComposerStrip.margin) { store.stop() }
@@ -191,27 +191,34 @@ struct ComposerView: View {
         .modifier(ComposerStrip(edge: .top))
     }
 
-    /// The agents that work, side by side, as the way to the Agents tab.
-    private func agentsButton(_ text: String, children: ThreadChildren) -> some View {
-        let avatars = AgentAvatars(
+    /// The agents that work, side by side or as a bot, as the way to the Agents tab.
+    private func agentsButton(_ text: String, children: ThreadChildren, avatars: Bool = true) -> some View {
+        let pictures = AgentAvatars(
             avatars: children.working.map { ($0, nil) }, more: max(0, children.running - children.working.count),
             side: ComposerView.avatarSide)
             // Taller than the words, they reach into the button's room above and below them.
             .padding(.vertical, (ControlSize.regular.symbolSide - ComposerView.avatarSide) / 2)
         let button = { (words: String, tinted: String?) in
             ActionButton(
-                words, tinted: tinted, pictures: AnyView(avatars), help: text, variant: .ghost, tint: .themeProcess,
+                words, tinted: tinted, icon: avatars ? nil : .bot, pictures: avatars ? AnyView(pictures) : nil, help: text, variant: .ghost,
+                gap: avatars ? nil : Self.symbolGap, tint: .themeProcess,
                 margin: EdgeInsets(top: ComposerStrip.inset, leading: 0, bottom: ComposerStrip.inset, trailing: 0)
             ) { store.rightPanel.open(.agents) }
         }
         // A narrow composer only counts them.
         return ViewThatFits(in: .horizontal) {
-            button(children.runningCount ?? text, children.runningCount == nil ? nil : "working")
+            if avatars {
+                button(children.runningCount ?? text, children.runningCount == nil ? nil : "working")
+            } else {
+                button("\(children.running) working", nil)
+            }
             button("\(children.running)", nil)
         }
     }
 
     private static let avatarSide: CGFloat = 20
+    /// The room between the monitoring strip's eye and bot and their words.
+    private static let symbolGap: CGFloat = 4
     /// The room between the agents button's side and its avatars.
     private static let agentsButtonLead = ControlSize.regular.padding - ControlSize.regular.symbolOutset
 

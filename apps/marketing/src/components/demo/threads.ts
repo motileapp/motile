@@ -168,7 +168,7 @@ export const threads: Thread[] = [
             runsOn: "Opus 5.5 · Personal",
             detail:
               "60 a minute per key hold; the 61st gets a 429 with Retry-After: 1.",
-            took: "1m 4s",
+            took: "1m 04s",
           },
         ],
       },
@@ -432,7 +432,7 @@ src/middleware.ts
           kind: "text",
           text: "Removed it. The migration test still covers a user who has the plist, with a copy it writes itself.",
         },
-        { kind: "end", worked: "Worked for 3m 4s" },
+        { kind: "end", worked: "Worked for 3m 04s" },
       ],
       denied: [
         {

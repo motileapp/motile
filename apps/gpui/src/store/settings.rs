@@ -41,7 +41,7 @@ impl SettingsSection {
             SettingsSection::General => "General",
             SettingsSection::Keyboard => "Keybindings",
             SettingsSection::Servers => "Servers",
-            SettingsSection::Accounts => "Accounts",
+            SettingsSection::Accounts => "Providers",
             SettingsSection::Projects => "Projects",
             SettingsSection::TextGeneration => "Text Generation",
             SettingsSection::PullRequests => "Pull Requests",
@@ -85,7 +85,7 @@ const ENTRIES: [(&str, &str, SettingsSection, &str); 18] = [
     ("storage", "Images and videos", SettingsSection::General, "storage cache clear media disk"),
     (
         "agent-accounts",
-        "Accounts",
+        "Provider Accounts",
         SettingsSection::Accounts,
         "agents claude codex sign in login folder subscription plan api key router",
     ),

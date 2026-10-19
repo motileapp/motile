@@ -179,12 +179,12 @@ private fun MonitoringStrip(thread: ThreadInfo) {
     val children = thread.children
     val agentsText = children?.runningText
     Row(Modifier.fillMaxWidth().composerStrip(ComposerStrip.Edge.Top), verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.padding(start = 14.dp, end = 8.dp).size(6.dp).background(Theme.colors.foreground, CircleShape))
-        Text("Monitoring for ${Time.elapsed(thread.monitoringSince, now)}", style = ControlSize.Regular.font, color = Theme.colors.foreground, maxLines = 1)
+        Icon(Symbol.Eye, ControlSize.Regular.symbol, Modifier.padding(start = ComposerStrip.inset + AgentsButton.lead, end = AgentsButton.symbolGap), color = Theme.colors.foreground)
+        Text("Monitoring: ${Time.elapsed(thread.monitoringSince, now)}", style = ControlSize.Regular.font.copy(fontFeatureSettings = "tnum"), color = Theme.colors.foreground, maxLines = 1)
         if (children != null && agentsText != null) {
-            // The button's own room before its avatars is the dot's on its other side.
+            // The button's own room before its symbol is the dot's on its other side.
             Box(Modifier.padding(start = AgentsButton.lead).size(3.dp).background(Theme.colors.mutedStrongerForeground, CircleShape))
-            AgentsButton(agentsText, children, Modifier.weight(1f).padding(end = 8.dp))
+            AgentsButton(agentsText, children, Modifier.weight(1f).padding(end = 8.dp), avatars = false)
         } else {
             Spacer(Modifier.weight(1f).widthIn(min = 8.dp))
         }
@@ -212,29 +212,41 @@ private object AgentsButton {
     val avatarSide = 20.dp
     /** The room between the agents button's side and its avatars. */
     val lead = ControlSize.Regular.padding - ControlSize.Regular.symbolOutset
+    /** The room between the monitoring strip's eye and bot and their words. */
+    val symbolGap = 4.dp
 }
 
-/** The agents that work, side by side, as the way to the Agents tab. */
+/** The agents that work, side by side or as a bot, as the way to the Agents tab. */
 @Composable
-private fun AgentsButton(text: String, children: ThreadChildren, modifier: Modifier = Modifier) {
+private fun AgentsButton(text: String, children: ThreadChildren, modifier: Modifier = Modifier, avatars: Boolean = true) {
     val store = LocalStore.current
     val button = @Composable { words: String, tinted: String? ->
         ActionButton(
-            words, tinted = tinted, help = text, variant = ButtonVariant.Ghost, tint = Theme.colors.process,
+            words, icon = if (avatars) null else Symbol.Bot, tinted = tinted, help = text, variant = ButtonVariant.Ghost,
+            gap = if (avatars) null else AgentsButton.symbolGap, tint = Theme.colors.process,
             margin = PaddingValues(vertical = ComposerStrip.inset),
-            pictures = {
-                // Taller than the words, they reach into the button's room above and below them.
-                AgentAvatars(
-                    children.working.map { it to null }, more = (children.running - children.working.size).coerceAtLeast(0),
-                    Modifier.overhang(vertical = (AgentsButton.avatarSide - ControlSize.Regular.symbolSide) / 2),
-                    side = AgentsButton.avatarSide,
-                )
+            pictures = if (!avatars) null else {
+                {
+                    // Taller than the words, they reach into the button's room above and below them.
+                    AgentAvatars(
+                        children.working.map { it to null }, more = (children.running - children.working.size).coerceAtLeast(0),
+                        Modifier.overhang(vertical = (AgentsButton.avatarSide - ControlSize.Regular.symbolSide) / 2),
+                        side = AgentsButton.avatarSide,
+                    )
+                }
             },
         ) { store.rightPanel.open(PanelTab.Agents) }
     }
     // A narrow composer only counts them.
     val count = children.runningCount
-    FirstThatFits(modifier, { if (count == null) button(text, null) else button(count, "working") }, { button("${children.running}", null) })
+    val full = @Composable {
+        when {
+            !avatars -> button("${children.running} working", null)
+            count == null -> button(text, null)
+            else -> button(count, "working")
+        }
+    }
+    FirstThatFits(modifier, full, { button("${children.running}", null) })
 }
 
 @Composable

@@ -289,6 +289,8 @@ function useSeconds() {
 
 function formatElapsed(seconds: number) {
   if (seconds < 60) return `${seconds}s`
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${seconds % 60}s`
-  return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`
+  const twoDigits = (value: number) => String(value).padStart(2, "0")
+  if (seconds < 3600)
+    return `${Math.floor(seconds / 60)}m ${twoDigits(seconds % 60)}s`
+  return `${Math.floor(seconds / 3600)}h ${twoDigits(Math.floor((seconds % 3600) / 60))}m`
 }

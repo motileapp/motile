@@ -931,7 +931,7 @@ pub fn ago(timestamp: f64) -> String {
     format!("{}d", (seconds / 86400.) as u64)
 }
 
-/// "850ms", "12s", "3m 5s", "1h 2m".
+/// "850ms", "12s", "3m 05s", "1h 02m".
 pub fn duration(milliseconds: u64) -> String {
     if milliseconds < 1000 {
         return format!("{milliseconds}ms");
@@ -940,22 +940,24 @@ pub fn duration(milliseconds: u64) -> String {
     if seconds < 60 {
         return format!("{seconds}s");
     }
-    if seconds < 3600 {
-        return format!("{}m {}s", seconds / 60, seconds % 60);
-    }
-    format!("{}h {}m", seconds / 3600, seconds % 3600 / 60)
+    minutes(seconds)
 }
 
-/// A running timer: "5s", "12m 3s", "1h 3m".
+/// "3m 05s", "1h 02m": the second unit always takes two digits, so a timer doesn't jump.
+fn minutes(seconds: u64) -> String {
+    if seconds < 3600 {
+        return format!("{}m {:02}s", seconds / 60, seconds % 60);
+    }
+    format!("{}h {:02}m", seconds / 3600, seconds % 3600 / 60)
+}
+
+/// A running timer: "5s", "12m 03s", "1h 03m".
 pub fn elapsed(since: f64) -> String {
     let seconds = (now() - since).max(0.) as u64;
     if seconds < 60 {
         return format!("{seconds}s");
     }
-    if seconds < 3600 {
-        return format!("{}m {}s", seconds / 60, seconds % 60);
-    }
-    format!("{}h {}m", seconds / 3600, seconds % 3600 / 60)
+    minutes(seconds)
 }
 
 /// Whether `version` comes before `other`, comparing their numbers from the left.
@@ -1076,8 +1078,9 @@ mod tests {
     fn durations_read_as_short_as_they_can() {
         assert_eq!(duration(850), "850ms");
         assert_eq!(duration(12_000), "12s");
-        assert_eq!(duration(185_000), "3m 5s");
-        assert_eq!(duration(3_720_000), "1h 2m");
+        assert_eq!(duration(185_000), "3m 05s");
+        assert_eq!(duration(750_000), "12m 30s");
+        assert_eq!(duration(3_720_000), "1h 02m");
     }
 
     #[test]
