@@ -114,7 +114,7 @@ final class RowModel {
         case "fold":
             kind = .fold(FoldContent(json: json))
         case "error":
-            kind = .error(Typesetter.plain(json.string("message"), color: Theme.destructive, size: 13 * Platform.scale))
+            kind = .error(ErrorBox.message(json.string("message")))
         case "changes":
             kind = .changes(ChangesContent(json: json))
         case "turn_end":

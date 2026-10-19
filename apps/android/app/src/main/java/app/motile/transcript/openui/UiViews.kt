@@ -106,7 +106,7 @@ fun UiRow(row: RowModel, content: UiContent) {
             if (tree != null) {
                 CompositionLocalProvider(LocalUiHost provides host) { UiProgram(tree, width) }
             }
-            if (errors.isNotEmpty()) ErrorRow(errors.joinToString("\n"), Modifier.padding(top = if (tree != null) 12.dp else 0.dp))
+            if (errors.isNotEmpty()) ErrorRow(errors.joinToString("\n"), Modifier.padding(top = if (tree != null) 8.dp else 0.dp))
         }
     }
 }

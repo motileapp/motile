@@ -34,6 +34,8 @@ use crate::theme::Surface;
 const NARROW: f32 = 640.;
 /// The row keeps this much from the row above it, as a table in prose does from its paragraph.
 const ABOVE: f32 = 10.;
+/// How far a program's errors are under it.
+const ERROR_GAP: f32 = 8.;
 
 /// Sends an event of the node to core.
 pub type Sink = Rc<dyn Fn(&str, UiEvent, &mut App)>;
@@ -113,7 +115,7 @@ pub fn ui_row(model: &RowModel, ctx: &RowContext, window: &mut Window, cx: &mut 
         .pt(px(ABOVE))
         .flex()
         .flex_col()
-        .gap(px(12.))
+        .gap(px(ERROR_GAP))
         .when_some(ui.tree.as_deref(), |row, tree| row.child(root(tree, &ui_cx, window, cx)))
         .children(errors)
         .into_any_element()

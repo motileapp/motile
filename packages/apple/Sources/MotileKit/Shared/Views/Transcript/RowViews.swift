@@ -773,23 +773,59 @@ final class ToolRowView: RowView {
     }
 }
 
-final class ErrorRowView: RowView {
+/// An error on its tint with its sign before it: the transcript's error row, and a program's
+/// errors under it.
+final class ErrorBox {
     /// The room beside the text, and the room above and under it.
     static let textInset: CGFloat = 36 + 14
-    static let padding: CGFloat = 20 + 14
+    static let padding: CGFloat = 20
 
+    let text = RowTextView.make()
     private let surface = SurfaceView()
     private let icon = SymbolView(.circleAlert, size: 13, tint: Theme.destructive)
-    private let text = RowTextView.make()
+
+    init(in view: PlatformView) {
+        surface.fill = Theme.destructiveTint
+        surface.radius = Radius.lg
+        view.addSubview(surface)
+        surface.addSubview(icon)
+        surface.addSubview(text)
+    }
+
+    static func message(_ text: String) -> NSAttributedString {
+        Typesetter.plain(text, color: Theme.destructive, size: 13 * Platform.scale)
+    }
+
+    static func height(_ message: NSAttributedString, width: CGFloat) -> CGFloat {
+        TextMeasure.height(of: message, width: width - textInset) + padding
+    }
+
+    var isHidden: Bool {
+        get { surface.isHidden }
+        set { surface.isHidden = newValue }
+    }
+
+    /// Lays the box out from `y`, as wide as `width`: its height.
+    func layout(y: CGFloat, width: CGFloat) -> CGFloat {
+        let inner = width - Self.textInset
+        let height = text.height(forWidth: inner)
+        surface.frame = CGRect(x: 0, y: y, width: width, height: height + Self.padding)
+        icon.frame = CGRect(x: 12, y: 10, width: 16, height: 18)
+        text.frame = CGRect(x: 36, y: 10, width: inner, height: height)
+        return height + Self.padding
+    }
+}
+
+final class ErrorRowView: RowView {
+    static let textInset = ErrorBox.textInset
+    /// The box's height and the room above and under it.
+    static let padding: CGFloat = ErrorBox.padding + 14
+
+    private lazy var box = ErrorBox(in: self)
 
     override init(frame: CGRect) {
         super.init(frame: frame)
-        surface.fill = Theme.destructiveTint
-        surface.radius = Radius.lg
-        addSubview(surface)
-        surface.addSubview(icon)
-        surface.addSubview(text)
-        text.onSelect = { [weak self] in
+        box.text.onSelect = { [weak self] in
             guard let self else { return }
             self.owner?.rowWillSelect(self)
         }
@@ -800,19 +836,14 @@ final class ErrorRowView: RowView {
     override func configure(_ row: RowModel) {
         super.configure(row)
         guard case .error(let message) = row.kind else { return }
-        text.content = message
+        box.text.content = message
     }
 
     override func layout(width: CGFloat) -> CGFloat {
-        let inner = width - Self.textInset
-        let height = text.height(forWidth: inner)
-        surface.frame = CGRect(x: 0, y: 4, width: width, height: height + 20)
-        icon.frame = CGRect(x: 12, y: 10, width: 16, height: 18)
-        text.frame = CGRect(x: 36, y: 10, width: inner, height: height)
-        return height + Self.padding
+        box.layout(y: 4, width: width) + 14
     }
 
-    override func clearSelection() { text.clearSelection() }
+    override func clearSelection() { box.text.clearSelection() }
 }
 
 /// What a turn changed: how many files and lines, and the files under their folders. A click on
