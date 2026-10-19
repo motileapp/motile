@@ -165,6 +165,9 @@ fun Root(store: AppStore) {
                 containerColor = palette.popover,
             )
         }
+        Asking(store.uiConfirm, onDismiss = { store.dismissUiConfirm() }) { asked ->
+            Confirmation("Run this command?", asked.command, listOf(Answer("Run") { store.allowUiConfirm(asked) }), dismissal = "Don't Run")
+        }
         Asking(store.stopping, onDismiss = { store.stopping = null }) { stopping ->
             Confirmation(
                 stopping.question, "What they did so far stays in their threads.",

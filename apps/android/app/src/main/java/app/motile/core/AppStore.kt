@@ -297,6 +297,9 @@ class AppStore(private val context: Context) {
     /** The stop that waits for the user to say it may end the agents a thread started. */
     var stopping by mutableStateOf<StopQuestion?>(null)
 
+    /** The command a program asks to run, which waits for the user to allow it. */
+    var uiConfirm by mutableStateOf<UiConfirm?>(null)
+
     /** What deleting a thread takes with it. */
     fun deletionNote(thread: ThreadInfo?): String {
         val inWorktree = thread?.let { project(it.projectID)?.seen(it)?.worktree != null } ?: false
@@ -590,6 +593,10 @@ class AppStore(private val context: Context) {
                     }
                 }
             }
+            "ui_confirm" -> {
+                val asked = UiConfirm(event.string("thread_id"), event.string("row_id"), event.long("call_id"), event.string("command"))
+                return { uiConfirm = asked }
+            }
             "live" -> {
                 val threadID = event.string("thread_id")
                 val live = event.bool("live")
@@ -629,6 +636,26 @@ class AppStore(private val context: Context) {
     /** Tells core what the user did to the node `node` of the program in the row. */
     fun sendUi(threadID: String, rowID: String, node: String, event: Map<String, Any?>) {
         core.send("ui", mapOf("thread_id" to threadID, "row_id" to rowID, "node" to node, "event" to event))
+    }
+
+    /** Lets the command a program asked to run go ahead. */
+    fun allowUiConfirm(asked: UiConfirm) {
+        uiConfirm = null
+        answerUiConfirm(asked, true)
+    }
+
+    /** The question went away: unless it was to allow the command, which follows at once, the command is refused. */
+    fun dismissUiConfirm() {
+        val asked = uiConfirm ?: return
+        uiConfirm = null
+        main.post { if (!allowed.remove(asked)) answerUiConfirm(asked, false) }
+    }
+
+    private val allowed = mutableSetOf<UiConfirm>()
+
+    private fun answerUiConfirm(asked: UiConfirm, allow: Boolean) {
+        if (allow) allowed += asked
+        core.send("ui_confirm", mapOf("thread_id" to asked.threadID, "row_id" to asked.rowID, "call_id" to asked.callID, "allow" to allow))
     }
 
     private fun apply(account: Account) {
