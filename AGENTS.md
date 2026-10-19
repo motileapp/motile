@@ -75,8 +75,9 @@ auth page), `theme.css` (Tailwind, for the web projects), the clients' `Tokens.s
 GPUI app's `apps/gpui/src/tokens.rs`, and the Android app's `Tokens.kt` with the few colours Android
 itself draws before the app does (`res/values/tokens.xml` and `res/values-night/tokens.xml`). It
 also writes OpenUI's map style for MapLibre, `map-style-light.json` and `map-style-dark.json`
-beside it, which every client bundles: OpenFreeMap's vector tiles drawn in the `map-*` tokens,
-with the route and the pins as layers. A colour that only one place needs, like the window buttons
+beside it, which every client bundles (the Apple package from its copy in
+`Sources/MotileKit/Map`): OpenFreeMap's vector tiles drawn in the `map-*` tokens, with the route and
+the pins as layers. A colour that only one place needs, like the window buttons
 of the demo or the icons' tile, is added to the JSON, never written where it is used.
 
 ### apps/marketing (Astro, static) and apps/web (TanStack Start)
@@ -254,6 +255,9 @@ for tests.
   (`OPENUI_BLESS=1` rewrites them). `scripts/ui-types.sh` writes its Swift and Kotlin copies
   (`examples/ui_types.rs`), and `scripts/lucide-names.mjs` the Lucide names its icons take
   (`tree/lucide.rs`). Run them after changing the types or the font.
+- `render/openui/map.rs`: the map's camera in MapLibre's zoom levels: where the first pin and a fit
+  put it, the fly between two cameras, the route revealed along its length. The Apple and Android
+  clients ask it through `motile_ui_map` and `Native.uiMap`.
 - `api.rs`: the JSON the client and the core exchange.
 - `examples/drive.rs` drives the core from a terminal; `examples/seed.rs` makes the dev app's
   account, project and threads.
@@ -458,7 +462,8 @@ redone for its versions in `patches/crates`; the script refuses a patch that `Ca
 - Do not edit generated code: `Cargo.lock`, `pnpm-lock.yaml`, `apps/web/src/routeTree.gen.ts`,
   and what `pnpm tokens` writes from `packages/theme/tokens.json`: `tokens.css`, `theme.css`,
   `Tokens.swift`, `apps/gpui/src/tokens.rs`, the Android app's `Tokens.kt` and its
-  `res/values*/tokens.xml`, and `packages/theme/map-style-*.json`. Also what
+  `res/values*/tokens.xml`, and `packages/theme/map-style-*.json` with their copies in
+  `packages/apple/Sources/MotileKit/Map`. Also what
   `scripts/ui-types.sh` writes, `UiNodes.swift` and `UiNodes.kt`, and what
   `scripts/lucide-names.mjs` writes, `crates/core/src/render/openui/tree/lucide.rs`.
   The shadcn components in `src/components/ui` are ours once added: they are rewritten on the

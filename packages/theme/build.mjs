@@ -1,6 +1,6 @@
 // Writes the design tokens of tokens.json out as tokens.css, theme.css, the clients' Tokens.swift,
 // the GPUI app's tokens.rs, the Android app's Tokens.kt and colour resources, and the MapLibre
-// style of OpenUI's map in each appearance. Run it with `pnpm tokens` after changing tokens.json;
+// style of OpenUI's map in each appearance, with a copy inside the Apple package for its resources. Run it with `pnpm tokens` after changing tokens.json;
 // what it writes is never edited by hand.
 import { readFileSync, writeFileSync } from "node:fs"
 
@@ -458,5 +458,7 @@ writeFileSync(here("../../apps/gpui/src/tokens.rs"), rust())
 writeFileSync(here("../../apps/android/app/src/main/java/app/motile/theme/Tokens.kt"), kotlin())
 writeFileSync(here("../../apps/android/app/src/main/res/values/tokens.xml"), androidResources("light"))
 writeFileSync(here("../../apps/android/app/src/main/res/values-night/tokens.xml"), androidResources("dark"))
-writeFileSync(here("map-style-light.json"), mapStyle("light"))
-writeFileSync(here("map-style-dark.json"), mapStyle("dark"))
+for (const mode of ["light", "dark"]) {
+  writeFileSync(here(`map-style-${mode}.json`), mapStyle(mode))
+  writeFileSync(here(`../apple/Sources/MotileKit/Map/map-style-${mode}.json`), mapStyle(mode))
+}

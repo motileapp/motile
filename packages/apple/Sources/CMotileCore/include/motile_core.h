@@ -18,6 +18,10 @@ void motile_send(const char *command_json);
 // thread. Free the answer with `motile_free_string`.
 char *motile_ui_layout(const char *input_json);
 
+// Answers the map's camera maths (`map::map_json`), on any thread. Free the answer with
+// `motile_free_string`.
+char *motile_ui_map(const char *input_json);
+
 // Frees a string the core answered with.
 void motile_free_string(char *string);
 

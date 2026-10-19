@@ -483,11 +483,12 @@ control, the pair a column.
 - Gestures: a drag pans; the wheel and the trackpad scroll the transcript, never zoom; no rotation
   or pitch. On touch, one finger scrolls the transcript and two pan and pinch the map. A pin press
   selects it (`select` event); while expanded it also collapses.
-- Camera (core's targets): the first marker at zoom 10.5 while the program streams; once it ends,
-  fit every visible marker with padding 70 top, 72 sides, 50 bottom, zoom at most 13, flying 920 ms;
-  never again once the user moved it. Recenter fits with padding 55, 40 right, 35 bottom, 34 left,
-  zoom at most 14, animated. After framing, the route draws from its start over 760 ms, ease in-out
-  (quadratic), through core's partial line.
+- Camera (core's targets, `render/openui/map.rs`: `frame`, `fly`, `reveal`, in MapLibre's zoom
+  levels): the first marker at zoom 10.5 while the program streams; once it ends, fit every visible
+  marker with padding 70 top, 72 sides, 50 bottom, zoom at most 13, flying 920 ms; never again once
+  the user moved it. Recenter fits with padding 55, 40 right, 35 bottom, 34 left, zoom at most 14,
+  flying 920 ms. After framing, the route draws from its start over 760 ms, ease in-out
+  (quadratic): each frame draws core's `reveal` of the line.
 - Expanded: Mac and GPUI: over the window, 24 in (12 under 520 wide), the surface's colour around it
   at `lit`, `ShadowSize.xl` at `shadow-stronger`; Esc collapses. iOS and Android: a full-screen
   cover, Collapse at its top right.

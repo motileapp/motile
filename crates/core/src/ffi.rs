@@ -8,7 +8,7 @@ use tokio::runtime::Runtime;
 
 use crate::api::{Config, Envelope, Event};
 use crate::core::{self, Handle};
-use crate::render::openui::canvas;
+use crate::render::openui::{canvas, map};
 
 /// Called on a background thread with one event as NUL-terminated JSON. The text is only valid
 /// during the call.
@@ -86,6 +86,14 @@ pub extern "C" fn motile_send(command_json: *const c_char) {
 pub extern "C" fn motile_ui_layout(input_json: *const c_char) -> *mut c_char {
     let scene = canvas::layout_json(&text(input_json).unwrap_or_default());
     CString::new(scene).unwrap_or_default().into_raw()
+}
+
+/// Answers the map's camera maths (`map::map_json`) for the clients whose engines are MapLibre's:
+/// JSON in, JSON out, on any thread. The answer is the caller's to free with `motile_free_string`.
+#[unsafe(no_mangle)]
+pub extern "C" fn motile_ui_map(input_json: *const c_char) -> *mut c_char {
+    let answer = map::map_json(&text(input_json).unwrap_or_default());
+    CString::new(answer).unwrap_or_default().into_raw()
 }
 
 /// Frees a string the core gave the client.
