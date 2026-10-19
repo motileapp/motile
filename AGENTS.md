@@ -298,7 +298,10 @@ to be AppKit on the Mac and UIKit on iOS has a twin in each, named alike (`KitMa
   the Ricrac tab's.
 - `Shared/Views/Transcript`: the transcript. `TranscriptView.swift` only keeps views for the
   rows on screen, `Rows.swift` builds their text and measures them off the main thread,
-  `RowViews.swift` are the rows.
+  `RowViews.swift` are the rows. `Map/` is OpenUI's map (`MapView.swift`, with `MapPilot.swift`
+  moving its camera and drawing its route as core says): MapLibre Native on iOS
+  (`iOS/MapEngineIOS.swift`) and MapLibre GL JS, bundled in `Sources/MotileKit/Map`, in a web view
+  on the Mac (`Mac/MapEngineMac.swift`). Three run at most, the others show a picture of themselves.
 - `Shared/Views/Sidebar`, `Composer`, `Onboarding`, `Thread`: SwiftUI. In the composer a skill is
   picked from `SkillMenuStrip.swift`, a strip over it, and becomes a chip (`SkillChip.swift`): an
   attachment in the composer's text, which is written `$name`, and in a message a box its layout
@@ -361,6 +364,7 @@ gesture for what Esc does. Its package is `app.motile`, its application `app.mot
   `platform/` is `Platform.swift` and `Symbol.swift`, `ui/` is the component kit of `Shared/Views/UI`
   and `Shared/Views/Shared`, and `transcript/`, `composer/`, `sidebar/`, `thread/`, `panel/`,
   `commandpanel/`, `settings/`, `usage/`, `onboarding/` and `media/` are the views of the same names.
+  `transcript/map/` is OpenUI's map on MapLibre Native (`UiMapView.kt`, `MapDirector.kt`).
   `layout/` lays out the screen: on a phone the sidebar and the panel are under the thread, which a
   swipe slides aside (`Drawer.kt`), on a tablet all three are side by side (`MainScreen.kt`).
   `Keyboard.kt` runs the core's keybindings from a keyboard with keys, where `mod` is Ctrl.
@@ -419,7 +423,8 @@ redone for its versions in `patches/crates`; the script refuses a patch that `Ca
   stack and confirmations (`modal.rs`), the Lucide icons by the names of `Symbol.swift`
   (`icons.rs`). Nothing native is imitated: a menu or a modal is drawn in the app's own style.
 - `transcript/`: `model.rs` (the rows and their splices into GPUI's list), `prose.rs`,
-  `rows.rs`, `view.rs`.
+  `rows.rs`, `view.rs`. `map/` is OpenUI's map, which draws OpenFreeMap's vector tiles itself with
+  the bundled style (`paint.rs`), with no MapLibre and no web view, on every system.
 - `composer/`, `sidebar/`, `thread/`, `git.rs`, `command_panel.rs`, `media/`,
   `onboarding.rs`: the views of the same names in the Apple kit. The skills' menu and chips are
   `composer/skills.rs`, `store/skills.rs` and `ui/skill_chip.rs`; GPUI Kit's inline tokens are the
