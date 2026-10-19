@@ -12,6 +12,7 @@ use motile_core::render::openui::web::{self, Bridge, PageStyle};
 
 use super::UiCx;
 use super::style::{self, SMALL};
+use crate::media::pictures::{Picture, Pictures, Shown};
 use crate::theme::{self, Radius, colors};
 use crate::ui::{ActionButton, Spinner};
 
@@ -75,6 +76,7 @@ pub fn html_view(
     let html = html.to_string();
     let open = move |bridge: Bridge| web::html_page(&html, &style, bridge);
     let live = live::page(cx.id(id, "live"), &key, window, app);
+    let card = card.child(live.track());
     if let Some(view) = live.view(app) {
         return card.child(view);
     }
@@ -82,9 +84,9 @@ pub fn html_view(
         .child(style::type_of(TextStyle::CardTitle, false).text_box().text_color(c.foreground).child(title.to_string()))
         .child(SMALL.text_box().text_color(c.muted_foreground).child("Interactive view"));
     let button = ActionButton::new(cx.id(id, "open"), live::OPEN).symbol("play.fill");
-    let background = cx.surface.color(c);
+    let (background, transcript) = (cx.surface.color(c), cx.transcript.clone());
     still.child(button.on_click(move |_, window, app| {
-        live.open(live::Page::Html(open(live::BRIDGE)), background, window, app);
+        live.open(live::Page::Html(open(live::BRIDGE)), background, transcript.clone(), window, app);
     }))
 }
 
@@ -104,11 +106,12 @@ pub fn youtube(
     let frame =
         element.relative().w_full().h(px(cx.width * 9. / 16.)).rounded(px(Radius::LG)).overflow_hidden().bg(c.overlay);
     let live = live::page(cx.id(id, "live"), &key, window, app);
+    let frame = frame.child(live.track());
     if let Some(view) = live.view(app) {
         return frame.child(view);
     }
-    let thumbnail = web::thumbnail_url(url)
-        .map(|thumbnail| img(SharedUri::from(thumbnail)).size_full().object_fit(ObjectFit::Cover));
+    let thumbnail = thumbnail(url, cx.width * window.scale_factor(), app)
+        .map(|shown| img(ImageSource::Render(shown.image)).size_full().object_fit(ObjectFit::Cover));
     let page = live::Page::YouTube { url: url.to_string(), title: title.to_string() };
     let symbol = canvas(
         |_, _, _| {},
@@ -122,12 +125,23 @@ pub fn youtube(
         },
     )
     .absolute()
-    .size_full();
-    frame
-        .cursor_pointer()
-        .children(thumbnail)
-        .child(symbol)
-        .on_click(move |_, window, app| live.open(page.clone(), gpui_kit::black(), window, app))
+    .inset_0();
+    frame.cursor_pointer().children(thumbnail).child(symbol).on_click({
+        let transcript = cx.transcript.clone();
+        move |_, window, app| live.open(page.clone(), gpui_kit::black(), transcript.clone(), window, app)
+    })
+}
+
+/// The video's thumbnail, fetched once into the temporary folder.
+fn thumbnail(url: &str, pixels: f32, app: &mut App) -> Option<Shown> {
+    let thumbnail = web::thumbnail_url(url)?;
+    let video = thumbnail.rsplit('/').nth(1)?;
+    let file = std::env::temp_dir().join("motile-youtube").join(format!("{video}.jpg"));
+    let max_pixels = pixels.ceil() as u32;
+    match Pictures::load_web(&format!("youtube:{video}:{max_pixels}"), &thumbnail, &file, max_pixels, app) {
+        Picture::Ready(shown) => Some(shown),
+        _ => None,
+    }
 }
 
 /// A colour as CSS takes it, `#rrggbbaa`.
@@ -151,6 +165,7 @@ mod live {
     use motile_core::render::openui::web::{self, Bridge};
 
     use super::Heights;
+    use crate::transcript::view::TranscriptView;
 
     pub const OPEN: &str = "Open";
     pub const BRIDGE: Bridge = Bridge::Wry;
@@ -170,7 +185,12 @@ mod live {
     #[derive(Default)]
     pub struct Live {
         view: Option<Entity<WebView>>,
+        /// The row's bounds in the window, as last drawn.
+        bounds: Option<Bounds<Pixels>>,
+        /// Where the rows show, out from under the composer, when the page opened.
+        area: Option<Bounds<Pixels>>,
         _messages: Option<Task<()>>,
+        _escape: Option<Subscription>,
     }
 
     #[derive(Clone)]
@@ -184,43 +204,76 @@ mod live {
     }
 
     impl Handle {
-        /// The live page over the row, and what closes it, while it is open.
+        /// The live page over the part of the row that shows, while it is open.
         pub fn view(&self, app: &App) -> Option<AnyElement> {
-            let view = self.state.read(app).view.clone()?;
+            let live = self.state.read(app);
+            let view = live.view.clone()?;
+            let (top, bottom) = match (live.bounds, live.area) {
+                (Some(row), Some(area)) => {
+                    ((area.top() - row.top()).max(px(0.)), (row.bottom() - area.bottom()).max(px(0.)))
+                }
+                _ => (px(0.), px(0.)),
+            };
             let state = self.state.clone();
-            let watch = canvas(
-                {
-                    let state = state.clone();
-                    move |bounds, window, _| {
-                        if window.content_mask().bounds.intersect(&bounds).is_empty() {
-                            close_soon(&state, window);
-                        }
-                    }
-                },
+            let outside = canvas(
+                |_, _, _| {},
                 move |bounds, _, window, _| {
-                    let outside = state.clone();
+                    let state = state.clone();
                     window.on_mouse_event(move |event: &MouseDownEvent, phase, window, app| {
                         if phase == DispatchPhase::Capture && !bounds.contains(&event.position) {
-                            outside.update(app, |live, cx| live.close(cx));
-                            window.refresh();
-                        }
-                    });
-                    let escape = state.clone();
-                    window.on_key_event(move |event: &KeyDownEvent, phase, window, app| {
-                        if phase == DispatchPhase::Capture && event.keystroke.key == "escape" {
-                            escape.update(app, |live, cx| live.close(cx));
-                            app.stop_propagation();
+                            state.update(app, |live, cx| live.close(cx));
                             window.refresh();
                         }
                     });
                 },
             )
             .absolute()
-            .size_full();
-            Some(div().absolute().inset_0().child(view).child(watch).into_any_element())
+            .inset_0();
+            Some(
+                div()
+                    .absolute()
+                    .left_0()
+                    .right_0()
+                    .top(top)
+                    .bottom(bottom)
+                    .child(view)
+                    .child(outside)
+                    .into_any_element(),
+            )
         }
 
-        pub fn open(&self, page: Page, background: Hsla, window: &mut Window, app: &mut App) {
+        /// Keeps the row's bounds, and closes the page once the row moves.
+        pub fn track(&self) -> AnyElement {
+            let state = self.state.clone();
+            canvas(
+                move |bounds, window, app| {
+                    let moved = state.read(app).bounds.is_some_and(|last| last.origin != bounds.origin);
+                    let open = state.read(app).view.is_some();
+                    let resized = state.read(app).bounds.is_some_and(|last| last.size != bounds.size);
+                    state.update(app, |live, _| live.bounds = Some(bounds));
+                    if open && moved {
+                        let state = state.clone();
+                        window.on_next_frame(move |_, app| state.update(app, |live, cx| live.close(cx)));
+                    } else if open && resized {
+                        window.refresh();
+                    }
+                },
+                |_, _, _, _| {},
+            )
+            .absolute()
+            .inset_0()
+            .into_any_element()
+        }
+
+        /// Opens the page over the row, scrolled into the transcript's view first.
+        pub fn open(
+            &self,
+            page: Page,
+            background: Hsla,
+            transcript: Option<WeakEntity<TranscriptView>>,
+            window: &mut Window,
+            app: &mut App,
+        ) {
             let (sender, mut receiver) = unbounded();
             let webview = match build(&page, background, sender, window) {
                 Ok(webview) => webview,
@@ -230,6 +283,15 @@ mod live {
                 }
             };
             let view = app.new(|cx| WebView::new(webview, window, cx));
+            let mut bounds = self.state.read(app).bounds;
+            let mut area = None;
+            if let Some(transcript) = transcript.and_then(|transcript| transcript.upgrade()) {
+                if let Some(row) = bounds {
+                    let distance = transcript.update(app, |transcript, cx| transcript.reveal(row, cx));
+                    bounds = Some(Bounds::new(point(row.origin.x, row.origin.y - distance), row.size));
+                }
+                area = Some(transcript.read(app).shown_area(app));
+            }
             let (state, key) = (self.state.downgrade(), self.key.clone());
             let messages = window.spawn(app, async move |cx| {
                 while let Some(message) = receiver.next().await {
@@ -255,9 +317,23 @@ mod live {
                     }
                 }
             });
+            let closing = self.state.downgrade();
+            let escape = app.intercept_keystrokes(move |event, _, app| {
+                if event.keystroke.key != "escape" || event.keystroke.modifiers.modified() {
+                    return;
+                }
+                app.stop_propagation();
+                let closing = closing.clone();
+                app.defer(move |app| {
+                    let _ = closing.update(app, |live, cx| live.close(cx));
+                });
+            });
             self.state.update(app, |live, cx| {
                 live.view = Some(view);
+                live.bounds = bounds;
+                live.area = area;
                 live._messages = Some(messages);
+                live._escape = Some(escape);
                 cx.notify();
             });
         }
@@ -267,15 +343,10 @@ mod live {
         fn close(&mut self, cx: &mut Context<Self>) {
             if self.view.take().is_some() {
                 self._messages = None;
+                self._escape = None;
                 cx.notify();
             }
         }
-    }
-
-    /// Closes the page once this frame is drawn: a frame that is being laid out can't change it.
-    fn close_soon(state: &Entity<Live>, window: &mut Window) {
-        let state = state.clone();
-        window.on_next_frame(move |_, app| state.update(app, |live, cx| live.close(cx)));
     }
 
     fn build(
@@ -379,6 +450,8 @@ mod live {
     use gpui_kit::*;
     use motile_core::render::openui::web::{self, Bridge};
 
+    use crate::transcript::view::TranscriptView;
+
     pub const OPEN: &str = "Open in Browser";
     pub const BRIDGE: Bridge = Bridge::Browser;
 
@@ -400,7 +473,11 @@ mod live {
             None
         }
 
-        pub fn open(&self, page: Page, _: Hsla, _: &mut Window, app: &mut App) {
+        pub fn track(&self) -> AnyElement {
+            div().into_any_element()
+        }
+
+        pub fn open(&self, page: Page, _: Hsla, _: Option<WeakEntity<TranscriptView>>, _: &mut Window, app: &mut App) {
             match page {
                 Page::Html(html) => {
                     let name = format!("motile-{:016x}.html", hash(&html));
