@@ -91,10 +91,19 @@ import kotlin.math.roundToInt
 /**
  * A program's `Map`: MapLibre over OpenFreeMap's tiles, live while on screen and a snapshot
  * otherwise. One finger scrolls the transcript and two move the map. A pressed pin calls
- * `onSelect` with its label, a filter's choice `onFilter` with its category, or none for every place.
+ * `onSelect` with its label, a filter's choice `onFilter` with its category, or none for every
+ * place, and the full-screen cover `onExpand`. Without `engine` it is only laid out: no MapLibre.
  */
 @Composable
-fun UiMapView(node: UiKind.Map, streaming: Boolean, onSelect: (String) -> Unit, onFilter: (String?) -> Unit, modifier: Modifier = Modifier) {
+fun UiMapView(
+    node: UiKind.Map,
+    streaming: Boolean,
+    onSelect: (String) -> Unit,
+    onFilter: (String?) -> Unit,
+    modifier: Modifier = Modifier,
+    onExpand: (Boolean) -> Unit = {},
+    engine: Boolean = true,
+) {
     val context = LocalContext.current
     val dark = LocalDark.current
     val palette = LocalPalette.current
@@ -105,7 +114,9 @@ fun UiMapView(node: UiKind.Map, streaming: Boolean, onSelect: (String) -> Unit, 
     val reducedMotion = Platform.reducesMotion
     var expanded by rememberSaveable { mutableStateOf(false) }
     var width by remember { mutableFloatStateOf(0f) }
-    val style by produceState(MapLibreSetup.cachedStyle(dark), dark) { value = MapLibreSetup.style(context, dark) }
+    val style by produceState(MapLibreSetup.cachedStyle(dark), dark, engine) {
+        if (engine) value = MapLibreSetup.style(context, dark)
+    }
     val id = remember { Any() }
     DisposableEffect(id) { onDispose { LivePool.maps.leave(id) } }
     LaunchedEffect(node, streaming, reducedMotion, width, height, expanded) {
@@ -113,11 +124,17 @@ fun UiMapView(node: UiKind.Map, streaming: Boolean, onSelect: (String) -> Unit, 
         if (!expanded) director.resize(width, height)
         director.update(node, streaming, reducedMotion)
     }
+    val expand = { open: Boolean ->
+        if (open != expanded) {
+            expanded = open
+            onExpand(open)
+        }
+    }
     val select = { label: String ->
         onSelect(label)
-        expanded = false
+        expand(false)
     }
-    val live = rememberLiveMap(LivePool.maps.isLive(id), style, director, attached = !expanded, onPin = select)
+    val live = rememberLiveMap(engine && LivePool.maps.isLive(id), style, director, attached = !expanded, onPin = select)
     Box(
         modifier
             .fillMaxWidth()
@@ -125,7 +142,10 @@ fun UiMapView(node: UiKind.Map, streaming: Boolean, onSelect: (String) -> Unit, 
             .clip(RoundedCornerShape(Radius.xl))
             .background(palette.mapWater)
             .onSizeChanged { width = with(density) { it.width.toDp().value } }
-            .onVisibilityChanged { shown -> if (shown) LivePool.maps.show(id) else LivePool.maps.hide(id) }
+            .onVisibilityChanged { shown ->
+                if (!engine) return@onVisibilityChanged
+                if (shown) LivePool.maps.show(id) else LivePool.maps.hide(id)
+            }
             .semantics {
                 contentDescription = "Map"
                 isTraversalGroup = true
@@ -136,17 +156,16 @@ fun UiMapView(node: UiKind.Map, streaming: Boolean, onSelect: (String) -> Unit, 
             PinButtons(live.spots, select)
             Box(Modifier.matchParentSize().cooperative(live.view) { at -> live.pinAt(at.x, at.y)?.let(select) })
         } else {
-            MapSnapshot(director, node, dark, width, height)
-            PinButtons(node.pins.filter { it.visible }.map { PinSpot(it, Offset.Zero) }, select)
+            if (engine) MapSnapshot(director, node, dark, width, height, select)
         }
-        MapChrome(node, director, expanded = false, tilesFailed = live?.tilesFailed == true, onExpand = { expanded = true }, onFilter = onFilter)
+        MapChrome(node, director, expanded = false, tilesFailed = live?.tilesFailed == true, onExpand = { expand(true) }, onFilter = onFilter)
     }
     if (expanded) {
         Dialog(
-            onDismissRequest = { expanded = false },
+            onDismissRequest = { expand(false) },
             properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
         ) {
-            val cover = rememberLiveMap(true, style, director, attached = true, onPin = select)
+            val cover = rememberLiveMap(engine, style, director, attached = true, onPin = select)
             Box(
                 Modifier
                     .fillMaxSize()
@@ -159,7 +178,7 @@ fun UiMapView(node: UiKind.Map, streaming: Boolean, onSelect: (String) -> Unit, 
                     PinButtons(cover.spots, select)
                 }
                 Box(Modifier.fillMaxSize().safeDrawingPadding()) {
-                    MapChrome(node, director, expanded = true, tilesFailed = cover?.tilesFailed == true, onExpand = { expanded = false }, onFilter = onFilter)
+                    MapChrome(node, director, expanded = true, tilesFailed = cover?.tilesFailed == true, onExpand = { expand(false) }, onFilter = onFilter)
                 }
             }
         }
@@ -191,21 +210,24 @@ private fun rememberLiveMap(enabled: Boolean, style: String?, director: MapDirec
     return map
 }
 
-/** The picture of a map that isn't live, at the director's camera; the map's water until it comes. */
+/** The picture of a map that isn't live, at the director's camera, with its pins' buttons; the map's water until it comes. */
 @Composable
-private fun MapSnapshot(director: MapDirector, node: UiKind.Map, dark: Boolean, width: Float, height: Float) {
+private fun MapSnapshot(director: MapDirector, node: UiKind.Map, dark: Boolean, width: Float, height: Float, onSelect: (String) -> Unit) {
     val context = LocalContext.current
     val camera = director.camera
     val line = director.line
-    var picture by remember { mutableStateOf<ImageBitmap?>(null) }
+    var picture by remember { mutableStateOf<Pair<ImageBitmap, List<PinSpot>>?>(null) }
     LaunchedEffect(camera, node.pins, line, dark, width, height) {
         if (camera == null || width <= 0f) return@LaunchedEffect
         delay(150)
         val style = MapLibreSetup.style(context, dark)
         val styled = withContext(Dispatchers.Default) { MapGeoJson.styled(style, node.pins, line) }
-        MapLibreSetup.snapshot(context, styled, node.pins, camera, width, height)?.let { picture = it.asImageBitmap() }
+        val shot = MapLibreSetup.snapshot(context, styled, node.pins, camera, width, height) ?: return@LaunchedEffect
+        picture = shot.bitmap.asImageBitmap() to shot.spots
     }
-    picture?.let { Image(it, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop) }
+    val (image, spots) = picture ?: return
+    Image(image, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+    PinButtons(spots, onSelect)
 }
 
 /** Each pin as a button for accessibility, over where the map draws it. */

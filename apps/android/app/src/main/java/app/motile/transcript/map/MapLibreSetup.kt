@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Paint
+import androidx.compose.ui.geometry.Offset
 import androidx.core.graphics.createBitmap
 import app.motile.BuildConfig
 import app.motile.core.UiMapPin
@@ -62,8 +63,8 @@ object MapLibreSetup {
         return bitmap
     }
 
-    /** A still picture of the map, taken where a live map would show it; none if it fails. On the main thread. */
-    suspend fun snapshot(context: Context, style: String, pins: List<UiMapPin>, camera: MapCamera, width: Float, height: Float): Bitmap? {
+    /** A still picture of the map, taken where a live map would show it, with where it drew the pins; none if it fails. On the main thread. */
+    suspend fun snapshot(context: Context, style: String, pins: List<UiMapPin>, camera: MapCamera, width: Float, height: Float): MapPicture? {
         start(context)
         val builder = Style.Builder().fromJson(style)
         MapGeoJson.emoji(pins).forEach { builder.withImage(it, emojiImage(context, it)) }
@@ -76,7 +77,16 @@ object MapLibreSetup {
         val snapshotter = MapSnapshotter(context, options)
         return suspendCancellableCoroutine { waiting ->
             waiting.invokeOnCancellation { snapshotter.cancel() }
-            snapshotter.start({ waiting.resume(it.bitmap) }, { waiting.resume(null) })
+            snapshotter.start({ shot ->
+                val spots = pins.filter { it.visible }.map { pin ->
+                    val point = shot.pixelForLatLng(LatLng(pin.lat, pin.lng))
+                    PinSpot(pin, Offset(point.x, point.y))
+                }
+                waiting.resume(MapPicture(shot.bitmap, spots))
+            }, { waiting.resume(null) })
         }
     }
 }
+
+/** A map's still picture, and where it drew each pin, in pixels from its top left. */
+class MapPicture(val bitmap: Bitmap, val spots: List<PinSpot>)

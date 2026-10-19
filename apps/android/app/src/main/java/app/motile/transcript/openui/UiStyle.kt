@@ -38,6 +38,9 @@ class UiHost(private val store: AppStore, private val threadID: String, val rowI
 /** The host of the program drawn, none where it is only laid out. */
 val LocalUiHost = staticCompositionLocalOf<UiHost?> { null }
 
+/** The row's program still streams in. */
+val LocalUiStreaming = staticCompositionLocalOf { false }
+
 /** The height of the Box around a node, when it has one, in points: what a share of its height is of. */
 val LocalUiParentHeight = staticCompositionLocalOf<Float?> { null }
 

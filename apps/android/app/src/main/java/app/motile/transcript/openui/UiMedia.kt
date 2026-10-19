@@ -13,10 +13,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
@@ -56,7 +54,6 @@ import androidx.compose.ui.layout.MeasurePolicy
 import androidx.compose.ui.layout.MeasureResult
 import androidx.compose.ui.layout.MeasureScope
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -82,6 +79,7 @@ import app.motile.theme.Radius
 import app.motile.theme.Surface
 import app.motile.theme.value
 import app.motile.transcript.PictureCache
+import app.motile.transcript.map.UiMapView
 import app.motile.transcript.mediaFile
 import app.motile.ui.Glyph
 import app.motile.ui.Icon
@@ -382,29 +380,19 @@ private class TablePolicy(val columns: Int) : MeasurePolicy {
     }
 }
 
-/** Until the map comes: a card of the map's height that lists its places. */
+/** A program's map, whose pins, filter and cover send their events to the program; only laid out where there is no host. */
 @Composable
-fun UiMapCard(node: UiNode, kind: UiKind.Map) {
-    val palette = LocalPalette.current
-    val window = with(LocalDensity.current) { LocalWindowInfo.current.containerSize.width.toDp().value }
-    val height = minOf(kind.height.coerceIn(200f, 720f), max(280f, 0.82f * window))
-    val shape = RoundedCornerShape(Radius.xl)
-    CompositionLocalProvider(LocalSurface provides Surface.Card) {
-        Column(
-            Modifier.uiNode(node).fillMaxWidth().height(height.dp).clip(shape).background(palette.card, shape)
-                .border(1.dp, palette.borderCard, shape).padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Text("Map", style = UiStyle.text(UiTextStyle.CardTitle, false), color = palette.foreground)
-            kind.pins.filter { it.visible }.forEach { pin ->
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(pin.icon ?: "${pin.number}", style = UiStyle.text(UiTextStyle.Small, false), color = palette.mutedForeground, maxLines = 1)
-                    Text(pin.label, style = UiStyle.text(UiTextStyle.Small, false), color = palette.foreground, maxLines = 1)
-                    pin.category?.let { Text(it, style = UiStyle.text(UiTextStyle.Caption, false), color = palette.mutedStrongerForeground, maxLines = 1) }
-                }
-            }
-        }
-    }
+fun UiMap(node: UiNode, kind: UiKind.Map) {
+    val host = LocalUiHost.current
+    UiMapView(
+        kind,
+        streaming = LocalUiStreaming.current,
+        onSelect = { label -> host?.send(node.id, "select", "value" to label) },
+        onFilter = { category -> host?.send(node.id, "filter", "category" to category) },
+        modifier = Modifier.uiNode(node),
+        onExpand = { open -> host?.send(node.id, "expand", "open" to open) },
+        engine = host != null,
+    )
 }
 
 @Composable

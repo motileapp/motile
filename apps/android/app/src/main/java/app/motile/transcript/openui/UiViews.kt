@@ -105,7 +105,11 @@ fun UiRow(row: RowModel, content: UiContent) {
         Column(Modifier.fillMaxWidth()) {
             if (tree != null) {
                 val frames = app.motile.DemoHooks.programFrames?.getOrPut(row.id) { UiFrames() }
-                CompositionLocalProvider(LocalUiHost provides host, LocalUiFrames provides (frames ?: LocalUiFrames.current)) { UiProgram(tree, width) }
+                CompositionLocalProvider(
+                    LocalUiHost provides host,
+                    LocalUiFrames provides (frames ?: LocalUiFrames.current),
+                    LocalUiStreaming provides !content.complete,
+                ) { UiProgram(tree, width) }
             }
             if (errors.isNotEmpty()) ErrorRow(errors.joinToString("\n"), Modifier.padding(top = if (tree != null) 8.dp else 0.dp))
         }
@@ -175,7 +179,7 @@ fun UiNodeView(node: UiNode) {
         is UiKind.Icon -> UiIcon(node, kind)
         is UiKind.Table -> UiTable(node, kind)
         is UiKind.Chart -> UiCanvasView(node, kind.canvas)
-        is UiKind.Map -> UiMapCard(node, kind)
+        is UiKind.Map -> UiMap(node, kind)
         is UiKind.MapMarker -> Unit
         is UiKind.YouTube -> UiYouTube(node, kind)
         is UiKind.Flashcard -> UiFlashcard(node, kind)
