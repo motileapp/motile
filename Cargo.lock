@@ -2234,9 +2234,11 @@ version = "0.1.267"
 dependencies = [
  "anyhow",
  "base64 0.23.1",
+ "chrono",
  "futures-lite",
  "iroh",
  "linkify",
+ "motile-openui",
  "motile-protocol",
  "pulldown-cmark",
  "rusqlite",

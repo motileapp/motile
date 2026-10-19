@@ -1,0 +1,11 @@
+root = Col([title, intro, Grid([iphone, pixel], 2, 240, 4), Title("Side by side", "md"), specs, Title("Which suits you?", "md"), picker, verdict])
+$care = "Camera"
+title = Title("iPhone 17 vs Pixel 11", "xl")
+intro = Text("Two flagship phones at the same price. The iPhone is the safer all-rounder; the Pixel wins on photos and AI features.")
+iphone = Col([Box([SearchImage("iPhone 17", 1, "xl", "contain")], null, null, 4, "surface", "xl"), Row([Title("iPhone 17", "md"), Spacer(), Badge("From $799")], 2), Text([Icon("cpu", "sm"), " A19 · 6.3-inch 120 Hz"], "sm", "muted")], 2)
+pixel = Col([Box([SearchImage("Pixel 11", 1, "xl", "contain")], null, null, 4, "surface", "xl"), Row([Title("Pixel 11", "md"), Spacer(), Badge("From $799")], 2), Text([Icon("cpu", "sm"), " Tensor G6 · 6.3-inch 120 Hz"], "sm", "muted")], 2)
+rows = [{f: "Main camera", a: "48 MP", b: "50 MP", win: "b"}, {f: "Battery life", a: "Up to 30 h video", b: "Up to 31 h video", win: "b"}, {f: "Updates", a: "About 6 years", b: "7 years", win: "b"}, {f: "Charging", a: "40 W wired · MagSafe", b: "30 W wired · Qi2", win: "a"}, {f: "Ecosystem", a: "iMessage, Watch, Mac", b: "Gemini, Android", win: ""}]
+specs = Table(["", "iPhone 17", "Pixel 11"], @Each(rows, "r", [r.f, Text([r.win == "a" ? Icon("check-circle", "sm", "success") : "", " " + r.a], "sm"), Text([r.win == "b" ? Icon("check-circle", "sm", "success") : "", " " + r.b], "sm")]))
+picker = RadioGroup($care, [{value: "Camera", label: "Photos", description: "Low light, zoom, editing"}, {value: "Apps", label: "My other devices", description: "Mac, Watch, iMessage"}, {value: "Battery", label: "Battery", description: "A long day of use"}], null, "cards")
+pick = $care == "Apps" ? "iPhone 17" : "Pixel 11"
+verdict = Card([Row([Box([SearchImage(pick, 1, "lg", "contain")], null, null, 2, "canvas", "lg", null, 64, 64), Col([Caption("Our pick for you"), Title(pick, "lg"), Text($care == "Camera" ? "Its 50 MP sensor and editing tools take the better low-light shots." : $care == "Apps" ? "It works best with the Apple devices you already own." : "A little more screen-on time and slower battery wear.", "sm", "muted")], 1)], 4)], "soft")

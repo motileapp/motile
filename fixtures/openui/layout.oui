@@ -1,0 +1,7 @@
+root = Col([stats, swatches, tints, summary], 4)
+stats = Grid([st1, st2], 2, 220, 4)
+st1 = Card([Caption("Photography services · demo estimate"), Title("$617M", "xl"), Caption("2025, U.S. · narrow market definition")], null, 4, 2)
+st2 = Card([Caption("Commercial drones · demo estimate"), Title("$4.1B", "xl"), Caption("2024, U.S. · broader market definition")], null, 4, 2)
+swatches = Row([Box([], null, null, null, "#d9c9b0", "lg", null, 44, 44), Box([], null, null, null, "#9fb4a4", "lg", null, 44, 44), Box([], null, null, null, "#4f5d75", "lg", null, 44, 44), Box([], null, null, null, "#c96f53", "full", null, 44, 44), Spacer(), Badge("Warm neutrals")], 2)
+tints = Grid([Box([Text("Info tint", "sm", "info")], null, null, 3, "info", "lg"), Box([Text("Success tint", "sm", "success")], null, null, 3, "success", "lg"), Box([Text("Warning tint", "sm", "warning")], null, null, 3, "warning", "lg"), Box([Text("On a hex color", "sm"), Caption("Text stays readable")], null, 1, 3, "#f5e6c8", "lg")], 4, 130, 2)
+summary = Card([Row([Text("Subtotal"), Spacer(), Text("$156.00", null, null, null, null, null, true)]), Row([Text("Tax · 8.5%", "sm", "muted"), Spacer(), Text("$13.26", "sm", "muted", null, null, null, true)]), Divider(), Row([Text("Total"), Spacer(), Title("$169.26", "xl")])], "soft", null, 2)

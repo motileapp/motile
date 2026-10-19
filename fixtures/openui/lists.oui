@@ -1,0 +1,8 @@
+root = Card([Title("Sunday cooking schedule", "lg"), Text("Assuming you serve at **2:00 PM**.", "sm", "muted"), schedule, Divider(), Grid([packing, steps], 2, 240, 6)])
+schedule = List([a, b, c, d], "none", true)
+a = ListItem("Prepare everything", "Season the lamb, peel the potatoes and trim the beans.", "10:45 AM")
+b = ListItem("Start roasting", "The lamb goes into a 200°C oven until it reaches 60°C inside.", "11:15 AM")
+c = ListItem("Potatoes in", "Parboil for 10 minutes, rough up the edges and roast in hot oil.", "12:00 PM")
+d = ListItem("Rest and carve", "Rest the lamb for 20 minutes while the gravy simmers.", "1:30 PM")
+packing = Col([Title("Packing", "sm"), List(["Light rain jacket", "Comfortable shoes", "A reusable bottle"])], 2)
+steps = Col([Title("Steps", "sm"), List(["Choose a direction", "Explore the answer", "Keep the conversation going"], "number")], 2)

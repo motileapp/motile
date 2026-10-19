@@ -10,8 +10,10 @@ crate-type = ["rlib", "staticlib"]
 
 [dependencies]
 motile-protocol = { workspace = true, features = ["auth-client"] }
+motile-openui.workspace = true
 anyhow.workspace = true
 base64.workspace = true
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 futures-lite.workspace = true
 iroh.workspace = true
 rusqlite.workspace = true

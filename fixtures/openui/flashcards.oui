@@ -1,0 +1,11 @@
+root = Col([title, intro, cards, Title("Quick quiz", "md"), quiz, Celebration($score == 4)])
+$score = 0
+$q = 0
+$picked = ""
+title = Title("8 Spanish words for the kitchen", "xl")
+intro = Text([Icon("hand", "sm"), " Tap a card to see the English, then try the quiz."], "md", "muted")
+words = [{es: "la cuchara", en: "the spoon", emoji: "🥄"}, {es: "el cuchillo", en: "the knife", emoji: "🔪"}, {es: "el tenedor", en: "the fork", emoji: "🍴"}, {es: "la sartén", en: "the frying pan", emoji: "🍳"}, {es: "la olla", en: "the pot", emoji: "🍲"}, {es: "el horno", en: "the oven", emoji: "🔥"}, {es: "la nevera", en: "the fridge", emoji: "🧊"}, {es: "el vaso", en: "the glass", emoji: "🥛"}]
+cards = Carousel(@Each(words, "w", Flashcard([Title(w.emoji, "2xl"), Title(w.es, "lg")], [Title(w.en, "md"), Caption(w.es)])), 180)
+questions = [{es: "la sartén", options: ["the pot", "the frying pan", "the oven"], answer: "the frying pan"}, {es: "el tenedor", options: ["the fork", "the knife", "the spoon"], answer: "the fork"}, {es: "la nevera", options: ["the glass", "the oven", "the fridge"], answer: "the fridge"}, {es: "la olla", options: ["the pot", "the spoon", "the fork"], answer: "the pot"}]
+current = questions[$q]
+quiz = $q < 4 ? Card([Row([Caption("Question " + ($q + 1) + " of 4"), Spacer(), Badge("Score " + $score, "info")], 2), Title("What is " + current.es + "?", "lg"), Row(@Each(current.options, "o", Button(o, Action([@Set($picked, o), @Set($score, o == current.answer ? $score + 1 : $score), @Set($q, $q + 1)]), "outline")), 2, null, null, true), $picked == "" ? null : Caption("Last answer: " + $picked)], null, 5, 3) : Card([Title($score == 4 ? "Perfect, 4 of 4!" : "You got " + $score + " of 4", "lg"), Text($score == 4 ? "¡Muy bien! You know your way around a Spanish kitchen." : "Flip the cards again and have another go."), Button("Try again", Action([@Reset($score, $q, $picked)]), "solid", null, null, "rotate-ccw")], "soft", 5, 3)

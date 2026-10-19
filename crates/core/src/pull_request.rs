@@ -1064,6 +1064,9 @@ pub fn text(markdown: &str) -> Vec<Text> {
             Block::Code { language, code } => {
                 Some(Text::Code { spans: highlight::highlight(&language, &code), language, code })
             }
+            Block::Ui { code, .. } => {
+                Some(Text::Code { spans: Spans::default(), language: "openui-lang".into(), code })
+            }
             Block::Image { .. } => None,
         })
         .collect()

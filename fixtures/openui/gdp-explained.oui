@@ -1,0 +1,15 @@
+root = Card([head, Caption("Total output"), total, bar, legend, note, sliders, Row([Button("Reset economy", @Reset($c, $i, $g, $x), "ghost", null, "sm", "rotate-ccw"), Spacer(), Badge("GDP = C + I + G + (X − M)", "purple")], 2, null, null, true), Text("GDP counts the value of final goods and services produced within a country. Imports are subtracted because they were produced elsewhere.", "sm", "muted"), quiz], null, 5, 4)
+$c = 600
+$i = 200
+$g = 170
+$x = 30
+$answer = ""
+gdp = $c + $i + $g + $x
+parts = [{label: "Consumer spending", value: $c, color: "chart1"}, {label: "Business investment", value: $i, color: "chart2"}, {label: "Government spending", value: $g, color: "chart4"}, {label: "Net exports", value: $x, color: "chart3"}]
+head = Row([Col([Title("What makes up GDP?", "lg"), Text("An economy, in four parts.", "sm", "muted")], 1), Spacer(), Badge("Illustrative economy")], 3, "start")
+total = Title("$" + @Format(gdp / 1000, "number", 2) + " trillion", "2xl")
+bar = Box(@Each(parts, "p", Box([p.value >= 80 ? Text("$" + p.value + "B", "xs", "#ffffff", "medium") : null], null, null, null, p.color, 0, null, null, "100%", @Max([p.value, 0]), "center", "center")), "row", 0.5, null, null, "md", null, "100%", 38)
+legend = Grid(@Each(parts, "p", Row([Box([], null, null, null, p.color, "full", null, 10, 10), Text(p.label, "sm"), Spacer(), Text((p.value < 0 ? "-$" : "$") + @Format(@Abs(p.value)) + "B", "sm", "muted", "medium", false, false, true)], 2)), 2, 220, 2)
+note = $x < 0 ? Text("Positive contributions add up to $" + ($c + $i + $g) + "B. Net imports subtract $" + @Abs($x) + "B, leaving $" + gdp + "B of output.", "sm", "warning") : null
+sliders = Grid([Slider($c, 0, 1200, 10, "Consumer spending, $ billions"), Slider($i, 0, 600, 10, "Business investment, $ billions"), Slider($g, 0, 500, 10, "Government spending, $ billions"), Slider($x, -200, 300, 10, "Net exports, $ billions")], 2, 240, 6)
+quiz = Card([RadioGroup($answer, [{value: "a", label: "Real GDP increases by 10%"}, {value: "b", label: "Nominal GDP rises; real GDP is unchanged"}, {value: "c", label: "Both measures stay the same"}], "The same goods cost 10% more this year. What changes?"), $answer == "" ? null : Text(($answer == "b" ? "**Correct.** " : "**Not quite.** ") + "Real GDP adjusts for price changes, so higher prices alone raise nominal GDP but not real output.", "sm")], "soft", 4, 2)

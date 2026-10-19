@@ -1,9 +1,12 @@
 //! open-intelligent-ui's function tests (`src/lib/functions/__tests__`): every row of their tables,
 //! and the cases beside them.
 
+use std::sync::Arc;
+
 use super::functions;
 use crate::js;
 use crate::library::{Args, FixedEnv};
+use crate::runtime::{NoForms, Runtime};
 use crate::value::Value;
 
 /// The rows' `ROWS`, as the language writes them and as JSON.
@@ -494,6 +497,22 @@ fn passes_every_table_row() {
     let mut failures = Vec::new();
     for (expression, name, arguments, step, expected) in CASES {
         let value = then(call(name, &args(arguments), &utc()), step);
+        if value != json(expected) {
+            failures.push(format!("{expression}: got {}, expected {expected}", value.to_json_string()));
+        }
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+#[test]
+fn passes_every_table_row_written_in_a_program() {
+    let library = Arc::new(crate::motile::library());
+    let mut failures = Vec::new();
+    for (expression, .., expected) in CASES {
+        let mut runtime = Runtime::new(library.clone(), Arc::new(utc()), Arc::new(NoForms));
+        let program = format!("$value = {}\nroot = Col([])", expression.replace("ROWS", ROWS));
+        runtime.set_text(&program, true);
+        let value = runtime.state("$value").cloned().unwrap_or_default();
         if value != json(expected) {
             failures.push(format!("{expression}: got {}, expected {expected}", value.to_json_string()));
         }

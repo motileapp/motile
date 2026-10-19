@@ -1,0 +1,19 @@
+root = Col([head, photos, setup, Title("The palette", "md"), palette, Title("Packing list", "md"), packing, Title("Outfits, day by day", "md"), outfits, tip])
+$days = 7
+$weather = "Mild"
+$packed = []
+head = Col([Title("A capsule wardrobe for a week away", "xl"), Text("A dozen pieces in one palette that all work together. Change the trip and the list and the outfits follow.", "md", "muted")], 2)
+photos = Grid([SearchImage("Folded clothes", 1.2, "lg"), SearchImage("Capsule wardrobe", 1.2, "lg"), SearchImage("Suitcase", 1.2, "lg")], 3, 140, 2)
+setup = Card([Grid([Slider($days, 3, 14, 1, "Trip length", " days"), Col([Label("Weather"), SegmentedControl($weather, ["Warm", "Mild", "Cool"])], 2)], 2, 220, 5)], "soft", 4)
+colors = [{name: "Navy", hex: "#2F3E55"}, {name: "White", hex: "#F7F5F0"}, {name: "Stone", hex: "#CFC5B8"}, {name: "Olive", hex: "#6B7350"}, {name: "Tan", hex: "#B98B5E"}]
+palette = Row(@Each(colors, "c", Col([Box([], null, null, null, c.hex, "full", true, 40, 40), Caption(c.name)], 1, "center")), 4, null, null, true)
+tops = $weather == "Warm" ? ["White linen shirt", "Navy tee", "Striped tee", "Olive camp shirt"] : $weather == "Cool" ? ["Merino crewneck", "White Oxford shirt", "Navy long-sleeve tee", "Stone knit"] : ["White tee", "Navy Oxford shirt", "Striped long-sleeve tee", "Stone knit polo"]
+bottoms = $weather == "Warm" ? ["Stone linen trousers", "Navy shorts"] : $weather == "Cool" ? ["Dark jeans", "Olive chinos"] : ["Dark jeans", "Stone chinos"]
+layers = $weather == "Warm" ? ["Light overshirt"] : $weather == "Cool" ? ["Wool coat", "Navy cardigan"] : ["Unstructured navy jacket"]
+shoes = $weather == "Cool" ? ["Leather boots", "White sneakers"] : ["White sneakers", "Tan loafers"]
+nTops = @Clamp(@Ceil($days / 2) + 1, 3, @Count(tops))
+list = @Concat(@Concat(@Each(@Take(tops, nTops), "x", {group: "Top", name: x}), @Each(bottoms, "x", {group: "Bottom", name: x})), @Concat(@Concat(@Each(layers, "x", {group: "Layer", name: x}), @Each(shoes, "x", {group: "Shoes", name: x})), [{group: "Basics", name: "Socks and underwear × " + @Min([$days, 7])}, {group: "Basics", name: "Sleepwear"}, {group: "Basics", name: $weather == "Warm" ? "Swimsuit and sunglasses" : "Compact umbrella"}]))
+done = @Count(@Filter(@Each(list, "it", @Includes($packed, it.name)), "", "==", true))
+packing = Card([Row([Text(done + " of " + @Count(list) + " packed", "sm", "muted", null, false, false, true), Spacer(), Button("Reset", @Reset($packed), "ghost", null, "sm", "rotate-ccw")], 2), Box([Box([], null, null, null, "ink", "full", null, @Percent(done, @Count(list)) + "%", 4)], null, null, null, "border", "full", null, "100%", 4), Col(@Each(list, "it", Pressable([Row([Icon(@Includes($packed, it.name) ? "check-circle" : "circle", "sm", @Includes($packed, it.name) ? "success" : "faint"), Text(it.name, "sm", null, null, false, @Includes($packed, it.name)), Spacer(), Caption(it.group)], 2)], @Set($packed, @Toggle($packed, it.name)), @Includes($packed, it.name), 2)), 1), $days > 7 ? Caption("Plan one laundry stop around day " + @Ceil($days / 2) + ".") : null], null, 4, 2)
+outfits = Card([Col(@Each(@Range(0, $days), "d", Row([Box([Text("Day " + (d + 1), "xs", null, "semibold")], null, null, 1, "surface", "md", null, 56, null, null, "center", "center"), Text(tops[d % nTops] + " with " + bottoms[d % @Count(bottoms)] + ($weather == "Warm" ? "" : ", " + layers[d % @Count(layers)]), "sm"), Spacer(), Caption(shoes[d % @Count(shoes)])], 2)), 2)], null, 3)
+tip = Text("Wear the bulkiest shoes and layer on the travel day, and roll rather than fold to fit everything in a carry-on.", "sm", "muted")

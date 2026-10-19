@@ -18,6 +18,7 @@ use serde_json::Value;
 use super::agents::{self, AgentState, AgentView, workflow_name};
 use super::highlight::{self, Incremental, Spans};
 use super::markdown::{self, Block, ParaKind, Prose};
+use super::openui::UiRow;
 
 /// Tool output beyond this is cut; nobody reads more of it in a chat.
 const MAX_OUTPUT_CHARS: usize = 20_000;
@@ -80,6 +81,12 @@ pub enum RowKind {
     },
     Thinking {
         text: String,
+    },
+    /// A program the reply shows, which the core runs. Its tree comes with the row and changes
+    /// through `ui_patch` events.
+    Ui {
+        #[serde(flatten)]
+        ui: UiRow,
     },
     /// An image or a video the reply shows. The client asks the core for the file `media` names.
     Media {
@@ -328,7 +335,7 @@ impl After {
                 _ => Self::Prose,
             }),
             RowKind::Code { .. } => Some(Self::Code),
-            RowKind::Media { .. } | RowKind::File { .. } => Some(Self::Media),
+            RowKind::Media { .. } | RowKind::File { .. } | RowKind::Ui { .. } => Some(Self::Media),
             RowKind::Tool { .. }
             | RowKind::Thinking { .. }
             | RowKind::Group { .. }
@@ -439,6 +446,9 @@ pub struct Transcript {
     settled: bool,
     /// The agents the thread's agent started, as they are now, by the thread each works in.
     agents: HashMap<String, AgentView>,
+    /// Each patch's program, by its row: the program it was merged over, the patch, and the two
+    /// merged.
+    merged: HashMap<String, (String, String, String)>,
 }
 
 /// Code that came without highlighting: a code row, or the code paragraph `para` of a prose row.
@@ -621,6 +631,7 @@ impl Transcript {
 
     /// Works out the rows to show and returns how they differ from the ones shown before.
     fn show(&mut self) -> Option<Splice> {
+        self.link_programs();
         let mut shown = present(&self.items, &self.rendered, &self.opened, self.settled);
         shown.extend(queued_rows(&self.queued).into_iter().map(Cow::Owned));
         if let Some(server) = &self.removed {
@@ -649,9 +660,43 @@ impl Transcript {
         Some(splice)
     }
 
-    /// Stops keeping highlighters for a finished turn's code blocks.
-    pub fn end_streaming(&mut self) {
+    /// Merges each patch over the latest program before it, which it shows in its place.
+    fn link_programs(&mut self) {
+        let mut latest: Option<(String, String)> = None;
+        for row in self.rendered.iter_mut().flatten() {
+            let RowKind::Ui { ui } = &mut row.kind else { continue };
+            match latest.as_ref().filter(|_| ui.patch) {
+                Some((base, program)) => {
+                    let merged = match self.merged.get(&row.id) {
+                        Some((before, fence, merged)) if before == program && *fence == ui.fence => merged.clone(),
+                        _ => {
+                            let merged = motile_openui::merge(program, &ui.fence);
+                            self.merged.insert(row.id.clone(), (program.clone(), ui.fence.clone(), merged.clone()));
+                            merged
+                        }
+                    };
+                    ui.source = merged;
+                    ui.base = Some(base.clone());
+                }
+                None => {
+                    ui.source.clone_from(&ui.fence);
+                    ui.base = None;
+                }
+            }
+            latest = Some((row.id.clone(), ui.source.clone()));
+        }
+    }
+
+    /// Stops keeping highlighters for a finished turn's code blocks. A program whose fence never
+    /// closed is complete now.
+    pub fn end_streaming(&mut self) -> Option<Splice> {
         self.streaming.clear();
+        let growing = |rows: &Vec<Row>| rows.iter().any(|row| matches!(&row.kind, RowKind::Ui { ui } if !ui.complete));
+        let indices: Vec<usize> = (0..self.rendered.len()).filter(|&index| growing(&self.rendered[index])).collect();
+        for index in indices {
+            self.rendered[index] = render(&self.items[index], &self.cwd, &self.agents, None);
+        }
+        self.show()
     }
 
     /// The code among `row_ids` that has no highlighting yet.
@@ -1266,6 +1311,7 @@ fn render_markdown(item: &Item, text: &str, mut streaming: Option<&mut HashMap<S
                 let spans = colour(&id, &language, &code, &mut streaming);
                 RowKind::Code { language, code, spans }
             }
+            Block::Ui { code, closed } => RowKind::Ui { ui: UiRow::new(code, closed || streaming.is_none()) },
             Block::Image { src, alt } => {
                 let Some(media) = item.media.iter().find(|media| media.src == src) else { continue };
                 let name = file_name(&src).to_string();
