@@ -571,6 +571,25 @@ async fn codex_reads_the_skills_a_message_starts_from_its_text() {
 }
 
 #[tokio::test]
+async fn a_reply_from_a_new_process_of_the_agent_follows_the_replies_before_it() {
+    let mut harness = Harness::start("fixtures/read-and-bash.jsonl", "0").await;
+    let connection = harness.connect().await;
+    let new_thread = harness.new_thread(&connection, Agent::Claude).await;
+    let thread_id = send(&connection, None, new_thread, "Show the ui gdp").await;
+    finished_transcript(&connection, &thread_id).await;
+
+    harness.restart().await;
+    let connection = harness.connect().await;
+    send(&connection, Some(thread_id.clone()), None, "Show the ui gdp").await;
+    let transcript = finished_transcript(&connection, &thread_id).await;
+
+    let programs = transcript.texts().into_iter().filter(|text| text.contains("```openui-lang")).count();
+    assert_eq!((programs, transcript.turn_ends().len()), (2, 2), "{:?}", transcript.texts());
+    let seqs: Vec<u64> = transcript.items.iter().map(|item| item.seq).collect();
+    assert!(seqs.windows(2).all(|pair| pair[0] < pair[1]), "{seqs:?}");
+}
+
+#[tokio::test]
 async fn a_streamed_reply_arrives_in_finished_blocks() {
     let harness = Harness::start("fixtures/read-and-bash.jsonl", "0").await;
     let connection = harness.connect().await;
