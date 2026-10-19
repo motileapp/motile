@@ -61,6 +61,22 @@ fun Icon(symbol: Symbol, size: Float = 13f, modifier: Modifier = Modifier, color
     }
 }
 
+/** A character of Lucide's font that no `Symbol` names, as core gives it, filling a square of `side`. */
+@Composable
+fun Glyph(character: String, side: Dp, modifier: Modifier = Modifier, color: Color = LocalForeground.current) {
+    Canvas(modifier.size(side)) { drawGlyph(character, size.width, color) }
+}
+
+/** Draws a character of Lucide's font in a square of `side` pixels at the top left. */
+fun DrawScope.drawGlyph(character: String, side: Float, color: Color) {
+    val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        typeface = lucide
+        textSize = side
+        this.color = color.takeOrElse(Color.Black).toArgb()
+    }
+    drawContext.canvas.nativeCanvas.drawText(character, 0f, side, paint)
+}
+
 /** Draws the symbol in a square of `side` pixels at the top left, or its trimmed glyph. */
 fun DrawScope.drawSymbol(symbol: Symbol, side: Float, color: Color, trimmed: Boolean = false) {
     val drawn = color.takeOrElse(Color.Black)

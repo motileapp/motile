@@ -435,7 +435,8 @@ control, the pair a column.
 
 - The scene is core's for (node, width): the plot `height` (140–480, default 240) tall and the
   column wide; gridlines (zero solid, the rest dashed 3/4), tick labels, category labels, bars
-  (corners 4), lines (2.2 wide, round), dots (3, 4.5 hovered, ringed 1.5 in the surface's colour),
+  (the two corners away from the baseline 4, the others square; in a stack only the topmost
+  segment with a height), lines (2.2 wide, round), dots (3, 4.5 hovered, ringed 1.5 in the surface's colour),
   area gradients, arcs (pie and donut, 2 apart in the surface's colour), scatter points (5, 6.5
   hovered, 78%), and the hover bands with their tooltip rows. Paint it: colours are tokens
   (`border` for grid, `muted-stronger-foreground` ticks in `tick`, `muted-foreground` categories in

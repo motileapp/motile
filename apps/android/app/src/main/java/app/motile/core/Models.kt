@@ -923,6 +923,9 @@ data class ThreadChildren(
 /** A stop that asks first, since it ends the agents the thread started. */
 data class StopQuestion(val threadID: String, val question: String)
 
+/** A program asks to run `command` in its thread's folder. */
+data class UiConfirm(val threadID: String, val rowID: String, val callID: Long, val command: String)
+
 /** How an agent is doing, which the dot on its avatar shows. */
 enum class AgentState(val raw: String) {
     /** `Limited`: it reached its account's usage limit, and waits for the limit to reset. */

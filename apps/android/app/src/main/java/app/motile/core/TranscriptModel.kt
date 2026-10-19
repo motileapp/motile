@@ -142,4 +142,11 @@ class TranscriptModel {
         if (keepsRows) return
         rows.lastOrNull { it.id == rowID }?.applySpans(spans)
     }
+
+    /** Changes the tree of a program row. */
+    fun patchUi(rowID: String, ops: List<JSON>) {
+        if (keepsRows) return
+        val program = rows.lastOrNull { it.id == rowID }?.kind as? RowModel.Kind.Ui ?: return
+        program.content.patch(ops)
+    }
 }

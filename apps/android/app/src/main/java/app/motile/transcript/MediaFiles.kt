@@ -39,6 +39,10 @@ object PictureCache {
 
     fun cached(key: String?): ImageBitmap? = key?.let { cache.get(it) }
 
+    fun put(key: String, picture: ImageBitmap) {
+        cache.put(key, picture)
+    }
+
     /** The image, no larger than `maxPixels` on a side, kept under `key`. */
     suspend fun decode(file: File, key: String, maxPixels: Int): ImageBitmap? = withContext(Dispatchers.IO) {
         Pictures.decode(file, maxPixels)?.asImageBitmap()?.also { cache.put(key, it) }

@@ -10,6 +10,7 @@ enum class Symbol(val character: String?) {
     ArrowLeft("\uE048"),
     ArrowRight("\uE049"),
     ArrowUp("\uE04A"),
+    ArrowUpRight("\uE04D"),
     Blocks("\uE4FA"),
     BookMarked("\uE3F1"),
     Bot("\uE1BB"),

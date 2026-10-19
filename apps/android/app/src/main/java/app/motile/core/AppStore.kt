@@ -267,6 +267,12 @@ class AppStore(private val context: Context) {
         private set
 
     // The open thread
+    /** The open thread and the one whose agent started it, kept apart from `threads` so that what shows them changes with them alone, not with every thread. */
+    var selectedThread by mutableStateOf<ThreadInfo?>(null)
+        private set
+    var parentThread by mutableStateOf<ThreadInfo?>(null)
+        private set
+
     /** Always a draft or a thread; `loadPreferences` opens the first draft. */
     private var selectionState by mutableStateOf<Selection>(Selection.Draft(""))
     var selection: Selection
@@ -290,6 +296,9 @@ class AppStore(private val context: Context) {
 
     /** The stop that waits for the user to say it may end the agents a thread started. */
     var stopping by mutableStateOf<StopQuestion?>(null)
+
+    /** The command a program asks to run, which waits for the user to allow it. */
+    var uiConfirm by mutableStateOf<UiConfirm?>(null)
 
     /** What deleting a thread takes with it. */
     fun deletionNote(thread: ThreadInfo?): String {
@@ -573,6 +582,21 @@ class AppStore(private val context: Context) {
                     }
                 }
             }
+            "ui_patch" -> {
+                val threadID = event.string("thread_id")
+                val rowID = event.string("row_id")
+                val ops = event.objects("ops")
+                return {
+                    if (transcript.threadID == threadID) {
+                        transcript.patchUi(rowID, ops)
+                        agentTranscript.patchUi(rowID, ops)
+                    }
+                }
+            }
+            "ui_confirm" -> {
+                val asked = UiConfirm(event.string("thread_id"), event.string("row_id"), event.long("call_id"), event.string("command"))
+                return { uiConfirm = asked }
+            }
             "live" -> {
                 val threadID = event.string("thread_id")
                 val live = event.bool("live")
@@ -607,6 +631,31 @@ class AppStore(private val context: Context) {
             }
             else -> return null
         }
+    }
+
+    /** Tells core what the user did to the node `node` of the program in the row. */
+    fun sendUi(threadID: String, rowID: String, node: String, event: Map<String, Any?>) {
+        core.send("ui", mapOf("thread_id" to threadID, "row_id" to rowID, "node" to node, "event" to event))
+    }
+
+    /** Lets the command a program asked to run go ahead. */
+    fun allowUiConfirm(asked: UiConfirm) {
+        uiConfirm = null
+        answerUiConfirm(asked, true)
+    }
+
+    /** The question went away: unless it was to allow the command, which follows at once, the command is refused. */
+    fun dismissUiConfirm() {
+        val asked = uiConfirm ?: return
+        uiConfirm = null
+        main.post { if (!allowed.remove(asked)) answerUiConfirm(asked, false) }
+    }
+
+    private val allowed = mutableSetOf<UiConfirm>()
+
+    private fun answerUiConfirm(asked: UiConfirm, allow: Boolean) {
+        if (allow) allowed += asked
+        core.send("ui_confirm", mapOf("thread_id" to asked.threadID, "row_id" to asked.rowID, "call_id" to asked.callID, "allow" to allow))
     }
 
     private fun apply(account: Account) {
@@ -742,12 +791,6 @@ class AppStore(private val context: Context) {
     private fun changeList(done: Boolean, change: (MutableList<ThreadInfo>) -> Unit) {
         if (done) doneThreads = doneThreads.toMutableList().also(change) else activeThreads = activeThreads.toMutableList().also(change)
     }
-
-    /** The open thread and the one whose agent started it, kept apart from `threads` so that what shows them changes with them alone, not with every thread. */
-    var selectedThread by mutableStateOf<ThreadInfo?>(null)
-        private set
-    var parentThread by mutableStateOf<ThreadInfo?>(null)
-        private set
 
     /** Keeps `selectedThread` and `parentThread` as the threads have them, assigned only when they change. */
     private fun showSelectedThread() {
