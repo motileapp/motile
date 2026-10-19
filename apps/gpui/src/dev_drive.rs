@@ -100,20 +100,24 @@ async fn touch_program(line: &str, store: &Entity<Store>, done: &PathBuf, cx: &m
     }
 }
 
-/// The id of the latest program's slider or button read by the label.
+/// The id of the latest program's last slider or button read by the label, as the other clients'
+/// drivers pick it.
 fn labelled(store: &Entity<Store>, label: &str, cx: &App) -> Option<String> {
     use motile_core::render::rows::RowKind;
     fn find(node: &serde_json::Value, label: &str) -> Option<String> {
         match node {
             serde_json::Value::Object(map) => {
+                if let Some(id) = map.values().rev().find_map(|value| find(value, label)) {
+                    return Some(id);
+                }
                 let named = map.get("a11y").and_then(|a11y| a11y["label"].as_str()) == Some(label);
                 let control = matches!(map.get("component").and_then(|kind| kind.as_str()), Some("Slider" | "Button"));
-                if named && control {
-                    return map.get("id").and_then(|id| id.as_str()).map(str::to_string);
+                if !named || !control {
+                    return None;
                 }
-                map.values().find_map(|value| find(value, label))
+                map.get("id").and_then(|id| id.as_str()).map(str::to_string)
             }
-            serde_json::Value::Array(list) => list.iter().find_map(|value| find(value, label)),
+            serde_json::Value::Array(list) => list.iter().rev().find_map(|value| find(value, label)),
             _ => None,
         }
     }
