@@ -27,16 +27,16 @@ enum ProgramStore {
         entries.withLock { $0[rowID]?.tree }
     }
 
-    /// Applies the ops to the row's tree: its tree and errors after them, or nothing when the
-    /// row isn't known.
-    static func patch(rowID: String, ops: [JSON]) -> (tree: JSON?, errors: [String], cache: ProgramCache)? {
+    /// Applies the ops to the row's tree: its tree and errors after them, with the cache's
+    /// generation they are laid out in, or nothing when the row isn't known.
+    static func patch(rowID: String, ops: [JSON]) -> (tree: JSON?, errors: [String], cache: ProgramCache, generation: Int)? {
         entries.withLock { entries in
             guard var entry = entries[rowID] else { return nil }
             for op in ops {
                 apply(op, to: &entry)
             }
             entries[rowID] = entry
-            return (entry.tree, entry.errors, entry.cache)
+            return (entry.tree, entry.errors, entry.cache, entry.cache.current)
         }
     }
 
@@ -151,20 +151,27 @@ final class ProgramCache: @unchecked Sendable {
     /// Goes up with every change, so that what a tree before it lays out is never kept.
     var current: Int { lock.withLock { generation } }
 
-    func box(_ key: ProgramCacheKey) -> ProgramBox? {
-        lock.withLock { boxes[key.id]?[key] }
+    /// What a tree of the generation `generation` kept; nothing once a change came after it.
+    func box(_ key: ProgramCacheKey, generation: Int) -> ProgramBox? {
+        lock.withLock { generation == self.generation ? boxes[key.id]?[key] : nil }
     }
 
-    func keep(_ box: ProgramBox, for key: ProgramCacheKey) {
-        lock.withLock { boxes[key.id, default: [:]][key] = box }
+    func keep(_ box: ProgramBox, for key: ProgramCacheKey, generation: Int) {
+        lock.withLock {
+            guard generation == self.generation else { return }
+            boxes[key.id, default: [:]][key] = box
+        }
     }
 
-    func width(_ key: ProgramCacheKey) -> CGFloat? {
-        lock.withLock { widths[key.id]?[key] }
+    func width(_ key: ProgramCacheKey, generation: Int) -> CGFloat? {
+        lock.withLock { generation == self.generation ? widths[key.id]?[key] : nil }
     }
 
-    func keep(width: CGFloat, for key: ProgramCacheKey) {
-        lock.withLock { widths[key.id, default: [:]][key] = width }
+    func keep(width: CGFloat, for key: ProgramCacheKey, generation: Int) {
+        lock.withLock {
+            guard generation == self.generation else { return }
+            widths[key.id, default: [:]][key] = width
+        }
     }
 
     func clear() {

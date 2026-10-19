@@ -542,7 +542,7 @@ final class AppStore {
             let width = TranscriptColumn.width
             let remake = { (row: RowModel) -> RowModel? in
                 guard case .ui(let content) = row.kind else { return nil }
-                let changed = UiContent(content, tree: patched.tree, errors: patched.errors, cache: patched.cache)
+                let changed = UiContent(content, tree: patched.tree, errors: patched.errors, cache: patched.cache, generation: patched.generation)
                 let measured = width > 0 ? (width, ProgramRowView.height(changed, width: width)) : nil
                 return RowModel(row, kind: .ui(changed), measured: measured)
             }

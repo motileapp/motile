@@ -851,28 +851,6 @@ enum ProgramLayout {
     }
 }
 
-extension ProgramCache {
-    func box(_ key: ProgramCacheKey, generation: Int) -> ProgramBox? {
-        guard generation == current else { return nil }
-        return box(key)
-    }
-
-    func keep(_ box: ProgramBox, for key: ProgramCacheKey, generation: Int) {
-        guard generation == current else { return }
-        keep(box, for: key)
-    }
-
-    func width(_ key: ProgramCacheKey, generation: Int) -> CGFloat? {
-        guard generation == current else { return nil }
-        return width(key)
-    }
-
-    func keep(width: CGFloat, for key: ProgramCacheKey, generation: Int) {
-        guard generation == current else { return }
-        keep(width: width, for: key)
-    }
-}
-
 /// A carousel's track: how wide its items are, how far apart, and how long it is.
 struct ProgramCarousel {
     let item: CGFloat

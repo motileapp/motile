@@ -210,14 +210,15 @@ struct UiContent {
         limited = json.bool("limited")
     }
 
-    /// The content after a patch, whose tree and errors the store has.
-    init(_ content: UiContent, tree: JSON?, errors: [String], cache: ProgramCache) {
+    /// The content after a patch, whose tree and errors the store has, in the cache's generation
+    /// of that patch: a later patch's boxes are never laid out from this tree.
+    init(_ content: UiContent, tree: JSON?, errors: [String], cache: ProgramCache, generation: Int) {
         rowID = content.rowID
         code = content.code
         complete = content.complete
         limited = content.limited
         self.cache = cache
-        generation = cache.current
+        self.generation = generation
         self.tree = tree.flatMap(UiNode.init(json:))
         self.errors = errors
     }
