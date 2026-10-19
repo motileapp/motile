@@ -182,7 +182,7 @@ fun UiNodeView(node: UiNode) {
         is UiKind.Svg -> UiCanvasView(node, kind.canvas)
         is UiKind.G, is UiKind.Circle, is UiKind.Ellipse, is UiKind.Rect, is UiKind.Line, is UiKind.Path,
         is UiKind.Polyline, is UiKind.Polygon, is UiKind.SvgText -> Unit
-        is UiKind.HtmlView -> UiHtmlCard(node, kind)
+        is UiKind.HtmlView -> UiHtmlView(node, kind)
     }
 }
 
