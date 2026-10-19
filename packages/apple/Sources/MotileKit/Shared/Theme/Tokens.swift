@@ -82,6 +82,93 @@ extension Theme {
     static let syntaxTag = tone(0x116329, 0x7ee787)
 }
 
+extension Theme {
+    /// The colour of a token by its name in tokens.json, as OpenUI's scenes and trees name them.
+    static func named(_ name: String) -> PlatformColor? {
+        switch name {
+        case "background": background
+        case "background-accent": backgroundAccent
+        case "background-accent-stronger": backgroundAccentStronger
+        case "background-accent-strongest": backgroundAccentStrongest
+        case "background-accent-larger": backgroundAccentLarger
+        case "background-accent-larger-stronger": backgroundAccentLargerStronger
+        case "background-secondary": backgroundSecondary
+        case "background-secondary-accent": backgroundSecondaryAccent
+        case "background-secondary-accent-stronger": backgroundSecondaryAccentStronger
+        case "card": card
+        case "card-accent": cardAccent
+        case "popover": popover
+        case "popover-accent": popoverAccent
+        case "foreground": foreground
+        case "emphasized-foreground": emphasizedForeground
+        case "muted-foreground": mutedForeground
+        case "muted-stronger-foreground": mutedStrongerForeground
+        case "muted-strongest-foreground": mutedStrongestForeground
+        case "primary": primary
+        case "primary-foreground": primaryForeground
+        case "destructive": destructive
+        case "destructive-foreground": destructiveForeground
+        case "success": success
+        case "success-foreground": successForeground
+        case "warning": warning
+        case "warning-foreground": warningForeground
+        case "pending": pending
+        case "pending-foreground": pendingForeground
+        case "process": process
+        case "process-foreground": processForeground
+        case "merged": merged
+        case "merged-foreground": mergedForeground
+        case "pink": pink
+        case "skill": skill
+        case "border": border
+        case "border-card": borderCard
+        case "border-input": borderInput
+        case "border-popover": borderPopover
+        case "input": input
+        case "composer": composer
+        case "border-composer": borderComposer
+        case "border-accent": borderAccent
+        case "ring": ring
+        case "overlay": overlay
+        case "shadow": shadow
+        case "chart-1": chart1
+        case "chart-2": chart2
+        case "chart-3": chart3
+        case "chart-4": chart4
+        case "chart-5": chart5
+        case "chart-6": chart6
+        case "map-land": mapLand
+        case "map-green": mapGreen
+        case "map-park": mapPark
+        case "map-campus": mapCampus
+        case "map-water": mapWater
+        case "map-waterway": mapWaterway
+        case "map-building": mapBuilding
+        case "map-street": mapStreet
+        case "map-road": mapRoad
+        case "map-ferry": mapFerry
+        case "claude": claude
+        case "openai": openai
+        case "google-blue": googleBlue
+        case "google-red": googleRed
+        case "google-yellow": googleYellow
+        case "google-green": googleGreen
+        case "linear": linear
+        case "window-close": windowClose
+        case "window-minimize": windowMinimize
+        case "window-zoom": windowZoom
+        case "syntax-comment": syntaxComment
+        case "syntax-keyword": syntaxKeyword
+        case "syntax-string": syntaxString
+        case "syntax-constant": syntaxConstant
+        case "syntax-function": syntaxFunction
+        case "syntax-type": syntaxType
+        case "syntax-tag": syntaxTag
+        default: nil
+        }
+    }
+}
+
 extension Color {
     static let themeBackground = Color(platform: Theme.background)
     static let themeBackgroundAccent = Color(platform: Theme.backgroundAccent)

@@ -474,10 +474,15 @@ impl RenderOnce for FadingScroll {
 /// The look of what drops from a button or lies over the window: the popover's colour, a line
 /// around it and a faint shadow under it. What is inside lies on `Surface::Popover`.
 pub fn dropdown_card(element: Div, cx: &App) -> Div {
+    popover_card(element, Radius::MD, cx)
+}
+
+/// `dropdown_card` with corners of `radius`, as a chart's tooltip has.
+pub fn popover_card(element: Div, radius: f32, cx: &App) -> Div {
     let c = colors(cx);
     element
         .bg(c.popover)
-        .rounded(px(Radius::MD))
+        .rounded(px(radius))
         .border_1()
         .border_color(c.border_popover)
         .shadow(c.shadow(ShadowSize::Md, Opacity::Shadow))

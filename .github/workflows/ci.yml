@@ -45,7 +45,8 @@ jobs:
       - run: cargo test --workspace
 
   # The GPUI app is a Cargo workspace of its own, built against crates/core, for Linux and Windows.
-  # Its tests run on Linux; Windows is only linted, which checks the code only it compiles.
+  # Its tests run on Linux, its pictures on Mesa's software Vulkan; Windows is only linted, which
+  # checks the code only it compiles.
   gpui:
     strategy:
       fail-fast: false
@@ -60,7 +61,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y pkg-config libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev libxcb1-dev libx11-xcb-dev libfontconfig-dev libfreetype-dev
+        run: sudo apt-get update && sudo apt-get install -y pkg-config libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev libxcb1-dev libx11-xcb-dev libfontconfig-dev libfreetype-dev mesa-vulkan-drivers
       - run: rustup update stable --no-self-update && rustup default stable && rustup component add rustfmt clippy
       - run: scripts/patch-crates.sh
       - uses: Swatinem/rust-cache@v2

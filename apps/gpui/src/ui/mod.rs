@@ -30,7 +30,7 @@ pub use control::{
 };
 #[allow(unused_imports, reason = "for the OpenUI components still to be written")]
 pub use date_field::DateField;
-pub use parts::{CommandBox, FadingScroll, KeyCaps, PickMark, dropdown_card};
+pub use parts::{CommandBox, FadingScroll, KeyCaps, PickMark, dropdown_card, popover_card};
 #[allow(unused_imports, reason = "for the OpenUI components still to be written")]
 pub use pick::{OptionCard, PickRow};
 #[allow(unused_imports, reason = "for the OpenUI components still to be written")]

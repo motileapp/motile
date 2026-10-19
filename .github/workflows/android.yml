@@ -59,3 +59,10 @@ jobs:
 
       - name: Lint and test
         run: ./gradlew -Pmotile.skipCore lintDebug testDebugUnitTest assembleDebug
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: canvas-android
+          path: build/canvas/android
+          if-no-files-found: ignore

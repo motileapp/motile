@@ -4,7 +4,9 @@
 
 use std::collections::HashMap;
 
-use motile_core::render::openui::canvas::{Anchor, Cap, Color, Font, Item, Join, Layer, Paint, Path, Scene, Weight};
+use motile_core::render::openui::canvas::{
+    Anchor, Cap, Color, Font, Item, Join, Layer, Paint, Path, Scene, Text, Weight,
+};
 use tiny_skia::{
     FillRule, GradientStop, LineCap, LineJoin, LinearGradient, Paint as SkPaint, PathBuilder, Pixmap, Point, Shader,
     SpreadMode, Stroke, StrokeDash, Transform,
@@ -118,13 +120,8 @@ fn draw(pixmap: &mut Pixmap, item: &Item, palette: &Palette, transform: Transfor
             shape(pixmap, PathBuilder::from_circle(*cx, *cy, *r), paint, palette, transform)
         }
         Item::Text(text) => {
-            let (size, weight) = match text.font {
-                Font::Tick => (11.0, Weight::Regular),
-                Font::Caption => (12.0, Weight::Regular),
-                Font::Ui { size, weight } => (size, weight),
-            };
-            let data = FONTS.iter().find(|(w, _)| *w == weight).map_or(FONTS[0].1, |(_, data)| data);
-            let face = Face::parse(data, 0).unwrap();
+            let (size, weight) = font_of(&text.font);
+            let face = face(weight);
             let k = size / face.units_per_em() as f32;
             let glyphs: Vec<_> = text.text.chars().filter_map(|c| face.glyph_index(c)).collect();
             let advance: f32 = glyphs.iter().map(|g| face.glyph_hor_advance(*g).unwrap_or(0) as f32 * k).sum();
@@ -148,6 +145,42 @@ fn draw(pixmap: &mut Pixmap, item: &Item, palette: &Palette, transform: Transfor
             shape(pixmap, builder.finish(), &paint, palette, transform);
         }
     }
+}
+
+/// Where a label could lie in any client's typeface: its box in DM Sans, widened by a fifth and
+/// 3 points on each side, from an ascent above its baseline to a descent below, as x, y, width,
+/// height. A client's picture is compared with the reference's outside these.
+pub fn text_box(text: &Text) -> [f32; 4] {
+    let (size, weight) = font_of(&text.font);
+    let face = face(weight);
+    let k = size / face.units_per_em() as f32;
+    let advance: f32 = text
+        .text
+        .chars()
+        .filter_map(|c| face.glyph_index(c))
+        .map(|glyph| face.glyph_hor_advance(glyph).unwrap_or(0) as f32 * k)
+        .sum();
+    let left = match text.anchor {
+        Anchor::Start => text.x,
+        Anchor::Middle => text.x - advance / 2.0,
+        Anchor::End => text.x - advance,
+    };
+    let pad = advance * 0.2 + 3.0;
+    let (top, bottom) = (text.y - size - 2.0, text.y + size * 0.35 + 2.0);
+    [left - pad, top, advance + pad * 2.0, bottom - top]
+}
+
+fn font_of(font: &Font) -> (f32, Weight) {
+    match font {
+        Font::Tick => (11.0, Weight::Regular),
+        Font::Caption => (12.0, Weight::Regular),
+        Font::Ui { size, weight } => (*size, *weight),
+    }
+}
+
+fn face(weight: Weight) -> Face<'static> {
+    let data = FONTS.iter().find(|(w, _)| *w == weight).map_or(FONTS[0].1, |(_, data)| data);
+    Face::parse(data, 0).unwrap()
 }
 
 fn shape(pixmap: &mut Pixmap, path: Option<tiny_skia::Path>, paint: &Paint, palette: &Palette, transform: Transform) {

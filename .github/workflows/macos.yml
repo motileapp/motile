@@ -54,6 +54,17 @@ jobs:
       - name: Build the core, the server and the auth server
         run: cargo build --release -p motile-core -p motile-server -p motile-auth
 
+      # Paints the core's canvas scenes and compares them with its reference pictures.
+      - name: Test the Apple kit
+        run: swift test --package-path packages/apple
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: canvas-apple
+          path: build/canvas/apple
+          if-no-files-found: ignore
+
       - name: Import the signing certificate
         if: inputs.sign
         env:
