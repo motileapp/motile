@@ -329,7 +329,7 @@
         "Nature"
       ],
       "filter": null,
-      "note": "Drag to explore and use + and − to zoom. Select a place to highlight it. The line joins the places in order. Street routing is loading or unavailable."
+      "note": "Move and zoom the map to explore. Select a place to highlight it. The line joins the places in order. Street routing is loading or unavailable."
     },
     {
       "id": "children/4",

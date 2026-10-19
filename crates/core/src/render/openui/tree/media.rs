@@ -22,7 +22,7 @@ static YOUTUBE: LazyLock<Regex> = LazyLock::new(|| {
 static PICTOGRAPHIC: LazyLock<Regex> =
     LazyLock::new(|| Regex::with_flags(r"\p{Extended_Pictographic}", "u").expect("a valid pattern"));
 
-const MAP_NOTE: &str = "Drag to explore and use + and − to zoom. Select a place to highlight it.";
+const MAP_NOTE: &str = "Move and zoom the map to explore. Select a place to highlight it.";
 
 impl Pass<'_, '_> {
     fn photo_search(&mut self, query: &str) -> Photos {
