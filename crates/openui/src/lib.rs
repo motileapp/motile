@@ -13,11 +13,14 @@
 //! the prompts this crate writes (`prompt`).
 
 pub mod builtins;
+pub mod components;
 pub mod element;
 pub mod format;
 pub mod functions;
 pub mod js;
 pub mod library;
+pub mod motile;
+pub mod prompt;
 pub mod schema;
 pub mod value;
 
@@ -26,5 +29,6 @@ pub use library::{
     ActionDef, Args, Call, ComponentDef, Env, FixedEnv, FnError, FunctionDef, FunctionImpl, Group, Library, LibraryDef,
     LibraryError,
 };
+pub use prompt::{PromptOptions, Tool, ToolSpec, generate_system_prompt};
 pub use schema::{Field, Schema};
 pub use value::{Map, Value};
