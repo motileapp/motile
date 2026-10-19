@@ -97,7 +97,13 @@ mod tests {
         let context = json!(["User clicked: Book it", {"Booking": {"Name": {"value": "Ada"}, "Guests": {"value": 4, "componentType": "Input"}}, "trip": {}}, {"table": 7, "seat": {"row": "B"}, "notes": ""}]);
         assert_eq!(
             entries(sent_values(Some(&context), &[])),
-            pairs(&[("Booking.Guests", "4"), ("Booking.Name", "Ada"), ("notes", "\"\""), ("seat.row", "B"), ("table", "7")])
+            pairs(&[
+                ("Booking.Guests", "4"),
+                ("Booking.Name", "Ada"),
+                ("notes", "\"\""),
+                ("seat.row", "B"),
+                ("table", "7")
+            ])
         );
         assert_eq!(entries(sent_values(Some(&json!("hidden")), &[])), pairs(&[("context", "hidden")]));
     }

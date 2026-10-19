@@ -421,7 +421,7 @@
               "basis": "content",
               "length": null,
               "grow": 0.0,
-              "shrink": true
+              "shrink": false
             },
             {
               "basis": "content",
@@ -581,7 +581,7 @@
                       },
                       "component": "SearchImage",
                       "query": "Ferry Building San Francisco",
-                      "aspect_ratio": 1.0,
+                      "aspect_ratio": 1.3333334,
                       "radius": {
                         "kind": "md",
                         "points": 8.0
@@ -607,14 +607,8 @@
                     "points": 8.0
                   },
                   "border": false,
-                  "width": {
-                    "unit": "points",
-                    "value": 64.0
-                  },
-                  "height": {
-                    "unit": "points",
-                    "value": 64.0
-                  },
+                  "width": null,
+                  "height": null,
                   "flex": null,
                   "align": "stretch",
                   "justify": "start",
@@ -781,7 +775,7 @@
                       },
                       "component": "SearchImage",
                       "query": "Coit Tower San Francisco",
-                      "aspect_ratio": 1.0,
+                      "aspect_ratio": 1.3333334,
                       "radius": {
                         "kind": "md",
                         "points": 8.0
@@ -807,14 +801,8 @@
                     "points": 8.0
                   },
                   "border": false,
-                  "width": {
-                    "unit": "points",
-                    "value": 64.0
-                  },
-                  "height": {
-                    "unit": "points",
-                    "value": 64.0
-                  },
+                  "width": null,
+                  "height": null,
                   "flex": null,
                   "align": "stretch",
                   "justify": "start",
@@ -981,7 +969,7 @@
                       },
                       "component": "SearchImage",
                       "query": "Lombard Street San Francisco",
-                      "aspect_ratio": 1.0,
+                      "aspect_ratio": 1.3333334,
                       "radius": {
                         "kind": "md",
                         "points": 8.0
@@ -1007,14 +995,8 @@
                     "points": 8.0
                   },
                   "border": false,
-                  "width": {
-                    "unit": "points",
-                    "value": 64.0
-                  },
-                  "height": {
-                    "unit": "points",
-                    "value": 64.0
-                  },
+                  "width": null,
+                  "height": null,
                   "flex": null,
                   "align": "stretch",
                   "justify": "start",
@@ -1181,7 +1163,7 @@
                       },
                       "component": "SearchImage",
                       "query": "Fisherman's Wharf San Francisco",
-                      "aspect_ratio": 1.0,
+                      "aspect_ratio": 1.3333334,
                       "radius": {
                         "kind": "md",
                         "points": 8.0
@@ -1207,14 +1189,8 @@
                     "points": 8.0
                   },
                   "border": false,
-                  "width": {
-                    "unit": "points",
-                    "value": 64.0
-                  },
-                  "height": {
-                    "unit": "points",
-                    "value": 64.0
-                  },
+                  "width": null,
+                  "height": null,
                   "flex": null,
                   "align": "stretch",
                   "justify": "start",
@@ -1381,7 +1357,7 @@
                       },
                       "component": "SearchImage",
                       "query": "Palace of Fine Arts San Francisco",
-                      "aspect_ratio": 1.0,
+                      "aspect_ratio": 1.3333334,
                       "radius": {
                         "kind": "md",
                         "points": 8.0
@@ -1407,14 +1383,8 @@
                     "points": 8.0
                   },
                   "border": false,
-                  "width": {
-                    "unit": "points",
-                    "value": 64.0
-                  },
-                  "height": {
-                    "unit": "points",
-                    "value": 64.0
-                  },
+                  "width": null,
+                  "height": null,
                   "flex": null,
                   "align": "stretch",
                   "justify": "start",
@@ -1581,7 +1551,7 @@
                       },
                       "component": "SearchImage",
                       "query": "Golden Gate Bridge San Francisco",
-                      "aspect_ratio": 1.0,
+                      "aspect_ratio": 1.3333334,
                       "radius": {
                         "kind": "md",
                         "points": 8.0
@@ -1607,14 +1577,8 @@
                     "points": 8.0
                   },
                   "border": false,
-                  "width": {
-                    "unit": "points",
-                    "value": 64.0
-                  },
-                  "height": {
-                    "unit": "points",
-                    "value": 64.0
-                  },
+                  "width": null,
+                  "height": null,
                   "flex": null,
                   "align": "stretch",
                   "justify": "start",
@@ -1781,7 +1745,7 @@
                       },
                       "component": "SearchImage",
                       "query": "Golden Gate Park San Francisco",
-                      "aspect_ratio": 1.0,
+                      "aspect_ratio": 1.3333334,
                       "radius": {
                         "kind": "md",
                         "points": 8.0
@@ -1807,14 +1771,8 @@
                     "points": 8.0
                   },
                   "border": false,
-                  "width": {
-                    "unit": "points",
-                    "value": 64.0
-                  },
-                  "height": {
-                    "unit": "points",
-                    "value": 64.0
-                  },
+                  "width": null,
+                  "height": null,
                   "flex": null,
                   "align": "stretch",
                   "justify": "start",
@@ -1981,7 +1939,7 @@
                       },
                       "component": "SearchImage",
                       "query": "Alamo Square San Francisco",
-                      "aspect_ratio": 1.0,
+                      "aspect_ratio": 1.3333334,
                       "radius": {
                         "kind": "md",
                         "points": 8.0
@@ -2007,14 +1965,8 @@
                     "points": 8.0
                   },
                   "border": false,
-                  "width": {
-                    "unit": "points",
-                    "value": 64.0
-                  },
-                  "height": {
-                    "unit": "points",
-                    "value": 64.0
-                  },
+                  "width": null,
+                  "height": null,
                   "flex": null,
                   "align": "stretch",
                   "justify": "start",

@@ -13,6 +13,16 @@ thread_local! {
     static RECORDED: RefCell<Option<Frames>> = const { RefCell::new(None) };
 }
 
+/// Notes the bounds in the window of every node drawn from now, until [`recorded`] is asked.
+pub fn record() {
+    RECORDED.with_borrow_mut(|recorded| *recorded = Some(Vec::new()));
+}
+
+/// What was drawn since [`record`], each node by its id in the order it was laid out.
+pub fn recorded() -> Vec<(String, Bounds<Pixels>)> {
+    RECORDED.with_borrow_mut(|recorded| recorded.take()).unwrap_or_default()
+}
+
 pub struct Framed {
     id: String,
     child: AnyElement,
@@ -85,6 +95,67 @@ impl Element for Framed {
     }
 }
 
+/// The tree drawn `width` wide in a headless window of `cx` `height` tall, dark on the transcript's
+/// background, as the transcript draws it, once what it laid out off the main thread has arrived.
+#[cfg(test)]
+fn drawn(
+    cx: &mut HeadlessAppContext,
+    tree: motile_core::render::openui::tree::UiNode,
+    width: f32,
+    height: f32,
+) -> AnyWindowHandle {
+    use std::rc::Rc;
+
+    struct Drawn {
+        tree: motile_core::render::openui::tree::UiNode,
+        width: f32,
+    }
+
+    impl Render for Drawn {
+        fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+            let ui_cx = super::UiCx {
+                row: "dump".into(),
+                key: 0,
+                column: self.width,
+                width: self.width,
+                window_height: 800.,
+                text_size: crate::theme::PROSE_SIZE,
+                surface: crate::theme::Surface::Background,
+                ground: None,
+                sink: Rc::new(|_, _, _| {}),
+                store: None,
+                transcript: None,
+            };
+            let c = crate::theme::colors(cx);
+            div()
+                .w(px(self.width))
+                .bg(c.background)
+                .text_color(c.foreground)
+                .font_family(crate::theme::UI_FONT)
+                .child(super::root(&self.tree, &ui_cx, window, cx))
+        }
+    }
+
+    let window = cx
+        .open_window(size(px(width), px(height)), |window, cx| {
+            crate::theme::apply(true, window, cx);
+            cx.new(|_| Drawn { tree, width })
+        })
+        .expect("a window");
+    draw(cx, window.into());
+    cx.run_until_parked();
+    window.into()
+}
+
+#[cfg(test)]
+fn draw(cx: &mut HeadlessAppContext, window: AnyWindowHandle) {
+    cx.update_window(window, |_, window, cx| {
+        window.refresh();
+        window.draw(cx).clear(cx);
+    })
+    .expect("a frame");
+}
+
 /// Every node's frame `[x, y, width, height]` in points from the root's top left corner, by its
 /// id, for the tree laid out `width` wide: `{"children/0": [0, 0, 720, 24], …}`. It draws the
 /// tree in a headless window of `cx`, as the transcript draws it; a node drawn twice (a carousel's
@@ -95,46 +166,10 @@ pub fn frame_dump(
     tree: motile_core::render::openui::tree::UiNode,
     width: f32,
 ) -> serde_json::Value {
-    use std::rc::Rc;
-
-    struct Dumped {
-        tree: motile_core::render::openui::tree::UiNode,
-        width: f32,
-    }
-
-    impl Render for Dumped {
-        fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-            let ui_cx = super::UiCx {
-                row: "dump".into(),
-                key: 0,
-                column: self.width,
-                width: self.width,
-                window_height: 900.,
-                text_size: crate::theme::PROSE_SIZE,
-                surface: crate::theme::Surface::Background,
-                ground: None,
-                sink: Rc::new(|_, _, _| {}),
-                store: None,
-                transcript: None,
-            };
-            div().w(px(self.width)).child(super::root(&self.tree, &ui_cx, window, cx))
-        }
-    }
-
-    let window =
-        cx.open_window(size(px(width), px(4000.)), |_, cx| cx.new(|_| Dumped { tree, width })).expect("a window");
-    let draw = |cx: &mut HeadlessAppContext| {
-        cx.update_window(window.into(), |_, window, cx| {
-            window.refresh();
-            window.draw(cx).clear(cx);
-        })
-        .expect("a frame");
-    };
-    draw(cx);
-    cx.run_until_parked();
-    RECORDED.with_borrow_mut(|recorded| *recorded = Some(Vec::new()));
-    draw(cx);
-    let recorded = RECORDED.with_borrow_mut(|recorded| recorded.take()).unwrap_or_default();
+    let window = drawn(cx, tree, width, 4000.);
+    record();
+    draw(cx, window);
+    let recorded = recorded();
     let origin = recorded.iter().find(|(id, _)| id.is_empty()).map_or(Point::default(), |(_, bounds)| bounds.origin);
     let mut frames = serde_json::Map::new();
     for (id, bounds) in recorded {
@@ -146,6 +181,19 @@ pub fn frame_dump(
         frames.insert(id, serde_json::json!(frame));
     }
     serde_json::Value::Object(frames)
+}
+
+/// A picture of the tree drawn `width` wide and as tall as it lays out, for a `cx` with a renderer.
+#[cfg(test)]
+pub fn picture(
+    cx: &mut HeadlessAppContext,
+    tree: motile_core::render::openui::tree::UiNode,
+    width: f32,
+) -> image::RgbaImage {
+    let height = frame_dump(cx, tree.clone(), width)[""][3].as_f64().unwrap_or(1.).max(1.).ceil() as f32;
+    let window = drawn(cx, tree, width, height);
+    draw(cx, window);
+    cx.capture_screenshot(window).expect("a picture")
 }
 
 #[cfg(test)]
@@ -175,6 +223,16 @@ mod tests {
         serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap()
     }
 
+    fn goldens() -> Vec<String> {
+        let goldens = format!("{}/../../crates/core/fixtures/openui", env!("CARGO_MANIFEST_DIR"));
+        let mut names: Vec<String> = std::fs::read_dir(goldens)
+            .unwrap()
+            .filter_map(|entry| entry.ok()?.path().file_stem()?.to_str().map(str::to_string))
+            .collect();
+        names.sort();
+        names
+    }
+
     fn frame(frames: &Value, id: &str) -> [f32; 4] {
         let frame = frames[id].as_array().unwrap_or_else(|| panic!("no frame for {id:?}"));
         [0, 1, 2, 3].map(|index| frame[index].as_f64().unwrap() as f32)
@@ -200,29 +258,51 @@ mod tests {
         }
     }
 
-    /// Lays out every golden tree at both widths; with `MOTILE_FRAME_DUMPS` set to a folder, writes
-    /// each dump there as `<name>-<width>.json` for the test that compares the clients.
+    /// Lays out every golden tree at both widths, and writes each dump to build/frames/gpui as
+    /// `<name>-<width>.json` for `scripts/compare-frames.sh`.
     #[test]
     fn every_golden_tree_lays_out() {
         let Some(mut cx) = headless() else {
             eprintln!("skipped: GPUI has no text system here");
             return;
         };
-        let out = std::env::var_os("MOTILE_FRAME_DUMPS").map(std::path::PathBuf::from);
-        let goldens = format!("{}/../../crates/core/fixtures/openui", env!("CARGO_MANIFEST_DIR"));
-        let mut names: Vec<String> = std::fs::read_dir(goldens)
-            .unwrap()
-            .filter_map(|entry| entry.ok()?.path().file_stem()?.to_str().map(str::to_string))
-            .collect();
-        names.sort();
-        for name in names {
+        let out = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../build/frames/gpui");
+        std::fs::create_dir_all(&out).unwrap();
+        for name in goldens() {
             for width in [390., 720.] {
                 let frames = frame_dump(&mut cx, golden(&name), width);
                 assert!(frame(&frames, "")[3] > 0., "{name} at {width} has no height");
-                if let Some(out) = &out {
-                    let path = out.join(format!("{name}-{width}.json"));
-                    std::fs::write(path, serde_json::to_string_pretty(&frames).unwrap()).unwrap();
-                }
+                std::fs::write(out.join(format!("{name}-{width}.json")), frames.to_string()).unwrap();
+            }
+        }
+    }
+
+    /// Every golden tree drawn dark at both widths, as build/programs/gpui/<name>-<width>.png for
+    /// `scripts/compare-frames.sh`, where GPUI has a headless renderer.
+    #[test]
+    fn every_golden_tree_is_pictured() {
+        let Some(text) = crate::transcript::canvas::tests::platform_text() else { return };
+        if !matches!(gpui_kit::platform::current_headless_renderer(), Ok(Some(_))) {
+            eprintln!("skipped: GPUI has no headless renderer here");
+            return;
+        }
+        let mut cx = HeadlessAppContext::with_platform(
+            text,
+            std::sync::Arc::new(crate::assets::Assets),
+            gpui_kit::platform::current_headless_renderer,
+        );
+        let fonts = crate::assets::FONTS.iter().map(|bytes| std::borrow::Cow::Borrowed(*bytes)).collect();
+        cx.update(|cx| {
+            gpui_kit::init(cx);
+            cx.text_system().add_fonts(fonts)
+        })
+        .expect("the fonts");
+        crate::fonts::load();
+        let out = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../build/programs/gpui");
+        std::fs::create_dir_all(&out).unwrap();
+        for name in goldens() {
+            for width in [390., 720.] {
+                picture(&mut cx, golden(&name), width).save(out.join(format!("{name}-{width}.png"))).unwrap();
             }
         }
     }
@@ -243,7 +323,7 @@ mod tests {
             eprintln!("skipped: GPUI has no text system here");
             return;
         };
-        for (width, inset) in [(720., 21.), (390., 17.)] {
+        for (width, inset) in [(720., 20.), (390., 16.)] {
             let frames = frame_dump(&mut cx, golden("text"), width);
             let [x, y, content, _] = frame(&frames, "children/0");
             assert_eq!((x, y, content), (inset, inset, width - 2. * inset));

@@ -134,6 +134,17 @@ enum Fixtures {
     static let references = repository.appendingPathComponent("crates/core/fixtures/canvas/reference")
     static let output = repository.appendingPathComponent("build/canvas/apple")
 
+    static let trees = repository.appendingPathComponent("crates/core/fixtures/openui")
+
+    /// The golden trees of the corpus, by their file's name.
+    static func programs() throws -> [(String, JSON)] {
+        let names = try FileManager.default.contentsOfDirectory(atPath: trees.path).filter { $0.hasSuffix(".json") }.sorted()
+        return try names.map { name in
+            let data = try Data(contentsOf: trees.appendingPathComponent(name))
+            return (name, try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? JSON))
+        }
+    }
+
     static func scene(_ name: String) -> CanvasScene? {
         guard let data = try? Data(contentsOf: references.appendingPathComponent("\(name).json")) else { return nil }
         return CanvasLayout.decode(data)

@@ -21,10 +21,10 @@ use motile_core::render::openui::host::UiEvent;
 use motile_core::render::openui::tree::{A11y, Role as UiRole, UiKind, UiNode};
 use motile_core::render::rows::RowKind;
 
-pub use frames::Framed;
 #[cfg(test)]
 #[allow(unused_imports, reason = "for the cross-client drift test")]
 pub use frames::frame_dump;
+pub use frames::{Framed, record as record_frames, recorded as recorded_frames};
 
 use super::model::RowModel;
 use super::rows::{RowContext, error_box, row_key};

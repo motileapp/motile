@@ -4,22 +4,22 @@ import XCTest
 @testable import MotileKit
 
 /// Every program of the corpus laid out as the transcript lays it out: each node has a frame, the
-/// program fills the column, and nothing is drawn at a size that isn't one.
+/// program fills the column, and nothing is drawn at a size that isn't one. The frames are written to
+/// build/frames/<mac|ios>/<program>-<width>.json for `scripts/compare-frames.sh`.
 final class ProgramFramesTests: XCTestCase {
-    private static let trees = Fixtures.repository.appendingPathComponent("crates/core/fixtures/openui")
-
-    private func programs() throws -> [(String, JSON)] {
-        let names = try FileManager.default.contentsOfDirectory(atPath: Self.trees.path).filter { $0.hasSuffix(".json") }.sorted()
-        return try names.map { name in
-            let data = try Data(contentsOf: Self.trees.appendingPathComponent(name))
-            return (name, try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? JSON))
-        }
-    }
+    #if os(macOS)
+    private static let output = Fixtures.repository.appendingPathComponent("build/frames/mac")
+    #else
+    private static let output = Fixtures.repository.appendingPathComponent("build/frames/ios")
+    #endif
 
     func testEveryNodeOfTheCorpusHasAFrameAtBothWidths() throws {
-        for (name, tree) in try programs() {
+        try FileManager.default.createDirectory(at: Self.output, withIntermediateDirectories: true)
+        for (name, tree) in try Fixtures.programs() {
             for width: CGFloat in [390, 720] {
                 let frames = ProgramFrames.frames(tree: tree, width: width)
+                let dump = Self.output.appendingPathComponent("\(name.dropLast(5))-\(Int(width)).json")
+                try ProgramFrames.json(tree: tree, width: width).write(to: dump, atomically: true, encoding: .utf8)
                 XCTAssertEqual(frames[""]?[2], Double(width), "\(name) at \(width) fills the column")
                 for id in Self.shownIDs(tree) {
                     let frame = try XCTUnwrap(frames[id], "\(name) at \(width) has no frame for \(id)")
@@ -47,6 +47,8 @@ final class ProgramFramesTests: XCTestCase {
         XCTAssertEqual(ProgramLayout.columns(grid(200), width: 720), 3)
         XCTAssertEqual(ProgramLayout.columns(grid(200), width: 390), 1)
         XCTAssertEqual(ProgramLayout.columns(grid(100), width: 720), 4)
+        let justFits = UiKind.Grid(json: ["children": [], "columns": 3, "min_child_width": 100, "gap": 8])
+        XCTAssertEqual(ProgramLayout.columns(justFits, width: 390), 3)
     }
 
     func testAPageIsAsTallAsItsOwnHeightThenTheOneItReportedThenTheStart() {

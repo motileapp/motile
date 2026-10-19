@@ -46,15 +46,15 @@ pub fn layout(node: &UiNode, cx: &UiCx, window: &mut Window, app: &mut App) -> S
                 false => (Surface::Card, 1.),
             };
             let fill = soft.then(|| cx.surface.layer(Layer::Box, c));
-            let inner_cx = cx.on(inner).over(fill).within(cx.width - 2. * (padding + border));
+            let inner_cx = cx.on(inner).over(fill).within(cx.width - 2. * padding.max(border));
             let element = element
-                .p(px(padding))
+                .p(px((padding - border).max(0.)))
                 .rounded(px(radius))
                 .when_some(fill, |card, fill| card.bg(fill))
                 .when(!soft, |card| card.bg(c.card).border_1().border_color(c.border_card));
             let element = column(element, children, Align::Stretch, spacing, false, &inner_cx, window, app);
             let edge = (!soft).then_some(c.border_card);
-            style::keep_corners(element, children, radius, padding + border, edge, cx, app)
+            style::keep_corners(element, children, radius, padding.max(border), edge, cx, app)
         }
         UiKind::Carousel { children, item_width, gap, fill } => {
             carousel(element, &node.id, children, *item_width, *gap, fill, cx, window, app)
@@ -237,10 +237,10 @@ fn boxed(element: Stateful<Div>, node: &UiNode, cx: &UiCx, window: &mut Window, 
     let edge = if *border { 1. } else { 0. };
     let inner = if *inner_surface { cx.surface.in_box() } else { cx.surface };
     let fill = background.as_ref().map(|background| style::color(background, cx, app));
-    let inner_cx = cx.on(inner).over(fill).within(own_width - 2. * (padding + edge));
+    let inner_cx = cx.on(inner).over(fill).within(own_width - 2. * padding.max(edge));
     let fixed_height = matches!(height, Some(Length { unit: LengthUnit::Points | LengthUnit::Window, .. }));
     let element = element
-        .p(px(*padding))
+        .p(px((padding - edge).max(0.)))
         .when_some(fill, |element, fill| element.bg(fill))
         .when(*border, |element| element.border_1().border_color(cx.surface.border(c)))
         .when_some(radius.as_ref(), |element, radius| element.rounded(px(style::radius(radius))).overflow_hidden())
@@ -266,7 +266,7 @@ fn boxed(element: Stateful<Div>, node: &UiNode, cx: &UiCx, window: &mut Window, 
     };
     let Some(radius) = radius.as_ref().map(style::radius) else { return element };
     let edge_color = border.then(|| cx.surface.border(c));
-    style::keep_corners(element, children, radius, padding + edge, edge_color, cx, app)
+    style::keep_corners(element, children, radius, padding.max(edge), edge_color, cx, app)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -286,18 +286,11 @@ fn grid(
     let lines: Vec<Div> = children
         .chunks(count)
         .map(|cells| {
-            let mut line = div().flex().flex_row().items_stretch().gap(px(gap));
-            for index in 0..count {
-                let cell = match cells.get(index) {
-                    Some(child) => {
-                        let laid = grown(node(child, &cell_cx, window, app).flex_basis(px(0.)), 1.).min_w_0();
-                        framed(&child.id, laid)
-                    }
-                    None => div().flex_basis(px(0.)).flex_grow(1.).into_any_element(),
-                };
-                line = line.child(cell);
-            }
-            line
+            let line = div().flex().flex_row().items_stretch().gap(px(gap));
+            let laid = cells
+                .iter()
+                .map(|child| framed(&child.id, node(child, &cell_cx, window, app).w(px(cell)).flex_none().min_w_0()));
+            line.children(laid)
         })
         .collect();
     element.flex().flex_col().gap(px(gap)).children(lines)

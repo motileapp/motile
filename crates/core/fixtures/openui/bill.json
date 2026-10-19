@@ -262,7 +262,7 @@
       "wrap": false,
       "sizing": [
         {
-          "basis": "content",
+          "basis": "row",
           "length": null,
           "grow": 0.0,
           "shrink": true
@@ -1089,13 +1089,13 @@
       "wrap": false,
       "sizing": [
         {
-          "basis": "content",
+          "basis": "row",
           "length": null,
           "grow": 0.0,
           "shrink": true
         },
         {
-          "basis": "content",
+          "basis": "row",
           "length": null,
           "grow": 0.0,
           "shrink": true

@@ -739,9 +739,8 @@ impl ActionButton {
     }
 
     /// How wide it is with its margin when nothing cuts its words short.
-    pub fn natural_width(&self, window: &mut Window, cx: &App) -> f32 {
-        let border = if self.look.border(colors(cx)).is_some() { 2. } else { 0. };
-        self.margin.left + self.margin.right + self.label.natural_width(window) + border
+    pub fn natural_width(&self, window: &mut Window, _: &App) -> f32 {
+        self.margin.left + self.margin.right + self.label.natural_width(window)
     }
 
     /// Its digits are all one width, as a count that changes.
@@ -787,7 +786,11 @@ impl RenderOnce for ActionButton {
         let bleed = self.inline.then(|| self.inline_bleed(window));
         // An inline button's light hugs its words, while its press keeps the control's height.
         let light_inset = bleed.map_or(0., |(_, vertical)| (vertical - INLINE_LIGHT_ROOM).max(0.));
-        let label = self.label.render(cx).when(truncates, |label| label.min_w_0()).my(px(-light_inset));
+        let border = look.border(c);
+        // An outline button's line lies inside its size, as the other buttons' fill does.
+        let inset = if border.is_some() { 1. } else { 0. };
+        let label =
+            self.label.render(cx).when(truncates, |label| label.min_w_0()).mx(px(-inset)).my(px(-light_inset - inset));
         div()
             .id(self.id.clone())
             .group(group.clone())
@@ -812,7 +815,7 @@ impl RenderOnce for ActionButton {
                     .rounded_bl(corners.bottom_left)
                     .rounded_br(corners.bottom_right)
                     .bg(fill)
-                    .when_some(look.border(c), |inner, border| inner.border_1().border_color(border))
+                    .when_some(border, |inner, border| inner.border_1().border_color(border))
                     .text_color(foreground)
                     .when(active, |inner| {
                         inner

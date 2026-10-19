@@ -43,10 +43,16 @@ jobs:
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
+      # Every program of the corpus has the frames the clients are compared with (scripts/compare-frames.sh).
+      - name: Check the frame references
+        run: |
+          cargo run -q -p motile-core --example compare_frames -- crates/core/fixtures/frames/mac crates/core/fixtures/frames/mac
+          cargo run -q -p motile-core --example compare_frames -- crates/core/fixtures/frames/ios crates/core/fixtures/frames/ios --mobile
 
   # The GPUI app is a Cargo workspace of its own, built against crates/core, for Linux and Windows.
   # Its tests run on Linux, its pictures on Mesa's software Vulkan; Windows is only linted, which
-  # checks the code only it compiles.
+  # checks the code only it compiles. On Linux the corpus's frames are compared with the Mac's
+  # (crates/core/fixtures/frames), and they and the pictures are kept as an artifact.
   gpui:
     strategy:
       fail-fast: false
@@ -66,12 +72,31 @@ jobs:
       - run: scripts/patch-crates.sh
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: apps/gpui -> target
+          workspaces: |
+            apps/gpui -> target
+            . -> target
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: cargo fmt --check
       - run: cargo clippy --all-targets -- -D warnings
       - if: runner.os == 'Linux'
         run: cargo test
+      - name: Compare the frames with the Mac's
+        if: runner.os == 'Linux'
+        working-directory: .
+        run: cargo run -q -p motile-core --example compare_frames -- crates/core/fixtures/frames/mac build/frames/gpui --known crates/core/fixtures/frames/known.txt
+      - name: Lay the pictures side by side
+        if: runner.os == 'Linux' && always()
+        working-directory: .
+        run: cargo run -q -p motile-core --example program_sheet -- build/programs/sheets
+      - uses: actions/upload-artifact@v4
+        if: runner.os == 'Linux' && always()
+        with:
+          name: programs-gpui
+          path: |
+            build/frames/gpui
+            build/programs
+            build/canvas/gpui
+          if-no-files-found: ignore
 
   apple:
     runs-on: ubuntu-24.04

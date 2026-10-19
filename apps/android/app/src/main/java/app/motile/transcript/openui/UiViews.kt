@@ -104,7 +104,8 @@ fun UiRow(row: RowModel, content: UiContent) {
         val width = maxWidth.value
         Column(Modifier.fillMaxWidth()) {
             if (tree != null) {
-                CompositionLocalProvider(LocalUiHost provides host) { UiProgram(tree, width) }
+                val frames = app.motile.DemoHooks.programFrames?.getOrPut(row.id) { UiFrames() }
+                CompositionLocalProvider(LocalUiHost provides host, LocalUiFrames provides (frames ?: LocalUiFrames.current)) { UiProgram(tree, width) }
             }
             if (errors.isNotEmpty()) ErrorRow(errors.joinToString("\n"), Modifier.padding(top = if (tree != null) 8.dp else 0.dp))
         }
@@ -210,7 +211,7 @@ private fun Aligned(align: UiAlign, content: @Composable () -> Unit) {
 /** The node's frame for the dumps, and what accessibility is told of it. */
 @Composable
 fun Modifier.uiNode(node: UiNode): Modifier {
-    val framed = uiFrame(node.id)
+    val framed = uiFrame(node.id, node.a11y?.label)
     val a11y = node.a11y ?: return framed
     return when (a11y.role) {
         UiRole.Hidden -> framed.clearAndSetSemantics {}
@@ -236,13 +237,22 @@ private fun UiBox(node: UiNode, kind: UiKind.Box) {
     val surface = LocalSurface.current
     val extent = LocalUiExtent.current
     val shape = uiShape(kind.radius)
-    var box = Modifier.uiNode(node).uiSize(kind.width, kind.height, extent)
+    val around = LocalUiParentHeight.current
+    val fixed = kind.height?.let { height ->
+        when (height.unit) {
+            app.motile.core.UiLengthUnit.Points -> height.value
+            app.motile.core.UiLengthUnit.Fraction -> around?.let { it * height.value }
+            app.motile.core.UiLengthUnit.Column -> extent.column * height.value
+            app.motile.core.UiLengthUnit.Window -> extent.window * height.value
+        }
+    }
+    var box = Modifier.uiNode(node).uiSize(kind.width, kind.height, extent, around)
     if (kind.radius != null) box = box.clip(shape)
     kind.background?.let { box = box.background(it.color(), shape) }
     if (kind.border) box = box.border(1.dp, surface.border, shape)
     box = box.padding(kind.padding.dp)
     val inner = if (kind.innerSurface) surface.inBox else surface
-    CompositionLocalProvider(LocalSurface provides inner) {
+    CompositionLocalProvider(LocalSurface provides inner, LocalUiParentHeight provides fixed?.let { it - 2 * kind.padding }) {
         if (kind.direction == app.motile.core.UiDirection.Row) {
             UiRowLayout(kind.gap, kind.align, kind.justify, kind.wrap, kind.sizing, extent, box) { kind.children.forEach { UiNodeView(it) } }
         } else {

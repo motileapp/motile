@@ -798,7 +798,7 @@
                   },
                   "component": "SearchImage",
                   "query": "Pixel 11",
-                  "aspect_ratio": 1.0,
+                  "aspect_ratio": 1.3333334,
                   "radius": {
                     "kind": "lg",
                     "points": 12.0
@@ -826,14 +826,8 @@
                 "points": 12.0
               },
               "border": false,
-              "width": {
-                "unit": "points",
-                "value": 64.0
-              },
-              "height": {
-                "unit": "points",
-                "value": 64.0
-              },
+              "width": null,
+              "height": null,
               "flex": null,
               "align": "stretch",
               "justify": "start",

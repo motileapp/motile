@@ -3397,7 +3397,7 @@
                       "basis": "content",
                       "length": null,
                       "grow": 0.0,
-                      "shrink": true
+                      "shrink": false
                     },
                     {
                       "basis": "content",
@@ -3475,7 +3475,7 @@
                       "basis": "content",
                       "length": null,
                       "grow": 0.0,
-                      "shrink": true
+                      "shrink": false
                     },
                     {
                       "basis": "content",
@@ -3553,7 +3553,7 @@
                       "basis": "content",
                       "length": null,
                       "grow": 0.0,
-                      "shrink": true
+                      "shrink": false
                     },
                     {
                       "basis": "content",
@@ -3631,7 +3631,7 @@
                       "basis": "content",
                       "length": null,
                       "grow": 0.0,
-                      "shrink": true
+                      "shrink": false
                     },
                     {
                       "basis": "content",
@@ -3709,7 +3709,7 @@
                       "basis": "content",
                       "length": null,
                       "grow": 0.0,
-                      "shrink": true
+                      "shrink": false
                     },
                     {
                       "basis": "content",
@@ -3787,7 +3787,7 @@
                       "basis": "content",
                       "length": null,
                       "grow": 0.0,
-                      "shrink": true
+                      "shrink": false
                     },
                     {
                       "basis": "content",

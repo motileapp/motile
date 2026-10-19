@@ -60,9 +60,9 @@ pub fn drawing(node: &UiNode, cx: &UiCx, window: &mut Window, app: &mut App) -> 
             };
             let width = prepared.scene.width;
             element
-                .w_full()
-                .flex()
-                .justify_center()
+                .w(px(width))
+                .flex_none()
+                .self_center()
                 .child(SceneView::new(cx.id(id, "svg"), prepared, width).surface(cx.surface).current(c.foreground))
         }
         UiKind::Flashcard { front, back, hint, flipped, canvas } => {
