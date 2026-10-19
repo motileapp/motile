@@ -409,6 +409,25 @@ fn asks_before_running_a_command_without_full_access() {
 }
 
 #[test]
+fn the_run_program_shows_what_its_confirmed_command_printed() {
+    let mut thread = Thread::of(&fixture("run"));
+    thread.programs.full_access = false;
+    thread.ui(PROGRAM);
+    let button = find(&thread.tree(), "Button", "Run git status").unwrap();
+    let outs = thread.event(&button, UiEvent::Press);
+    let Some(Out::Confirm { call_id, command, .. }) = outs.iter().find(|out| matches!(out, Out::Confirm { .. })) else {
+        panic!("{outs:?}")
+    };
+    assert_eq!(command, "git status --short");
+    let (serial, call, ..) = calls(&thread.programs.confirm(PROGRAM, *call_id, true))[0].clone();
+    let printed = json!({"exit_code": 0, "stdout": " M greet.py\n", "stderr": "", "truncated": false});
+    thread.programs.tool_result(PROGRAM, serial, call, Ok(printed));
+    let tree = thread.tree();
+    assert!(nodes(&tree).iter().any(|node| node["component"] == "Code"), "{tree}");
+    assert!(tree.to_string().contains("Exited with 0"), "{tree}");
+}
+
+#[test]
 fn an_old_server_runs_no_tools() {
     let mut thread = Thread::of("root = Col([Text(\"n\" + @Count(log))])\nlog = Query(\"git_log\", {}, [])");
     thread.programs.limited = true;
@@ -526,7 +545,7 @@ fn runs_every_corpus_program_without_errors() {
         .filter_map(|entry| entry.ok()?.file_name().to_str()?.strip_suffix(".oui").map(str::to_string))
         .collect();
     names.sort();
-    assert_eq!(names.len(), 42);
+    assert_eq!(names.len(), 43);
     for name in names {
         let mut thread = Thread::of(&fixture(&name));
         let ui = thread.ui(PROGRAM);
