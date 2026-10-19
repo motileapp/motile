@@ -102,10 +102,10 @@ fun ComposerView(modifier: Modifier = Modifier) {
                     when {
                         thread != null && approval != null -> WaitingStrip(approval, store.activity.approvals.size)
                         waitingChild != null && waitingText != null -> ChildrenStrip(waitingText, waitingChild, children.waiting.size)
+                        thread != null && !thread.busy && !store.activity.busy && interruption != null -> InterruptionStrip(interruption)
                         thread != null && store.activity.monitoring -> MonitoringStrip(thread)
                         thread != null && children?.runningText != null ->
                             AgentsStrip(children.runningText, children, stops = thread.waitsOnAgents && !store.activity.running)
-                        thread != null && !thread.busy && !store.activity.busy && interruption != null -> InterruptionStrip(interruption)
                     }
                     ComposerBox(model, focus, press)
                 }

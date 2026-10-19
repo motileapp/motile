@@ -28,12 +28,12 @@ struct ComposerView: View {
                 } else if let children = store.selectedThread?.children, let first = children.waiting.first,
                           let text = children.waitingText {
                     ChildrenStrip(text: text, first: first, count: children.waiting.count)
+                } else if let thread = store.selectedThread, !thread.busy, !store.activity.busy, let interruption = thread.interruption {
+                    InterruptionStrip(interruption: interruption)
                 } else if store.selectedThread != nil, store.activity.monitoring {
                     monitoringStrip
                 } else if let thread = store.selectedThread, let children = thread.children, let text = children.runningText {
                     agentsStrip(text, children: children, stops: thread.waitsOnAgents && !store.activity.running)
-                } else if let thread = store.selectedThread, !thread.busy, !store.activity.busy, let interruption = thread.interruption {
-                    InterruptionStrip(interruption: interruption)
                 }
                 box
                     .zIndex(1)

@@ -844,12 +844,14 @@ impl Render for Composer {
             Some(waiting_strip(&self.store, approval, count, questions, cx).into_any_element())
         } else if let Some((text, first, count)) = waiting_children {
             Some(children::children_strip(&self.store, text, &first, count, cx).into_any_element())
+        } else if let Some(interruption) = interrupted {
+            Some(interruption_strip(&self.store, interruption, cx).into_any_element())
         } else if let Some(thread) = thread.as_ref().filter(|_| monitoring) {
             Some(monitoring_strip(&self.store, thread, self.width, window, cx).into_any_element())
-        } else if let Some((children, stops)) = working_children {
-            Some(agents_strip(&self.store, &children, stops, self.width, window, cx).into_any_element())
         } else {
-            interrupted.map(|interruption| interruption_strip(&self.store, interruption, cx).into_any_element())
+            working_children.map(|(children, stops)| {
+                agents_strip(&self.store, &children, stops, self.width, window, cx).into_any_element()
+            })
         };
         let bottom_strip = project.map(|project| {
             let picker = self.branch_picker.clone();
