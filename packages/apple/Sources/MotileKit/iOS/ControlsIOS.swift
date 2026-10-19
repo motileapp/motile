@@ -5,6 +5,7 @@ import UIKit
 /// A tap anywhere on the fill brings the keyboard.
 final class FieldView: FlippedView {
     let size: ControlSize
+    let numeric: Bool
     var text: String {
         get { field.text ?? "" }
         set {
@@ -21,6 +22,8 @@ final class FieldView: FlippedView {
         }
     }
     var onChange: (String) -> Void
+    /// The user is typing in it.
+    var editing: Bool { field.isFirstResponder }
 
     private let frameView = SurfaceView()
     private let field = UITextField()
@@ -29,6 +32,7 @@ final class FieldView: FlippedView {
     init(placeholder: String, size: ControlSize = .regular, numeric: Bool = false, onChange: @escaping (String) -> Void) {
         self.placeholder = placeholder
         self.size = size
+        self.numeric = numeric
         self.onChange = onChange
         super.init(frame: .zero)
         frameView.radius = size.radius
@@ -95,6 +99,8 @@ final class TextAreaView: FlippedView, UITextViewDelegate {
         }
     }
     var onChange: (String) -> Void
+    /// The user is typing in it.
+    var editing: Bool { textView.isFirstResponder }
 
     private let frameView = SurfaceView()
     private let textView = UITextView()

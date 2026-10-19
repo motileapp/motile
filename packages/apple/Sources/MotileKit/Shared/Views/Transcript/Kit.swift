@@ -28,13 +28,14 @@ final class SurfaceView: LayerView {
     var stroke: PlatformColor? { didSet { repaint() } }
     var dotted = false { didSet { repaint() } }
     var radius: CGFloat = 0 { didSet { repaint() } }
+    var lineWidth: CGFloat = 1 { didSet { repaint() } }
     /// A shadow of the size, in the colour shadow at one of its opacities.
     var drop: (size: ShadowSize, strength: Opacity)? { didSet { repaint() } }
     private var dots: CAShapeLayer?
 
     override var frame: CGRect {
         didSet {
-            guard dotted, frame.size != oldValue.size else { return }
+            guard frame.size != oldValue.size, dotted || radius > 0 else { return }
             repaint()
         }
     }
@@ -47,9 +48,10 @@ final class SurfaceView: LayerView {
     override func paint(_ layer: CALayer) {
         layer.backgroundColor = resolved(fill)
         layer.cornerRadius = radius
-        layer.cornerCurve = .continuous
+        // A corner as round as half the side is a circle's, which a continuous curve points.
+        layer.cornerCurve = radius * 2 >= min(layer.bounds.width, layer.bounds.height) - 0.5 ? .circular : .continuous
         layer.borderColor = dotted ? nil : stroke.map(resolved)
-        layer.borderWidth = stroke == nil || dotted ? 0 : 1
+        layer.borderWidth = stroke == nil || dotted ? 0 : lineWidth
         layer.shadowColor = drop.map { resolved(Theme.thinned(Theme.shadow, $0.strength)) }
         layer.shadowOpacity = drop == nil ? 0 : 1
         layer.shadowRadius = drop?.size.radius ?? 0
