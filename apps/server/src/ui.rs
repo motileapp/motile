@@ -7,7 +7,7 @@ use std::sync::LazyLock;
 
 use motile_openui::fences::{fences, over};
 use motile_openui::{Library, Program, ToolSpec, motile};
-use motile_protocol::wire::{Item, ItemKind, NoticeEvent, ProgramState};
+use motile_protocol::wire::{Item, ItemKind, ProgramState};
 use serde::Serialize;
 use serde_json::{Value, json};
 
@@ -180,7 +180,7 @@ fn ended(item: &Item) -> Option<&motile_protocol::wire::TurnSummary> {
 }
 
 fn is_repair(item: &Item) -> bool {
-    matches!(&item.kind, ItemKind::Notice { notice, .. } if notice.event == NoticeEvent::ProgramErrors)
+    matches!(&item.kind, ItemKind::Notice { notice, .. } if notice.repair)
 }
 
 /// A message as the agent reads it: its text, then what its program sent with it and the state of
@@ -214,7 +214,7 @@ pub fn states(items: &[Item]) -> Vec<ProgramState> {
 
 #[cfg(test)]
 mod tests {
-    use motile_protocol::wire::{AgentNotice, TurnSummary};
+    use motile_protocol::wire::{AgentNotice, NoticeEvent, TurnSummary};
 
     use super::*;
 
@@ -253,9 +253,10 @@ note = Badge(\"Tuesday was the best day\", \"success\")";
         let notice = AgentNotice {
             thread_id: "t".into(),
             title: "Program errors".into(),
-            event: NoticeEvent::ProgramErrors,
+            event: NoticeEvent::Failed,
             agent: motile_protocol::wire::Agent::Claude,
             summary: None,
+            repair: true,
         };
         item(id, ItemKind::Notice { notice, text: String::new() })
     }

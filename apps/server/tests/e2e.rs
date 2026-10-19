@@ -4244,8 +4244,11 @@ async fn a_program_with_errors_goes_back_to_its_agent_until_a_patch_fixes_it() {
     let thread_id = send(&connection, None, new_thread, "Show a broken ui").await;
 
     let fixed = transcript_once(&connection, &thread_id, |transcript| transcript.turn_ends().len() == 2).await;
-    use motile_protocol::wire::NoticeEvent::ProgramErrors;
-    assert_eq!(notices(&fixed), [("Program errors".to_string(), ProgramErrors)]);
+    use motile_protocol::wire::NoticeEvent::Failed;
+    assert_eq!(notices(&fixed), [("Program errors".to_string(), Failed)]);
+    let repairs =
+        fixed.items.iter().filter(|item| matches!(&item.kind, ItemKind::Notice { notice, .. } if notice.repair));
+    assert_eq!(repairs.count(), 1);
     let told = harness.recorded_prompts();
     let asked = told.last().unwrap();
     assert!(asked.starts_with("Motile's clients can't draw all of what you showed:"), "{told:?}");

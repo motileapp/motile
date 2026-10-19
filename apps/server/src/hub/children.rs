@@ -728,6 +728,7 @@ impl Hub {
             event,
             agent: thread.agent,
             summary,
+            repair: false,
         };
         Ok(Some((notice, text)))
     }
