@@ -933,9 +933,12 @@ private struct OnRowSurface<Content: View>: View {
 }
 
 extension ThreadInfo {
-    /// The colour of its status when it waits for the user: an approval, or a reply they haven't seen.
+    /// The colour of its status when it waits for the user, as its sidebar row shows it: an
+    /// approval, its usage limit, or a reply they haven't seen. None while it or its agents work.
     var attentionColor: Color? {
         if waitsFor != nil { return .themeWarning }
+        if working || gitStage != nil || monitoring { return nil }
+        if interruption != nil { return .themeWarning }
         if unread { return .themeSuccess }
         return nil
     }

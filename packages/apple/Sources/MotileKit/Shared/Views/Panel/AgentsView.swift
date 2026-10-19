@@ -226,12 +226,12 @@ private struct AgentRow: View {
     }
 }
 
-/// How long the agent has worked so far, or worked in all.
+/// How long the agent has worked so far, or worked in all, or until its usage limit stopped it.
 struct AgentTime: View {
     let agent: AgentInfo
 
     var body: some View {
-        if agent.working {
+        if agent.working && agent.state != .limited {
             TimelineView(.periodic(from: .now, by: 1)) { context in
                 time(Time.elapsed(since: agent.startedAt, now: context.date.timeIntervalSince1970), Color.themeProcess)
             }

@@ -1064,7 +1064,7 @@ final class AgentRowView: RowView {
             time.string = Time.stamp(at)
             return
         }
-        guard [.working, .waiting, .limited].contains(content.state) else {
+        guard [.working, .waiting].contains(content.state) else {
             time.string = content.durationMs.map { Time.duration(milliseconds: $0) } ?? ""
             return
         }

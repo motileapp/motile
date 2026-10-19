@@ -287,8 +287,7 @@ impl Transcript {
         self.activity.running
             || self.rows.iter().any(|model| match &model.row.kind {
                 RowKind::Agent { agent } => {
-                    agent.at.is_none()
-                        && matches!(agent.state, AgentState::Working | AgentState::Waiting | AgentState::Limited)
+                    agent.at.is_none() && matches!(agent.state, AgentState::Working | AgentState::Waiting)
                 }
                 RowKind::Agents { started_at, .. } => started_at.is_some(),
                 _ => false,

@@ -1869,7 +1869,7 @@ pub fn agent_time(agent: &AgentView, cx: &App) -> AnyElement {
             .child(text)
             .into_any_element()
     };
-    if agent.working() {
+    if agent.working() && agent.state != AgentState::Limited {
         return time(elapsed(agent.started_at), c.process);
     }
     match agent.duration_ms {
