@@ -488,6 +488,83 @@ pub fn popover_card(element: Div, radius: f32, cx: &App) -> Div {
         .shadow(c.shadow(ShadowSize::Md, Opacity::Shadow))
 }
 
+const POPOVER_GAP: f32 = 8.;
+const POPOVER_MARGIN: f32 = 12.;
+
+/// Where the trigger of a popover was last painted, in the window.
+pub type TriggerBounds = Entity<Option<Bounds<Pixels>>>;
+
+/// Keeps `bounds` up to date with the frame of the element it is a child of.
+pub fn tracks_bounds(bounds: TriggerBounds) -> impl IntoElement {
+    canvas(move |frame, _, cx| bounds.update(cx, |bounds, _| *bounds = Some(frame)), |_, _, _, _| {})
+        .absolute()
+        .inset_0()
+}
+
+/// Motile's popover panel, at most `width` wide, padded 12 and 14, its children 8 apart. A press
+/// outside it, Esc while it has `focus`, or a scroll outside it calls `close`.
+pub fn popover_panel(id: ElementId, width: f32, focus: &FocusHandle, close: Run, cx: &App) -> Stateful<Div> {
+    let c = colors(cx);
+    let (escapes, scrolls) = (close.clone(), close.clone());
+    let closes_on_scroll = canvas(
+        |_, _, _| {},
+        move |bounds, _, window, _| {
+            let (scrolls, sent) = (scrolls.clone(), std::cell::Cell::new(false));
+            window.on_mouse_event(move |event: &ScrollWheelEvent, phase, window, cx| {
+                if phase != DispatchPhase::Bubble || bounds.contains(&event.position) || sent.replace(true) {
+                    return;
+                }
+                scrolls(window, cx);
+            });
+        },
+    )
+    .absolute()
+    .inset_0();
+    popover_card(
+        div().py(px(12.)).px(px(14.)).max_w(px(width)).flex().flex_col().gap(px(8.)).text_color(c.foreground),
+        Radius::LG,
+        cx,
+    )
+    .id(id)
+    .role(Role::Dialog)
+    .occlude()
+    .child(closes_on_scroll)
+    .track_focus(focus)
+    .on_key_down(move |event: &KeyDownEvent, window, cx| {
+        if event.keystroke.key == "escape" {
+            cx.stop_propagation();
+            escapes(window, cx);
+        }
+    })
+    .on_mouse_down_out(move |_, window, cx| close(window, cx))
+}
+
+/// A popover's panel by its trigger, a child of it: 8 under it with their leading edges together,
+/// or 8 over it when fewer than 220 are left under it and more than 240 over it, kept 12 inside
+/// the window.
+pub fn anchored_popover(trigger: Option<Bounds<Pixels>>, panel: impl IntoElement, window: &Window) -> Div {
+    let room = f32::from(window.viewport_size().height);
+    let up = trigger.is_some_and(|trigger| {
+        let below = room - f32::from(trigger.bottom());
+        below < 220. + POPOVER_GAP && f32::from(trigger.top()) > 240.
+    });
+    let (place, corner, offset) = if up {
+        (div().absolute().left_0().bottom_full(), gpui_kit::Anchor::BottomLeft, -POPOVER_GAP)
+    } else {
+        (div().absolute().left_0().top_full(), gpui_kit::Anchor::TopLeft, POPOVER_GAP)
+    };
+    place.child(
+        deferred(
+            anchored()
+                .anchor(corner)
+                .snap_to_window_with_margin(px(POPOVER_MARGIN))
+                .offset(point(px(0.), px(offset)))
+                .child(panel),
+        )
+        .with_priority(1),
+    )
+}
+
 /// One of the things a `CheckMenu` turns on and off.
 pub struct Check {
     pub title: SharedString,

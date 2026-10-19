@@ -55,7 +55,14 @@ impl RowModel {
         let kind = if queued {
             RowKind::Queued { text, skills: Vec::new(), attachments, status: "Queued" }
         } else {
-            RowKind::User { text, links: Vec::new(), skills: Vec::new(), attachments, at: crate::models::now() }
+            RowKind::User {
+                text,
+                links: Vec::new(),
+                skills: Vec::new(),
+                attachments,
+                values: None,
+                at: crate::models::now(),
+            }
         };
         Self::new(Row { id: Self::PENDING_ID.into(), item: Self::PENDING_ID.into(), nested: false, kind, after: None })
     }

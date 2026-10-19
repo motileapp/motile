@@ -28,7 +28,7 @@ enum TranscriptColumn {
 /// here, off the main thread, so showing a row costs the main thread nothing but drawing.
 final class RowModel {
     enum Kind {
-        case user(text: NSAttributedString, attachments: [AttachedFile], at: Double)
+        case user(text: NSAttributedString, attachments: [AttachedFile], values: SentValues?, at: Double)
         /// `uncoloured` when code inside it still waits for highlighting.
         case prose(NSAttributedString, uncoloured: Bool)
         case code(CodeContent)
@@ -92,7 +92,8 @@ final class RowModel {
         above = Typesetter.spaceAbove(json)
         switch json.string("kind") {
         case "user":
-            kind = .user(text: Typesetter.message(json), attachments: json.objects("attachments").map(AttachedFile.init(json:)), at: json.double("at"))
+            let attachments = json.objects("attachments").map(AttachedFile.init(json:))
+            kind = .user(text: Typesetter.message(json), attachments: attachments, values: SentValues(json: json.object("values")), at: json.double("at"))
         case "prose":
             let uncoloured = json.objects("paras").contains { $0.string("kind") == "pre" && $0["spans"] as? [NSNumber] == nil }
             kind = .prose(Typesetter.prose(json), uncoloured: uncoloured)
@@ -146,7 +147,7 @@ final class RowModel {
             let content = QueuedContent(text: typeset, attachments: attachments, status: "Queued")
             return RowModel(id: pendingID, itemID: pendingID, kind: .queued(content))
         }
-        return RowModel(id: pendingID, itemID: pendingID, kind: .user(text: typeset, attachments: attachments, at: Date().timeIntervalSince1970))
+        return RowModel(id: pendingID, itemID: pendingID, kind: .user(text: typeset, attachments: attachments, values: nil, at: Date().timeIntervalSince1970))
     }
 
     static let pendingID = "pending"

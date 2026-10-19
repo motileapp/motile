@@ -10,6 +10,7 @@ use std::time::{Duration, Instant};
 use gpui_kit::prelude::*;
 use gpui_kit::*;
 use motile_core::render::agents::AgentState;
+use motile_core::render::openui::sent::SentValues;
 use motile_core::render::rows::{AgentRow, CardPlace, ChangeEntry, HandoffLabel, RowKind, StateCount, Tool};
 use motile_protocol::wire::{Agent, Ask, ToolStatus};
 
@@ -34,6 +35,8 @@ const META_HEIGHT: f32 = 28.;
 pub const TURN_END_HEIGHT: f32 = META_HEIGHT + 10.;
 const BUBBLE_PADDING: f32 = 14.;
 const BUBBLE_RADIUS: f32 = 18.;
+/// How far the chip of a message's values is under the rest of its bubble.
+const VALUES_GAP: f32 = 8.;
 const QUEUED_RADIUS: f32 = Radius::XL;
 const CODE_HEADER: f32 = META_HEIGHT + 8.;
 const CODE_BOTTOM: f32 = 12.;
@@ -758,18 +761,22 @@ fn bubble_content(
 
 /// A message of the user: a bubble against the column's right edge, as wide as its text, with
 /// the images and files it came with above the text, and when it was sent under it.
+#[allow(clippy::too_many_arguments)]
 fn user_row(
     model: &RowModel,
     message: Message,
     attachments: &[AttachedFile],
+    values: Option<&SentValues>,
     at: f64,
     ctx: &RowContext,
     window: &mut Window,
-    cx: &App,
+    cx: &mut App,
 ) -> AnyElement {
     let c = colors(cx);
     let text = message.text;
     let copied_text = text.to_string();
+    let below_gap = !attachments.is_empty() && !text.is_empty();
+    let chip = values.map(|values| values_chip(&model.row.id, values, below_gap, window, cx));
     div()
         .pt(px(14.))
         .pb(px(25.))
@@ -778,9 +785,10 @@ fn user_row(
         .items_end()
         .child(
             bubble_content(model, message, attachments, c.foreground, ctx, window, cx)
+                .children(chip)
                 .max_w(relative(0.8))
                 .min_w(px(12. + BUBBLE_PADDING * 2.))
-                .pb(px(if text.is_empty() { BUBBLE_PADDING } else { 10. }))
+                .pb(px(if text.is_empty() || values.is_some() { BUBBLE_PADDING } else { 10. }))
                 .bg(c.background_secondary)
                 .rounded(px(BUBBLE_RADIUS))
                 .when(model.is_pending(), |bubble| bubble.opacity(0.6)),
@@ -795,6 +803,57 @@ fn user_row(
             move |cx| cx.write_to_clipboard(ClipboardItem::new_string(copied_text.clone())),
         )))
         .into_any_element()
+}
+
+/// The chip at the end of a message's bubble that opens what programs sent with it.
+/// `spaced` when the bubble already spaces its parts.
+fn values_chip(row_id: &str, values: &SentValues, spaced: bool, window: &mut Window, cx: &mut App) -> Div {
+    let key = |part: &str| ElementId::Name(format!("{row_id}-values-{part}").into());
+    let open = window.use_keyed_state(key("open"), cx, |_, _| false);
+    let trigger = window.use_keyed_state(key("trigger"), cx, |_, _| None);
+    let focus = window.use_keyed_state(key("focus"), cx, |_, cx| cx.focus_handle()).read(cx).clone();
+    let shown = *open.read(cx);
+    let toggles = open.clone();
+    let (opens, focused) = (open.clone(), focus.clone());
+    let chip = ActionButton::new(key("chip"), values.label.clone())
+        .symbol("braces")
+        .outline()
+        .small()
+        .surface(Surface::Secondary)
+        .on_click(move |_, window, cx| {
+            let opening = !*toggles.read(cx);
+            toggles.update(cx, |open, cx| {
+                *open = opening;
+                cx.notify();
+            });
+            if opening {
+                window.focus(&focused, cx);
+            }
+        });
+    let panel = shown.then(|| {
+        let c = colors(cx);
+        let width = 320f32.min(f32::from(window.viewport_size().width) - 24.);
+        let close = Rc::new(move |_: &mut Window, cx: &mut App| {
+            opens.update(cx, |open, cx| {
+                *open = false;
+                cx.notify();
+            })
+        });
+        let entries = values.entries.iter().map(|entry| {
+            div()
+                .flex()
+                .flex_col()
+                .gap(px(2.))
+                .child(text_box(12., 18.).text_color(c.muted_foreground).child(entry.name.clone()))
+                .child(text_box(13., 20.).text_color(c.foreground).child(entry.value.clone()))
+        });
+        let card = crate::ui::popover_panel(key("panel"), width, &focus, close, cx).children(entries);
+        crate::ui::anchored_popover(*trigger.read(cx), card, window)
+    });
+    div()
+        .mt(px(if spaced { 0. } else { VALUES_GAP }))
+        .flex()
+        .child(div().relative().child(chip).child(crate::ui::tracks_bounds(trigger)).children(panel))
 }
 
 /// A message that waits for the agent: what it says, how it waits, and the buttons that steer
@@ -1880,11 +1939,11 @@ fn fitted(from: f32, to: f32, room: f32) -> (f32, f32) {
 
 pub fn render_row(model: &RowModel, ctx: &RowContext, window: &mut Window, cx: &mut App) -> AnyElement {
     match &model.row.kind {
-        RowKind::User { text, links, skills, attachments, at } => {
+        RowKind::User { text, links, skills, attachments, values, at } => {
             let files: Vec<AttachedFile> = attachments.iter().map(AttachedFile::from).collect();
             let message =
                 Message { text, links: prose::link_ranges(text, links), skills: prose::skill_ranges(text, skills) };
-            user_row(model, message, &files, *at, ctx, window, cx)
+            user_row(model, message, &files, values.as_ref(), *at, ctx, window, cx)
         }
         RowKind::Prose { .. } => prose_row(model, ctx, cx),
         RowKind::Code { language, code, .. } => code_row(model, language, code, ctx, cx),

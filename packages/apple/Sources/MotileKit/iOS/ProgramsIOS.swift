@@ -60,15 +60,24 @@ final class ProgramPopoverPanel: NSObject, UIPopoverPresentationControllerDelega
     }
 
     func show(_ slot: UiSlot, host: ProgramHost?, surface: Surface) {
+        present(ProgramPanelView.self) { panel, window in panel.show(slot, host: host, window: window) }
+    }
+
+    /// Shows a message's values in its place.
+    func show(_ values: SentValues) {
+        present(SentValuesPanel.self) { panel, window in panel.show(values, window: window) }
+    }
+
+    private func present<Panel: UIView>(_ kind: Panel.Type, fill: (Panel, CGSize) -> CGSize) {
         guard let anchor, let presenter = anchor.presenter else { return }
         let controller = self.controller ?? UIViewController()
-        let panel = controller.view.subviews.first as? ProgramPanelView ?? {
-            let panel = ProgramPanelView()
+        let panel = controller.view.subviews.first as? Panel ?? {
+            let panel = Panel()
             controller.view.addSubview(panel)
             return panel
         }()
         let window = anchor.window?.bounds.size ?? UIScreen.main.bounds.size
-        let size = panel.show(slot, host: host, window: window)
+        let size = fill(panel, window)
         panel.frame = CGRect(origin: .zero, size: size)
         controller.view.backgroundColor = Theme.popover
         controller.preferredContentSize = size

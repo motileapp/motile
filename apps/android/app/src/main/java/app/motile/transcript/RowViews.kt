@@ -142,13 +142,14 @@ private fun UserRow(row: RowModel, user: RowModel.Kind.User) {
                 .background(palette.backgroundSecondary, shape)
                 .padding(
                     start = Bubble.PADDING.dp, end = Bubble.PADDING.dp,
-                    top = if (hasFiles) Bubble.PADDING.dp else 10.dp, bottom = if (hasText) 10.dp else Bubble.PADDING.dp,
+                    top = if (hasFiles) Bubble.PADDING.dp else 10.dp, bottom = if (hasText && user.values == null) 10.dp else Bubble.PADDING.dp,
                 ),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             CompositionLocalProvider(LocalSurface provides Surface.Secondary) {
                 if (hasFiles) AttachedFiles(user.attachments)
                 if (hasText) SelectionContainer { MarkedText(text, messageStyle) }
+                user.values?.let { SentValuesChip(it) }
             }
         }
         MessageMeta(Time.stamp(user.at), trailing = true, help = "Copy message", Modifier.padding(top = 4.dp, bottom = 25.dp)) {

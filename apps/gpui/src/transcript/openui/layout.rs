@@ -1,5 +1,6 @@
 //! The containers: Col, Row, Box, Grid, Card, Carousel and Popover, and Divider and Spacer.
 
+use std::rc::Rc;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -21,7 +22,6 @@ const CAROUSEL_SHARE: f32 = 0.85;
 const CAROUSEL_BLEED: f32 = 4.;
 const CAROUSEL_BUTTON_INSET: f32 = 8.;
 const CAROUSEL_PAGING: Duration = Duration::from_millis(320);
-const POPOVER_GAP: f32 = 8.;
 const POPOVER_WIDTH: f32 = 280.;
 const POPOVER_MARGIN: f32 = 12.;
 
@@ -433,8 +433,9 @@ fn popover(
         .with_text_style(Some(TextStyleRefinement { color: Some(ink), ..Default::default() }), |window| {
             slot(trigger, &format!("{id}/trigger"), ink, cx, window, app)
         });
-    let (node_id, toggles, closes, escapes) = (id.to_string(), cx.clone(), cx.clone(), cx.clone());
+    let (node_id, toggles) = (id.to_string(), cx.clone());
     let focus = window.use_keyed_state(cx.id(id, "focus"), app, |_, cx| cx.focus_handle()).read(app).clone();
+    let trigger = window.use_keyed_state(cx.id(id, "trigger"), app, |_, _| None);
     let was_open = window.use_keyed_state(cx.id(id, "was-open"), app, |_, _| false);
     if open && !*was_open.read(app) {
         window.focus(&focus, app);
@@ -447,49 +448,12 @@ fn popover(
             .with_text_style(Some(TextStyleRefinement { color: Some(c.foreground), ..Default::default() }), |window| {
                 slot(content, &format!("{id}/content"), c.foreground, &inner_cx, window, app)
             });
-        let (close_id, escape_id, scroll_id) = (id.to_string(), id.to_string(), id.to_string());
-        let scrolls = cx.clone();
-        let closes_on_scroll = canvas(
-            |_, _, _| {},
-            move |bounds, _, window, _| {
-                let (scrolls, scroll_id, sent) = (scrolls.clone(), scroll_id.clone(), std::cell::Cell::new(false));
-                window.on_mouse_event(move |event: &ScrollWheelEvent, phase, _, cx| {
-                    if phase != DispatchPhase::Bubble || bounds.contains(&event.position) || sent.replace(true) {
-                        return;
-                    }
-                    scrolls.send(&scroll_id, UiEvent::Expand { open: false }, cx);
-                });
-            },
-        )
-        .absolute()
-        .inset_0();
-        let card = crate::ui::popover_card(
-            div().py(px(12.)).px(px(14.)).max_w(px(width)).flex().flex_col().gap(px(8.)).text_color(c.foreground),
-            Radius::LG,
-            app,
-        )
-        .id(cx.id(id, "panel"))
-        .role(Role::Dialog)
-        .occlude()
-        .child(closes_on_scroll)
-        .children(parts)
-        .track_focus(&focus)
-        .on_key_down(move |event: &KeyDownEvent, _, cx| {
-            if event.keystroke.key == "escape" {
-                cx.stop_propagation();
-                escapes.send(&escape_id, UiEvent::Expand { open: false }, cx);
-            }
-        })
-        .on_mouse_down_out(move |_, _, cx| closes.send(&close_id, UiEvent::Expand { open: false }, cx));
-        div().absolute().left_0().top_full().child(
-            deferred(
-                anchored()
-                    .snap_to_window_with_margin(px(POPOVER_MARGIN))
-                    .offset(point(px(0.), px(POPOVER_GAP)))
-                    .child(card),
-            )
-            .with_priority(1),
-        )
+        let closes = cx.clone();
+        let close_id = id.to_string();
+        let close =
+            Rc::new(move |_: &mut Window, cx: &mut App| closes.send(&close_id, UiEvent::Expand { open: false }, cx));
+        let card = crate::ui::popover_panel(cx.id(id, "panel"), width, &focus, close, app).children(parts);
+        crate::ui::anchored_popover(*trigger.read(app), card, window)
     });
     element
         .relative()
@@ -508,5 +472,6 @@ fn popover(
             })
         })
         .on_click(move |_, _, cx| toggles.send(&node_id, UiEvent::Expand { open: !open }, cx))
+        .child(crate::ui::tracks_bounds(trigger))
         .children(panel)
 }

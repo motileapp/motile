@@ -27,7 +27,10 @@ pub use control::{
     card_default, text_area_state,
 };
 pub use date_field::DateField;
-pub use parts::{CommandBox, CopyButton, FadingScroll, GlassButton, KeyCaps, PickMark, dropdown_card, popover_card};
+pub use parts::{
+    CommandBox, CopyButton, FadingScroll, GlassButton, KeyCaps, PickMark, anchored_popover, dropdown_card,
+    popover_card, popover_panel, tracks_bounds,
+};
 pub use pick::{OptionCard, PickRow};
 pub use slider::Slider;
 
