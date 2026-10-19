@@ -1452,6 +1452,8 @@ impl Core {
                 self.cache.set_projects(server_id, &projects);
                 let Some(server) = self.server_mut(server_id) else { return };
                 server.info = Some(info);
+                self.reprogram(server_id);
+                let Some(server) = self.server_mut(server_id) else { return };
                 server.threads = threads.iter().map(|thread| (thread.id.clone(), thread.clone())).collect();
                 let views = threads.iter().map(|thread| self.thread_view(server_id, thread)).collect();
                 let Some(server) = self.server_mut(server_id) else { return };
@@ -1473,6 +1475,7 @@ impl Core {
                 self.cache.set_server_info(server_id, &info);
                 let Some(server) = self.server_mut(server_id) else { return };
                 server.info = Some(info);
+                self.reprogram(server_id);
                 self.emit_servers();
             }
             Message::Projects { projects } => {
@@ -1749,12 +1752,43 @@ impl Core {
     fn refresh_programs(&mut self, thread_id: &str) {
         let Some(open) = self.open.get(thread_id) else { return };
         let server = self.servers.iter().find(|server| server.device.public_key == open.server_id);
-        let limited = server.and_then(|server| server.info.as_ref()).is_some_and(|info| info.protocol < UI_PROTOCOL);
+        let limited = runs_no_programs(server.and_then(|server| server.info.as_ref()));
         let thread = server.and_then(|server| server.threads.get(thread_id));
         let full_access = thread.is_some_and(|thread| thread.access == Access::Full);
         let Some(open) = self.open.get_mut(thread_id) else { return };
         open.programs.limited = limited;
         open.programs.full_access = full_access;
+    }
+
+    /// Draws the programs of the server's open threads again once what the server can do is known
+    /// or changed, and fetches what failed for want of it.
+    fn reprogram(&mut self, server_id: &str) {
+        let thread_ids: Vec<String> =
+            self.open.iter().filter(|(_, open)| open.server_id == server_id).map(|(id, _)| id.clone()).collect();
+        for thread_id in thread_ids {
+            let Some(before) = self.open.get(&thread_id).map(|open| open.programs.limited) else { continue };
+            self.refresh_programs(&thread_id);
+            let Some(open) = self.open.get_mut(&thread_id) else { continue };
+            if open.programs.limited == before {
+                continue;
+            }
+            let program_rows = |rows: &[Row]| -> Vec<Splice> {
+                let programs = rows.iter().enumerate().filter(|(_, row)| matches!(row.kind, RowKind::Ui { .. }));
+                programs.map(|(start, row)| Splice { start, remove: 1, rows: vec![row.clone()] }).collect()
+            };
+            let rows = program_rows(open.transcript.rows());
+            let agent_rows = open.agent.as_ref().map(|(_, agent)| program_rows(agent.rows())).unwrap_or_default();
+            let limited = open.programs.limited;
+            for splice in rows {
+                self.emit_rows(&thread_id, false, splice);
+            }
+            for splice in agent_rows {
+                self.emit_agent_rows(&thread_id, false, splice);
+            }
+            if !limited {
+                self.with_programs(&thread_id, Programs::retry);
+            }
+        }
     }
 
     fn with_programs(&mut self, thread_id: &str, act: impl FnOnce(&mut Programs) -> Vec<Out>) {
@@ -3185,9 +3219,29 @@ fn percent_decode(text: &str) -> String {
     String::from_utf8_lossy(&decoded).into_owned()
 }
 
+/// Whether the server can't run programs' tools or keep their state: until its `Welcome` says
+/// which protocol it speaks, it is taken for an old one.
+fn runs_no_programs(info: Option<&ServerInfo>) -> bool {
+    info.is_none_or(|info| info.protocol < UI_PROTOCOL)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_server_runs_programs_once_it_says_it_speaks_their_protocol() {
+        let info = |protocol| ServerInfo {
+            protocol,
+            ..serde_json::from_value(serde_json::json!({
+                "version": "0.1.0", "protocol": 0, "hostname": "box", "home": "/root", "agents": [], "models": [],
+            }))
+            .unwrap()
+        };
+        assert!(runs_no_programs(None));
+        assert!(runs_no_programs(Some(&info(UI_PROTOCOL - 1))));
+        assert!(!runs_no_programs(Some(&info(UI_PROTOCOL))));
+    }
 
     #[test]
     fn a_long_server_name_is_cut_to_ten_characters() {

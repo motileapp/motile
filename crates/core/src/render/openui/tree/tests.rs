@@ -596,7 +596,7 @@ fn canvas_components_carry_their_props_for_the_layout() {
 
 #[test]
 fn media_props_are_checked() {
-    let program = r#"root = Col([YouTube("https://youtu.be/dQw4w9WgXcQ?t=1"), YouTube("not a video"), Image("javascript:x", "ab", 9, "nope", "contain"), HtmlView("<p>", 5000)])"#;
+    let program = r#"root = Col([YouTube("https://youtu.be/dQw4w9WgXcQ?t=1"), YouTube("not a video"), Image("javascript:x", "ab", 9, "nope", "contain"), HtmlView("<p>", 5000), Image("http://192.168.1.1/a.png", "Router"), Image("https://x.dev/a.png", "A")])"#;
     assert_eq!(
         kind(program, "children/0"),
         UiKind::YouTube {
@@ -613,6 +613,10 @@ fn media_props_are_checked() {
     );
     let UiKind::HtmlView { height, title, .. } = kind(program, "children/3") else { panic!() };
     assert_eq!((height, title.as_str()), (Some(2400.0), "Interactive view"));
+    let UiKind::Image { src, photos, .. } = kind(program, "children/4") else { panic!() };
+    assert_eq!((src, photos.state), (None, PhotoState::Waiting), "http is looked up as a photo");
+    let UiKind::Image { src, photos, .. } = kind(program, "children/5") else { panic!() };
+    assert_eq!((src.as_deref(), photos.state), (Some("https://x.dev/a.png"), PhotoState::Idle));
 }
 
 #[test]

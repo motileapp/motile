@@ -28,6 +28,13 @@ pub fn web_url(value: &str) -> Option<String> {
     matches!(url.scheme(), "http" | "https").then(|| value.to_owned())
 }
 
+/// An absolute https URL: what a client fetches itself, as HtmlView's policy lets a page.
+pub fn https_url(value: &str) -> Option<String> {
+    let value = value.trim();
+    let url = Url::parse(value).ok()?;
+    (url.scheme() == "https").then(|| value.to_owned())
+}
+
 /// White space as `white-space: normal` sets it: each run of it one space, none at either end.
 pub fn collapse(text: &str) -> String {
     text.split([' ', '\t', '\n', '\r', '\u{c}']).filter(|word| !word.is_empty()).collect::<Vec<_>>().join(" ")
@@ -217,5 +224,9 @@ mod tests {
         assert_eq!(web_url("javascript:alert(1)"), None);
         assert_eq!(web_url("/relative"), None);
         assert_eq!(web_url("mailto:a@b.c"), None);
+        assert_eq!(https_url(" https://bea.gov/a.png "), Some("https://bea.gov/a.png".into()));
+        assert_eq!(https_url("http://192.168.1.1/reboot"), None);
+        assert_eq!(https_url("HTTPS://bea.gov"), Some("HTTPS://bea.gov".into()));
+        assert_eq!(https_url("file:///etc/passwd"), None);
     }
 }

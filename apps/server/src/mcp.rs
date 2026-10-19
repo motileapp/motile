@@ -430,6 +430,7 @@ fn described(item: &Item) -> (&'static str, &'static str, String) {
         ItemKind::TurnEnd { .. } => ("turn_end", "done", "Turn ended".to_string()),
         ItemKind::Handoff { from, to } => ("handoff", "done", format!("{} → {}", end_name(from), end_name(to))),
         ItemKind::Notice { text, .. } => ("notice", "done", text.clone()),
+        ItemKind::Unknown => ("unknown", "done", String::new()),
     }
 }
 

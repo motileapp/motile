@@ -140,7 +140,8 @@ pub struct Item {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub parent: Option<String>,
     /// The state the user left the programs of an assistant item in, by the index of each
-    /// program's block. Only the clients read it.
+    /// program's block. Only the clients read it. A copy passed on by a server older than protocol
+    /// 34 has lost it, as it has `context` and `programs`, until every server is updated.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty", deserialize_with = "blocks")]
     pub ui: BTreeMap<u32, Value>,
     #[serde(flatten)]
@@ -227,6 +228,9 @@ pub enum ItemKind {
         notice: AgentNotice,
         text: String,
     },
+    /// An item of a newer server.
+    #[serde(other)]
+    Unknown,
 }
 
 /// Something that happened in a thread an agent started, which the server tells that agent.
@@ -239,6 +243,10 @@ pub struct AgentNotice {
     /// The start of its reply, why it failed, or what it asks.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub summary: Option<String>,
+    /// It asks the thread's own agent to fix the programs it showed. Its event is `Failed`, which
+    /// servers and clients older than protocol 34 read.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub repair: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
@@ -251,8 +259,9 @@ pub enum NoticeEvent {
     Asked,
     /// It reached its account's usage limit, and waits for the limit to reset.
     Limited,
-    /// A program the thread's own agent showed has errors, which it is asked to fix.
-    ProgramErrors,
+    /// An event of a newer server.
+    #[serde(other)]
+    Unknown,
 }
 
 /// One side of a handoff.
@@ -2509,5 +2518,39 @@ mod tests {
         let stage: GitStage = serde_json::from_value(serde_json::json!("squashing")).unwrap();
 
         assert_eq!(stage, GitStage::Unknown);
+    }
+
+    #[test]
+    fn an_item_or_a_notice_of_a_newer_server_is_read_as_unknown() {
+        let items: Message = serde_json::from_value(serde_json::json!({"type": "items", "items": [
+            {"id": "a", "seq": 1, "rev": 1, "created_at": 1.0, "type": "chart", "series": [1, 2]},
+            {"id": "n", "seq": 2, "rev": 2, "created_at": 2.0, "type": "notice", "text": "",
+             "notice": {"thread_id": "t", "title": "Merged", "event": "merged", "agent": "claude"}},
+        ]}))
+        .unwrap();
+
+        let Message::Items { items } = items else { panic!("{items:?}") };
+        assert_eq!(items[0].kind, ItemKind::Unknown);
+        assert!(matches!(&items[1].kind, ItemKind::Notice { notice, .. } if notice.event == NoticeEvent::Unknown));
+    }
+
+    #[test]
+    fn a_repair_notice_is_a_failure_to_a_peer_that_doesnt_know_repairs() {
+        let notice = AgentNotice {
+            thread_id: "t".into(),
+            title: "Program errors".into(),
+            event: NoticeEvent::Failed,
+            agent: Agent::Claude,
+            summary: None,
+            repair: true,
+        };
+
+        let json = serde_json::to_value(&notice).unwrap();
+
+        assert_eq!(json["event"], "failed");
+        assert_eq!(json["repair"], true);
+        assert_eq!(serde_json::from_value::<AgentNotice>(json).unwrap(), notice);
+        let told = AgentNotice { repair: false, ..notice };
+        assert!(serde_json::to_value(&told).unwrap().get("repair").is_none());
     }
 }

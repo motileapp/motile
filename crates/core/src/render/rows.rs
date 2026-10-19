@@ -1273,6 +1273,7 @@ fn render(
             };
             vec![row(0, RowKind::Agent { agent })]
         }
+        ItemKind::Unknown => Vec::new(),
     }
 }
 
@@ -2048,6 +2049,7 @@ mod tests {
             event: NoticeEvent::Finished,
             agent: Agent::Claude,
             summary: Some("It compiles.".into()),
+            repair: false,
         };
         let notice = Item { created_at: 12.0, ..item("n", 5, ItemKind::Notice { notice, text: String::new() }) };
         let mut transcript = Transcript::new("");

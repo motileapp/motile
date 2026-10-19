@@ -3615,9 +3615,10 @@ impl Hub {
         let notice = AgentNotice {
             thread_id: thread.id.clone(),
             title: "Program errors".to_string(),
-            event: NoticeEvent::ProgramErrors,
+            event: NoticeEvent::Failed,
             agent: thread.agent,
             summary: Some(repair.summary),
+            repair: true,
         };
         self.tell(live, notice, repair.text)
     }
