@@ -271,7 +271,7 @@ fn region_hit(region: Region) -> Hit {
 fn finds_the_bar_band_under_the_pointer() {
     let scene = fixture("chart-bar-720");
     assert_eq!(hit(&scene, 400., 100.), Some(3));
-    assert_eq!(hit(&scene, 373.6, 0.), Some(3));
+    assert_eq!(hit(&scene, 375.55, 0.), Some(3));
     assert_eq!(hit(&scene, 400., 241.), None);
 }
 
