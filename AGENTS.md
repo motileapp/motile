@@ -246,6 +246,14 @@ for tests.
   many servers share it, and a row for each window with when it starts over and its pace.
 - `render/`: turns transcripts into rows ready to draw: `rows.rs` (the row list and its
   splices), `markdown.rs`, `highlight.rs`, `diff.rs`, `agents.rs`.
+- `render/openui/host.rs`: runs the programs of an open thread's rows (`RowKind::Ui`), each in a
+  runtime of its own: the row carries its tree, then `ui_patch` events what changed in it, by node
+  id (the path from its root, `node_id` in `render/openui/mod.rs`). What the user does comes as
+  `Command::Ui`; the host calls the program's tools on the thread's server (a `run` asks the user
+  first, `ui_confirm`, unless the thread has full access), keeps its timers, sends its
+  `@ToAssistant` messages with their context, keeps its state with `SetUi` half a second after it
+  stops changing, and looks up its photos and routes. Which fences are programs and which patch
+  the one before is `motile_openui::fences`, as the server finds them.
 - `render/openui/tree.rs`: the tree a client draws for an OpenUI program, a `UiNode` for each
   component with its props final for drawing (`crates/openui/LAYOUT.md`): colours, points, text
   runs, the context rules. `tree/` resolves an evaluated program into it, reusing the components

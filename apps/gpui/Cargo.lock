@@ -4581,6 +4581,7 @@ version = "0.1.267"
 dependencies = [
  "anyhow",
  "base64 0.23.1",
+ "chrono",
  "csscolorparser",
  "futures-lite",
  "iroh",
@@ -4650,6 +4651,7 @@ version = "0.1.267"
 dependencies = [
  "icu_collator",
  "indexmap",
+ "pulldown-cmark",
  "regress",
  "ryu-js",
  "serde",
