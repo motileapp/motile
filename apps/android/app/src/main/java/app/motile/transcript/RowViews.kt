@@ -72,6 +72,7 @@ import app.motile.ui.HighlightButton
 import app.motile.ui.Icon
 import app.motile.ui.Text
 import app.motile.ui.color
+import app.motile.transcript.openui.UiRow
 import kotlinx.coroutines.delay
 
 /** The view of one row, by its kind. */
@@ -82,7 +83,7 @@ fun TranscriptRow(row: RowModel) {
         is RowModel.Kind.Queued -> QueuedRow(row, kind.content)
         is RowModel.Kind.Prose -> ProseRow(row, kind.content)
         is RowModel.Kind.Code -> CodeRow(kind.content)
-        is RowModel.Kind.Ui -> CodeRow(kind.content.code)
+        is RowModel.Kind.Ui -> UiRow(row, kind.content)
         is RowModel.Kind.Tool, is RowModel.Kind.Thinking, is RowModel.Kind.Group, is RowModel.Kind.Fold -> ToolRow(row)
         is RowModel.Kind.Agent -> AgentRow(row, kind.content)
         is RowModel.Kind.Agents -> AgentsRow(row, kind.content)
@@ -206,7 +207,7 @@ private fun ProseRow(row: RowModel, prose: ProseContent) {
 }
 
 @Composable
-private fun ProseBlockView(block: ProseBlock) {
+fun ProseBlockView(block: ProseBlock) {
     val palette = LocalPalette.current
     val bars = Modifier.quoteBars(block.quote, palette.border)
     val placed = if (block.joined) bars.padding(top = block.top.dp) else Modifier.padding(top = block.top.dp).then(bars)
@@ -230,17 +231,17 @@ private fun ProseBlockView(block: ProseBlock) {
     }
 }
 
-/** Code in a box with its language and a button that copies it, which scrolls sideways when it is wider than the column. */
+/** Code in a box with its language and a button that copies it, which scrolls sideways when it is wider than the column, or `wraps`. */
 @Composable
-private fun CodeBox(language: String, code: String, text: AnnotatedString, modifier: Modifier = Modifier) {
+fun CodeBox(language: String, code: String, text: AnnotatedString, modifier: Modifier = Modifier, wraps: Boolean = false) {
     SurfaceBox(RoundedCornerShape(Radius.lg), modifier.fillMaxWidth(), bordered = true) {
         Column {
             CodeHeader(language, code)
             BasicText(
                 text,
-                Modifier.horizontalScroll(rememberScrollState()).padding(start = 14.dp, end = 14.dp, bottom = 12.dp),
+                (if (wraps) Modifier else Modifier.horizontalScroll(rememberScrollState())).padding(start = 14.dp, end = 14.dp, bottom = 12.dp),
                 style = TextStyle(fontFamily = Theme.mono, fontSize = Theme.codeSize, lineHeight = Theme.codeLineHeight),
-                softWrap = false,
+                softWrap = wraps,
             )
         }
     }
@@ -502,12 +503,11 @@ private fun Modifier.bleed(by: Dp): Modifier = layout { measurable, constraints 
 }
 
 @Composable
-private fun ErrorRow(message: String) {
+fun ErrorRow(message: String, modifier: Modifier = Modifier.padding(top = 4.dp, bottom = 10.dp)) {
     val palette = LocalPalette.current
     val shape = RoundedCornerShape(Radius.lg)
     Row(
-        Modifier
-            .padding(top = 4.dp, bottom = 10.dp)
+        modifier
             .fillMaxWidth()
             .clip(shape)
             .background(palette.destructive.wash(), shape)

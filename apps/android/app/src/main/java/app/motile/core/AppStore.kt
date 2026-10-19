@@ -579,6 +579,17 @@ class AppStore(private val context: Context) {
                     }
                 }
             }
+            "ui_patch" -> {
+                val threadID = event.string("thread_id")
+                val rowID = event.string("row_id")
+                val ops = event.objects("ops")
+                return {
+                    if (transcript.threadID == threadID) {
+                        transcript.patchUi(rowID, ops)
+                        agentTranscript.patchUi(rowID, ops)
+                    }
+                }
+            }
             "live" -> {
                 val threadID = event.string("thread_id")
                 val live = event.bool("live")
@@ -613,6 +624,11 @@ class AppStore(private val context: Context) {
             }
             else -> return null
         }
+    }
+
+    /** Tells core what the user did to the node `node` of the program in the row. */
+    fun sendUi(threadID: String, rowID: String, node: String, event: Map<String, Any?>) {
+        core.send("ui", mapOf("thread_id" to threadID, "row_id" to rowID, "node" to node, "event" to event))
     }
 
     private fun apply(account: Account) {
