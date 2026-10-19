@@ -89,6 +89,8 @@ final class ProgramRowView: RowView, ProgramHost {
         owner.media(id: id, done: done)
     }
 
+    var streaming: Bool { content?.complete == false }
+
     func resized(_ node: String) {
         content?.cache.forget(node)
         owner?.rowResized(id: rowID)

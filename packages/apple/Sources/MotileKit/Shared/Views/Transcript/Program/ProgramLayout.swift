@@ -228,7 +228,7 @@ enum ProgramLayout {
         case .flashcard(let card):
             return flashcard(node, card, width: width, env: env)
         case .map(let map):
-            return ProgramCards.map(node, map, width: width, env: env)
+            return ProgramBox(node, size: CGSize(width: width, height: MapView.height(node: map, windowWidth: env.window.width)), surface: surface)
         case .youTube(let video):
             return ProgramWeb.youTube(node, video, width: width, env: env)
         case .htmlView(let view):

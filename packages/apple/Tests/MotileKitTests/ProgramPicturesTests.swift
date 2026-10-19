@@ -23,6 +23,7 @@ final class ProgramPicturesTests: XCTestCase {
         let rowID = "picture"
         func send(_ node: String, _ event: JSON) {}
         func media(_ id: String, done: @escaping (URL?) -> Void) { done(nil) }
+        func resized(_ node: String) {}
     }
 
     func testEveryProgramOfTheCorpusIsPictured() throws {

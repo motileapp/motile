@@ -74,6 +74,7 @@
         if (event.originalEvent) post({ type: "moved" });
       });
       map.on("moveend", rest);
+      map.on("idle", () => post({ type: "idle" }));
       map.on("click", (event) => {
         const pin = pinAt(event.point);
         if (pin) post({ type: "pin", key: pin.properties.key, label: pin.properties.label });

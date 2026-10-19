@@ -473,37 +473,3 @@ enum ProgramCanvasPart {
         return 4
     }
 }
-
-/// What stands for a component until its own view comes: a bordered card of its title and a line.
-enum ProgramCards {
-    static let padding: CGFloat = 16
-
-    static func card(_ node: UiNode, title: String, detail: String?, width: CGFloat, height: CGFloat? = nil, env: ProgramEnv) -> ProgramBox {
-        let room = max(0, width - 2 * padding)
-        let titleLook = ProgramStyle.look(.cardTitle, narrow: env.narrow)
-        let titleText = ProgramText.plain(title, look: titleLook, color: Theme.foreground)
-        let titleHeight = ProgramText.height(titleText, width: room, lineHeight: titleLook.lineHeight)
-        var texts = [
-            "title": ProgramTextPart(
-                text: titleText, frame: CGRect(x: padding, y: padding, width: room, height: titleHeight),
-                lift: ControlText.lift(titleLook.font, lineHeight: titleLook.lineHeight))
-        ]
-        var y = padding + titleHeight
-        if let detail, !detail.isEmpty {
-            let look = ProgramStyle.look(.small, narrow: env.narrow)
-            let text = ProgramText.plain(detail, look: look, color: Theme.mutedForeground)
-            let detailHeight = ProgramText.height(text, width: room, lineHeight: look.lineHeight)
-            y += 2
-            texts["detail"] = ProgramTextPart(
-                text: text, frame: CGRect(x: padding, y: y, width: room, height: detailHeight), lift: ControlText.lift(look.font, lineHeight: look.lineHeight))
-            y += detailHeight
-        }
-        return ProgramBox(node, size: CGSize(width: width, height: max(height ?? 0, y + padding)), surface: env.surface, texts: texts)
-    }
-
-    static func map(_ node: UiNode, _ map: UiKind.Map, width: CGFloat, env: ProgramEnv) -> ProgramBox {
-        let height = min(min(720, max(200, CGFloat(map.height))), max(280, 0.82 * env.window.width))
-        let places = map.pins.filter(\.visible).map { pin in pin.icon.map { "\($0) \(pin.label)" } ?? "\(pin.number). \(pin.label)" }
-        return card(node, title: "Map", detail: places.joined(separator: "\n"), width: width, height: height, env: env)
-    }
-}

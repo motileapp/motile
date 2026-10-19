@@ -8,21 +8,26 @@ import UIKit
 #endif
 
 /// OpenUI's `Map` for the transcript: the pins and the route core resolved on MapLibre, with glass
-/// controls over it. It runs an engine (`MapEngineView`) only while it is on screen, three at most
-/// at once, and shows a picture of itself otherwise.
+/// controls over it. It runs an engine (`MapEngineView`) only while it is shown, three at most at
+/// once, and shows a picture of itself otherwise.
 final class MapView: FlippedView {
     /// Called with a pin's label when it is pressed.
     var onSelect: (String) -> Void = { _ in }
     /// Called with the category to show, or nil for every place, when the filter's choice changes.
     var onFilter: (String?) -> Void = { _ in }
-    /// Whether the map is on screen, which is when it claims an engine. It follows its window; a
-    /// transcript that keeps rows out of sight in the window says so itself.
+    /// Called when the map goes over the window or the screen, and when it comes back.
+    var onExpand: (Bool) -> Void = { _ in }
+    /// Whether its row is on screen, which is when it claims an engine. Leaving its window takes it
+    /// off; the transcript says when it shows the row and when it lets it go.
     var onScreen = false {
         didSet {
             guard onScreen, !oldValue else { return }
+            if let engine { pilot.attach(engine) }
             MapPool.claim(self)
         }
     }
+    /// On screen or expanded: an engine it has is the last the pool takes back.
+    var shown: Bool { onScreen || expansion != nil }
 
     /// What the map remembers of how it was moved, for a view made again for the same map.
     var memory: MapMemory { pilot.memory }
@@ -35,6 +40,10 @@ final class MapView: FlippedView {
     private var infoOpen = false
     private var tilesFailed = false
     private var pinPoints: [String: CGPoint] = [:]
+    #if os(iOS)
+    private var scrolling: NSKeyValueObservation?
+    private var inView = false
+    #endif
 
     private let placeholder = SurfaceView()
     let stage = MapStage()
@@ -134,6 +143,7 @@ final class MapView: FlippedView {
     func collapse() {
         guard let expansion else { return }
         self.expansion = nil
+        onExpand(false)
         expansion.dismiss { [weak self] in
             guard let self else { return }
             addSubview(stage)
@@ -216,7 +226,21 @@ final class MapView: FlippedView {
     private func toggleExpanded() {
         guard expansion == nil else { return collapse() }
         expansion = MapExpansion(stage: stage, from: self) { [weak self] in self?.collapse() }
+        guard expansion != nil else { return }
+        onExpand(true)
         refresh()
+    }
+
+    /// Gives everything up for good: the map is no longer kept for its row.
+    func retire() {
+        collapse()
+        onScreen = false
+        goStill()
+    }
+
+    /// Presses the pin of this label, as a finger would.
+    func press(pin label: String) {
+        pressed(label)
     }
 
     private func pressed(_ label: String) {
@@ -263,7 +287,7 @@ final class MapView: FlippedView {
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        onScreen = window != nil
+        if window == nil { onScreen = false }
     }
     #else
     private func watchAppearance() {
@@ -272,7 +296,24 @@ final class MapView: FlippedView {
 
     override func didMoveToWindow() {
         super.didMoveToWindow()
-        onScreen = window != nil
+        if window == nil { onScreen = false }
+        watchScroll()
+    }
+
+    /// MapLibre Native leaves what changed while the map was scrolled out of sight undrawn, so the
+    /// map is drawn again when it comes back into view.
+    private func watchScroll() {
+        scrolling = nil
+        let scroll = sequence(first: superview, next: { $0?.superview }).lazy.compactMap { $0 as? UIScrollView }.first
+        guard window != nil, let scroll else { return }
+        scrolling = scroll.observe(\.contentOffset) { [weak self] scroll, _ in self?.scrolled(in: scroll) }
+    }
+
+    private func scrolled(in scroll: UIScrollView) {
+        let shows = scroll.bounds.intersects(convert(bounds, to: scroll))
+        guard shows != inView else { return }
+        inView = shows
+        if shows { engine?.repaint() }
     }
     #endif
 
@@ -452,7 +493,8 @@ private final class MapAttributionView: FlippedView {
 }
 
 /// The maps whose engines run: three at most. A map that comes on screen takes the engine of the
-/// one shown longest ago, off screen first.
+/// one shown longest ago, off screen first. The engine starts on the next turn of the run loop, so
+/// that a row scrolling in isn't held up by it.
 enum MapPool {
     static let limit = 3
 
@@ -466,10 +508,14 @@ enum MapPool {
     static func claim(_ map: MapView) {
         shown.removeAll { $0.map == nil || $0.map === map }
         shown.append(Entry(map))
-        let live = shown.compactMap(\.map).filter { $0.isLive && $0 !== map }
-        if !map.isLive, live.count >= limit {
-            (live.first { !$0.onScreen } ?? live.first)?.goStill()
+        guard !map.isLive else { return }
+        DispatchQueue.main.async { [weak map] in
+            guard let map, map.shown, !map.isLive else { return }
+            let live = shown.compactMap(\.map).filter(\.isLive)
+            if live.count >= limit {
+                (live.first { !$0.shown } ?? live.first)?.goStill()
+            }
+            map.goLive()
         }
-        map.goLive()
     }
 }

@@ -241,28 +241,6 @@ final class ProgramTableView: ProgramNodeView {
     }
 }
 
-/// What stands for a map until its own view comes: a card of its title and its places.
-final class ProgramCardView: ProgramNodeView {
-    private let face = SurfaceView()
-
-    override init(frame: CGRect) {
-        super.init(frame: frame)
-        face.radius = Radius.lg
-        addSubview(face)
-    }
-
-    required init?(coder: NSCoder) { fatalError("not used") }
-
-    override func configure(_ box: ProgramBox) {
-        face.stroke = box.surface.platformBorder
-        face.fill = box.surface.platform(.box)
-    }
-
-    override func layoutNow() {
-        face.frame = bounds
-    }
-}
-
 /// A Chart: the core's scene with its legend and tooltips.
 final class ProgramChartView: ProgramNodeView {
     private let canvas = CanvasView()

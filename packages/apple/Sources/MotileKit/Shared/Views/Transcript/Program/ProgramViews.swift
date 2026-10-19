@@ -17,9 +17,12 @@ protocol ProgramHost: AnyObject {
     func media(_ id: String, done: @escaping (URL?) -> Void)
     /// The node's height changed outside the tree: a page reported its own.
     func resized(_ node: String)
+    /// The program still streams in.
+    var streaming: Bool { get }
 }
 
 extension ProgramHost {
+    var streaming: Bool { false }
     func press(_ node: String) { send(node, ["type": "press"]) }
     func value(_ node: String, _ value: Any) { send(node, ["type": "value", "value": value]) }
 }
@@ -242,7 +245,7 @@ enum ProgramViews {
         case .svg, .math: ProgramSceneView()
         case .flashcard: ProgramFlashcardView()
         case .celebration: ProgramCelebrationView()
-        case .map: ProgramCardView()
+        case .map: ProgramMapView()
         case .youTube, .htmlView: ProgramWebView()
         case .spacer, .mapMarker, .g, .circle, .ellipse, .rect, .line, .path, .polyline, .polygon, .svgText: ProgramNodeView()
         }
@@ -800,6 +803,8 @@ enum ProgramAccess {
             view.setAccessibilityRole(.staticText)
             view.setAccessibilityLabel(label)
             if a11y.role == .heading { view.setAccessibilityRoleDescription("heading, level \(a11y.level ?? 3)") }
+        case .region where view is ProgramMapView:
+            break
         case .group, .list, .listItem, .form, .region, .dialog, .table, .blockquote, .code:
             view.setAccessibilityElement(true)
             view.setAccessibilityRole(a11y.role == .list ? .list : a11y.role == .table ? .table : .group)
@@ -858,8 +863,8 @@ final class ProgramCarouselView: ProgramNodeView {
     private static let button: CGFloat = 34
     private static let buttonInset: CGFloat = 8
     private let track = CarouselTrack()
-    private let back = GlassView(.chevronLeft, help: "Previous")
-    private let forward = GlassView(.chevronRight, help: "Next")
+    private let back = GlassButtonView(symbol: .chevronLeft, symbolSide: 18, help: "Previous", height: ProgramCarouselView.button) {}
+    private let forward = GlassButtonView(symbol: .chevronRight, symbolSide: 18, help: "Next", height: ProgramCarouselView.button) {}
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -896,36 +901,6 @@ final class ProgramCarouselView: ProgramNodeView {
     override func layoutNow() {
         track.frame = bounds.insetBy(dx: 0, dy: -Self.bleed)
         showButtons()
-    }
-}
-
-/// Motile's glass button over a picture or a track: a round button of one symbol.
-final class GlassView: FlippedView {
-    private let face = SurfaceView()
-    private let symbol: SymbolView
-    var action: () -> Void = {}
-
-    init(_ symbol: Symbol, help: String) {
-        self.symbol = SymbolView(symbol, size: 18 / 1.2 / Platform.scale, tint: Theme.foreground)
-        super.init(frame: .zero)
-        face.fill = Theme.thinned(Theme.popover, .lit)
-        face.stroke = Theme.borderPopover
-        face.drop = (.sm, .shadowStronger)
-        addSubview(face)
-        addSubview(self.symbol)
-        tip = help
-        describe(help, button: true)
-        pointer = .hand
-        onPress = { [weak self] _ in self?.action() }
-        onHover = { [weak self] point in self?.face.fill = Theme.thinned(point == nil ? Theme.popover : Theme.popoverAccent, .lit) }
-    }
-
-    required init?(coder: NSCoder) { fatalError("not used") }
-
-    override func layoutNow() {
-        face.frame = bounds
-        face.radius = bounds.height / 2
-        symbol.frame = bounds
     }
 }
 

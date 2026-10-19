@@ -23,6 +23,10 @@ enum MapMaths {
         case recenter
     }
 
+    /// Where the route's reveal is cut, out of the way of the main thread: a street route has
+    /// thousands of points.
+    static let revealing = DispatchQueue(label: "motile.map.reveal", qos: .userInteractive)
+
     static let flyDuration: TimeInterval = 0.92
     static let drawDuration: TimeInterval = 0.76
     /// How long after a fly starts the route begins to draw.
@@ -122,6 +126,9 @@ final class MapPilot {
     private var pins: MapPins?
     private var framing: MapTask?
     private var drawing: MapTask?
+    /// The reveal under way, whose cuts are still wanted, and whether one is being cut.
+    private var reveal: UUID?
+    private var cutting = false
     /// The route and pins the line was last set for.
     private var drawnFor: String?
 
@@ -166,8 +173,10 @@ final class MapPilot {
         memory.userMoved = true
     }
 
-    /// The engine's camera came to rest here.
+    /// The engine's camera came to rest here. Until the user moves it, the camera is where the
+    /// pilot sent it, however far an engine out of sight got.
     func rested(at camera: MapCamera) {
+        guard memory.userMoved else { return }
         memory.camera = camera
     }
 
@@ -206,6 +215,7 @@ final class MapPilot {
         memory.fitSignature = signature
         framing?.cancel()
         drawing?.cancel()
+        reveal = nil
         drawnFor = nil
         setLine([])
         let target = MapMaths.frame(points, size: size, .fit)
@@ -226,14 +236,36 @@ final class MapPilot {
         guard key != drawnFor else { return }
         drawnFor = key
         drawing?.cancel()
+        reveal = nil
         guard positions.count > 1, !memory.lineDrawn, !reducesMotion(), engine != nil else {
             memory.lineDrawn = positions.count > 1
             return setLine(positions)
         }
+        let reveal = UUID()
+        self.reveal = reveal
         drawing = clock.frames(over: MapMaths.drawDuration) { [weak self] t in
-            self?.setLine(MapMaths.reveal(positions, t))
-            guard t >= 1 else { return }
-            self?.memory.lineDrawn = true
+            guard let self else { return }
+            guard t < 1 else {
+                self.reveal = nil
+                self.memory.lineDrawn = true
+                return self.setLine(positions)
+            }
+            self.cut(positions, at: t, for: reveal)
+        }
+    }
+
+    /// Shows the route `t` of the way through its reveal, unless a cut is still being made.
+    private func cut(_ line: [[Double]], at t: Double, for reveal: UUID) {
+        guard !cutting else { return }
+        cutting = true
+        MapMaths.revealing.async {
+            let part = MapMaths.reveal(line, t)
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.cutting = false
+                guard self.reveal == reveal else { return }
+                self.setLine(part)
+            }
         }
     }
 

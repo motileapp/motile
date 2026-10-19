@@ -30,6 +30,7 @@ final class MapEngineView: UIView, MapEngine, MLNMapViewDelegate, MLNMapSnapshot
     private var style: MLNStyle?
     private var pins: MapPins?
     private var line: [[Double]] = []
+    private var lineSerial = 0
     private var failing = false
     private var snapshotter: MLNMapSnapshotter?
 
@@ -75,9 +76,25 @@ final class MapEngineView: UIView, MapEngine, MLNMapViewDelegate, MLNMapSnapshot
         showPins()
     }
 
+    /// Sets the route, its shape made off the main thread; the last one set wins.
     func show(line: [[Double]]) {
         self.line = line
-        (style?.source(withIdentifier: "route") as? MLNShapeSource)?.shape = Self.shape(MapPins.route(line))
+        lineSerial &+= 1
+        let serial = lineSerial
+        MapMaths.revealing.async {
+            let shape = Self.shape(MapPins.route(line))
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.lineSerial == serial else { return }
+                (self.style?.source(withIdentifier: "route") as? MLNShapeSource)?.shape = shape
+            }
+        }
+    }
+
+    /// Draws the map again: MapLibre stops drawing while it is out of sight, and only starts
+    /// again when its view comes into a window.
+    func repaint() {
+        map.removeFromSuperview()
+        addSubview(map)
     }
 
     /// Zooms by `levels` about the map's centre.

@@ -33,6 +33,10 @@ final class MapEngineView: NSView, MapEngine, WKNavigationDelegate, WKUIDelegate
     private var camera: MapCamera
     private var pins: MapPins?
     private var line: [[Double]] = []
+    private var lineSerial = 0
+    /// The map as last drawn whole, for when it is asked for a picture out of sight.
+    private var picture: CGImage?
+    private var picturing = false
 
     init(camera: MapCamera, dark: Bool) {
         self.camera = camera
@@ -89,9 +93,18 @@ final class MapEngineView: NSView, MapEngine, WKNavigationDelegate, WKUIDelegate
         call("motile.pins(\(MapPins.json(pins.geoJSON)), \(MapPins.json(added)))")
     }
 
+    /// Sets the route, its JSON written off the main thread; the last one set wins.
     func show(line: [[Double]]) {
         self.line = line
-        call("motile.line(\(MapPins.json(MapPins.route(line))))")
+        lineSerial &+= 1
+        let serial = lineSerial
+        MapMaths.revealing.async {
+            let json = MapPins.json(MapPins.route(line))
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.lineSerial == serial else { return }
+                self.call("motile.line(\(json))")
+            }
+        }
     }
 
     /// Zooms by `levels` about a point of the map, or its centre.
@@ -101,12 +114,20 @@ final class MapEngineView: NSView, MapEngine, WKNavigationDelegate, WKUIDelegate
         call("motile.zoom(\(levels), \(at), \(duration))")
     }
 
-    /// A picture of the map as it is drawn now.
+    /// A picture of the map as it is drawn now, or as it was last drawn whole when it is out of sight.
     func snapshot(_ done: @escaping (CGImage?) -> Void) {
-        guard ready, web.alphaValue > 0 else { return done(nil) }
-        web.takeSnapshot(with: nil) { image, _ in
-            done(image?.cgImage(forProposedRect: nil, context: nil, hints: nil))
+        guard ready, web.alphaValue > 0, window != nil, !isHiddenOrHasHiddenAncestor else { return done(picture) }
+        web.takeSnapshot(with: nil) { [weak self] image, _ in
+            let picture = image?.cgImage(forProposedRect: nil, context: nil, hints: nil)
+            if let picture { self?.picture = picture }
+            done(picture ?? self?.picture)
         }
+    }
+
+    private func takePicture() {
+        guard !picturing else { return }
+        picturing = true
+        snapshot { [weak self] _ in self?.picturing = false }
     }
 
     func stop() {
@@ -140,6 +161,8 @@ final class MapEngineView: NSView, MapEngine, WKNavigationDelegate, WKUIDelegate
             for script in scripts { call(script) }
         case "loaded":
             web.alphaValue = 1
+        case "idle":
+            takePicture()
         case "moved":
             onUserMove()
         case "rest":
@@ -289,7 +312,8 @@ private final class MapOverlayView: FlippedView {
     override func layoutNow() {
         backdrop.frame = bounds
         let inset = MapLayout.expandedInset(windowWidth: bounds.width)
-        stage.frame = bounds.insetBy(dx: inset, dy: inset)
+        let top = max(inset, safeAreaInsets.top)
+        stage.frame = CGRect(x: inset, y: top, width: max(0, bounds.width - 2 * inset), height: max(0, bounds.height - top - inset))
         lift.frame = stage.frame
     }
 }

@@ -228,6 +228,20 @@ enum DemoDriver {
         case "press":
             guard let button = views(ControlView.self).last(where: { $0.title == rest }) else { return }
             button.onPress?(CGPoint(x: button.bounds.midX, y: button.bounds.midY))
+        case "scroll":
+            let window = UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.keyWindow }.first
+            guard let scroll = UIView.first(TranscriptScroller.self, in: window)?.subviews.first as? UIScrollView, let by = Double(rest) else { return }
+            let most = max(0, scroll.contentSize.height - scroll.bounds.height)
+            scroll.setContentOffset(CGPoint(x: 0, y: min(most, max(0, scroll.contentOffset.y + by))), animated: false)
+        case "map":
+            let words = rest.split(separator: " ", maxSplits: 1).map(String.init)
+            guard words.count == 2 else { return }
+            let map = views(MapView.self).last
+            switch words[0] {
+            case "pin": map?.press(pin: words[1])
+            case "filter": map?.onFilter(words[1] == "All places" ? nil : words[1])
+            default: views(GlassButtonView.self).last { $0.title == words[1] || $0.help == words[1] }?.press()
+            }
         case "branches":
             guard let project = store.composerProject else { return }
             store.showsThreadSettings = true
