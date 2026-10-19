@@ -8,7 +8,9 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.unit.dp
 import app.motile.core.UiNode
@@ -28,8 +30,17 @@ class UiFrames {
         root = coordinates
     }
 
-    fun node(id: String, coordinates: LayoutCoordinates) {
+    private val labels = HashMap<String, String>()
+
+    fun node(id: String, coordinates: LayoutCoordinates, label: String? = null) {
         nodes[id] = coordinates
+        if (label != null) labels[id] = label
+    }
+
+    /** The bounds in the window, in pixels, of the last node laid out with the label. */
+    fun bounds(label: String): Rect? {
+        val id = nodes.keys.lastOrNull { labels[it] == label } ?: return null
+        return nodes[id]?.takeIf { it.isAttached }?.boundsInWindow()
     }
 
     /** `{"<node id>": [x, y, width, height], …}` in points from the row's top left, while the views are on screen. */
@@ -50,11 +61,11 @@ class UiFrames {
 
 val LocalUiFrames = staticCompositionLocalOf<UiFrames?> { null }
 
-/** Records the node's frame while frames are being taken. */
+/** Records the node's frame, and the label it is read by, while frames are being taken. */
 @Composable
-fun Modifier.uiFrame(id: String): Modifier {
+fun Modifier.uiFrame(id: String, label: String? = null): Modifier {
     val frames = LocalUiFrames.current ?: return this
-    return onGloballyPositioned { frames.node(id, it) }
+    return onGloballyPositioned { frames.node(id, it, label) }
 }
 
 /**

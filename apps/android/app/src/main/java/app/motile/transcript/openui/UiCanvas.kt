@@ -42,11 +42,8 @@ private fun UiScene(node: UiNode, canvas: UiCanvas) {
     val density = LocalDensity.current
     var width by remember { mutableFloatStateOf(0f) }
     val scene = if (width > 0) rememberScene(canvas, width, LocalUiTextSize.current) else null
-    Box(
-        Modifier.uiNode(node).fillMaxWidth().onSizeChanged { width = it.width / density.density },
-        contentAlignment = Alignment.TopCenter,
-    ) {
-        scene?.let { SceneView(it) }
+    Box(Modifier.fillMaxWidth().onSizeChanged { width = it.width / density.density }, contentAlignment = Alignment.TopCenter) {
+        scene?.let { SceneView(it, Modifier.uiNode(node)) }
     }
 }
 

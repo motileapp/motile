@@ -1,5 +1,7 @@
 package app.motile.transcript.openui
 
+import androidx.compose.foundation.layout.requiredHeight
+import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.IntrinsicMeasurable
@@ -13,6 +15,7 @@ import androidx.compose.ui.layout.Placeable
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.dp
 import app.motile.core.UiAlign
 import app.motile.core.UiBasis
 import app.motile.core.UiJustify
@@ -335,7 +338,8 @@ private class RowPolicy(
 fun gridColumns(columns: Int, minChildWidth: Float?, gap: Float, width: Float): Int {
     val most = columns.coerceIn(1, 12)
     if (minChildWidth == null) return most
-    val least = min(width, max(minChildWidth, (width - (most - 1) * gap) / most))
+    if ((width - (most - 1) * gap) / most >= minChildWidth) return most
+    val least = min(width, minChildWidth)
     return max(1, min(most, floor((width + gap) / (least + gap)).toInt()))
 }
 
@@ -398,18 +402,24 @@ private class GridPolicy(val columns: Int, val minChildWidth: Float?, val gap: F
  * A box's own `width` and `height`: points, a share of what its parent offers, of the transcript's
  * column or of the window. A share of a height the parent doesn't fix is left out.
  */
-fun Modifier.uiSize(width: UiLength?, height: UiLength?, extent: UiExtent): Modifier {
+fun Modifier.uiSize(width: UiLength?, height: UiLength?, extent: UiExtent, around: Float? = null): Modifier {
     if (width == null && height == null) return this
-    return layout { measurable, constraints ->
-        val parentWidth = constraints.maxWidth.takeIf { constraints.hasBoundedWidth }?.toFloat()
-        val parentHeight = constraints.maxHeight.takeIf { constraints.hasFixedHeight }?.toFloat()
-        val w = width?.let { length(it, parentWidth, extent) }?.roundToInt()?.let { if (constraints.hasBoundedWidth) min(it, constraints.maxWidth) else it }
-        val h = height?.let { length(it, parentHeight, extent) }?.roundToInt()
-        val inner = Constraints(
-            minWidth = w ?: constraints.minWidth, maxWidth = w ?: constraints.maxWidth,
-            minHeight = h ?: constraints.minHeight, maxHeight = h ?: constraints.maxHeight,
-        )
-        val placeable = measurable.measure(inner)
+    // Lengths known here are Compose's own sizes, which a grid's intrinsic measuring reads too.
+    val points = { length: UiLength, parent: Float? ->
+        when (length.unit) {
+            UiLengthUnit.Points -> length.value
+            UiLengthUnit.Fraction -> parent?.let { it * length.value }
+            UiLengthUnit.Column -> extent.column * length.value
+            UiLengthUnit.Window -> extent.window * length.value
+        }
+    }
+    val sized = height?.let { points(it, around) }?.let { requiredHeight(it.dp) } ?: this
+    if (width == null) return sized
+    points(width, null)?.let { return sized.width(it.dp) }
+    return sized.layout { measurable, constraints ->
+        val share = constraints.maxWidth.takeIf { constraints.hasBoundedWidth }?.toFloat()
+        val w = share?.let { length(width, it, extent) }?.roundToInt()?.let { min(it, constraints.maxWidth) }
+        val placeable = measurable.measure(if (w == null) constraints else constraints.copy(minWidth = w, maxWidth = w))
         layout(placeable.width, placeable.height) { placeable.place(0, 0) }
     }
 }

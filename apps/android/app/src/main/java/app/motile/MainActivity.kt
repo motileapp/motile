@@ -29,6 +29,7 @@ class MainActivity : ComponentActivity() {
             DemoDriver.startIfRequested(application.store, environment)
         }
         intent?.let(::opened)
+        if (BuildConfig.DEBUG) DemoHooks.touch = { window.decorView.dispatchTouchEvent(it) }
         setContent { Root(application.store) }
     }
 

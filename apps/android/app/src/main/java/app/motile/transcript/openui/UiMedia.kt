@@ -49,6 +49,8 @@ import androidx.compose.ui.layout.IntrinsicMeasurable
 import androidx.compose.ui.layout.LayoutModifier
 import androidx.compose.ui.layout.IntrinsicMeasureScope
 import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.layout.LayoutIdParentData
+import androidx.compose.ui.layout.layoutId
 import androidx.compose.ui.layout.Measurable
 import androidx.compose.ui.layout.MeasurePolicy
 import androidx.compose.ui.layout.MeasureResult
@@ -61,6 +63,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import app.motile.LocalStore
+import app.motile.core.UiAlign
 import app.motile.core.UiFit
 import app.motile.core.UiKind
 import app.motile.core.UiNode
@@ -230,7 +233,7 @@ fun UiTable(node: UiNode, kind: UiKind.Table) {
             Layout(
                 content = {
                     kind.columns.forEach { column ->
-                        Cell(column.numeric, palette.cardAccent, line = true, horizontal, 8.dp) {
+                        Cell(column.numeric, palette.cardAccent, line = true, horizontal, 8.dp, oneLine = true) {
                             Text(
                                 column.title, style = UiStyle.text(UiTextStyle.Label, false), color = palette.foreground, maxLines = 1,
                                 align = if (column.numeric) TextAlign.End else null, overflow = TextOverflow.Clip,
@@ -240,13 +243,16 @@ fun UiTable(node: UiNode, kind: UiKind.Table) {
                     kind.rows.forEachIndexed { index, row ->
                         for (column in 0 until columns) {
                             val numeric = kind.columns[column].numeric
-                            Cell(numeric, null, line = index < kind.rows.lastIndex, horizontal, vertical) {
-                                when (val cell = row.getOrNull(column)) {
+                            val cell = row.getOrNull(column)
+                            Cell(numeric, null, line = index < kind.rows.lastIndex, horizontal, vertical, oneLine = cell is UiTableCell.Node) {
+                                when (cell) {
                                     is UiTableCell.Text -> {
                                         val style = UiStyle.text(UiTextStyle.Small, narrow).let { if (numeric) it.copy(fontFeatureSettings = "tnum", textAlign = TextAlign.End) else it }
                                         UiRichText(cell.text, style, palette.foreground, maxLines = if (numeric) 1 else Int.MAX_VALUE)
                                     }
-                                    is UiTableCell.Node -> UiNodeView(cell.node)
+                                    is UiTableCell.Node -> UiColumnLayout(listOf(0f), UiAlign.Stretch, listOf(keepsWidth(cell.node)), Modifier.fillMaxWidth()) {
+                                        UiNodeView(cell.node)
+                                    }
                                     null -> Unit
                                 }
                             }
@@ -260,18 +266,28 @@ fun UiTable(node: UiNode, kind: UiKind.Table) {
     }
 }
 
-/** A cell: its content in from its sides, centred across the row, a line under it where one runs. */
+/**
+ * A cell: its content in from its sides, centred across the row, a line under it where one runs. A
+ * header or a component counts its whole line as the least its column can be (`oneLine`).
+ */
 @Composable
-private fun Cell(trailing: Boolean, fill: Color?, line: Boolean, horizontal: androidx.compose.ui.unit.Dp, vertical: androidx.compose.ui.unit.Dp, content: @Composable () -> Unit) {
+private fun Cell(
+    trailing: Boolean, fill: Color?, line: Boolean, horizontal: androidx.compose.ui.unit.Dp, vertical: androidx.compose.ui.unit.Dp,
+    oneLine: Boolean = false, content: @Composable () -> Unit,
+) {
     val border = LocalPalette.current.borderCard
     Box(
         Modifier
+            .layoutId(if (oneLine) ONE_LINE else CELL)
             .then(if (fill != null) Modifier.background(fill) else Modifier)
             .drawBehind { if (line) drawRect(border, Offset(0f, size.height - 1.dp.toPx()), Size(size.width, 1.dp.toPx())) }
             .padding(horizontal = horizontal, vertical = vertical),
         contentAlignment = if (trailing) Alignment.CenterEnd else Alignment.CenterStart,
     ) { content() }
 }
+
+private const val ONE_LINE = "one line"
+private const val CELL = "cell"
 
 /** Tells the table the width it has, which the sideways scroll inside it hides from it. */
 private class TableWidth(val policy: TablePolicy) : LayoutModifier {
@@ -305,7 +321,9 @@ private class TablePolicy(val columns: Int) : MeasurePolicy {
         val most = FloatArray(columns)
         measurables.forEachIndexed { index, cell ->
             val column = index % columns
-            least[column] = max(least[column], cell.minIntrinsicWidth(Constraints.Infinity).toFloat())
+            val line = (cell.parentData as? LayoutIdParentData)?.layoutId == ONE_LINE
+            val word = if (line) cell.maxIntrinsicWidth(Constraints.Infinity) else cell.minIntrinsicWidth(Constraints.Infinity)
+            least[column] = max(least[column], word.toFloat())
             most[column] = max(most[column], cell.maxIntrinsicWidth(Constraints.Infinity).toFloat())
         }
         return least to most

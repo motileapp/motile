@@ -73,9 +73,11 @@ android {
     testOptions {
         unitTests.isReturnDefaultValues = true
         unitTests.isIncludeAndroidResources = true
-        // The canvas test writes its pictures with Roborazzi, to build/canvas/android at the repository's root.
+        // The canvas and program tests write their pictures with Roborazzi, to build/ at the repository's
+        // root, and lay programs out with the core built for this machine.
         unitTests.all {
             it.systemProperty("roborazzi.test.record", "true")
+            it.systemProperty("java.library.path", layout.buildDirectory.dir("hostLibs").get().asFile.path)
             // Robolectric reaches into FileDescriptor for Android 16's shared memory.
             it.jvmArgs("--add-exports=java.base/jdk.internal.access=ALL-UNNAMED")
         }
@@ -120,4 +122,5 @@ dependencies {
     testImplementation(libs.junit)
     testImplementation(libs.robolectric)
     testImplementation(libs.roborazzi)
+    testImplementation(libs.compose.ui.test)
 }

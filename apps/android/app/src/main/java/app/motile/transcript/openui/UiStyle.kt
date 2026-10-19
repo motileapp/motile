@@ -38,6 +38,9 @@ class UiHost(private val store: AppStore, private val threadID: String, val rowI
 /** The host of the program drawn, none where it is only laid out. */
 val LocalUiHost = staticCompositionLocalOf<UiHost?> { null }
 
+/** The height of the Box around a node, when it has one, in points: what a share of its height is of. */
+val LocalUiParentHeight = staticCompositionLocalOf<Float?> { null }
+
 /** The transcript column is under 640 wide: LAYOUT.md's narrow variants apply. */
 val LocalUiNarrow = staticCompositionLocalOf { false }
 
