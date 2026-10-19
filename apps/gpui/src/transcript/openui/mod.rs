@@ -10,6 +10,7 @@ mod media;
 pub mod patch;
 mod style;
 mod text;
+mod web;
 
 use std::rc::Rc;
 
