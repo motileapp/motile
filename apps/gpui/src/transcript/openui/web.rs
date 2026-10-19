@@ -375,6 +375,7 @@ mod live {
                 }
                 wry::NewWindowResponse::Deny
             })
+            .with_download_started_handler(|_, _| false)
             .with_ipc_handler(move |request| {
                 let _ = sender.unbounded_send(Message::Page(request.into_body()));
             });
