@@ -7,7 +7,7 @@ use linkify::{LinkFinder, LinkKind};
 use pulldown_cmark::{
     Alignment, CodeBlockKind, Event, HeadingLevel, Options, Parser, Tag, TagEnd, TextMergeWithOffset,
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use super::highlight::Spans;
 
@@ -40,7 +40,7 @@ pub enum Block {
     },
 }
 
-#[derive(Serialize, Clone, PartialEq, Debug, Default)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug, Default)]
 pub struct Prose {
     pub text: String,
     /// `[start, length, style bits]` for every stretch that isn't plain.
@@ -49,7 +49,7 @@ pub struct Prose {
     pub paras: Vec<Para>,
 }
 
-#[derive(Serialize, Clone, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct Link {
     pub start: u32,
     pub len: u32,
@@ -57,7 +57,7 @@ pub struct Link {
 }
 
 /// A paragraph of the text and how it is set. The range includes the paragraph's line break.
-#[derive(Serialize, Clone, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct Para {
     pub start: u32,
     pub len: u32,
@@ -65,7 +65,7 @@ pub struct Para {
     pub kind: ParaKind,
 }
 
-#[derive(Serialize, Clone, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum ParaKind {
     Body,

@@ -108,6 +108,31 @@ fn the_corpus_resolves_as_its_goldens_say() {
 }
 
 #[test]
+fn a_tree_reads_back_as_it_was_written() {
+    fn same(a: &serde_json::Value, b: &serde_json::Value) -> bool {
+        use serde_json::Value::{Array, Number, Object};
+        match (a, b) {
+            (Number(a), Number(b)) => {
+                let (a, b) = (a.as_f64().unwrap(), b.as_f64().unwrap());
+                (a - b).abs() <= 1e-6 * a.abs().max(1.0)
+            }
+            (Array(a), Array(b)) => a.len() == b.len() && a.iter().zip(b).all(|(a, b)| same(a, b)),
+            (Object(a), Object(b)) => {
+                a.len() == b.len() && a.iter().all(|(key, value)| b.get(key).is_some_and(|other| same(value, other)))
+            }
+            (a, b) => a == b,
+        }
+    }
+    let goldens = Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/openui");
+    for entry in std::fs::read_dir(goldens).unwrap() {
+        let json: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(entry.unwrap().path()).unwrap()).unwrap();
+        let tree: UiNode = serde_json::from_value(json.clone()).unwrap();
+        assert!(same(&serde_json::to_value(&tree).unwrap(), &json));
+    }
+}
+
+#[test]
 fn colours_become_tokens_washes_or_safe_rgba() {
     let program = r##"root = Col([Box([Text("a", "md", "muted"), Text("b", "md", "chart3"), Text("c", "md", "url(x)"), Text("d", "md", "red;x")], "col", 1, 2, "success"), Box([], "col", null, null, "rebeccapurple"), Box([], "col", null, null, "var(--x)"), Box([], "col", null, null, "surface")])"##;
     let tree = tree(program);
