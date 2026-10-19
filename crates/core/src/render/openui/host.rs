@@ -676,6 +676,21 @@ impl Programs {
         outs
     }
 
+    /// Fetches again what every program's queries failed to, as a server that couldn't run them
+    /// now can.
+    pub fn retry(&mut self) -> Vec<Out> {
+        let mut outs = Vec::new();
+        let row_ids: Vec<String> = self.programs.keys().cloned().collect();
+        for row_id in row_ids {
+            let Some(hosted) = self.programs.get_mut(&row_id) else { continue };
+            hosted.env.rewind();
+            let effects = hosted.runtime.retry();
+            self.carry(&row_id, effects, &mut outs);
+            self.repaint(&row_id, &mut outs);
+        }
+        outs
+    }
+
     /// Keeps every state that changed now, as the thread closes.
     pub fn flush(&mut self) -> Vec<Out> {
         self.programs.values_mut().filter(|hosted| hosted.dirty.is_some()).map(save).collect()

@@ -435,6 +435,15 @@ fn an_old_server_runs_no_tools() {
     assert!(ui.limited);
     assert!(calls(&thread.outs).is_empty());
     assert_eq!(ui.errors, ["Query \"git_log\" failed: Your server needs an update to run this."]);
+
+    thread.programs.limited = false;
+    let ui = thread.ui(PROGRAM);
+    let retried = thread.programs.retry();
+    assert!(!ui.limited);
+    assert_eq!(calls(&retried).iter().map(|call| call.2.as_str()).collect::<Vec<_>>(), ["git_log"]);
+    let (serial, call, ..) = calls(&retried)[0].clone();
+    thread.programs.tool_result(PROGRAM, serial, call, Ok(json!([{"subject": "One"}])));
+    assert_eq!(texts(&thread.tree()), ["n1"]);
 }
 
 #[test]
