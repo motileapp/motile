@@ -1172,6 +1172,22 @@ impl Store {
         draft.model = self.prefs.string(&format!("new.model-{server}"));
         draft.agent_account = self.prefs.string(&format!("new.agentAccount-{server}"));
         draft.effort = self.prefs.string(&format!("new.effort-{server}"));
+        self.move_to_roomier_account(draft);
+    }
+
+    /// Starts the draft on the account of its agent that has used the least of its limits and
+    /// runs its model, where the settings say so. The next draft starts from the last choice again.
+    fn move_to_roomier_account(&self, draft: &mut ThreadDraft) {
+        if !self.manages_new_threads() {
+            return;
+        }
+        let Some(server) = self.server_of(draft) else { return };
+        let Some((model, account)) = server.roomier_account(draft.model.as_deref(), draft.agent_account.as_deref())
+        else {
+            return;
+        };
+        draft.model = Some(model.id.clone());
+        draft.agent_account = Some(account.to_string());
     }
 
     /// Has the next draft start with what was just chosen, and only that.
@@ -1186,6 +1202,9 @@ impl Store {
             self.prefs.set("new.access", draft.access);
         }
         let Some(server) = self.server_of(draft).map(|server| server.id.clone()) else { return };
+        if self.server_of(before).map(|server| &server.id) != Some(&server) {
+            return;
+        }
         if draft.model != before.model {
             self.prefs.set(&format!("new.model-{server}"), draft.model.clone());
         }

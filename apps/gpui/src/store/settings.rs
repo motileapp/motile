@@ -77,11 +77,17 @@ pub struct SettingsEntry {
     pub keywords: &'static str,
 }
 
-const ENTRIES: [(&str, &str, SettingsSection, &str); 18] = [
+const ENTRIES: [(&str, &str, SettingsSection, &str); 19] = [
     ("account", "Account", SettingsSection::General, "signed in email sign out"),
     ("updates", "Updates", SettingsSection::General, "version check for updates release"),
     ("appearance", "Theme", SettingsSection::General, "appearance light dark system mode"),
     ("messages", "Sent while the agent works", SettingsSection::General, "messages queue steer interrupt"),
+    (
+        "manage-new-threads",
+        "Manage new threads automatically",
+        SettingsSection::General,
+        "provider limits usage accounts switch quota rate",
+    ),
     ("storage", "Images and videos", SettingsSection::General, "storage cache clear media disk"),
     (
         "agent-accounts",
@@ -180,6 +186,16 @@ impl Store {
         self.settings.section = None;
         self.settings.target = None;
         self.recording_shortcut = None;
+    }
+
+    /// Whether a new draft starts on the account of its agent that has used the least of its
+    /// limits, kept on this device.
+    pub fn manages_new_threads(&self) -> bool {
+        self.prefs.bool("manageNewThreads")
+    }
+
+    pub fn set_manages_new_threads(&mut self, on: bool) {
+        self.prefs.set("manageNewThreads", on);
     }
 
     /// What the server does with pull requests by itself.
@@ -288,7 +304,7 @@ mod tests {
             SettingsEntry::matching(query, &shortcuts).into_iter().map(|entry| entry.id).collect()
         };
         assert_eq!(ids("THEME"), vec!["appearance"]);
-        assert_eq!(ids("new thread"), vec!["shortcut-chat.new"]);
+        assert_eq!(ids("new thread"), vec!["manage-new-threads", "shortcut-chat.new"]);
         assert_eq!(ids("continue restart"), vec!["continue-restarts"]);
         assert!(ids("  ").is_empty());
         assert!(ids("usage tokens cost").is_empty());

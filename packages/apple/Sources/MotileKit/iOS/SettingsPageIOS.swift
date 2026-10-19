@@ -82,6 +82,7 @@ struct SettingsPage: View {
     let section: SettingsSection
     @AppStorage("appearance") private var appearance = Appearance.system
     @AppStorage(AppStore.steersKey) private var steers = AppStore.steersByDefault
+    @AppStorage(AppStore.managesNewThreadsKey) private var managesNewThreads = false
     @State private var editedAccount: EditedAccount?
     @State private var removal: Removal?
 
@@ -144,6 +145,16 @@ struct SettingsPage: View {
                 .foregroundStyle(Color.themeMutedForeground)
         }
         .id("messages")
+
+        Section {
+            Toggle("Manage new threads automatically", isOn: $managesNewThreads)
+        } header: {
+            Text("Provider Limits")
+        } footer: {
+            Text(managesNewThreadsDescription)
+                .foregroundStyle(Color.themeMutedForeground)
+        }
+        .id("manage-new-threads")
 
         Section {
             LabeledContent("Images and videos", value: store.mediaStorageUsed)

@@ -1044,7 +1044,7 @@ pub struct Switch {
 }
 
 impl Switch {
-    const HEIGHT: f32 = 18.;
+    pub const HEIGHT: f32 = 18.;
     const WIDTH: f32 = 44.;
     const KNOB_WIDTH: f32 = 26.;
     const INSET: f32 = 2.;

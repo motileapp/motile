@@ -176,6 +176,8 @@ data class Server(
     val agents: Map<Agent, String>,
     /** The agents' accounts, the default ones first. */
     val agentAccounts: List<AgentAccount>,
+    /** The account a new thread is better off starting on, by account id and model id. */
+    val roomierAccounts: Map<String, Map<String, String>>,
     /** Whether the server has ever told us about itself. */
     val known: Boolean,
     /** The update the server is putting in place, as it last said. */
@@ -217,6 +219,14 @@ data class Server(
     fun account(id: String?, of: Agent): AgentAccount? {
         val accounts = accounts(of)
         return accounts.firstOrNull { it.id == id } ?: accounts.firstOrNull { it.isDefault } ?: accounts.firstOrNull()
+    }
+
+    /** The account and model a new thread starts on, when another account of its agent runs the model and has used clearly less of its limits. */
+    fun roomier(than: String?, model: String?): Pair<String, String>? {
+        val found = Server.model(model, account = than, among = models) ?: return null
+        val account = account(than, of = found.agent) ?: return null
+        val roomier = roomierAccounts[account.id]?.get(found.id) ?: return null
+        return roomier to found.id
     }
 
     /** The model's name, with the account's when its agent has more than one. */
@@ -264,6 +274,7 @@ data class Server(
                 defaultBranchInstructions = naming?.string("default") ?: "",
                 agents = installed,
                 agentAccounts = accounts.ifEmpty { Agent.entries.map(::defaultAccount) },
+                roomierAccounts = json.obj("roomier_accounts")?.let { byAccount -> byAccount.keys.associateWith(byAccount::stringMap) } ?: emptyMap(),
                 known = info != null,
                 update = info?.obj("update")?.let { ServerUpdate(it, version) },
             )

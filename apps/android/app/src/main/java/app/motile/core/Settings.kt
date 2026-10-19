@@ -38,6 +38,9 @@ enum class SettingsSection(val raw: String) {
     }
 }
 
+/** What managing new threads does, said under its switch. */
+const val managesNewThreadsDescription = "Starts new threads on the account with the most limits left."
+
 /** What automatically pulling does, said under its switch. */
 const val pullDefaultBranchCaption = "Keeps each project's folder current while it is on its default branch with no changes or commits of its own."
 
@@ -55,6 +58,7 @@ data class SettingsEntry(
             SettingsEntry("updates", "Updates", SettingsSection.General, "version check for updates release download install"),
             SettingsEntry("appearance", "Theme", SettingsSection.General, "appearance light dark system mode"),
             SettingsEntry("messages", "Sent while the agent works", SettingsSection.General, "messages queue steer interrupt"),
+            SettingsEntry("manage-new-threads", "Manage new threads automatically", SettingsSection.General, "provider limits usage accounts switch quota rate"),
             SettingsEntry("storage", "Images and videos", SettingsSection.General, "storage cache clear media disk"),
             SettingsEntry("agent-accounts", "Provider Accounts", SettingsSection.Accounts, "agents claude codex sign in login folder subscription plan api key router"),
             SettingsEntry("servers", "Servers", SettingsSection.Servers, "add remove unlink unlinked delete copies machine agents connected"),

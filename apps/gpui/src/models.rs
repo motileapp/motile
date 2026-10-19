@@ -59,6 +59,8 @@ pub struct Server {
     pub agents: HashMap<Agent, String>,
     /// The agents' accounts, the default ones first.
     pub agent_accounts: Vec<AgentAccount>,
+    /// The account a new thread is better off starting on, by account id and model id.
+    pub roomier_accounts: HashMap<String, HashMap<String, String>>,
     /// Whether the server has ever told us about itself.
     pub known: bool,
     /// The update the server is putting in place, as it last said.
@@ -91,6 +93,7 @@ impl From<ServerView> for Server {
             protocol_version: info.as_ref().map_or(0, |info| info.protocol),
             models: info.as_ref().map(|info| info.models.clone()).unwrap_or_default(),
             short_model_names: view.short_model_names,
+            roomier_accounts: view.roomier_accounts,
             text_model: info.as_ref().and_then(|info| info.text_model.clone()),
             branch_instructions: info.as_ref().map(|info| info.branch_instructions.text.clone()).unwrap_or_default(),
             default_branch_instructions: info
@@ -310,6 +313,15 @@ impl Server {
             .copied()
             .or_else(|| offered.iter().find(listed_by_account))
             .or(offered.first())
+    }
+
+    /// The model a new thread with these choices would start with, and the account of its agent
+    /// that has used clearly less of its limits and runs it, when there is one.
+    pub fn roomier_account(&self, model: Option<&str>, account: Option<&str>) -> Option<(&ModelInfo, &str)> {
+        let model = Server::model(model, account, &self.models)?;
+        let account = self.account(account, model.agent)?;
+        let roomier = self.roomier_accounts.get(&account.id)?.get(&model.id)?;
+        Some((model, roomier.as_str()))
     }
 
     /// The model's name, with the account's when its agent has more than one.
@@ -1067,6 +1079,38 @@ mod tests {
     }
 
     #[test]
+    fn a_new_thread_moves_to_the_roomier_account_that_runs_its_model() {
+        let account = |id: &str| AgentAccount { id: id.into(), name: id.into(), ..new_account(Agent::Claude) };
+        let roomier =
+            HashMap::from([("claude".to_string(), HashMap::from([("opus".to_string(), "work".to_string())]))]);
+        let server = Server::from(ServerView {
+            id: "key".into(),
+            name: "studio".into(),
+            short_name: "studio".into(),
+            platform: "macos".into(),
+            removed: false,
+            state: State::Connected,
+            error: None,
+            path: None,
+            rtt_ms: None,
+            info: None,
+            short_model_names: HashMap::new(),
+            roomier_accounts: roomier,
+        });
+        let server = Server {
+            models: vec![model("opus", ""), model("sonnet", "")],
+            agent_accounts: vec![account("claude"), account("work")],
+            ..server
+        };
+        let found = |model, account| server.roomier_account(model, account).map(|(model, to)| (model.id.as_str(), to));
+        assert_eq!(found(Some("opus"), Some("claude")), Some(("opus", "work")));
+        assert_eq!(found(None, None), Some(("opus", "work")));
+        assert_eq!(found(Some("opus"), Some("gone")), Some(("opus", "work")));
+        assert_eq!(found(Some("sonnet"), Some("claude")), None);
+        assert_eq!(found(Some("opus"), Some("work")), None);
+    }
+
+    #[test]
     fn a_folder_under_the_home_reads_from_tilde() {
         assert_eq!(shortened("/home/me/code/api", "/home/me"), "~/code/api");
         assert_eq!(shortened("/home/me", "/home/me"), "~");
@@ -1097,6 +1141,7 @@ mod tests {
             rtt_ms: None,
             info: None,
             short_model_names: HashMap::new(),
+            roomier_accounts: HashMap::new(),
         };
         let server = Server::from(view);
         assert!(server.removed);

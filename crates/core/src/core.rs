@@ -201,6 +201,8 @@ struct Server {
     /// Since when the server hasn't been reached, while it isn't.
     away_since: Option<Instant>,
     info: Option<ServerInfo>,
+    /// What its agents' logins had used when it last said.
+    limits: Vec<AgentLimits>,
     threads: HashMap<String, Thread>,
 }
 
@@ -535,7 +537,12 @@ impl Core {
                 self.search.asking = None;
                 self.emit_search(false);
             }
-            Input::Keep { key, value } => self.cache.keep(&key, &value),
+            Input::Keep { key, value } => {
+                self.cache.keep(&key, &value);
+                if let Some(server_id) = key.strip_prefix("limits:") {
+                    self.limits_kept(server_id);
+                }
+            }
             Input::Relay => self.start_relay(),
             Input::Relayed(round) => self.relayed(round),
             Input::CopiesFetched { origin, projects, threads } => self.copies_fetched(&origin, projects, threads),
@@ -899,6 +906,7 @@ impl Core {
                 status: Status::default(),
                 away_since: Some(Instant::now()),
                 info: self.cache.server_info(&server_id),
+                limits: self.kept_limits(&server_id).map(|(_, limits)| limits).unwrap_or_default(),
                 threads,
             });
             added.push((server_id, views));
@@ -968,6 +976,11 @@ impl Core {
                 .flat_map(|info| &info.models)
                 .filter_map(|model| Some((model.id.clone(), short_model_name(&model.name)?.to_string())))
                 .collect(),
+            roomier_accounts: server
+                .info
+                .as_ref()
+                .map(|info| limits::roomier(&info.agent_accounts, &info.models, &server.limits, now()))
+                .unwrap_or_default(),
         };
         self.emit(Event::Servers { servers: self.servers.iter().map(view).collect() });
     }
@@ -1435,6 +1448,16 @@ impl Core {
             };
             let _ = inputs.send(keep_limits(&server_id, &agents));
         });
+    }
+
+    fn limits_kept(&mut self, server_id: &str) {
+        let Some((_, limits)) = self.kept_limits(server_id) else { return };
+        let Some(server) = self.servers.iter_mut().find(|server| server.device.public_key == server_id) else { return };
+        if server.limits == limits {
+            return;
+        }
+        server.limits = limits;
+        self.emit_servers();
     }
 
     /// What the server last said of its agents' logins, and whether it is recent.

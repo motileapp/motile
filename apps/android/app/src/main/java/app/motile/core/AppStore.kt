@@ -1082,11 +1082,14 @@ class AppStore(private val context: Context) {
             return reset
         }
         if (draftAwaitingServer == reset.id) draftAwaitingServer = null
-        return reset.copy(
+        val last = reset.copy(
             model = Preferences.string("new.model-${server.id}"),
             agentAccount = Preferences.string("new.agentAccount-${server.id}"),
             effort = Preferences.string("new.effort-${server.id}"),
         )
+        if (!Preferences.managesNewThreads) return last
+        val (account, model) = server.roomier(than = last.agentAccount, model = last.model) ?: return last
+        return last.copy(agentAccount = account, model = model)
     }
 
     /** Has the next draft start with what was just chosen, and only that. */
@@ -1156,11 +1159,12 @@ class AppStore(private val context: Context) {
     /** Puts the open draft in a project. On another server, it starts with that server's last choices. */
     private fun moveDraft(projectID: String?) {
         val from = selectedDraft?.let(::serverOf)?.id
-        updateDraft { draft ->
-            val moved = draft.copy(projectID = projectID, base = null)
-            if (serverOf(moved)?.id != from) applyLastSettings(moved) else moved
-        }
-        if (selectedDraft?.let(::serverOf)?.id != from) refreshComposerModels()
+        updateDraft { it.copy(projectID = projectID, base = null) }
+        val index = threadDrafts.indexOfFirst { selection == Selection.Draft(it.id) }
+        if (index < 0 || serverOf(threadDrafts[index])?.id == from) return
+        threadDrafts = threadDrafts.toMutableList().also { it[index] = applyLastSettings(it[index]) }
+        saveThreadDrafts()
+        refreshComposerModels()
     }
 
     /** Has the open draft's server ask its agents what models they run, so that its menus offer what the thread would start with. */

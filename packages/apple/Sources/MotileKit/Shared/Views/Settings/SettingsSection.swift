@@ -40,6 +40,9 @@ enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
     }
 }
 
+/// What managing new threads does, said under its switch.
+let managesNewThreadsDescription = "Starts new threads on the account with the most limits left."
+
 /// What automatically pulling does, said under its switch.
 let pullDefaultBranchCaption = "Keeps each project's folder current while it is on its default branch with no changes or commits of its own."
 
@@ -56,6 +59,7 @@ struct SettingsEntry: Identifiable, Hashable {
         SettingsEntry(id: "updates", title: Platform.name == "macos" ? "Updates" : "Version", section: .general, keywords: "version check for updates release"),
         SettingsEntry(id: "appearance", title: "Theme", section: .general, keywords: "appearance light dark system mode"),
         SettingsEntry(id: "messages", title: "Sent while the agent works", section: .general, keywords: "messages queue steer interrupt"),
+        SettingsEntry(id: "manage-new-threads", title: "Manage new threads automatically", section: .general, keywords: "provider limits usage accounts switch quota rate"),
         SettingsEntry(id: "storage", title: "Images and videos", section: .general, keywords: "storage cache clear media disk"),
         SettingsEntry(id: "agent-accounts", title: "Provider Accounts", section: .accounts, keywords: "agents claude codex sign in login folder subscription plan api key router"),
         SettingsEntry(id: "servers", title: "Servers", section: .servers, keywords: "add remove unlink unlinked delete copies machine agents connected"),

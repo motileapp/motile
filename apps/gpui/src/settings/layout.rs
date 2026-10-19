@@ -8,7 +8,7 @@ use gpui_kit::*;
 
 use crate::theme::{ControlSize, Surface, colors};
 use crate::ui::menu::Menu;
-use crate::ui::{ActionMenu, card_default, icons};
+use crate::ui::{ActionMenu, Switch, card_default, icons};
 
 /// How far a group's rows stand from the card's sides.
 pub const INSET: f32 = 14.;
@@ -97,6 +97,15 @@ pub fn group(
 /// What the row is about on the left, its controls on the right, a large one as far from the
 /// row's right as from its top and bottom.
 pub fn row(leading: Vec<AnyElement>, trailing: Vec<AnyElement>) -> Div {
+    row_with(leading, trailing, large_outset())
+}
+
+/// A row whose switch is as far from its right as from its top and bottom.
+pub fn switch_row(leading: Vec<AnyElement>, switch: Switch) -> Div {
+    row_with(leading, vec![switch.into_any_element()], row_outset(Switch::HEIGHT))
+}
+
+fn row_with(leading: Vec<AnyElement>, trailing: Vec<AnyElement>, outset: f32) -> Div {
     div()
         .px(px(INSET))
         .min_h(px(ROW_HEIGHT))
@@ -114,9 +123,7 @@ pub fn row(leading: Vec<AnyElement>, trailing: Vec<AnyElement>) -> Div {
             })
         }))
         .when(!trailing.is_empty(), |row| {
-            row.child(
-                div().flex_shrink_0().mr(px(-large_outset())).flex().items_center().gap(px(10.)).children(trailing),
-            )
+            row.child(div().flex_shrink_0().mr(px(-outset)).flex().items_center().gap(px(10.)).children(trailing))
         })
 }
 
