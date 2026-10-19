@@ -275,6 +275,7 @@ fn grids_drop_columns_that_get_too_narrow() {
     assert_eq!(grid_columns(3, Some(150.0), 16.0, 720.0), 3);
     assert_eq!(grid_columns(3, Some(150.0), 16.0, 390.0), 2);
     assert_eq!(grid_columns(3, Some(150.0), 16.0, 140.0), 1);
+    assert_eq!(grid_columns(3, Some(100.0), 8.0, 390.0), 3, "three columns that just fit");
     assert_eq!(grid_columns(2, Some(200.0), 16.0, 390.0), 1);
     assert_eq!(grid_columns(40, None, 12.0, 300.0), 12);
     let UiKind::Grid { columns, min_child_width, gap, .. } =
@@ -377,7 +378,7 @@ fn grid_cells_and_carousel_items_that_flow_take_card_typography() {
 
 #[test]
 fn rows_around_an_image_are_media_rows() {
-    let program = r#"root = Col([Row([SearchImage("Belém Tower", 2), Col([Title("Belém")])], 2, "center"), Row([Box([Image("https://x.dev/a.png", "A")]), Text("t")]), Row([Box([Image("https://x.dev/a.png", "A"), Text("t")])])])"#;
+    let program = r#"root = Col([Row([SearchImage("Belém Tower", 2), Col([Title("Belém")])], 2, "center"), Row([Box([Image("https://x.dev/a.png", "A")], "col", 0, 0, null, null, false, 64, 64), Text("t")]), Row([Box([Image("https://x.dev/a.png", "A"), Text("t")])])])"#;
     let tree = tree(program);
     let UiKind::Row { gap, align, sizing, .. } = &at(&tree, "children/0").kind else { panic!() };
     assert_eq!((*gap, *align, sizing[0].basis, sizing[1].basis), (16.0, Align::Start, Basis::Media, Basis::Content));
@@ -385,6 +386,10 @@ fn rows_around_an_image_are_media_rows() {
     assert_eq!(*aspect_ratio, 4.0 / 3.0);
     let UiKind::Row { sizing, .. } = &at(&tree, "children/1").kind else { panic!() };
     assert_eq!(sizing[0].basis, Basis::Media);
+    let UiKind::Image { aspect_ratio, .. } = &at(&tree, "children/1/children/0/children/0").kind else { panic!() };
+    assert_eq!(*aspect_ratio, 4.0 / 3.0, "a box's only image in a media row is 4:3 too");
+    let UiKind::Box { width, height, .. } = &at(&tree, "children/1/children/0").kind else { panic!() };
+    assert_eq!((width, height), (&None, &None), "the media row sizes the box around the image");
     let UiKind::Row { gap, sizing, .. } = &at(&tree, "children/2").kind else { panic!() };
     assert_eq!((*gap, sizing[0].basis), (8.0, Basis::Content));
 }

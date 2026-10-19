@@ -187,8 +187,8 @@ the column (`min-width: 0` everywhere): what is too wide shrinks, wraps or scrol
   | Box with `flex: n` | 0 | weight n | no (base 0) |
   | Spacer | 0 | weight 1 | no |
   | Box with a width in points | that width | no | no |
-  | Button, IconButton, Badge | its own width | no | no |
-  | Card | the row's width | no | yes |
+  | Button, IconButton, Badge, Icon | its own width | no | no |
+  | Card, Input, TextArea, Select, DatePicker | the row's width | no | yes |
   | Box with a width in % | that share of the row | no | yes |
   | Anything else | its widest single-line width | no | yes |
 
@@ -213,7 +213,8 @@ the column (`min-width: 0` everywhere): what is too wide shrinks, wraps or scrol
 ### Box
 
 `padding` in steps; `background` per the colour table (a raw colour makes what lies on it take core's
-inks); `border` 1 in the surface's border; `radius` rounds it and clips its content (without a
+inks); `border` 1 in the surface's border, inside its edge and within its padding (the content is
+`padding` from the edge); `radius` rounds it and clips its content (without a
 radius nothing is clipped); `width`, `height` per Length. Its content lies on the box's inner surface
 when it has a token background.
 
@@ -223,8 +224,10 @@ when it has a token background.
 - Without `minChildWidth`: c columns of (W − (c − 1)·g) / c.
 - With `minChildWidth` m: least = min(W, max(m, (W − (c − 1)·g) / c)); count = max(1,
   ⌊(W + g) / (least + g)⌋); each column (W − (count − 1)·g) / count. So at most c columns, each at
-  least m wide, one column when even one doesn't fit. Core gives the count for a width; clients
-  compute it with this formula at their width (it is the same function, `motile_ui_layout`).
+  least m wide, one column when even one doesn't fit. When (W − (c − 1)·g) / c ≥ m the count is c,
+  without dividing, so that floating point can't drop a column at the boundary (390 wide, 3 of at least
+  100 with gap 8). Core gives the count for a width (`grid_columns`); clients compute it with this
+  formula at their width.
 - Cells fill rows left to right; a row is as tall as its tallest cell and every cell in it is
   stretched to that height.
 
@@ -233,7 +236,7 @@ when it has a token background.
 | | |
 | --- | --- |
 | Look | Motile's card: `card` fill, 1 `border-card`, `Radius.lg`, content on `Surface.card` |
-| Padding | 20 (narrow 16), or the `padding` prop |
+| Padding | 20 (narrow 16), or the `padding` prop, from the card's edge: its line lies inside the padding (Motile's), as a Box's does |
 | Nested (a Card in a Card) | `Radius.md`, padding 16 |
 | `soft` | No border; fill the surface's `box` layer; content on that box's surface; padding 20 (narrow 16) |
 | Width | The parent's |
@@ -248,7 +251,8 @@ when it has a token background.
   `body-card`.
 - Media row: a Row whose direct child is an Image or SearchImage, or a Box holding only one: the row
   aligns to the top, gap 16; that child is clamp(120, a third of the row, 200) wide, never grows or
-  shrinks, and its image is 4:3.
+  shrinks, and its image is 4:3. A Box holding the image loses its own width and height (the
+  reference's rules are `!important`) and is as tall as the image, which never overflows it.
 
 ## Components
 
@@ -352,7 +356,7 @@ actions.
 | IconButton | `ActionButton` with only a symbol, `.regular` (square), the symbol at the size's own. outline → `.outline`, ghost → `.ghost`, solid → `.primary`. `label` is its tooltip (pointer) and its name. | button, `label` or the icon's name |
 | Pressable | See below. | button, pressed state when `selected` is given |
 | Input | `InputField` (`.filled`, `.regular`), the column's width. `type: number`: the decimal keypad; what is typed stays while it doesn't parse yet (the client's draft), a number when it does, commas dropped, nothing when empty. `placeholder` in the field's placeholder colour. | text field, `label` or `placeholder` |
-| TextArea | Motile's `TextArea`, `rows` lines (2–20, default 3) tall, scrolling past that. Return is a line break. | text field |
+| TextArea | Motile's `TextArea`, `rows` lines (2–20, default 3): `rows` × 18 + 19 tall (a line of its 13.5 text and 3 between lines, its insets and padding; 73 for 3), scrolling past that. Return is a line break. | text field |
 | Select | `ActionMenu`, `.regular`, filling the width, the chosen label (or the placeholder, "Choose…" by default, in the placeholder colour) at the start and its chevron at the end. Opens the options with a check by the chosen one: a menu on the Mac and GPUI, a sheet on iOS (`Choice`), a dropdown on Android. | pop-up button |
 | SegmentedControl | `Segmented`, `.regular`, at its own width at the start, scrolling horizontally when wider than the column; `block` → `fills`. | radio group of radios |
 | Slider | See below. | adjustable, `label`, the readout as its value |
@@ -444,8 +448,9 @@ control, the pair a column.
   that is a component is laid out at the cell's width.
 - Numeric columns (core's flag): header and cells trailing, digits, one line.
 - Column widths (the automatic table layout): each column's least width is its widest unbreakable
-  part (a word, or a one-line cell) plus padding; its most, its widest cell on one line plus
-  padding. With W the table's width: Σmost ≤ W → each gets most + (W − Σmost) × most / Σmost. Σleast
+  part (a word, a one-line cell or the header, which is one line) plus padding; its most, its widest
+  cell on one line plus padding. A cell that is a component counts its width on one line for both
+  (a text with its inline parts, a badge, an icon), or 120 and 240 when it has none (a picture). With W the table's width: Σmost ≤ W → each gets most + (W − Σmost) × most / Σmost. Σleast
   ≤ W → least + (W − Σleast) × (most − least) / Σ(most − least). Otherwise each gets its least and
   the table scrolls horizontally inside its frame.
 - No row hover (Motile's tables have none).

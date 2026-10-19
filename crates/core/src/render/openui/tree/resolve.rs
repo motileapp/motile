@@ -364,7 +364,7 @@ impl Pass<'_, '_> {
             typography: kind == Column::Card || (flow && cx.cell),
             cell: false,
             title_row: cx.title_row,
-            media: false,
+            media: cx.media && kind == Column::Plain,
             ink: cx.ink,
             part: Part::Plain,
         };
@@ -450,8 +450,8 @@ impl Pass<'_, '_> {
                 .prop("radius")
                 .map(|value| radius(value).unwrap_or(Radius { kind: RadiusKind::Points, points: 0.0 })),
             border: flag(element, "border"),
-            width: element.prop("width").and_then(length),
-            height: element.prop("height").and_then(length),
+            width: element.prop("width").and_then(length).filter(|_| !cx.media),
+            height: element.prop("height").and_then(length).filter(|_| !cx.media),
             flex: element
                 .prop("flex")
                 .and_then(Value::as_number)
@@ -790,8 +790,8 @@ fn sizing_of(value: &Value) -> Sizing {
     let Some(element) = value.as_element() else { return content };
     match element.component.as_str() {
         "Spacer" => Sizing { basis: Basis::Zero, length: None, grow: 1.0, shrink: false },
-        "Button" | "IconButton" | "Badge" => Sizing { shrink: false, ..content },
-        "Card" => Sizing { basis: Basis::Row, ..content },
+        "Button" | "IconButton" | "Badge" | "Icon" => Sizing { shrink: false, ..content },
+        "Card" | "Input" | "TextArea" | "Select" | "DatePicker" => Sizing { basis: Basis::Row, ..content },
         "Box" => {
             if let Some(flex) = number(element, "flex") {
                 return Sizing { basis: Basis::Zero, length: None, grow: flex.max(0.0) as f32, shrink: false };
@@ -1111,7 +1111,10 @@ pub fn grid_columns(columns: u32, min_child_width: Option<f32>, gap: f32, width:
     let columns = columns.clamp(1, 12);
     let Some(min) = min_child_width else { return columns };
     let share = (width - (columns - 1) as f32 * gap) / columns as f32;
-    let least = width.min(min.max(share));
+    if share >= min {
+        return columns;
+    }
+    let least = width.min(min);
     if least + gap <= 0.0 {
         return 1;
     }
