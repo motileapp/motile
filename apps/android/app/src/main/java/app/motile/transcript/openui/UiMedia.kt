@@ -53,8 +53,8 @@ import androidx.compose.ui.layout.Measurable
 import androidx.compose.ui.layout.MeasurePolicy
 import androidx.compose.ui.layout.MeasureResult
 import androidx.compose.ui.layout.MeasureScope
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -376,7 +376,7 @@ fun UiYouTube(node: UiNode, kind: UiKind.YouTube) {
 fun UiHtmlCard(node: UiNode, kind: UiKind.HtmlView) {
     val palette = LocalPalette.current
     if (kind.streaming) {
-        Card(node, Modifier) {
+        Card(node) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Spinner(13f, color = palette.mutedForeground)
                 Text("Preparing the interactive view", style = UiStyle.text(UiTextStyle.Small, false), color = palette.mutedForeground)
@@ -384,14 +384,14 @@ fun UiHtmlCard(node: UiNode, kind: UiKind.HtmlView) {
         }
         return
     }
-    StandIn(node, kind.title, "Runs once it opens here", Symbol.Blocks, Modifier)
+    StandIn(node, kind.title, "Runs once it opens here", Symbol.Blocks)
 }
 
 /** Until the map comes: a card of the map's height that lists its places. */
 @Composable
 fun UiMapCard(node: UiNode, kind: UiKind.Map) {
     val palette = LocalPalette.current
-    val window = LocalConfiguration.current.screenWidthDp
+    val window = with(LocalDensity.current) { LocalWindowInfo.current.containerSize.width.toDp().value }
     val height = minOf(kind.height.coerceIn(200f, 720f), max(280f, 0.82f * window))
     val shape = RoundedCornerShape(Radius.xl)
     CompositionLocalProvider(LocalSurface provides Surface.Card) {
@@ -413,9 +413,9 @@ fun UiMapCard(node: UiNode, kind: UiKind.Map) {
 }
 
 @Composable
-private fun StandIn(node: UiNode, title: String, detail: String, symbol: Symbol, press: Modifier) {
+private fun StandIn(node: UiNode, title: String, detail: String, symbol: Symbol, modifier: Modifier = Modifier) {
     val palette = LocalPalette.current
-    Card(node, press) {
+    Card(node, modifier) {
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(symbol, 16f, color = palette.mutedForeground)
             Column(Modifier.weight(1f)) {
@@ -427,13 +427,13 @@ private fun StandIn(node: UiNode, title: String, detail: String, symbol: Symbol,
 }
 
 @Composable
-private fun Card(node: UiNode, press: Modifier, content: @Composable () -> Unit) {
+private fun Card(node: UiNode, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
     val palette = LocalPalette.current
     val shape = RoundedCornerShape(Radius.lg)
     CompositionLocalProvider(LocalSurface provides Surface.Card) {
         Box(
             Modifier.uiNode(node).fillMaxWidth().clip(shape).background(palette.card, shape).border(1.dp, palette.borderCard, shape)
-                .then(press).padding(16.dp),
+                .then(modifier).padding(16.dp),
         ) { content() }
     }
 }

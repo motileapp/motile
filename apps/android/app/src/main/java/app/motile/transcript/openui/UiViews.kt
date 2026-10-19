@@ -40,7 +40,8 @@ import androidx.compose.ui.layout.MeasureResult
 import androidx.compose.ui.layout.MeasureScope
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -113,7 +114,7 @@ fun UiRow(row: RowModel, content: UiContent) {
 /** The program's tree laid out in a column `width` points wide. */
 @Composable
 fun UiProgram(tree: UiNode, width: Float) {
-    val window = LocalConfiguration.current.screenHeightDp.toFloat()
+    val window = with(LocalDensity.current) { LocalWindowInfo.current.containerSize.height.toDp().value }
     val extent = remember(width, window) { UiExtent(width, window) }
     CompositionLocalProvider(
         LocalUiNarrow provides (width < UiStyle.NARROW_BELOW),
@@ -284,7 +285,7 @@ private fun UiCarousel(node: UiNode, kind: UiKind.Carousel) {
     val width = min(kind.itemWidth.coerceIn(80f, 640f), extent.column * 0.85f)
     val scroll = rememberScrollState()
     val bleed = 4.dp
-    val density = androidx.compose.ui.platform.LocalDensity.current
+    val density = LocalDensity.current
     val step = with(density) { (width + kind.gap).dp.toPx() }
     val bleedPx = with(density) { bleed.roundToPx() }
     val snapping = remember(scroll, step) {
@@ -367,9 +368,9 @@ private fun UiPopover(node: UiNode, kind: UiKind.Popover) {
             UiSlotView(kind.trigger)
         }
         if (open) {
-            val window = LocalConfiguration.current.screenWidthDp
+            val window = with(LocalDensity.current) { LocalWindowInfo.current.containerSize.width.toDp().value }
             Popup(
-                popupPositionProvider = PopoverPlacement(with(androidx.compose.ui.platform.LocalDensity.current) { 1.dp.toPx() }),
+                popupPositionProvider = PopoverPlacement(with(LocalDensity.current) { 1.dp.toPx() }),
                 onDismissRequest = { show(false) },
                 properties = PopupProperties(focusable = true),
             ) {
