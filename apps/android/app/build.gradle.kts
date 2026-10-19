@@ -37,6 +37,8 @@ android {
         versionCode = (System.getenv("MOTILE_VERSION_CODE") ?: "1").toInt()
         // The auth server the client signs in with; the dev app is given another when it starts.
         buildConfigField("String", "AUTH_URL", "\"https://auth.motile.app\"")
+        // The ABIs the core is built for; MapLibre brings its own library for others too.
+        ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
     }
 
     signingConfigs {
@@ -88,6 +90,31 @@ val buildCore = tasks.register<Exec>("buildCore") {
 }
 tasks.named("preBuild") { dependsOn(buildCore) }
 
+/** The map's styles, which packages/theme generates, as the app's assets. */
+abstract class MapStyles : DefaultTask() {
+    @get:InputFiles
+    abstract val styles: ConfigurableFileCollection
+
+    @get:OutputDirectory
+    abstract val output: DirectoryProperty
+
+    @TaskAction
+    fun copy() {
+        val folder = output.get().asFile
+        folder.deleteRecursively()
+        folder.mkdirs()
+        styles.forEach { it.copyTo(folder.resolve(it.name)) }
+    }
+}
+
+val mapStyles = tasks.register<MapStyles>("mapStyles") {
+    styles.from(root.resolve("packages/theme/map-style-light.json"), root.resolve("packages/theme/map-style-dark.json"))
+}
+
+androidComponents {
+    onVariants { variant -> variant.sources.assets?.addGeneratedSourceDirectory(mapStyles, MapStyles::output) }
+}
+
 dependencies {
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
@@ -105,6 +132,8 @@ dependencies {
     implementation(libs.serialization.json)
     implementation(libs.media3.exoplayer)
     implementation(libs.media3.ui)
+    implementation(libs.maplibre)
+    implementation(libs.okhttp)
     implementation("org.rustls:rustls-platform-verifier:$verifierVersion")
     debugImplementation(libs.compose.ui.tooling)
     debugImplementation(libs.compose.ui.test.manifest)

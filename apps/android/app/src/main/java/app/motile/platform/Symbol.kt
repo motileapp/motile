@@ -74,6 +74,7 @@ enum class Symbol(val character: String?) {
     FileBraces("\uE36B"),
     Image("\uE0F6"),
     Images("\uE5C4"),
+    Info("\uE0F9"),
     Keyboard("\uE284"),
     Layers("\uE529"),
     /** Linear's logo, which Lucide doesn't have. */
@@ -83,6 +84,7 @@ enum class Symbol(val character: String?) {
     ListChecks("\uE1D0"),
     ListFilter("\uE460"),
     Loader("\uE109"),
+    LocateFixed("\uE1DB"),
     LockOpen("\uE10C"),
     LogOut("\uE10E"),
     Maximize2("\uE113"),
