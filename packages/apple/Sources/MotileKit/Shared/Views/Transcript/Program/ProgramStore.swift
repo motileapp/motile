@@ -22,6 +22,11 @@ enum ProgramStore {
         }
     }
 
+    /// The row's tree as the core last sent it.
+    static func tree(rowID: String) -> JSON? {
+        entries.withLock { $0[rowID]?.tree }
+    }
+
     /// Applies the ops to the row's tree: its tree and errors after them, or nothing when the
     /// row isn't known.
     static func patch(rowID: String, ops: [JSON]) -> (tree: JSON?, errors: [String], cache: ProgramCache)? {

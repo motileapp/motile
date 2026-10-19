@@ -469,8 +469,8 @@ enum ProgramTable {
 enum ProgramCanvasPart {
     /// A block formula keeps 4 above and below.
     static func margin(_ node: UiNode) -> CGFloat {
-        if case .math = node.kind { return 4 }
-        return 0
+        guard case .math(let math) = node.kind, (math.canvas.props as? JSON)?["inline"] as? Bool != true else { return 0 }
+        return 4
     }
 }
 

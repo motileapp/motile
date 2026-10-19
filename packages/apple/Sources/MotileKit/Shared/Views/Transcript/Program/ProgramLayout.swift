@@ -76,6 +76,14 @@ final class ProgramBox {
     }
 
     var id: String { node.id }
+
+    /// The box at least `height` tall, as a grid's cell is stretched to its row.
+    func stretched(to height: CGFloat) -> ProgramBox {
+        guard size.height < height else { return self }
+        return ProgramBox(
+            node, size: CGSize(width: size.width, height: height), children: children, origins: origins, surface: surface, inner: inner,
+            texts: texts, rects: rects, extra: extra)
+    }
 }
 
 /// Lays a program's tree out as `crates/openui/LAYOUT.md` says, without views: the transcript
@@ -294,7 +302,9 @@ enum ProgramLayout {
             switch align {
             case .center: x = ((content - box.size.width) / 2).rounded()
             case .end: x = content - box.size.width
-            case .start, .stretch: x = 0
+            case .start, .stretch:
+                guard case .svg = box.node.kind else { x = 0; break }
+                x = ((content - box.size.width) / 2).rounded()
             }
             origins.append(CGPoint(x: padding + x, y: y))
             y += box.size.height
@@ -480,8 +490,8 @@ enum ProgramLayout {
             let cells = Array(grid.children[start..<min(start + count, grid.children.count)])
             let tallest = cells.map { layout($0, width: cell, env: childEnv).size.height }.max() ?? 0
             for (column, child) in cells.enumerated() {
-                boxes.append(layout(child, width: cell, height: tallest, env: childEnv))
-                origins.append(CGPoint(x: (CGFloat(column) * (cell + gap)).rounded(), y: y))
+                boxes.append(layout(child, width: cell, height: tallest, env: childEnv).stretched(to: tallest))
+                origins.append(CGPoint(x: CGFloat(column) * (cell + gap), y: y))
             }
             y += tallest
         }
@@ -494,7 +504,8 @@ enum ProgramLayout {
         let gap = CGFloat(grid.gap)
         guard let least = grid.minChildWidth.map({ CGFloat($0) }) else { return most }
         let share = (width - CGFloat(most - 1) * gap) / CGFloat(most)
-        let column = min(width, max(least, share))
+        guard share < least else { return most }
+        let column = min(width, least)
         guard column + gap > 0 else { return 1 }
         return max(1, min(most, Int(((width + gap) / (column + gap)).rounded(.down))))
     }
@@ -586,9 +597,9 @@ enum ProgramLayout {
         let natural = ProgramText.width(text)
         let textWidth = fill ? width : min(width, natural)
         let height = ProgramText.height(text, width: textWidth, lineHeight: look.lineHeight, maxLines: maxLines)
-        let lift = inlines.isEmpty ? ControlText.lift(look.font, lineHeight: look.lineHeight) : 0
+        let lift = ControlText.lift(look.font, lineHeight: look.lineHeight)
         let part = ProgramTextPart(text: text, frame: CGRect(x: 0, y: 0, width: textWidth, height: height), lift: lift, maxLines: maxLines)
-        let origins = inlines.isEmpty ? [] : ProgramInline.places(in: text, width: textWidth, count: inlines.count)
+        let origins = inlines.isEmpty ? [] : ProgramInline.places(in: text, width: textWidth, count: inlines.count).map { CGPoint(x: $0.x, y: $0.y - lift) }
         return ProgramBox(
             node, size: CGSize(width: textWidth, height: height), children: Array(inlines.prefix(origins.count)), origins: origins, surface: env.surface,
             texts: ["text": part])
@@ -767,7 +778,8 @@ enum ProgramLayout {
         guard let scene = scene(canvas, width: width) else { return ProgramBox(node, size: CGSize(width: width, height: 0), surface: env.surface) }
         guard case .chart = node.kind else {
             let size = scene.size
-            let width = fill ? width : min(width, size.width)
+            let svg = if case .svg = node.kind { true } else { false }
+            let width = fill && !svg ? width : min(width, size.width)
             let place = CGRect(x: max(0, ((width - size.width) / 2).rounded()), y: ProgramCanvasPart.margin(node), width: size.width, height: size.height)
             let height = size.height + 2 * ProgramCanvasPart.margin(node)
             return ProgramBox(node, size: CGSize(width: width, height: height), surface: env.surface, rects: ["scene": place], extra: scene)
