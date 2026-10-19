@@ -1,5 +1,4 @@
-//! Media and data: SearchImage and Image, Icon, Table, YouTube (in `web`), and until the map
-//! comes, Map as a card that lists its places.
+//! Media and data: SearchImage and Image, Icon, Table, YouTube (in `web`) and Map (in `map`).
 
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::time::{Duration, Instant};
@@ -8,20 +7,18 @@ use gpui_kit::prelude::*;
 use gpui_kit::*;
 use motile_core::render::openui::host::UiEvent;
 use motile_core::render::openui::tree::{
-    Fit, MapPin, PhotoState, Photos, Radius, TableCell, TableColumn, TextStyle, UiKind, UiNode,
+    Fit, PhotoState, Photos, Radius, TableCell, TableColumn, TextStyle, UiKind, UiNode,
 };
 
 use super::style::{self, LABEL, Look, SMALL, Type};
 use super::text::rich;
 use super::{UiCx, framed, node};
 use crate::media::pictures::{Picture, Pictures};
-use crate::theme::{self, Layer, Radius as Radii, Surface, colors};
+use crate::theme::{Layer, Radius as Radii, Surface, colors};
 use crate::transcript::kit::ShimmerBox;
 
 const FADE_IN: Duration = Duration::from_millis(300);
 const MISSING_SYMBOL: f32 = 26.;
-const CARD_PADDING: f32 = 16.;
-const MAP_LIST_GAP: f32 = 6.;
 
 pub fn media(node: &UiNode, cx: &UiCx, window: &mut Window, app: &mut App) -> Stateful<Div> {
     let element = div().id(cx.id(&node.id, "node"));
@@ -42,7 +39,7 @@ pub fn media(node: &UiNode, cx: &UiCx, window: &mut Window, app: &mut App) -> St
         UiKind::YouTube { url: Some(url), title } => {
             super::web::youtube(element, &node.id, url, title, cx, window, app)
         }
-        UiKind::Map { pins, height, .. } => map(element, pins, *height, cx, window, app),
+        UiKind::Map { .. } => super::map::map(element, node, cx, window, app),
         _ => element,
     }
 }
@@ -352,38 +349,6 @@ fn node_width(node: &UiNode, narrow: bool, window: &Window) -> Option<f32> {
         UiKind::Label { text, .. } => Some(style::LABEL.width(text, window)),
         _ => None,
     }
-}
-
-fn map(element: Stateful<Div>, pins: &[MapPin], height: f32, cx: &UiCx, window: &Window, app: &App) -> Stateful<Div> {
-    let c = colors(app);
-    let window_width = f32::from(window.viewport_size().width);
-    let height = height.clamp(200., 720.).min((0.82 * window_width).max(280.));
-    let places = pins.iter().filter(|pin| pin.visible).map(|pin| {
-        let mark = match &pin.icon {
-            Some(icon) => icon.clone(),
-            None => pin.number.to_string(),
-        };
-        SMALL
-            .text_box()
-            .flex()
-            .flex_row()
-            .gap(px(8.))
-            .text_color(c.foreground)
-            .child(div().w(px(20.)).flex_none().text_color(c.muted_foreground).child(mark))
-            .child(div().flex_1().min_w_0().truncate().child(pin.label.clone()))
-    });
-    element.w_full().h(px(height)).rounded(px(Radii::XL)).overflow_hidden().bg(c.map_water).p(px(CARD_PADDING)).child(
-        div()
-            .max_w(px(320.))
-            .p(px(12.))
-            .rounded(px(Radii::LG))
-            .bg(c.at(cx.surface.color(c), theme::Opacity::Lit))
-            .flex()
-            .flex_col()
-            .gap(px(MAP_LIST_GAP))
-            .child(LABEL.text_box().text_color(c.foreground).child("Places"))
-            .children(places),
-    )
 }
 
 #[cfg(test)]

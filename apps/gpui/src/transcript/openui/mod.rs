@@ -6,6 +6,7 @@ mod drawing;
 mod frames;
 mod inputs;
 mod layout;
+mod map;
 mod media;
 pub mod patch;
 mod style;
@@ -56,6 +57,8 @@ pub struct UiCx {
     /// The size of the text around the node, which a formula is set to.
     pub text_size: f32,
     pub surface: Surface,
+    /// The program still streams in.
+    pub streaming: bool,
     /// What is painted under the node where it isn't its surface's own colour.
     pub ground: Option<Hsla>,
     pub sink: Sink,
@@ -115,6 +118,7 @@ pub fn ui_row(model: &RowModel, ctx: &RowContext, window: &mut Window, cx: &mut 
         window_height: f32::from(window.viewport_size().height),
         text_size: crate::theme::PROSE_SIZE,
         surface: Surface::Background,
+        streaming: !ui.complete,
         ground: None,
         sink,
         store: Some(ctx.store.clone()),

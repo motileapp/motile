@@ -777,3 +777,29 @@ impl RenderOnce for ShimmerBox {
             .into_any_element()
     }
 }
+
+/// Paints the corners of `bounds` outside a rounding of `radius` in `color`.
+pub fn paint_corners(bounds: Bounds<Pixels>, radius: f32, color: Hsla, window: &mut Window) {
+    let r = px(radius.min(f32::from(bounds.size.width.min(bounds.size.height)) / 2.));
+    let bend = r * (1. - 0.5523);
+    let corners = [
+        (bounds.origin, 1., 1.),
+        (bounds.top_right(), -1., 1.),
+        (bounds.bottom_left(), 1., -1.),
+        (bounds.bottom_right(), -1., -1.),
+    ];
+    for (corner, x, y) in corners {
+        let mut path = PathBuilder::fill();
+        path.move_to(corner);
+        path.line_to(point(corner.x + r * x, corner.y));
+        path.cubic_bezier_to(
+            point(corner.x, corner.y + r * y),
+            point(corner.x + bend * x, corner.y),
+            point(corner.x, corner.y + bend * y),
+        );
+        path.close();
+        if let Ok(path) = path.build() {
+            window.paint_path(path, color);
+        }
+    }
+}

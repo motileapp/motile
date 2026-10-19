@@ -31,12 +31,6 @@ pub struct TileId {
     pub y: u32,
 }
 
-impl TileId {
-    pub fn parent(self) -> Option<TileId> {
-        (self.z > 0).then(|| TileId { z: self.z - 1, x: self.x / 2, y: self.y / 2 })
-    }
-}
-
 /// A decoded tile: its layers by name, with the features' coordinates 0–1 across the tile.
 #[derive(Default, Debug)]
 pub struct Tile {
@@ -278,7 +272,8 @@ impl Store {
             .filter(|id| state.failed.get(id).is_none_or(|at| at.elapsed() >= RETRY))
             .collect();
         state.wanted.insert(owner, ids);
-        if missing.is_empty() {
+        // The tests draw maps but never fetch their tiles.
+        if missing.is_empty() || cfg!(test) {
             return;
         }
         let worker = state.worker.get_or_insert_with(spawn_worker).clone();

@@ -119,6 +119,7 @@ pub struct Label {
 }
 
 /// The whole map: `base` and `overlay` in one list.
+#[cfg(test)]
 pub fn paint(style: &Style, tiles: &[Placed], view: &View, pins: &[Pin], line: &[[f64; 2]]) -> DisplayList {
     let mut list = base(style, tiles, view, pins);
     list.items.extend(overlay(style, view, pins, line));

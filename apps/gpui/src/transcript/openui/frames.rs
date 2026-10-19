@@ -95,6 +95,10 @@ impl Element for Framed {
     }
 }
 
+/// How wide the window is that the trees are drawn in, as the Apple clients' frames have it.
+#[cfg(test)]
+const WINDOW_WIDTH: f32 = 1200.;
+
 /// The tree drawn `width` wide in a headless window of `cx` `height` tall, dark on the transcript's
 /// background, as the transcript draws it, once what it laid out off the main thread has arrived.
 #[cfg(test)]
@@ -121,6 +125,7 @@ fn drawn(
                 window_height: 800.,
                 text_size: crate::theme::PROSE_SIZE,
                 surface: crate::theme::Surface::Background,
+                streaming: false,
                 ground: None,
                 sink: Rc::new(|_, _, _| {}),
                 store: None,
@@ -137,7 +142,7 @@ fn drawn(
     }
 
     let window = cx
-        .open_window(size(px(width), px(height)), |window, cx| {
+        .open_window(size(px(WINDOW_WIDTH.max(width)), px(height)), |window, cx| {
             crate::theme::apply(true, window, cx);
             cx.new(|_| Drawn { tree, width })
         })
@@ -193,7 +198,9 @@ pub fn picture(
     let height = frame_dump(cx, tree.clone(), width)[""][3].as_f64().unwrap_or(1.).max(1.).ceil() as f32;
     let window = drawn(cx, tree, width, height);
     draw(cx, window);
-    cx.capture_screenshot(window).expect("a picture")
+    let shot = cx.capture_screenshot(window).expect("a picture");
+    let shown = (shot.width() as f32 * width / WINDOW_WIDTH.max(width)).round() as u32;
+    image::imageops::crop_imm(&shot, 0, 0, shown, shot.height()).to_image()
 }
 
 #[cfg(test)]
@@ -315,6 +322,18 @@ mod tests {
         };
         let [_, _, _, height] = frame(&frame_dump(&mut cx, golden("bicycle"), 720.), "children/6/children/1");
         assert!(height > 100., "the drawing is {height} tall");
+    }
+
+    #[test]
+    fn a_map_is_as_tall_as_its_node_asks_in_a_wide_window() {
+        let Some(mut cx) = headless() else {
+            eprintln!("skipped: GPUI has no text system here");
+            return;
+        };
+        for width in [390., 720.] {
+            let [_, _, map_width, map_height] = frame(&frame_dump(&mut cx, golden("map"), width), "children/2");
+            assert_eq!((map_width, map_height), (width, 400.));
+        }
     }
 
     #[test]

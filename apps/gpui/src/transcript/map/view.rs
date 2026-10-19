@@ -19,6 +19,7 @@ use super::style::style;
 use super::tiles::{self, Slot};
 use super::{height, pool};
 use crate::theme::{ControlSize, Opacity, Radius, ShadowSize, Surface, colors};
+use crate::transcript::kit::paint_corners;
 use crate::ui::control::{ActionButton, ActionMenu, Variant};
 use crate::ui::menu::Menu;
 use crate::ui::motion;
@@ -90,6 +91,7 @@ impl MapNode {
 
 pub type OnSelect = Rc<dyn Fn(String, &mut Window, &mut App)>;
 pub type OnFilter = Rc<dyn Fn(Option<String>, &mut Window, &mut App)>;
+pub type OnExpand = Rc<dyn Fn(bool, &mut Window, &mut App)>;
 
 /// A camera on its way from one place to another, flown or zoomed.
 #[derive(Clone, Copy)]
@@ -117,14 +119,17 @@ struct SceneKey {
 
 /// OpenUI's Map. Make it from the node with `new`, give it each new node with `set`, and size
 /// its row with `height`. `on_select` is called with a pin's label when it is pressed,
-/// `on_filter` with the category chosen (none for every place); core answers both with a new
-/// node.
+/// `on_filter` with the category chosen (none for every place), `on_expand` when it opens over
+/// the window or closes; core answers them with a new node.
 pub struct MapView {
     id: u64,
     node: MapNode,
     streaming: bool,
+    /// The colour around the map, which its corners are painted in.
+    under: Hsla,
     on_select: OnSelect,
     on_filter: OnFilter,
+    on_expand: OnExpand,
     camera: Option<Camera>,
     /// The map's size when it was last laid out.
     size: Option<(f64, f64)>,
@@ -149,6 +154,8 @@ pub struct MapView {
     scene_key: Option<SceneKey>,
     making: Option<(SceneKey, Task<()>)>,
     focus: FocusHandle,
+    /// While expanded, Esc collapses the map and goes no further.
+    _escape: Option<Subscription>,
     _tiles: Task<()>,
 }
 
@@ -158,8 +165,10 @@ impl MapView {
     pub fn new(
         node: MapNode,
         streaming: bool,
+        under: Hsla,
         on_select: OnSelect,
         on_filter: OnFilter,
+        on_expand: OnExpand,
         cx: &mut Context<Self>,
     ) -> Self {
         let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
@@ -182,8 +191,10 @@ impl MapView {
             id,
             node,
             streaming,
+            under,
             on_select,
             on_filter,
+            on_expand,
             camera: None,
             size: None,
             bounds: Rc::new(Cell::new(Bounds::default())),
@@ -206,17 +217,19 @@ impl MapView {
             scene_key: None,
             making: None,
             focus: cx.focus_handle(),
+            _escape: None,
             _tiles: tiles,
         }
     }
 
-    /// The node core sent last, and whether its program still streams.
-    pub fn set(&mut self, node: MapNode, streaming: bool, cx: &mut Context<Self>) {
-        if self.node == node && self.streaming == streaming {
+    /// The node core sent last, whether its program still streams, and the colour around it.
+    pub fn set(&mut self, node: MapNode, streaming: bool, under: Hsla, cx: &mut Context<Self>) {
+        if self.node == node && self.streaming == streaming && self.under == under {
             return;
         }
         self.node = node;
         self.streaming = streaming;
+        self.under = under;
         cx.notify();
     }
 
@@ -440,10 +453,7 @@ impl MapView {
         let pins = self.node.visible();
         let Some(index) = paint::hit(style(colors(cx).dark), &view, &pins, [x as f32, y as f32]) else { return };
         let label = pins[index].label.clone();
-        if self.expanded {
-            self.expanded = false;
-            cx.notify();
-        }
+        self.set_expanded(false, window, cx);
         (self.on_select)(label, window, cx);
     }
 
@@ -464,11 +474,35 @@ impl MapView {
     }
 
     fn set_expanded(&mut self, expanded: bool, window: &mut Window, cx: &mut Context<Self>) {
+        if self.expanded == expanded {
+            return;
+        }
         self.expanded = expanded;
+        self._escape = expanded.then(|| Self::collapse_on_escape(cx));
         if expanded {
             window.focus(&self.focus, cx);
         }
+        (self.on_expand)(expanded, window, cx);
         cx.notify();
+    }
+
+    /// Takes Esc ahead of the window's own keys, unless a menu or a modal over the map claims it.
+    fn collapse_on_escape(cx: &mut Context<Self>) -> Subscription {
+        let map = cx.entity().downgrade();
+        cx.intercept_keystrokes(move |event, window, cx| {
+            let keystroke = &event.keystroke;
+            if keystroke.key != "escape" || keystroke.modifiers.modified() {
+                return;
+            }
+            if crate::ui::menu::is_open(cx) || crate::ui::modal::is_open(cx) {
+                return;
+            }
+            cx.stop_propagation();
+            let map = map.clone();
+            window.defer(cx, move |window, cx| {
+                let _ = map.update(cx, |map, cx| map.set_expanded(false, window, cx));
+            });
+        })
     }
 
     /// The map itself: the canvas, its pins as buttons for assistive technologies, and its
@@ -489,7 +523,9 @@ impl MapView {
         let bounds = self.bounds.clone();
         let id = self.id;
         let size = self.size;
-        let canvas = canvas(
+        let live = self.live;
+        let corners = if self.expanded { c.background } else { self.under };
+        let map_canvas = canvas(
             move |frame, _, _| bounds.set(frame),
             move |frame, _, window, cx| {
                 window.paint_quad(fill(frame, water));
@@ -508,15 +544,16 @@ impl MapView {
                 let changed = size != Some(laid_out);
                 let map = entity.clone();
                 pool::shown(id, map.clone(), cx);
-                let _ = map.update(cx, |map, cx| {
-                    if changed {
-                        map.size = Some(laid_out);
-                    }
-                    if changed || !map.live {
-                        map.live = true;
-                        cx.notify();
-                    }
-                });
+                if changed || !live {
+                    // A change made while the window paints is drawn only once the paint is over.
+                    cx.defer(move |cx| {
+                        let _ = map.update(cx, |map, cx| {
+                            map.size = Some(laid_out);
+                            map.live = true;
+                            cx.notify();
+                        });
+                    });
+                }
                 let moving = entity.clone();
                 window.on_mouse_event(move |event: &MouseMoveEvent, phase, _, cx| {
                     if phase != DispatchPhase::Bubble {
@@ -559,8 +596,6 @@ impl MapView {
             .rounded(px(Radius::XL))
             .overflow_hidden()
             .bg(water)
-            .role(Role::Region)
-            .aria_label("Map")
             .cursor(if self.drag.as_ref().is_some_and(|drag| drag.moved >= CLICK_SLOP) {
                 CursorStyle::ClosedHand
             } else {
@@ -573,9 +608,14 @@ impl MapView {
             .on_mouse_down(MouseButton::Left, cx.listener(|map, event: &MouseDownEvent, _, cx| map.pressed(event, cx)))
             .on_scroll_wheel(cx.listener(|map, event: &ScrollWheelEvent, _, cx| map.scrolled(event, cx)))
             .on_pinch(cx.listener(|map, event: &PinchEvent, _, cx| map.pinched(event, cx)))
-            .child(canvas)
+            .child(map_canvas)
             .children(pin_buttons.into_iter().flatten())
             .child(self.controls(window, cx))
+            .child(
+                canvas(|_, _, _| {}, move |bounds, _, window, _| paint_corners(bounds, Radius::XL, corners, window))
+                    .absolute()
+                    .inset_0(),
+            )
     }
 
     fn controls(&self, window: &mut Window, cx: &mut Context<Self>) -> Div {
@@ -694,7 +734,8 @@ impl MapView {
             })
             .child(
                 pressable(div().absolute().bottom_0().left_0())
-                    .px(px(4.))
+                    .pl(px(8.))
+                    .pr(px(4.))
                     .py(px(1.))
                     .flex()
                     .bg(lit)
@@ -742,16 +783,11 @@ impl Render for MapView {
         let cover = div()
             .id(("map-expanded", self.id))
             .track_focus(&self.focus)
-            .on_key_down(cx.listener(|map, event: &KeyDownEvent, window, cx| {
-                if event.keystroke.key == "escape" {
-                    map.set_expanded(false, window, cx);
-                    cx.stop_propagation();
-                }
-            }))
             .occlude()
             .w(area.size.width)
             .h(area.size.height)
             .p(px(inset))
+            .when(cfg!(target_os = "macos"), |cover| cover.pt(px(inset.max(crate::theme::TOP_BAR))))
             .bg(c.at(c.background, Opacity::Lit))
             .child(
                 div()

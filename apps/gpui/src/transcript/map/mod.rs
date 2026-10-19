@@ -2,8 +2,6 @@
 //! the pins and the route over them, with the camera core moves (`motile_core::render::openui::map`).
 //! The same on Linux, Windows and the Mac, with no web view and no MapLibre.
 
-#![allow(dead_code, reason = "the transcript's Ui rows embed the map in a later step")]
-
 pub mod draw;
 pub mod paint;
 pub mod pool;

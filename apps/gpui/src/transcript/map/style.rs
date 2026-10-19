@@ -84,8 +84,6 @@ pub struct Symbol {
     pub color: Value,
     pub halo_color: Value,
     pub halo_width: Value,
-    /// Placed whatever lies under it, as the pins' marks and labels are.
-    pub overlaps: bool,
 }
 
 /// A feature's properties, as the expressions read them.
@@ -167,7 +165,6 @@ impl Layer {
                 color: or(&paint["text-color"], "#000000".into()),
                 halo_color: or(&paint["text-halo-color"], "rgba(0,0,0,0)".into()),
                 halo_width: or(&paint["text-halo-width"], 0.0.into()),
-                overlaps: layout["text-allow-overlap"] == true,
             }),
             _ => return None,
         };
@@ -506,7 +503,7 @@ mod tests {
         assert_eq!((text(&mark.text, 12., &emoji), text(&mark.icon, 12., &emoji)), ("".into(), "☕".into()));
         let Paint::Symbol(label) = &style.layer("pin-label").unwrap().paint else { panic!() };
         assert_eq!(pair(&label.offset, 12., &numbered), [0., 1.4]);
-        assert!(label.top && label.bold && label.overlaps);
+        assert!(label.top && label.bold);
     }
 
     #[test]

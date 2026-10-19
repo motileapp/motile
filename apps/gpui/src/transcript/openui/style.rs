@@ -9,8 +9,8 @@ use motile_core::render::openui::tree::{Color, Radius, RadiusKind, Rich, TextSty
 use super::UiCx;
 use crate::theme::{self, Radius as Radii, colors};
 use crate::transcript::canvas::Palette;
-use crate::transcript::prose;
 use crate::transcript::rows::{self, Plain};
+use crate::transcript::{kit, prose};
 
 /// A text style's size, line height and weight, and whether its digits are of one width.
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -210,35 +210,9 @@ pub fn keep_corners(
         return element;
     }
     let under = cx.ground.unwrap_or_else(|| cx.surface.color(colors(app)));
-    let masks = canvas(
-        |_, _, _| {},
-        move |bounds, _, window, _| {
-            let r = px(radius.min(f32::from(bounds.size.width.min(bounds.size.height)) / 2.));
-            let bend = r * (1. - 0.5523);
-            let corners = [
-                (bounds.origin, 1., 1.),
-                (bounds.top_right(), -1., 1.),
-                (bounds.bottom_left(), 1., -1.),
-                (bounds.bottom_right(), -1., -1.),
-            ];
-            for (corner, x, y) in corners {
-                let mut path = PathBuilder::fill();
-                path.move_to(corner);
-                path.line_to(point(corner.x + r * x, corner.y));
-                path.cubic_bezier_to(
-                    point(corner.x, corner.y + r * y),
-                    point(corner.x + bend * x, corner.y),
-                    point(corner.x, corner.y + bend * y),
-                );
-                path.close();
-                if let Ok(path) = path.build() {
-                    window.paint_path(path, under);
-                }
-            }
-        },
-    )
-    .absolute()
-    .inset_0();
+    let masks = canvas(|_, _, _| {}, move |bounds, _, window, _| kit::paint_corners(bounds, radius, under, window))
+        .absolute()
+        .inset_0();
     element.relative().child(masks).when_some(border, |element, border| {
         element.child(div().absolute().inset_0().rounded(px(radius)).border_1().border_color(border))
     })
