@@ -10,6 +10,8 @@ export type Item =
   | { kind: "user"; text: string }
   | { kind: "text"; text: string }
   | { kind: "code"; lang: string; code: string }
+  /** An OpenUI program the reply shows: the savings calculator of `program.tsx`. */
+  | { kind: "ui" }
   | {
       kind: "tool"
       tool: Tool
@@ -467,6 +469,39 @@ src/middleware.ts
 +        try? db.run("INSERT OR REPLACE INTO settings VALUES (?, ?)", key, value)
      }
  }`,
+  },
+  {
+    id: "savings",
+    title: "Prototype the savings calculator",
+    project: web,
+    branch: "savings",
+    agent: "claude",
+    model: "Opus 5.5 · Work",
+    server: studio,
+    status: { kind: "idle", ago: "18m" },
+    items: [
+      {
+        kind: "user",
+        text: "Before I build the savings calculator for the pricing page, show me how the numbers should behave. Let me play with them.",
+      },
+      {
+        kind: "tool",
+        tool: "read",
+        verb: "Read",
+        target: "src/lib/compound.ts",
+      },
+      {
+        kind: "text",
+        text: "Here it is with the same math as `compound.ts`: monthly compounding, contributions at the end of each month. Drag the sliders.",
+      },
+      { kind: "ui" },
+      {
+        kind: "text",
+        text: "At the defaults, growth overtakes what you put in by year 24. Doubling the monthly contribution to $1,000 and giving it 35 years crosses $1 million.",
+      },
+      { kind: "end", worked: "Worked for 21s" },
+    ],
+    diff: "",
   },
   {
     id: "deploy",
