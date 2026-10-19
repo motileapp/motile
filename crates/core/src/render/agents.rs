@@ -183,6 +183,13 @@ pub fn starting(item: &Item, call: &ToolCall) -> Option<AgentView> {
     })
 }
 
+/// Whether the agent has worked since `at`, when the thread's agent was told of it, so that what
+/// it was told no longer says how it is.
+pub fn worked_since(agent: &AgentView, at: f64) -> bool {
+    let ended_at = agent.duration_ms.map(|duration| agent.started_at + duration as f64 / 1000.0);
+    agent.status == ToolStatus::Running || ended_at.is_some_and(|ended_at| ended_at > at)
+}
+
 /// What the thread's agent was told of an agent it started, as that agent: what happened to it,
 /// and what it said.
 pub fn noticed(item: &Item, notice: &AgentNotice) -> AgentView {

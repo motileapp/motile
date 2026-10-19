@@ -437,6 +437,8 @@ pub struct Transcript {
     removed: Option<String>,
     /// Nothing more is coming, as in the transcript of an agent that has ended.
     settled: bool,
+    /// The agents the thread's agent started, as they are now, by the thread each works in.
+    agents: HashMap<String, AgentView>,
 }
 
 /// Code that came without highlighting: a code row, or the code paragraph `para` of a prose row.
@@ -508,7 +510,7 @@ impl Transcript {
 
     /// Fills an empty transcript with stored items, in order.
     pub fn load(&mut self, items: Vec<Item>) {
-        self.rendered = items.iter().map(|item| render(item, &self.cwd, None)).collect();
+        self.rendered = items.iter().map(|item| render(item, &self.cwd, &self.agents, None)).collect();
         self.items = items;
         self.show();
     }
@@ -531,7 +533,7 @@ impl Transcript {
 
     /// Puts earlier items in front of the ones already loaded.
     pub fn prepend(&mut self, items: Vec<Item>) -> Option<Splice> {
-        let rendered: Vec<Vec<Row>> = items.iter().map(|item| render(item, &self.cwd, None)).collect();
+        let rendered: Vec<Vec<Row>> = items.iter().map(|item| render(item, &self.cwd, &self.agents, None)).collect();
         self.rendered.splice(0..0, rendered);
         self.items.splice(0..0, items);
         self.show()
@@ -590,6 +592,19 @@ impl Transcript {
         self.show()
     }
 
+    /// Takes the agents the thread's tool calls started, as they are now. The notice of one that
+    /// has worked since shows it as it is now.
+    pub fn set_agents(&mut self, started: &[Item]) -> Option<Splice> {
+        self.agents =
+            started.iter().filter_map(agents::view).filter_map(|view| Some((view.thread_id.clone()?, view))).collect();
+        for (item, rendered) in self.items.iter().zip(&mut self.rendered) {
+            if matches!(item.kind, ItemKind::Notice { .. }) {
+                *rendered = render(item, &self.cwd, &self.agents, None);
+            }
+        }
+        self.show()
+    }
+
     /// Opens or closes a group, a fold, or a folder of changed files.
     pub fn toggle(&mut self, row_id: &str) -> Option<Splice> {
         if !self.opened.remove(row_id) {
@@ -600,7 +615,7 @@ impl Transcript {
 
     fn rerender(&mut self, index: usize, live: bool) -> Option<Splice> {
         let streaming = live.then_some(&mut self.streaming);
-        self.rendered[index] = render(&self.items[index], &self.cwd, streaming);
+        self.rendered[index] = render(&self.items[index], &self.cwd, &self.agents, streaming);
         self.show()
     }
 
@@ -1154,7 +1169,12 @@ fn counted(kind: &str, count: usize) -> String {
     }
 }
 
-fn render(item: &Item, cwd: &str, streaming: Option<&mut HashMap<String, Incremental>>) -> Vec<Row> {
+fn render(
+    item: &Item,
+    cwd: &str,
+    started: &HashMap<String, AgentView>,
+    streaming: Option<&mut HashMap<String, Incremental>>,
+) -> Vec<Row> {
     let row = |index: usize, kind: RowKind| Row {
         id: format!("{}/{index}", item.id),
         item: item.id.clone(),
@@ -1196,8 +1216,12 @@ fn render(item: &Item, cwd: &str, streaming: Option<&mut HashMap<String, Increme
             vec![row(0, RowKind::Handoff { from: HandoffLabel::new(from), to: HandoffLabel::new(to) })]
         }
         ItemKind::Notice { notice, .. } => {
-            let view = agents::noticed(item, notice);
-            vec![row(0, RowKind::Agent { agent: AgentRow::new(view, Some(item.created_at)) })]
+            let now = started.get(&notice.thread_id).filter(|now| agents::worked_since(now, item.created_at));
+            let agent = match now {
+                Some(now) => AgentRow::new(now.clone(), None),
+                None => AgentRow::new(agents::noticed(item, notice), Some(item.created_at)),
+            };
+            vec![row(0, RowKind::Agent { agent })]
         }
     }
 }
@@ -1445,6 +1469,7 @@ fn describe(call: &ToolCall, cwd: &str, at: f64) -> Tool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use motile_protocol::wire::{AgentNotice, NoticeEvent};
 
     fn item(id: &str, seq: u64, kind: ItemKind) -> Item {
         Item { id: id.to_string(), seq, rev: seq + 1, created_at: 0.0, media: Vec::new(), parent: None, kind }
@@ -1922,6 +1947,44 @@ mod tests {
             (row.agent, row.runs_on.as_str(), row.thread.as_deref()),
             (Some(Agent::Codex), "6.1-Sol · work", Some("c"))
         );
+    }
+
+    #[test]
+    fn a_notice_of_an_agent_that_worked_since_shows_it_as_it_is_now() {
+        let started = |status: ToolStatus, duration_ms: Option<u64>| {
+            let mut item = agent_call("t1", 0, "Kernel", None, status);
+            let ItemKind::Tool { call } = &mut item.kind else { unreachable!() };
+            let agent = call.agent.as_mut().unwrap();
+            agent.duration_ms = duration_ms;
+            agent.runs_on = Some(Box::new(motile_protocol::wire::RunsOn {
+                agent: Agent::Claude,
+                model: None,
+                account: None,
+                thread_id: Some("c".into()),
+            }));
+            item
+        };
+        let notice = AgentNotice {
+            thread_id: "c".into(),
+            title: "Kernel".into(),
+            event: NoticeEvent::Finished,
+            agent: Agent::Claude,
+            summary: Some("It compiles.".into()),
+        };
+        let notice = Item { created_at: 12.0, ..item("n", 5, ItemKind::Notice { notice, text: String::new() }) };
+        let mut transcript = Transcript::new("");
+        transcript.set_agents(&[started(ToolStatus::Succeeded, Some(10_000))]);
+        transcript.load(vec![notice]);
+        let told = agent_row(&transcript, 0);
+        assert_eq!((told.label.as_str(), told.at), ("Finished", Some(12.0)));
+
+        assert!(transcript.set_agents(&[started(ToolStatus::Running, None)]).is_some());
+        let working = agent_row(&transcript, 0);
+        assert_eq!((working.state, working.label.as_str(), working.at), (AgentState::Working, "Working", None));
+
+        transcript.set_agents(&[started(ToolStatus::Succeeded, Some(30_000))]);
+        let done = agent_row(&transcript, 0);
+        assert_eq!((done.state, done.at, done.duration_ms), (AgentState::Done, None, Some(30_000)));
     }
 
     #[test]

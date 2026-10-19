@@ -1539,6 +1539,9 @@ impl Core {
                     }
                     splices.extend(open.transcript.upsert(item.clone(), live));
                 }
+                if agents_changed {
+                    splices.extend(open.transcript.set_agents(&open.agents));
+                }
                 let synced = live.then_some(open.rev);
                 let mut to_save: Vec<&Item> = items.iter().collect();
                 // The revision being recorded covers streamed text that hasn't been saved yet.
@@ -2571,8 +2574,10 @@ impl Core {
         let Page { mut items, earlier } = self.cache.page(thread_id, None);
         let since = self.cache.synced_rev(thread_id);
         let newest = items.split_off(items.len().saturating_sub(FIRST_ITEMS));
+        let agents = self.cache.agents(thread_id);
         let mut transcript = Transcript::new(&cwd);
         transcript.set_removed(removed.clone());
+        transcript.set_agents(&agents);
         transcript.load(newest);
         let rows = |reset, splice: Splice| Event::Rows {
             thread_id: thread_id.to_string(),
@@ -2601,7 +2606,6 @@ impl Core {
             self.emit(event);
         }
 
-        let agents = self.cache.agents(thread_id);
         self.emit(agents_event(thread_id, &agents));
         let open = OpenThread {
             server_id: server_id.to_string(),
