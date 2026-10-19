@@ -110,12 +110,13 @@ final class ProgramPopoverPanel {
         let up = below < 220 + 8 && above > 240
         var x = min(max(12, trigger.minX), host.bounds.width - 12 - size.width)
         x = max(12, x)
-        let y: CGFloat
+        var y: CGFloat
         if flipped {
             y = up ? trigger.minY - 8 - size.height : trigger.maxY + 8
         } else {
             y = up ? trigger.maxY + 8 : trigger.minY - 8 - size.height
         }
+        y = max(12, min(y, host.bounds.height - 12 - size.height))
         view.frame = NSRect(x: x, y: y, width: size.width, height: size.height)
     }
 
