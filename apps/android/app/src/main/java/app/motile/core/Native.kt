@@ -16,4 +16,7 @@ object Native {
 
     /** Waits for the next event. */
     @JvmStatic external fun next(): String
+
+    /** Lays out a canvas component, a `canvas::Canvas`, into its `canvas::Scene`. Any thread. */
+    @JvmStatic external fun uiLayout(input: String): String
 }
