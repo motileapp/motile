@@ -619,6 +619,20 @@ impl Store {
         Ok(payloads.filter_map(|payload| serde_json::from_str(&payload.ok()?).ok()).collect())
     }
 
+    /// The thread's own replies whose programs the user changed after the last message.
+    pub fn programs_changed(&self, thread_id: &str) -> rusqlite::Result<Vec<Item>> {
+        let connection = self.connection();
+        let mut statement = connection.prepare(
+            "SELECT payload FROM items WHERE thread_id = ?1 AND json_extract(payload, '$.type') = 'assistant'
+                 AND json_extract(payload, '$.ui') IS NOT NULL AND json_extract(payload, '$.parent') IS NULL
+                 AND rev > (SELECT COALESCE(MAX(rev), 0) FROM items WHERE thread_id = ?1
+                            AND json_extract(payload, '$.type') IN ('user', 'notice'))
+             ORDER BY seq",
+        )?;
+        let payloads = statement.query_map([thread_id], |row| row.get::<_, String>(0))?;
+        Ok(payloads.filter_map(|payload| serde_json::from_str(&payload.ok()?).ok()).collect())
+    }
+
     /// How many tools the thread's own agent called.
     pub fn tool_count(&self, thread_id: &str) -> rusqlite::Result<u64> {
         let connection = self.connection();

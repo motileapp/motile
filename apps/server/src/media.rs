@@ -157,6 +157,40 @@ impl MediaStore {
         copied
     }
 
+    /// Keeps a photo that was downloaded from `src`. `None` when the bytes aren't one.
+    pub fn keep_photo(&self, bytes: &[u8], src: &str) -> anyhow::Result<Option<Media>> {
+        let extension = match imagesize::image_type(bytes) {
+            Ok(imagesize::ImageType::Png) => "png",
+            Ok(imagesize::ImageType::Jpeg) => "jpg",
+            Ok(imagesize::ImageType::Gif) => "gif",
+            Ok(imagesize::ImageType::Webp) => "webp",
+            _ => return Ok(None),
+        };
+        let Ok(dimensions) = imagesize::blob_size(bytes) else { return Ok(None) };
+        let mut namer = Namer::default();
+        namer.update(bytes);
+        let id = namer.id(extension);
+        std::fs::create_dir_all(&self.folder)?;
+        let unfinished = self.folder.join(format!("{}.part", uuid::Uuid::new_v4().simple()));
+        std::fs::write(&unfinished, bytes)?;
+        std::fs::rename(&unfinished, self.folder.join(&id))?;
+        Ok(Some(Media {
+            id,
+            src: src.to_string(),
+            video: false,
+            file: false,
+            size: bytes.len() as u64,
+            width: u32::try_from(dimensions.width).ok(),
+            height: u32::try_from(dimensions.height).ok(),
+            poster: None,
+        }))
+    }
+
+    /// Whether the store still has the file.
+    pub fn has(&self, id: &str) -> bool {
+        is_id(id) && self.folder.join(id).is_file()
+    }
+
     pub async fn open(&self, id: &str) -> anyhow::Result<(tokio::fs::File, u64)> {
         if !is_id(id) {
             bail!("{id} isn't the name of a file your server keeps.");
@@ -183,7 +217,7 @@ fn images(text: &str) -> Vec<(String, String)> {
     images.collect()
 }
 
-fn percent_decode(text: &str) -> String {
+pub(crate) fn percent_decode(text: &str) -> String {
     let bytes = text.as_bytes();
     let mut decoded = Vec::with_capacity(bytes.len());
     let mut index = 0;

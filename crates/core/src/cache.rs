@@ -498,10 +498,22 @@ mod tests {
             created_at: 0.0,
             media: Vec::new(),
             parent: parent.map(String::from),
+            ui: Default::default(),
             kind,
         };
         let items = [
-            item("u", 0, None, ItemKind::User { text: "Go".into(), attachments: Vec::new(), skills: Vec::new() }),
+            item(
+                "u",
+                0,
+                None,
+                ItemKind::User {
+                    text: "Go".into(),
+                    attachments: Vec::new(),
+                    skills: Vec::new(),
+                    context: None,
+                    programs: Vec::new(),
+                },
+            ),
             item("a", 1, None, ItemKind::Tool { call: call("a", Some(agent)) }),
             item("r", 2, Some("a"), ItemKind::Tool { call: call("r", None) }),
             item("s", 3, Some("a"), ItemKind::Assistant { text: "Found it".into() }),
@@ -516,6 +528,41 @@ mod tests {
     }
 
     #[test]
+    fn a_programs_state_and_what_a_message_sent_are_kept() {
+        use motile_protocol::wire::ProgramState;
+        use serde_json::json;
+
+        let dir = tempfile::tempdir().unwrap();
+        let cache = Cache::open(&dir.path().join("cache.sqlite")).unwrap();
+        let item = |id: &str, seq, kind| Item {
+            id: id.into(),
+            seq,
+            rev: seq + 1,
+            created_at: 0.0,
+            media: Vec::new(),
+            parent: None,
+            ui: Default::default(),
+            kind,
+        };
+        let mut reply = item("a", 0, ItemKind::Assistant { text: "```openui-lang\n```".into() });
+        reply.ui.insert(1, json!({ "$days": "30" }));
+        let state = ProgramState { item_id: "a".into(), block: 1, state: json!({ "$days": "30" }) };
+        let context = Some(json!(["User clicked: Go", {}]));
+        let message = ItemKind::User {
+            text: "Go".into(),
+            attachments: Vec::new(),
+            skills: Vec::new(),
+            context,
+            programs: vec![state],
+        };
+        let message = item("u", 1, message);
+
+        cache.save_items("t", &[&reply, &message], None);
+
+        assert_eq!(cache.page("t", None).items, [reply, message]);
+    }
+
+    #[test]
     fn a_thread_is_read_a_few_whole_turns_at_a_time() {
         use motile_protocol::wire::TurnSummary;
 
@@ -524,11 +571,26 @@ mod tests {
         // Three turns of a message, 99 replies and an end.
         let item = |seq: u64| {
             let kind = match seq % 101 {
-                0 => ItemKind::User { text: "Go on".into(), attachments: Vec::new(), skills: Vec::new() },
+                0 => ItemKind::User {
+                    text: "Go on".into(),
+                    attachments: Vec::new(),
+                    skills: Vec::new(),
+                    context: None,
+                    programs: Vec::new(),
+                },
                 100 => ItemKind::TurnEnd { summary: TurnSummary::default() },
                 _ => ItemKind::Assistant { text: "Done".into() },
             };
-            Item { id: seq.to_string(), seq, rev: seq + 1, created_at: 0.0, media: Vec::new(), parent: None, kind }
+            Item {
+                id: seq.to_string(),
+                seq,
+                rev: seq + 1,
+                created_at: 0.0,
+                media: Vec::new(),
+                parent: None,
+                ui: Default::default(),
+                kind,
+            }
         };
         let items: Vec<Item> = (0..303).map(item).collect();
         cache.save_items("t", &items.iter().collect::<Vec<_>>(), None);

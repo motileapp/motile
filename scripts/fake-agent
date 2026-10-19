@@ -51,6 +51,11 @@ made up on the spot instead:
   before each step, and ends.
 - "ask an agent which color": a turn that starts an agent that asks which color; told it asks, it
   answers blue.
+- "show the ui <name>": a reply with the program `fixtures/openui/<name>.oui` in an `openui-lang`
+  fence, streamed in pieces. "show the dashboard" shows `dashboard.oui`, which reads `git_log` and
+  `usage` with `Query`, and "ask with a form" `inputs.oui`, a form that sends its values with
+  `@ToAssistant`. A message with "context and form values = " lines is answered with the values
+  they hold.
 - "look over": a turn that reads greet.py and runs the tests, a step every FAKE_AGENT_CHILD_STEP
   seconds, and says what it would change. Codex does the same.
 
@@ -1061,6 +1066,62 @@ def show_the_recording():
     turn.done()
 
 
+OPENUI = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "fixtures", "openui")
+CONTEXT = "context and form values = "
+
+
+def show_program(intro, name, outro):
+    """A reply with a program of the corpus in it, streamed as replies stream."""
+    turn = Turn("00000000-0000-4000-8000-0000000c0de0", piece=48)
+    try:
+        with open(os.path.join(OPENUI, f"{name}.oui")) as f:
+            program = f.read()
+    except OSError:
+        turn.text(f"There is no program called {name}.")
+        turn.done()
+        return
+    turn.text(f"{intro}\n\n```openui-lang\n{program}```\n\n{outro}")
+    turn.done()
+
+
+def show_the_ui():
+    named = re.search(r"show the ui ([\w-]+)", message_of(prompt_now[0]).lower())
+    show_program("Here it is:", named.group(1) if named else "answer", "Change anything you like.")
+
+
+def show_the_dashboard():
+    show_program("Here is what your server's agents spent and the latest commits:", "dashboard",
+                 "It reads them from your server as you look.")
+
+
+def ask_with_a_form():
+    show_program("Tell me about the trip:", "inputs", "I'll plan it once you send it.")
+
+
+def values_of(value):
+    """The plain values in what a program sent: a form's fields are `{value, componentType}`."""
+    if isinstance(value, dict):
+        if "componentType" in value:
+            return [] if isinstance(value.get("value"), (dict, list)) else [("", value.get("value"))]
+        return [(f"{key}.{inner}" if inner else key, found) for key, item in value.items()
+                for inner, found in values_of(item)]
+    if isinstance(value, list):
+        return [pair for item in value for pair in values_of(item)]
+    return [("", value)]
+
+
+def restate_values():
+    said = message_of(prompt_now[0])
+    sent = [json.loads(line[len(CONTEXT):]) for line in said.splitlines() if line.startswith(CONTEXT)]
+    named = [f"{key} is {json.dumps(value)}" for value in sent for key, value in values_of(value) if key]
+    clicked = next((value[0] for value in sent if isinstance(value, list) and value
+                    and str(value[0]).startswith("User clicked: ")), None)
+    turn = Turn("00000000-0000-4000-8000-0000000f0a11")
+    opening = f"{clicked}." if clicked else "You changed the program."
+    turn.text(f"{opening} I read: {', '.join(named) or 'nothing'}.")
+    turn.done()
+
+
 GREET_BY_NAME = 'def greet(name):\n    return f"Hello, {name}!"\n\n\nprint(greet("world"))\n'
 GREETING_NOTES = "# Greeting\n\n`greet(name)` returns the greeting for `name`.\n"
 
@@ -1396,6 +1457,10 @@ if APP_SERVER:
     sys.exit(0)
 
 SCRIPTED = {
+    CONTEXT: restate_values,
+    "show the dashboard": show_the_dashboard,
+    "show the ui": show_the_ui,
+    "ask with a form": ask_with_a_form,
     "ask another account": ask_another_account,
     "ask agents in the background": ask_agents_in_the_background,
     "ask three agents": ask_three_agents,

@@ -28,6 +28,7 @@ use crate::agents::PLAN_TOOL;
 use crate::handoff::tool_status;
 use crate::hub::Hub;
 use crate::store::Store;
+use crate::ui;
 
 pub const SERVER_NAME: &str = "motile";
 /// The tools as the agents name them.
@@ -385,7 +386,7 @@ fn entry(item: &Item, offset: usize, max_chars: usize) -> Value {
 
 fn described(item: &Item) -> (&'static str, &'static str, String) {
     match &item.kind {
-        ItemKind::User { text, .. } => ("user", "done", text.clone()),
+        ItemKind::User { text, context, programs, .. } => ("user", "done", ui::told(text, context.as_ref(), programs)),
         ItemKind::Assistant { text } => ("assistant", "done", text.clone()),
         ItemKind::Thinking { text } => ("thinking", "done", text.clone()),
         ItemKind::Tool { call } => {
@@ -472,7 +473,13 @@ mod tests {
             agent: None,
         };
         let kinds = [
-            ItemKind::User { text: "Fix the login".into(), attachments: vec![], skills: Vec::new() },
+            ItemKind::User {
+                text: "Fix the login".into(),
+                attachments: vec![],
+                skills: Vec::new(),
+                context: None,
+                programs: Vec::new(),
+            },
             ItemKind::Thinking { text: "hmm".into() },
             ItemKind::Tool { call: call("Bash", r#"{"command":"cargo test"}"#) },
             ItemKind::Tool { call: call("Read", r#"{"file_path":"/a"}"#) },
@@ -487,6 +494,7 @@ mod tests {
                 created_at: 0.0,
                 media: vec![],
                 parent: None,
+                ui: Default::default(),
                 kind,
             };
             store.save_item("t", &item).unwrap();

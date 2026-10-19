@@ -1,0 +1,9 @@
+root = Card([Title("Turn the crank", "md"), Text("The rear sprocket turns " + ratio + " times as far as the chainring.", "sm", "muted"), drawing, Slider($angle, 0, 360, 5, "Crank angle", "°"), shapes])
+$angle = 40
+ratio = 2.5
+drawing = Svg([chain, front, rear, readout], "0 0 320 160")
+chain = Path("M 90 40 L 240 62 A 18 18 0 0 1 240 98 L 90 120 A 40 40 0 0 1 90 40 Z", null, "faint", 2)
+front = G([Circle(90, 80, 40, "surface", "ink", 3), Line(90, 80, 90, 44, "ink", 4), Circle(90, 80, 6, "ink")], "rotate(" + $angle + " 90 80)")
+rear = G([Circle(240, 80, 18, "surface", "ink", 3), Line(240, 80, 240, 64, "info", 3), Circle(240, 80, 4, "ink")], "rotate(" + $angle * ratio + " 240 80)")
+readout = SvgText("Rear " + @Round($angle * ratio % 360, 0) + "°", 240, 132, 12, "muted", "middle")
+shapes = Svg([Rect(10, 10, 60, 40, "info", null, null, 0.8, 8), Ellipse(120, 30, 34, 20, "success"), Polygon("180,50 205,10 230,50", "warning"), Polyline("250,45 265,15 280,40 295,12", "danger", 3), SvgText("Rect · Ellipse · Polygon · Polyline", 160, 72, 11, "muted", "middle")], "0 0 320 80", null, null)

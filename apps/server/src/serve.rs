@@ -20,7 +20,7 @@ use tokio::sync::{Notify, watch};
 use crate::access::Access;
 use crate::hub::{GitRun, Hub, ListSubscription, ThreadSubscription};
 use crate::media::MediaStore;
-use crate::{files, linear, ricrac, update};
+use crate::{files, linear, ricrac, ui_tools, update};
 
 const NOT_LINKED: u32 = 403;
 const RECHECK_ACCESS_EVERY: Duration = Duration::from_secs(30);
@@ -137,10 +137,23 @@ impl Server {
                 Ok(subscription) => return follow_thread(send, subscription).await,
                 Err(error) => Err(error),
             },
-            Request::Send { thread_id, new_thread, text, attachments, now } => hub
-                .send(thread_id, new_thread, text, attachments, now)
+            Request::Send { thread_id, new_thread, text, attachments, now, context } => hub
+                .send(thread_id, new_thread, text, attachments, now, context)
                 .await
                 .map(|thread_id| Message::Sent { thread_id }),
+            Request::SetUi { thread_id, item_id, block, state } => {
+                hub.set_ui(&thread_id, &item_id, block, state).await.map(|_| Message::Ok)
+            }
+            Request::UiTool { thread_id, tool, args, confirmed } => {
+                Ok(match ui_tools::call(hub, &thread_id, &tool, args, confirmed).await {
+                    Ok(result) => Message::UiToolResult { result },
+                    Err(failure) => Message::UiToolError { code: failure.code.to_string(), message: failure.message },
+                })
+            }
+            Request::UiImages { thread_id, query } => {
+                hub.ui_images(&thread_id, &query).await.map(|images| Message::UiImages { images })
+            }
+            Request::UiRoute { stops } => hub.lookups.route(&stops).await.map(|points| Message::UiRoute { points }),
             Request::Answer { thread_id, approval_id, allow, answers } => {
                 hub.answer(&thread_id, &approval_id, allow, answers).await.map(|_| Message::Ok)
             }

@@ -25,4 +25,7 @@ pub mod sign_in;
 pub mod store;
 pub mod sync;
 pub mod title;
+pub mod ui;
+pub mod ui_lookups;
+pub mod ui_tools;
 pub mod update;

@@ -279,6 +279,7 @@ pub fn workflow_items(item: &Item) -> Vec<Item> {
             created_at,
             media: Vec::new(),
             parent: Some(item.id.clone()),
+            ui: Default::default(),
             kind,
         };
         if agent.phase.is_some() && agent.phase != phase {
@@ -352,7 +353,16 @@ mod tests {
             agent: Some(agent),
         };
         let kind = ItemKind::Tool { call };
-        Item { id: "t".into(), seq: 0, rev: 1, created_at: 5.0, media: Vec::new(), parent: None, kind }
+        Item {
+            id: "t".into(),
+            seq: 0,
+            rev: 1,
+            created_at: 5.0,
+            media: Vec::new(),
+            parent: None,
+            ui: Default::default(),
+            kind,
+        }
     }
 
     #[test]

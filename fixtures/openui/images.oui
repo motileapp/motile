@@ -1,0 +1,5 @@
+root = Card([Title("Golden hour in San Francisco", "md"), Grid([i1, i2, i3, i4], 4, 150, 3)])
+i1 = Col([Image("https://upload.wikimedia.org/wikipedia/commons/thumb/b/bf/Golden_Gate_Bridge_as_seen_from_Battery_East.jpg/960px-Golden_Gate_Bridge_as_seen_from_Battery_East.jpg", "Golden Gate Bridge from Battery East"), Text("Working src", "sm", null, "semibold"), Caption("Loads the given URL")], 2)
+i2 = Col([SearchImage("Alcatraz Island"), Text("No src", "sm", null, "semibold"), Caption("Found by searching the query")], 2)
+i3 = Col([Image("https://example.invalid/palace.jpg", "Palace of Fine Arts"), Text("Broken src", "sm", null, "semibold"), Caption("Falls back to search")], 2)
+i4 = Col([Image("https://example.invalid/none.jpg", "qzxv unfindable subject 0000", 1.5, "xl"), Text("Nothing found", "sm", null, "semibold"), Caption("Quiet placeholder")], 2)
