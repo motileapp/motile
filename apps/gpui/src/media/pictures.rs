@@ -364,7 +364,8 @@ pub fn download(url: &str, file: &std::path::Path) -> bool {
     motile_protocol::tls::install();
     let Ok(runtime) = tokio::runtime::Builder::new_current_thread().enable_all().build() else { return false };
     let bytes = runtime.block_on(async {
-        let client = reqwest::Client::builder().timeout(std::time::Duration::from_secs(20)).build().ok()?;
+        let client =
+            reqwest::Client::builder().user_agent("Motile").timeout(std::time::Duration::from_secs(20)).build().ok()?;
         let response = client.get(url).send().await.ok()?.error_for_status().ok()?;
         response.bytes().await.ok()
     });
