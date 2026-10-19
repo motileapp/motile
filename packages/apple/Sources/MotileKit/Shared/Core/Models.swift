@@ -206,6 +206,8 @@ struct Server: Equatable, Identifiable {
     let agents: [Agent: String]
     /// The agents' accounts, the default ones first.
     let agentAccounts: [AgentAccount]
+    /// The account a new thread is better off starting on, by account id and model id.
+    let roomierAccounts: [String: [String: String]]
     /// Whether the server has ever told us about itself.
     let known: Bool
     /// The update the server is putting in place, as it last said.
@@ -221,6 +223,7 @@ struct Server: Equatable, Identifiable {
         error = json.optionalString("error")
         path = json.optionalString("path")
         rttMs = (json["rtt_ms"] as? NSNumber)?.intValue
+        roomierAccounts = json["roomier_accounts"] as? [String: [String: String]] ?? [:]
         let info = json.object("info")
         known = info != nil
         home = info?.string("home") ?? ""
@@ -294,6 +297,14 @@ struct Server: Equatable, Identifiable {
         let named = offered.filter { $0.id == id }
         let listedByAccount = { (model: ModelInfo) in model.account.isEmpty || model.account == account }
         return named.first(where: listedByAccount) ?? named.first ?? offered.first(where: listedByAccount) ?? offered.first
+    }
+
+    /// The account and model a new thread starts on, when another account of its agent runs the
+    /// model and has used clearly less of its limits.
+    func roomier(than accountID: String?, model id: String?) -> (account: String, model: String)? {
+        guard let model = Server.model(id, account: accountID, among: models), let account = account(accountID, of: model.agent),
+              let roomier = roomierAccounts[account.id]?[model.id] else { return nil }
+        return (roomier, model.id)
     }
 
     /// The model's name, with the account's when its agent has more than one.

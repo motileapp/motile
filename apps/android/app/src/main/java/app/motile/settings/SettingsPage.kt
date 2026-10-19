@@ -33,6 +33,7 @@ import app.motile.core.Integration
 import app.motile.core.Preferences
 import app.motile.core.Server
 import app.motile.core.SettingsSection
+import app.motile.core.managesNewThreadsDescription
 import app.motile.core.pullDefaultBranchCaption
 import app.motile.onboarding.ConnectServerView
 import app.motile.platform.Platform
@@ -63,12 +64,16 @@ fun SettingsPage(section: SettingsSection) {
     var edited by remember { mutableStateOf<EditedAccount?>(null) }
     var removal by remember { mutableStateOf<Removal?>(null) }
     var steers by remember { mutableStateOf(Preferences.optionalBool(AppStore.STEERS_KEY) ?: AppStore.STEERS_BY_DEFAULT) }
+    var managesNewThreads by remember { mutableStateOf(Preferences.managesNewThreads) }
     LaunchedEffect(Unit) { store.refreshMediaStorage() }
     SettingsList(target = store.settingsTarget, reached = { store.settingsTarget = null }) {
         when (section) {
-            SettingsSection.General -> general(store, steers) {
+            SettingsSection.General -> general(store, steers, managesNewThreads, setSteers = {
                 steers = it
                 Preferences.set(AppStore.STEERS_KEY, it)
+            }) {
+                managesNewThreads = it
+                Preferences.managesNewThreads = it
             }
             SettingsSection.Servers -> servers(store, navigator)
             SettingsSection.Accounts -> agentAccounts(store, edit = { server, account -> edited = EditedAccount(server, account) }) { removal = it }
@@ -83,7 +88,13 @@ fun SettingsPage(section: SettingsSection) {
     Modal(edited, onDismiss = { edited = null }) { AgentAccountSheet(it.server, it.account) }
 }
 
-private fun SettingsGroups.general(store: AppStore, steers: Boolean, setSteers: (Boolean) -> Unit) {
+private fun SettingsGroups.general(
+    store: AppStore,
+    steers: Boolean,
+    managesNewThreads: Boolean,
+    setSteers: (Boolean) -> Unit,
+    setManagesNewThreads: (Boolean) -> Unit,
+) {
     group("account", header = "Account") {
         row {
             SettingsLabeled("Signed in as", if (store.account.signedIn) store.account.email else "Not signed in", TextOverflow.MiddleEllipsis)
@@ -95,6 +106,14 @@ private fun SettingsGroups.general(store: AppStore, steers: Boolean, setSteers: 
     }
     group("messages", header = "Messages", footer = steersDescription(steers)) {
         row { SettingsPicker("Sent while the agent works", listOf("Queue" to false, "Steer" to true), steers, setSteers) }
+    }
+    group("manage-new-threads", header = "Provider Limits") {
+        row {
+            SettingsRow {
+                SettingsItem("Manage new threads automatically", managesNewThreadsDescription, lines = Int.MAX_VALUE)
+                Switch(managesNewThreads, setManagesNewThreads)
+            }
+        }
     }
     group("storage", header = "Storage", footer = "Kept on this ${Platform.device} so threads open with them. Your servers keep them all.") {
         row { SettingsLabeled("Images and videos", store.mediaStorageUsed) }

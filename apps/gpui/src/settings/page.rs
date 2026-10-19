@@ -10,7 +10,7 @@ use motile_protocol::wire::{Agent, AgentAccount, ContinueSettings, PullRequestSe
 
 use super::account_sheet::AccountSheet;
 use super::keybindings::KeybindingsPage;
-use super::layout::{Cut, INSET, Targets, group, label, large_outset, more, note, row, target};
+use super::layout::{Cut, INSET, Targets, group, label, large_outset, more, note, row, switch_row, target};
 use crate::format;
 use crate::models::{AgentAccountExt, Project, Server, agent_name, new_account};
 use crate::sidebar::{AppUpdateRow, ServerUpdateStatus};
@@ -159,7 +159,14 @@ impl SettingsPage {
     }
 
     fn general(&self, cx: &mut Context<Self>) -> Vec<AnyElement> {
-        vec![self.account(cx), self.updates(cx), self.appearance(cx), self.messages(cx), self.storage(cx)]
+        vec![
+            self.account(cx),
+            self.updates(cx),
+            self.appearance(cx),
+            self.messages(cx),
+            self.provider_limits(cx),
+            self.storage(cx),
+        ]
     }
 
     fn account(&self, cx: &mut Context<Self>) -> AnyElement {
@@ -253,6 +260,22 @@ impl SettingsPage {
         let leading = label("Sent while the agent works", Some(description.into()), None, Cut::Wraps, cx);
         let rows = vec![row(vec![leading], vec![picker.into_any_element()]).into_any_element()];
         group("messages", "Messages", None, true, rows, cx)
+    }
+
+    /// Whether a new thread starts on the account that has used the least of its limits.
+    fn provider_limits(&self, cx: &mut Context<Self>) -> AnyElement {
+        let on = self.store.read(cx).manages_new_threads();
+        let store = self.store.clone();
+        let switch = Switch::new("manage-new-threads", on).on_change(move |on, _, cx| {
+            store.update(cx, |store, cx| {
+                store.set_manages_new_threads(on);
+                cx.notify();
+            })
+        });
+        let description = "Starts new threads on the account with the most limits left.";
+        let leading = label("Manage new threads automatically", Some(description.into()), None, Cut::Wraps, cx);
+        let rows = vec![switch_row(vec![leading], switch).into_any_element()];
+        group("manage-new-threads", "Provider Limits", None, true, rows, cx)
     }
 
     /// The servers keep every image and video; the ones kept here only make threads open with them.
@@ -413,7 +436,7 @@ impl SettingsPage {
                     cx.notify();
                 })
             });
-            rows.push(row(vec![server_label(server, cx)], vec![switch.into_any_element()]).into_any_element());
+            rows.push(switch_row(vec![server_label(server, cx)], switch).into_any_element());
             if index + 1 < servers.len() {
                 rows.push(divider_on(Surface::Card, cx).into_any_element());
             }
@@ -720,7 +743,7 @@ impl SettingsPage {
                 div()
                     .relative()
                     .child(target(format!("integration-{}", integration.id())))
-                    .child(row(vec![leading], vec![switch.into_any_element()]))
+                    .child(switch_row(vec![leading], switch))
                     .into_any_element(),
             );
             if index + 1 < Integration::ALL.len() {

@@ -100,6 +100,22 @@ class ModelsTest {
     }
 
     @Test
+    fun aServerReadsTheRoomierAccountsANewThreadStartsOn() {
+        val info = mapOf(
+            "protocol" to 31,
+            "agent_accounts" to listOf(
+                mapOf("id" to "claude", "agent" to "claude", "name" to "Yekta"),
+                mapOf("id" to "work", "agent" to "claude", "name" to "Work"),
+            ),
+            "models" to listOf(mapOf("id" to "opus", "name" to "Opus 5.5", "agent" to "claude")),
+        )
+        val server = Server(json("id" to "s", "name" to "studio", "state" to "connected", "info" to info, "roomier_accounts" to mapOf("claude" to mapOf("opus" to "work"))))
+        assertEquals(mapOf("claude" to mapOf("opus" to "work")), server.roomierAccounts)
+        assertEquals("work" to "opus", server.roomier(than = null, model = "opus"))
+        assertNull(server.roomier(than = "work", model = "opus"))
+    }
+
+    @Test
     fun aRemovedServerKeepsItsLastNameWithoutInfo() {
         val server = Server(json("id" to "s", "name" to "build-box", "short_name" to "build-box", "removed" to true, "state" to "disconnected", "info" to null))
         assertTrue(server.removed)

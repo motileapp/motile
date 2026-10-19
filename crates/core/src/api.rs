@@ -624,6 +624,9 @@ pub struct ServerView {
     pub info: Option<ServerInfo>,
     /// The names of its models that have a shorter one, by model id, for the model picker.
     pub short_model_names: HashMap<String, String>,
+    /// The account a new thread is better off starting on, by account id and model id: the one
+    /// of the same agent that runs the model and has used clearly less of its limits.
+    pub roomier_accounts: HashMap<String, HashMap<String, String>>,
 }
 
 #[derive(Serialize, Clone, Debug, PartialEq)]

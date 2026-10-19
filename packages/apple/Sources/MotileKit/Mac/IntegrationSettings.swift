@@ -8,7 +8,7 @@ struct IntegrationSettings: View {
     var body: some View {
         SettingsGroup("integrations", "Issue trackers", caption: "Each one that is on has a tab in the right panel.") {
             ForEach(Integration.allCases) { integration in
-                SettingsRow {
+                SettingsRow(control: Switch.height) {
                     HStack(spacing: 12) {
                         IntegrationLogo(integration: integration)
                         SettingsLabel(integration.title, description: integration.summary)

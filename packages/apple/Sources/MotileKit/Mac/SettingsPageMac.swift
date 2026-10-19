@@ -10,6 +10,7 @@ struct SettingsPage: View {
     let section: SettingsSection
     @AppStorage("appearance") private var appearance = Appearance.system
     @AppStorage(AppStore.steersKey) private var steers = AppStore.steersByDefault
+    @AppStorage(AppStore.managesNewThreadsKey) private var managesNewThreads = false
     @State private var setupProject: Project?
     @State private var editedAccount: EditedAccount?
     @State private var removal: Removal?
@@ -103,6 +104,14 @@ struct SettingsPage: View {
             }
         }
 
+        SettingsGroup("manage-new-threads", "Provider Limits") {
+            SettingsRow(control: Switch.height) {
+                SettingsLabel("Manage new threads automatically", description: managesNewThreadsDescription)
+            } trailing: {
+                Switch(isOn: $managesNewThreads)
+            }
+        }
+
         SettingsGroup("storage", "Storage") {
             SettingsRow {
                 SettingsLabel("Images and videos", description: store.mediaStorageDescription)
@@ -165,7 +174,7 @@ struct SettingsPage: View {
         if !servers.isEmpty {
             SettingsGroup("continue-limits", "Continue after usage limits", caption: "A thread whose agent reached its usage limit goes on once the limit resets") {
                 ForEach(servers) { server in
-                    SettingsRow {
+                    SettingsRow(control: Switch.height) {
                         serverName(server)
                     } trailing: {
                         Switch(isOn: Binding { server.continueAfterLimits } set: {
@@ -177,7 +186,7 @@ struct SettingsPage: View {
             }
             SettingsGroup("continue-restarts", "Continue after restarts", caption: "When your server comes back from a restart, agents that were working carry on.") {
                 ForEach(servers) { server in
-                    SettingsRow {
+                    SettingsRow(control: Switch.height) {
                         serverName(server)
                     } trailing: {
                         Switch(isOn: Binding { server.continueAfterRestarts } set: {
@@ -239,7 +248,7 @@ struct SettingsPage: View {
         } else {
             SettingsGroup("merged", "Mark the thread done after merge or close") {
                 ForEach(servers) { server in
-                    SettingsRow {
+                    SettingsRow(control: Switch.height) {
                         serverName(server)
                     } trailing: {
                         Switch(isOn: Binding { server.doneOnMerge } set: {
@@ -251,7 +260,7 @@ struct SettingsPage: View {
             }
             SettingsGroup("worktrees", "Remove the thread's worktree after merge") {
                 ForEach(servers) { server in
-                    SettingsRow {
+                    SettingsRow(control: Switch.height) {
                         serverName(server)
                     } trailing: {
                         Switch(isOn: Binding { server.removeMergedWorktrees } set: {
@@ -265,7 +274,7 @@ struct SettingsPage: View {
             if !pulling.isEmpty {
                 SettingsGroup("pull", "Automatically pull", caption: pullDefaultBranchCaption) {
                     ForEach(pulling) { server in
-                        SettingsRow {
+                        SettingsRow(control: Switch.height) {
                             serverName(server)
                         } trailing: {
                             Switch(isOn: Binding { server.pullDefaultBranch } set: {
@@ -547,6 +556,8 @@ struct SettingsLabel: View {
 /// What the row is about on the left, its controls on the right. Every row is as tall as the
 /// tallest, with the same room above and below.
 struct SettingsRow<Leading: View, Trailing: View>: View {
+    /// How tall the trailing control is, which stands as far from the row's right as from its top and bottom.
+    var control = ControlSize.large.height
     @ViewBuilder let leading: Leading
     @ViewBuilder let trailing: Trailing
 
@@ -556,7 +567,7 @@ struct SettingsRow<Leading: View, Trailing: View>: View {
                 .padding(.vertical, scaled(8))
             Spacer(minLength: 12)
             trailing
-                .padding(.trailing, -rowOutset(for: ControlSize.large.height))
+                .padding(.trailing, -rowOutset(for: control))
         }
         .padding(.horizontal, settingsInset)
         .frame(minHeight: settingsRowHeight)

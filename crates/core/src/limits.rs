@@ -1,11 +1,18 @@
 //! How much of their plans the agents' accounts have used, from every server, for the Limits tab
-//! of the usage view: a section for each account, with a row for each of its windows.
+//! of the usage view: a section for each account, with a row for each of its windows. And which
+//! account a new thread is better off starting on.
 
-use motile_protocol::wire::{Agent, AgentLimits, LimitWindow};
+use std::collections::HashMap;
+
+use motile_protocol::wire::{Agent, AgentAccount, AgentLimits, LimitWindow, ModelInfo};
 use serde::Serialize;
 
 /// How far spending may stray from the time that has passed and still be on pace, in points.
 const ON_PACE: f64 = 5.0;
+
+/// How much less another account must have used than the one a new thread would start on, in
+/// points, for the thread to start on it instead.
+const ROOMIER_BY: f64 = 5.0;
 
 /// What a server said of its agents' logins.
 pub struct Read {
@@ -159,6 +166,59 @@ fn duration(seconds: f64) -> String {
     }
 }
 
+/// For each account and model of a server, the account of the same agent that runs the model too
+/// and has used clearly less of its limits, when one has: by account id, then model id.
+pub fn roomier(
+    accounts: &[AgentAccount],
+    models: &[ModelInfo],
+    limits: &[AgentLimits],
+    now: f64,
+) -> HashMap<String, HashMap<String, String>> {
+    let mut roomier: HashMap<String, HashMap<String, String>> = HashMap::new();
+    let runs = |account: &AgentAccount, id: &str| models.iter().find(|model| model.id == id && runs(account, model));
+    for account in accounts {
+        for model in models.iter().filter(|model| self::runs(account, model)) {
+            let Some(used) = used(account, model, limits, now) else { continue };
+            let best = accounts
+                .iter()
+                .filter(|other| other.id != account.id)
+                .filter_map(|other| Some((other, self::used(other, runs(other, &model.id)?, limits, now)?)))
+                .min_by(|(_, a), (_, b)| a.total_cmp(b));
+            let Some((best, _)) = best.filter(|(_, least)| least + ROOMIER_BY < used) else { continue };
+            roomier.entry(account.id.clone()).or_default().insert(model.id.clone(), best.id.clone());
+        }
+    }
+    roomier
+}
+
+fn runs(account: &AgentAccount, model: &ModelInfo) -> bool {
+    model.agent == account.agent && (model.account.is_empty() || model.account == account.id)
+}
+
+/// How much of the account's tightest window that applies to the model is used: the session,
+/// the week, and the week of the model where the plan counts it apart.
+fn used(account: &AgentAccount, model: &ModelInfo, limits: &[AgentLimits], now: f64) -> Option<f64> {
+    let limits = limits.iter().find(|limits| {
+        limits.agent == account.agent && limits.account_name == account.name && limits.error.is_none()
+    })?;
+    limits
+        .windows
+        .iter()
+        .filter(|window| applies(window, model))
+        .map(|window| match window.resets_at {
+            Some(at) if at <= now => 0.0,
+            _ => window.used_percent.clamp(0.0, 100.0),
+        })
+        .max_by(f64::total_cmp)
+}
+
+/// "Weekly · Opus" only counts what an Opus model spends.
+fn applies(window: &LimitWindow, model: &ModelInfo) -> bool {
+    let Some((_, only)) = window.label.split_once(" · ") else { return true };
+    let only = only.to_lowercase();
+    model.name.to_lowercase().contains(&only) || model.id.to_lowercase().contains(&only)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -286,6 +346,115 @@ mod tests {
         let [section] = &sections(reads, 1000.0)[..] else { panic!("one section") };
         assert_eq!((section.windows.len(), section.note.as_deref()), (1, None));
         assert_eq!(section.servers, ["studio", "laptop"]);
+    }
+
+    fn account(id: &str, agent: Agent) -> AgentAccount {
+        AgentAccount {
+            id: id.into(),
+            agent,
+            name: id.into(),
+            folder: String::new(),
+            shares_sessions: false,
+            variables: vec![],
+            email: None,
+            plan: None,
+        }
+    }
+
+    fn model(id: &str, name: &str, agent: Agent, account: &str) -> ModelInfo {
+        ModelInfo {
+            id: id.into(),
+            name: name.into(),
+            agent,
+            account: account.into(),
+            efforts: vec![],
+            default_effort: None,
+        }
+    }
+
+    fn used_by(name: &str, agent: Agent, windows: Vec<LimitWindow>) -> AgentLimits {
+        AgentLimits { account_name: name.into(), ..read("studio", agent, Some(name), windows).limits }
+    }
+
+    #[test]
+    fn a_new_thread_starts_on_the_account_whose_tightest_window_is_least_used() {
+        let accounts =
+            [account("yekta", Agent::Claude), account("work", Agent::Claude), account("spare", Agent::Claude)];
+        let opus = |account: &str| model("opus", "Opus 5.5", Agent::Claude, account);
+        let models = [opus("yekta"), opus("work"), opus("spare")];
+        let limits = [
+            used_by(
+                "yekta",
+                Agent::Claude,
+                vec![window("Session", 10.0, 60.0, 18000), window("Weekly", 90.0, 60.0, 604800)],
+            ),
+            used_by(
+                "work",
+                Agent::Claude,
+                vec![window("Session", 60.0, 60.0, 18000), window("Weekly", 20.0, 60.0, 604800)],
+            ),
+            used_by(
+                "spare",
+                Agent::Claude,
+                vec![window("Session", 70.0, 60.0, 18000), window("Weekly", 10.0, 60.0, 604800)],
+            ),
+        ];
+        let roomier = roomier(&accounts, &models, &limits, 1000.0);
+        assert_eq!(roomier["yekta"]["opus"], "work");
+        assert_eq!(roomier["spare"]["opus"], "work");
+        assert!(!roomier.contains_key("work"));
+    }
+
+    #[test]
+    fn a_window_of_another_model_doesnt_count_and_one_that_reset_is_unused() {
+        let accounts = [account("yekta", Agent::Claude), account("work", Agent::Claude)];
+        let models = [model("opus", "Opus 5.5", Agent::Claude, ""), model("fable", "Fable 5.1", Agent::Claude, "")];
+        let mut reset = window("Session", 95.0, 60.0, 18000);
+        reset.resets_at = Some(900.0);
+        let limits = [
+            used_by(
+                "yekta",
+                Agent::Claude,
+                vec![window("Session", 30.0, 60.0, 18000), window("Weekly", 30.0, 60.0, 604800)],
+            ),
+            used_by(
+                "work",
+                Agent::Claude,
+                vec![reset, window("Weekly", 10.0, 60.0, 604800), window("Weekly · Fable", 99.0, 60.0, 604800)],
+            ),
+        ];
+        let roomier = roomier(&accounts, &models, &limits, 1000.0);
+        assert_eq!(roomier["yekta"]["opus"], "work");
+        assert!(!roomier["yekta"].contains_key("fable"));
+        assert_eq!(roomier["work"]["fable"], "yekta");
+    }
+
+    #[test]
+    fn a_new_thread_stays_where_it_is_unless_another_account_is_clearly_roomier() {
+        let accounts = [
+            account("yekta", Agent::Claude),
+            account("close", Agent::Claude),
+            account("unknown", Agent::Claude),
+            account("other-model", Agent::Claude),
+            account("codex", Agent::Codex),
+        ];
+        let models = [
+            model("opus", "Opus 5.5", Agent::Claude, "yekta"),
+            model("opus", "Opus 5.5", Agent::Claude, "close"),
+            model("opus", "Opus 5.5", Agent::Claude, "unknown"),
+            model("sonnet", "Sonnet 5.5", Agent::Claude, "other-model"),
+            model("gpt", "GPT", Agent::Codex, "codex"),
+        ];
+        let mut failed = used_by("unknown", Agent::Claude, vec![window("Session", 0.0, 60.0, 18000)]);
+        failed.error = Some("It didn't answer in time.".into());
+        let limits = [
+            used_by("yekta", Agent::Claude, vec![window("Session", 50.0, 60.0, 18000)]),
+            used_by("close", Agent::Claude, vec![window("Session", 47.0, 60.0, 18000)]),
+            failed,
+            used_by("other-model", Agent::Claude, vec![window("Session", 0.0, 60.0, 18000)]),
+            used_by("codex", Agent::Codex, vec![window("Session", 0.0, 60.0, 18000)]),
+        ];
+        assert!(roomier(&accounts, &models, &limits, 1000.0).is_empty());
     }
 
     #[test]

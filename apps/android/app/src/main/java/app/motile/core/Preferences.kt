@@ -27,6 +27,11 @@ object Preferences {
 
     fun remove(key: String) = shared.edit { remove(key) }
 
+    /** Whether a new thread starts on the account of its agent that has used the least of its limits, rather than the one last chosen. */
+    var managesNewThreads: Boolean
+        get() = bool("providerLimits.manageNewThreads")
+        set(on) = set("providerLimits.manageNewThreads", on)
+
     /** A map of strings, kept as JSON. */
     fun strings(key: String): Map<String, String> {
         val json = string(key)?.let(::parseJSON) ?: return emptyMap()

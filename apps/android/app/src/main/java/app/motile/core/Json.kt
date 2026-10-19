@@ -48,6 +48,12 @@ fun JSON.objects(key: String): List<JSON> = (this[key] as? JsonArray)?.mapNotNul
 fun JSON.strings(key: String): List<String> =
     (this[key] as? JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.takeIf { p -> p.isString }?.content } ?: emptyList()
 
+/** An object of strings by name, without what isn't a string. */
+fun JSON.stringMap(key: String): Map<String, String> {
+    val found = obj(key) ?: return emptyMap()
+    return found.keys.mapNotNull { name -> found.optionalString(name)?.let { name to it } }.toMap()
+}
+
 /** A list of numbers, like the core's `[start, length, palette index]` spans. */
 fun JSON.numbers(key: String): List<Double> = (this[key] as? JsonArray)?.let(::numbersOf) ?: emptyList()
 

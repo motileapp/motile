@@ -1078,7 +1078,14 @@ final class AppStore {
         draft.model = defaults.string(forKey: "new.model-\(server.id)")
         draft.agentAccount = defaults.string(forKey: "new.agentAccount-\(server.id)")
         draft.effort = defaults.string(forKey: "new.effort-\(server.id)")
+        guard defaults.bool(forKey: AppStore.managesNewThreadsKey), let roomier = server.roomier(than: draft.agentAccount, model: draft.model) else { return }
+        draft.agentAccount = roomier.account
+        draft.model = roomier.model
     }
+
+    /// Whether a new thread starts on the account of its agent that has used the least of its
+    /// limits, rather than the one last chosen.
+    static let managesNewThreadsKey = "providerLimits.manageNewThreads"
 
     /// Has the next draft start with what was just chosen, and only that.
     private func rememberChoices(of draft: ThreadDraft, changedFrom before: ThreadDraft) {
@@ -1147,10 +1154,11 @@ final class AppStore {
         updateDraft { draft in
             draft.projectID = projectID
             draft.base = nil
-            guard server(of: draft)?.id != from else { return }
-            applyLastSettings(to: &draft)
         }
-        if selectedDraft.flatMap(server(of:))?.id != from { refreshComposerModels() }
+        guard let index = threadDrafts.firstIndex(where: { selection == .draft($0.id) }), server(of: threadDrafts[index])?.id != from else { return }
+        applyLastSettings(to: &threadDrafts[index])
+        saveThreadDrafts()
+        refreshComposerModels()
     }
 
     /// Has the open draft's server ask its agents what models they run, so that its menus offer
