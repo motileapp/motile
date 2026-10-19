@@ -112,6 +112,7 @@ pub fn frame_dump(
                 window_height: 900.,
                 text_size: crate::theme::PROSE_SIZE,
                 surface: crate::theme::Surface::Background,
+                ground: None,
                 sink: Rc::new(|_, _, _| {}),
                 store: None,
             };

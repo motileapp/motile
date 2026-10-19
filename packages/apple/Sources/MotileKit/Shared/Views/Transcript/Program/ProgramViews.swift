@@ -333,6 +333,7 @@ final class ProgramStackView: ProgramNodeView {
             face.fill = card.soft ? box.surface.platform(.box) : Theme.card
             face.stroke = card.soft ? nil : Theme.borderCard
             face.radius = card.nested ? Radius.md : Radius.lg
+            clip(radius: CGFloat(card.padding ?? 16) < face.radius ? face.radius : nil)
         default:
             break
         }
@@ -376,6 +377,7 @@ final class ProgramPressableView: ProgramNodeView {
         guard case .pressable(let node) = box.node.kind else { return }
         let radius = ProgramStyle.radius(node.radius, side: min(box.size.width, box.size.height))
         for view in [face, wash, ring] { view.radius = radius }
+        clip(radius: CGFloat(node.padding) < radius ? radius : nil)
         ring.stroke = node.ring ? Theme.borderAccent : nil
         mark.picked = true
         mark.isHidden = !node.ring

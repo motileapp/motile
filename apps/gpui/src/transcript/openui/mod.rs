@@ -54,6 +54,8 @@ pub struct UiCx {
     /// The size of the text around the node, which a formula is set to.
     pub text_size: f32,
     pub surface: Surface,
+    /// What is painted under the node where it isn't its surface's own colour.
+    pub ground: Option<Hsla>,
     pub sink: Sink,
     pub store: Option<Entity<Store>>,
 }
@@ -77,7 +79,12 @@ impl UiCx {
     }
 
     pub fn on(&self, surface: Surface) -> Self {
-        Self { surface, ..self.clone() }
+        Self { surface, ground: None, ..self.clone() }
+    }
+
+    /// On a fill of its own over the surface.
+    pub fn over(&self, ground: Option<Hsla>) -> Self {
+        Self { ground: ground.or(self.ground), ..self.clone() }
     }
 }
 
@@ -104,6 +111,7 @@ pub fn ui_row(model: &RowModel, ctx: &RowContext, window: &mut Window, cx: &mut 
         window_height: f32::from(window.viewport_size().height),
         text_size: crate::theme::PROSE_SIZE,
         surface: Surface::Background,
+        ground: None,
         sink,
         store: Some(ctx.store.clone()),
     };

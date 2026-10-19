@@ -4,7 +4,7 @@ use std::ops::Range;
 
 use gpui_kit::prelude::*;
 use gpui_kit::*;
-use motile_core::render::openui::tree::{Color, Radius, RadiusKind, Rich, TextStyle, Weight};
+use motile_core::render::openui::tree::{Color, Radius, RadiusKind, Rich, TextStyle, UiKind, UiNode, Weight};
 
 use super::UiCx;
 use crate::theme::{self, Radius as Radii, colors};
@@ -191,4 +191,74 @@ pub fn set_text(
     }
     let code = styled.iter().filter(|(_, bits)| prose::is_code(*bits)).map(|(range, _)| range.clone()).collect();
     Set { text: text.into(), runs, links, code }
+}
+
+/// GPUI clips to rectangles, so what a rounded container's children paint into its corners would
+/// show past them. Where one paints a fill there, the corners outside the rounding are painted
+/// over in the colour under the container, and its `border` drawn again over them.
+pub fn keep_corners(
+    element: Stateful<Div>,
+    children: &[std::sync::Arc<UiNode>],
+    radius: f32,
+    padding: f32,
+    border: Option<Hsla>,
+    cx: &UiCx,
+    app: &App,
+) -> Stateful<Div> {
+    let inset = radius - padding;
+    if inset <= 0. || !children.iter().any(|child| fills_corner(child, inset)) {
+        return element;
+    }
+    let under = cx.ground.unwrap_or_else(|| cx.surface.color(colors(app)));
+    let masks = canvas(
+        |_, _, _| {},
+        move |bounds, _, window, _| {
+            let r = px(radius.min(f32::from(bounds.size.width.min(bounds.size.height)) / 2.));
+            let bend = r * (1. - 0.5523);
+            let corners = [
+                (bounds.origin, 1., 1.),
+                (bounds.top_right(), -1., 1.),
+                (bounds.bottom_left(), 1., -1.),
+                (bounds.bottom_right(), -1., -1.),
+            ];
+            for (corner, x, y) in corners {
+                let mut path = PathBuilder::fill();
+                path.move_to(corner);
+                path.line_to(point(corner.x + r * x, corner.y));
+                path.cubic_bezier_to(
+                    point(corner.x, corner.y + r * y),
+                    point(corner.x + bend * x, corner.y),
+                    point(corner.x, corner.y + bend * y),
+                );
+                path.close();
+                if let Ok(path) = path.build() {
+                    window.paint_path(path, under);
+                }
+            }
+        },
+    )
+    .absolute()
+    .inset_0();
+    element.relative().child(masks).when_some(border, |element, border| {
+        element.child(div().absolute().inset_0().rounded(px(radius)).border_1().border_color(border))
+    })
+}
+
+/// Whether a child paints a fill into a corner rounded by `inset` that its own rounding doesn't keep in.
+fn fills_corner(node: &UiNode, inset: f32) -> bool {
+    match &node.kind {
+        UiKind::Box { background, radius: own, padding, children, .. } => {
+            let own = own.as_ref().map_or(0., radius);
+            (background.is_some() && own < inset)
+                || (*padding < inset && children.iter().any(|child| fills_corner(child, inset - padding)))
+        }
+        UiKind::Col { children, .. } | UiKind::Row { children, .. } | UiKind::Grid { children, .. } => {
+            children.iter().any(|child| fills_corner(child, inset))
+        }
+        UiKind::Image { radius: own, .. } | UiKind::SearchImage { radius: own, .. } => radius(own) < inset,
+        UiKind::Pressable { radius: own, .. } => radius(own) < inset,
+        UiKind::Card { nested, .. } => (if *nested { Radii::MD } else { Radii::LG }) < inset,
+        UiKind::Table { .. } | UiKind::Code { .. } => Radii::LG < inset,
+        _ => false,
+    }
 }
