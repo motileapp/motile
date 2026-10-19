@@ -824,10 +824,13 @@ mod tests {
             created_at: 0.0,
             media: vec![],
             parent: None,
+            ui: Default::default(),
             kind: motile_protocol::wire::ItemKind::User {
                 text: "Earlier".into(),
                 attachments: vec![],
                 skills: Vec::new(),
+                context: None,
+                programs: Vec::new(),
             },
         };
         let range = crate::handoff::Range::Full;

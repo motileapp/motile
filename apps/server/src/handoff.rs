@@ -5,6 +5,7 @@ use motile_protocol::wire::{Item, ItemKind, ToolCall, ToolStatus};
 use serde_json::{Value, json};
 
 use crate::agents::PLAN_TOOL;
+use crate::ui;
 
 /// The most a handoff takes, in bytes, however much room the context has.
 pub const HANDOFF_CAP: usize = 64_000;
@@ -200,9 +201,10 @@ fn header(
 
 fn historical(item: &Item) -> Option<HistoricalItem> {
     let (kind, role, status, text) = match &item.kind {
-        ItemKind::User { text, .. } | ItemKind::Notice { text, .. } => {
-            ("user_message", Role::User, "done".to_string(), text.clone())
+        ItemKind::User { text, context, programs, .. } => {
+            ("user_message", Role::User, "done".to_string(), ui::told(text, context.as_ref(), programs))
         }
+        ItemKind::Notice { text, .. } => ("user_message", Role::User, "done".to_string(), text.clone()),
         ItemKind::Assistant { text } => ("assistant_message", Role::Assistant, "done".to_string(), text.clone()),
         ItemKind::Tool { call } if call.name == "Bash" => {
             let status = tool_status(call.status).to_string();
@@ -259,11 +261,29 @@ mod tests {
     use super::*;
 
     fn item(seq: u64, kind: ItemKind) -> Item {
-        Item { id: format!("i{seq}"), seq, rev: seq, created_at: 0.0, media: vec![], parent: None, kind }
+        Item {
+            id: format!("i{seq}"),
+            seq,
+            rev: seq,
+            created_at: 0.0,
+            media: vec![],
+            parent: None,
+            ui: Default::default(),
+            kind,
+        }
     }
 
     fn user(seq: u64, text: &str) -> Item {
-        item(seq, ItemKind::User { text: text.into(), attachments: vec![], skills: Vec::new() })
+        item(
+            seq,
+            ItemKind::User {
+                text: text.into(),
+                attachments: vec![],
+                skills: Vec::new(),
+                context: None,
+                programs: Vec::new(),
+            },
+        )
     }
 
     fn reply(seq: u64, text: &str) -> Item {
@@ -284,6 +304,21 @@ mod tests {
 
     fn texts(handoff: &Handoff) -> Vec<&str> {
         handoff.items.iter().map(|item| item.text.as_str()).collect()
+    }
+
+    #[test]
+    fn a_message_is_told_with_what_its_program_sent() {
+        let context = Some(json!(["User clicked: Book it", { "people": 4 }]));
+        let message =
+            ItemKind::User { text: "Book it".into(), attachments: vec![], skills: vec![], context, programs: vec![] };
+
+        let handoff =
+            build("t", &[item(0, message), reply(1, "Booked.")], Range::Full, 2, HANDOFF_CAP).unwrap().unwrap();
+
+        assert_eq!(
+            texts(&handoff),
+            ["Book it\ncontext and form values = [\"User clicked: Book it\",{\"people\":4}]", "Booked."]
+        );
     }
 
     #[test]

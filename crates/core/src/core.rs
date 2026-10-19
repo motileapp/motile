@@ -69,6 +69,10 @@ const LIMITS_PROTOCOL: u32 = 17;
 const SEARCH_PROTOCOL: u32 = 26;
 /// The first protocol whose servers list the skills of their projects.
 const SKILLS_PROTOCOL: u32 = 28;
+/// The first protocol whose servers keep the state of programs and run their tools and lookups:
+/// `SetUi`, `UiTool`, `UiImages`, `UiRoute`, and a message's `context`.
+#[allow(dead_code)]
+const UI_PROTOCOL: u32 = 34;
 /// How long the skills a server listed are offered before it is asked again.
 const SKILLS_FRESH: Duration = Duration::from_secs(30);
 /// How long the search has to stay as it is before the servers are asked.
@@ -1653,7 +1657,13 @@ impl Core {
         if let (Some(call), Some(agent)) = (call, &started)
             && !agent.prompt.is_empty()
         {
-            let kind = ItemKind::User { text: agent.prompt.clone(), attachments: Vec::new(), skills: Vec::new() };
+            let kind = ItemKind::User {
+                text: agent.prompt.clone(),
+                attachments: Vec::new(),
+                skills: Vec::new(),
+                context: None,
+                programs: Vec::new(),
+            };
             items.insert(0, Item { id: format!("{agent_id}/prompt"), kind, ..call.clone() });
         }
         let mut transcript = open.transcript.beside();
@@ -1878,7 +1888,10 @@ impl Core {
                 let sink = self.sink.clone();
                 tokio::spawn(async move {
                     let sent = async {
-                        match link.request(&Request::Send { thread_id, new_thread, text, attachments, now }).await? {
+                        match link
+                            .request(&Request::Send { thread_id, new_thread, text, attachments, now, context: None })
+                            .await?
+                        {
                             Message::Sent { thread_id } => Ok(json!({ "thread_id": thread_id })),
                             other => bail!(
                                 "Your server gave an unexpected answer. Update it and try again. It said: {other:?}"

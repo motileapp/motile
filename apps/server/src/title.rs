@@ -322,11 +322,23 @@ mod tests {
     }
 
     fn said(id: &str, kind: ItemKind) -> Item {
-        Item { id: id.to_string(), seq: 0, rev: 0, created_at: 0.0, media: Vec::new(), parent: None, kind }
+        Item {
+            id: id.to_string(),
+            seq: 0,
+            rev: 0,
+            created_at: 0.0,
+            media: Vec::new(),
+            parent: None,
+            ui: Default::default(),
+            kind,
+        }
     }
 
     fn user(text: String) -> Item {
-        said("u", ItemKind::User { text, attachments: Vec::new(), skills: Vec::new() })
+        said(
+            "u",
+            ItemKind::User { text, attachments: Vec::new(), skills: Vec::new(), context: None, programs: Vec::new() },
+        )
     }
 
     fn assistant(text: String) -> Item {

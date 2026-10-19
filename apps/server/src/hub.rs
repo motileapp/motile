@@ -25,6 +25,7 @@ use motile_protocol::wire::{
     ThreadChange, ToolCall, ToolStatus, TurnChanges, TurnSummary, Worktree,
 };
 use motile_protocol::{error_text, now};
+use serde_json::Value;
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, ChildStdin, Command};
 use tokio::sync::{Mutex, broadcast, mpsc, watch};
@@ -42,7 +43,8 @@ use crate::pricing::{self, Prices};
 use crate::ricrac::Ricrac;
 use crate::sign_in::SignIns;
 use crate::store::{Continuation, Purpose, Session, Store, StoredProject, StoredThread, StoredWorktree, TitleSource};
-use crate::{agent_accounts, drafts, files, git, github, icons, limits, pacing, pull_requests, title};
+use crate::ui_lookups::Lookups;
+use crate::{agent_accounts, drafts, files, git, github, icons, limits, pacing, pull_requests, title, ui};
 
 mod children;
 
@@ -118,6 +120,7 @@ pub struct Hub {
     pub media: MediaStore,
     pub linear: Linear,
     pub ricrac: Ricrac,
+    pub lookups: Lookups,
     environment: Environment,
     threads: Mutex<HashMap<String, Live>>,
     /// Locked after `threads` when both are needed.
@@ -384,6 +387,7 @@ impl Hub {
             media,
             linear: Linear::from_environment(),
             ricrac: Ricrac::from_environment(),
+            lookups: Lookups::default(),
             environment,
             projects,
             git,
@@ -410,6 +414,21 @@ impl Hub {
         let port = self.mcp_port.get()?;
         let token = live.mcp_token.get_or_insert_with(|| self.mcp_tokens.mint(&live.stored.thread.id));
         Some(McpAccess { url: format!("http://127.0.0.1:{port}/mcp"), token: token.clone() })
+    }
+
+    pub fn environment(&self) -> &Environment {
+        &self.environment
+    }
+
+    /// One of the server's own threads, as it is now.
+    pub async fn thread(&self, thread_id: &str) -> Option<Thread> {
+        self.threads.lock().await.get(thread_id).map(|live| live.stored.thread.clone())
+    }
+
+    /// The projects' names, by id.
+    pub async fn project_names(&self) -> HashMap<String, String> {
+        let projects = self.projects_of(&self.projects.lock().await);
+        projects.into_iter().map(|project| (project.id, project.name)).collect()
     }
 
     pub fn store(&self) -> &Store {
@@ -740,7 +759,7 @@ impl Hub {
 
     /// Has the thread's agent go on with what it was doing.
     pub async fn continue_thread(self: &Arc<Self>, thread_id: &str) -> anyhow::Result<()> {
-        self.send(Some(thread_id.to_string()), None, CONTINUE_PROMPT.to_string(), Vec::new(), false).await?;
+        self.send(Some(thread_id.to_string()), None, CONTINUE_PROMPT.to_string(), Vec::new(), false, None).await?;
         Ok(())
     }
 
@@ -862,9 +881,10 @@ impl Hub {
         text: String,
         attachments: Vec<String>,
         now: bool,
+        context: Option<Value>,
     ) -> anyhow::Result<String> {
         let text = text.trim().to_string();
-        if text.is_empty() && attachments.is_empty() {
+        if text.is_empty() && attachments.is_empty() && context.is_none() {
             bail!("There is nothing to send.");
         }
         if self.closing.load(Ordering::SeqCst) {
@@ -906,20 +926,20 @@ impl Hub {
         let live = threads.get_mut(&thread_id).context("That thread no longer exists.")?;
         // A message goes on with the thread, so it no longer waits to be continued.
         live.stored.thread.interruption = None;
-        let media = self.keep_attached(&thread_id, &attachments)?;
-        let prompt = prompt(&text, &attachments);
-        let skills = self.mentioned_skills(&live.stored.thread, &text);
+        let message = Queued {
+            id: new_id(),
+            media: self.keep_attached(&thread_id, &attachments)?,
+            skills: self.mentioned_skills(&live.stored.thread, &text),
+            programs: ui::states(&self.store.programs_changed(&thread_id)?),
+            text: text.clone(),
+            attachments,
+            held: false,
+            sending: false,
+            notice: None,
+            context,
+        };
         if live.preparing.is_some() {
-            live.queued.push(Queued {
-                id: new_id(),
-                text,
-                attachments,
-                media,
-                skills,
-                held: false,
-                sending: false,
-                notice: None,
-            });
+            live.queued.push(message);
             live.save_queued(&self.store)?;
             live.send_activity();
             return Ok(thread_id);
@@ -927,18 +947,9 @@ impl Hub {
         if let Some(run) = live.run.as_ref().filter(|run| run.resting.is_none()) {
             // An agent that is only monitoring takes the message right away.
             let idle = run.received_result;
-            live.note_skills(&skills);
-            if !idle || !live.write_prompt(&prompt, &new_id()) {
-                live.queued.push(Queued {
-                    id: new_id(),
-                    text,
-                    attachments,
-                    media,
-                    skills,
-                    held: false,
-                    sending: false,
-                    notice: None,
-                });
+            live.note_skills(&message.skills);
+            if !idle || !live.write_prompt(&prompt(&message), &message.id) {
+                live.queued.push(message);
                 if now && !idle && live.steer(&self.store, live.queued.len() - 1)? {
                     return Ok(thread_id);
                 }
@@ -946,17 +957,39 @@ impl Hub {
                 live.send_activity();
                 return Ok(thread_id);
             }
-            live.append_message(&self.store, new_id(), text, attachments, media, skills)?;
+            live.append_queued(&self.store, message)?;
             self.resume(live)?;
             return Ok(thread_id);
         }
         self.note_handoff(live)?;
-        live.append_message(&self.store, new_id(), text.clone(), attachments, media, skills)?;
+        let prompt = prompt(&message);
+        live.append_queued(&self.store, message)?;
         self.start_turn(live, prompt)?;
         if is_new {
             tokio::spawn(self.clone().title_from_first_message(thread_id.clone(), text));
         }
         Ok(thread_id)
+    }
+
+    /// Keeps the state the user left a program of an assistant item in. Only the server's own
+    /// threads keep it: a removed server's copies are as their server left them.
+    pub async fn set_ui(&self, thread_id: &str, item_id: &str, block: u32, state: Value) -> anyhow::Result<()> {
+        if state.to_string().len() > ui::MAX_STATE {
+            bail!("That program's state is too large to keep.");
+        }
+        let mut threads = self.threads.lock().await;
+        let live = threads.get_mut(thread_id).context("That thread isn't one of your server's own.")?;
+        live.set_ui(&self.store, item_id, block, state)
+    }
+
+    /// Photos of what `query` names, kept as the thread's media.
+    pub async fn ui_images(&self, thread_id: &str, query: &str) -> anyhow::Result<Vec<Media>> {
+        self.thread(thread_id).await.context("That thread isn't one of your server's own.")?;
+        let images = self.lookups.images(&self.media, query).await?;
+        for image in &images {
+            self.store.save_media(thread_id, &image.id)?;
+        }
+        Ok(images)
     }
 
     /// Notes that the thread has the files, and copies the images and videos among them.
@@ -2100,7 +2133,7 @@ impl Hub {
             let before = self.lock_watched().insert(thread_id.clone(), seen.clone());
             let Some(before) = before else { continue };
             let Some(text) = news(&found, &before, &seen) else { continue };
-            if let Err(error) = self.send(Some(thread_id.clone()), None, text, Vec::new(), false).await {
+            if let Err(error) = self.send(Some(thread_id.clone()), None, text, Vec::new(), false, None).await {
                 tracing::warn!(thread_id, "couldn't tell the agent about its pull request: {error:#}");
             }
         }
@@ -2944,7 +2977,9 @@ impl Hub {
     ) -> usize {
         let message = items.iter().find(|item| item.seq == message_seq).map(|item| &item.kind);
         let cost = match message {
-            Some(ItemKind::User { text, attachments, .. }) => handoff::message_cost(text, attachments),
+            Some(ItemKind::User { text, attachments, context, programs, .. }) => {
+                handoff::message_cost(&ui::told(text, context.as_ref(), programs), attachments)
+            }
             _ => prompt.len(),
         };
         let model = thread.model.as_deref().or(session.model.as_deref());
@@ -3448,7 +3483,7 @@ impl Hub {
         // What the agent was given and didn't take starts the next turn, already in the transcript.
         let given = std::mem::take(&mut live.given);
         if !interrupted && !given.is_empty() {
-            let prompts: Vec<String> = given.iter().map(|given| prompt(&given.text, &given.attachments)).collect();
+            let prompts: Vec<String> = given.iter().map(prompt).collect();
             if let Err(error) = self.start_turn(live, prompts.join("\n\n")) {
                 tracing::error!(thread_id, "couldn't start the next turn: {error:#}");
             }
@@ -3471,7 +3506,7 @@ impl Hub {
     }
 
     fn start_next_turn(self: &Arc<Self>, live: &mut Live, queued: Queued) -> anyhow::Result<()> {
-        let prompt = prompt(&queued.text, &queued.attachments);
+        let prompt = prompt(&queued);
         live.save_queued(&self.store)?;
         self.note_handoff(live)?;
         live.append_queued(&self.store, queued)?;
@@ -3699,7 +3734,7 @@ impl Live {
     fn give(&mut self, store: &Store, index: usize) -> anyhow::Result<bool> {
         self.note_skills(&self.queued[index].skills.clone());
         let queued = &self.queued[index];
-        if !self.write_prompt(&prompt(&queued.text, &queued.attachments), &queued.id) {
+        if !self.write_prompt(&prompt(queued), &queued.id) {
             return Ok(false);
         }
         self.note_given(store, index)?;
@@ -3714,7 +3749,7 @@ impl Live {
         let thread = &self.stored.thread;
         let turn_id = self.run.as_ref().and_then(|run| run.turn_id.as_deref());
         let session_id = self.stored.session_id.as_deref();
-        let prompt = prompt(&queued.text, &queued.attachments);
+        let prompt = prompt(queued);
         let line = agents::steer(thread.agent, session_id, turn_id, &prompt, &self.skills, &queued.id);
         if !line.is_some_and(|line| self.write(line)) {
             return Ok(false);
@@ -3840,33 +3875,40 @@ impl Live {
         Ok(())
     }
 
-    /// Adds a message of the user with the images and videos attached to it.
-    /// Adds the user's message to the transcript. A queued message keeps its id, so that the
-    /// client can tell which waiting row it replaces.
-    fn append_message(
-        &mut self,
-        store: &Store,
-        id: String,
-        text: String,
-        attachments: Vec<String>,
-        media: Vec<Media>,
-        skills: Vec<SkillMention>,
-    ) -> anyhow::Result<()> {
-        self.note_skills(&skills);
-        let mut item = self.new_item(id, ItemKind::User { text, attachments, skills });
-        item.media = media;
-        self.last_message_seq = Some(item.seq);
-        store.save_item(&self.stored.thread.id, &item)?;
-        let _ = self.updates.send(Message::Items { items: vec![item] });
-        Ok(())
+    fn set_ui(&mut self, store: &Store, item_id: &str, block: u32, state: Value) -> anyhow::Result<()> {
+        let found = match self.open.get(item_id) {
+            Some(item) => Some(item.clone()),
+            None => store.item(&self.stored.thread.id, item_id)?,
+        };
+        let mut item = found.context("That reply is no longer in the thread.")?;
+        if !matches!(item.kind, ItemKind::Assistant { .. }) {
+            bail!("Only an agent's reply has programs.");
+        }
+        match state {
+            Value::Null => item.ui.remove(&block),
+            state => item.ui.insert(block, state),
+        };
+        item.rev = self.next_rev();
+        if let Some(open) = self.open.get_mut(item_id) {
+            open.clone_from(&item);
+            self.unsaved.remove(item_id);
+        }
+        self.save(store, item)
     }
 
-    /// Adds a message that waited to the transcript, as the user's message or as the notice it is.
+    /// Adds a message to the transcript, as the user's message with the images and videos attached
+    /// to it, or as the notice it is. A queued message keeps its id, so that the client can tell
+    /// which waiting row it replaces.
     fn append_queued(&mut self, store: &Store, queued: Queued) -> anyhow::Result<()> {
-        let Some(notice) = queued.notice else {
-            return self.append_message(store, queued.id, queued.text, queued.attachments, queued.media, queued.skills);
+        let Queued { id, text, attachments, media, skills, notice, context, programs, .. } = queued;
+        let item = match notice {
+            Some(notice) => self.new_item(id, ItemKind::Notice { notice, text }),
+            None => {
+                self.note_skills(&skills);
+                let kind = ItemKind::User { text, attachments, skills, context, programs };
+                Item { media, ..self.new_item(id, kind) }
+            }
         };
-        let item = self.new_item(queued.id, ItemKind::Notice { notice, text: queued.text });
         self.last_message_seq = Some(item.seq);
         self.save(store, item)
     }
@@ -3917,7 +3959,17 @@ impl Live {
     fn new_item(&mut self, id: String, kind: ItemKind) -> Item {
         let seq = self.stored.next_seq;
         self.stored.next_seq += 1;
-        Item { id, seq, rev: self.next_rev(), created_at: now(), media: Vec::new(), parent: self.parent.clone(), kind }
+        let parent = self.parent.clone();
+        Item {
+            id,
+            seq,
+            rev: self.next_rev(),
+            created_at: now(),
+            media: Vec::new(),
+            parent,
+            ui: Default::default(),
+            kind,
+        }
     }
 
     /// Adds the item, or replaces what the running turn said about it before.
@@ -4276,7 +4328,28 @@ pub(crate) fn file_name(path: &str) -> &str {
     Path::new(path).file_name().and_then(|name| name.to_str()).unwrap_or(path)
 }
 
-fn prompt(text: &str, attachments: &[String]) -> String {
+/// A message of the user's with nothing attached to it.
+fn plain_message(text: String) -> Queued {
+    Queued {
+        id: new_id(),
+        text,
+        attachments: Vec::new(),
+        media: Vec::new(),
+        skills: Vec::new(),
+        held: false,
+        sending: false,
+        notice: None,
+        context: None,
+        programs: Vec::new(),
+    }
+}
+
+fn prompt(message: &Queued) -> String {
+    let text = ui::told(&message.text, message.context.as_ref(), &message.programs);
+    with_attachments(&text, &message.attachments)
+}
+
+fn with_attachments(text: &str, attachments: &[String]) -> String {
     if attachments.is_empty() {
         return text.to_string();
     }
@@ -4390,8 +4463,30 @@ mod tests {
 
     #[test]
     fn prompt_lists_attachments_after_the_text() {
-        assert_eq!(prompt("Look", &["/a".to_string(), "/b".to_string()]), "Look\n\nAttached files:\n- /a\n- /b");
-        assert_eq!(prompt("", &["/a".to_string()]), "Attached files:\n- /a");
+        let attachments = ["/a".to_string(), "/b".to_string()];
+        assert_eq!(with_attachments("Look", &attachments), "Look\n\nAttached files:\n- /a\n- /b");
+        assert_eq!(with_attachments("", &["/a".to_string()]), "Attached files:\n- /a");
+    }
+
+    #[test]
+    fn a_prompt_tells_what_the_program_sent_before_the_attachments() {
+        let message = Queued {
+            id: "m".into(),
+            text: "Book it".into(),
+            attachments: vec!["/a".into()],
+            media: Vec::new(),
+            skills: Vec::new(),
+            held: false,
+            sending: false,
+            notice: None,
+            context: Some(serde_json::json!(["User clicked: Book it", {"people": 4}])),
+            programs: Vec::new(),
+        };
+
+        assert_eq!(
+            prompt(&message),
+            "Book it\ncontext and form values = [\"User clicked: Book it\",{\"people\":4}]\n\nAttached files:\n- /a"
+        );
     }
 
     #[test]

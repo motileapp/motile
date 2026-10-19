@@ -177,6 +177,16 @@ shadcn's own colours, opacities and radii are gone from the theme.
   in for Linear.
 - `ricrac.rs`: the same for Ricrac (ricrac.app, our own tracker), through its REST operations
   (`POST /v1/ops/<name>`) where Linear's is GraphQL. `MOTILE_RICRAC_URL` stands in for Ricrac.
+- `ui.rs`: the programs agents show in their replies (OpenUI Lang in an `openui-lang` fence). An
+  assistant item keeps the state the user left each program in (`ui`, by block, set with `SetUi`),
+  which syncs like the rest of the item. A message that a program sent (`context`) and the state of
+  the programs the user changed since the last message (`programs`) reach the agent after its text,
+  a line each: `context and form values = <JSON>`.
+- `ui_tools.rs`: the tools a program's `Query` and `Mutation` call (`UiTool`), inside the thread's
+  folder, with their JSON schemas for the agent's prompt. `run` runs a command the user confirmed,
+  or any under full access.
+- `ui_lookups.rs`: a program's photos from Wikipedia and Wikimedia Commons, kept as the thread's
+  media (`UiImages`), and street routes from OSRM (`UiRoute`), both kept in memory a while.
 - `icons.rs`: finds a project's icon in its folder.
 - `access.rs`: asks the auth server which clients belong to the account, and which servers it
   deleted completely.
@@ -570,6 +580,9 @@ clients. It replays the recorded output in `fixtures/` or makes up a turn, depen
 | "hit the limit" | Is stopped by the usage limit, which resets `FAKE_AGENT_RESET` seconds later |
 | "agents hit the limit" | Is stopped by the usage limit while two agents it started work, which it stops after the turn (Claude Code) |
 | "crash before taking this" | Exits before it takes the prompt (Claude Code) |
+| "show the ui <name>" | Shows the program `fixtures/openui/<name>.oui`, streamed |
+| "show the dashboard" | Shows a program that reads `git_log` and `usage` with `Query` |
+| "ask with a form" | Shows a form that sends its values with `@ToAssistant`; told them, says what they are |
 | "$ship-it", "$review" | Says it followed the skill: the project's in `.claude/skills` (`.agents/skills` for Codex), or one it makes up |
 
 As `claude auth login` it signs in with any code but one with "wrong" in it, as the folder's

@@ -1,0 +1,9 @@
+root = Card([Title("Make it yours", "lg"), form])
+$name = ""
+$people = 4
+$date = "2026-10-24"
+$pace = "balanced"
+$weather = "mild"
+$notes = ""
+form = Form([Grid([Input($name, "Name", "text", "Your name"), Input($people, "Travelers", "number")], 2, 200, 4), Grid([DatePicker($date, "Start date"), Select($pace, [{value: "relaxed", label: "Relaxed"}, {value: "balanced", label: "Balanced"}, {value: "active", label: "Active"}], "Preferred pace")], 2, 200, 4), RadioGroup($weather, [{value: "hot", label: "Hot / tropical"}, {value: "mild", label: "Mild / mixed weather"}, {value: "cold", label: "Cold / rainy"}], "What weather are you packing for?"), TextArea($notes, "Anything else?", "A place you would love to visit…", 3), submit])
+submit = Button("Customize my trip", @ToAssistant("Customize my trip", {name: $name, people: $people, date: $date, pace: $pace, weather: $weather, notes: $notes}), "solid", null, null, "arrow-right")

@@ -1,0 +1,12 @@
+root = Col([head, kpis, Grid([spend, commits], 2, 300, 4)], 4)
+$days = "14"
+log = Query("git_log", {limit: 10}, [])
+usage = Query("usage", {days: $days}, [], 300)
+daily = @Bucket(usage, "date", "day", "cost_usd")
+head = Row([Col([Title("This project", "lg"), Caption("What your server's agents spent, and the latest commits")], 1), Spacer(), SegmentedControl($days, [{value: "7", label: "7d"}, {value: "14", label: "14d"}, {value: "30", label: "30d"}])], 3, null, null, true)
+kpis = Grid([k1, k2, k3], 3, 150, 3)
+k1 = Card([Caption("Spent"), Title(@Format(@Sum(usage.cost_usd), "currency"), "xl")], null, 3, 1)
+k2 = Card([Caption("Tokens"), Title(@Format(@Sum(usage.tokens), "compact", 1), "xl")], null, 3, 1)
+k3 = Card([Caption("Commits"), Title(@Format(@Count(log)), "xl")], null, 3, 1)
+spend = Card([Title("Spent by day", "sm"), Chart("bar", daily, "key", ["value"], "currency")], null, 4, 2)
+commits = Card([Title("Latest commits", "sm"), Table(["Commit", "Subject", "Author"], @Each(log, "c", [c.short, c.subject, c.author]))], null, 4, 2)

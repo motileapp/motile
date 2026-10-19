@@ -1,0 +1,9 @@
+root = Card([head, chart, Grid([pie, donut], 2, 260, 6)])
+$type = "bar"
+head = Row([Col([Title("Drone services revenue", "md"), Caption("Illustrative revenue path, not a forecast")], 1), Spacer(), SegmentedControl($type, ["bar", "line", "area"])], 3, null, null, true)
+chart = Chart($type, rows, "year", ["Photography", "Inspection"], "currency", null, $type != "line")
+rows = [{year: "2025", Photography: 617000000, Inspection: 410000000}, {year: "2027", Photography: 820000000, Inspection: 690000000}, {year: "2030", Photography: 1240000000, Inspection: 1310000000}, {year: "2034", Photography: 1900000000, Inspection: 2350000000}]
+pie = Col([Title("How people get around", "sm"), Chart("pie", modes, "mode", ["share"], "percent")], 2)
+donut = Col([Title("Budget", "sm"), Chart("donut", budget, "item", ["amount"], "currency", "EUR")], 2)
+modes = [{mode: "Walking", share: 52}, {mode: "Transit", share: 31}, {mode: "Cycling", share: 17}]
+budget = [{item: "Lodging", amount: 840}, {item: "Food", amount: 420}, {item: "Transport", amount: 260}, {item: "Museums", amount: 90}]

@@ -102,7 +102,7 @@ mod tests {
 
     fn reply(id: &str, seq: u64, rev: u64, text: &str) -> Item {
         let kind = ItemKind::Assistant { text: text.into() };
-        Item { id: id.into(), seq, rev, created_at: 0.0, media: Vec::new(), parent: None, kind }
+        Item { id: id.into(), seq, rev, created_at: 0.0, media: Vec::new(), parent: None, ui: Default::default(), kind }
     }
 
     fn working() -> Activity {

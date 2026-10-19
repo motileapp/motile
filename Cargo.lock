@@ -2228,6 +2228,7 @@ dependencies = [
  "imagesize",
  "iroh",
  "libc",
+ "lru",
  "motile-core",
  "motile-protocol",
  "pulldown-cmark",
