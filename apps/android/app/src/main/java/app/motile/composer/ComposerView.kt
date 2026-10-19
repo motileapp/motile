@@ -178,7 +178,7 @@ private fun MonitoringStrip(thread: ThreadInfo) {
     val children = thread.children
     val agentsText = children?.runningText
     Row(Modifier.fillMaxWidth().composerStrip(ComposerStrip.Edge.Top), verticalAlignment = Alignment.CenterVertically) {
-        Icon(Symbol.Eye, ControlSize.Regular.symbol, Modifier.padding(start = ComposerStrip.inset + AgentsButton.lead, end = AgentsButton.symbolGap), color = Theme.colors.foreground)
+        Icon(Symbol.Eye, ControlSize.Small.symbol, Modifier.padding(start = ComposerStrip.inset + AgentsButton.lead, end = AgentsButton.symbolGap), color = Theme.colors.foreground)
         Text("Monitoring: ${Time.elapsed(thread.monitoringSince, now)}", style = ControlSize.Regular.font.copy(fontFeatureSettings = "tnum"), color = Theme.colors.foreground, maxLines = 1)
         if (children != null && agentsText != null) {
             // The button's own room before its symbol is the dot's on its other side.
@@ -220,7 +220,8 @@ private fun AgentsButton(text: String, children: ThreadChildren, modifier: Modif
     val store = LocalStore.current
     val button = @Composable { words: String ->
         ActionButton(
-            words, icon = Symbol.Bot, help = text, variant = ButtonVariant.Ghost, gap = AgentsButton.symbolGap,
+            words, icon = Symbol.Bot, help = text, variant = ButtonVariant.Ghost, symbolSize = ControlSize.Small.symbol,
+            gap = AgentsButton.symbolGap,
             tint = Theme.colors.process, margin = PaddingValues(vertical = ComposerStrip.inset),
         ) { store.rightPanel.open(PanelTab.Agents) }
     }

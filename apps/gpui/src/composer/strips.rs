@@ -90,7 +90,7 @@ pub fn monitoring_strip(
                 .ml(px(INSET + agents_button_lead()))
                 .mr(px(SYMBOL_GAP))
                 .flex_shrink_0()
-                .child(icons::symbol("eye", size.symbol()).text_color(c.foreground)),
+                .child(icons::symbol("eye", ControlSize::Small.symbol()).text_color(c.foreground)),
         )
         .child(
             div()
@@ -150,7 +150,7 @@ const SYMBOL_GAP: f32 = 4.;
 
 /// The eye before "Monitoring:" and the room either side of it.
 fn monitoring_eye_room() -> f32 {
-    INSET + agents_button_lead() + ControlSize::Regular.symbol_side() + SYMBOL_GAP
+    INSET + agents_button_lead() + ControlSize::Small.symbol_side() + SYMBOL_GAP
 }
 
 /// What a strip's sides take from the composer's width: its distance from the composer's
@@ -180,6 +180,7 @@ fn agents_button(store: &Entity<Store>, children: &Children, room: f32, window: 
         let store = store.clone();
         ActionButton::new("composer-agents", words)
             .symbol("bot")
+            .symbol_size(ControlSize::Small.symbol())
             .gap(SYMBOL_GAP)
             .help(text.clone())
             .ghost()

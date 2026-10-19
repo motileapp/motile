@@ -3503,6 +3503,26 @@ async fn a_thread_handed_from_claude_to_codex_and_back_tells_each_what_it_missed
 }
 
 #[tokio::test]
+async fn a_session_too_full_to_be_told_what_it_missed_is_left_for_a_new_one() {
+    let harness = Harness::with_sessions(fixture(Agent::Claude), &[("FAKE_AGENT_CONTEXT", "190000")]).await;
+    let connection = harness.connect().await;
+    let new_thread = full_access(&harness, &connection, Agent::Claude).await;
+    let thread_id = send(&connection, None, new_thread, "What is in README.md?").await;
+    finished_transcript(&connection, &thread_id).await;
+    switch_to(&connection, &thread_id, Agent::Codex).await;
+    turn(&connection, &thread_id, "Run greet.py").await;
+    switch_to(&connection, &thread_id, Agent::Claude).await;
+    let third = turn(&connection, &thread_id, "And in Cargo.toml?").await;
+
+    assert!(third.errors().is_empty(), "{:?}", third.errors());
+    let turns = claude_turns(&harness);
+    assert!(!turns.last().unwrap().contains("--resume"), "{turns:?}");
+    let prompt = harness.recorded_prompts().pop().unwrap();
+    assert!(prompt.starts_with(FULL_HANDOFF), "{prompt}");
+    assert!(prompt.contains("What is in README.md?") && prompt.contains("\nRun greet.py\n\n"), "{prompt}");
+}
+
+#[tokio::test]
 async fn a_codex_that_takes_no_injected_messages_is_told_before_the_prompt() {
     let harness = Harness::with_sessions(fixture(Agent::Claude), &[("FAKE_AGENT_NO_INJECT", "1")]).await;
     let connection = harness.connect().await;

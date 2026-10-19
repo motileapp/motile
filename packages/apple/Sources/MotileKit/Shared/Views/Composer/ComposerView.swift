@@ -147,7 +147,7 @@ struct ComposerView: View {
 
     private var monitoringStrip: some View {
         HStack(spacing: 0) {
-            Image(.eye, size: ControlSize.regular.symbol)
+            Image(.eye, size: ControlSize.small.symbol)
                 .foregroundStyle(Color.themeForeground)
                 .padding(.leading, ComposerStrip.inset + Self.agentsButtonLead)
                 .padding(.trailing, Self.symbolGap)
@@ -195,7 +195,8 @@ struct ComposerView: View {
     private func agentsButton(_ text: String, children: ThreadChildren) -> some View {
         let button = { (words: String) in
             ActionButton(
-                words, icon: .bot, help: text, variant: .ghost, gap: Self.symbolGap, tint: .themeProcess,
+                words, icon: .bot, help: text, variant: .ghost, symbolSize: ControlSize.small.symbol, gap: Self.symbolGap,
+                tint: .themeProcess,
                 margin: EdgeInsets(top: ComposerStrip.inset, leading: 0, bottom: ComposerStrip.inset, trailing: 0)
             ) { store.rightPanel.open(.agents) }
         }
