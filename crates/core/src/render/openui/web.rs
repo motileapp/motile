@@ -153,7 +153,7 @@ pub fn youtube_page(url: &str, title: &str, autoplay: bool) -> String {
     format!(
         "<!doctype html><meta charset=\"utf-8\"><meta http-equiv=\"Content-Security-Policy\" content=\"{YOUTUBE_CSP}\">\
          <meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">\
-         <style>html,body{{margin:0;height:100%;overflow:hidden;background:#000}}iframe{{display:block;border:0;width:100%;height:100%}}</style>\
+         <style>html,body{{margin:0;overflow:hidden;background:#000}}iframe{{position:fixed;inset:0;width:100%;height:100%;border:0}}</style>\
          <iframe src=\"{}\" title=\"{}\" allow=\"accelerometer; encrypted-media; gyroscope; picture-in-picture; fullscreen\" \
          allowfullscreen referrerpolicy=\"strict-origin-when-cross-origin\"></iframe>",
         escape(&url),
