@@ -248,6 +248,89 @@ class Palette(
             syntaxTag = Color(0xFF7EE787),
         )
     }
+
+    /** The colour of a token by its name in tokens.json, as OpenUI's scenes and trees name them. */
+    fun named(name: String): Color? = when (name) {
+        "background" -> background
+        "background-accent" -> backgroundAccent
+        "background-accent-stronger" -> backgroundAccentStronger
+        "background-accent-strongest" -> backgroundAccentStrongest
+        "background-accent-larger" -> backgroundAccentLarger
+        "background-accent-larger-stronger" -> backgroundAccentLargerStronger
+        "background-secondary" -> backgroundSecondary
+        "background-secondary-accent" -> backgroundSecondaryAccent
+        "background-secondary-accent-stronger" -> backgroundSecondaryAccentStronger
+        "card" -> card
+        "card-accent" -> cardAccent
+        "popover" -> popover
+        "popover-accent" -> popoverAccent
+        "foreground" -> foreground
+        "emphasized-foreground" -> emphasizedForeground
+        "muted-foreground" -> mutedForeground
+        "muted-stronger-foreground" -> mutedStrongerForeground
+        "muted-strongest-foreground" -> mutedStrongestForeground
+        "primary" -> primary
+        "primary-foreground" -> primaryForeground
+        "destructive" -> destructive
+        "destructive-foreground" -> destructiveForeground
+        "success" -> success
+        "success-foreground" -> successForeground
+        "warning" -> warning
+        "warning-foreground" -> warningForeground
+        "pending" -> pending
+        "pending-foreground" -> pendingForeground
+        "process" -> process
+        "process-foreground" -> processForeground
+        "merged" -> merged
+        "merged-foreground" -> mergedForeground
+        "pink" -> pink
+        "skill" -> skill
+        "border" -> border
+        "border-card" -> borderCard
+        "border-input" -> borderInput
+        "border-popover" -> borderPopover
+        "input" -> input
+        "composer" -> composer
+        "border-composer" -> borderComposer
+        "border-accent" -> borderAccent
+        "ring" -> ring
+        "overlay" -> overlay
+        "shadow" -> shadow
+        "chart-1" -> chart1
+        "chart-2" -> chart2
+        "chart-3" -> chart3
+        "chart-4" -> chart4
+        "chart-5" -> chart5
+        "chart-6" -> chart6
+        "map-land" -> mapLand
+        "map-green" -> mapGreen
+        "map-park" -> mapPark
+        "map-campus" -> mapCampus
+        "map-water" -> mapWater
+        "map-waterway" -> mapWaterway
+        "map-building" -> mapBuilding
+        "map-street" -> mapStreet
+        "map-road" -> mapRoad
+        "map-ferry" -> mapFerry
+        "claude" -> claude
+        "openai" -> openai
+        "google-blue" -> googleBlue
+        "google-red" -> googleRed
+        "google-yellow" -> googleYellow
+        "google-green" -> googleGreen
+        "linear" -> linear
+        "window-close" -> windowClose
+        "window-minimize" -> windowMinimize
+        "window-zoom" -> windowZoom
+        "syntax-comment" -> syntaxComment
+        "syntax-keyword" -> syntaxKeyword
+        "syntax-string" -> syntaxString
+        "syntax-constant" -> syntaxConstant
+        "syntax-function" -> syntaxFunction
+        "syntax-type" -> syntaxType
+        "syntax-tag" -> syntaxTag
+        else -> null
+    }
 }
 
 /** How much of a colour shows: every opacity in the app is one of these. */
