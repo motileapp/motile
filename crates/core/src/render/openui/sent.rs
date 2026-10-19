@@ -16,10 +16,11 @@ pub struct SentValues {
 }
 
 /// A value by its name: a field's label, a `$variable`, or a path into the context, `table.seat`.
+/// An empty object names nothing and is left out.
 #[derive(Serialize, Clone, PartialEq, Debug)]
 pub struct SentValue {
     pub name: String,
-    /// Text as it is, anything else as JSON.
+    /// Text as it is, anything else, and empty text, as JSON.
     pub value: String,
 }
 
@@ -52,7 +53,7 @@ fn flatten(name: &str, value: &Value, entries: &mut Vec<SentValue>) {
         return flatten(name, field, entries);
     }
     match value {
-        Value::Object(fields) if !fields.is_empty() || name.is_empty() => {
+        Value::Object(fields) => {
             for (key, value) in fields {
                 let path = if name.is_empty() { key.clone() } else { format!("{name}.{key}") };
                 flatten(&path, value, entries);
@@ -61,7 +62,8 @@ fn flatten(name: &str, value: &Value, entries: &mut Vec<SentValue>) {
         Value::Null if name.is_empty() => {}
         value => {
             let name = if name.is_empty() { "context" } else { name };
-            let value = value.as_str().map_or_else(|| value.to_string(), str::to_owned);
+            let text = value.as_str().filter(|text| !text.is_empty());
+            let value = text.map_or_else(|| value.to_string(), str::to_owned);
             entries.push(SentValue { name: name.to_owned(), value });
         }
     }
@@ -92,10 +94,10 @@ mod tests {
 
     #[test]
     fn a_sent_form_is_its_fields_and_the_programs_context() {
-        let context = json!(["User clicked: Book it", {"Booking": {"Name": {"value": "Ada"}, "Guests": {"value": 4, "componentType": "Input"}}}, {"table": 7, "seat": {"row": "B"}}]);
+        let context = json!(["User clicked: Book it", {"Booking": {"Name": {"value": "Ada"}, "Guests": {"value": 4, "componentType": "Input"}}, "trip": {}}, {"table": 7, "seat": {"row": "B"}, "notes": ""}]);
         assert_eq!(
             entries(sent_values(Some(&context), &[])),
-            pairs(&[("Booking.Guests", "4"), ("Booking.Name", "Ada"), ("seat.row", "B"), ("table", "7")])
+            pairs(&[("Booking.Guests", "4"), ("Booking.Name", "Ada"), ("notes", "\"\""), ("seat.row", "B"), ("table", "7")])
         );
         assert_eq!(entries(sent_values(Some(&json!("hidden")), &[])), pairs(&[("context", "hidden")]));
     }
