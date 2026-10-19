@@ -90,6 +90,12 @@ On the server, `motile status` shows its account, agents and service, `motile lo
 | `⌘.` | Stop the agent |
 | `⌃⌘S` | Toggle the sidebar |
 
+## Interactive answers
+
+When a picture or a control says more than prose, an agent answers with a small program, which the client draws in the reply: charts, tables, forms, sliders, maps with pins and routes, flashcards, formulas, drawings and videos. It works the same on every client. A program reacts at once; a button can send your choices back to the agent, and a later reply can change the program. Where you leave its controls is kept with the thread.
+
+A program can read from your own server, inside the thread's folder: its files, git status, history and diffs, pull requests, usage, and Linear or Ricrac issues. It runs a command there only when you press its button, and the client first shows you the exact command and asks, unless the thread has full access. Your server looks up a program's photos (on Wikipedia and Wikimedia Commons) and street routes (OSRM); the client fetches map tiles from OpenFreeMap.
+
 ## How it works
 
 - **Devices**: every client and every server has an ed25519 key, which is also its iroh address. Signing in links a client's key to your account; the install command links a server's. A server asks the auth server which clients belong to its account and accepts only those.
@@ -138,6 +144,7 @@ apps/android     The Android app, in Kotlin with Jetpack Compose
 packages/apple   The state and views the Mac and iOS apps share
 crates/protocol  Messages, device keys and request signing, shared by every program
 crates/core      What every client shares: account, connections, sync, cache, rendering
+crates/openui    OpenUI Lang, the language of the programs agents show in their replies
 scripts          fake-agent, which stands in for the agents in tests
 fixtures         Recorded agent output
 ```

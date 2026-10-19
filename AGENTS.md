@@ -49,6 +49,26 @@ What the programs agree on.
 - `media.rs`: names an image, a video or a file an agent sends by its contents.
 - `skills.rs`: how a message names the skills it starts, `$name` at the start of a word.
 
+### crates/openui
+
+OpenUI Lang 1.0, the language of the programs agents show in their replies (thesysdev/openui's
+`spec/`), for the server and the core alike.
+
+- `lexer.rs`, `parser.rs`, `eval.rs`, `store.rs`, `query.rs`, `merge.rs`, `serialize.rs`: the
+  language as the spec says, streamed (a program grows statement by statement while it arrives),
+  with JavaScript's semantics where the spec asks for them (`js.rs`). `runtime.rs` is what a host
+  drives: text, input and tool results in; a tree, tool calls, timers and events out. `fences.rs`
+  finds a reply's programs.
+- `motile.rs`: Motile's library, which is open-intelligent-ui's: 55 components (`components.rs`), 59
+  functions (`functions/`) and `@CopyToClipboard`, with its names, argument order and defaults, so
+  that its programs work unchanged. `prompt.rs` writes the system prompt the server gives the agents
+  from it.
+- `LAYOUT.md`: every component's geometry and behaviour in our tokens. Every client follows it.
+- `fixtures/`: the spec's conformance cases (`openui/1.0`), which `tests/conformance.rs` runs whole
+  and streamed, and open-intelligent-ui's library and prompts (`oiu`), each with its project's
+  licence; and the prompts this crate writes (`prompt`), which `OPENUI_BLESS=1` rewrites. The
+  programs the clients and the fake agent show are the repo's `fixtures/openui`.
+
 ### apps/auth (Rust, Axum, sqlx on Postgres)
 
 - `sign_in.rs`: the browser's side of a sign-in. `google.rs` is the OIDC exchange.
@@ -190,7 +210,7 @@ shadcn's own colours, opacities and radii are gone from the theme.
   a line each: `context and form values = <JSON>`.
 - `ui_tools.rs`: the tools a program's `Query` and `Mutation` call (`UiTool`), inside the thread's
   folder, with their JSON schemas for the agent's prompt. `run` runs a command the user confirmed,
-  or any under full access.
+  or any under full access, and only from a `Mutation`, which a click fires.
 - `ui_lookups.rs`: a program's photos from Wikipedia and Wikimedia Commons, kept as the thread's
   media (`UiImages`), and street routes from OSRM (`UiRoute`), both kept in memory a while.
 - `icons.rs`: finds a project's icon in its folder.
@@ -263,6 +283,12 @@ for tests.
   (`OPENUI_BLESS=1` rewrites them). `scripts/ui-types.sh` writes its Swift and Kotlin copies
   (`examples/ui_types.rs`), and `scripts/lucide-names.mjs` the Lucide names its icons take
   (`tree/lucide.rs`). Run them after changing the types or the font.
+- `render/openui/canvas/`: charts, drawings, formulas (RaTeX with the KaTeX fonts), a flashcard's
+  flip and confetti as scenes of paths, text and the regions a pointer lights, which the clients
+  only paint (`motile_ui_layout`, `Native.uiLayout`). `tests/paint` paints them as a reference, into
+  `fixtures/canvas`, which every client's painter is compared with.
+- `render/openui/web.rs`: the pages of HtmlView and YouTube for the clients' sandboxed web views
+  (`motile_ui_page`, `Native.uiPage`).
 - `render/openui/map.rs`: the map's camera in MapLibre's zoom levels: where the first pin and a fit
   put it, the fly between two cameras, the route revealed along its length. The Apple and Android
   clients ask it through `motile_ui_map` and `Native.uiMap`.
@@ -495,6 +521,11 @@ redone for its versions in `patches/crates`; the script refuses a patch that `Ca
   design tokens and edited like any view. Never edit an applied migration in
   `apps/auth/migrations` or `apps/server/migrations`, add a new one.
 - Do not write useless tests; tests should cover input/output behaviour.
+- What we take from another project keeps its licence beside it: OpenUI's conformance cases and
+  open-intelligent-ui's library (MIT, `crates/openui/fixtures`), the KaTeX fonts math is drawn with
+  (OFL, `crates/core/fonts/katex`), MapLibre GL JS (BSD, `packages/apple/Sources/MotileKit/Map`),
+  DM Sans (OFL) and Lucide (ISC). The iOS and Android apps draw maps with MapLibre Native (BSD).
+  Maps are OpenFreeMap's tiles of OpenStreetMap's data, which every client credits on the map.
 - Reinvent the wheel but do not reinvent the car. If you are solving a simple problem do not
   introduce a library. If you are solving a complex but common problem, there is likely a
   modern library for it, if so, use it.
@@ -519,10 +550,10 @@ redone for its versions in `patches/crates`; the script refuses a patch that `Ca
 - A change must not break what CI runs on it: the checks, the e2e tests, the iOS UI tests and
   the Mac app's demo (`DemoDriver.swift`, run by `scripts/ci-demo.sh` in the `Release` and
   `macOS` workflows), which signs in, adds a project, and drives threads, git, drafts and a program
-  (a slider dragged, a button pressed) end to end. When a change touches what one of them does or expects, read it, update it in the same
-  change, and run it (`apps/macos/scripts/build-app.sh`, then `apps/macos/scripts/ci-demo.sh`,
-  then read `screenshots/checks.txt`)
-  before calling the change done. A push to `main` with a red workflow blocks the release.
+  (a slider dragged, a button pressed) end to end. When a change touches what one of them does or
+  expects, read it, update it in the same change, and run it (`apps/macos/scripts/build-app.sh`,
+  then `apps/macos/scripts/ci-demo.sh`, then read `screenshots/checks.txt`) before calling the
+  change done. A push to `main` with a red workflow blocks the release.
 
 ## Development
 
@@ -575,6 +606,7 @@ app. A change to a view both clients share is then looked at in both.
     scripts/shot.sh shot.png                # a picture of its screen
     scripts/do.sh "sidebar open"            # has the client do something; the steps are in DemoDriverIOS.swift
     scripts/do.sh "type run greet.py" send
+    scripts/do.sh "slide Tip 1" "press Alex"  # drags a program's slider, presses its button
     scripts/ui-test.sh                      # the tests that swipe and tap (MotileUITests)
     MOTILE_SIM="iPad Pro 13-inch (M5)" scripts/dev-app.sh    # another simulator
 
@@ -582,6 +614,7 @@ app. A change to a view both clients share is then looked at in both.
     scripts/dev-app.sh                      # builds what changed and opens the client
     scripts/shot.sh shot.png                # a picture of its screen
     scripts/do.sh "sidebar open"            # has the client do something; the steps are in DemoDriver.kt
+    scripts/do.sh "slide Tip 1" "press Alex"  # drags a program's slider, presses its button
     scripts/ui-test.sh                      # the tests that swipe and tap (GestureTests.kt)
     scripts/check.sh [path]                 # compiles the Kotlin and lists its errors
     MOTILE_AVD=tablet scripts/dev-app.sh    # another emulator, made the first time
@@ -686,7 +719,7 @@ sentence describing the change:
     server | core | macos: Stream replies in finished blocks
 
 The parts are the folders in `apps`, `crates` and `packages`: `auth`, `marketing`, `web`, `server`,
-`macos`, `ios`, `android`, `apple`, `gpui`, `core` and `protocol`. Use `ci` for the workflows and `docs` for README.md and AGENTS.md.
+`macos`, `ios`, `android`, `apple`, `gpui`, `core`, `openui` and `protocol`. Use `ci` for the workflows and `docs` for README.md and AGENTS.md.
 
 The title should be concise. Description should explain the work in more detail (only if
 required) while still being concise. Use simple language, do not try to sound smart.
