@@ -2871,7 +2871,13 @@ impl Hub {
             Some(range) => {
                 let items = self.store.items_since(&thread.id, 0)?;
                 let budget = self.handoff_budget(thread, &session, &items, message_seq, &prompt);
-                match handoff::build(&thread.id, &items, range, message_seq, budget) {
+                let mut built = handoff::build(&thread.id, &items, range, message_seq, budget);
+                // A session too full to be told what it missed is left for a new one, told everything.
+                if built.is_err() && session.session_id.take().is_some() {
+                    let budget = self.handoff_budget(thread, &session, &items, message_seq, &prompt);
+                    built = handoff::build(&thread.id, &items, Range::Full, message_seq, budget);
+                }
+                match built {
                     Ok(handoff) => handoff,
                     Err(handoff::NoRoom) => return self.end_without_agent(live, Some(NO_ROOM_FOR_HANDOFF.to_string())),
                 }

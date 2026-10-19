@@ -50,7 +50,7 @@ export function Composer({
     <div className="mx-auto w-full max-w-[796px]">
       {status.kind === "monitoring" && (
         <Strip edge="top">
-          <EyeIcon className="mr-1 ml-[10.5px] size-3.5 shrink-0 text-foreground" />
+          <EyeIcon className="mr-1 ml-[10.5px] size-[13px] shrink-0 text-foreground" />
           <span className="text-[12.5px] font-medium text-foreground tabular-nums">
             Monitoring: {elapsed(status.since)}
           </span>
@@ -70,7 +70,7 @@ export function Composer({
               type="button"
               className="ml-[3px] flex h-7 min-w-0 items-center gap-1 rounded-md pr-[11px] pl-[7.5px] text-[12px] font-medium text-process hover:bg-border-composer"
             >
-              <BotIcon className="size-3.5 shrink-0" />
+              <BotIcon className="size-[13px] shrink-0" />
               <span className="truncate">{working.length} working</span>
             </button>
             {status.kind === "agents" && (

@@ -1432,10 +1432,13 @@ def replay_fixture():
     fixture = os.environ.get("FAKE_AGENT_FIXTURE") or os.path.join(
         os.path.dirname(os.path.abspath(__file__)), "..", "fixtures", "edit-and-run.jsonl"
     )
+    context = os.environ.get("FAKE_AGENT_CONTEXT")
     with open(fixture) as f:
         for line in f:
             if SESSION:
                 line = re.sub(r'"session_id":"[^"]*"', f'"session_id":"{SESSION}"', line)
+            if context:
+                line = re.sub(r'"cache_read_input_tokens":\d+', f'"cache_read_input_tokens":{context}', line)
             sys.stdout.write(line)
             sys.stdout.flush()
             time.sleep(delay)
