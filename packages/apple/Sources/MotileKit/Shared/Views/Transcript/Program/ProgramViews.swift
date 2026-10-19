@@ -584,6 +584,9 @@ final class ProgramMarkdownView: ProgramNodeView {
     private var texts: [RowTextView] = []
     private var codes: [ProgramCodeBox] = []
     private var headers: [[CodeHeader]] = []
+    #if os(iOS)
+    private var tables: [[TableView]] = []
+    #endif
 
     override func configure(_ box: ProgramBox) {
         let blocks = box.extra as? [ProgramProse.Block] ?? []
@@ -594,6 +597,9 @@ final class ProgramMarkdownView: ProgramNodeView {
             addSubview(text)
             texts.append(text)
             headers.append([])
+            #if os(iOS)
+            tables.append([])
+            #endif
         }
         while codes.count < code.count {
             let view = ProgramCodeBox()
@@ -606,6 +612,9 @@ final class ProgramMarkdownView: ProgramNodeView {
             text.content = content
             text.frame = prose[index].frame
             placeHeaders(in: text, index: index)
+            #if os(iOS)
+            tables[index] = TableView.place(text.tableBoxes(), in: text, reusing: tables[index])
+            #endif
         }
         for (index, view) in codes.enumerated() {
             view.isHidden = index >= code.count
