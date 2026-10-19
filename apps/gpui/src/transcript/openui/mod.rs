@@ -2,6 +2,7 @@
 //! a box of its own, laid out with the rest of the transcript's rows, which the list measures as
 //! they come into view. What the user does goes back to core as `Command::Ui` events.
 
+mod drawing;
 mod frames;
 mod inputs;
 mod layout;
@@ -186,7 +187,7 @@ pub fn node(node: &UiNode, cx: &UiCx, window: &mut Window, app: &mut App) -> Sta
         | UiKind::Polyline { .. }
         | UiKind::Polygon { .. }
         | UiKind::SvgText { .. }
-        | UiKind::HtmlView { .. } => div().id(cx.id(&node.id, "node")),
+        | UiKind::HtmlView { .. } => drawing::drawing(node, cx, window, app),
     };
     accessible(element, node.a11y.as_ref())
 }

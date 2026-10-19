@@ -205,6 +205,14 @@ fn inlined(
 /// An inline component's width and height, and how much higher than the others it sits.
 fn inline_size(inline: &UiNode, size: f32, cx: &UiCx, window: &mut Window, app: &mut App) -> (f32, f32, f32) {
     match &inline.kind {
+        UiKind::Math { canvas } => {
+            let Some(prepared) = super::drawing::scene(&inline.id, canvas, cx.width, size, cx, window, app) else {
+                return (0., 0., 0.);
+            };
+            let scene = &prepared.scene;
+            let baseline = scene.baseline.unwrap_or(scene.height);
+            (scene.width, scene.height, baseline + size * INLINE_DROP - scene.height)
+        }
         UiKind::Icon { size: side, icon, .. } => (if icon.is_some() { *side } else { 0. }, *side, 0.),
         UiKind::Badge { text, tone, icon } => {
             (badge_width(text, tone.is_some(), icon.is_some(), window), Chip::HEIGHT, size * INLINE_BADGE_RAISE)

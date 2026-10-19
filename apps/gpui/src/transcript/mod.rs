@@ -1,6 +1,5 @@
 //! The transcript of the open thread: the rows the core sends, and the list that draws them.
 
-#[allow(dead_code, unused_imports, reason = "for the OpenUI components still to be written")]
 pub mod canvas;
 pub mod kit;
 pub mod model;

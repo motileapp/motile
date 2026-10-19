@@ -226,6 +226,16 @@ mod tests {
     }
 
     #[test]
+    fn a_canvas_is_measured_once_core_laid_it_out() {
+        let Some(mut cx) = headless() else {
+            eprintln!("skipped: GPUI has no text system here");
+            return;
+        };
+        let [_, _, _, height] = frame(&frame_dump(&mut cx, golden("bicycle"), 720.), "children/6/children/1");
+        assert!(height > 100., "the drawing is {height} tall");
+    }
+
+    #[test]
     fn a_cards_content_is_inset_by_its_padding_which_narrows_in_a_narrow_column() {
         let Some(mut cx) = headless() else {
             eprintln!("skipped: GPUI has no text system here");
