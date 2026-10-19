@@ -258,20 +258,19 @@ fn table(
     let line = |last: bool| {
         div().flex().flex_row().items_stretch().when(!last, |row| row.border_b_1().border_color(c.border_card))
     };
-    let header =
-        line(rows.is_empty()).bg(c.card_accent).children(columns.iter().zip(&widths).map(|(column, width)| {
-            header_type
-                .text_box()
-                .w(px(*width))
-                .flex_none()
-                .py(px(padding.header.0))
-                .px(px(padding.header.1))
-                .text_color(c.foreground)
-                .whitespace_nowrap()
-                .overflow_hidden()
-                .when(column.numeric, |cell| cell.text_right())
-                .child(column.title.clone())
-        }));
+    let header = line(rows.is_empty()).children(columns.iter().zip(&widths).map(|(column, width)| {
+        header_type
+            .text_box()
+            .w(px(*width))
+            .flex_none()
+            .py(px(padding.header.0))
+            .px(px(padding.header.1))
+            .text_color(c.foreground)
+            .whitespace_nowrap()
+            .overflow_hidden()
+            .when(column.numeric, |cell| cell.text_right())
+            .child(column.title.clone())
+    }));
     let count = rows.len();
     let body: Vec<Div> = rows
         .iter()
@@ -311,13 +310,23 @@ fn table(
         })
         .collect();
     let grid = div().w(px(total)).flex().flex_col().child(header).children(body);
+    let header_fill = div()
+        .absolute()
+        .top_0()
+        .left_0()
+        .right_0()
+        .h(px(header_type.line + 2. * padding.header.0))
+        .rounded_t(px(Radii::LG - 1.))
+        .bg(c.card_accent);
     element
         .w_full()
+        .relative()
         .rounded(px(Radii::LG))
         .border_1()
         .border_color(c.border_card)
         .bg(c.card)
         .overflow_hidden()
+        .child(header_fill)
         .child(div().id(cx.id(id, "scroll")).w_full().overflow_x_scroll().child(grid))
 }
 
