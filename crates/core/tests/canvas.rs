@@ -160,15 +160,13 @@ fn charts_follow_the_references_rules() {
     assert_eq!(ticks, ["$0", "$1B", "$2B", "$3B", "$4B", "$5B"]);
     assert_eq!(scene.hits[2].tip.rows[1].value, "$1.31B");
     assert_eq!(scene.label.as_deref(), Some("bar chart of Photography, Inspection by year"));
-    let rounded: Vec<f32> = scene
+    let square = scene.items.iter().filter(|item| matches!(item, Item::Rect { rx, .. } if *rx == 0.0)).count();
+    let tops = scene
         .items
         .iter()
-        .filter_map(|item| match item {
-            Item::Rect { rx, .. } => Some(*rx),
-            _ => None,
-        })
-        .collect();
-    assert_eq!(rounded, [0.0, 4.0, 0.0, 4.0, 0.0, 4.0, 0.0, 4.0]);
+        .filter(|item| matches!(item, Item::Path { paint, .. } if paint.fill.is_some() && paint.stroke.is_none()))
+        .count();
+    assert_eq!((square, tops), (4, 4), "each stack is a square segment under a top rounded only at its top");
 
     let many = canvas::layout("Chart", &chart("line-many"), 390.0, 14.0);
     let labels =
