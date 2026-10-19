@@ -46,6 +46,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.IntrinsicMeasurable
+import androidx.compose.ui.layout.LayoutModifier
 import androidx.compose.ui.layout.IntrinsicMeasureScope
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.Measurable
@@ -221,10 +222,10 @@ fun UiTable(node: UiNode, kind: UiKind.Table) {
     if (columns == 0) return
     val horizontal = if (narrow) 10.dp else 12.dp
     val vertical = if (narrow) 8.dp else 10.dp
-    BoxWithConstraints(
+    val policy = remember(columns) { TablePolicy(columns) }
+    Box(
         Modifier.uiNode(node).fillMaxWidth().clip(shape).background(palette.card, shape).border(1.dp, palette.borderCard, shape),
     ) {
-        val width = constraints.maxWidth
         CompositionLocalProvider(LocalSurface provides Surface.Card) {
             Layout(
                 content = {
@@ -252,8 +253,8 @@ fun UiTable(node: UiNode, kind: UiKind.Table) {
                         }
                     }
                 },
-                modifier = Modifier.horizontalScroll(rememberScrollState()),
-                measurePolicy = TablePolicy(columns, width),
+                modifier = Modifier.then(TableWidth(policy)).horizontalScroll(rememberScrollState()),
+                measurePolicy = policy,
             )
         }
     }
@@ -272,8 +273,34 @@ private fun Cell(trailing: Boolean, fill: Color?, line: Boolean, horizontal: and
     ) { content() }
 }
 
-private class TablePolicy(val columns: Int, val available: Int) : MeasurePolicy {
-    private fun widths(measurables: List<IntrinsicMeasurable>): IntArray {
+/** Tells the table the width it has, which the sideways scroll inside it hides from it. */
+private class TableWidth(val policy: TablePolicy) : LayoutModifier {
+    override fun MeasureScope.measure(measurable: Measurable, constraints: Constraints): MeasureResult {
+        policy.available = constraints.maxWidth
+        val placeable = measurable.measure(constraints)
+        return layout(placeable.width, placeable.height) { placeable.place(0, 0) }
+    }
+
+    override fun IntrinsicMeasureScope.maxIntrinsicHeight(measurable: IntrinsicMeasurable, width: Int): Int {
+        policy.available = width
+        return measurable.maxIntrinsicHeight(width)
+    }
+
+    override fun IntrinsicMeasureScope.minIntrinsicHeight(measurable: IntrinsicMeasurable, width: Int): Int {
+        policy.available = width
+        return measurable.minIntrinsicHeight(width)
+    }
+
+    override fun equals(other: Any?): Boolean = other is TableWidth && other.policy === policy
+
+    override fun hashCode(): Int = System.identityHashCode(policy)
+}
+
+private class TablePolicy(val columns: Int) : MeasurePolicy {
+    var available = 0
+
+    /** Each column's least and most width: its widest unbreakable part, and its widest cell on one line. */
+    private fun bounds(measurables: List<IntrinsicMeasurable>): Pair<FloatArray, FloatArray> {
         val least = FloatArray(columns)
         val most = FloatArray(columns)
         measurables.forEachIndexed { index, cell ->
@@ -281,6 +308,11 @@ private class TablePolicy(val columns: Int, val available: Int) : MeasurePolicy 
             least[column] = max(least[column], cell.minIntrinsicWidth(Constraints.Infinity).toFloat())
             most[column] = max(most[column], cell.maxIntrinsicWidth(Constraints.Infinity).toFloat())
         }
+        return least to most
+    }
+
+    private fun widths(measurables: List<IntrinsicMeasurable>): IntArray {
+        val (least, most) = bounds(measurables)
         val width = available.toFloat()
         val totalMost = most.sum()
         val totalLeast = least.sum()
@@ -316,6 +348,15 @@ private class TablePolicy(val columns: Int, val available: Int) : MeasurePolicy 
             }
         }
     }
+
+    override fun IntrinsicMeasureScope.maxIntrinsicWidth(measurables: List<IntrinsicMeasurable>, height: Int): Int =
+        bounds(measurables).second.sum().roundToInt()
+
+    override fun IntrinsicMeasureScope.minIntrinsicWidth(measurables: List<IntrinsicMeasurable>, height: Int): Int =
+        bounds(measurables).first.sum().roundToInt()
+
+    override fun IntrinsicMeasureScope.minIntrinsicHeight(measurables: List<IntrinsicMeasurable>, width: Int): Int =
+        maxIntrinsicHeight(measurables, width)
 
     override fun IntrinsicMeasureScope.maxIntrinsicHeight(measurables: List<IntrinsicMeasurable>, width: Int): Int {
         val widths = widths(measurables)

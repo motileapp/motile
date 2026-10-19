@@ -25,7 +25,19 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.SubcomposeLayout
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.layout.AlignmentLine
+import androidx.compose.ui.layout.FirstBaseline
+import androidx.compose.ui.layout.IntrinsicMeasurable
+import androidx.compose.ui.layout.IntrinsicMeasureScope
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.layout.Measurable
+import androidx.compose.ui.layout.MeasurePolicy
+import androidx.compose.ui.layout.MeasureResult
+import androidx.compose.ui.layout.MeasureScope
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
@@ -53,6 +65,7 @@ import app.motile.core.UiRich
 import app.motile.core.UiTextStyle
 import app.motile.platform.Platform
 import app.motile.platform.Symbol
+import app.motile.theme.LocalForeground
 import app.motile.theme.LocalPalette
 import app.motile.theme.LocalSurface
 import app.motile.theme.Palette
@@ -144,27 +157,62 @@ fun UiRichText(
     }
     val density = LocalDensity.current
     val textSize = with(density) { style.fontSize.toPx() }
-    SubcomposeLayout(modifier) { constraints ->
-        val sizes = inlines.mapIndexed { index, node ->
-            subcompose("measure $index") { UiNodeView(node) }.map { it.measure(Constraints(maxWidth = constraints.maxWidth)) }
-                .let { placed -> (placed.maxOfOrNull { it.width } ?: 0) to (placed.maxOfOrNull { it.height } ?: 0) }
+    var sizes by remember(inlines.size) { mutableStateOf(List(inlines.size) { InlineSize(0, 0, null) }) }
+    val content = inlines.mapIndexed { index, node ->
+        val size = sizes.getOrElse(index) { InlineSize(0, 0, null) }
+        val below = size.baseline?.let { size.height - it.toFloat() } ?: (textSize * if (node.kind is UiKind.Badge) 0.05f else 0.15f)
+        val placeholder = with(density) {
+            Placeholder((size.width + 2.dp.toPx()).toSp(), (size.height - below).coerceAtLeast(1f).toSp(), PlaceholderVerticalAlign.AboveBaseline)
         }
-        val content = inlines.mapIndexed { index, node ->
-            val (width, height) = sizes[index]
-            val below = textSize * if (node.kind is UiKind.Badge) 0.05f else 0.15f
-            val side = 1.dp.toPx()
-            val placeholder = Placeholder((width + side * 2).toSp(), (height - below).coerceAtLeast(1f).toSp(), PlaceholderVerticalAlign.AboveBaseline)
-            "$index" to InlineTextContent(placeholder) {
-                Box(Modifier.fillMaxSize().padding(horizontal = 1.dp).wrapContentHeight(Alignment.Top, unbounded = true)) {
-                    Box(Modifier.requiredHeight(height.toDp())) { UiNodeView(node) }
-                }
+        "$index" to InlineTextContent(placeholder) {
+            Box(Modifier.fillMaxSize().padding(horizontal = 1.dp).wrapContentHeight(Alignment.Top, unbounded = true)) {
+                Box(Modifier.requiredHeight(with(density) { size.height.toDp() })) { UiNodeView(node) }
             }
-        }.toMap()
-        val placeable = subcompose("text") {
-            Text(text, style = styled, color = color, maxLines = maxLines, overflow = TextOverflow.Ellipsis, inlineContent = content)
-        }.first().measure(constraints)
-        layout(placeable.width, placeable.height) { placeable.place(0, 0) }
+        }
+    }.toMap()
+    val measure = remember(inlines) { InlineMeasure(inlines) { measured -> if (measured != sizes) sizes = measured } }
+    CompositionLocalProvider(LocalUiTextSize provides style.fontSize.value, LocalForeground provides color) {
+        Layout(
+            content = {
+                inlines.forEach { node -> Box { UiNodeView(node) } }
+                Text(text, style = styled, color = color, maxLines = maxLines, overflow = TextOverflow.Ellipsis, inlineContent = content)
+            },
+            modifier = modifier,
+            measurePolicy = measure,
+        )
     }
+}
+
+/** An inline component's size, and the baseline a formula shares with the text around it. */
+private data class InlineSize(val width: Int, val height: Int, val baseline: Int?)
+
+/**
+ * Measures a text's inline components, which it composes without placing them, for the boxes
+ * the text keeps for them, then lays the text out. Its intrinsic sizes are the text's.
+ */
+private class InlineMeasure(val inlines: List<UiNode>, val measured: (List<InlineSize>) -> Unit) : MeasurePolicy {
+    override fun MeasureScope.measure(measurables: List<Measurable>, constraints: Constraints): MeasureResult {
+        val sizes = measurables.dropLast(1).mapIndexed { index, measurable ->
+            val placeable = measurable.measure(Constraints(maxWidth = constraints.maxWidth))
+            val baseline = placeable[FirstBaseline].takeIf { it != AlignmentLine.Unspecified && inlines[index].kind is UiKind.Math }
+            InlineSize(placeable.width, placeable.height, baseline)
+        }
+        measured(sizes)
+        val text = measurables.last().measure(constraints)
+        return layout(text.width, text.height) { text.place(0, 0) }
+    }
+
+    override fun IntrinsicMeasureScope.maxIntrinsicHeight(measurables: List<IntrinsicMeasurable>, width: Int): Int =
+        measurables.last().maxIntrinsicHeight(width)
+
+    override fun IntrinsicMeasureScope.minIntrinsicHeight(measurables: List<IntrinsicMeasurable>, width: Int): Int =
+        measurables.last().minIntrinsicHeight(width)
+
+    override fun IntrinsicMeasureScope.maxIntrinsicWidth(measurables: List<IntrinsicMeasurable>, height: Int): Int =
+        measurables.last().maxIntrinsicWidth(height)
+
+    override fun IntrinsicMeasureScope.minIntrinsicWidth(measurables: List<IntrinsicMeasurable>, height: Int): Int =
+        measurables.last().minIntrinsicWidth(height)
 }
 
 @Composable

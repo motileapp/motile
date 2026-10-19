@@ -357,12 +357,9 @@ fun UiRadioGroup(node: UiNode, kind: UiKind.RadioGroup) {
                     ) { pick(index) }
                 }
             }
-            UiRadioVariant.Cards -> BoxWithConstraints(Modifier.fillMaxWidth()) {
-                val count = max(1, floor((maxWidth.value + 8) / 208).toInt())
-                UiGridLayout(count, null, 8f) {
-                    kind.options.forEachIndexed { index, option ->
-                        OptionCard(option.label, index == kind.selected, { pick(index) }, detail = option.description, disabled = disabled)
-                    }
+            UiRadioVariant.Cards -> UiGridLayout(12, 200f, 8f, Modifier.fillMaxWidth()) {
+                kind.options.forEachIndexed { index, option ->
+                    OptionCard(option.label, index == kind.selected, { pick(index) }, detail = option.description, disabled = disabled)
                 }
             }
         }

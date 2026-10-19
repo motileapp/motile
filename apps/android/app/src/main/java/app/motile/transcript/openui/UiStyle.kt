@@ -44,6 +44,9 @@ val LocalUiNarrow = staticCompositionLocalOf { false }
 /** The transcript column's width, which `vw` lengths and carousel items count in. */
 val LocalUiColumn = staticCompositionLocalOf { 0.dp }
 
+/** The size of the text around an inline formula, in points, which it is set 1.12 times as large as. */
+val LocalUiTextSize = staticCompositionLocalOf { Theme.proseSize.value }
+
 /** How a column that centres or ends its children aligns the lines of their text. */
 val LocalUiTextAlign = compositionLocalOf<TextAlign?> { null }
 
