@@ -2,11 +2,17 @@ package app.motile.transcript.openui
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.content.ContextWrapper
+import android.view.View
+import android.view.ViewGroup
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.widget.FrameLayout
+import androidx.activity.ComponentActivity
+import androidx.activity.OnBackPressedCallback
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -31,6 +37,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import app.motile.core.Native
@@ -192,7 +201,10 @@ private fun PageView(page: UiPage, modifier: Modifier, opensYouTube: Boolean, on
             }
             view.loadDataWithBaseURL(page.base, page.html, "text/html", "utf-8", null)
         },
-        onRelease = { it.destroy() },
+        onRelease = { view ->
+            (view.webChromeClient as? FullScreenChrome)?.leave()
+            view.destroy()
+        },
     )
 }
 
@@ -211,7 +223,7 @@ private fun sandboxed(context: Context, opensYouTube: Boolean): WebView = WebVie
         setGeolocationEnabled(false)
         mediaPlaybackRequiresUserGesture = true
     }
-    webChromeClient = WebChromeClient()
+    webChromeClient = FullScreenChrome(context)
     webViewClient = object : WebViewClient() {
         override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
             if (!request.isForMainFrame) return !opensYouTube
@@ -220,6 +232,59 @@ private fun sandboxed(context: Context, opensYouTube: Boolean): WebView = WebVie
             return true
         }
     }
+}
+
+/**
+ * Shows what the page puts full screen, the player's video, over the whole app with the system's
+ * bars hidden, as a browser does, until the player leaves it or the back gesture does.
+ */
+private class FullScreenChrome(private val context: Context) : WebChromeClient() {
+    private var shown: View? = null
+    private var callback: CustomViewCallback? = null
+    private var back: OnBackPressedCallback? = null
+
+    override fun onShowCustomView(view: View, callback: CustomViewCallback) {
+        val activity = context.activity()
+        val decor = activity?.window?.decorView as? FrameLayout
+        if (activity == null || decor == null || shown != null) return callback.onCustomViewHidden()
+        view.setBackgroundColor(android.graphics.Color.BLACK)
+        decor.addView(view, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        shown = view
+        this.callback = callback
+        WindowCompat.getInsetsController(activity.window, decor).apply {
+            systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            hide(WindowInsetsCompat.Type.systemBars())
+        }
+        back = object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() = leave()
+        }.also { activity.onBackPressedDispatcher.addCallback(it) }
+    }
+
+    override fun onHideCustomView() = close()
+
+    /** Leaves full screen from outside the page: the page is told, then the view goes. */
+    fun leave() {
+        val callback = callback ?: return
+        close()
+        callback.onCustomViewHidden()
+    }
+
+    private fun close() {
+        val view = shown ?: return
+        shown = null
+        callback = null
+        back?.remove()
+        back = null
+        (view.parent as? ViewGroup)?.removeView(view)
+        val window = context.activity()?.window ?: return
+        WindowCompat.getInsetsController(window, window.decorView).show(WindowInsetsCompat.Type.systemBars())
+    }
+}
+
+private tailrec fun Context.activity(): ComponentActivity? = when (this) {
+    is ComponentActivity -> this
+    is ContextWrapper -> baseContext.activity()
+    else -> null
 }
 
 private fun isYouTube(host: String): Boolean = host == "youtu.be" || host == "youtube.com" || host.endsWith(".youtube.com")
