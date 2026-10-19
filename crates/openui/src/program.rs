@@ -83,7 +83,7 @@ impl Program {
             parsed,
             cache: &mut lowerer.cache,
             pass: lowerer.pass,
-            partial: parsed.incomplete,
+            partial: !parsed.complete,
             errors: Vec::new(),
             unresolved: Vec::new(),
             reached: Vec::new(),
@@ -732,22 +732,23 @@ fn tag(node: Node, name: &str) -> Node {
 /// A node whose children are all constant, computed now. What reads state, a query, a loop
 /// variable or calls a library function or action stays.
 fn fold(node: Node) -> Node {
-    let constant = match &node {
-        Node::Element(element) => !element.props.is_empty() && element.props.iter().all(|(_, prop)| prop.is_lit()),
-        Node::Array(_)
-        | Node::Object(_)
-        | Node::Unary(..)
-        | Node::Binary(..)
-        | Node::Ternary(..)
-        | Node::Member(..)
-        | Node::Index(..)
-        | Node::Builtin(..)
-        | Node::Each(..)
-        | Node::Steps(_)
-        | Node::ToAssistant(..)
-        | Node::OpenUrl(_) => node.children().into_iter().all(Node::is_lit),
-        _ => false,
-    } || matches!(&node, Node::Element(element) if element.props.is_empty());
+    let foldable = matches!(
+        node,
+        Node::Element(_)
+            | Node::Array(_)
+            | Node::Object(_)
+            | Node::Unary(..)
+            | Node::Binary(..)
+            | Node::Ternary(..)
+            | Node::Member(..)
+            | Node::Index(..)
+            | Node::Builtin(..)
+            | Node::Each(..)
+            | Node::Steps(_)
+            | Node::ToAssistant(..)
+            | Node::OpenUrl(_)
+    );
+    let constant = foldable && node.children().into_iter().all(Node::is_lit);
     if !constant {
         return node;
     }

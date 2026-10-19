@@ -427,10 +427,8 @@ impl Runtime {
             None => None,
         };
         let changed = match (&self.root, &root) {
-            (Some(Value::Element(before)), Some(Value::Element(after))) => {
-                !Arc::ptr_eq(before, after) && before != after
-            }
-            (before, after) => before != after,
+            (Some(before), Some(after)) => !same_tree(before, after),
+            (before, after) => before.is_some() != after.is_some(),
         };
         if changed {
             self.root = root;
@@ -737,6 +735,27 @@ impl Runtime {
         }
         effects.absorb(requests);
         effects
+    }
+}
+
+/// Equal trees, without comparing what both share.
+fn same_tree(a: &Value, b: &Value) -> bool {
+    let same_map = |a: &Map, b: &Map| {
+        a.len() == b.len() && a.iter().zip(b).all(|((key_a, a), (key_b, b))| key_a == key_b && same_tree(a, b))
+    };
+    match (a, b) {
+        (Value::Element(a), Value::Element(b)) => {
+            Arc::ptr_eq(a, b)
+                || (a.component == b.component
+                    && a.statement == b.statement
+                    && a.partial == b.partial
+                    && a.bindings == b.bindings
+                    && same_map(&a.props, &b.props))
+        }
+        (Value::Array(a), Value::Array(b)) => a.len() == b.len() && a.iter().zip(b).all(|(a, b)| same_tree(a, b)),
+        (Value::Object(a), Value::Object(b)) => same_map(a, b),
+        (Value::Plan(a), Value::Plan(b)) => Arc::ptr_eq(a, b) || a == b,
+        (a, b) => a == b,
     }
 }
 

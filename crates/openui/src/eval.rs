@@ -59,10 +59,11 @@ pub fn idle_mutation() -> Value {
     Value::from_iter([("status", Value::from("idle")), ("data", Value::Null), ("error", Value::Null)])
 }
 
-/// The components evaluated last time, by their lowered node, with their inputs' versions.
+/// The components evaluated last time, by their lowered node, with their inputs' versions. An
+/// entry holds its node, so that no other node takes its address while it is kept.
 #[derive(Debug, Default)]
 pub struct Cache {
-    entries: HashMap<usize, (Vec<u64>, Value)>,
+    entries: HashMap<usize, (Arc<ElementNode>, Vec<u64>, Value)>,
     used: HashSet<usize>,
 }
 
@@ -256,7 +257,7 @@ impl<'a> Evaluator<'a> {
             if cacheable { node.deps.iter().map(|dep| self.inputs.version(dep)).collect() } else { Vec::new() };
         if cacheable
             && let Some(cache) = self.cache.as_deref_mut()
-            && let Some((versions, value)) = cache.entries.get(&key)
+            && let Some((_, versions, value)) = cache.entries.get(&key)
             && *versions == fingerprint
         {
             cache.used.insert(key);
@@ -298,7 +299,7 @@ impl<'a> Evaluator<'a> {
             bindings,
         });
         if cacheable && let Some(cache) = self.cache.as_deref_mut() {
-            cache.entries.insert(key, (fingerprint, value.clone()));
+            cache.entries.insert(key, (node.clone(), fingerprint, value.clone()));
             cache.used.insert(key);
         }
         value

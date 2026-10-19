@@ -489,3 +489,140 @@ fn infix_precedence(token: &Tok) -> u8 {
         _ => 0,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ast::{BinaryOp, Expr, Kind};
+
+    fn names(parsed: &Parsed) -> Vec<&str> {
+        parsed.statements.keys().map(String::as_str).collect()
+    }
+
+    fn expr<'a>(parsed: &'a Parsed, name: &str) -> &'a Expr {
+        &parsed.statement(name).unwrap().expr
+    }
+
+    #[test]
+    fn keeps_a_ternary_open_across_lines() {
+        let ternary = |then: &str, otherwise: &str| {
+            Expr::Ternary(
+                Box::new(Expr::Ref("x".into())),
+                Box::new(Expr::Num(then.parse().unwrap())),
+                Box::new(Expr::Num(otherwise.parse().unwrap())),
+            )
+        };
+        for text in [
+            "a = x ? 1 :\n  2\nb = 3",
+            "a = x ?\n  1 : 2\nb = 3",
+            "a = x\n  ? 1\n  : 2\nb = 3",
+            "a = x ? 1\n\n : 2\nb = 3",
+        ] {
+            let parsed = parse(text);
+            assert_eq!(names(&parsed), ["a", "b"], "{text:?}");
+            assert_eq!(expr(&parsed, "a"), &ternary("1", "2"), "{text:?}");
+        }
+        let parsed = parse("a = x ? 1 : 2\n  + 3\nb = 3");
+        assert_eq!(expr(&parsed, "a"), &ternary("1", "2"));
+        assert_eq!(names(&parsed), ["a", "b"]);
+        let parsed = parse("a = x ? 1 : -\n  2");
+        assert!(matches!(expr(&parsed, "a"), Expr::Ternary(..)));
+    }
+
+    #[test]
+    fn reads_precedence_and_skips_what_is_not_a_statement() {
+        let parsed = parse("Some prose: (with a paren\nroot = 1 + 2 * 3 == 7 && !false\n= 4\nx");
+        assert_eq!(names(&parsed), ["root"]);
+        let Expr::Binary(BinaryOp::And, left, _) = expr(&parsed, "root") else { panic!("not &&") };
+        assert!(matches!(**left, Expr::Binary(BinaryOp::Eq, ..)));
+        let parsed = parse("a = Count(x)\nb = @Count(x)\nc = Upper(1)\nd = $v = 3");
+        assert_eq!(expr(&parsed, "a"), &Expr::Ref("Count".into()));
+        assert!(matches!(expr(&parsed, "b"), Expr::Call { at: true, .. }));
+        assert!(matches!(expr(&parsed, "c"), Expr::Call { at: false, .. }));
+        assert!(matches!(expr(&parsed, "d"), Expr::Assign(..)));
+        let parsed = parse("$q = Query(\"t\", {}, {})\n$s = 1");
+        assert_eq!(parsed.statement("$q").unwrap().kind, Kind::Query);
+        assert_eq!(parsed.statement("$s").unwrap().kind, Kind::State);
+    }
+
+    #[test]
+    fn closes_a_pending_tail() {
+        assert_eq!(auto_close("a = F([1, \"x"), (Cow::Owned("a = F([1, \"x\"])".into()), true));
+        assert_eq!(auto_close("a = \"x\\"), (Cow::Owned("a = \"x\\\\\"".into()), true));
+        assert_eq!(auto_close("a = F(]"), (Cow::Owned("a = F(])".into()), true));
+        assert_eq!(auto_close("a = 'it\\'s'"), (Cow::Borrowed("a = 'it\\'s'"), false));
+    }
+
+    #[test]
+    fn never_lets_a_pending_statement_replace_a_completed_one() {
+        let mut parser = Parser::new();
+        let parsed = parser.push("t = Text(\"first\")\nt = Text(\"sec", false);
+        assert_eq!(
+            expr(&parsed, "t"),
+            &Expr::Call { name: "Text".into(), args: vec![Expr::Str("first".into())], at: false }
+        );
+        assert!(parsed.incomplete);
+        let parsed = parser.push("ond\")", false);
+        assert_eq!(
+            expr(&parsed, "t"),
+            &Expr::Call { name: "Text".into(), args: vec![Expr::Str("second".into())], at: false }
+        );
+        let parsed = parser.push("\nu = Text(\"x", true);
+        assert_eq!(names(&parsed), ["t", "u"]);
+        assert!(parsed.complete && parsed.incomplete);
+    }
+
+    #[test]
+    fn parses_a_completed_statement_once() {
+        let mut parser = Parser::new();
+        let first = parser.push("a = Text(\"a\")\nb = Te", false);
+        let second = parser.push("xt(\"b\")\nc = 1", false);
+        assert!(Arc::ptr_eq(&first.statements["a"], &second.statements["a"]));
+        assert_eq!(parser.watermark, "a = Text(\"a\")\nb = Text(\"b\")\n".len());
+    }
+
+    #[test]
+    fn does_not_declare_a_state_name_still_growing() {
+        let mut parser = Parser::new();
+        let parsed = parser.push("root = Text($d", false);
+        assert_eq!(parsed.growing.as_deref(), Some("$d"));
+        let parsed = parser.push("ish)", false);
+        assert_eq!(parsed.growing, None);
+        let parsed = Parser::new().push("root = Text($d + $d", false);
+        assert_eq!(parsed.growing, None);
+    }
+
+    #[test]
+    fn starts_again_when_the_text_changes_before_the_watermark() {
+        let mut parser = Parser::new();
+        let parsed = parser.push("Here you go:\na = 1\n", false);
+        assert_eq!(names(&parsed), ["a"]);
+        let parsed = parser.push("```openui\nroot = Text(\"x\")\n", false);
+        assert_eq!(names(&parsed), ["root"]);
+        let parsed = parser.set("b = 2\n", true);
+        assert_eq!(names(&parsed), ["b"]);
+        let parsed = parser.push("c = 3", true);
+        assert_eq!(names(&parsed), ["c"], "a chunk after the end starts a new stream");
+    }
+
+    #[test]
+    fn streams_to_what_a_batch_parse_reads() {
+        let text = "Intro with \"quotes\n```openui\nroot = Stack([a, b, s]) // the page\n$n = -1\na = Text(\"line one\nline // two\", 'it\\'s')\n# note\nb = @Count([1 -2, -3])\ns = $n > 0\n  ? \"some\" :\n  \"none\"\nt = {k: [1, {x: \"}\"}], $s: 2}\n```\nOutro";
+        let batch = parse(text);
+        for size in 1..12 {
+            let mut parser = Parser::new();
+            let chars: Vec<char> = text.chars().collect();
+            let chunks: Vec<String> = chars.chunks(size).map(|chunk| chunk.iter().collect()).collect();
+            let mut parsed = Parsed::default();
+            for (index, chunk) in chunks.iter().enumerate() {
+                parsed = parser.push(chunk, index + 1 == chunks.len());
+            }
+            assert_eq!(names(&parsed), names(&batch), "chunks of {size}");
+            for (name, statement) in &batch.statements {
+                assert_eq!(&parsed.statements[name], statement, "chunks of {size}: {name}");
+            }
+            assert_eq!((parsed.incomplete, parsed.count), (batch.incomplete, batch.count));
+        }
+        assert_eq!(names(&batch), ["root", "$n", "a", "b", "s", "t"]);
+    }
+}
