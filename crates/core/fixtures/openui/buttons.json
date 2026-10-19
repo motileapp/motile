@@ -1,0 +1,440 @@
+{
+  "id": "",
+  "a11y": {
+    "role": "group"
+  },
+  "component": "Card",
+  "children": [
+    {
+      "id": "children/0",
+      "component": "Row",
+      "children": [
+        {
+          "id": "children/0/children/0",
+          "a11y": {
+            "role": "button",
+            "label": "Customize my capsule"
+          },
+          "component": "Button",
+          "label": "Customize my capsule",
+          "variant": "primary",
+          "tint": null,
+          "size": "regular",
+          "icon": {
+            "name": "arrow-right",
+            "glyph": ""
+          },
+          "block": false,
+          "disabled": null
+        },
+        {
+          "id": "children/0/children/1",
+          "a11y": {
+            "role": "button",
+            "label": "Copy split"
+          },
+          "component": "Button",
+          "label": "Copy split",
+          "variant": "outline",
+          "tint": null,
+          "size": "regular",
+          "icon": {
+            "name": "copy",
+            "glyph": ""
+          },
+          "block": false,
+          "disabled": null
+        },
+        {
+          "id": "children/0/children/2",
+          "a11y": {
+            "role": "button",
+            "label": "Reset"
+          },
+          "component": "Button",
+          "label": "Reset",
+          "variant": "ghost",
+          "tint": null,
+          "size": "regular",
+          "icon": {
+            "name": "rotate-ccw",
+            "glyph": ""
+          },
+          "block": false,
+          "disabled": null
+        },
+        {
+          "id": "children/0/children/3",
+          "a11y": {
+            "role": "button",
+            "label": "Soft"
+          },
+          "component": "Button",
+          "label": "Soft",
+          "variant": "secondary",
+          "tint": null,
+          "size": "regular",
+          "icon": null,
+          "block": false,
+          "disabled": null
+        }
+      ],
+      "gap": 8.0,
+      "align": "center",
+      "justify": "start",
+      "wrap": true,
+      "sizing": [
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": false
+        },
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": false
+        },
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": false
+        },
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": false
+        }
+      ]
+    },
+    {
+      "id": "children/1",
+      "component": "Row",
+      "children": [
+        {
+          "id": "children/1/children/0",
+          "a11y": {
+            "role": "button",
+            "label": "Small"
+          },
+          "component": "Button",
+          "label": "Small",
+          "variant": "outline",
+          "tint": null,
+          "size": "small",
+          "icon": null,
+          "block": false,
+          "disabled": null
+        },
+        {
+          "id": "children/1/children/1",
+          "a11y": {
+            "role": "button",
+            "label": "Medium"
+          },
+          "component": "Button",
+          "label": "Medium",
+          "variant": "outline",
+          "tint": null,
+          "size": "regular",
+          "icon": null,
+          "block": false,
+          "disabled": null
+        },
+        {
+          "id": "children/1/children/2",
+          "a11y": {
+            "role": "button",
+            "label": "Large"
+          },
+          "component": "Button",
+          "label": "Large",
+          "variant": "outline",
+          "tint": null,
+          "size": "large",
+          "icon": null,
+          "block": false,
+          "disabled": null
+        },
+        {
+          "id": "children/1/children/3",
+          "a11y": {
+            "role": "button",
+            "label": "Disabled"
+          },
+          "component": "Button",
+          "label": "Disabled",
+          "variant": "primary",
+          "tint": null,
+          "size": "regular",
+          "icon": null,
+          "block": false,
+          "disabled": "program"
+        }
+      ],
+      "gap": 8.0,
+      "align": "center",
+      "justify": "start",
+      "wrap": true,
+      "sizing": [
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": false
+        },
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": false
+        },
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": false
+        },
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": false
+        }
+      ]
+    },
+    {
+      "id": "children/2",
+      "component": "Row",
+      "children": [
+        {
+          "id": "children/2/children/0",
+          "a11y": {
+            "role": "button",
+            "label": "Delete"
+          },
+          "component": "Button",
+          "label": "Delete",
+          "variant": "danger",
+          "tint": null,
+          "size": "regular",
+          "icon": null,
+          "block": false,
+          "disabled": null
+        },
+        {
+          "id": "children/2/children/1",
+          "a11y": {
+            "role": "button",
+            "label": "Confirm"
+          },
+          "component": "Button",
+          "label": "Confirm",
+          "variant": "success",
+          "tint": null,
+          "size": "regular",
+          "icon": null,
+          "block": false,
+          "disabled": null
+        },
+        {
+          "id": "children/2/children/2",
+          "a11y": {
+            "role": "button",
+            "label": "Remove"
+          },
+          "component": "Button",
+          "label": "Remove",
+          "variant": "outline",
+          "tint": "destructive",
+          "size": "regular",
+          "icon": {
+            "name": "trash-2",
+            "glyph": ""
+          },
+          "block": false,
+          "disabled": null
+        },
+        {
+          "id": "children/2/children/3",
+          "a11y": {
+            "role": "button",
+            "label": "Open docs"
+          },
+          "component": "Button",
+          "label": "Open docs",
+          "variant": "ghost",
+          "tint": null,
+          "size": "regular",
+          "icon": {
+            "name": "external-link",
+            "glyph": ""
+          },
+          "block": false,
+          "disabled": null
+        }
+      ],
+      "gap": 8.0,
+      "align": "center",
+      "justify": "start",
+      "wrap": true,
+      "sizing": [
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": false
+        },
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": false
+        },
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": false
+        },
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": false
+        }
+      ]
+    },
+    {
+      "id": "children/3",
+      "component": "Row",
+      "children": [
+        {
+          "id": "children/3/children/0",
+          "a11y": {
+            "role": "button",
+            "label": "Save"
+          },
+          "component": "IconButton",
+          "icon": {
+            "name": "heart",
+            "glyph": ""
+          },
+          "label": "Save",
+          "tooltip": "Save",
+          "variant": "outline",
+          "disabled": null
+        },
+        {
+          "id": "children/3/children/1",
+          "a11y": {
+            "role": "button",
+            "label": "Share"
+          },
+          "component": "IconButton",
+          "icon": {
+            "name": "share",
+            "glyph": ""
+          },
+          "label": "Share",
+          "tooltip": "Share",
+          "variant": "ghost",
+          "disabled": null
+        },
+        {
+          "id": "children/3/children/2",
+          "a11y": {
+            "role": "button",
+            "label": "Add"
+          },
+          "component": "IconButton",
+          "icon": {
+            "name": "plus",
+            "glyph": ""
+          },
+          "label": "Add",
+          "tooltip": "Add",
+          "variant": "primary",
+          "disabled": null
+        },
+        {
+          "id": "children/3/children/3",
+          "a11y": {
+            "role": "button",
+            "label": "Bookmark"
+          },
+          "component": "IconButton",
+          "icon": {
+            "name": "bookmark",
+            "glyph": ""
+          },
+          "label": "Bookmark",
+          "tooltip": "Bookmark",
+          "variant": "outline",
+          "disabled": null
+        }
+      ],
+      "gap": 8.0,
+      "align": "center",
+      "justify": "start",
+      "wrap": false,
+      "sizing": [
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": false
+        },
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": false
+        },
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": false
+        },
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": false
+        }
+      ]
+    },
+    {
+      "id": "children/4",
+      "a11y": {
+        "role": "button",
+        "label": "Add to my route"
+      },
+      "component": "Button",
+      "label": "Add to my route",
+      "variant": "primary",
+      "tint": null,
+      "size": "large",
+      "icon": {
+        "name": "plus",
+        "glyph": ""
+      },
+      "block": true,
+      "disabled": null
+    }
+  ],
+  "soft": false,
+  "nested": false,
+  "padding": null,
+  "spacing": [
+    0.0,
+    12.0,
+    12.0,
+    12.0,
+    12.0
+  ]
+}

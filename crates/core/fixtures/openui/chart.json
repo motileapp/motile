@@ -1,0 +1,297 @@
+{
+  "id": "",
+  "a11y": {
+    "role": "group"
+  },
+  "component": "Card",
+  "children": [
+    {
+      "id": "children/0",
+      "component": "Row",
+      "children": [
+        {
+          "id": "children/0/children/0",
+          "component": "Col",
+          "children": [
+            {
+              "id": "children/0/children/0/children/0",
+              "a11y": {
+                "role": "heading",
+                "level": 3
+              },
+              "component": "Title",
+              "text": {
+                "text": "Drone services revenue",
+                "runs": [],
+                "links": []
+              },
+              "style": "card_title",
+              "color": "foreground"
+            },
+            {
+              "id": "children/0/children/0/children/1",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Caption",
+              "text": {
+                "text": "Illustrative revenue path, not a forecast",
+                "runs": [],
+                "links": []
+              },
+              "style": "card_subtitle",
+              "color": "muted-foreground"
+            }
+          ],
+          "align": "stretch",
+          "spacing": [
+            0.0,
+            4.0
+          ]
+        },
+        {
+          "id": "children/0/children/1",
+          "a11y": {
+            "role": "hidden"
+          },
+          "component": "Spacer"
+        },
+        {
+          "id": "children/0/children/2",
+          "a11y": {
+            "role": "radio_group"
+          },
+          "component": "SegmentedControl",
+          "value": "bar",
+          "options": [
+            {
+              "value": "bar",
+              "label": "bar",
+              "description": null
+            },
+            {
+              "value": "line",
+              "label": "line",
+              "description": null
+            },
+            {
+              "value": "area",
+              "label": "area",
+              "description": null
+            }
+          ],
+          "selected": 0,
+          "block": false,
+          "disabled": null
+        }
+      ],
+      "gap": 12.0,
+      "align": "center",
+      "justify": "start",
+      "wrap": true,
+      "sizing": [
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": true
+        },
+        {
+          "basis": "zero",
+          "length": null,
+          "grow": 1.0,
+          "shrink": false
+        },
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": true
+        }
+      ]
+    },
+    {
+      "id": "children/1",
+      "a11y": {
+        "role": "image",
+        "label": "bar chart of Photography, Inspection by year"
+      },
+      "component": "Chart",
+      "canvas": {
+        "kind": "Chart",
+        "props": {
+          "type": "bar",
+          "data": [
+            {
+              "year": "2025",
+              "Photography": 617000000,
+              "Inspection": 410000000
+            },
+            {
+              "year": "2027",
+              "Photography": 820000000,
+              "Inspection": 690000000
+            },
+            {
+              "year": "2030",
+              "Photography": 1240000000,
+              "Inspection": 1310000000
+            },
+            {
+              "year": "2034",
+              "Photography": 1900000000,
+              "Inspection": 2350000000
+            }
+          ],
+          "x": "year",
+          "series": [
+            "Photography",
+            "Inspection"
+          ],
+          "format": "currency",
+          "stacked": true
+        }
+      }
+    },
+    {
+      "id": "children/2",
+      "component": "Grid",
+      "children": [
+        {
+          "id": "children/2/children/0",
+          "component": "Col",
+          "children": [
+            {
+              "id": "children/2/children/0/children/0",
+              "a11y": {
+                "role": "heading",
+                "level": 4
+              },
+              "component": "Title",
+              "text": {
+                "text": "How people get around",
+                "runs": [],
+                "links": []
+              },
+              "style": "title_sm",
+              "color": "foreground"
+            },
+            {
+              "id": "children/2/children/0/children/1",
+              "a11y": {
+                "role": "image",
+                "label": "pie chart of share by mode"
+              },
+              "component": "Chart",
+              "canvas": {
+                "kind": "Chart",
+                "props": {
+                  "type": "pie",
+                  "data": [
+                    {
+                      "mode": "Walking",
+                      "share": 52
+                    },
+                    {
+                      "mode": "Transit",
+                      "share": 31
+                    },
+                    {
+                      "mode": "Cycling",
+                      "share": 17
+                    }
+                  ],
+                  "x": "mode",
+                  "series": [
+                    "share"
+                  ],
+                  "format": "percent"
+                }
+              }
+            }
+          ],
+          "align": "stretch",
+          "spacing": [
+            0.0,
+            8.0
+          ]
+        },
+        {
+          "id": "children/2/children/1",
+          "component": "Col",
+          "children": [
+            {
+              "id": "children/2/children/1/children/0",
+              "a11y": {
+                "role": "heading",
+                "level": 4
+              },
+              "component": "Title",
+              "text": {
+                "text": "Budget",
+                "runs": [],
+                "links": []
+              },
+              "style": "title_sm",
+              "color": "foreground"
+            },
+            {
+              "id": "children/2/children/1/children/1",
+              "a11y": {
+                "role": "image",
+                "label": "donut chart of amount by item"
+              },
+              "component": "Chart",
+              "canvas": {
+                "kind": "Chart",
+                "props": {
+                  "type": "donut",
+                  "data": [
+                    {
+                      "item": "Lodging",
+                      "amount": 840
+                    },
+                    {
+                      "item": "Food",
+                      "amount": 420
+                    },
+                    {
+                      "item": "Transport",
+                      "amount": 260
+                    },
+                    {
+                      "item": "Museums",
+                      "amount": 90
+                    }
+                  ],
+                  "x": "item",
+                  "series": [
+                    "amount"
+                  ],
+                  "format": "currency",
+                  "currency": "EUR"
+                }
+              }
+            }
+          ],
+          "align": "stretch",
+          "spacing": [
+            0.0,
+            8.0
+          ]
+        }
+      ],
+      "columns": 2,
+      "min_child_width": 260.0,
+      "gap": 24.0
+    }
+  ],
+  "soft": false,
+  "nested": false,
+  "padding": null,
+  "spacing": [
+    0.0,
+    12.0,
+    12.0
+  ]
+}

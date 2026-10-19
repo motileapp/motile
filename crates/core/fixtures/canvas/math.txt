@@ -1,0 +1,36 @@
+E = mc^2 | block | 60.21 × 13.55, baseline 13.55, 1 items, 236 verbs
+E = mc^2 | inline | 60.21 × 12.77, baseline 12.77, 1 items, 236 verbs
+\frac{a}{b} + \frac{1}{1 + \frac{1}{x}} | block | 72.02 × 37.66, baseline 20.72, 1 items, 286 verbs
+\frac{a}{b} + \frac{1}{1 + \frac{1}{x}} | inline | 53.63 × 23.32, baseline 13.25, 1 items, 286 verbs
+\sqrt{2} + \sqrt[3]{x^2 + 1} | block | 102.69 × 19.44, baseline 16.66, 1 items, 316 verbs
+\sqrt{2} + \sqrt[3]{x^2 + 1} | inline | 100.08 × 16.4, baseline 14.32, 1 items, 314 verbs
+\sum_{i=1}^{n} i = \frac{n(n+1)}{2} | block | 113.36 × 48.44, baseline 27.15, 1 items, 466 verbs
+\sum_{i=1}^{n} i = \frac{n(n+1)}{2} | inline | 103.56 × 21.25, baseline 15.84, 1 items, 466 verbs
+\int_0^\infty e^{-x^2}\,dx = \frac{\sqrt{\pi}}{2} | block | 124.63 × 37.45, baseline 23.16, 1 items, 517 verbs
+\int_0^\infty e^{-x^2}\,dx = \frac{\sqrt{\pi}}{2} | inline | 112.63 × 21.95, baseline 16.37, 1 items, 521 verbs
+\lim_{x \to 0} \frac{\sin x}{x} = 1 | block | 88.69 × 33.59, baseline 21.09, 1 items, 604 verbs
+\lim_{x \to 0} \frac{\sin x}{x} = 1 | inline | 102.31 × 18.92, baseline 13.51, 1 items, 604 verbs
+\begin{pmatrix} a & b \\ c & d \end{pmatrix} | block | 55.21 × 37.63, baseline 22.74, 1 items, 215 verbs
+\begin{pmatrix} a & b \\ c & d \end{pmatrix} | inline | 55.21 × 37.63, baseline 22.74, 1 items, 215 verbs
+\begin{bmatrix} 1 & 0 & 0 \\ 0 & 1 & 0 \\ 0 & 0 & 1 \end{bmatrix} | block | 75.8 × 56.48, baseline 32.14, 1 items, 316 verbs
+\begin{bmatrix} 1 & 0 & 0 \\ 0 & 1 & 0 \\ 0 & 0 & 1 \end{bmatrix} | inline | 75.8 × 56.48, baseline 32.14, 1 items, 316 verbs
+f(x) = \begin{cases} 1 & x > 0 \\ 0 & \text{otherwise} \end{cases} | block | 152.17 × 47.04, baseline 27.44, 1 items, 765 verbs
+f(x) = \begin{cases} 1 & x > 0 \\ 0 & \text{otherwise} \end{cases} | inline | 152.17 × 47.04, baseline 27.44, 1 items, 765 verbs
+\text{area} = \pi r^2 | block | 72.98 × 13.55, baseline 13.55, 1 items, 332 verbs
+\text{area} = \pi r^2 | inline | 72.98 × 12.77, baseline 12.77, 1 items, 332 verbs
+\hat{x} + \vec{v} + \bar{y} + \tilde{n} + \dot{a} | block | 119.73 × 15.29, baseline 12.24, 1 items, 413 verbs
+\hat{x} + \vec{v} + \bar{y} + \tilde{n} + \dot{a} | inline | 119.73 × 15.29, baseline 12.24, 1 items, 413 verbs
+\bar{x} \sim \mathcal{N}\left(\mu, \frac{\sigma^2}{n}\right) | block | 106.72 × 38.28, baseline 23.38, 1 items, 372 verbs
+\bar{x} \sim \mathcal{N}\left(\mu, \frac{\sigma^2}{n}\right) | inline | 97.94 × 28.22, baseline 18.03, 1 items, 367 verbs
+\binom{n}{k} = \frac{n!}{k!(n-k)!} | block | 123.96 × 37.63, baseline 22.74, 1 items, 508 verbs
+\binom{n}{k} = \frac{n!}{k!(n-k)!} | inline | 87.51 × 21.95, baseline 13.8, 1 items, 499 verbs
+\alpha \beta \Gamma \in \mathbb{R}, \forall \epsilon > 0 | block | 110.87 × 13.94, baseline 10.89, 1 items, 433 verbs
+\alpha \beta \Gamma \in \mathbb{R}, \forall \epsilon > 0 | inline | 110.87 × 13.94, baseline 10.89, 1 items, 433 verbs
+\ce{H2O + CO2 -> H2CO3} | block | 158.75 × 13.07, baseline 10.71, 1 items, 808 verbs
+\ce{H2O + CO2 -> H2CO3} | inline | 158.75 × 13.07, baseline 10.71, 1 items, 808 verbs
+\ce{2H2 + O2 -> 2H2O} | block | 138.54 × 13.07, baseline 10.71, 1 items, 716 verbs
+\ce{2H2 + O2 -> 2H2O} | inline | 138.54 × 13.07, baseline 10.71, 1 items, 716 verbs
+\textcolor{red}{x} + y \colorbox{yellow}{z} | block | 52.75 × 16.16, baseline 11.46, 4 items, 184 verbs
+\textcolor{red}{x} + y \colorbox{yellow}{z} | inline | 52.75 × 16.16, baseline 11.46, 4 items, 184 verbs
+\overbrace{a + b}^{n} \underline{c} | block | 40.97 × 31.73, baseline 28.91, 1 items, 635 verbs
+\overbrace{a + b}^{n} \underline{c} | inline | 40.97 × 31.73, baseline 28.91, 1 items, 635 verbs

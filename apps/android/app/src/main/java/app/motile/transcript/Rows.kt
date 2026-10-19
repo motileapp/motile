@@ -10,6 +10,7 @@ import app.motile.core.AttachedFile
 import app.motile.core.JSON
 import app.motile.core.SkillSpan
 import app.motile.core.Time
+import app.motile.core.UiNode
 import app.motile.core.ViewedMedia
 import app.motile.core.bool
 import app.motile.core.double
@@ -49,6 +50,8 @@ class RowModel(
         class User(val text: MessageText, val attachments: List<AttachedFile>, val at: Double) : Kind
         class Prose(val content: ProseContent) : Kind
         class Code(val content: CodeContent) : Kind
+        /** A program the core runs, shown as its source until its views come. */
+        class Ui(val content: UiContent) : Kind
         class Tool(val content: ToolContent) : Kind
         class Thinking(val text: String) : Kind
         class Media(val content: MediaContent) : Kind
@@ -92,6 +95,7 @@ class RowModel(
         get() = when (kind) {
             is Kind.Prose -> kind.content.plain
             is Kind.Code -> "```${kind.content.language}\n${kind.content.code}\n```"
+            is Kind.Ui -> "```${kind.content.code.language}\n${kind.content.code.code}\n```"
             else -> null
         }
 
@@ -114,7 +118,7 @@ class RowModel(
                 "user" -> Kind.User(MessageText(json, muted = false), json.objects("attachments").map(::AttachedFile), json.double("at"))
                 "prose" -> Kind.Prose(ProseContent(json))
                 "code" -> Kind.Code(CodeContent(json.string("language"), json.string("code"), json.optionalInts("spans")))
-                "ui" -> Kind.Code(CodeContent("openui-lang", json.string("source"), IntArray(0)))
+                "ui" -> Kind.Ui(UiContent(json))
                 "tool" -> Kind.Tool(ToolContent(json))
                 "thinking" -> Kind.Thinking(json.string("text"))
                 "media" -> Kind.Media(MediaContent(json))
@@ -232,6 +236,15 @@ class ProseSource(json: JSON) {
 }
 
 /** A code row: its highlighting arrives after it, and is typeset off the main thread. */
+/** A program row: its tree, which `ui_patch` events change, and its source. */
+class UiContent(json: JSON) {
+    val code = CodeContent("openui-lang", json.string("source"), IntArray(0))
+    val tree: UiNode? = json.obj("tree")?.let(UiNode::from)
+    val complete = json.bool("complete")
+    /** The thread's server is too old to run the program's tools. */
+    val limited = json.bool("limited")
+}
+
 class CodeContent(val language: String, val code: String, spans: IntArray?) {
     val lineCount: Int = if (code.isEmpty()) 1 else code.count { it == '\n' } + 1
     /** The highlighting, as `[start, length, palette index]`; null until it has arrived. */

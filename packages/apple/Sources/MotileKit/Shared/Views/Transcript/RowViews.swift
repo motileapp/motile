@@ -78,7 +78,7 @@ class RowView: FlippedView {
             return TextMeasure.height(of: text, width: width - ErrorRowView.textInset) + ErrorRowView.padding
         case .removed(let content):
             return RemovedRowView.height(textHeight: TextMeasure.height(of: content.message, width: RemovedRowView.inner(width)))
-        case .code, .tool, .thinking, .group, .fold, .agent, .agents, .media, .file, .changes, .turnEnd, .handoff, .queued, .unknown:
+        case .code, .ui, .tool, .thinking, .group, .fold, .agent, .agents, .media, .file, .changes, .turnEnd, .handoff, .queued, .unknown:
             return estimatedHeight(row, width: width)
         }
     }
@@ -92,6 +92,8 @@ class RowView: FlippedView {
             return estimatedTextHeight(text.length, width: width) + ProseRowView.gap + row.above
         case .code(let content):
             return CodeRowView.height(lines: content.lineCount)
+        case .ui(let content):
+            return CodeRowView.height(lines: content.code.lineCount)
         case .tool, .thinking, .group, .fold:
             return ToolRowView.rowHeight + row.above
         case .agent(let content):
@@ -129,7 +131,7 @@ class RowView: FlippedView {
         switch row.kind {
         case .user: return UserRowView()
         case .prose: return ProseRowView()
-        case .code: return CodeRowView()
+        case .code, .ui: return CodeRowView()
         case .tool, .thinking, .group, .fold: return ToolRowView()
         case .agent: return AgentRowView()
         case .agents: return AgentsRowView()
@@ -149,7 +151,7 @@ class RowView: FlippedView {
         switch row.kind {
         case .user: return "user"
         case .prose: return "prose"
-        case .code: return "code"
+        case .code, .ui: return "code"
         case .tool, .thinking, .group, .fold: return "tool"
         case .agent: return "agent"
         case .agents: return "agents"
@@ -511,7 +513,12 @@ final class CodeRowView: RowView {
 
     override func configure(_ row: RowModel) {
         super.configure(row)
-        guard case .code(let content) = row.kind else { return }
+        let content: CodeContent
+        switch row.kind {
+        case .code(let code): content = code
+        case .ui(let program): content = program.code
+        default: return
+        }
         lines = content.lineCount
         header.show(language: content.language, code: content.code)
         text.content = content.attributed

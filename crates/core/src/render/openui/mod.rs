@@ -4,20 +4,18 @@
 //!
 //! A node's id is its path from the root, the steps joined by `/`: `children/2/action`.
 
+pub mod canvas;
 pub mod host;
 pub mod tree;
 
 #[cfg(test)]
 mod tests;
 
-use std::cell::RefCell;
-use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use chrono::{Local, Offset, TimeZone};
-use motile_openui::{Element, Env, FieldSpec, Forms, Library, Runtime, Step};
-use motile_protocol::wire::Media;
+use motile_openui::{Element, Env, FieldSpec, Forms, Library, Step};
 use serde::Serialize;
 use serde_json::{Map, Value};
 
@@ -26,9 +24,8 @@ use self::tree::UiNode;
 /// What a node's id is made from.
 pub type Path = Vec<Step>;
 
-/// The keys of a node's JSON that aren't its props: a node whose `component` changes is replaced.
+/// What a node's JSON is known by: a node whose `component` changes is replaced.
 const ID: &str = "id";
-const CHILDREN: &str = "children";
 const COMPONENT: &str = "component";
 
 /// A program row: the program and how it is drawn.
@@ -42,7 +39,7 @@ pub struct UiRow {
     /// The fence has closed, or the reply has ended: the program won't grow.
     pub complete: bool,
     /// The program's tree as it is now, set as the row is sent. `ui_patch` events change it after.
-    pub tree: Option<UiNode>,
+    pub tree: Option<Box<UiNode>>,
     /// What keeps the program from running as it should, once it is complete.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub errors: Vec<String>,
@@ -53,27 +50,16 @@ pub struct UiRow {
     /// The fence as the agent wrote it.
     #[serde(skip)]
     pub fence: String,
-    /// The fence patches the latest program before it: it has no `root` and no `Col` statement.
+    /// The fence patches the latest program before it, when there is one: it has no `root`.
     #[serde(skip)]
     pub patch: bool,
 }
 
 impl UiRow {
     pub fn new(fence: String, complete: bool) -> Self {
-        let patch = is_patch(&fence);
+        let patch = motile_openui::fences::is_patch(&fence);
         Self { source: fence.clone(), complete, fence, patch, ..Self::default() }
     }
-}
-
-/// A fence with no `root` statement and no statement that is a `Col(...)` call, as the agents are
-/// told.
-fn is_patch(fence: &str) -> bool {
-    let parsed = motile_openui::parse(fence);
-    let starts_program = |statement: &motile_openui::ast::Statement| {
-        statement.name == "root"
-            || matches!(&statement.expr, motile_openui::ast::Expr::Call { name, at: false, .. } if name == "Col")
-    };
-    parsed.count > 0 && !parsed.statements.values().any(|statement| starts_program(statement))
 }
 
 /// A change to a program's tree, applied in order.
@@ -89,16 +75,18 @@ pub enum UiOp {
         id: String,
         node: Value,
     },
-    /// Some of the node's keys changed: `set` holds their new values, `unset` the keys it lost.
+    /// Some of the node's keys changed: `set` holds their new values, `unset` the keys it lost. A
+    /// key whose value is a node, or a list of nodes, changes through the ops of those nodes.
     Props {
         id: String,
         set: Map<String, Value>,
         #[serde(skip_serializing_if = "Vec::is_empty")]
         unset: Vec<String>,
     },
-    /// A child at `index` of the node `parent`.
+    /// A node at `index` of the list `key` of the node `parent`.
     Insert {
         parent: String,
+        key: String,
         index: usize,
         node: Value,
     },
@@ -160,6 +148,7 @@ fn diff_node(before: &Value, after: &Value, ops: &mut Vec<UiOp>) {
         return;
     }
     let id = after[ID].as_str().unwrap_or_default().to_string();
+    let (Some(old), Some(new)) = (before.as_object(), after.as_object()) else { return };
     if before[ID] != after[ID] || before[COMPONENT] != after[COMPONENT] {
         ops.push(match id.is_empty() {
             true => UiOp::Root { node: Some(after.clone()) },
@@ -167,145 +156,48 @@ fn diff_node(before: &Value, after: &Value, ops: &mut Vec<UiOp>) {
         });
         return;
     }
-    let (Some(old), Some(new)) = (before.as_object(), after.as_object()) else {
-        ops.push(UiOp::Root { node: Some(after.clone()) });
-        return;
-    };
-    let own = |key: &String| key != ID && key != CHILDREN;
-    let set: Map<String, Value> = new
-        .iter()
-        .filter(|(key, value)| own(key) && old.get(*key) != Some(*value))
-        .map(|(key, value)| (key.clone(), value.clone()))
-        .collect();
-    let unset: Vec<String> = old.keys().filter(|key| own(key) && !new.contains_key(*key)).cloned().collect();
+    let mut set = Map::new();
+    let mut inner = Vec::new();
+    for (key, value) in new.iter().filter(|(key, _)| *key != ID) {
+        let Some(previous) = old.get(key) else {
+            set.insert(key.clone(), value.clone());
+            continue;
+        };
+        match (nodes(previous), nodes(value)) {
+            _ if previous == value => {}
+            _ if is_node(previous) && is_node(value) => diff_node(previous, value, &mut inner),
+            (Some(old), Some(new)) => {
+                let shared = old.len().min(new.len());
+                for (before, after) in old.iter().zip(new) {
+                    diff_node(before, after, &mut inner);
+                }
+                for (index, node) in new.iter().enumerate().skip(shared) {
+                    let (parent, key, node) = (id.clone(), key.clone(), node.clone());
+                    inner.push(UiOp::Insert { parent, key, index, node });
+                }
+                for node in old[shared..].iter().rev() {
+                    inner.push(UiOp::Remove { id: node[ID].as_str().unwrap_or_default().to_string() });
+                }
+            }
+            _ => {
+                set.insert(key.clone(), value.clone());
+            }
+        }
+    }
+    let unset: Vec<String> = old.keys().filter(|key| !new.contains_key(*key)).cloned().collect();
     if !set.is_empty() || !unset.is_empty() {
-        ops.push(UiOp::Props { id: id.clone(), set, unset });
+        ops.push(UiOp::Props { id, set, unset });
     }
-    let children =
-        |node: &Map<String, Value>| node.get(CHILDREN).and_then(Value::as_array).cloned().unwrap_or_default();
-    let (old, new) = (children(old), children(new));
-    let shared = old.len().min(new.len());
-    for (before, after) in old.iter().zip(&new) {
-        diff_node(before, after, ops);
-    }
-    for (index, node) in new.iter().enumerate().skip(shared) {
-        ops.push(UiOp::Insert { parent: id.clone(), index, node: node.clone() });
-    }
-    for node in old[shared..].iter().rev() {
-        ops.push(UiOp::Remove { id: node[ID].as_str().unwrap_or_default().to_string() });
-    }
+    ops.extend(inner);
 }
 
-/// What the user did to a node that only the clients see, kept by the core between renders.
-#[derive(Clone, PartialEq, Debug, Default)]
-pub struct NodeState {
-    /// A flashcard shows its back.
-    pub flipped: bool,
-    /// An accordion's or a popover's state, once the user changed it.
-    pub open: Option<bool>,
-    /// A carousel's or a stepper's page, once the user moved it.
-    pub index: Option<usize>,
-    /// A map's category filter.
-    pub filter: Option<String>,
-    /// The marker picked on a map with no `$variable` for it.
-    pub selected: Option<String>,
-    /// An image whose `src` couldn't be loaded: a photo is found for its `alt`.
-    pub fallback: bool,
-    /// A `Timer`'s countdown, once started.
-    pub countdown: Option<Countdown>,
+fn is_node(value: &Value) -> bool {
+    value.get(ID).is_some_and(Value::is_string) && value.get(COMPONENT).is_some()
 }
 
-#[derive(Clone, Copy, PartialEq, Debug)]
-pub struct Countdown {
-    pub running: bool,
-    /// The seconds it started from, which Reset goes back to.
-    pub from: f64,
-}
-
-/// A street route, or the stops in straight lines when the streets couldn't be found.
-#[derive(Serialize, Clone, PartialEq, Debug)]
-pub struct Route {
-    /// Each `[lat, lng]`.
-    pub points: Vec<[f64; 2]>,
-    /// "Route overview" for the straight lines.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub label: Option<String>,
-}
-
-impl Route {
-    pub fn overview(stops: &[[f64; 2]]) -> Self {
-        Self { points: stops.to_vec(), label: Some("Route overview".to_string()) }
-    }
-}
-
-/// What the thread's server found for its programs, kept while the thread is open.
-#[derive(Default)]
-pub struct Lookups {
-    /// The photos of each query; none while it is asked for.
-    pub images: HashMap<String, Option<Vec<Media>>>,
-    pub routes: HashMap<String, Option<Route>>,
-}
-
-/// The lookups a resolution needed and didn't find.
-#[derive(Default)]
-pub struct Wanted {
-    pub images: HashSet<String>,
-    pub routes: Vec<Vec<[f64; 2]>>,
-}
-
-/// What resolving a program's tree reads beyond its elements.
-pub struct ResolveCtx<'a> {
-    /// What a bound control shows (`value_at`), a field's error (`error_at`), the queries loading.
-    pub runtime: &'a Runtime,
-    /// See [`UiRow::limited`].
-    pub limited: bool,
-    lookups: &'a Lookups,
-    nodes: &'a HashMap<String, NodeState>,
-    wanted: RefCell<Wanted>,
-}
-
-impl<'a> ResolveCtx<'a> {
-    pub fn new(
-        runtime: &'a Runtime,
-        limited: bool,
-        lookups: &'a Lookups,
-        nodes: &'a HashMap<String, NodeState>,
-    ) -> Self {
-        Self { runtime, limited, lookups, nodes, wanted: RefCell::default() }
-    }
-
-    /// The photos found for `query`, the best first, or none while they are looked for.
-    pub fn images(&self, query: &str) -> Option<&'a [Media]> {
-        if self.limited {
-            return Some(&[]);
-        }
-        let found = self.lookups.images.get(query).and_then(Option::as_deref);
-        if found.is_none() {
-            self.wanted.borrow_mut().images.insert(query.to_string());
-        }
-        found
-    }
-
-    /// The route through the stops, each `[lat, lng]`, or none while it is looked for.
-    pub fn route(&self, stops: &[[f64; 2]]) -> Option<Route> {
-        if self.limited {
-            return Some(Route::overview(stops));
-        }
-        let found = self.lookups.routes.get(&route_key(stops)).cloned().flatten();
-        if found.is_none() {
-            self.wanted.borrow_mut().routes.push(stops.to_vec());
-        }
-        found
-    }
-
-    /// What the user did to the node at `path` that only the clients see.
-    pub fn node(&self, path: &[Step]) -> Option<&'a NodeState> {
-        self.nodes.get(&node_id(path))
-    }
-
-    pub fn into_wanted(self) -> Wanted {
-        self.wanted.into_inner()
-    }
+/// A list of nodes, or an empty list, which may become one.
+fn nodes(value: &Value) -> Option<&Vec<Value>> {
+    value.as_array().filter(|items| items.iter().all(is_node))
 }
 
 pub fn route_key(stops: &[[f64; 2]]) -> String {

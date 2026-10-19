@@ -66,6 +66,8 @@ enum class ButtonVariant {
     Outline,
     /** What can't be taken back. */
     Danger,
+    /** What went well, or is done. */
+    Success,
     /** What the user is asked to let happen. */
     Warning,
     /** Nothing until it is pressed: the buttons of bars and rows. */
@@ -123,11 +125,12 @@ data class ControlLook(
     val hover: Color? = null,
 ) {
     fun foreground(palette: Palette): Color {
-        if (tint != null && (variant == ButtonVariant.Ghost || variant == ButtonVariant.Secondary)) return tint
+        if (tint != null && (variant == ButtonVariant.Ghost || variant == ButtonVariant.Secondary || variant == ButtonVariant.Outline)) return tint
         return when (variant) {
             ButtonVariant.Secondary, ButtonVariant.Outline -> palette.foreground
             ButtonVariant.Primary -> palette.primaryForeground
             ButtonVariant.Danger -> palette.destructiveForeground
+            ButtonVariant.Success -> palette.successForeground
             ButtonVariant.Warning -> palette.warningForeground
             ButtonVariant.Ghost -> if (selected || lit) palette.foreground else palette.mutedForeground
             ButtonVariant.Link, ButtonVariant.Accent -> palette.primary
@@ -144,6 +147,7 @@ data class ControlLook(
             ButtonVariant.Secondary -> surface.color(if (selected || lit) Surface.Layer.ControlLit else Surface.Layer.Control, palette)
             ButtonVariant.Outline -> if (selected || lit) surface.color(Surface.Layer.Control, palette) else palette.background
             ButtonVariant.Danger -> filled(palette.destructive)
+            ButtonVariant.Success -> filled(palette.success)
             ButtonVariant.Warning -> filled(palette.warning)
             ButtonVariant.Ghost -> when {
                 selected -> surface.color(Surface.Layer.ControlLit, palette)
@@ -318,6 +322,7 @@ fun ControlButton(
     margin: PaddingValues = PaddingValues(0.dp),
     help: String? = null,
     onLongClick: (() -> Unit)? = null,
+    role: Role = Role.Button,
     content: @Composable () -> Unit,
 ) {
     val enabled = LocalEnabled.current && !disabled
@@ -338,7 +343,7 @@ fun ControlButton(
                 interactionSource = interaction,
                 indication = null,
                 enabled = enabled && !pending,
-                role = Role.Button,
+                role = role,
                 onLongClick = onLongClick,
                 onClick = onClick,
             )
@@ -397,7 +402,7 @@ fun ActionButton(
             tinted = tinted?.let { tail -> tint?.let { tail to it } },
         )
     }
-    if (!inline) return ControlButton(look, onClick, modifier, pending, disabled, margin, words?.let { listOfNotNull(it, tinted).joinToString(" ") } ?: help, onLongClick, label)
+    if (!inline) return ControlButton(look, onClick, modifier, pending, disabled, margin, words?.let { listOfNotNull(it, tinted).joinToString(" ") } ?: help, onLongClick, content = label)
     val line = with(LocalDensity.current) { rememberTextMeasurer().measure("M", size.font).size.height.toDp() }
     val vertical = ((size.height - line) / 2).coerceAtLeast(0.dp)
     val leading = when {

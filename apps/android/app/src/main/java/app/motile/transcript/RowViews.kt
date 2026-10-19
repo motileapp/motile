@@ -82,6 +82,7 @@ fun TranscriptRow(row: RowModel) {
         is RowModel.Kind.Queued -> QueuedRow(row, kind.content)
         is RowModel.Kind.Prose -> ProseRow(row, kind.content)
         is RowModel.Kind.Code -> CodeRow(kind.content)
+        is RowModel.Kind.Ui -> CodeRow(kind.content.code)
         is RowModel.Kind.Tool, is RowModel.Kind.Thinking, is RowModel.Kind.Group, is RowModel.Kind.Fold -> ToolRow(row)
         is RowModel.Kind.Agent -> AgentRow(row, kind.content)
         is RowModel.Kind.Agents -> AgentsRow(row, kind.content)

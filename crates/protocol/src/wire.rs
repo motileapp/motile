@@ -251,6 +251,8 @@ pub enum NoticeEvent {
     Asked,
     /// It reached its account's usage limit, and waits for the limit to reset.
     Limited,
+    /// A program the thread's own agent showed has errors, which it is asked to fix.
+    ProgramErrors,
 }
 
 /// One side of a handoff.

@@ -564,10 +564,20 @@ Before finishing, walk your output and verify:
     )
 }
 
-/// A JSON Schema as a signature's type.
+/// A JSON Schema as a signature's type; a list of types, as `["string", "null"]`, is their union.
 fn type_text(schema: &Value) -> String {
-    match schema.get("type").and_then(Value::as_str) {
-        Some("string") => match schema.get("enum").and_then(Value::as_array) {
+    match schema.get("type") {
+        Some(Value::Array(kinds)) => {
+            kinds.iter().filter_map(Value::as_str).map(|kind| kind_text(schema, kind)).collect::<Vec<_>>().join(" | ")
+        }
+        Some(Value::String(kind)) => kind_text(schema, kind),
+        _ => "any".to_owned(),
+    }
+}
+
+fn kind_text(schema: &Value, kind: &str) -> String {
+    match kind {
+        "string" => match schema.get("enum").and_then(Value::as_array) {
             Some(values) => values
                 .iter()
                 .map(|value| format!("\"{}\"", crate::js::to_string(value)))
@@ -575,13 +585,14 @@ fn type_text(schema: &Value) -> String {
                 .join(" | "),
             None => "string".to_owned(),
         },
-        Some("number" | "integer") => "number".to_owned(),
-        Some("boolean") => "boolean".to_owned(),
-        Some("array") => match schema.get("items") {
+        "number" | "integer" => "number".to_owned(),
+        "boolean" => "boolean".to_owned(),
+        "null" => "null".to_owned(),
+        "array" => match schema.get("items") {
             Some(items) => format!("{}[]", type_text(items)),
             None => "any[]".to_owned(),
         },
-        Some("object") => match schema.get("properties").and_then(Value::as_object).filter(|map| !map.is_empty()) {
+        "object" => match schema.get("properties").and_then(Value::as_object).filter(|map| !map.is_empty()) {
             Some(properties) => format!("{{{}}}", fields_text(properties, schema)),
             None => "object".to_owned(),
         },

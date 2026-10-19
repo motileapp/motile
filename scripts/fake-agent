@@ -56,6 +56,8 @@ made up on the spot instead:
   `usage` with `Query`, and "ask with a form" `inputs.oui`, a form that sends its values with
   `@ToAssistant`. A message with "context and form values = " lines is answered with the values
   they hold.
+- "show a broken ui": a reply with a program that has an unknown component and a missing required
+  prop. Told of its errors, it replies with a patch that fixes them.
 - "look over": a turn that reads greet.py and runs the tests, a step every FAKE_AGENT_CHILD_STEP
   seconds, and says what it would change. Codex does the same.
 
@@ -1098,6 +1100,28 @@ def ask_with_a_form():
     show_program("Tell me about the trip:", "inputs", "I'll plan it once you send it.")
 
 
+BROKEN_UI = """root = Card([title, chart, note])
+title = Title("Signups this week", "md")
+chart = BarChart([{day: "Mon", signups: 12}, {day: "Tue", signups: 18}, {day: "Wed", signups: 9}])
+note = Badge()"""
+FIXED_UI = """chart = Chart("bar", [{day: "Mon", signups: 12}, {day: "Tue", signups: 18}, {day: "Wed", signups: 9}], "day")
+note = Badge("Tuesday was the best day", "success")"""
+
+
+def show_a_broken_ui():
+    """A program with an unknown component and a missing required prop."""
+    turn = Turn("00000000-0000-4000-8000-0000000c0de1", piece=48)
+    turn.text(f"Here are this week's signups:\n\n```openui-lang\n{BROKEN_UI}\n```")
+    turn.done()
+
+
+def fix_the_ui():
+    """Told its program has errors, a patch that fixes them."""
+    turn = Turn("00000000-0000-4000-8000-0000000c0de2")
+    turn.text(f"```openui-lang\n{FIXED_UI}\n```")
+    turn.done()
+
+
 def values_of(value):
     """The plain values in what a program sent: a form's fields are `{value, componentType}`."""
     if isinstance(value, dict):
@@ -1461,6 +1485,8 @@ SCRIPTED = {
     "show the dashboard": show_the_dashboard,
     "show the ui": show_the_ui,
     "ask with a form": ask_with_a_form,
+    "show a broken ui": show_a_broken_ui,
+    "can't draw all of what you showed": fix_the_ui,
     "ask another account": ask_another_account,
     "ask agents in the background": ask_agents_in_the_background,
     "ask three agents": ask_three_agents,

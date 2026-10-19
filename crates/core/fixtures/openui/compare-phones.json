@@ -1,0 +1,943 @@
+{
+  "id": "",
+  "component": "Col",
+  "children": [
+    {
+      "id": "children/0",
+      "a11y": {
+        "role": "heading",
+        "level": 2
+      },
+      "component": "Title",
+      "text": {
+        "text": "iPhone 17 vs Pixel 11",
+        "runs": [],
+        "links": []
+      },
+      "style": "title_xl",
+      "color": "foreground"
+    },
+    {
+      "id": "children/1",
+      "a11y": {
+        "role": "text"
+      },
+      "component": "Text",
+      "text": {
+        "text": "Two flagship phones at the same price. The iPhone is the safer all-rounder; the Pixel wins on photos and AI features.",
+        "runs": [],
+        "links": []
+      },
+      "inlines": [],
+      "style": "body",
+      "color": "foreground",
+      "weight": "regular",
+      "italic": false,
+      "strike": false,
+      "digits": false,
+      "max_lines": null
+    },
+    {
+      "id": "children/2",
+      "component": "Grid",
+      "children": [
+        {
+          "id": "children/2/children/0",
+          "component": "Col",
+          "children": [
+            {
+              "id": "children/2/children/0/children/0",
+              "component": "Box",
+              "children": [
+                {
+                  "id": "children/2/children/0/children/0/children/0",
+                  "a11y": {
+                    "role": "image",
+                    "label": "iPhone 17"
+                  },
+                  "component": "SearchImage",
+                  "query": "iPhone 17",
+                  "aspect_ratio": 1.0,
+                  "radius": {
+                    "kind": "xl",
+                    "points": 16.0
+                  },
+                  "fit": "contain",
+                  "photos": {
+                    "state": "waiting",
+                    "media": []
+                  }
+                }
+              ],
+              "direction": "col",
+              "gap": 0.0,
+              "spacing": [
+                0.0
+              ],
+              "sizing": [],
+              "padding": 16.0,
+              "background": {
+                "surface": "box"
+              },
+              "inner_surface": true,
+              "radius": {
+                "kind": "xl",
+                "points": 16.0
+              },
+              "border": false,
+              "width": null,
+              "height": null,
+              "flex": null,
+              "align": "stretch",
+              "justify": "start",
+              "wrap": false
+            },
+            {
+              "id": "children/2/children/0/children/1",
+              "component": "Row",
+              "children": [
+                {
+                  "id": "children/2/children/0/children/1/children/0",
+                  "a11y": {
+                    "role": "heading",
+                    "level": 3
+                  },
+                  "component": "Title",
+                  "text": {
+                    "text": "iPhone 17",
+                    "runs": [],
+                    "links": []
+                  },
+                  "style": "title_md",
+                  "color": "foreground"
+                },
+                {
+                  "id": "children/2/children/0/children/1/children/1",
+                  "a11y": {
+                    "role": "hidden"
+                  },
+                  "component": "Spacer"
+                },
+                {
+                  "id": "children/2/children/0/children/1/children/2",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Badge",
+                  "text": "From $799",
+                  "tone": null,
+                  "icon": null
+                }
+              ],
+              "gap": 8.0,
+              "align": "center",
+              "justify": "start",
+              "wrap": false,
+              "sizing": [
+                {
+                  "basis": "content",
+                  "length": null,
+                  "grow": 0.0,
+                  "shrink": true
+                },
+                {
+                  "basis": "zero",
+                  "length": null,
+                  "grow": 1.0,
+                  "shrink": false
+                },
+                {
+                  "basis": "content",
+                  "length": null,
+                  "grow": 0.0,
+                  "shrink": false
+                }
+              ]
+            },
+            {
+              "id": "children/2/children/0/children/2",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Text",
+              "text": {
+                "text": "￼ A19 · 6.3-inch 120 Hz",
+                "runs": [],
+                "links": []
+              },
+              "inlines": [
+                {
+                  "id": "children/2/children/0/children/2/text/0",
+                  "a11y": {
+                    "role": "hidden"
+                  },
+                  "component": "Icon",
+                  "icon": {
+                    "name": "cpu",
+                    "glyph": ""
+                  },
+                  "size": 14.0,
+                  "color": "foreground"
+                }
+              ],
+              "style": "small",
+              "color": "muted-foreground",
+              "weight": "regular",
+              "italic": false,
+              "strike": false,
+              "digits": false,
+              "max_lines": null
+            }
+          ],
+          "align": "stretch",
+          "spacing": [
+            0.0,
+            8.0,
+            8.0
+          ]
+        },
+        {
+          "id": "children/2/children/1",
+          "component": "Col",
+          "children": [
+            {
+              "id": "children/2/children/1/children/0",
+              "component": "Box",
+              "children": [
+                {
+                  "id": "children/2/children/1/children/0/children/0",
+                  "a11y": {
+                    "role": "image",
+                    "label": "Pixel 11"
+                  },
+                  "component": "SearchImage",
+                  "query": "Pixel 11",
+                  "aspect_ratio": 1.0,
+                  "radius": {
+                    "kind": "xl",
+                    "points": 16.0
+                  },
+                  "fit": "contain",
+                  "photos": {
+                    "state": "waiting",
+                    "media": []
+                  }
+                }
+              ],
+              "direction": "col",
+              "gap": 0.0,
+              "spacing": [
+                0.0
+              ],
+              "sizing": [],
+              "padding": 16.0,
+              "background": {
+                "surface": "box"
+              },
+              "inner_surface": true,
+              "radius": {
+                "kind": "xl",
+                "points": 16.0
+              },
+              "border": false,
+              "width": null,
+              "height": null,
+              "flex": null,
+              "align": "stretch",
+              "justify": "start",
+              "wrap": false
+            },
+            {
+              "id": "children/2/children/1/children/1",
+              "component": "Row",
+              "children": [
+                {
+                  "id": "children/2/children/1/children/1/children/0",
+                  "a11y": {
+                    "role": "heading",
+                    "level": 3
+                  },
+                  "component": "Title",
+                  "text": {
+                    "text": "Pixel 11",
+                    "runs": [],
+                    "links": []
+                  },
+                  "style": "title_md",
+                  "color": "foreground"
+                },
+                {
+                  "id": "children/2/children/1/children/1/children/1",
+                  "a11y": {
+                    "role": "hidden"
+                  },
+                  "component": "Spacer"
+                },
+                {
+                  "id": "children/2/children/1/children/1/children/2",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Badge",
+                  "text": "From $799",
+                  "tone": null,
+                  "icon": null
+                }
+              ],
+              "gap": 8.0,
+              "align": "center",
+              "justify": "start",
+              "wrap": false,
+              "sizing": [
+                {
+                  "basis": "content",
+                  "length": null,
+                  "grow": 0.0,
+                  "shrink": true
+                },
+                {
+                  "basis": "zero",
+                  "length": null,
+                  "grow": 1.0,
+                  "shrink": false
+                },
+                {
+                  "basis": "content",
+                  "length": null,
+                  "grow": 0.0,
+                  "shrink": false
+                }
+              ]
+            },
+            {
+              "id": "children/2/children/1/children/2",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Text",
+              "text": {
+                "text": "￼ Tensor G6 · 6.3-inch 120 Hz",
+                "runs": [],
+                "links": []
+              },
+              "inlines": [
+                {
+                  "id": "children/2/children/1/children/2/text/0",
+                  "a11y": {
+                    "role": "hidden"
+                  },
+                  "component": "Icon",
+                  "icon": {
+                    "name": "cpu",
+                    "glyph": ""
+                  },
+                  "size": 14.0,
+                  "color": "foreground"
+                }
+              ],
+              "style": "small",
+              "color": "muted-foreground",
+              "weight": "regular",
+              "italic": false,
+              "strike": false,
+              "digits": false,
+              "max_lines": null
+            }
+          ],
+          "align": "stretch",
+          "spacing": [
+            0.0,
+            8.0,
+            8.0
+          ]
+        }
+      ],
+      "columns": 2,
+      "min_child_width": 240.0,
+      "gap": 16.0
+    },
+    {
+      "id": "children/3",
+      "a11y": {
+        "role": "heading",
+        "level": 3
+      },
+      "component": "Title",
+      "text": {
+        "text": "Side by side",
+        "runs": [],
+        "links": []
+      },
+      "style": "title_md",
+      "color": "foreground"
+    },
+    {
+      "id": "children/4",
+      "a11y": {
+        "role": "table"
+      },
+      "component": "Table",
+      "columns": [
+        {
+          "title": "",
+          "numeric": false
+        },
+        {
+          "title": "iPhone 17",
+          "numeric": false
+        },
+        {
+          "title": "Pixel 11",
+          "numeric": false
+        }
+      ],
+      "rows": [
+        [
+          {
+            "kind": "text",
+            "text": {
+              "text": "Main camera",
+              "runs": [],
+              "links": []
+            }
+          },
+          {
+            "kind": "node",
+            "node": {
+              "id": "children/4/rows/0/1",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Text",
+              "text": {
+                "text": " 48 MP",
+                "runs": [],
+                "links": []
+              },
+              "inlines": [],
+              "style": "small",
+              "color": "foreground",
+              "weight": "regular",
+              "italic": false,
+              "strike": false,
+              "digits": false,
+              "max_lines": null
+            }
+          },
+          {
+            "kind": "node",
+            "node": {
+              "id": "children/4/rows/0/2",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Text",
+              "text": {
+                "text": "￼ 50 MP",
+                "runs": [],
+                "links": []
+              },
+              "inlines": [
+                {
+                  "id": "children/4/rows/0/2/text/0",
+                  "a11y": {
+                    "role": "hidden"
+                  },
+                  "component": "Icon",
+                  "icon": {
+                    "name": "circle-check-big",
+                    "glyph": ""
+                  },
+                  "size": 14.0,
+                  "color": "success"
+                }
+              ],
+              "style": "small",
+              "color": "foreground",
+              "weight": "regular",
+              "italic": false,
+              "strike": false,
+              "digits": false,
+              "max_lines": null
+            }
+          }
+        ],
+        [
+          {
+            "kind": "text",
+            "text": {
+              "text": "Battery life",
+              "runs": [],
+              "links": []
+            }
+          },
+          {
+            "kind": "node",
+            "node": {
+              "id": "children/4/rows/1/1",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Text",
+              "text": {
+                "text": " Up to 30 h video",
+                "runs": [],
+                "links": []
+              },
+              "inlines": [],
+              "style": "small",
+              "color": "foreground",
+              "weight": "regular",
+              "italic": false,
+              "strike": false,
+              "digits": false,
+              "max_lines": null
+            }
+          },
+          {
+            "kind": "node",
+            "node": {
+              "id": "children/4/rows/1/2",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Text",
+              "text": {
+                "text": "￼ Up to 31 h video",
+                "runs": [],
+                "links": []
+              },
+              "inlines": [
+                {
+                  "id": "children/4/rows/1/2/text/0",
+                  "a11y": {
+                    "role": "hidden"
+                  },
+                  "component": "Icon",
+                  "icon": {
+                    "name": "circle-check-big",
+                    "glyph": ""
+                  },
+                  "size": 14.0,
+                  "color": "success"
+                }
+              ],
+              "style": "small",
+              "color": "foreground",
+              "weight": "regular",
+              "italic": false,
+              "strike": false,
+              "digits": false,
+              "max_lines": null
+            }
+          }
+        ],
+        [
+          {
+            "kind": "text",
+            "text": {
+              "text": "Updates",
+              "runs": [],
+              "links": []
+            }
+          },
+          {
+            "kind": "node",
+            "node": {
+              "id": "children/4/rows/2/1",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Text",
+              "text": {
+                "text": " About 6 years",
+                "runs": [],
+                "links": []
+              },
+              "inlines": [],
+              "style": "small",
+              "color": "foreground",
+              "weight": "regular",
+              "italic": false,
+              "strike": false,
+              "digits": false,
+              "max_lines": null
+            }
+          },
+          {
+            "kind": "node",
+            "node": {
+              "id": "children/4/rows/2/2",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Text",
+              "text": {
+                "text": "￼ 7 years",
+                "runs": [],
+                "links": []
+              },
+              "inlines": [
+                {
+                  "id": "children/4/rows/2/2/text/0",
+                  "a11y": {
+                    "role": "hidden"
+                  },
+                  "component": "Icon",
+                  "icon": {
+                    "name": "circle-check-big",
+                    "glyph": ""
+                  },
+                  "size": 14.0,
+                  "color": "success"
+                }
+              ],
+              "style": "small",
+              "color": "foreground",
+              "weight": "regular",
+              "italic": false,
+              "strike": false,
+              "digits": false,
+              "max_lines": null
+            }
+          }
+        ],
+        [
+          {
+            "kind": "text",
+            "text": {
+              "text": "Charging",
+              "runs": [],
+              "links": []
+            }
+          },
+          {
+            "kind": "node",
+            "node": {
+              "id": "children/4/rows/3/1",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Text",
+              "text": {
+                "text": "￼ 40 W wired · MagSafe",
+                "runs": [],
+                "links": []
+              },
+              "inlines": [
+                {
+                  "id": "children/4/rows/3/1/text/0",
+                  "a11y": {
+                    "role": "hidden"
+                  },
+                  "component": "Icon",
+                  "icon": {
+                    "name": "circle-check-big",
+                    "glyph": ""
+                  },
+                  "size": 14.0,
+                  "color": "success"
+                }
+              ],
+              "style": "small",
+              "color": "foreground",
+              "weight": "regular",
+              "italic": false,
+              "strike": false,
+              "digits": false,
+              "max_lines": null
+            }
+          },
+          {
+            "kind": "node",
+            "node": {
+              "id": "children/4/rows/3/2",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Text",
+              "text": {
+                "text": " 30 W wired · Qi2",
+                "runs": [],
+                "links": []
+              },
+              "inlines": [],
+              "style": "small",
+              "color": "foreground",
+              "weight": "regular",
+              "italic": false,
+              "strike": false,
+              "digits": false,
+              "max_lines": null
+            }
+          }
+        ],
+        [
+          {
+            "kind": "text",
+            "text": {
+              "text": "Ecosystem",
+              "runs": [],
+              "links": []
+            }
+          },
+          {
+            "kind": "node",
+            "node": {
+              "id": "children/4/rows/4/1",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Text",
+              "text": {
+                "text": " iMessage, Watch, Mac",
+                "runs": [],
+                "links": []
+              },
+              "inlines": [],
+              "style": "small",
+              "color": "foreground",
+              "weight": "regular",
+              "italic": false,
+              "strike": false,
+              "digits": false,
+              "max_lines": null
+            }
+          },
+          {
+            "kind": "node",
+            "node": {
+              "id": "children/4/rows/4/2",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Text",
+              "text": {
+                "text": " Gemini, Android",
+                "runs": [],
+                "links": []
+              },
+              "inlines": [],
+              "style": "small",
+              "color": "foreground",
+              "weight": "regular",
+              "italic": false,
+              "strike": false,
+              "digits": false,
+              "max_lines": null
+            }
+          }
+        ]
+      ]
+    },
+    {
+      "id": "children/5",
+      "a11y": {
+        "role": "heading",
+        "level": 3
+      },
+      "component": "Title",
+      "text": {
+        "text": "Which suits you?",
+        "runs": [],
+        "links": []
+      },
+      "style": "title_md",
+      "color": "foreground"
+    },
+    {
+      "id": "children/6",
+      "a11y": {
+        "role": "radio_group"
+      },
+      "component": "RadioGroup",
+      "value": "Camera",
+      "options": [
+        {
+          "value": "Camera",
+          "label": "Photos",
+          "description": "Low light, zoom, editing"
+        },
+        {
+          "value": "Apps",
+          "label": "My other devices",
+          "description": "Mac, Watch, iMessage"
+        },
+        {
+          "value": "Battery",
+          "label": "Battery",
+          "description": "A long day of use"
+        }
+      ],
+      "selected": 0,
+      "label": null,
+      "variant": "cards",
+      "error": null,
+      "disabled": null
+    },
+    {
+      "id": "children/7",
+      "a11y": {
+        "role": "group"
+      },
+      "component": "Card",
+      "children": [
+        {
+          "id": "children/7/children/0",
+          "component": "Row",
+          "children": [
+            {
+              "id": "children/7/children/0/children/0",
+              "component": "Box",
+              "children": [
+                {
+                  "id": "children/7/children/0/children/0/children/0",
+                  "a11y": {
+                    "role": "image",
+                    "label": "Pixel 11"
+                  },
+                  "component": "SearchImage",
+                  "query": "Pixel 11",
+                  "aspect_ratio": 1.0,
+                  "radius": {
+                    "kind": "lg",
+                    "points": 12.0
+                  },
+                  "fit": "contain",
+                  "photos": {
+                    "state": "waiting",
+                    "media": []
+                  }
+                }
+              ],
+              "direction": "col",
+              "gap": 0.0,
+              "spacing": [
+                0.0
+              ],
+              "sizing": [],
+              "padding": 8.0,
+              "background": {
+                "surface": "base"
+              },
+              "inner_surface": true,
+              "radius": {
+                "kind": "lg",
+                "points": 12.0
+              },
+              "border": false,
+              "width": {
+                "unit": "points",
+                "value": 64.0
+              },
+              "height": {
+                "unit": "points",
+                "value": 64.0
+              },
+              "flex": null,
+              "align": "stretch",
+              "justify": "start",
+              "wrap": false
+            },
+            {
+              "id": "children/7/children/0/children/1",
+              "component": "Col",
+              "children": [
+                {
+                  "id": "children/7/children/0/children/1/children/0",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Caption",
+                  "text": {
+                    "text": "Our pick for you",
+                    "runs": [],
+                    "links": []
+                  },
+                  "style": "caption",
+                  "color": "muted-foreground"
+                },
+                {
+                  "id": "children/7/children/0/children/1/children/1",
+                  "a11y": {
+                    "role": "heading",
+                    "level": 2
+                  },
+                  "component": "Title",
+                  "text": {
+                    "text": "Pixel 11",
+                    "runs": [],
+                    "links": []
+                  },
+                  "style": "title_lg",
+                  "color": "foreground"
+                },
+                {
+                  "id": "children/7/children/0/children/1/children/2",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Text",
+                  "text": {
+                    "text": "Its 50 MP sensor and editing tools take the better low-light shots.",
+                    "runs": [],
+                    "links": []
+                  },
+                  "inlines": [],
+                  "style": "small",
+                  "color": "muted-foreground",
+                  "weight": "regular",
+                  "italic": false,
+                  "strike": false,
+                  "digits": false,
+                  "max_lines": null
+                }
+              ],
+              "align": "stretch",
+              "spacing": [
+                0.0,
+                4.0,
+                4.0
+              ]
+            }
+          ],
+          "gap": 16.0,
+          "align": "start",
+          "justify": "start",
+          "wrap": false,
+          "sizing": [
+            {
+              "basis": "media",
+              "length": null,
+              "grow": 0.0,
+              "shrink": false
+            },
+            {
+              "basis": "content",
+              "length": null,
+              "grow": 0.0,
+              "shrink": true
+            }
+          ]
+        }
+      ],
+      "soft": true,
+      "nested": false,
+      "padding": null,
+      "spacing": [
+        0.0
+      ]
+    }
+  ],
+  "align": "stretch",
+  "spacing": [
+    0.0,
+    8.0,
+    24.0,
+    24.0,
+    12.0,
+    24.0,
+    12.0,
+    24.0
+  ]
+}

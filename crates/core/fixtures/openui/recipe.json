@@ -1,0 +1,1996 @@
+{
+  "id": "",
+  "component": "Col",
+  "children": [
+    {
+      "id": "children/0",
+      "component": "Col",
+      "children": [
+        {
+          "id": "children/0/children/0",
+          "a11y": {
+            "role": "heading",
+            "level": 2
+          },
+          "component": "Title",
+          "text": {
+            "text": "Sunday roast with friends",
+            "runs": [],
+            "links": []
+          },
+          "style": "title_xl",
+          "color": "foreground"
+        },
+        {
+          "id": "children/0/children/1",
+          "a11y": {
+            "role": "text"
+          },
+          "component": "Text",
+          "text": {
+            "text": "Rosemary and garlic lamb, golden potatoes and all the good things on the side. The shopping list grows with your guest list.",
+            "runs": [],
+            "links": []
+          },
+          "inlines": [],
+          "style": "body",
+          "color": "muted-foreground",
+          "weight": "regular",
+          "italic": false,
+          "strike": false,
+          "digits": false,
+          "max_lines": null
+        }
+      ],
+      "align": "stretch",
+      "spacing": [
+        0.0,
+        8.0
+      ]
+    },
+    {
+      "id": "children/1",
+      "component": "Grid",
+      "children": [
+        {
+          "id": "children/1/children/0",
+          "component": "Col",
+          "children": [
+            {
+              "id": "children/1/children/0/children/0",
+              "a11y": {
+                "role": "image",
+                "label": "Lamb roast dinner"
+              },
+              "component": "SearchImage",
+              "query": "Lamb roast dinner",
+              "aspect_ratio": 1.4,
+              "radius": {
+                "kind": "lg",
+                "points": 12.0
+              },
+              "fit": "cover",
+              "photos": {
+                "state": "waiting",
+                "media": []
+              }
+            },
+            {
+              "id": "children/1/children/0/children/1",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Text",
+              "text": {
+                "text": "Rosemary & garlic lamb",
+                "runs": [],
+                "links": []
+              },
+              "inlines": [],
+              "style": "small",
+              "color": "foreground",
+              "weight": "semibold",
+              "italic": false,
+              "strike": false,
+              "digits": false,
+              "max_lines": null
+            },
+            {
+              "id": "children/1/children/0/children/2",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Caption",
+              "text": {
+                "text": "The centerpiece, with gravy and mint sauce",
+                "runs": [],
+                "links": []
+              },
+              "style": "caption",
+              "color": "muted-foreground"
+            }
+          ],
+          "align": "stretch",
+          "spacing": [
+            0.0,
+            4.0,
+            4.0
+          ]
+        },
+        {
+          "id": "children/1/children/1",
+          "component": "Col",
+          "children": [
+            {
+              "id": "children/1/children/1/children/0",
+              "a11y": {
+                "role": "image",
+                "label": "Roast potato"
+              },
+              "component": "SearchImage",
+              "query": "Roast potato",
+              "aspect_ratio": 1.4,
+              "radius": {
+                "kind": "lg",
+                "points": 12.0
+              },
+              "fit": "cover",
+              "photos": {
+                "state": "waiting",
+                "media": []
+              }
+            },
+            {
+              "id": "children/1/children/1/children/1",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Text",
+              "text": {
+                "text": "Extra-crispy potatoes",
+                "runs": [],
+                "links": []
+              },
+              "inlines": [],
+              "style": "small",
+              "color": "foreground",
+              "weight": "semibold",
+              "italic": false,
+              "strike": false,
+              "digits": false,
+              "max_lines": null
+            },
+            {
+              "id": "children/1/children/1/children/2",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Caption",
+              "text": {
+                "text": "Fluffy inside, golden edges",
+                "runs": [],
+                "links": []
+              },
+              "style": "caption",
+              "color": "muted-foreground"
+            }
+          ],
+          "align": "stretch",
+          "spacing": [
+            0.0,
+            4.0,
+            4.0
+          ]
+        },
+        {
+          "id": "children/1/children/2",
+          "component": "Col",
+          "children": [
+            {
+              "id": "children/1/children/2/children/0",
+              "a11y": {
+                "role": "image",
+                "label": "Apple crumble"
+              },
+              "component": "SearchImage",
+              "query": "Apple crumble",
+              "aspect_ratio": 1.4,
+              "radius": {
+                "kind": "lg",
+                "points": 12.0
+              },
+              "fit": "cover",
+              "photos": {
+                "state": "waiting",
+                "media": []
+              }
+            },
+            {
+              "id": "children/1/children/2/children/1",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Text",
+              "text": {
+                "text": "Bramley apple crumble",
+                "runs": [],
+                "links": []
+              },
+              "inlines": [],
+              "style": "small",
+              "color": "foreground",
+              "weight": "semibold",
+              "italic": false,
+              "strike": false,
+              "digits": false,
+              "max_lines": null
+            },
+            {
+              "id": "children/1/children/2/children/2",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Caption",
+              "text": {
+                "text": "Warm, with custard or cream",
+                "runs": [],
+                "links": []
+              },
+              "style": "caption",
+              "color": "muted-foreground"
+            }
+          ],
+          "align": "stretch",
+          "spacing": [
+            0.0,
+            4.0,
+            4.0
+          ]
+        }
+      ],
+      "columns": 3,
+      "min_child_width": 170.0,
+      "gap": 12.0
+    },
+    {
+      "id": "children/2",
+      "a11y": {
+        "role": "group"
+      },
+      "component": "Card",
+      "children": [
+        {
+          "id": "children/2/children/0",
+          "component": "Row",
+          "children": [
+            {
+              "id": "children/2/children/0/children/0",
+              "component": "Col",
+              "children": [
+                {
+                  "id": "children/2/children/0/children/0/children/0",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Text",
+                  "text": {
+                    "text": "Guests",
+                    "runs": [],
+                    "links": []
+                  },
+                  "inlines": [],
+                  "style": "small",
+                  "color": "foreground",
+                  "weight": "semibold",
+                  "italic": false,
+                  "strike": false,
+                  "digits": false,
+                  "max_lines": null
+                },
+                {
+                  "id": "children/2/children/0/children/0/children/1",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Caption",
+                  "text": {
+                    "text": "Quantities follow the guest count",
+                    "runs": [],
+                    "links": []
+                  },
+                  "style": "caption",
+                  "color": "muted-foreground"
+                }
+              ],
+              "align": "stretch",
+              "spacing": [
+                0.0,
+                0.0
+              ]
+            },
+            {
+              "id": "children/2/children/0/children/1",
+              "a11y": {
+                "role": "hidden"
+              },
+              "component": "Spacer"
+            },
+            {
+              "id": "children/2/children/0/children/2",
+              "a11y": {
+                "role": "button",
+                "label": "Fewer guests"
+              },
+              "component": "IconButton",
+              "icon": {
+                "name": "minus",
+                "glyph": ""
+              },
+              "label": "Fewer guests",
+              "tooltip": "Fewer guests",
+              "variant": "outline",
+              "disabled": null
+            },
+            {
+              "id": "children/2/children/0/children/3",
+              "a11y": {
+                "role": "heading",
+                "level": 2
+              },
+              "component": "Title",
+              "text": {
+                "text": "6",
+                "runs": [],
+                "links": []
+              },
+              "style": "title_lg",
+              "color": "foreground"
+            },
+            {
+              "id": "children/2/children/0/children/4",
+              "a11y": {
+                "role": "button",
+                "label": "More guests"
+              },
+              "component": "IconButton",
+              "icon": {
+                "name": "plus",
+                "glyph": ""
+              },
+              "label": "More guests",
+              "tooltip": "More guests",
+              "variant": "outline",
+              "disabled": null
+            }
+          ],
+          "gap": 12.0,
+          "align": "center",
+          "justify": "start",
+          "wrap": false,
+          "sizing": [
+            {
+              "basis": "content",
+              "length": null,
+              "grow": 0.0,
+              "shrink": true
+            },
+            {
+              "basis": "zero",
+              "length": null,
+              "grow": 1.0,
+              "shrink": false
+            },
+            {
+              "basis": "content",
+              "length": null,
+              "grow": 0.0,
+              "shrink": false
+            },
+            {
+              "basis": "content",
+              "length": null,
+              "grow": 0.0,
+              "shrink": true
+            },
+            {
+              "basis": "content",
+              "length": null,
+              "grow": 0.0,
+              "shrink": false
+            }
+          ]
+        }
+      ],
+      "soft": true,
+      "nested": false,
+      "padding": 16.0,
+      "spacing": [
+        0.0
+      ]
+    },
+    {
+      "id": "children/3",
+      "component": "Grid",
+      "children": [
+        {
+          "id": "children/3/children/0",
+          "a11y": {
+            "role": "group"
+          },
+          "component": "Card",
+          "children": [
+            {
+              "id": "children/3/children/0/children/0",
+              "component": "Row",
+              "children": [
+                {
+                  "id": "children/3/children/0/children/0/children/0",
+                  "a11y": {
+                    "role": "heading",
+                    "level": 3
+                  },
+                  "component": "Title",
+                  "text": {
+                    "text": "Shopping list",
+                    "runs": [],
+                    "links": []
+                  },
+                  "style": "card_title",
+                  "color": "foreground"
+                },
+                {
+                  "id": "children/3/children/0/children/0/children/1",
+                  "a11y": {
+                    "role": "hidden"
+                  },
+                  "component": "Spacer"
+                },
+                {
+                  "id": "children/3/children/0/children/0/children/2",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Badge",
+                  "text": "0 of 7 in the basket",
+                  "tone": null,
+                  "icon": null
+                }
+              ],
+              "gap": 8.0,
+              "align": "center",
+              "justify": "start",
+              "wrap": false,
+              "sizing": [
+                {
+                  "basis": "content",
+                  "length": null,
+                  "grow": 0.0,
+                  "shrink": true
+                },
+                {
+                  "basis": "zero",
+                  "length": null,
+                  "grow": 1.0,
+                  "shrink": false
+                },
+                {
+                  "basis": "content",
+                  "length": null,
+                  "grow": 0.0,
+                  "shrink": false
+                }
+              ]
+            },
+            {
+              "id": "children/3/children/0/children/1",
+              "component": "Col",
+              "children": [
+                {
+                  "id": "children/3/children/0/children/1/children/0",
+                  "a11y": {
+                    "role": "button",
+                    "label": "Bone-in leg of lamb 2.4 kg",
+                    "on": false
+                  },
+                  "component": "Pressable",
+                  "children": [
+                    {
+                      "id": "children/3/children/0/children/1/children/0/children/0",
+                      "component": "Row",
+                      "children": [
+                        {
+                          "id": "children/3/children/0/children/1/children/0/children/0/children/0",
+                          "a11y": {
+                            "role": "hidden"
+                          },
+                          "component": "Icon",
+                          "icon": {
+                            "name": "circle",
+                            "glyph": ""
+                          },
+                          "size": 14.0,
+                          "color": "muted-stronger-foreground"
+                        },
+                        {
+                          "id": "children/3/children/0/children/1/children/0/children/0/children/1",
+                          "a11y": {
+                            "role": "text"
+                          },
+                          "component": "Text",
+                          "text": {
+                            "text": "Bone-in leg of lamb",
+                            "runs": [],
+                            "links": []
+                          },
+                          "inlines": [],
+                          "style": "small",
+                          "color": "foreground",
+                          "weight": "regular",
+                          "italic": false,
+                          "strike": false,
+                          "digits": false,
+                          "max_lines": null
+                        },
+                        {
+                          "id": "children/3/children/0/children/1/children/0/children/0/children/2",
+                          "a11y": {
+                            "role": "hidden"
+                          },
+                          "component": "Spacer"
+                        },
+                        {
+                          "id": "children/3/children/0/children/1/children/0/children/0/children/3",
+                          "a11y": {
+                            "role": "text"
+                          },
+                          "component": "Text",
+                          "text": {
+                            "text": "2.4 kg",
+                            "runs": [],
+                            "links": []
+                          },
+                          "inlines": [],
+                          "style": "small",
+                          "color": "muted-foreground",
+                          "weight": "medium",
+                          "italic": false,
+                          "strike": false,
+                          "digits": true,
+                          "max_lines": null
+                        }
+                      ],
+                      "gap": 8.0,
+                      "align": "center",
+                      "justify": "start",
+                      "wrap": false,
+                      "sizing": [
+                        {
+                          "basis": "content",
+                          "length": null,
+                          "grow": 0.0,
+                          "shrink": true
+                        },
+                        {
+                          "basis": "content",
+                          "length": null,
+                          "grow": 0.0,
+                          "shrink": true
+                        },
+                        {
+                          "basis": "zero",
+                          "length": null,
+                          "grow": 1.0,
+                          "shrink": false
+                        },
+                        {
+                          "basis": "content",
+                          "length": null,
+                          "grow": 0.0,
+                          "shrink": true
+                        }
+                      ]
+                    }
+                  ],
+                  "padding": 8.0,
+                  "background": null,
+                  "inner_surface": false,
+                  "radius": {
+                    "kind": "lg",
+                    "points": 12.0
+                  },
+                  "selected": false,
+                  "ring": false,
+                  "disabled": null
+                },
+                {
+                  "id": "children/3/children/0/children/1/children/1",
+                  "a11y": {
+                    "role": "button",
+                    "label": "Potatoes 1,800 g",
+                    "on": false
+                  },
+                  "component": "Pressable",
+                  "children": [
+                    {
+                      "id": "children/3/children/0/children/1/children/1/children/0",
+                      "component": "Row",
+                      "children": [
+                        {
+                          "id": "children/3/children/0/children/1/children/1/children/0/children/0",
+                          "a11y": {
+                            "role": "hidden"
+                          },
+                          "component": "Icon",
+                          "icon": {
+                            "name": "circle",
+                            "glyph": ""
+                          },
+                          "size": 14.0,
+                          "color": "muted-stronger-foreground"
+                        },
+                        {
+                          "id": "children/3/children/0/children/1/children/1/children/0/children/1",
+                          "a11y": {
+                            "role": "text"
+                          },
+                          "component": "Text",
+                          "text": {
+                            "text": "Potatoes",
+                            "runs": [],
+                            "links": []
+                          },
+                          "inlines": [],
+                          "style": "small",
+                          "color": "foreground",
+                          "weight": "regular",
+                          "italic": false,
+                          "strike": false,
+                          "digits": false,
+                          "max_lines": null
+                        },
+                        {
+                          "id": "children/3/children/0/children/1/children/1/children/0/children/2",
+                          "a11y": {
+                            "role": "hidden"
+                          },
+                          "component": "Spacer"
+                        },
+                        {
+                          "id": "children/3/children/0/children/1/children/1/children/0/children/3",
+                          "a11y": {
+                            "role": "text"
+                          },
+                          "component": "Text",
+                          "text": {
+                            "text": "1,800 g",
+                            "runs": [],
+                            "links": []
+                          },
+                          "inlines": [],
+                          "style": "small",
+                          "color": "muted-foreground",
+                          "weight": "medium",
+                          "italic": false,
+                          "strike": false,
+                          "digits": true,
+                          "max_lines": null
+                        }
+                      ],
+                      "gap": 8.0,
+                      "align": "center",
+                      "justify": "start",
+                      "wrap": false,
+                      "sizing": [
+                        {
+                          "basis": "content",
+                          "length": null,
+                          "grow": 0.0,
+                          "shrink": true
+                        },
+                        {
+                          "basis": "content",
+                          "length": null,
+                          "grow": 0.0,
+                          "shrink": true
+                        },
+                        {
+                          "basis": "zero",
+                          "length": null,
+                          "grow": 1.0,
+                          "shrink": false
+                        },
+                        {
+                          "basis": "content",
+                          "length": null,
+                          "grow": 0.0,
+                          "shrink": true
+                        }
+                      ]
+                    }
+                  ],
+                  "padding": 8.0,
+                  "background": null,
+                  "inner_surface": false,
+                  "radius": {
+                    "kind": "lg",
+                    "points": 12.0
+                  },
+                  "selected": false,
+                  "ring": false,
+                  "disabled": null
+                },
+                {
+                  "id": "children/3/children/0/children/1/children/2",
+                  "a11y": {
+                    "role": "button",
+                    "label": "Carrots 9",
+                    "on": false
+                  },
+                  "component": "Pressable",
+                  "children": [
+                    {
+                      "id": "children/3/children/0/children/1/children/2/children/0",
+                      "component": "Row",
+                      "children": [
+                        {
+                          "id": "children/3/children/0/children/1/children/2/children/0/children/0",
+                          "a11y": {
+                            "role": "hidden"
+                          },
+                          "component": "Icon",
+                          "icon": {
+                            "name": "circle",
+                            "glyph": ""
+                          },
+                          "size": 14.0,
+                          "color": "muted-stronger-foreground"
+                        },
+                        {
+                          "id": "children/3/children/0/children/1/children/2/children/0/children/1",
+                          "a11y": {
+                            "role": "text"
+                          },
+                          "component": "Text",
+                          "text": {
+                            "text": "Carrots",
+                            "runs": [],
+                            "links": []
+                          },
+                          "inlines": [],
+                          "style": "small",
+                          "color": "foreground",
+                          "weight": "regular",
+                          "italic": false,
+                          "strike": false,
+                          "digits": false,
+                          "max_lines": null
+                        },
+                        {
+                          "id": "children/3/children/0/children/1/children/2/children/0/children/2",
+                          "a11y": {
+                            "role": "hidden"
+                          },
+                          "component": "Spacer"
+                        },
+                        {
+                          "id": "children/3/children/0/children/1/children/2/children/0/children/3",
+                          "a11y": {
+                            "role": "text"
+                          },
+                          "component": "Text",
+                          "text": {
+                            "text": "9",
+                            "runs": [],
+                            "links": []
+                          },
+                          "inlines": [],
+                          "style": "small",
+                          "color": "muted-foreground",
+                          "weight": "medium",
+                          "italic": false,
+                          "strike": false,
+                          "digits": true,
+                          "max_lines": null
+                        }
+                      ],
+                      "gap": 8.0,
+                      "align": "center",
+                      "justify": "start",
+                      "wrap": false,
+                      "sizing": [
+                        {
+                          "basis": "content",
+                          "length": null,
+                          "grow": 0.0,
+                          "shrink": true
+                        },
+                        {
+                          "basis": "content",
+                          "length": null,
+                          "grow": 0.0,
+                          "shrink": true
+                        },
+                        {
+                          "basis": "zero",
+                          "length": null,
+                          "grow": 1.0,
+                          "shrink": false
+                        },
+                        {
+                          "basis": "content",
+                          "length": null,
+                          "grow": 0.0,
+                          "shrink": true
+                        }
+                      ]
+                    }
+                  ],
+                  "padding": 8.0,
+                  "background": null,
+                  "inner_surface": false,
+                  "radius": {
+                    "kind": "lg",
+                    "points": 12.0
+                  },
+                  "selected": false,
+                  "ring": false,
+                  "disabled": null
+                },
+                {
+                  "id": "children/3/children/0/children/1/children/3",
+                  "a11y": {
+                    "role": "button",
+                    "label": "Parsnips 6",
+                    "on": false
+                  },
+                  "component": "Pressable",
+                  "children": [
+                    {
+                      "id": "children/3/children/0/children/1/children/3/children/0",
+                      "component": "Row",
+                      "children": [
+                        {
+                          "id": "children/3/children/0/children/1/children/3/children/0/children/0",
+                          "a11y": {
+                            "role": "hidden"
+                          },
+                          "component": "Icon",
+                          "icon": {
+                            "name": "circle",
+                            "glyph": ""
+                          },
+                          "size": 14.0,
+                          "color": "muted-stronger-foreground"
+                        },
+                        {
+                          "id": "children/3/children/0/children/1/children/3/children/0/children/1",
+                          "a11y": {
+                            "role": "text"
+                          },
+                          "component": "Text",
+                          "text": {
+                            "text": "Parsnips",
+                            "runs": [],
+                            "links": []
+                          },
+                          "inlines": [],
+                          "style": "small",
+                          "color": "foreground",
+                          "weight": "regular",
+                          "italic": false,
+                          "strike": false,
+                          "digits": false,
+                          "max_lines": null
+                        },
+                        {
+                          "id": "children/3/children/0/children/1/children/3/children/0/children/2",
+                          "a11y": {
+                            "role": "hidden"
+                          },
+                          "component": "Spacer"
+                        },
+                        {
+                          "id": "children/3/children/0/children/1/children/3/children/0/children/3",
+                          "a11y": {
+                            "role": "text"
+                          },
+                          "component": "Text",
+                          "text": {
+                            "text": "6",
+                            "runs": [],
+                            "links": []
+                          },
+                          "inlines": [],
+                          "style": "small",
+                          "color": "muted-foreground",
+                          "weight": "medium",
+                          "italic": false,
+                          "strike": false,
+                          "digits": true,
+                          "max_lines": null
+                        }
+                      ],
+                      "gap": 8.0,
+                      "align": "center",
+                      "justify": "start",
+                      "wrap": false,
+                      "sizing": [
+                        {
+                          "basis": "content",
+                          "length": null,
+                          "grow": 0.0,
+                          "shrink": true
+                        },
+                        {
+                          "basis": "content",
+                          "length": null,
+                          "grow": 0.0,
+                          "shrink": true
+                        },
+                        {
+                          "basis": "zero",
+                          "length": null,
+                          "grow": 1.0,
+                          "shrink": false
+                        },
+                        {
+                          "basis": "content",
+                          "length": null,
+                          "grow": 0.0,
+                          "shrink": true
+                        }
+                      ]
+                    }
+                  ],
+                  "padding": 8.0,
+                  "background": null,
+                  "inner_surface": false,
+                  "radius": {
+                    "kind": "lg",
+                    "points": 12.0
+                  },
+                  "selected": false,
+                  "ring": false,
+                  "disabled": null
+                },
+                {
+                  "id": "children/3/children/0/children/1/children/4",
+                  "a11y": {
+                    "role": "button",
+                    "label": "Tenderstem broccoli 750 g",
+                    "on": false
+                  },
+                  "component": "Pressable",
+                  "children": [
+                    {
+                      "id": "children/3/children/0/children/1/children/4/children/0",
+                      "component": "Row",
+                      "children": [
+                        {
+                          "id": "children/3/children/0/children/1/children/4/children/0/children/0",
+                          "a11y": {
+                            "role": "hidden"
+                          },
+                          "component": "Icon",
+                          "icon": {
+                            "name": "circle",
+                            "glyph": ""
+                          },
+                          "size": 14.0,
+                          "color": "muted-stronger-foreground"
+                        },
+                        {
+                          "id": "children/3/children/0/children/1/children/4/children/0/children/1",
+                          "a11y": {
+                            "role": "text"
+                          },
+                          "component": "Text",
+                          "text": {
+                            "text": "Tenderstem broccoli",
+                            "runs": [],
+                            "links": []
+                          },
+                          "inlines": [],
+                          "style": "small",
+                          "color": "foreground",
+                          "weight": "regular",
+                          "italic": false,
+                          "strike": false,
+                          "digits": false,
+                          "max_lines": null
+                        },
+                        {
+                          "id": "children/3/children/0/children/1/children/4/children/0/children/2",
+                          "a11y": {
+                            "role": "hidden"
+                          },
+                          "component": "Spacer"
+                        },
+                        {
+                          "id": "children/3/children/0/children/1/children/4/children/0/children/3",
+                          "a11y": {
+                            "role": "text"
+                          },
+                          "component": "Text",
+                          "text": {
+                            "text": "750 g",
+                            "runs": [],
+                            "links": []
+                          },
+                          "inlines": [],
+                          "style": "small",
+                          "color": "muted-foreground",
+                          "weight": "medium",
+                          "italic": false,
+                          "strike": false,
+                          "digits": true,
+                          "max_lines": null
+                        }
+                      ],
+                      "gap": 8.0,
+                      "align": "center",
+                      "justify": "start",
+                      "wrap": false,
+                      "sizing": [
+                        {
+                          "basis": "content",
+                          "length": null,
+                          "grow": 0.0,
+                          "shrink": true
+                        },
+                        {
+                          "basis": "content",
+                          "length": null,
+                          "grow": 0.0,
+                          "shrink": true
+                        },
+                        {
+                          "basis": "zero",
+                          "length": null,
+                          "grow": 1.0,
+                          "shrink": false
+                        },
+                        {
+                          "basis": "content",
+                          "length": null,
+                          "grow": 0.0,
+                          "shrink": true
+                        }
+                      ]
+                    }
+                  ],
+                  "padding": 8.0,
+                  "background": null,
+                  "inner_surface": false,
+                  "radius": {
+                    "kind": "lg",
+                    "points": 12.0
+                  },
+                  "selected": false,
+                  "ring": false,
+                  "disabled": null
+                },
+                {
+                  "id": "children/3/children/0/children/1/children/5",
+                  "a11y": {
+                    "role": "button",
+                    "label": "Apples for the crumble 5",
+                    "on": false
+                  },
+                  "component": "Pressable",
+                  "children": [
+                    {
+                      "id": "children/3/children/0/children/1/children/5/children/0",
+                      "component": "Row",
+                      "children": [
+                        {
+                          "id": "children/3/children/0/children/1/children/5/children/0/children/0",
+                          "a11y": {
+                            "role": "hidden"
+                          },
+                          "component": "Icon",
+                          "icon": {
+                            "name": "circle",
+                            "glyph": ""
+                          },
+                          "size": 14.0,
+                          "color": "muted-stronger-foreground"
+                        },
+                        {
+                          "id": "children/3/children/0/children/1/children/5/children/0/children/1",
+                          "a11y": {
+                            "role": "text"
+                          },
+                          "component": "Text",
+                          "text": {
+                            "text": "Apples for the crumble",
+                            "runs": [],
+                            "links": []
+                          },
+                          "inlines": [],
+                          "style": "small",
+                          "color": "foreground",
+                          "weight": "regular",
+                          "italic": false,
+                          "strike": false,
+                          "digits": false,
+                          "max_lines": null
+                        },
+                        {
+                          "id": "children/3/children/0/children/1/children/5/children/0/children/2",
+                          "a11y": {
+                            "role": "hidden"
+                          },
+                          "component": "Spacer"
+                        },
+                        {
+                          "id": "children/3/children/0/children/1/children/5/children/0/children/3",
+                          "a11y": {
+                            "role": "text"
+                          },
+                          "component": "Text",
+                          "text": {
+                            "text": "5",
+                            "runs": [],
+                            "links": []
+                          },
+                          "inlines": [],
+                          "style": "small",
+                          "color": "muted-foreground",
+                          "weight": "medium",
+                          "italic": false,
+                          "strike": false,
+                          "digits": true,
+                          "max_lines": null
+                        }
+                      ],
+                      "gap": 8.0,
+                      "align": "center",
+                      "justify": "start",
+                      "wrap": false,
+                      "sizing": [
+                        {
+                          "basis": "content",
+                          "length": null,
+                          "grow": 0.0,
+                          "shrink": true
+                        },
+                        {
+                          "basis": "content",
+                          "length": null,
+                          "grow": 0.0,
+                          "shrink": true
+                        },
+                        {
+                          "basis": "zero",
+                          "length": null,
+                          "grow": 1.0,
+                          "shrink": false
+                        },
+                        {
+                          "basis": "content",
+                          "length": null,
+                          "grow": 0.0,
+                          "shrink": true
+                        }
+                      ]
+                    }
+                  ],
+                  "padding": 8.0,
+                  "background": null,
+                  "inner_surface": false,
+                  "radius": {
+                    "kind": "lg",
+                    "points": 12.0
+                  },
+                  "selected": false,
+                  "ring": false,
+                  "disabled": null
+                },
+                {
+                  "id": "children/3/children/0/children/1/children/6",
+                  "a11y": {
+                    "role": "button",
+                    "label": "Bunches of rosemary 1",
+                    "on": false
+                  },
+                  "component": "Pressable",
+                  "children": [
+                    {
+                      "id": "children/3/children/0/children/1/children/6/children/0",
+                      "component": "Row",
+                      "children": [
+                        {
+                          "id": "children/3/children/0/children/1/children/6/children/0/children/0",
+                          "a11y": {
+                            "role": "hidden"
+                          },
+                          "component": "Icon",
+                          "icon": {
+                            "name": "circle",
+                            "glyph": ""
+                          },
+                          "size": 14.0,
+                          "color": "muted-stronger-foreground"
+                        },
+                        {
+                          "id": "children/3/children/0/children/1/children/6/children/0/children/1",
+                          "a11y": {
+                            "role": "text"
+                          },
+                          "component": "Text",
+                          "text": {
+                            "text": "Bunches of rosemary",
+                            "runs": [],
+                            "links": []
+                          },
+                          "inlines": [],
+                          "style": "small",
+                          "color": "foreground",
+                          "weight": "regular",
+                          "italic": false,
+                          "strike": false,
+                          "digits": false,
+                          "max_lines": null
+                        },
+                        {
+                          "id": "children/3/children/0/children/1/children/6/children/0/children/2",
+                          "a11y": {
+                            "role": "hidden"
+                          },
+                          "component": "Spacer"
+                        },
+                        {
+                          "id": "children/3/children/0/children/1/children/6/children/0/children/3",
+                          "a11y": {
+                            "role": "text"
+                          },
+                          "component": "Text",
+                          "text": {
+                            "text": "1",
+                            "runs": [],
+                            "links": []
+                          },
+                          "inlines": [],
+                          "style": "small",
+                          "color": "muted-foreground",
+                          "weight": "medium",
+                          "italic": false,
+                          "strike": false,
+                          "digits": true,
+                          "max_lines": null
+                        }
+                      ],
+                      "gap": 8.0,
+                      "align": "center",
+                      "justify": "start",
+                      "wrap": false,
+                      "sizing": [
+                        {
+                          "basis": "content",
+                          "length": null,
+                          "grow": 0.0,
+                          "shrink": true
+                        },
+                        {
+                          "basis": "content",
+                          "length": null,
+                          "grow": 0.0,
+                          "shrink": true
+                        },
+                        {
+                          "basis": "zero",
+                          "length": null,
+                          "grow": 1.0,
+                          "shrink": false
+                        },
+                        {
+                          "basis": "content",
+                          "length": null,
+                          "grow": 0.0,
+                          "shrink": true
+                        }
+                      ]
+                    }
+                  ],
+                  "padding": 8.0,
+                  "background": null,
+                  "inner_surface": false,
+                  "radius": {
+                    "kind": "lg",
+                    "points": 12.0
+                  },
+                  "selected": false,
+                  "ring": false,
+                  "disabled": null
+                }
+              ],
+              "align": "stretch",
+              "spacing": [
+                0.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0
+              ]
+            },
+            {
+              "id": "children/3/children/0/children/2",
+              "a11y": {
+                "role": "button",
+                "label": "Copy shopping list"
+              },
+              "component": "Button",
+              "label": "Copy shopping list",
+              "variant": "outline",
+              "tint": null,
+              "size": "small",
+              "icon": {
+                "name": "copy",
+                "glyph": ""
+              },
+              "block": false,
+              "disabled": null
+            }
+          ],
+          "soft": false,
+          "nested": false,
+          "padding": 16.0,
+          "spacing": [
+            0.0,
+            12.0,
+            12.0
+          ]
+        },
+        {
+          "id": "children/3/children/1",
+          "a11y": {
+            "role": "group"
+          },
+          "component": "Card",
+          "children": [
+            {
+              "id": "children/3/children/1/children/0",
+              "component": "Row",
+              "children": [
+                {
+                  "id": "children/3/children/1/children/0/children/0",
+                  "a11y": {
+                    "role": "heading",
+                    "level": 3
+                  },
+                  "component": "Title",
+                  "text": {
+                    "text": "Cooking plan",
+                    "runs": [],
+                    "links": []
+                  },
+                  "style": "card_title",
+                  "color": "foreground"
+                },
+                {
+                  "id": "children/3/children/1/children/0/children/1",
+                  "a11y": {
+                    "role": "hidden"
+                  },
+                  "component": "Spacer"
+                },
+                {
+                  "id": "children/3/children/1/children/0/children/2",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Text",
+                  "text": {
+                    "text": "0 of 5 done",
+                    "runs": [],
+                    "links": []
+                  },
+                  "inlines": [],
+                  "style": "small",
+                  "color": "muted-foreground",
+                  "weight": "regular",
+                  "italic": false,
+                  "strike": false,
+                  "digits": false,
+                  "max_lines": null
+                }
+              ],
+              "gap": 8.0,
+              "align": "center",
+              "justify": "start",
+              "wrap": false,
+              "sizing": [
+                {
+                  "basis": "content",
+                  "length": null,
+                  "grow": 0.0,
+                  "shrink": true
+                },
+                {
+                  "basis": "zero",
+                  "length": null,
+                  "grow": 1.0,
+                  "shrink": false
+                },
+                {
+                  "basis": "content",
+                  "length": null,
+                  "grow": 0.0,
+                  "shrink": true
+                }
+              ]
+            },
+            {
+              "id": "children/3/children/1/children/1",
+              "component": "Col",
+              "children": [
+                {
+                  "id": "children/3/children/1/children/1/children/0",
+                  "a11y": {
+                    "role": "button",
+                    "label": "Saturday · Get ahead Make the crumble, marinate the lamb and set the table.",
+                    "on": false
+                  },
+                  "component": "Pressable",
+                  "children": [
+                    {
+                      "id": "children/3/children/1/children/1/children/0/children/0",
+                      "component": "Row",
+                      "children": [
+                        {
+                          "id": "children/3/children/1/children/1/children/0/children/0/children/0",
+                          "a11y": {
+                            "role": "hidden"
+                          },
+                          "component": "Icon",
+                          "icon": {
+                            "name": "circle",
+                            "glyph": ""
+                          },
+                          "size": 14.0,
+                          "color": "muted-stronger-foreground"
+                        },
+                        {
+                          "id": "children/3/children/1/children/1/children/0/children/0/children/1",
+                          "component": "Col",
+                          "children": [
+                            {
+                              "id": "children/3/children/1/children/1/children/0/children/0/children/1/children/0",
+                              "a11y": {
+                                "role": "text"
+                              },
+                              "component": "Text",
+                              "text": {
+                                "text": "Saturday · Get ahead",
+                                "runs": [],
+                                "links": []
+                              },
+                              "inlines": [],
+                              "style": "small",
+                              "color": "foreground",
+                              "weight": "semibold",
+                              "italic": false,
+                              "strike": false,
+                              "digits": false,
+                              "max_lines": null
+                            },
+                            {
+                              "id": "children/3/children/1/children/1/children/0/children/0/children/1/children/1",
+                              "a11y": {
+                                "role": "text"
+                              },
+                              "component": "Caption",
+                              "text": {
+                                "text": "Make the crumble, marinate the lamb and set the table.",
+                                "runs": [],
+                                "links": []
+                              },
+                              "style": "caption",
+                              "color": "muted-foreground"
+                            }
+                          ],
+                          "align": "stretch",
+                          "spacing": [
+                            0.0,
+                            0.0
+                          ]
+                        }
+                      ],
+                      "gap": 12.0,
+                      "align": "start",
+                      "justify": "start",
+                      "wrap": false,
+                      "sizing": [
+                        {
+                          "basis": "content",
+                          "length": null,
+                          "grow": 0.0,
+                          "shrink": true
+                        },
+                        {
+                          "basis": "content",
+                          "length": null,
+                          "grow": 0.0,
+                          "shrink": true
+                        }
+                      ]
+                    }
+                  ],
+                  "padding": 8.0,
+                  "background": null,
+                  "inner_surface": false,
+                  "radius": {
+                    "kind": "lg",
+                    "points": 12.0
+                  },
+                  "selected": false,
+                  "ring": false,
+                  "disabled": null
+                },
+                {
+                  "id": "children/3/children/1/children/1/children/1",
+                  "a11y": {
+                    "role": "button",
+                    "label": "12:30 PM · Lamb in 200°C for 20 minutes, then 180°C for about 25 minutes per 500 g.",
+                    "on": false
+                  },
+                  "component": "Pressable",
+                  "children": [
+                    {
+                      "id": "children/3/children/1/children/1/children/1/children/0",
+                      "component": "Row",
+                      "children": [
+                        {
+                          "id": "children/3/children/1/children/1/children/1/children/0/children/0",
+                          "a11y": {
+                            "role": "hidden"
+                          },
+                          "component": "Icon",
+                          "icon": {
+                            "name": "circle",
+                            "glyph": ""
+                          },
+                          "size": 14.0,
+                          "color": "muted-stronger-foreground"
+                        },
+                        {
+                          "id": "children/3/children/1/children/1/children/1/children/0/children/1",
+                          "component": "Col",
+                          "children": [
+                            {
+                              "id": "children/3/children/1/children/1/children/1/children/0/children/1/children/0",
+                              "a11y": {
+                                "role": "text"
+                              },
+                              "component": "Text",
+                              "text": {
+                                "text": "12:30 PM · Lamb in",
+                                "runs": [],
+                                "links": []
+                              },
+                              "inlines": [],
+                              "style": "small",
+                              "color": "foreground",
+                              "weight": "semibold",
+                              "italic": false,
+                              "strike": false,
+                              "digits": false,
+                              "max_lines": null
+                            },
+                            {
+                              "id": "children/3/children/1/children/1/children/1/children/0/children/1/children/1",
+                              "a11y": {
+                                "role": "text"
+                              },
+                              "component": "Caption",
+                              "text": {
+                                "text": "200°C for 20 minutes, then 180°C for about 25 minutes per 500 g.",
+                                "runs": [],
+                                "links": []
+                              },
+                              "style": "caption",
+                              "color": "muted-foreground"
+                            }
+                          ],
+                          "align": "stretch",
+                          "spacing": [
+                            0.0,
+                            0.0
+                          ]
+                        }
+                      ],
+                      "gap": 12.0,
+                      "align": "start",
+                      "justify": "start",
+                      "wrap": false,
+                      "sizing": [
+                        {
+                          "basis": "content",
+                          "length": null,
+                          "grow": 0.0,
+                          "shrink": true
+                        },
+                        {
+                          "basis": "content",
+                          "length": null,
+                          "grow": 0.0,
+                          "shrink": true
+                        }
+                      ]
+                    }
+                  ],
+                  "padding": 8.0,
+                  "background": null,
+                  "inner_surface": false,
+                  "radius": {
+                    "kind": "lg",
+                    "points": 12.0
+                  },
+                  "selected": false,
+                  "ring": false,
+                  "disabled": null
+                },
+                {
+                  "id": "children/3/children/1/children/1/children/2",
+                  "a11y": {
+                    "role": "button",
+                    "label": "1:15 PM · Potatoes in Parboil, rough up the edges and roast in hot fat.",
+                    "on": false
+                  },
+                  "component": "Pressable",
+                  "children": [
+                    {
+                      "id": "children/3/children/1/children/1/children/2/children/0",
+                      "component": "Row",
+                      "children": [
+                        {
+                          "id": "children/3/children/1/children/1/children/2/children/0/children/0",
+                          "a11y": {
+                            "role": "hidden"
+                          },
+                          "component": "Icon",
+                          "icon": {
+                            "name": "circle",
+                            "glyph": ""
+                          },
+                          "size": 14.0,
+                          "color": "muted-stronger-foreground"
+                        },
+                        {
+                          "id": "children/3/children/1/children/1/children/2/children/0/children/1",
+                          "component": "Col",
+                          "children": [
+                            {
+                              "id": "children/3/children/1/children/1/children/2/children/0/children/1/children/0",
+                              "a11y": {
+                                "role": "text"
+                              },
+                              "component": "Text",
+                              "text": {
+                                "text": "1:15 PM · Potatoes in",
+                                "runs": [],
+                                "links": []
+                              },
+                              "inlines": [],
+                              "style": "small",
+                              "color": "foreground",
+                              "weight": "semibold",
+                              "italic": false,
+                              "strike": false,
+                              "digits": false,
+                              "max_lines": null
+                            },
+                            {
+                              "id": "children/3/children/1/children/1/children/2/children/0/children/1/children/1",
+                              "a11y": {
+                                "role": "text"
+                              },
+                              "component": "Caption",
+                              "text": {
+                                "text": "Parboil, rough up the edges and roast in hot fat.",
+                                "runs": [],
+                                "links": []
+                              },
+                              "style": "caption",
+                              "color": "muted-foreground"
+                            }
+                          ],
+                          "align": "stretch",
+                          "spacing": [
+                            0.0,
+                            0.0
+                          ]
+                        }
+                      ],
+                      "gap": 12.0,
+                      "align": "start",
+                      "justify": "start",
+                      "wrap": false,
+                      "sizing": [
+                        {
+                          "basis": "content",
+                          "length": null,
+                          "grow": 0.0,
+                          "shrink": true
+                        },
+                        {
+                          "basis": "content",
+                          "length": null,
+                          "grow": 0.0,
+                          "shrink": true
+                        }
+                      ]
+                    }
+                  ],
+                  "padding": 8.0,
+                  "background": null,
+                  "inner_surface": false,
+                  "radius": {
+                    "kind": "lg",
+                    "points": 12.0
+                  },
+                  "selected": false,
+                  "ring": false,
+                  "disabled": null
+                },
+                {
+                  "id": "children/3/children/1/children/1/children/3",
+                  "a11y": {
+                    "role": "button",
+                    "label": "2:30 PM · Rest and carve Rest the lamb for 20 minutes while the vegetables finish.",
+                    "on": false
+                  },
+                  "component": "Pressable",
+                  "children": [
+                    {
+                      "id": "children/3/children/1/children/1/children/3/children/0",
+                      "component": "Row",
+                      "children": [
+                        {
+                          "id": "children/3/children/1/children/1/children/3/children/0/children/0",
+                          "a11y": {
+                            "role": "hidden"
+                          },
+                          "component": "Icon",
+                          "icon": {
+                            "name": "circle",
+                            "glyph": ""
+                          },
+                          "size": 14.0,
+                          "color": "muted-stronger-foreground"
+                        },
+                        {
+                          "id": "children/3/children/1/children/1/children/3/children/0/children/1",
+                          "component": "Col",
+                          "children": [
+                            {
+                              "id": "children/3/children/1/children/1/children/3/children/0/children/1/children/0",
+                              "a11y": {
+                                "role": "text"
+                              },
+                              "component": "Text",
+                              "text": {
+                                "text": "2:30 PM · Rest and carve",
+                                "runs": [],
+                                "links": []
+                              },
+                              "inlines": [],
+                              "style": "small",
+                              "color": "foreground",
+                              "weight": "semibold",
+                              "italic": false,
+                              "strike": false,
+                              "digits": false,
+                              "max_lines": null
+                            },
+                            {
+                              "id": "children/3/children/1/children/1/children/3/children/0/children/1/children/1",
+                              "a11y": {
+                                "role": "text"
+                              },
+                              "component": "Caption",
+                              "text": {
+                                "text": "Rest the lamb for 20 minutes while the vegetables finish.",
+                                "runs": [],
+                                "links": []
+                              },
+                              "style": "caption",
+                              "color": "muted-foreground"
+                            }
+                          ],
+                          "align": "stretch",
+                          "spacing": [
+                            0.0,
+                            0.0
+                          ]
+                        }
+                      ],
+                      "gap": 12.0,
+                      "align": "start",
+                      "justify": "start",
+                      "wrap": false,
+                      "sizing": [
+                        {
+                          "basis": "content",
+                          "length": null,
+                          "grow": 0.0,
+                          "shrink": true
+                        },
+                        {
+                          "basis": "content",
+                          "length": null,
+                          "grow": 0.0,
+                          "shrink": true
+                        }
+                      ]
+                    }
+                  ],
+                  "padding": 8.0,
+                  "background": null,
+                  "inner_surface": false,
+                  "radius": {
+                    "kind": "lg",
+                    "points": 12.0
+                  },
+                  "selected": false,
+                  "ring": false,
+                  "disabled": null
+                },
+                {
+                  "id": "children/3/children/1/children/1/children/4",
+                  "a11y": {
+                    "role": "button",
+                    "label": "3:00 PM · Serve The crumble goes in as you sit down.",
+                    "on": false
+                  },
+                  "component": "Pressable",
+                  "children": [
+                    {
+                      "id": "children/3/children/1/children/1/children/4/children/0",
+                      "component": "Row",
+                      "children": [
+                        {
+                          "id": "children/3/children/1/children/1/children/4/children/0/children/0",
+                          "a11y": {
+                            "role": "hidden"
+                          },
+                          "component": "Icon",
+                          "icon": {
+                            "name": "circle",
+                            "glyph": ""
+                          },
+                          "size": 14.0,
+                          "color": "muted-stronger-foreground"
+                        },
+                        {
+                          "id": "children/3/children/1/children/1/children/4/children/0/children/1",
+                          "component": "Col",
+                          "children": [
+                            {
+                              "id": "children/3/children/1/children/1/children/4/children/0/children/1/children/0",
+                              "a11y": {
+                                "role": "text"
+                              },
+                              "component": "Text",
+                              "text": {
+                                "text": "3:00 PM · Serve",
+                                "runs": [],
+                                "links": []
+                              },
+                              "inlines": [],
+                              "style": "small",
+                              "color": "foreground",
+                              "weight": "semibold",
+                              "italic": false,
+                              "strike": false,
+                              "digits": false,
+                              "max_lines": null
+                            },
+                            {
+                              "id": "children/3/children/1/children/1/children/4/children/0/children/1/children/1",
+                              "a11y": {
+                                "role": "text"
+                              },
+                              "component": "Caption",
+                              "text": {
+                                "text": "The crumble goes in as you sit down.",
+                                "runs": [],
+                                "links": []
+                              },
+                              "style": "caption",
+                              "color": "muted-foreground"
+                            }
+                          ],
+                          "align": "stretch",
+                          "spacing": [
+                            0.0,
+                            0.0
+                          ]
+                        }
+                      ],
+                      "gap": 12.0,
+                      "align": "start",
+                      "justify": "start",
+                      "wrap": false,
+                      "sizing": [
+                        {
+                          "basis": "content",
+                          "length": null,
+                          "grow": 0.0,
+                          "shrink": true
+                        },
+                        {
+                          "basis": "content",
+                          "length": null,
+                          "grow": 0.0,
+                          "shrink": true
+                        }
+                      ]
+                    }
+                  ],
+                  "padding": 8.0,
+                  "background": null,
+                  "inner_surface": false,
+                  "radius": {
+                    "kind": "lg",
+                    "points": 12.0
+                  },
+                  "selected": false,
+                  "ring": false,
+                  "disabled": null
+                }
+              ],
+              "align": "stretch",
+              "spacing": [
+                0.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0
+              ]
+            },
+            {
+              "id": "children/3/children/1/children/2",
+              "a11y": {
+                "role": "button",
+                "label": "Start over"
+              },
+              "component": "Button",
+              "label": "Start over",
+              "variant": "ghost",
+              "tint": null,
+              "size": "small",
+              "icon": {
+                "name": "rotate-ccw",
+                "glyph": ""
+              },
+              "block": false,
+              "disabled": null
+            }
+          ],
+          "soft": false,
+          "nested": false,
+          "padding": 16.0,
+          "spacing": [
+            0.0,
+            12.0,
+            12.0
+          ]
+        }
+      ],
+      "columns": 2,
+      "min_child_width": 300.0,
+      "gap": 20.0
+    }
+  ],
+  "align": "stretch",
+  "spacing": [
+    0.0,
+    20.0,
+    20.0,
+    20.0
+  ]
+}

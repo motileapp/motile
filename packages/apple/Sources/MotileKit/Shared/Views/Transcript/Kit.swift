@@ -7,6 +7,21 @@ import AppKit
 import UIKit
 #endif
 
+/// A key a focused control takes.
+enum ControlKey {
+    case press, left, right, up, down, home, end
+}
+
+/// How a drag over a view goes.
+enum DragPhase {
+    case began, moved, ended
+}
+
+/// What a control is, as assistive technologies say it.
+enum AccessRole {
+    case button, popUp, checkbox, radio, slider
+}
+
 /// A filled, rounded rectangle whose colours follow the appearance.
 final class SurfaceView: LayerView {
     var fill: PlatformColor = .clear { didSet { repaint() } }

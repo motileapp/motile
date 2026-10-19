@@ -293,6 +293,15 @@ enum Surface {
         }
     }
 
+    var platformBorder: PlatformColor {
+        switch self {
+        case .background, .secondary: Theme.border
+        case .card: Theme.borderCard
+        case .popover: Theme.borderPopover
+        case .composer: Theme.borderComposer
+        }
+    }
+
     func platform(_ layer: Layer) -> PlatformColor {
         switch self {
         case .background:

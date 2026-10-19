@@ -570,6 +570,7 @@ extension RowModel {
         case .user: "user"
         case .prose: "prose"
         case .code: "code"
+        case .ui: "ui"
         case .tool: "tool"
         case .thinking: "thinking"
         case .media: "media"

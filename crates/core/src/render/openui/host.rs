@@ -2,6 +2,7 @@
 //! tools' answers, the timers and the lookups go in; what the core is to carry out comes out:
 //! patches for the clients, tool calls, timers, messages to the agent and the state to keep.
 
+use std::cell::RefCell;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::{Arc, OnceLock};
 use std::time::{Duration, Instant};
@@ -11,11 +12,9 @@ use motile_protocol::wire::{Item, Media};
 use serde::Deserialize;
 use serde_json::{Value, json};
 
-use super::tree::{UiNode, resolve};
-use super::{
-    CoreEnv, Countdown, LibraryForms, Lookups, NodeState, ResolveCtx, Route, UiOp, UiRow, Wanted, diff, node_path,
-    route_key, seed, value_prop,
-};
+use super::tree::{PhotoState, Photos, ResolveCtx, Resolver, Route, UiNode, UiState, Widgets};
+use super::{CoreEnv, LibraryForms, UiOp, UiRow, diff, node_id, node_path, route_key, seed, value_prop};
+use crate::render::highlight::{self, Spans};
 use crate::render::rows::{Row, RowKind};
 
 /// How long a program's state stays as it is before it is kept on the server.
@@ -57,10 +56,6 @@ pub enum UiEvent {
     /// An accordion or a popover opened or closed.
     Expand {
         open: bool,
-    },
-    /// A carousel or a stepper moved to a page.
-    Scroll {
-        index: usize,
     },
     /// A timer's countdown.
     Start,
@@ -145,12 +140,133 @@ pub enum Out {
     Wake {
         after: Duration,
     },
+    /// Code to highlight off the core's loop, then [`Programs::highlighted`].
+    Highlight {
+        language: String,
+        code: String,
+    },
 }
 
 /// Motile's library, built once.
 pub fn library() -> Arc<Library> {
     static LIBRARY: OnceLock<Arc<Library>> = OnceLock::new();
     LIBRARY.get_or_init(|| Arc::new(motile_openui::motile::library())).clone()
+}
+
+/// What the user did to a node that only the clients see.
+#[derive(Clone, PartialEq, Debug, Default)]
+struct NodeState {
+    open: bool,
+    flipped: bool,
+    filter: Option<String>,
+    /// The marker picked on a map with no `$variable` for it.
+    selected: Option<String>,
+    failed: bool,
+    countdown: Option<Countdown>,
+    /// How many times a `Celebration` went off.
+    burst: u32,
+    /// What its `when` was last.
+    when: bool,
+}
+
+#[derive(Clone, Copy, PartialEq, Debug)]
+struct Countdown {
+    running: bool,
+    /// The seconds it started from, which Reset goes back to.
+    from: f64,
+}
+
+/// What the thread's server found for its programs; none while it is asked.
+#[derive(Default)]
+struct Lookups {
+    images: HashMap<String, Option<Vec<Media>>>,
+    /// The street route through stops, or none when there is no street route.
+    routes: HashMap<String, Option<Option<Vec<[f64; 2]>>>>,
+}
+
+/// The lookups and the highlighting a tree waited for.
+#[derive(Default)]
+struct Wanted {
+    images: HashSet<String>,
+    routes: Vec<Vec<[f64; 2]>>,
+    code: Vec<(String, String)>,
+}
+
+/// A program's state as its resolution reads it.
+struct HostState<'a> {
+    runtime: &'a Runtime,
+    limited: bool,
+    lookups: &'a Lookups,
+    nodes: &'a HashMap<String, NodeState>,
+    wanted: RefCell<Wanted>,
+}
+
+impl UiState for HostState<'_> {
+    fn value(&self, path: &[Step], prop: &str) -> Option<motile_openui::Value> {
+        let selected = self.nodes.get(&node_id(path)).and_then(|node| node.selected.as_ref());
+        match selected.filter(|_| prop == "selected") {
+            Some(selected) => Some(selected.as_str().into()),
+            None => self.runtime.value_at(path, prop),
+        }
+    }
+
+    fn error(&self, path: &[Step]) -> Option<String> {
+        self.runtime.error_at(path).map(str::to_string)
+    }
+
+    fn photos(&self, query: &str) -> Photos {
+        let missing = Photos { state: PhotoState::Missing, media: Vec::new() };
+        if self.limited {
+            return missing;
+        }
+        match self.lookups.images.get(query) {
+            Some(Some(found)) if !found.is_empty() => {
+                Photos { state: PhotoState::Found, media: found.iter().map(|media| media.id.clone()).collect() }
+            }
+            Some(Some(_)) => missing,
+            Some(None) => Photos { state: PhotoState::Waiting, media: Vec::new() },
+            None => {
+                self.wanted.borrow_mut().images.insert(query.to_string());
+                Photos { state: PhotoState::Waiting, media: Vec::new() }
+            }
+        }
+    }
+
+    fn route(&self, stops: &[[f64; 2]]) -> Route {
+        if self.limited {
+            return Route::Failed;
+        }
+        match self.lookups.routes.get(&route_key(stops)) {
+            Some(Some(Some(points))) => Route::Street(points.clone()),
+            Some(Some(None)) => Route::Failed,
+            Some(None) => Route::Loading,
+            None => {
+                self.wanted.borrow_mut().routes.push(stops.to_vec());
+                Route::Loading
+            }
+        }
+    }
+
+    fn widgets(&self, id: &str) -> Widgets {
+        let Some(node) = self.nodes.get(id) else { return Widgets::default() };
+        Widgets {
+            open: node.open,
+            flipped: node.flipped,
+            running: node.countdown.is_some_and(|countdown| countdown.running),
+            started: node.countdown.map(|countdown| countdown.from),
+            filter: node.filter.clone(),
+            burst: node.burst,
+            failed: node.failed,
+        }
+    }
+
+    fn spans(&self, language: &str, code: &str) -> Option<Spans> {
+        let spans = highlight::cached(language, code);
+        if spans.is_none() {
+            self.wanted.borrow_mut().code.push((language.to_string(), code.to_string()));
+        }
+        spans
+    }
 }
 
 struct Hosted {
@@ -162,6 +278,7 @@ struct Hosted {
     complete: bool,
     runtime: Runtime,
     env: Arc<CoreEnv>,
+    resolver: Resolver,
     /// The tree the clients have, as JSON.
     shown: Option<Value>,
     shown_errors: Vec<String>,
@@ -189,6 +306,8 @@ pub struct Programs {
     lookups: Lookups,
     /// The queries of photos the programs want, since when, until they are looked up.
     wanted: HashMap<String, Instant>,
+    /// The code being highlighted.
+    highlighting: HashSet<(String, String)>,
     waking: bool,
 }
 
@@ -200,12 +319,11 @@ impl Programs {
         for row in rows {
             let RowKind::Ui { ui } = &mut row.kind else { continue };
             self.host(&row.id, ui, saved, &mut outs);
-            let Some(hosted) = self.programs.get(&row.id) else { continue };
-            let (tree, wanted) = self.view(hosted);
-            ui.tree = tree;
+            let Some(hosted) = self.programs.get_mut(&row.id) else { continue };
+            let (tree, wanted) = view(hosted, &self.lookups, self.limited);
+            ui.tree = tree.map(Box::new);
             ui.errors = hosted.errors.clone();
             ui.limited = self.limited;
-            let hosted = self.programs.get_mut(&row.id).expect("hosted above");
             hosted.shown = Some(json!(ui.tree));
             hosted.shown_errors = hosted.errors.clone();
             self.want(&row.id, wanted, &mut outs);
@@ -234,6 +352,7 @@ impl Programs {
                 complete: false,
                 runtime,
                 env,
+                resolver: Resolver::default(),
                 shown: None,
                 shown_errors: Vec::new(),
                 errors: Vec::new(),
@@ -257,27 +376,16 @@ impl Programs {
         self.carry(row_id, effects, outs);
     }
 
-    /// The program's tree, and the lookups it needs.
-    fn view(&self, hosted: &Hosted) -> (Option<UiNode>, Wanted) {
-        let ctx = ResolveCtx::new(&hosted.runtime, self.limited, &self.lookups, &hosted.nodes);
-        let tree = hosted.runtime.root().map(|root| resolve(root, &ctx));
-        (tree, ctx.into_wanted())
-    }
-
     /// Patches the clients' tree of the program with what changed in it.
     fn repaint(&mut self, row_id: &str, outs: &mut Vec<Out>) {
-        let Some(hosted) = self.programs.get(row_id) else { return };
-        if hosted.shown.is_none() {
-            return;
-        }
-        let (tree, wanted) = self.view(hosted);
+        let Some(hosted) = self.programs.get_mut(row_id).filter(|hosted| hosted.shown.is_some()) else { return };
+        let (tree, wanted) = view(hosted, &self.lookups, self.limited);
         let tree = tree.map(|tree| json!(tree));
         let mut ops = Vec::new();
         diff(hosted.shown.as_ref().filter(|shown| !shown.is_null()), tree.as_ref(), &mut ops);
         if hosted.errors != hosted.shown_errors {
             ops.push(UiOp::Errors { errors: hosted.errors.clone() });
         }
-        let hosted = self.programs.get_mut(row_id).expect("hosted above");
         hosted.shown = Some(tree.unwrap_or_default());
         hosted.shown_errors = hosted.errors.clone();
         if !ops.is_empty() {
@@ -293,8 +401,13 @@ impl Programs {
         }
     }
 
-    /// Asks for the routes a program's tree needs, and soon for its photos.
+    /// Asks for the routes and the highlighting a program's tree needs, and soon for its photos.
     fn want(&mut self, row_id: &str, wanted: Wanted, outs: &mut Vec<Out>) {
+        for (language, code) in wanted.code {
+            if self.highlighting.insert((language.clone(), code.clone())) {
+                outs.push(Out::Highlight { language, code });
+            }
+        }
         let Some(hosted) = self.programs.get_mut(row_id) else { return };
         if hosted.runtime.is_streaming() || self.limited {
             return;
@@ -380,6 +493,7 @@ impl Programs {
         let prop = value_prop(&library(), &element.component);
         let action = element.props.iter().find(|(_, value)| value.as_plan().is_some()).map(|(name, _)| name.clone());
         let label = element.prop("label").and_then(|label| label.as_str()).map(str::to_string);
+        let bound = prop.as_ref().is_some_and(|prop| element.bindings.contains_key(prop));
         let state = hosted.nodes.entry(node.to_string()).or_default();
         let runtime = &mut hosted.runtime;
         hosted.env.rewind();
@@ -397,13 +511,13 @@ impl Programs {
                 None => Effects::default(),
             },
             UiEvent::Ask { message } => runtime.ask(&path, &message),
-            UiEvent::Select { value } => {
-                state.selected.clone_from(&value);
-                match prop {
-                    Some(prop) => runtime.input(&path, &prop, value.map(Into::into).unwrap_or_default()),
-                    None => Effects::default(),
+            UiEvent::Select { value } => match prop.filter(|_| bound) {
+                Some(prop) => runtime.input(&path, &prop, value.map(Into::into).unwrap_or_default()),
+                None => {
+                    state.selected = value;
+                    Effects::default()
                 }
-            }
+            },
             UiEvent::Filter { category } => {
                 state.filter = category;
                 Effects::default()
@@ -413,15 +527,11 @@ impl Programs {
                 Effects::default()
             }
             UiEvent::Expand { open } => {
-                state.open = Some(open);
-                Effects::default()
-            }
-            UiEvent::Scroll { index } => {
-                state.index = Some(index);
+                state.open = open;
                 Effects::default()
             }
             UiEvent::Fallback => {
-                state.fallback = true;
+                state.failed = true;
                 Effects::default()
             }
             UiEvent::Retry => runtime.retry(),
@@ -579,11 +689,16 @@ impl Programs {
 
     /// The streets through the stops, or none when they couldn't be found.
     pub fn route(&mut self, stops: &[[f64; 2]], points: Option<Vec<[f64; 2]>>) -> Vec<Out> {
-        let route = match points {
-            Some(points) if points.len() > 1 => Route { points, label: None },
-            _ => Route::overview(stops),
-        };
-        self.lookups.routes.insert(route_key(stops), Some(route));
+        let points = points.filter(|points| points.len() > 1);
+        self.lookups.routes.insert(route_key(stops), Some(points));
+        let mut outs = Vec::new();
+        self.repaint_all(&mut outs);
+        outs
+    }
+
+    /// Code has been highlighted.
+    pub fn highlighted(&mut self, language: &str, code: &str) -> Vec<Out> {
+        self.highlighting.remove(&(language.to_string(), code.to_string()));
         let mut outs = Vec::new();
         self.repaint_all(&mut outs);
         outs
@@ -628,6 +743,54 @@ impl Programs {
     #[cfg(test)]
     pub fn shown(&self, row_id: &str) -> Option<&Value> {
         self.programs.get(row_id)?.shown.as_ref()
+    }
+}
+
+/// The program's tree, and what it waited for. A `Celebration` whose `when` turned true goes off.
+fn view(hosted: &mut Hosted, lookups: &Lookups, limited: bool) -> (Option<UiNode>, Wanted) {
+    let Some(root) = hosted.runtime.root().cloned() else { return (None, Wanted::default()) };
+    let mut celebrations = Vec::new();
+    find(&motile_openui::Value::Element(root.clone()), "Celebration", &mut Vec::new(), &mut celebrations);
+    for (id, element) in celebrations {
+        let when = element.prop("when").and_then(|when| when.as_bool()).unwrap_or(false);
+        let node = hosted.nodes.entry(id).or_default();
+        node.burst += u32::from(when && !node.when);
+        node.when = when;
+    }
+    let state =
+        HostState { runtime: &hosted.runtime, limited, lookups, nodes: &hosted.nodes, wanted: RefCell::default() };
+    let ctx = ResolveCtx { streaming: hosted.runtime.is_streaming(), tools: !limited, state: &state };
+    let tree = hosted.resolver.resolve(&root, &ctx);
+    (Some(tree), state.wanted.into_inner())
+}
+
+/// The components named `component` in a value, by node id.
+fn find(value: &motile_openui::Value, component: &str, path: &mut Vec<Step>, found: &mut Vec<(String, Arc<Element>)>) {
+    let visit = |step: Step, value: &motile_openui::Value, path: &mut Vec<Step>, found: &mut Vec<_>| {
+        path.push(step);
+        find(value, component, path, found);
+        path.pop();
+    };
+    match value {
+        motile_openui::Value::Element(element) => {
+            if element.component == component {
+                found.push((node_id(path), element.clone()));
+            }
+            for (key, value) in &element.props {
+                visit(Step::Key(key.clone()), value, path, found);
+            }
+        }
+        motile_openui::Value::Array(items) => {
+            for (index, value) in items.iter().enumerate() {
+                visit(Step::Index(index), value, path, found);
+            }
+        }
+        motile_openui::Value::Object(map) => {
+            for (key, value) in map {
+                visit(Step::Key(key.clone()), value, path, found);
+            }
+        }
+        _ => {}
     }
 }
 

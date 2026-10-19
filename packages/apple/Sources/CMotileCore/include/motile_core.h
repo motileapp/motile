@@ -14,4 +14,11 @@ bool motile_start(const char *config_json, motile_event_callback callback, void 
 // Sends one command, an `api::Envelope`. The answer arrives as a `reply` event.
 void motile_send(const char *command_json);
 
+// Lays out a canvas component (a `canvas::Canvas`) and answers with its `canvas::Scene`, on any
+// thread. Free the answer with `motile_free_string`.
+char *motile_ui_layout(const char *input_json);
+
+// Frees a string the core answered with.
+void motile_free_string(char *string);
+
 #endif

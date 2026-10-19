@@ -1,0 +1,152 @@
+{
+  "id": "",
+  "a11y": {
+    "role": "group"
+  },
+  "component": "Card",
+  "children": [
+    {
+      "id": "children/0",
+      "a11y": {
+        "role": "heading",
+        "level": 3
+      },
+      "component": "Title",
+      "text": {
+        "text": "Steep your tea",
+        "runs": [],
+        "links": []
+      },
+      "style": "card_title",
+      "color": "foreground"
+    },
+    {
+      "id": "children/1",
+      "component": "Row",
+      "children": [
+        {
+          "id": "children/1/children/0",
+          "a11y": {
+            "role": "button",
+            "label": "Green · 2 min"
+          },
+          "component": "Button",
+          "label": "Green · 2 min",
+          "variant": "outline",
+          "tint": null,
+          "size": "small",
+          "icon": null,
+          "block": false,
+          "disabled": null
+        },
+        {
+          "id": "children/1/children/1",
+          "a11y": {
+            "role": "button",
+            "label": "Black · 4 min"
+          },
+          "component": "Button",
+          "label": "Black · 4 min",
+          "variant": "outline",
+          "tint": null,
+          "size": "small",
+          "icon": null,
+          "block": false,
+          "disabled": null
+        },
+        {
+          "id": "children/1/children/2",
+          "a11y": {
+            "role": "button",
+            "label": "Herbal · 6 min"
+          },
+          "component": "Button",
+          "label": "Herbal · 6 min",
+          "variant": "outline",
+          "tint": null,
+          "size": "small",
+          "icon": null,
+          "block": false,
+          "disabled": null
+        }
+      ],
+      "gap": 8.0,
+      "align": "center",
+      "justify": "start",
+      "wrap": true,
+      "sizing": [
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": false
+        },
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": false
+        },
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": false
+        }
+      ]
+    },
+    {
+      "id": "children/2",
+      "a11y": {
+        "role": "timer",
+        "label": "Time left",
+        "value": "3:00"
+      },
+      "component": "Timer",
+      "label": "Time left",
+      "time": "3:00",
+      "seconds": 180.0,
+      "running": false,
+      "done": false,
+      "toggle": {
+        "label": "Start",
+        "icon": {
+          "name": "play",
+          "glyph": ""
+        },
+        "disabled": null
+      },
+      "reset": {
+        "label": "Reset",
+        "icon": {
+          "name": "rotate-ccw",
+          "glyph": ""
+        },
+        "disabled": "program"
+      }
+    },
+    {
+      "id": "children/3",
+      "a11y": {
+        "role": "text"
+      },
+      "component": "Caption",
+      "text": {
+        "text": "Start the timer when the water reaches the leaves.",
+        "runs": [],
+        "links": []
+      },
+      "style": "caption",
+      "color": "muted-foreground"
+    }
+  ],
+  "soft": false,
+  "nested": false,
+  "padding": null,
+  "spacing": [
+    0.0,
+    12.0,
+    12.0,
+    12.0
+  ]
+}

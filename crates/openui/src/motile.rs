@@ -83,10 +83,10 @@ const PREAMBLE: &str = "You can show an answer with openui-lang, a small declara
                         don't need one, such as explanations, code, reviews, plans and most replies while you work on \
                         code, stay plain Markdown with no program.
 
-A later fence with no `root` statement and no statement that is a `Col(...)` call is a patch: Motile merges it over \
-                        the latest program of this thread by statement name (the same name replaces a statement, a \
-                        new name adds one) and draws the merged program in place of that one. A fence with `root` \
-                        starts a new program.";
+Once this thread has a program, a later fence with no `root` statement is a patch: Motile merges it over the \
+                        latest program of this thread by statement name (the same name replaces a statement, a new \
+                        name adds one, `name = null` removes one) and draws the merged program in place of that one. \
+                        A fence with `root` starts a new program.";
 
 const WORKING_TOOL_RULE: &str = "When you answer with a program and the request involves numbers, choices, lists, \
                                  steps, a game or something to explore, make it a working tool: keep inputs and lists \
@@ -102,16 +102,17 @@ const MARKDOWN_RULE: &str = "Answer a plain knowledge or safety question, an exp
                              Markdown, outside any fence; add a short program with a SearchImage, a Quote or a \
                              drawing only where it helps.";
 
-const PATCH_RULE: &str = "In a patch, write a column as Box([...]) rather than Col([...]): a statement that is a Col \
-                          call makes the fence a new program. Never repeat a whole program to change it.";
+const PATCH_RULE: &str = "A patch holds only the statements that change or are new and never a root statement, \
+                          which would start a new program: change the page through the statements root lists. Never \
+                          repeat a whole program to change it.";
 
 const DASHBOARD_RULE: &str = "Fetch rows with Query and compute every number, group and series from them with @Sum, \
                               @Count, @GroupBy, @Bucket, @Top, @Stats and @Change. A filter is a $variable (from this \
                               library's Select or SegmentedControl) applied with @Filter; select dates and ranges with \
                               @Between, since @Filter's < and > compare numbers only.";
 
-const PATCH_EXAMPLE: &str = "Example 4: A later reply that adds basil to Example 1's list, as a patch merged over that \
-                             program:
+const PATCH_EXAMPLE: &str = "Example 4: A later reply that adds basil to Example 1's list, as a patch with no root \
+                             statement, merged over that program:
 
 ```openui-lang
 base = [{name: \"spaghetti\", qty: 400, unit: \" g\"}, {name: \"tomatoes\", qty: 6, unit: \"\"}, {name: \"parmesan\", qty: 80, unit: \" g\"}, {name: \"basil\", qty: 1, unit: \" bunch\"}]

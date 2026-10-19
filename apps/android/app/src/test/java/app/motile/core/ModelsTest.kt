@@ -135,7 +135,7 @@ class ModelsTest {
     @Test
     fun aProgramShowsItsSourceAndAnUnknownRowKeepsItsPlace() {
         val program = RowModel.parse(json("id" to "a/1", "item" to "a", "kind" to "ui", "source" to "root = Col([])", "complete" to true, "tree" to null))
-        assertEquals("root = Col([])", (program?.kind as? RowModel.Kind.Code)?.content?.code)
+        assertEquals("root = Col([])", (program?.kind as? RowModel.Kind.Ui)?.content?.code?.code)
         val unknown = RowModel.parse(json("id" to "a/2", "item" to "a", "kind" to "hologram"))
         assertEquals(RowModel.Kind.Unknown, unknown?.kind)
     }

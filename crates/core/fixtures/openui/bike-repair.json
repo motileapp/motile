@@ -1,0 +1,1686 @@
+{
+  "id": "",
+  "component": "Col",
+  "children": [
+    {
+      "id": "children/0",
+      "component": "Col",
+      "children": [
+        {
+          "id": "children/0/children/0",
+          "a11y": {
+            "role": "heading",
+            "level": 2
+          },
+          "component": "Title",
+          "text": {
+            "text": "Assemble a youth bike",
+            "runs": [],
+            "links": []
+          },
+          "style": "title_xl",
+          "color": "foreground"
+        },
+        {
+          "id": "children/0/children/1",
+          "a11y": {
+            "role": "text"
+          },
+          "component": "Text",
+          "text": {
+            "text": "Most youth bikes arrive about 85% built. You fit the handlebars, front wheel, pedals and saddle, then set up the brakes. Tap each step as you finish it.",
+            "runs": [],
+            "links": []
+          },
+          "inlines": [],
+          "style": "body",
+          "color": "muted-foreground",
+          "weight": "regular",
+          "italic": false,
+          "strike": false,
+          "digits": false,
+          "max_lines": null
+        }
+      ],
+      "align": "stretch",
+      "spacing": [
+        0.0,
+        8.0
+      ]
+    },
+    {
+      "id": "children/1",
+      "component": "Row",
+      "children": [
+        {
+          "id": "children/1/children/0",
+          "a11y": {
+            "role": "text"
+          },
+          "component": "Badge",
+          "text": "45 to 90 minutes",
+          "tone": null,
+          "icon": null
+        },
+        {
+          "id": "children/1/children/1",
+          "a11y": {
+            "role": "text"
+          },
+          "component": "Badge",
+          "text": "Beginner friendly",
+          "tone": "success",
+          "icon": null
+        },
+        {
+          "id": "children/1/children/2",
+          "a11y": {
+            "role": "text"
+          },
+          "component": "Badge",
+          "text": "Adult job, kid helper",
+          "tone": "merged",
+          "icon": null
+        }
+      ],
+      "gap": 8.0,
+      "align": "center",
+      "justify": "start",
+      "wrap": true,
+      "sizing": [
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": false
+        },
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": false
+        },
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": false
+        }
+      ]
+    },
+    {
+      "id": "children/2",
+      "component": "Row",
+      "children": [
+        {
+          "id": "children/2/children/0",
+          "a11y": {
+            "role": "text"
+          },
+          "component": "Label",
+          "text": "Brake type",
+          "color": "foreground"
+        },
+        {
+          "id": "children/2/children/1",
+          "a11y": {
+            "role": "radio_group"
+          },
+          "component": "SegmentedControl",
+          "value": "Rim",
+          "options": [
+            {
+              "value": "Rim",
+              "label": "Rim",
+              "description": null
+            },
+            {
+              "value": "Disc",
+              "label": "Disc",
+              "description": null
+            },
+            {
+              "value": "Coaster",
+              "label": "Coaster",
+              "description": null
+            }
+          ],
+          "selected": 0,
+          "block": false,
+          "disabled": null
+        }
+      ],
+      "gap": 12.0,
+      "align": "center",
+      "justify": "start",
+      "wrap": true,
+      "sizing": [
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": true
+        },
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": true
+        }
+      ]
+    },
+    {
+      "id": "children/3",
+      "a11y": {
+        "role": "group"
+      },
+      "component": "Card",
+      "children": [
+        {
+          "id": "children/3/children/0",
+          "a11y": {
+            "role": "text"
+          },
+          "component": "Label",
+          "text": "You will need",
+          "color": "foreground"
+        },
+        {
+          "id": "children/3/children/1",
+          "a11y": {
+            "role": "list"
+          },
+          "component": "List",
+          "items": [
+            {
+              "id": "children/3/children/1/items/0",
+              "a11y": {
+                "role": "list_item"
+              },
+              "component": "ListItem",
+              "title": {
+                "text": "4, 5 and 6 mm Allen keys",
+                "runs": [],
+                "links": []
+              },
+              "style": "body_card",
+              "medium": false,
+              "description": null,
+              "marker": {
+                "kind": "dot"
+              },
+              "children": []
+            },
+            {
+              "id": "children/3/children/1/items/1",
+              "a11y": {
+                "role": "list_item"
+              },
+              "component": "ListItem",
+              "title": {
+                "text": "15 mm pedal wrench",
+                "runs": [],
+                "links": []
+              },
+              "style": "body_card",
+              "medium": false,
+              "description": null,
+              "marker": {
+                "kind": "dot"
+              },
+              "children": []
+            },
+            {
+              "id": "children/3/children/1/items/2",
+              "a11y": {
+                "role": "list_item"
+              },
+              "component": "ListItem",
+              "title": {
+                "text": "Phillips screwdriver",
+                "runs": [],
+                "links": []
+              },
+              "style": "body_card",
+              "medium": false,
+              "description": null,
+              "marker": {
+                "kind": "dot"
+              },
+              "children": []
+            },
+            {
+              "id": "children/3/children/1/items/3",
+              "a11y": {
+                "role": "list_item"
+              },
+              "component": "ListItem",
+              "title": {
+                "text": "Pump with a pressure gauge",
+                "runs": [],
+                "links": []
+              },
+              "style": "body_card",
+              "medium": false,
+              "description": null,
+              "marker": {
+                "kind": "dot"
+              },
+              "children": []
+            },
+            {
+              "id": "children/3/children/1/items/4",
+              "a11y": {
+                "role": "list_item"
+              },
+              "component": "ListItem",
+              "title": {
+                "text": "Scissors for the zip ties",
+                "runs": [],
+                "links": []
+              },
+              "style": "body_card",
+              "medium": false,
+              "description": null,
+              "marker": {
+                "kind": "dot"
+              },
+              "children": []
+            }
+          ],
+          "marker": "bullet",
+          "timeline": false,
+          "wide": false
+        }
+      ],
+      "soft": true,
+      "nested": false,
+      "padding": 12.0,
+      "spacing": [
+        0.0,
+        8.0
+      ]
+    },
+    {
+      "id": "children/4",
+      "a11y": {
+        "role": "heading",
+        "level": 3
+      },
+      "component": "Title",
+      "text": {
+        "text": "Assembly, step by step",
+        "runs": [],
+        "links": []
+      },
+      "style": "title_md",
+      "color": "foreground"
+    },
+    {
+      "id": "children/5",
+      "component": "Col",
+      "children": [
+        {
+          "id": "children/5/children/0",
+          "component": "Row",
+          "children": [
+            {
+              "id": "children/5/children/0/children/0",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Text",
+              "text": {
+                "text": "0 of 8 steps done",
+                "runs": [],
+                "links": []
+              },
+              "inlines": [],
+              "style": "small",
+              "color": "muted-foreground",
+              "weight": "regular",
+              "italic": false,
+              "strike": false,
+              "digits": false,
+              "max_lines": null
+            },
+            {
+              "id": "children/5/children/0/children/1",
+              "a11y": {
+                "role": "hidden"
+              },
+              "component": "Spacer"
+            },
+            {
+              "id": "children/5/children/0/children/2",
+              "a11y": {
+                "role": "button",
+                "label": "Reset"
+              },
+              "component": "Button",
+              "label": "Reset",
+              "variant": "ghost",
+              "tint": null,
+              "size": "small",
+              "icon": {
+                "name": "rotate-ccw",
+                "glyph": ""
+              },
+              "block": false,
+              "disabled": null
+            }
+          ],
+          "gap": 8.0,
+          "align": "center",
+          "justify": "start",
+          "wrap": false,
+          "sizing": [
+            {
+              "basis": "content",
+              "length": null,
+              "grow": 0.0,
+              "shrink": true
+            },
+            {
+              "basis": "zero",
+              "length": null,
+              "grow": 1.0,
+              "shrink": false
+            },
+            {
+              "basis": "content",
+              "length": null,
+              "grow": 0.0,
+              "shrink": false
+            }
+          ]
+        },
+        {
+          "id": "children/5/children/1",
+          "component": "Box",
+          "children": [
+            {
+              "id": "children/5/children/1/children/0",
+              "component": "Box",
+              "children": [],
+              "direction": "col",
+              "gap": 0.0,
+              "spacing": [],
+              "sizing": [],
+              "padding": 0.0,
+              "background": "chart-2",
+              "inner_surface": true,
+              "radius": {
+                "kind": "full",
+                "points": 0.0
+              },
+              "border": false,
+              "width": {
+                "unit": "fraction",
+                "value": 0.0
+              },
+              "height": {
+                "unit": "points",
+                "value": 6.0
+              },
+              "flex": null,
+              "align": "stretch",
+              "justify": "start",
+              "wrap": false
+            }
+          ],
+          "direction": "col",
+          "gap": 0.0,
+          "spacing": [
+            0.0
+          ],
+          "sizing": [],
+          "padding": 0.0,
+          "background": {
+            "surface": "border"
+          },
+          "inner_surface": true,
+          "radius": {
+            "kind": "full",
+            "points": 0.0
+          },
+          "border": false,
+          "width": {
+            "unit": "fraction",
+            "value": 1.0
+          },
+          "height": {
+            "unit": "points",
+            "value": 6.0
+          },
+          "flex": null,
+          "align": "stretch",
+          "justify": "start",
+          "wrap": false
+        }
+      ],
+      "align": "stretch",
+      "spacing": [
+        0.0,
+        8.0
+      ]
+    },
+    {
+      "id": "children/6",
+      "component": "Col",
+      "children": [
+        {
+          "id": "children/6/children/0",
+          "a11y": {
+            "role": "button",
+            "label": "1. Unbox and check Cut the zip ties, remove the packaging and lay the parts out: front wheel, pedals marked L and R, sad",
+            "on": false
+          },
+          "component": "Pressable",
+          "children": [
+            {
+              "id": "children/6/children/0/children/0",
+              "component": "Row",
+              "children": [
+                {
+                  "id": "children/6/children/0/children/0/children/0",
+                  "a11y": {
+                    "role": "hidden"
+                  },
+                  "component": "Icon",
+                  "icon": {
+                    "name": "circle",
+                    "glyph": ""
+                  },
+                  "size": 18.0,
+                  "color": "muted-stronger-foreground"
+                },
+                {
+                  "id": "children/6/children/0/children/0/children/1",
+                  "component": "Col",
+                  "children": [
+                    {
+                      "id": "children/6/children/0/children/0/children/1/children/0",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Text",
+                      "text": {
+                        "text": "1. Unbox and check",
+                        "runs": [],
+                        "links": []
+                      },
+                      "inlines": [],
+                      "style": "small",
+                      "color": "foreground",
+                      "weight": "semibold",
+                      "italic": false,
+                      "strike": false,
+                      "digits": false,
+                      "max_lines": null
+                    },
+                    {
+                      "id": "children/6/children/0/children/0/children/1/children/1",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Caption",
+                      "text": {
+                        "text": "Cut the zip ties, remove the packaging and lay the parts out: front wheel, pedals marked L and R, saddle and reflectors.",
+                        "runs": [],
+                        "links": []
+                      },
+                      "style": "caption",
+                      "color": "muted-foreground"
+                    }
+                  ],
+                  "align": "stretch",
+                  "spacing": [
+                    0.0,
+                    4.0
+                  ]
+                }
+              ],
+              "gap": 12.0,
+              "align": "start",
+              "justify": "start",
+              "wrap": false,
+              "sizing": [
+                {
+                  "basis": "content",
+                  "length": null,
+                  "grow": 0.0,
+                  "shrink": true
+                },
+                {
+                  "basis": "content",
+                  "length": null,
+                  "grow": 0.0,
+                  "shrink": true
+                }
+              ]
+            }
+          ],
+          "padding": 12.0,
+          "background": null,
+          "inner_surface": false,
+          "radius": {
+            "kind": "lg",
+            "points": 12.0
+          },
+          "selected": false,
+          "ring": false,
+          "disabled": null
+        },
+        {
+          "id": "children/6/children/1",
+          "a11y": {
+            "role": "button",
+            "label": "2. Fit the handlebars Seat the stem, line the bars up with the front wheel and tighten the bolts evenly, a little at a t",
+            "on": false
+          },
+          "component": "Pressable",
+          "children": [
+            {
+              "id": "children/6/children/1/children/0",
+              "component": "Row",
+              "children": [
+                {
+                  "id": "children/6/children/1/children/0/children/0",
+                  "a11y": {
+                    "role": "hidden"
+                  },
+                  "component": "Icon",
+                  "icon": {
+                    "name": "circle",
+                    "glyph": ""
+                  },
+                  "size": 18.0,
+                  "color": "muted-stronger-foreground"
+                },
+                {
+                  "id": "children/6/children/1/children/0/children/1",
+                  "component": "Col",
+                  "children": [
+                    {
+                      "id": "children/6/children/1/children/0/children/1/children/0",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Text",
+                      "text": {
+                        "text": "2. Fit the handlebars",
+                        "runs": [],
+                        "links": []
+                      },
+                      "inlines": [],
+                      "style": "small",
+                      "color": "foreground",
+                      "weight": "semibold",
+                      "italic": false,
+                      "strike": false,
+                      "digits": false,
+                      "max_lines": null
+                    },
+                    {
+                      "id": "children/6/children/1/children/0/children/1/children/1",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Caption",
+                      "text": {
+                        "text": "Seat the stem, line the bars up with the front wheel and tighten the bolts evenly, a little at a time.",
+                        "runs": [],
+                        "links": []
+                      },
+                      "style": "caption",
+                      "color": "muted-foreground"
+                    }
+                  ],
+                  "align": "stretch",
+                  "spacing": [
+                    0.0,
+                    4.0
+                  ]
+                }
+              ],
+              "gap": 12.0,
+              "align": "start",
+              "justify": "start",
+              "wrap": false,
+              "sizing": [
+                {
+                  "basis": "content",
+                  "length": null,
+                  "grow": 0.0,
+                  "shrink": true
+                },
+                {
+                  "basis": "content",
+                  "length": null,
+                  "grow": 0.0,
+                  "shrink": true
+                }
+              ]
+            }
+          ],
+          "padding": 12.0,
+          "background": null,
+          "inner_surface": false,
+          "radius": {
+            "kind": "lg",
+            "points": 12.0
+          },
+          "selected": false,
+          "ring": false,
+          "disabled": null
+        },
+        {
+          "id": "children/6/children/2",
+          "a11y": {
+            "role": "button",
+            "label": "3. Install the front wheel Seat the axle fully in the fork, then close the quick release or tighten both axle nuts. Spin",
+            "on": false
+          },
+          "component": "Pressable",
+          "children": [
+            {
+              "id": "children/6/children/2/children/0",
+              "component": "Row",
+              "children": [
+                {
+                  "id": "children/6/children/2/children/0/children/0",
+                  "a11y": {
+                    "role": "hidden"
+                  },
+                  "component": "Icon",
+                  "icon": {
+                    "name": "circle",
+                    "glyph": ""
+                  },
+                  "size": 18.0,
+                  "color": "muted-stronger-foreground"
+                },
+                {
+                  "id": "children/6/children/2/children/0/children/1",
+                  "component": "Col",
+                  "children": [
+                    {
+                      "id": "children/6/children/2/children/0/children/1/children/0",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Text",
+                      "text": {
+                        "text": "3. Install the front wheel",
+                        "runs": [],
+                        "links": []
+                      },
+                      "inlines": [],
+                      "style": "small",
+                      "color": "foreground",
+                      "weight": "semibold",
+                      "italic": false,
+                      "strike": false,
+                      "digits": false,
+                      "max_lines": null
+                    },
+                    {
+                      "id": "children/6/children/2/children/0/children/1/children/1",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Caption",
+                      "text": {
+                        "text": "Seat the axle fully in the fork, then close the quick release or tighten both axle nuts. Spin it: it should run straight.",
+                        "runs": [],
+                        "links": []
+                      },
+                      "style": "caption",
+                      "color": "muted-foreground"
+                    }
+                  ],
+                  "align": "stretch",
+                  "spacing": [
+                    0.0,
+                    4.0
+                  ]
+                }
+              ],
+              "gap": 12.0,
+              "align": "start",
+              "justify": "start",
+              "wrap": false,
+              "sizing": [
+                {
+                  "basis": "content",
+                  "length": null,
+                  "grow": 0.0,
+                  "shrink": true
+                },
+                {
+                  "basis": "content",
+                  "length": null,
+                  "grow": 0.0,
+                  "shrink": true
+                }
+              ]
+            }
+          ],
+          "padding": 12.0,
+          "background": null,
+          "inner_surface": false,
+          "radius": {
+            "kind": "lg",
+            "points": 12.0
+          },
+          "selected": false,
+          "ring": false,
+          "disabled": null
+        },
+        {
+          "id": "children/6/children/3",
+          "a11y": {
+            "role": "button",
+            "label": "4. Attach the pedals The right pedal threads clockwise, the left anticlockwise. Start both by hand, then snug them with ",
+            "on": false
+          },
+          "component": "Pressable",
+          "children": [
+            {
+              "id": "children/6/children/3/children/0",
+              "component": "Row",
+              "children": [
+                {
+                  "id": "children/6/children/3/children/0/children/0",
+                  "a11y": {
+                    "role": "hidden"
+                  },
+                  "component": "Icon",
+                  "icon": {
+                    "name": "circle",
+                    "glyph": ""
+                  },
+                  "size": 18.0,
+                  "color": "muted-stronger-foreground"
+                },
+                {
+                  "id": "children/6/children/3/children/0/children/1",
+                  "component": "Col",
+                  "children": [
+                    {
+                      "id": "children/6/children/3/children/0/children/1/children/0",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Text",
+                      "text": {
+                        "text": "4. Attach the pedals",
+                        "runs": [],
+                        "links": []
+                      },
+                      "inlines": [],
+                      "style": "small",
+                      "color": "foreground",
+                      "weight": "semibold",
+                      "italic": false,
+                      "strike": false,
+                      "digits": false,
+                      "max_lines": null
+                    },
+                    {
+                      "id": "children/6/children/3/children/0/children/1/children/1",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Caption",
+                      "text": {
+                        "text": "The right pedal threads clockwise, the left anticlockwise. Start both by hand, then snug them with the 15 mm wrench.",
+                        "runs": [],
+                        "links": []
+                      },
+                      "style": "caption",
+                      "color": "muted-foreground"
+                    }
+                  ],
+                  "align": "stretch",
+                  "spacing": [
+                    0.0,
+                    4.0
+                  ]
+                }
+              ],
+              "gap": 12.0,
+              "align": "start",
+              "justify": "start",
+              "wrap": false,
+              "sizing": [
+                {
+                  "basis": "content",
+                  "length": null,
+                  "grow": 0.0,
+                  "shrink": true
+                },
+                {
+                  "basis": "content",
+                  "length": null,
+                  "grow": 0.0,
+                  "shrink": true
+                }
+              ]
+            }
+          ],
+          "padding": 12.0,
+          "background": null,
+          "inner_surface": false,
+          "radius": {
+            "kind": "lg",
+            "points": 12.0
+          },
+          "selected": false,
+          "ring": false,
+          "disabled": null
+        },
+        {
+          "id": "children/6/children/4",
+          "a11y": {
+            "role": "button",
+            "label": "5. Set the saddle height Insert the seat post at least to its minimum insertion mark, set the height below and tighten t",
+            "on": false
+          },
+          "component": "Pressable",
+          "children": [
+            {
+              "id": "children/6/children/4/children/0",
+              "component": "Row",
+              "children": [
+                {
+                  "id": "children/6/children/4/children/0/children/0",
+                  "a11y": {
+                    "role": "hidden"
+                  },
+                  "component": "Icon",
+                  "icon": {
+                    "name": "circle",
+                    "glyph": ""
+                  },
+                  "size": 18.0,
+                  "color": "muted-stronger-foreground"
+                },
+                {
+                  "id": "children/6/children/4/children/0/children/1",
+                  "component": "Col",
+                  "children": [
+                    {
+                      "id": "children/6/children/4/children/0/children/1/children/0",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Text",
+                      "text": {
+                        "text": "5. Set the saddle height",
+                        "runs": [],
+                        "links": []
+                      },
+                      "inlines": [],
+                      "style": "small",
+                      "color": "foreground",
+                      "weight": "semibold",
+                      "italic": false,
+                      "strike": false,
+                      "digits": false,
+                      "max_lines": null
+                    },
+                    {
+                      "id": "children/6/children/4/children/0/children/1/children/1",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Caption",
+                      "text": {
+                        "text": "Insert the seat post at least to its minimum insertion mark, set the height below and tighten the clamp.",
+                        "runs": [],
+                        "links": []
+                      },
+                      "style": "caption",
+                      "color": "muted-foreground"
+                    }
+                  ],
+                  "align": "stretch",
+                  "spacing": [
+                    0.0,
+                    4.0
+                  ]
+                }
+              ],
+              "gap": 12.0,
+              "align": "start",
+              "justify": "start",
+              "wrap": false,
+              "sizing": [
+                {
+                  "basis": "content",
+                  "length": null,
+                  "grow": 0.0,
+                  "shrink": true
+                },
+                {
+                  "basis": "content",
+                  "length": null,
+                  "grow": 0.0,
+                  "shrink": true
+                }
+              ]
+            }
+          ],
+          "padding": 12.0,
+          "background": null,
+          "inner_surface": false,
+          "radius": {
+            "kind": "lg",
+            "points": 12.0
+          },
+          "selected": false,
+          "ring": false,
+          "disabled": null
+        },
+        {
+          "id": "children/6/children/5",
+          "a11y": {
+            "role": "button",
+            "label": "6. Set up the rim brakes Hook the cable noodle into the V-brake arms and center the pads on the rim, not the tire. The w",
+            "on": false
+          },
+          "component": "Pressable",
+          "children": [
+            {
+              "id": "children/6/children/5/children/0",
+              "component": "Row",
+              "children": [
+                {
+                  "id": "children/6/children/5/children/0/children/0",
+                  "a11y": {
+                    "role": "hidden"
+                  },
+                  "component": "Icon",
+                  "icon": {
+                    "name": "circle",
+                    "glyph": ""
+                  },
+                  "size": 18.0,
+                  "color": "muted-stronger-foreground"
+                },
+                {
+                  "id": "children/6/children/5/children/0/children/1",
+                  "component": "Col",
+                  "children": [
+                    {
+                      "id": "children/6/children/5/children/0/children/1/children/0",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Text",
+                      "text": {
+                        "text": "6. Set up the rim brakes",
+                        "runs": [],
+                        "links": []
+                      },
+                      "inlines": [],
+                      "style": "small",
+                      "color": "foreground",
+                      "weight": "semibold",
+                      "italic": false,
+                      "strike": false,
+                      "digits": false,
+                      "max_lines": null
+                    },
+                    {
+                      "id": "children/6/children/5/children/0/children/1/children/1",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Caption",
+                      "text": {
+                        "text": "Hook the cable noodle into the V-brake arms and center the pads on the rim, not the tire. The wheel should lock before the lever reaches the grip.",
+                        "runs": [],
+                        "links": []
+                      },
+                      "style": "caption",
+                      "color": "muted-foreground"
+                    }
+                  ],
+                  "align": "stretch",
+                  "spacing": [
+                    0.0,
+                    4.0
+                  ]
+                }
+              ],
+              "gap": 12.0,
+              "align": "start",
+              "justify": "start",
+              "wrap": false,
+              "sizing": [
+                {
+                  "basis": "content",
+                  "length": null,
+                  "grow": 0.0,
+                  "shrink": true
+                },
+                {
+                  "basis": "content",
+                  "length": null,
+                  "grow": 0.0,
+                  "shrink": true
+                }
+              ]
+            }
+          ],
+          "padding": 12.0,
+          "background": null,
+          "inner_surface": false,
+          "radius": {
+            "kind": "lg",
+            "points": 12.0
+          },
+          "selected": false,
+          "ring": false,
+          "disabled": null
+        },
+        {
+          "id": "children/6/children/6",
+          "a11y": {
+            "role": "button",
+            "label": "7. Inflate the tires Pump to the pressure printed on the sidewall and check the bead sits evenly all round.",
+            "on": false
+          },
+          "component": "Pressable",
+          "children": [
+            {
+              "id": "children/6/children/6/children/0",
+              "component": "Row",
+              "children": [
+                {
+                  "id": "children/6/children/6/children/0/children/0",
+                  "a11y": {
+                    "role": "hidden"
+                  },
+                  "component": "Icon",
+                  "icon": {
+                    "name": "circle",
+                    "glyph": ""
+                  },
+                  "size": 18.0,
+                  "color": "muted-stronger-foreground"
+                },
+                {
+                  "id": "children/6/children/6/children/0/children/1",
+                  "component": "Col",
+                  "children": [
+                    {
+                      "id": "children/6/children/6/children/0/children/1/children/0",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Text",
+                      "text": {
+                        "text": "7. Inflate the tires",
+                        "runs": [],
+                        "links": []
+                      },
+                      "inlines": [],
+                      "style": "small",
+                      "color": "foreground",
+                      "weight": "semibold",
+                      "italic": false,
+                      "strike": false,
+                      "digits": false,
+                      "max_lines": null
+                    },
+                    {
+                      "id": "children/6/children/6/children/0/children/1/children/1",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Caption",
+                      "text": {
+                        "text": "Pump to the pressure printed on the sidewall and check the bead sits evenly all round.",
+                        "runs": [],
+                        "links": []
+                      },
+                      "style": "caption",
+                      "color": "muted-foreground"
+                    }
+                  ],
+                  "align": "stretch",
+                  "spacing": [
+                    0.0,
+                    4.0
+                  ]
+                }
+              ],
+              "gap": 12.0,
+              "align": "start",
+              "justify": "start",
+              "wrap": false,
+              "sizing": [
+                {
+                  "basis": "content",
+                  "length": null,
+                  "grow": 0.0,
+                  "shrink": true
+                },
+                {
+                  "basis": "content",
+                  "length": null,
+                  "grow": 0.0,
+                  "shrink": true
+                }
+              ]
+            }
+          ],
+          "padding": 12.0,
+          "background": null,
+          "inner_surface": false,
+          "radius": {
+            "kind": "lg",
+            "points": 12.0
+          },
+          "selected": false,
+          "ring": false,
+          "disabled": null
+        },
+        {
+          "id": "children/6/children/7",
+          "a11y": {
+            "role": "button",
+            "label": "8. Final safety check Check every bolt, fit the reflectors and the bell, and test the brakes at walking pace.",
+            "on": false
+          },
+          "component": "Pressable",
+          "children": [
+            {
+              "id": "children/6/children/7/children/0",
+              "component": "Row",
+              "children": [
+                {
+                  "id": "children/6/children/7/children/0/children/0",
+                  "a11y": {
+                    "role": "hidden"
+                  },
+                  "component": "Icon",
+                  "icon": {
+                    "name": "circle",
+                    "glyph": ""
+                  },
+                  "size": 18.0,
+                  "color": "muted-stronger-foreground"
+                },
+                {
+                  "id": "children/6/children/7/children/0/children/1",
+                  "component": "Col",
+                  "children": [
+                    {
+                      "id": "children/6/children/7/children/0/children/1/children/0",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Text",
+                      "text": {
+                        "text": "8. Final safety check",
+                        "runs": [],
+                        "links": []
+                      },
+                      "inlines": [],
+                      "style": "small",
+                      "color": "foreground",
+                      "weight": "semibold",
+                      "italic": false,
+                      "strike": false,
+                      "digits": false,
+                      "max_lines": null
+                    },
+                    {
+                      "id": "children/6/children/7/children/0/children/1/children/1",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Caption",
+                      "text": {
+                        "text": "Check every bolt, fit the reflectors and the bell, and test the brakes at walking pace.",
+                        "runs": [],
+                        "links": []
+                      },
+                      "style": "caption",
+                      "color": "muted-foreground"
+                    }
+                  ],
+                  "align": "stretch",
+                  "spacing": [
+                    0.0,
+                    4.0
+                  ]
+                }
+              ],
+              "gap": 12.0,
+              "align": "start",
+              "justify": "start",
+              "wrap": false,
+              "sizing": [
+                {
+                  "basis": "content",
+                  "length": null,
+                  "grow": 0.0,
+                  "shrink": true
+                },
+                {
+                  "basis": "content",
+                  "length": null,
+                  "grow": 0.0,
+                  "shrink": true
+                }
+              ]
+            }
+          ],
+          "padding": 12.0,
+          "background": null,
+          "inner_surface": false,
+          "radius": {
+            "kind": "lg",
+            "points": 12.0
+          },
+          "selected": false,
+          "ring": false,
+          "disabled": null
+        }
+      ],
+      "align": "stretch",
+      "spacing": [
+        0.0,
+        4.0,
+        4.0,
+        4.0,
+        4.0,
+        4.0,
+        4.0,
+        4.0
+      ]
+    },
+    {
+      "id": "children/7",
+      "a11y": {
+        "role": "heading",
+        "level": 3
+      },
+      "component": "Title",
+      "text": {
+        "text": "Visual references",
+        "runs": [],
+        "links": []
+      },
+      "style": "title_md",
+      "color": "foreground"
+    },
+    {
+      "id": "children/8",
+      "component": "Grid",
+      "children": [
+        {
+          "id": "children/8/children/0",
+          "component": "Col",
+          "children": [
+            {
+              "id": "children/8/children/0/children/0",
+              "a11y": {
+                "role": "image",
+                "label": "Bicycle wheel quick release"
+              },
+              "component": "SearchImage",
+              "query": "Bicycle wheel quick release",
+              "aspect_ratio": 1.4,
+              "radius": {
+                "kind": "lg",
+                "points": 12.0
+              },
+              "fit": "cover",
+              "photos": {
+                "state": "waiting",
+                "media": []
+              }
+            },
+            {
+              "id": "children/8/children/0/children/1",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Caption",
+              "text": {
+                "text": "Front wheel seated in the fork",
+                "runs": [],
+                "links": []
+              },
+              "style": "caption",
+              "color": "muted-foreground"
+            }
+          ],
+          "align": "stretch",
+          "spacing": [
+            0.0,
+            4.0
+          ]
+        },
+        {
+          "id": "children/8/children/1",
+          "component": "Col",
+          "children": [
+            {
+              "id": "children/8/children/1/children/0",
+              "a11y": {
+                "role": "image",
+                "label": "Bicycle pedal"
+              },
+              "component": "SearchImage",
+              "query": "Bicycle pedal",
+              "aspect_ratio": 1.4,
+              "radius": {
+                "kind": "lg",
+                "points": 12.0
+              },
+              "fit": "cover",
+              "photos": {
+                "state": "waiting",
+                "media": []
+              }
+            },
+            {
+              "id": "children/8/children/1/children/1",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Caption",
+              "text": {
+                "text": "Pedals: right clockwise, left anticlockwise",
+                "runs": [],
+                "links": []
+              },
+              "style": "caption",
+              "color": "muted-foreground"
+            }
+          ],
+          "align": "stretch",
+          "spacing": [
+            0.0,
+            4.0
+          ]
+        },
+        {
+          "id": "children/8/children/2",
+          "component": "Col",
+          "children": [
+            {
+              "id": "children/8/children/2/children/0",
+              "a11y": {
+                "role": "image",
+                "label": "V-brake"
+              },
+              "component": "SearchImage",
+              "query": "V-brake",
+              "aspect_ratio": 1.4,
+              "radius": {
+                "kind": "lg",
+                "points": 12.0
+              },
+              "fit": "cover",
+              "photos": {
+                "state": "waiting",
+                "media": []
+              }
+            },
+            {
+              "id": "children/8/children/2/children/1",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Caption",
+              "text": {
+                "text": "Brake pads meet the rim squarely",
+                "runs": [],
+                "links": []
+              },
+              "style": "caption",
+              "color": "muted-foreground"
+            }
+          ],
+          "align": "stretch",
+          "spacing": [
+            0.0,
+            4.0
+          ]
+        },
+        {
+          "id": "children/8/children/3",
+          "component": "Col",
+          "children": [
+            {
+              "id": "children/8/children/3/children/0",
+              "a11y": {
+                "role": "image",
+                "label": "Seatpost"
+              },
+              "component": "SearchImage",
+              "query": "Seatpost",
+              "aspect_ratio": 1.4,
+              "radius": {
+                "kind": "lg",
+                "points": 12.0
+              },
+              "fit": "cover",
+              "photos": {
+                "state": "waiting",
+                "media": []
+              }
+            },
+            {
+              "id": "children/8/children/3/children/1",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Caption",
+              "text": {
+                "text": "Never above the minimum insertion mark",
+                "runs": [],
+                "links": []
+              },
+              "style": "caption",
+              "color": "muted-foreground"
+            }
+          ],
+          "align": "stretch",
+          "spacing": [
+            0.0,
+            4.0
+          ]
+        }
+      ],
+      "columns": 2,
+      "min_child_width": 160.0,
+      "gap": 12.0
+    },
+    {
+      "id": "children/9",
+      "a11y": {
+        "role": "group"
+      },
+      "component": "Card",
+      "children": [
+        {
+          "id": "children/9/children/0",
+          "a11y": {
+            "role": "heading",
+            "level": 3
+          },
+          "component": "Title",
+          "text": {
+            "text": "Saddle height",
+            "runs": [],
+            "links": []
+          },
+          "style": "card_title",
+          "color": "foreground"
+        },
+        {
+          "id": "children/9/children/1",
+          "a11y": {
+            "role": "text_field",
+            "label": "Your child's inseam, in cm"
+          },
+          "component": "Input",
+          "value": "56",
+          "number": true,
+          "label": "Your child's inseam, in cm",
+          "placeholder": null,
+          "error": null,
+          "disabled": null
+        },
+        {
+          "id": "children/9/children/2",
+          "a11y": {
+            "role": "text"
+          },
+          "component": "Text",
+          "text": {
+            "text": "Start with the top of the saddle about 54 cm from the ground so both feet touch flat. Once your child rides confidently, raise it to about 59 cm, where only the balls of the feet touch.",
+            "runs": [
+              [
+                39,
+                5,
+                1
+              ],
+              [
+                139,
+                5,
+                1
+              ]
+            ],
+            "links": []
+          },
+          "inlines": [],
+          "style": "small",
+          "color": "foreground",
+          "weight": "regular",
+          "italic": false,
+          "strike": false,
+          "digits": false,
+          "max_lines": null
+        }
+      ],
+      "soft": true,
+      "nested": false,
+      "padding": 16.0,
+      "spacing": [
+        0.0,
+        8.0,
+        8.0
+      ]
+    },
+    {
+      "id": "children/10",
+      "component": "Box",
+      "children": [
+        {
+          "id": "children/10/children/0",
+          "component": "Row",
+          "children": [
+            {
+              "id": "children/10/children/0/children/0",
+              "a11y": {
+                "role": "hidden"
+              },
+              "component": "Icon",
+              "icon": {
+                "name": "shield-check",
+                "glyph": ""
+              },
+              "size": 18.0,
+              "color": "success"
+            },
+            {
+              "id": "children/10/children/0/children/1",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Text",
+              "text": {
+                "text": "Before the first ride: the brakes stop the bike, both wheels are tight, the bars do not twist against the front wheel and the helmet fits snugly.",
+                "runs": [],
+                "links": []
+              },
+              "inlines": [],
+              "style": "small",
+              "color": "foreground",
+              "weight": "regular",
+              "italic": false,
+              "strike": false,
+              "digits": false,
+              "max_lines": null
+            }
+          ],
+          "gap": 8.0,
+          "align": "start",
+          "justify": "start",
+          "wrap": false,
+          "sizing": [
+            {
+              "basis": "content",
+              "length": null,
+              "grow": 0.0,
+              "shrink": true
+            },
+            {
+              "basis": "content",
+              "length": null,
+              "grow": 0.0,
+              "shrink": true
+            }
+          ]
+        }
+      ],
+      "direction": "col",
+      "gap": 0.0,
+      "spacing": [
+        0.0
+      ],
+      "sizing": [],
+      "padding": 12.0,
+      "background": {
+        "wash": "success"
+      },
+      "inner_surface": true,
+      "radius": {
+        "kind": "lg",
+        "points": 12.0
+      },
+      "border": false,
+      "width": null,
+      "height": null,
+      "flex": null,
+      "align": "stretch",
+      "justify": "start",
+      "wrap": false
+    }
+  ],
+  "align": "stretch",
+  "spacing": [
+    0.0,
+    24.0,
+    24.0,
+    24.0,
+    24.0,
+    12.0,
+    24.0,
+    24.0,
+    12.0,
+    24.0,
+    24.0
+  ]
+}

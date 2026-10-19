@@ -28,6 +28,19 @@ extension NSView {
         setAccessibilityLabel(label)
     }
 
+    func describe(_ label: String, role: AccessRole, value: String? = nil, checked: Bool? = nil) {
+        setAccessibilityElement(true)
+        setAccessibilityLabel(label)
+        setAccessibilityValue(value ?? checked.map { $0 ? 1 : 0 })
+        switch role {
+        case .button: setAccessibilityRole(.button)
+        case .popUp: setAccessibilityRole(.popUpButton)
+        case .checkbox: setAccessibilityRole(.checkBox)
+        case .radio: setAccessibilityRole(.radioButton)
+        case .slider: setAccessibilityRole(.slider)
+        }
+    }
+
     func fade(to opacity: CGFloat, duration: TimeInterval) {
         NSAnimationContext.runAnimationGroup { context in
             context.duration = duration
@@ -67,12 +80,58 @@ class FlippedView: NSView {
     var menuActions: (() -> [MenuAction])?
     /// The cursor over a view that takes clicks.
     var pointer = Pointer.arrow
+    /// Takes the keys under Full Keyboard Access, with the focus ring around `focusShape`. Space
+    /// and Return press it unless `onKey` takes them.
+    var focusable = false
+    /// Called with a key it has while focused; says whether it took it.
+    var onKey: ((ControlKey) -> Bool)?
+    /// Called as a drag that starts on the view goes. A view with one drags rather than presses.
+    var onDrag: ((DragPhase, CGPoint) -> Void)?
+    /// Called with 1 or -1 when an assistive technology steps its value.
+    var onAdjust: ((Int) -> Void)?
     private var tracking: NSTrackingArea?
+    private var dragging = false
 
     override var isFlipped: Bool { true }
 
+    /// Where the focus ring goes, and its corners.
+    var focusShape: (rect: CGRect, radius: CGFloat) { (bounds, 0) }
+
+    override var acceptsFirstResponder: Bool { focusable && NSApp.isFullKeyboardAccessEnabled }
+
+    override var focusRingMaskBounds: NSRect { focusShape.rect }
+
+    override func drawFocusRingMask() {
+        let shape = focusShape
+        NSBezierPath(roundedRect: shape.rect, xRadius: shape.radius, yRadius: shape.radius).fill()
+    }
+
+    override func keyDown(with event: NSEvent) {
+        guard focusable, let key = ControlKey(event) else { return super.keyDown(with: event) }
+        if onKey?(key) == true { return }
+        guard key == .press, let onPress else { return super.keyDown(with: event) }
+        onPress(CGPoint(x: bounds.midX, y: bounds.midY))
+    }
+
+    override func accessibilityPerformIncrement() -> Bool {
+        guard let onAdjust else { return super.accessibilityPerformIncrement() }
+        onAdjust(1)
+        return true
+    }
+
+    override func accessibilityPerformDecrement() -> Bool {
+        guard let onAdjust else { return super.accessibilityPerformDecrement() }
+        onAdjust(-1)
+        return true
+    }
+
     /// Places what is inside the view.
     func layoutNow() {}
+
+    /// Has what is inside placed again before the next frame.
+    func relayout() {
+        needsLayout = true
+    }
 
     override func layout() {
         super.layout()
@@ -85,14 +144,29 @@ class FlippedView: NSView {
     }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
-        guard onPress != nil, !isHidden, takesPress(at: convert(point, from: superview)) else { return super.hitTest(point) }
+        guard onPress != nil || onDrag != nil, !isHidden, takesPress(at: convert(point, from: superview)) else { return super.hitTest(point) }
         return self
     }
 
     override func mouseDown(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
+        if let onDrag, takesPress(at: point) {
+            dragging = true
+            return onDrag(.began, point)
+        }
         guard let onPress, takesPress(at: point) else { return super.mouseDown(with: event) }
         onPress(point)
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        guard dragging, let onDrag else { return super.mouseDragged(with: event) }
+        onDrag(.moved, convert(event.locationInWindow, from: nil))
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        guard dragging, let onDrag else { return super.mouseUp(with: event) }
+        dragging = false
+        onDrag(.ended, convert(event.locationInWindow, from: nil))
     }
 
     // One area that follows the view, so that moving a row doesn't make another.
@@ -128,6 +202,23 @@ class FlippedView: NSView {
         let menu = NSMenu()
         for action in actions { menu.addItem(ClosureMenuItem(action)) }
         return menu
+    }
+}
+
+extension ControlKey {
+    init?(_ event: NSEvent) {
+        switch event.specialKey {
+        case .leftArrow?: self = .left
+        case .rightArrow?: self = .right
+        case .upArrow?: self = .up
+        case .downArrow?: self = .down
+        case .home?: self = .home
+        case .end?: self = .end
+        case .carriageReturn?, .enter?: self = .press
+        default:
+            guard event.charactersIgnoringModifiers == " " else { return nil }
+            self = .press
+        }
     }
 }
 

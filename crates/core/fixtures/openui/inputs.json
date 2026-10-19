@@ -1,0 +1,204 @@
+{
+  "id": "",
+  "a11y": {
+    "role": "group"
+  },
+  "component": "Card",
+  "children": [
+    {
+      "id": "children/0",
+      "a11y": {
+        "role": "heading",
+        "level": 2
+      },
+      "component": "Title",
+      "text": {
+        "text": "Make it yours",
+        "runs": [],
+        "links": []
+      },
+      "style": "card_heading",
+      "color": "foreground"
+    },
+    {
+      "id": "children/1",
+      "a11y": {
+        "role": "form"
+      },
+      "component": "Form",
+      "children": [
+        {
+          "id": "children/1/children/0",
+          "component": "Grid",
+          "children": [
+            {
+              "id": "children/1/children/0/children/0",
+              "a11y": {
+                "role": "text_field",
+                "label": "Name"
+              },
+              "component": "Input",
+              "value": "",
+              "number": false,
+              "label": "Name",
+              "placeholder": "Your name",
+              "error": null,
+              "disabled": null
+            },
+            {
+              "id": "children/1/children/0/children/1",
+              "a11y": {
+                "role": "text_field",
+                "label": "Travelers"
+              },
+              "component": "Input",
+              "value": "4",
+              "number": true,
+              "label": "Travelers",
+              "placeholder": null,
+              "error": null,
+              "disabled": null
+            }
+          ],
+          "columns": 2,
+          "min_child_width": 200.0,
+          "gap": 16.0
+        },
+        {
+          "id": "children/1/children/1",
+          "component": "Grid",
+          "children": [
+            {
+              "id": "children/1/children/1/children/0",
+              "a11y": {
+                "role": "button",
+                "label": "Start date",
+                "value": "Oct 24, 2026"
+              },
+              "component": "DatePicker",
+              "value": "2026-10-24",
+              "text": "Oct 24, 2026",
+              "min": null,
+              "max": null,
+              "label": "Start date",
+              "error": null,
+              "disabled": null
+            },
+            {
+              "id": "children/1/children/1/children/1",
+              "a11y": {
+                "role": "pop_up_button",
+                "label": "Preferred pace",
+                "value": "Balanced"
+              },
+              "component": "Select",
+              "value": "balanced",
+              "options": [
+                {
+                  "value": "relaxed",
+                  "label": "Relaxed",
+                  "description": null
+                },
+                {
+                  "value": "balanced",
+                  "label": "Balanced",
+                  "description": null
+                },
+                {
+                  "value": "active",
+                  "label": "Active",
+                  "description": null
+                }
+              ],
+              "selected": 1,
+              "label": "Preferred pace",
+              "placeholder": "Choose…",
+              "error": null,
+              "disabled": null
+            }
+          ],
+          "columns": 2,
+          "min_child_width": 200.0,
+          "gap": 16.0
+        },
+        {
+          "id": "children/1/children/2",
+          "a11y": {
+            "role": "radio_group",
+            "label": "What weather are you packing for?"
+          },
+          "component": "RadioGroup",
+          "value": "mild",
+          "options": [
+            {
+              "value": "hot",
+              "label": "Hot / tropical",
+              "description": null
+            },
+            {
+              "value": "mild",
+              "label": "Mild / mixed weather",
+              "description": null
+            },
+            {
+              "value": "cold",
+              "label": "Cold / rainy",
+              "description": null
+            }
+          ],
+          "selected": 1,
+          "label": "What weather are you packing for?",
+          "variant": "list",
+          "error": null,
+          "disabled": null
+        },
+        {
+          "id": "children/1/children/3",
+          "a11y": {
+            "role": "text_field",
+            "label": "Anything else?"
+          },
+          "component": "TextArea",
+          "value": "",
+          "label": "Anything else?",
+          "placeholder": "A place you would love to visit…",
+          "rows": 3,
+          "error": null,
+          "disabled": null
+        },
+        {
+          "id": "children/1/children/4",
+          "a11y": {
+            "role": "button",
+            "label": "Customize my trip"
+          },
+          "component": "Button",
+          "label": "Customize my trip",
+          "variant": "primary",
+          "tint": null,
+          "size": "regular",
+          "icon": {
+            "name": "arrow-right",
+            "glyph": ""
+          },
+          "block": false,
+          "disabled": null
+        }
+      ],
+      "spacing": [
+        0.0,
+        24.0,
+        24.0,
+        24.0,
+        40.0
+      ]
+    }
+  ],
+  "soft": false,
+  "nested": false,
+  "padding": null,
+  "spacing": [
+    0.0,
+    12.0
+  ]
+}

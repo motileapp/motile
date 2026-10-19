@@ -1,0 +1,374 @@
+{
+  "id": "",
+  "component": "Col",
+  "children": [
+    {
+      "id": "children/0",
+      "component": "Row",
+      "children": [
+        {
+          "id": "children/0/children/0",
+          "component": "Col",
+          "children": [
+            {
+              "id": "children/0/children/0/children/0",
+              "a11y": {
+                "role": "heading",
+                "level": 2
+              },
+              "component": "Title",
+              "text": {
+                "text": "This project",
+                "runs": [],
+                "links": []
+              },
+              "style": "title_lg",
+              "color": "foreground"
+            },
+            {
+              "id": "children/0/children/0/children/1",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Caption",
+              "text": {
+                "text": "What your server's agents spent, and the latest commits",
+                "runs": [],
+                "links": []
+              },
+              "style": "caption",
+              "color": "muted-foreground"
+            }
+          ],
+          "align": "stretch",
+          "spacing": [
+            0.0,
+            4.0
+          ]
+        },
+        {
+          "id": "children/0/children/1",
+          "a11y": {
+            "role": "hidden"
+          },
+          "component": "Spacer"
+        },
+        {
+          "id": "children/0/children/2",
+          "a11y": {
+            "role": "radio_group"
+          },
+          "component": "SegmentedControl",
+          "value": "14",
+          "options": [
+            {
+              "value": "7",
+              "label": "7d",
+              "description": null
+            },
+            {
+              "value": "14",
+              "label": "14d",
+              "description": null
+            },
+            {
+              "value": "30",
+              "label": "30d",
+              "description": null
+            }
+          ],
+          "selected": 1,
+          "block": false,
+          "disabled": null
+        }
+      ],
+      "gap": 12.0,
+      "align": "center",
+      "justify": "start",
+      "wrap": true,
+      "sizing": [
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": true
+        },
+        {
+          "basis": "zero",
+          "length": null,
+          "grow": 1.0,
+          "shrink": false
+        },
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": true
+        }
+      ]
+    },
+    {
+      "id": "children/1",
+      "component": "Grid",
+      "children": [
+        {
+          "id": "children/1/children/0",
+          "a11y": {
+            "role": "group"
+          },
+          "component": "Card",
+          "children": [
+            {
+              "id": "children/1/children/0/children/0",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Caption",
+              "text": {
+                "text": "Spent",
+                "runs": [],
+                "links": []
+              },
+              "style": "caption",
+              "color": "muted-foreground"
+            },
+            {
+              "id": "children/1/children/0/children/1",
+              "a11y": {
+                "role": "heading",
+                "level": 2
+              },
+              "component": "Title",
+              "text": {
+                "text": "-$0.00",
+                "runs": [],
+                "links": []
+              },
+              "style": "card_heading",
+              "color": "foreground"
+            }
+          ],
+          "soft": false,
+          "nested": false,
+          "padding": 12.0,
+          "spacing": [
+            0.0,
+            4.0
+          ]
+        },
+        {
+          "id": "children/1/children/1",
+          "a11y": {
+            "role": "group"
+          },
+          "component": "Card",
+          "children": [
+            {
+              "id": "children/1/children/1/children/0",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Caption",
+              "text": {
+                "text": "Tokens",
+                "runs": [],
+                "links": []
+              },
+              "style": "caption",
+              "color": "muted-foreground"
+            },
+            {
+              "id": "children/1/children/1/children/1",
+              "a11y": {
+                "role": "heading",
+                "level": 2
+              },
+              "component": "Title",
+              "text": {
+                "text": "-0",
+                "runs": [],
+                "links": []
+              },
+              "style": "card_heading",
+              "color": "foreground"
+            }
+          ],
+          "soft": false,
+          "nested": false,
+          "padding": 12.0,
+          "spacing": [
+            0.0,
+            4.0
+          ]
+        },
+        {
+          "id": "children/1/children/2",
+          "a11y": {
+            "role": "group"
+          },
+          "component": "Card",
+          "children": [
+            {
+              "id": "children/1/children/2/children/0",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Caption",
+              "text": {
+                "text": "Commits",
+                "runs": [],
+                "links": []
+              },
+              "style": "caption",
+              "color": "muted-foreground"
+            },
+            {
+              "id": "children/1/children/2/children/1",
+              "a11y": {
+                "role": "heading",
+                "level": 2
+              },
+              "component": "Title",
+              "text": {
+                "text": "0",
+                "runs": [],
+                "links": []
+              },
+              "style": "card_heading",
+              "color": "foreground"
+            }
+          ],
+          "soft": false,
+          "nested": false,
+          "padding": 12.0,
+          "spacing": [
+            0.0,
+            4.0
+          ]
+        }
+      ],
+      "columns": 3,
+      "min_child_width": 150.0,
+      "gap": 12.0
+    },
+    {
+      "id": "children/2",
+      "component": "Grid",
+      "children": [
+        {
+          "id": "children/2/children/0",
+          "a11y": {
+            "role": "group"
+          },
+          "component": "Card",
+          "children": [
+            {
+              "id": "children/2/children/0/children/0",
+              "a11y": {
+                "role": "heading",
+                "level": 3
+              },
+              "component": "Title",
+              "text": {
+                "text": "Spent by day",
+                "runs": [],
+                "links": []
+              },
+              "style": "card_title",
+              "color": "foreground"
+            },
+            {
+              "id": "children/2/children/0/children/1",
+              "a11y": {
+                "role": "image",
+                "label": "bar chart of value by key"
+              },
+              "component": "Chart",
+              "canvas": {
+                "kind": "Chart",
+                "props": {
+                  "type": "bar",
+                  "data": [],
+                  "x": "key",
+                  "series": [
+                    "value"
+                  ],
+                  "format": "currency"
+                }
+              }
+            }
+          ],
+          "soft": false,
+          "nested": false,
+          "padding": 16.0,
+          "spacing": [
+            0.0,
+            8.0
+          ]
+        },
+        {
+          "id": "children/2/children/1",
+          "a11y": {
+            "role": "group"
+          },
+          "component": "Card",
+          "children": [
+            {
+              "id": "children/2/children/1/children/0",
+              "a11y": {
+                "role": "heading",
+                "level": 3
+              },
+              "component": "Title",
+              "text": {
+                "text": "Latest commits",
+                "runs": [],
+                "links": []
+              },
+              "style": "card_title",
+              "color": "foreground"
+            },
+            {
+              "id": "children/2/children/1/children/1",
+              "a11y": {
+                "role": "table"
+              },
+              "component": "Table",
+              "columns": [
+                {
+                  "title": "Commit",
+                  "numeric": false
+                },
+                {
+                  "title": "Subject",
+                  "numeric": false
+                },
+                {
+                  "title": "Author",
+                  "numeric": false
+                }
+              ],
+              "rows": []
+            }
+          ],
+          "soft": false,
+          "nested": false,
+          "padding": 16.0,
+          "spacing": [
+            0.0,
+            8.0
+          ]
+        }
+      ],
+      "columns": 2,
+      "min_child_width": 300.0,
+      "gap": 16.0
+    }
+  ],
+  "align": "stretch",
+  "spacing": [
+    0.0,
+    16.0,
+    16.0
+  ]
+}

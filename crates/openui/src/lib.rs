@@ -19,6 +19,7 @@ pub mod components;
 pub mod element;
 pub mod error;
 pub mod eval;
+pub mod fences;
 pub mod format;
 pub mod functions;
 pub mod js;

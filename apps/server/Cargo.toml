@@ -10,6 +10,7 @@ path = "src/main.rs"
 
 [dependencies]
 motile-protocol = { workspace = true, features = ["auth-client"] }
+motile-openui.workspace = true
 reqwest.workspace = true
 anyhow.workspace = true
 axum = { version = "0.8", default-features = false, features = ["tokio", "http1"] }

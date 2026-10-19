@@ -25,6 +25,8 @@ final class RowModel {
         /// `uncoloured` when code inside it still waits for highlighting.
         case prose(NSAttributedString, uncoloured: Bool)
         case code(CodeContent)
+        /// A program the core runs, shown as its source until its views come.
+        case ui(UiContent)
         case tool(ToolContent)
         case thinking(NSAttributedString)
         case media(MediaContent)
@@ -80,7 +82,7 @@ final class RowModel {
         case "code":
             kind = .code(CodeContent(language: json.string("language"), code: json.string("code"), spans: json["spans"] as? [NSNumber]))
         case "ui":
-            kind = .code(CodeContent(language: "openui-lang", code: json.string("source"), spans: []))
+            kind = .ui(UiContent(json: json))
         case "tool":
             kind = .tool(ToolContent(json: json))
         case "thinking":
@@ -137,6 +139,7 @@ final class RowModel {
         switch kind {
         case .prose(let text, _): TextSystem.withLineBreaks(Typesetter.words(of: text))
         case .code(let content): "```\(content.language)\n\(content.code)\n```"
+        case .ui(let content): "```\(content.code.language)\n\(content.code.code)\n```"
         default: nil
         }
     }
@@ -162,6 +165,22 @@ final class RowModel {
 
     /// The row is a message the server has: one in the transcript, or one that waits for the agent.
     var isSentMessage: Bool { isUser || isQueued }
+}
+
+/// A program row: its tree, which `ui_patch` events change, and its source.
+struct UiContent {
+    let code: CodeContent
+    let tree: UiNode?
+    let complete: Bool
+    /// The thread's server is too old to run the program's tools.
+    let limited: Bool
+
+    init(json: JSON) {
+        code = CodeContent(language: "openui-lang", code: json.string("source"), spans: [])
+        tree = (json["tree"] as? JSON).flatMap(UiNode.init(json:))
+        complete = json.bool("complete")
+        limited = json.bool("limited")
+    }
 }
 
 final class CodeContent {

@@ -1,0 +1,3848 @@
+{
+  "id": "",
+  "component": "Col",
+  "children": [
+    {
+      "id": "children/0",
+      "component": "Col",
+      "children": [
+        {
+          "id": "children/0/children/0",
+          "a11y": {
+            "role": "heading",
+            "level": 2
+          },
+          "component": "Title",
+          "text": {
+            "text": "Plan a small vegetable garden",
+            "runs": [],
+            "links": []
+          },
+          "style": "title_xl",
+          "color": "foreground"
+        },
+        {
+          "id": "children/0/children/1",
+          "a11y": {
+            "role": "text"
+          },
+          "component": "Text",
+          "text": {
+            "text": "Set the bed size and how much sun it gets, choose your crops, and the square-foot plan fills itself in.",
+            "runs": [],
+            "links": []
+          },
+          "inlines": [],
+          "style": "body",
+          "color": "muted-foreground",
+          "weight": "regular",
+          "italic": false,
+          "strike": false,
+          "digits": false,
+          "max_lines": null
+        }
+      ],
+      "align": "stretch",
+      "spacing": [
+        0.0,
+        8.0
+      ]
+    },
+    {
+      "id": "children/1",
+      "a11y": {
+        "role": "group"
+      },
+      "component": "Card",
+      "children": [
+        {
+          "id": "children/1/children/0",
+          "component": "Grid",
+          "children": [
+            {
+              "id": "children/1/children/0/children/0",
+              "a11y": {
+                "role": "adjustable",
+                "label": "Bed width",
+                "value": "4 ft"
+              },
+              "component": "Slider",
+              "value": 4.0,
+              "min": 2.0,
+              "max": 8.0,
+              "step": 1.0,
+              "at": 0.3333333333333333,
+              "label": "Bed width",
+              "readout": "4 ft",
+              "head": true,
+              "marks": [],
+              "disabled": null
+            },
+            {
+              "id": "children/1/children/0/children/1",
+              "a11y": {
+                "role": "adjustable",
+                "label": "Bed length",
+                "value": "6 ft"
+              },
+              "component": "Slider",
+              "value": 6.0,
+              "min": 2.0,
+              "max": 12.0,
+              "step": 1.0,
+              "at": 0.4,
+              "label": "Bed length",
+              "readout": "6 ft",
+              "head": true,
+              "marks": [],
+              "disabled": null
+            },
+            {
+              "id": "children/1/children/0/children/2",
+              "a11y": {
+                "role": "adjustable",
+                "label": "Direct sun",
+                "value": "7 h"
+              },
+              "component": "Slider",
+              "value": 7.0,
+              "min": 2.0,
+              "max": 12.0,
+              "step": 1.0,
+              "at": 0.5,
+              "label": "Direct sun",
+              "readout": "7 h",
+              "head": true,
+              "marks": [],
+              "disabled": null
+            }
+          ],
+          "columns": 3,
+          "min_child_width": 200.0,
+          "gap": 20.0
+        },
+        {
+          "id": "children/1/children/1",
+          "component": "Row",
+          "children": [
+            {
+              "id": "children/1/children/1/children/0",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Badge",
+              "text": "24 square feet",
+              "tone": null,
+              "icon": null
+            },
+            {
+              "id": "children/1/children/1/children/1",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Badge",
+              "text": "About 14 bags of soil for 10 inches deep",
+              "tone": null,
+              "icon": null
+            }
+          ],
+          "gap": 8.0,
+          "align": "center",
+          "justify": "start",
+          "wrap": true,
+          "sizing": [
+            {
+              "basis": "content",
+              "length": null,
+              "grow": 0.0,
+              "shrink": false
+            },
+            {
+              "basis": "content",
+              "length": null,
+              "grow": 0.0,
+              "shrink": false
+            }
+          ]
+        }
+      ],
+      "soft": true,
+      "nested": false,
+      "padding": 16.0,
+      "spacing": [
+        0.0,
+        12.0
+      ]
+    },
+    {
+      "id": "children/2",
+      "a11y": {
+        "role": "heading",
+        "level": 3
+      },
+      "component": "Title",
+      "text": {
+        "text": "Pick what to grow",
+        "runs": [],
+        "links": []
+      },
+      "style": "title_md",
+      "color": "foreground"
+    },
+    {
+      "id": "children/3",
+      "component": "Row",
+      "children": [
+        {
+          "id": "children/3/children/0",
+          "a11y": {
+            "role": "button",
+            "label": "🍅 Tomatoes",
+            "on": true
+          },
+          "component": "Pressable",
+          "children": [
+            {
+              "id": "children/3/children/0/children/0",
+              "component": "Row",
+              "children": [
+                {
+                  "id": "children/3/children/0/children/0/children/0",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Text",
+                  "text": {
+                    "text": "🍅",
+                    "runs": [],
+                    "links": []
+                  },
+                  "inlines": [],
+                  "style": "body",
+                  "color": "foreground",
+                  "weight": "regular",
+                  "italic": false,
+                  "strike": false,
+                  "digits": false,
+                  "max_lines": null
+                },
+                {
+                  "id": "children/3/children/0/children/0/children/1",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Text",
+                  "text": {
+                    "text": "Tomatoes",
+                    "runs": [],
+                    "links": []
+                  },
+                  "inlines": [],
+                  "style": "small",
+                  "color": "foreground",
+                  "weight": "medium",
+                  "italic": false,
+                  "strike": false,
+                  "digits": false,
+                  "max_lines": null
+                }
+              ],
+              "gap": 4.0,
+              "align": "center",
+              "justify": "start",
+              "wrap": false,
+              "sizing": [
+                {
+                  "basis": "content",
+                  "length": null,
+                  "grow": 0.0,
+                  "shrink": true
+                },
+                {
+                  "basis": "content",
+                  "length": null,
+                  "grow": 0.0,
+                  "shrink": true
+                }
+              ]
+            }
+          ],
+          "padding": 8.0,
+          "background": null,
+          "inner_surface": false,
+          "radius": {
+            "kind": "full",
+            "points": 0.0
+          },
+          "selected": true,
+          "ring": false,
+          "disabled": null
+        },
+        {
+          "id": "children/3/children/1",
+          "a11y": {
+            "role": "button",
+            "label": "🌶️ Peppers",
+            "on": false
+          },
+          "component": "Pressable",
+          "children": [
+            {
+              "id": "children/3/children/1/children/0",
+              "component": "Row",
+              "children": [
+                {
+                  "id": "children/3/children/1/children/0/children/0",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Text",
+                  "text": {
+                    "text": "🌶️",
+                    "runs": [],
+                    "links": []
+                  },
+                  "inlines": [],
+                  "style": "body",
+                  "color": "foreground",
+                  "weight": "regular",
+                  "italic": false,
+                  "strike": false,
+                  "digits": false,
+                  "max_lines": null
+                },
+                {
+                  "id": "children/3/children/1/children/0/children/1",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Text",
+                  "text": {
+                    "text": "Peppers",
+                    "runs": [],
+                    "links": []
+                  },
+                  "inlines": [],
+                  "style": "small",
+                  "color": "foreground",
+                  "weight": "medium",
+                  "italic": false,
+                  "strike": false,
+                  "digits": false,
+                  "max_lines": null
+                }
+              ],
+              "gap": 4.0,
+              "align": "center",
+              "justify": "start",
+              "wrap": false,
+              "sizing": [
+                {
+                  "basis": "content",
+                  "length": null,
+                  "grow": 0.0,
+                  "shrink": true
+                },
+                {
+                  "basis": "content",
+                  "length": null,
+                  "grow": 0.0,
+                  "shrink": true
+                }
+              ]
+            }
+          ],
+          "padding": 8.0,
+          "background": null,
+          "inner_surface": false,
+          "radius": {
+            "kind": "full",
+            "points": 0.0
+          },
+          "selected": false,
+          "ring": false,
+          "disabled": null
+        },
+        {
+          "id": "children/3/children/2",
+          "a11y": {
+            "role": "button",
+            "label": "🌱 Beans",
+            "on": true
+          },
+          "component": "Pressable",
+          "children": [
+            {
+              "id": "children/3/children/2/children/0",
+              "component": "Row",
+              "children": [
+                {
+                  "id": "children/3/children/2/children/0/children/0",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Text",
+                  "text": {
+                    "text": "🌱",
+                    "runs": [],
+                    "links": []
+                  },
+                  "inlines": [],
+                  "style": "body",
+                  "color": "foreground",
+                  "weight": "regular",
+                  "italic": false,
+                  "strike": false,
+                  "digits": false,
+                  "max_lines": null
+                },
+                {
+                  "id": "children/3/children/2/children/0/children/1",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Text",
+                  "text": {
+                    "text": "Beans",
+                    "runs": [],
+                    "links": []
+                  },
+                  "inlines": [],
+                  "style": "small",
+                  "color": "foreground",
+                  "weight": "medium",
+                  "italic": false,
+                  "strike": false,
+                  "digits": false,
+                  "max_lines": null
+                }
+              ],
+              "gap": 4.0,
+              "align": "center",
+              "justify": "start",
+              "wrap": false,
+              "sizing": [
+                {
+                  "basis": "content",
+                  "length": null,
+                  "grow": 0.0,
+                  "shrink": true
+                },
+                {
+                  "basis": "content",
+                  "length": null,
+                  "grow": 0.0,
+                  "shrink": true
+                }
+              ]
+            }
+          ],
+          "padding": 8.0,
+          "background": null,
+          "inner_surface": false,
+          "radius": {
+            "kind": "full",
+            "points": 0.0
+          },
+          "selected": true,
+          "ring": false,
+          "disabled": null
+        },
+        {
+          "id": "children/3/children/3",
+          "a11y": {
+            "role": "button",
+            "label": "🥬 Lettuce",
+            "on": true
+          },
+          "component": "Pressable",
+          "children": [
+            {
+              "id": "children/3/children/3/children/0",
+              "component": "Row",
+              "children": [
+                {
+                  "id": "children/3/children/3/children/0/children/0",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Text",
+                  "text": {
+                    "text": "🥬",
+                    "runs": [],
+                    "links": []
+                  },
+                  "inlines": [],
+                  "style": "body",
+                  "color": "foreground",
+                  "weight": "regular",
+                  "italic": false,
+                  "strike": false,
+                  "digits": false,
+                  "max_lines": null
+                },
+                {
+                  "id": "children/3/children/3/children/0/children/1",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Text",
+                  "text": {
+                    "text": "Lettuce",
+                    "runs": [],
+                    "links": []
+                  },
+                  "inlines": [],
+                  "style": "small",
+                  "color": "foreground",
+                  "weight": "medium",
+                  "italic": false,
+                  "strike": false,
+                  "digits": false,
+                  "max_lines": null
+                }
+              ],
+              "gap": 4.0,
+              "align": "center",
+              "justify": "start",
+              "wrap": false,
+              "sizing": [
+                {
+                  "basis": "content",
+                  "length": null,
+                  "grow": 0.0,
+                  "shrink": true
+                },
+                {
+                  "basis": "content",
+                  "length": null,
+                  "grow": 0.0,
+                  "shrink": true
+                }
+              ]
+            }
+          ],
+          "padding": 8.0,
+          "background": null,
+          "inner_surface": false,
+          "radius": {
+            "kind": "full",
+            "points": 0.0
+          },
+          "selected": true,
+          "ring": false,
+          "disabled": null
+        },
+        {
+          "id": "children/3/children/4",
+          "a11y": {
+            "role": "button",
+            "label": "🍃 Spinach",
+            "on": false
+          },
+          "component": "Pressable",
+          "children": [
+            {
+              "id": "children/3/children/4/children/0",
+              "component": "Row",
+              "children": [
+                {
+                  "id": "children/3/children/4/children/0/children/0",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Text",
+                  "text": {
+                    "text": "🍃",
+                    "runs": [],
+                    "links": []
+                  },
+                  "inlines": [],
+                  "style": "body",
+                  "color": "foreground",
+                  "weight": "regular",
+                  "italic": false,
+                  "strike": false,
+                  "digits": false,
+                  "max_lines": null
+                },
+                {
+                  "id": "children/3/children/4/children/0/children/1",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Text",
+                  "text": {
+                    "text": "Spinach",
+                    "runs": [],
+                    "links": []
+                  },
+                  "inlines": [],
+                  "style": "small",
+                  "color": "foreground",
+                  "weight": "medium",
+                  "italic": false,
+                  "strike": false,
+                  "digits": false,
+                  "max_lines": null
+                }
+              ],
+              "gap": 4.0,
+              "align": "center",
+              "justify": "start",
+              "wrap": false,
+              "sizing": [
+                {
+                  "basis": "content",
+                  "length": null,
+                  "grow": 0.0,
+                  "shrink": true
+                },
+                {
+                  "basis": "content",
+                  "length": null,
+                  "grow": 0.0,
+                  "shrink": true
+                }
+              ]
+            }
+          ],
+          "padding": 8.0,
+          "background": null,
+          "inner_surface": false,
+          "radius": {
+            "kind": "full",
+            "points": 0.0
+          },
+          "selected": false,
+          "ring": false,
+          "disabled": null
+        },
+        {
+          "id": "children/3/children/5",
+          "a11y": {
+            "role": "button",
+            "label": "🥕 Carrots",
+            "on": true
+          },
+          "component": "Pressable",
+          "children": [
+            {
+              "id": "children/3/children/5/children/0",
+              "component": "Row",
+              "children": [
+                {
+                  "id": "children/3/children/5/children/0/children/0",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Text",
+                  "text": {
+                    "text": "🥕",
+                    "runs": [],
+                    "links": []
+                  },
+                  "inlines": [],
+                  "style": "body",
+                  "color": "foreground",
+                  "weight": "regular",
+                  "italic": false,
+                  "strike": false,
+                  "digits": false,
+                  "max_lines": null
+                },
+                {
+                  "id": "children/3/children/5/children/0/children/1",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Text",
+                  "text": {
+                    "text": "Carrots",
+                    "runs": [],
+                    "links": []
+                  },
+                  "inlines": [],
+                  "style": "small",
+                  "color": "foreground",
+                  "weight": "medium",
+                  "italic": false,
+                  "strike": false,
+                  "digits": false,
+                  "max_lines": null
+                }
+              ],
+              "gap": 4.0,
+              "align": "center",
+              "justify": "start",
+              "wrap": false,
+              "sizing": [
+                {
+                  "basis": "content",
+                  "length": null,
+                  "grow": 0.0,
+                  "shrink": true
+                },
+                {
+                  "basis": "content",
+                  "length": null,
+                  "grow": 0.0,
+                  "shrink": true
+                }
+              ]
+            }
+          ],
+          "padding": 8.0,
+          "background": null,
+          "inner_surface": false,
+          "radius": {
+            "kind": "full",
+            "points": 0.0
+          },
+          "selected": true,
+          "ring": false,
+          "disabled": null
+        },
+        {
+          "id": "children/3/children/6",
+          "a11y": {
+            "role": "button",
+            "label": "🔴 Radishes",
+            "on": true
+          },
+          "component": "Pressable",
+          "children": [
+            {
+              "id": "children/3/children/6/children/0",
+              "component": "Row",
+              "children": [
+                {
+                  "id": "children/3/children/6/children/0/children/0",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Text",
+                  "text": {
+                    "text": "🔴",
+                    "runs": [],
+                    "links": []
+                  },
+                  "inlines": [],
+                  "style": "body",
+                  "color": "foreground",
+                  "weight": "regular",
+                  "italic": false,
+                  "strike": false,
+                  "digits": false,
+                  "max_lines": null
+                },
+                {
+                  "id": "children/3/children/6/children/0/children/1",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Text",
+                  "text": {
+                    "text": "Radishes",
+                    "runs": [],
+                    "links": []
+                  },
+                  "inlines": [],
+                  "style": "small",
+                  "color": "foreground",
+                  "weight": "medium",
+                  "italic": false,
+                  "strike": false,
+                  "digits": false,
+                  "max_lines": null
+                }
+              ],
+              "gap": 4.0,
+              "align": "center",
+              "justify": "start",
+              "wrap": false,
+              "sizing": [
+                {
+                  "basis": "content",
+                  "length": null,
+                  "grow": 0.0,
+                  "shrink": true
+                },
+                {
+                  "basis": "content",
+                  "length": null,
+                  "grow": 0.0,
+                  "shrink": true
+                }
+              ]
+            }
+          ],
+          "padding": 8.0,
+          "background": null,
+          "inner_surface": false,
+          "radius": {
+            "kind": "full",
+            "points": 0.0
+          },
+          "selected": true,
+          "ring": false,
+          "disabled": null
+        },
+        {
+          "id": "children/3/children/7",
+          "a11y": {
+            "role": "button",
+            "label": "🌿 Basil",
+            "on": true
+          },
+          "component": "Pressable",
+          "children": [
+            {
+              "id": "children/3/children/7/children/0",
+              "component": "Row",
+              "children": [
+                {
+                  "id": "children/3/children/7/children/0/children/0",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Text",
+                  "text": {
+                    "text": "🌿",
+                    "runs": [],
+                    "links": []
+                  },
+                  "inlines": [],
+                  "style": "body",
+                  "color": "foreground",
+                  "weight": "regular",
+                  "italic": false,
+                  "strike": false,
+                  "digits": false,
+                  "max_lines": null
+                },
+                {
+                  "id": "children/3/children/7/children/0/children/1",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Text",
+                  "text": {
+                    "text": "Basil",
+                    "runs": [],
+                    "links": []
+                  },
+                  "inlines": [],
+                  "style": "small",
+                  "color": "foreground",
+                  "weight": "medium",
+                  "italic": false,
+                  "strike": false,
+                  "digits": false,
+                  "max_lines": null
+                }
+              ],
+              "gap": 4.0,
+              "align": "center",
+              "justify": "start",
+              "wrap": false,
+              "sizing": [
+                {
+                  "basis": "content",
+                  "length": null,
+                  "grow": 0.0,
+                  "shrink": true
+                },
+                {
+                  "basis": "content",
+                  "length": null,
+                  "grow": 0.0,
+                  "shrink": true
+                }
+              ]
+            }
+          ],
+          "padding": 8.0,
+          "background": null,
+          "inner_surface": false,
+          "radius": {
+            "kind": "full",
+            "points": 0.0
+          },
+          "selected": true,
+          "ring": false,
+          "disabled": null
+        }
+      ],
+      "gap": 8.0,
+      "align": "center",
+      "justify": "start",
+      "wrap": true,
+      "sizing": [
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": true
+        },
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": true
+        },
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": true
+        },
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": true
+        },
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": true
+        },
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": true
+        },
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": true
+        },
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": true
+        }
+      ]
+    },
+    {
+      "id": "children/4",
+      "component": "Box",
+      "children": [
+        {
+          "id": "children/4/children/0",
+          "a11y": {
+            "role": "text"
+          },
+          "component": "Text",
+          "text": {
+            "text": "With 7 hours of sun, Tomatoes will struggle. Leafy greens and radishes cope with 4 hours.",
+            "runs": [],
+            "links": []
+          },
+          "inlines": [],
+          "style": "small",
+          "color": "warning",
+          "weight": "regular",
+          "italic": false,
+          "strike": false,
+          "digits": false,
+          "max_lines": null
+        }
+      ],
+      "direction": "col",
+      "gap": 0.0,
+      "spacing": [
+        0.0
+      ],
+      "sizing": [],
+      "padding": 12.0,
+      "background": {
+        "wash": "warning"
+      },
+      "inner_surface": true,
+      "radius": {
+        "kind": "lg",
+        "points": 12.0
+      },
+      "border": false,
+      "width": null,
+      "height": null,
+      "flex": null,
+      "align": "stretch",
+      "justify": "start",
+      "wrap": false
+    },
+    {
+      "id": "children/5",
+      "a11y": {
+        "role": "heading",
+        "level": 3
+      },
+      "component": "Title",
+      "text": {
+        "text": "Your bed, square by square",
+        "runs": [],
+        "links": []
+      },
+      "style": "title_md",
+      "color": "foreground"
+    },
+    {
+      "id": "children/6",
+      "component": "Box",
+      "children": [
+        {
+          "id": "children/6/children/0",
+          "component": "Grid",
+          "children": [
+            {
+              "id": "children/6/children/0/children/0",
+              "component": "Box",
+              "children": [
+                {
+                  "id": "children/6/children/0/children/0/children/0",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Text",
+                  "text": {
+                    "text": "🍅",
+                    "runs": [],
+                    "links": []
+                  },
+                  "inlines": [],
+                  "style": "large",
+                  "color": [
+                    13,
+                    13,
+                    13,
+                    255
+                  ],
+                  "weight": "regular",
+                  "italic": false,
+                  "strike": false,
+                  "digits": false,
+                  "max_lines": null
+                },
+                {
+                  "id": "children/6/children/0/children/0/children/1",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Caption",
+                  "text": {
+                    "text": "1",
+                    "runs": [],
+                    "links": []
+                  },
+                  "style": "caption",
+                  "color": [
+                    13,
+                    13,
+                    13,
+                    184
+                  ]
+                }
+              ],
+              "direction": "col",
+              "gap": 0.0,
+              "spacing": [
+                0.0,
+                0.0
+              ],
+              "sizing": [],
+              "padding": 4.0,
+              "background": [
+                246,
+                213,
+                207,
+                255
+              ],
+              "inner_surface": false,
+              "radius": {
+                "kind": "sm",
+                "points": 6.0
+              },
+              "border": false,
+              "width": null,
+              "height": {
+                "unit": "points",
+                "value": 56.0
+              },
+              "flex": null,
+              "align": "center",
+              "justify": "center",
+              "wrap": false
+            },
+            {
+              "id": "children/6/children/0/children/1",
+              "component": "Box",
+              "children": [
+                {
+                  "id": "children/6/children/0/children/1/children/0",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Text",
+                  "text": {
+                    "text": "🥬",
+                    "runs": [],
+                    "links": []
+                  },
+                  "inlines": [],
+                  "style": "large",
+                  "color": [
+                    13,
+                    13,
+                    13,
+                    255
+                  ],
+                  "weight": "regular",
+                  "italic": false,
+                  "strike": false,
+                  "digits": false,
+                  "max_lines": null
+                },
+                {
+                  "id": "children/6/children/0/children/1/children/1",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Caption",
+                  "text": {
+                    "text": "4",
+                    "runs": [],
+                    "links": []
+                  },
+                  "style": "caption",
+                  "color": [
+                    13,
+                    13,
+                    13,
+                    184
+                  ]
+                }
+              ],
+              "direction": "col",
+              "gap": 0.0,
+              "spacing": [
+                0.0,
+                0.0
+              ],
+              "sizing": [],
+              "padding": 4.0,
+              "background": [
+                226,
+                240,
+                211,
+                255
+              ],
+              "inner_surface": false,
+              "radius": {
+                "kind": "sm",
+                "points": 6.0
+              },
+              "border": false,
+              "width": null,
+              "height": {
+                "unit": "points",
+                "value": 56.0
+              },
+              "flex": null,
+              "align": "center",
+              "justify": "center",
+              "wrap": false
+            },
+            {
+              "id": "children/6/children/0/children/2",
+              "component": "Box",
+              "children": [
+                {
+                  "id": "children/6/children/0/children/2/children/0",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Text",
+                  "text": {
+                    "text": "🌱",
+                    "runs": [],
+                    "links": []
+                  },
+                  "inlines": [],
+                  "style": "large",
+                  "color": [
+                    13,
+                    13,
+                    13,
+                    255
+                  ],
+                  "weight": "regular",
+                  "italic": false,
+                  "strike": false,
+                  "digits": false,
+                  "max_lines": null
+                },
+                {
+                  "id": "children/6/children/0/children/2/children/1",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Caption",
+                  "text": {
+                    "text": "9",
+                    "runs": [],
+                    "links": []
+                  },
+                  "style": "caption",
+                  "color": [
+                    13,
+                    13,
+                    13,
+                    184
+                  ]
+                }
+              ],
+              "direction": "col",
+              "gap": 0.0,
+              "spacing": [
+                0.0,
+                0.0
+              ],
+              "sizing": [],
+              "padding": 4.0,
+              "background": [
+                220,
+                235,
+                208,
+                255
+              ],
+              "inner_surface": false,
+              "radius": {
+                "kind": "sm",
+                "points": 6.0
+              },
+              "border": false,
+              "width": null,
+              "height": {
+                "unit": "points",
+                "value": 56.0
+              },
+              "flex": null,
+              "align": "center",
+              "justify": "center",
+              "wrap": false
+            },
+            {
+              "id": "children/6/children/0/children/3",
+              "component": "Box",
+              "children": [
+                {
+                  "id": "children/6/children/0/children/3/children/0",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Text",
+                  "text": {
+                    "text": "🔴",
+                    "runs": [],
+                    "links": []
+                  },
+                  "inlines": [],
+                  "style": "large",
+                  "color": [
+                    13,
+                    13,
+                    13,
+                    255
+                  ],
+                  "weight": "regular",
+                  "italic": false,
+                  "strike": false,
+                  "digits": false,
+                  "max_lines": null
+                },
+                {
+                  "id": "children/6/children/0/children/3/children/1",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Caption",
+                  "text": {
+                    "text": "16",
+                    "runs": [],
+                    "links": []
+                  },
+                  "style": "caption",
+                  "color": [
+                    13,
+                    13,
+                    13,
+                    184
+                  ]
+                }
+              ],
+              "direction": "col",
+              "gap": 0.0,
+              "spacing": [
+                0.0,
+                0.0
+              ],
+              "sizing": [],
+              "padding": 4.0,
+              "background": [
+                248,
+                217,
+                226,
+                255
+              ],
+              "inner_surface": false,
+              "radius": {
+                "kind": "sm",
+                "points": 6.0
+              },
+              "border": false,
+              "width": null,
+              "height": {
+                "unit": "points",
+                "value": 56.0
+              },
+              "flex": null,
+              "align": "center",
+              "justify": "center",
+              "wrap": false
+            },
+            {
+              "id": "children/6/children/0/children/4",
+              "component": "Box",
+              "children": [
+                {
+                  "id": "children/6/children/0/children/4/children/0",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Text",
+                  "text": {
+                    "text": "🌿",
+                    "runs": [],
+                    "links": []
+                  },
+                  "inlines": [],
+                  "style": "large",
+                  "color": [
+                    13,
+                    13,
+                    13,
+                    255
+                  ],
+                  "weight": "regular",
+                  "italic": false,
+                  "strike": false,
+                  "digits": false,
+                  "max_lines": null
+                },
+                {
+                  "id": "children/6/children/0/children/4/children/1",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Caption",
+                  "text": {
+                    "text": "4",
+                    "runs": [],
+                    "links": []
+                  },
+                  "style": "caption",
+                  "color": [
+                    13,
+                    13,
+                    13,
+                    184
+                  ]
+                }
+              ],
+              "direction": "col",
+              "gap": 0.0,
+              "spacing": [
+                0.0,
+                0.0
+              ],
+              "sizing": [],
+              "padding": 4.0,
+              "background": [
+                216,
+                236,
+                207,
+                255
+              ],
+              "inner_surface": false,
+              "radius": {
+                "kind": "sm",
+                "points": 6.0
+              },
+              "border": false,
+              "width": null,
+              "height": {
+                "unit": "points",
+                "value": 56.0
+              },
+              "flex": null,
+              "align": "center",
+              "justify": "center",
+              "wrap": false
+            },
+            {
+              "id": "children/6/children/0/children/5",
+              "component": "Box",
+              "children": [
+                {
+                  "id": "children/6/children/0/children/5/children/0",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Text",
+                  "text": {
+                    "text": "🥕",
+                    "runs": [],
+                    "links": []
+                  },
+                  "inlines": [],
+                  "style": "large",
+                  "color": [
+                    13,
+                    13,
+                    13,
+                    255
+                  ],
+                  "weight": "regular",
+                  "italic": false,
+                  "strike": false,
+                  "digits": false,
+                  "max_lines": null
+                },
+                {
+                  "id": "children/6/children/0/children/5/children/1",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Caption",
+                  "text": {
+                    "text": "16",
+                    "runs": [],
+                    "links": []
+                  },
+                  "style": "caption",
+                  "color": [
+                    13,
+                    13,
+                    13,
+                    184
+                  ]
+                }
+              ],
+              "direction": "col",
+              "gap": 0.0,
+              "spacing": [
+                0.0,
+                0.0
+              ],
+              "sizing": [],
+              "padding": 4.0,
+              "background": [
+                251,
+                226,
+                201,
+                255
+              ],
+              "inner_surface": false,
+              "radius": {
+                "kind": "sm",
+                "points": 6.0
+              },
+              "border": false,
+              "width": null,
+              "height": {
+                "unit": "points",
+                "value": 56.0
+              },
+              "flex": null,
+              "align": "center",
+              "justify": "center",
+              "wrap": false
+            },
+            {
+              "id": "children/6/children/0/children/6",
+              "component": "Box",
+              "children": [
+                {
+                  "id": "children/6/children/0/children/6/children/0",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Text",
+                  "text": {
+                    "text": "🍅",
+                    "runs": [],
+                    "links": []
+                  },
+                  "inlines": [],
+                  "style": "large",
+                  "color": [
+                    13,
+                    13,
+                    13,
+                    255
+                  ],
+                  "weight": "regular",
+                  "italic": false,
+                  "strike": false,
+                  "digits": false,
+                  "max_lines": null
+                },
+                {
+                  "id": "children/6/children/0/children/6/children/1",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Caption",
+                  "text": {
+                    "text": "1",
+                    "runs": [],
+                    "links": []
+                  },
+                  "style": "caption",
+                  "color": [
+                    13,
+                    13,
+                    13,
+                    184
+                  ]
+                }
+              ],
+              "direction": "col",
+              "gap": 0.0,
+              "spacing": [
+                0.0,
+                0.0
+              ],
+              "sizing": [],
+              "padding": 4.0,
+              "background": [
+                246,
+                213,
+                207,
+                255
+              ],
+              "inner_surface": false,
+              "radius": {
+                "kind": "sm",
+                "points": 6.0
+              },
+              "border": false,
+              "width": null,
+              "height": {
+                "unit": "points",
+                "value": 56.0
+              },
+              "flex": null,
+              "align": "center",
+              "justify": "center",
+              "wrap": false
+            },
+            {
+              "id": "children/6/children/0/children/7",
+              "component": "Box",
+              "children": [
+                {
+                  "id": "children/6/children/0/children/7/children/0",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Text",
+                  "text": {
+                    "text": "🥬",
+                    "runs": [],
+                    "links": []
+                  },
+                  "inlines": [],
+                  "style": "large",
+                  "color": [
+                    13,
+                    13,
+                    13,
+                    255
+                  ],
+                  "weight": "regular",
+                  "italic": false,
+                  "strike": false,
+                  "digits": false,
+                  "max_lines": null
+                },
+                {
+                  "id": "children/6/children/0/children/7/children/1",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Caption",
+                  "text": {
+                    "text": "4",
+                    "runs": [],
+                    "links": []
+                  },
+                  "style": "caption",
+                  "color": [
+                    13,
+                    13,
+                    13,
+                    184
+                  ]
+                }
+              ],
+              "direction": "col",
+              "gap": 0.0,
+              "spacing": [
+                0.0,
+                0.0
+              ],
+              "sizing": [],
+              "padding": 4.0,
+              "background": [
+                226,
+                240,
+                211,
+                255
+              ],
+              "inner_surface": false,
+              "radius": {
+                "kind": "sm",
+                "points": 6.0
+              },
+              "border": false,
+              "width": null,
+              "height": {
+                "unit": "points",
+                "value": 56.0
+              },
+              "flex": null,
+              "align": "center",
+              "justify": "center",
+              "wrap": false
+            },
+            {
+              "id": "children/6/children/0/children/8",
+              "component": "Box",
+              "children": [
+                {
+                  "id": "children/6/children/0/children/8/children/0",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Text",
+                  "text": {
+                    "text": "🌱",
+                    "runs": [],
+                    "links": []
+                  },
+                  "inlines": [],
+                  "style": "large",
+                  "color": [
+                    13,
+                    13,
+                    13,
+                    255
+                  ],
+                  "weight": "regular",
+                  "italic": false,
+                  "strike": false,
+                  "digits": false,
+                  "max_lines": null
+                },
+                {
+                  "id": "children/6/children/0/children/8/children/1",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Caption",
+                  "text": {
+                    "text": "9",
+                    "runs": [],
+                    "links": []
+                  },
+                  "style": "caption",
+                  "color": [
+                    13,
+                    13,
+                    13,
+                    184
+                  ]
+                }
+              ],
+              "direction": "col",
+              "gap": 0.0,
+              "spacing": [
+                0.0,
+                0.0
+              ],
+              "sizing": [],
+              "padding": 4.0,
+              "background": [
+                220,
+                235,
+                208,
+                255
+              ],
+              "inner_surface": false,
+              "radius": {
+                "kind": "sm",
+                "points": 6.0
+              },
+              "border": false,
+              "width": null,
+              "height": {
+                "unit": "points",
+                "value": 56.0
+              },
+              "flex": null,
+              "align": "center",
+              "justify": "center",
+              "wrap": false
+            },
+            {
+              "id": "children/6/children/0/children/9",
+              "component": "Box",
+              "children": [
+                {
+                  "id": "children/6/children/0/children/9/children/0",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Text",
+                  "text": {
+                    "text": "🔴",
+                    "runs": [],
+                    "links": []
+                  },
+                  "inlines": [],
+                  "style": "large",
+                  "color": [
+                    13,
+                    13,
+                    13,
+                    255
+                  ],
+                  "weight": "regular",
+                  "italic": false,
+                  "strike": false,
+                  "digits": false,
+                  "max_lines": null
+                },
+                {
+                  "id": "children/6/children/0/children/9/children/1",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Caption",
+                  "text": {
+                    "text": "16",
+                    "runs": [],
+                    "links": []
+                  },
+                  "style": "caption",
+                  "color": [
+                    13,
+                    13,
+                    13,
+                    184
+                  ]
+                }
+              ],
+              "direction": "col",
+              "gap": 0.0,
+              "spacing": [
+                0.0,
+                0.0
+              ],
+              "sizing": [],
+              "padding": 4.0,
+              "background": [
+                248,
+                217,
+                226,
+                255
+              ],
+              "inner_surface": false,
+              "radius": {
+                "kind": "sm",
+                "points": 6.0
+              },
+              "border": false,
+              "width": null,
+              "height": {
+                "unit": "points",
+                "value": 56.0
+              },
+              "flex": null,
+              "align": "center",
+              "justify": "center",
+              "wrap": false
+            },
+            {
+              "id": "children/6/children/0/children/10",
+              "component": "Box",
+              "children": [
+                {
+                  "id": "children/6/children/0/children/10/children/0",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Text",
+                  "text": {
+                    "text": "🌿",
+                    "runs": [],
+                    "links": []
+                  },
+                  "inlines": [],
+                  "style": "large",
+                  "color": [
+                    13,
+                    13,
+                    13,
+                    255
+                  ],
+                  "weight": "regular",
+                  "italic": false,
+                  "strike": false,
+                  "digits": false,
+                  "max_lines": null
+                },
+                {
+                  "id": "children/6/children/0/children/10/children/1",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Caption",
+                  "text": {
+                    "text": "4",
+                    "runs": [],
+                    "links": []
+                  },
+                  "style": "caption",
+                  "color": [
+                    13,
+                    13,
+                    13,
+                    184
+                  ]
+                }
+              ],
+              "direction": "col",
+              "gap": 0.0,
+              "spacing": [
+                0.0,
+                0.0
+              ],
+              "sizing": [],
+              "padding": 4.0,
+              "background": [
+                216,
+                236,
+                207,
+                255
+              ],
+              "inner_surface": false,
+              "radius": {
+                "kind": "sm",
+                "points": 6.0
+              },
+              "border": false,
+              "width": null,
+              "height": {
+                "unit": "points",
+                "value": 56.0
+              },
+              "flex": null,
+              "align": "center",
+              "justify": "center",
+              "wrap": false
+            },
+            {
+              "id": "children/6/children/0/children/11",
+              "component": "Box",
+              "children": [
+                {
+                  "id": "children/6/children/0/children/11/children/0",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Text",
+                  "text": {
+                    "text": "🥕",
+                    "runs": [],
+                    "links": []
+                  },
+                  "inlines": [],
+                  "style": "large",
+                  "color": [
+                    13,
+                    13,
+                    13,
+                    255
+                  ],
+                  "weight": "regular",
+                  "italic": false,
+                  "strike": false,
+                  "digits": false,
+                  "max_lines": null
+                },
+                {
+                  "id": "children/6/children/0/children/11/children/1",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Caption",
+                  "text": {
+                    "text": "16",
+                    "runs": [],
+                    "links": []
+                  },
+                  "style": "caption",
+                  "color": [
+                    13,
+                    13,
+                    13,
+                    184
+                  ]
+                }
+              ],
+              "direction": "col",
+              "gap": 0.0,
+              "spacing": [
+                0.0,
+                0.0
+              ],
+              "sizing": [],
+              "padding": 4.0,
+              "background": [
+                251,
+                226,
+                201,
+                255
+              ],
+              "inner_surface": false,
+              "radius": {
+                "kind": "sm",
+                "points": 6.0
+              },
+              "border": false,
+              "width": null,
+              "height": {
+                "unit": "points",
+                "value": 56.0
+              },
+              "flex": null,
+              "align": "center",
+              "justify": "center",
+              "wrap": false
+            },
+            {
+              "id": "children/6/children/0/children/12",
+              "component": "Box",
+              "children": [
+                {
+                  "id": "children/6/children/0/children/12/children/0",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Text",
+                  "text": {
+                    "text": "🍅",
+                    "runs": [],
+                    "links": []
+                  },
+                  "inlines": [],
+                  "style": "large",
+                  "color": [
+                    13,
+                    13,
+                    13,
+                    255
+                  ],
+                  "weight": "regular",
+                  "italic": false,
+                  "strike": false,
+                  "digits": false,
+                  "max_lines": null
+                },
+                {
+                  "id": "children/6/children/0/children/12/children/1",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Caption",
+                  "text": {
+                    "text": "1",
+                    "runs": [],
+                    "links": []
+                  },
+                  "style": "caption",
+                  "color": [
+                    13,
+                    13,
+                    13,
+                    184
+                  ]
+                }
+              ],
+              "direction": "col",
+              "gap": 0.0,
+              "spacing": [
+                0.0,
+                0.0
+              ],
+              "sizing": [],
+              "padding": 4.0,
+              "background": [
+                246,
+                213,
+                207,
+                255
+              ],
+              "inner_surface": false,
+              "radius": {
+                "kind": "sm",
+                "points": 6.0
+              },
+              "border": false,
+              "width": null,
+              "height": {
+                "unit": "points",
+                "value": 56.0
+              },
+              "flex": null,
+              "align": "center",
+              "justify": "center",
+              "wrap": false
+            },
+            {
+              "id": "children/6/children/0/children/13",
+              "component": "Box",
+              "children": [
+                {
+                  "id": "children/6/children/0/children/13/children/0",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Text",
+                  "text": {
+                    "text": "🥬",
+                    "runs": [],
+                    "links": []
+                  },
+                  "inlines": [],
+                  "style": "large",
+                  "color": [
+                    13,
+                    13,
+                    13,
+                    255
+                  ],
+                  "weight": "regular",
+                  "italic": false,
+                  "strike": false,
+                  "digits": false,
+                  "max_lines": null
+                },
+                {
+                  "id": "children/6/children/0/children/13/children/1",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Caption",
+                  "text": {
+                    "text": "4",
+                    "runs": [],
+                    "links": []
+                  },
+                  "style": "caption",
+                  "color": [
+                    13,
+                    13,
+                    13,
+                    184
+                  ]
+                }
+              ],
+              "direction": "col",
+              "gap": 0.0,
+              "spacing": [
+                0.0,
+                0.0
+              ],
+              "sizing": [],
+              "padding": 4.0,
+              "background": [
+                226,
+                240,
+                211,
+                255
+              ],
+              "inner_surface": false,
+              "radius": {
+                "kind": "sm",
+                "points": 6.0
+              },
+              "border": false,
+              "width": null,
+              "height": {
+                "unit": "points",
+                "value": 56.0
+              },
+              "flex": null,
+              "align": "center",
+              "justify": "center",
+              "wrap": false
+            },
+            {
+              "id": "children/6/children/0/children/14",
+              "component": "Box",
+              "children": [
+                {
+                  "id": "children/6/children/0/children/14/children/0",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Text",
+                  "text": {
+                    "text": "🌱",
+                    "runs": [],
+                    "links": []
+                  },
+                  "inlines": [],
+                  "style": "large",
+                  "color": [
+                    13,
+                    13,
+                    13,
+                    255
+                  ],
+                  "weight": "regular",
+                  "italic": false,
+                  "strike": false,
+                  "digits": false,
+                  "max_lines": null
+                },
+                {
+                  "id": "children/6/children/0/children/14/children/1",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Caption",
+                  "text": {
+                    "text": "9",
+                    "runs": [],
+                    "links": []
+                  },
+                  "style": "caption",
+                  "color": [
+                    13,
+                    13,
+                    13,
+                    184
+                  ]
+                }
+              ],
+              "direction": "col",
+              "gap": 0.0,
+              "spacing": [
+                0.0,
+                0.0
+              ],
+              "sizing": [],
+              "padding": 4.0,
+              "background": [
+                220,
+                235,
+                208,
+                255
+              ],
+              "inner_surface": false,
+              "radius": {
+                "kind": "sm",
+                "points": 6.0
+              },
+              "border": false,
+              "width": null,
+              "height": {
+                "unit": "points",
+                "value": 56.0
+              },
+              "flex": null,
+              "align": "center",
+              "justify": "center",
+              "wrap": false
+            },
+            {
+              "id": "children/6/children/0/children/15",
+              "component": "Box",
+              "children": [
+                {
+                  "id": "children/6/children/0/children/15/children/0",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Text",
+                  "text": {
+                    "text": "🔴",
+                    "runs": [],
+                    "links": []
+                  },
+                  "inlines": [],
+                  "style": "large",
+                  "color": [
+                    13,
+                    13,
+                    13,
+                    255
+                  ],
+                  "weight": "regular",
+                  "italic": false,
+                  "strike": false,
+                  "digits": false,
+                  "max_lines": null
+                },
+                {
+                  "id": "children/6/children/0/children/15/children/1",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Caption",
+                  "text": {
+                    "text": "16",
+                    "runs": [],
+                    "links": []
+                  },
+                  "style": "caption",
+                  "color": [
+                    13,
+                    13,
+                    13,
+                    184
+                  ]
+                }
+              ],
+              "direction": "col",
+              "gap": 0.0,
+              "spacing": [
+                0.0,
+                0.0
+              ],
+              "sizing": [],
+              "padding": 4.0,
+              "background": [
+                248,
+                217,
+                226,
+                255
+              ],
+              "inner_surface": false,
+              "radius": {
+                "kind": "sm",
+                "points": 6.0
+              },
+              "border": false,
+              "width": null,
+              "height": {
+                "unit": "points",
+                "value": 56.0
+              },
+              "flex": null,
+              "align": "center",
+              "justify": "center",
+              "wrap": false
+            },
+            {
+              "id": "children/6/children/0/children/16",
+              "component": "Box",
+              "children": [
+                {
+                  "id": "children/6/children/0/children/16/children/0",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Text",
+                  "text": {
+                    "text": "🌿",
+                    "runs": [],
+                    "links": []
+                  },
+                  "inlines": [],
+                  "style": "large",
+                  "color": [
+                    13,
+                    13,
+                    13,
+                    255
+                  ],
+                  "weight": "regular",
+                  "italic": false,
+                  "strike": false,
+                  "digits": false,
+                  "max_lines": null
+                },
+                {
+                  "id": "children/6/children/0/children/16/children/1",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Caption",
+                  "text": {
+                    "text": "4",
+                    "runs": [],
+                    "links": []
+                  },
+                  "style": "caption",
+                  "color": [
+                    13,
+                    13,
+                    13,
+                    184
+                  ]
+                }
+              ],
+              "direction": "col",
+              "gap": 0.0,
+              "spacing": [
+                0.0,
+                0.0
+              ],
+              "sizing": [],
+              "padding": 4.0,
+              "background": [
+                216,
+                236,
+                207,
+                255
+              ],
+              "inner_surface": false,
+              "radius": {
+                "kind": "sm",
+                "points": 6.0
+              },
+              "border": false,
+              "width": null,
+              "height": {
+                "unit": "points",
+                "value": 56.0
+              },
+              "flex": null,
+              "align": "center",
+              "justify": "center",
+              "wrap": false
+            },
+            {
+              "id": "children/6/children/0/children/17",
+              "component": "Box",
+              "children": [
+                {
+                  "id": "children/6/children/0/children/17/children/0",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Text",
+                  "text": {
+                    "text": "🥕",
+                    "runs": [],
+                    "links": []
+                  },
+                  "inlines": [],
+                  "style": "large",
+                  "color": [
+                    13,
+                    13,
+                    13,
+                    255
+                  ],
+                  "weight": "regular",
+                  "italic": false,
+                  "strike": false,
+                  "digits": false,
+                  "max_lines": null
+                },
+                {
+                  "id": "children/6/children/0/children/17/children/1",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Caption",
+                  "text": {
+                    "text": "16",
+                    "runs": [],
+                    "links": []
+                  },
+                  "style": "caption",
+                  "color": [
+                    13,
+                    13,
+                    13,
+                    184
+                  ]
+                }
+              ],
+              "direction": "col",
+              "gap": 0.0,
+              "spacing": [
+                0.0,
+                0.0
+              ],
+              "sizing": [],
+              "padding": 4.0,
+              "background": [
+                251,
+                226,
+                201,
+                255
+              ],
+              "inner_surface": false,
+              "radius": {
+                "kind": "sm",
+                "points": 6.0
+              },
+              "border": false,
+              "width": null,
+              "height": {
+                "unit": "points",
+                "value": 56.0
+              },
+              "flex": null,
+              "align": "center",
+              "justify": "center",
+              "wrap": false
+            },
+            {
+              "id": "children/6/children/0/children/18",
+              "component": "Box",
+              "children": [
+                {
+                  "id": "children/6/children/0/children/18/children/0",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Text",
+                  "text": {
+                    "text": "🍅",
+                    "runs": [],
+                    "links": []
+                  },
+                  "inlines": [],
+                  "style": "large",
+                  "color": [
+                    13,
+                    13,
+                    13,
+                    255
+                  ],
+                  "weight": "regular",
+                  "italic": false,
+                  "strike": false,
+                  "digits": false,
+                  "max_lines": null
+                },
+                {
+                  "id": "children/6/children/0/children/18/children/1",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Caption",
+                  "text": {
+                    "text": "1",
+                    "runs": [],
+                    "links": []
+                  },
+                  "style": "caption",
+                  "color": [
+                    13,
+                    13,
+                    13,
+                    184
+                  ]
+                }
+              ],
+              "direction": "col",
+              "gap": 0.0,
+              "spacing": [
+                0.0,
+                0.0
+              ],
+              "sizing": [],
+              "padding": 4.0,
+              "background": [
+                246,
+                213,
+                207,
+                255
+              ],
+              "inner_surface": false,
+              "radius": {
+                "kind": "sm",
+                "points": 6.0
+              },
+              "border": false,
+              "width": null,
+              "height": {
+                "unit": "points",
+                "value": 56.0
+              },
+              "flex": null,
+              "align": "center",
+              "justify": "center",
+              "wrap": false
+            },
+            {
+              "id": "children/6/children/0/children/19",
+              "component": "Box",
+              "children": [
+                {
+                  "id": "children/6/children/0/children/19/children/0",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Text",
+                  "text": {
+                    "text": "🥬",
+                    "runs": [],
+                    "links": []
+                  },
+                  "inlines": [],
+                  "style": "large",
+                  "color": [
+                    13,
+                    13,
+                    13,
+                    255
+                  ],
+                  "weight": "regular",
+                  "italic": false,
+                  "strike": false,
+                  "digits": false,
+                  "max_lines": null
+                },
+                {
+                  "id": "children/6/children/0/children/19/children/1",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Caption",
+                  "text": {
+                    "text": "4",
+                    "runs": [],
+                    "links": []
+                  },
+                  "style": "caption",
+                  "color": [
+                    13,
+                    13,
+                    13,
+                    184
+                  ]
+                }
+              ],
+              "direction": "col",
+              "gap": 0.0,
+              "spacing": [
+                0.0,
+                0.0
+              ],
+              "sizing": [],
+              "padding": 4.0,
+              "background": [
+                226,
+                240,
+                211,
+                255
+              ],
+              "inner_surface": false,
+              "radius": {
+                "kind": "sm",
+                "points": 6.0
+              },
+              "border": false,
+              "width": null,
+              "height": {
+                "unit": "points",
+                "value": 56.0
+              },
+              "flex": null,
+              "align": "center",
+              "justify": "center",
+              "wrap": false
+            },
+            {
+              "id": "children/6/children/0/children/20",
+              "component": "Box",
+              "children": [
+                {
+                  "id": "children/6/children/0/children/20/children/0",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Text",
+                  "text": {
+                    "text": "🌱",
+                    "runs": [],
+                    "links": []
+                  },
+                  "inlines": [],
+                  "style": "large",
+                  "color": [
+                    13,
+                    13,
+                    13,
+                    255
+                  ],
+                  "weight": "regular",
+                  "italic": false,
+                  "strike": false,
+                  "digits": false,
+                  "max_lines": null
+                },
+                {
+                  "id": "children/6/children/0/children/20/children/1",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Caption",
+                  "text": {
+                    "text": "9",
+                    "runs": [],
+                    "links": []
+                  },
+                  "style": "caption",
+                  "color": [
+                    13,
+                    13,
+                    13,
+                    184
+                  ]
+                }
+              ],
+              "direction": "col",
+              "gap": 0.0,
+              "spacing": [
+                0.0,
+                0.0
+              ],
+              "sizing": [],
+              "padding": 4.0,
+              "background": [
+                220,
+                235,
+                208,
+                255
+              ],
+              "inner_surface": false,
+              "radius": {
+                "kind": "sm",
+                "points": 6.0
+              },
+              "border": false,
+              "width": null,
+              "height": {
+                "unit": "points",
+                "value": 56.0
+              },
+              "flex": null,
+              "align": "center",
+              "justify": "center",
+              "wrap": false
+            },
+            {
+              "id": "children/6/children/0/children/21",
+              "component": "Box",
+              "children": [
+                {
+                  "id": "children/6/children/0/children/21/children/0",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Text",
+                  "text": {
+                    "text": "🔴",
+                    "runs": [],
+                    "links": []
+                  },
+                  "inlines": [],
+                  "style": "large",
+                  "color": [
+                    13,
+                    13,
+                    13,
+                    255
+                  ],
+                  "weight": "regular",
+                  "italic": false,
+                  "strike": false,
+                  "digits": false,
+                  "max_lines": null
+                },
+                {
+                  "id": "children/6/children/0/children/21/children/1",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Caption",
+                  "text": {
+                    "text": "16",
+                    "runs": [],
+                    "links": []
+                  },
+                  "style": "caption",
+                  "color": [
+                    13,
+                    13,
+                    13,
+                    184
+                  ]
+                }
+              ],
+              "direction": "col",
+              "gap": 0.0,
+              "spacing": [
+                0.0,
+                0.0
+              ],
+              "sizing": [],
+              "padding": 4.0,
+              "background": [
+                248,
+                217,
+                226,
+                255
+              ],
+              "inner_surface": false,
+              "radius": {
+                "kind": "sm",
+                "points": 6.0
+              },
+              "border": false,
+              "width": null,
+              "height": {
+                "unit": "points",
+                "value": 56.0
+              },
+              "flex": null,
+              "align": "center",
+              "justify": "center",
+              "wrap": false
+            },
+            {
+              "id": "children/6/children/0/children/22",
+              "component": "Box",
+              "children": [
+                {
+                  "id": "children/6/children/0/children/22/children/0",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Text",
+                  "text": {
+                    "text": "🌿",
+                    "runs": [],
+                    "links": []
+                  },
+                  "inlines": [],
+                  "style": "large",
+                  "color": [
+                    13,
+                    13,
+                    13,
+                    255
+                  ],
+                  "weight": "regular",
+                  "italic": false,
+                  "strike": false,
+                  "digits": false,
+                  "max_lines": null
+                },
+                {
+                  "id": "children/6/children/0/children/22/children/1",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Caption",
+                  "text": {
+                    "text": "4",
+                    "runs": [],
+                    "links": []
+                  },
+                  "style": "caption",
+                  "color": [
+                    13,
+                    13,
+                    13,
+                    184
+                  ]
+                }
+              ],
+              "direction": "col",
+              "gap": 0.0,
+              "spacing": [
+                0.0,
+                0.0
+              ],
+              "sizing": [],
+              "padding": 4.0,
+              "background": [
+                216,
+                236,
+                207,
+                255
+              ],
+              "inner_surface": false,
+              "radius": {
+                "kind": "sm",
+                "points": 6.0
+              },
+              "border": false,
+              "width": null,
+              "height": {
+                "unit": "points",
+                "value": 56.0
+              },
+              "flex": null,
+              "align": "center",
+              "justify": "center",
+              "wrap": false
+            },
+            {
+              "id": "children/6/children/0/children/23",
+              "component": "Box",
+              "children": [
+                {
+                  "id": "children/6/children/0/children/23/children/0",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Text",
+                  "text": {
+                    "text": "🥕",
+                    "runs": [],
+                    "links": []
+                  },
+                  "inlines": [],
+                  "style": "large",
+                  "color": [
+                    13,
+                    13,
+                    13,
+                    255
+                  ],
+                  "weight": "regular",
+                  "italic": false,
+                  "strike": false,
+                  "digits": false,
+                  "max_lines": null
+                },
+                {
+                  "id": "children/6/children/0/children/23/children/1",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Caption",
+                  "text": {
+                    "text": "16",
+                    "runs": [],
+                    "links": []
+                  },
+                  "style": "caption",
+                  "color": [
+                    13,
+                    13,
+                    13,
+                    184
+                  ]
+                }
+              ],
+              "direction": "col",
+              "gap": 0.0,
+              "spacing": [
+                0.0,
+                0.0
+              ],
+              "sizing": [],
+              "padding": 4.0,
+              "background": [
+                251,
+                226,
+                201,
+                255
+              ],
+              "inner_surface": false,
+              "radius": {
+                "kind": "sm",
+                "points": 6.0
+              },
+              "border": false,
+              "width": null,
+              "height": {
+                "unit": "points",
+                "value": 56.0
+              },
+              "flex": null,
+              "align": "center",
+              "justify": "center",
+              "wrap": false
+            }
+          ],
+          "columns": 4,
+          "min_child_width": null,
+          "gap": 4.0
+        }
+      ],
+      "direction": "col",
+      "gap": 0.0,
+      "spacing": [
+        0.0
+      ],
+      "sizing": [],
+      "padding": 8.0,
+      "background": [
+        139,
+        106,
+        78,
+        255
+      ],
+      "inner_surface": false,
+      "radius": {
+        "kind": "lg",
+        "points": 12.0
+      },
+      "border": false,
+      "width": null,
+      "height": null,
+      "flex": null,
+      "align": "stretch",
+      "justify": "start",
+      "wrap": false
+    },
+    {
+      "id": "children/7",
+      "a11y": {
+        "role": "text"
+      },
+      "component": "Caption",
+      "text": {
+        "text": "Each square is one foot across; the number is how many plants fit in it.",
+        "runs": [],
+        "links": []
+      },
+      "style": "caption",
+      "color": "muted-foreground"
+    },
+    {
+      "id": "children/8",
+      "a11y": {
+        "role": "heading",
+        "level": 3
+      },
+      "component": "Title",
+      "text": {
+        "text": "Planting summary",
+        "runs": [],
+        "links": []
+      },
+      "style": "title_md",
+      "color": "foreground"
+    },
+    {
+      "id": "children/9",
+      "a11y": {
+        "role": "table"
+      },
+      "component": "Table",
+      "columns": [
+        {
+          "title": "Crop",
+          "numeric": false
+        },
+        {
+          "title": "Squares",
+          "numeric": true
+        },
+        {
+          "title": "Plants",
+          "numeric": true
+        },
+        {
+          "title": "First harvest",
+          "numeric": false
+        },
+        {
+          "title": "Sun",
+          "numeric": false
+        }
+      ],
+      "rows": [
+        [
+          {
+            "kind": "text",
+            "text": {
+              "text": "🍅 Tomatoes",
+              "runs": [],
+              "links": []
+            }
+          },
+          {
+            "kind": "text",
+            "text": {
+              "text": "4",
+              "runs": [],
+              "links": []
+            }
+          },
+          {
+            "kind": "text",
+            "text": {
+              "text": "4",
+              "runs": [],
+              "links": []
+            }
+          },
+          {
+            "kind": "text",
+            "text": {
+              "text": "10 weeks",
+              "runs": [],
+              "links": []
+            }
+          },
+          {
+            "kind": "text",
+            "text": {
+              "text": "8+ h",
+              "runs": [],
+              "links": []
+            }
+          }
+        ],
+        [
+          {
+            "kind": "text",
+            "text": {
+              "text": "🥬 Lettuce",
+              "runs": [],
+              "links": []
+            }
+          },
+          {
+            "kind": "text",
+            "text": {
+              "text": "4",
+              "runs": [],
+              "links": []
+            }
+          },
+          {
+            "kind": "text",
+            "text": {
+              "text": "16",
+              "runs": [],
+              "links": []
+            }
+          },
+          {
+            "kind": "text",
+            "text": {
+              "text": "6 weeks",
+              "runs": [],
+              "links": []
+            }
+          },
+          {
+            "kind": "text",
+            "text": {
+              "text": "4+ h",
+              "runs": [],
+              "links": []
+            }
+          }
+        ],
+        [
+          {
+            "kind": "text",
+            "text": {
+              "text": "🌱 Beans",
+              "runs": [],
+              "links": []
+            }
+          },
+          {
+            "kind": "text",
+            "text": {
+              "text": "4",
+              "runs": [],
+              "links": []
+            }
+          },
+          {
+            "kind": "text",
+            "text": {
+              "text": "36",
+              "runs": [],
+              "links": []
+            }
+          },
+          {
+            "kind": "text",
+            "text": {
+              "text": "8 weeks",
+              "runs": [],
+              "links": []
+            }
+          },
+          {
+            "kind": "text",
+            "text": {
+              "text": "6+ h",
+              "runs": [],
+              "links": []
+            }
+          }
+        ],
+        [
+          {
+            "kind": "text",
+            "text": {
+              "text": "🔴 Radishes",
+              "runs": [],
+              "links": []
+            }
+          },
+          {
+            "kind": "text",
+            "text": {
+              "text": "4",
+              "runs": [],
+              "links": []
+            }
+          },
+          {
+            "kind": "text",
+            "text": {
+              "text": "64",
+              "runs": [],
+              "links": []
+            }
+          },
+          {
+            "kind": "text",
+            "text": {
+              "text": "4 weeks",
+              "runs": [],
+              "links": []
+            }
+          },
+          {
+            "kind": "text",
+            "text": {
+              "text": "4+ h",
+              "runs": [],
+              "links": []
+            }
+          }
+        ],
+        [
+          {
+            "kind": "text",
+            "text": {
+              "text": "🌿 Basil",
+              "runs": [],
+              "links": []
+            }
+          },
+          {
+            "kind": "text",
+            "text": {
+              "text": "4",
+              "runs": [],
+              "links": []
+            }
+          },
+          {
+            "kind": "text",
+            "text": {
+              "text": "16",
+              "runs": [],
+              "links": []
+            }
+          },
+          {
+            "kind": "text",
+            "text": {
+              "text": "8 weeks",
+              "runs": [],
+              "links": []
+            }
+          },
+          {
+            "kind": "text",
+            "text": {
+              "text": "6+ h",
+              "runs": [],
+              "links": []
+            }
+          }
+        ],
+        [
+          {
+            "kind": "text",
+            "text": {
+              "text": "🥕 Carrots",
+              "runs": [],
+              "links": []
+            }
+          },
+          {
+            "kind": "text",
+            "text": {
+              "text": "4",
+              "runs": [],
+              "links": []
+            }
+          },
+          {
+            "kind": "text",
+            "text": {
+              "text": "64",
+              "runs": [],
+              "links": []
+            }
+          },
+          {
+            "kind": "text",
+            "text": {
+              "text": "10 weeks",
+              "runs": [],
+              "links": []
+            }
+          },
+          {
+            "kind": "text",
+            "text": {
+              "text": "6+ h",
+              "runs": [],
+              "links": []
+            }
+          }
+        ]
+      ]
+    },
+    {
+      "id": "children/10",
+      "a11y": {
+        "role": "heading",
+        "level": 3
+      },
+      "component": "Title",
+      "text": {
+        "text": "What you will need",
+        "runs": [],
+        "links": []
+      },
+      "style": "title_md",
+      "color": "foreground"
+    },
+    {
+      "id": "children/11",
+      "a11y": {
+        "role": "group"
+      },
+      "component": "Card",
+      "children": [
+        {
+          "id": "children/11/children/0",
+          "component": "Row",
+          "children": [
+            {
+              "id": "children/11/children/0/children/0",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Text",
+              "text": {
+                "text": "0 of 6 ready",
+                "runs": [],
+                "links": []
+              },
+              "inlines": [],
+              "style": "small",
+              "color": "muted-foreground",
+              "weight": "regular",
+              "italic": false,
+              "strike": false,
+              "digits": false,
+              "max_lines": null
+            },
+            {
+              "id": "children/11/children/0/children/1",
+              "a11y": {
+                "role": "hidden"
+              },
+              "component": "Spacer"
+            },
+            {
+              "id": "children/11/children/0/children/2",
+              "a11y": {
+                "role": "button",
+                "label": "Reset"
+              },
+              "component": "Button",
+              "label": "Reset",
+              "variant": "ghost",
+              "tint": null,
+              "size": "small",
+              "icon": {
+                "name": "rotate-ccw",
+                "glyph": ""
+              },
+              "block": false,
+              "disabled": null
+            }
+          ],
+          "gap": 8.0,
+          "align": "center",
+          "justify": "start",
+          "wrap": false,
+          "sizing": [
+            {
+              "basis": "content",
+              "length": null,
+              "grow": 0.0,
+              "shrink": true
+            },
+            {
+              "basis": "zero",
+              "length": null,
+              "grow": 1.0,
+              "shrink": false
+            },
+            {
+              "basis": "content",
+              "length": null,
+              "grow": 0.0,
+              "shrink": false
+            }
+          ]
+        },
+        {
+          "id": "children/11/children/1",
+          "component": "Col",
+          "children": [
+            {
+              "id": "children/11/children/1/children/0",
+              "a11y": {
+                "role": "button",
+                "label": "A raised bed or a dug-over plot",
+                "on": false
+              },
+              "component": "Pressable",
+              "children": [
+                {
+                  "id": "children/11/children/1/children/0/children/0",
+                  "component": "Row",
+                  "children": [
+                    {
+                      "id": "children/11/children/1/children/0/children/0/children/0",
+                      "a11y": {
+                        "role": "hidden"
+                      },
+                      "component": "Icon",
+                      "icon": {
+                        "name": "circle",
+                        "glyph": ""
+                      },
+                      "size": 14.0,
+                      "color": "muted-stronger-foreground"
+                    },
+                    {
+                      "id": "children/11/children/1/children/0/children/0/children/1",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Text",
+                      "text": {
+                        "text": "A raised bed or a dug-over plot",
+                        "runs": [],
+                        "links": []
+                      },
+                      "inlines": [],
+                      "style": "small",
+                      "color": "foreground",
+                      "weight": "regular",
+                      "italic": false,
+                      "strike": false,
+                      "digits": false,
+                      "max_lines": null
+                    }
+                  ],
+                  "gap": 8.0,
+                  "align": "center",
+                  "justify": "start",
+                  "wrap": false,
+                  "sizing": [
+                    {
+                      "basis": "content",
+                      "length": null,
+                      "grow": 0.0,
+                      "shrink": true
+                    },
+                    {
+                      "basis": "content",
+                      "length": null,
+                      "grow": 0.0,
+                      "shrink": true
+                    }
+                  ]
+                }
+              ],
+              "padding": 8.0,
+              "background": null,
+              "inner_surface": false,
+              "radius": {
+                "kind": "lg",
+                "points": 12.0
+              },
+              "selected": false,
+              "ring": false,
+              "disabled": null
+            },
+            {
+              "id": "children/11/children/1/children/1",
+              "a11y": {
+                "role": "button",
+                "label": "Compost-rich soil",
+                "on": false
+              },
+              "component": "Pressable",
+              "children": [
+                {
+                  "id": "children/11/children/1/children/1/children/0",
+                  "component": "Row",
+                  "children": [
+                    {
+                      "id": "children/11/children/1/children/1/children/0/children/0",
+                      "a11y": {
+                        "role": "hidden"
+                      },
+                      "component": "Icon",
+                      "icon": {
+                        "name": "circle",
+                        "glyph": ""
+                      },
+                      "size": 14.0,
+                      "color": "muted-stronger-foreground"
+                    },
+                    {
+                      "id": "children/11/children/1/children/1/children/0/children/1",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Text",
+                      "text": {
+                        "text": "Compost-rich soil",
+                        "runs": [],
+                        "links": []
+                      },
+                      "inlines": [],
+                      "style": "small",
+                      "color": "foreground",
+                      "weight": "regular",
+                      "italic": false,
+                      "strike": false,
+                      "digits": false,
+                      "max_lines": null
+                    }
+                  ],
+                  "gap": 8.0,
+                  "align": "center",
+                  "justify": "start",
+                  "wrap": false,
+                  "sizing": [
+                    {
+                      "basis": "content",
+                      "length": null,
+                      "grow": 0.0,
+                      "shrink": true
+                    },
+                    {
+                      "basis": "content",
+                      "length": null,
+                      "grow": 0.0,
+                      "shrink": true
+                    }
+                  ]
+                }
+              ],
+              "padding": 8.0,
+              "background": null,
+              "inner_surface": false,
+              "radius": {
+                "kind": "lg",
+                "points": 12.0
+              },
+              "selected": false,
+              "ring": false,
+              "disabled": null
+            },
+            {
+              "id": "children/11/children/1/children/2",
+              "a11y": {
+                "role": "button",
+                "label": "Seeds or seedlings",
+                "on": false
+              },
+              "component": "Pressable",
+              "children": [
+                {
+                  "id": "children/11/children/1/children/2/children/0",
+                  "component": "Row",
+                  "children": [
+                    {
+                      "id": "children/11/children/1/children/2/children/0/children/0",
+                      "a11y": {
+                        "role": "hidden"
+                      },
+                      "component": "Icon",
+                      "icon": {
+                        "name": "circle",
+                        "glyph": ""
+                      },
+                      "size": 14.0,
+                      "color": "muted-stronger-foreground"
+                    },
+                    {
+                      "id": "children/11/children/1/children/2/children/0/children/1",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Text",
+                      "text": {
+                        "text": "Seeds or seedlings",
+                        "runs": [],
+                        "links": []
+                      },
+                      "inlines": [],
+                      "style": "small",
+                      "color": "foreground",
+                      "weight": "regular",
+                      "italic": false,
+                      "strike": false,
+                      "digits": false,
+                      "max_lines": null
+                    }
+                  ],
+                  "gap": 8.0,
+                  "align": "center",
+                  "justify": "start",
+                  "wrap": false,
+                  "sizing": [
+                    {
+                      "basis": "content",
+                      "length": null,
+                      "grow": 0.0,
+                      "shrink": true
+                    },
+                    {
+                      "basis": "content",
+                      "length": null,
+                      "grow": 0.0,
+                      "shrink": true
+                    }
+                  ]
+                }
+              ],
+              "padding": 8.0,
+              "background": null,
+              "inner_surface": false,
+              "radius": {
+                "kind": "lg",
+                "points": 12.0
+              },
+              "selected": false,
+              "ring": false,
+              "disabled": null
+            },
+            {
+              "id": "children/11/children/1/children/3",
+              "a11y": {
+                "role": "button",
+                "label": "Mulch",
+                "on": false
+              },
+              "component": "Pressable",
+              "children": [
+                {
+                  "id": "children/11/children/1/children/3/children/0",
+                  "component": "Row",
+                  "children": [
+                    {
+                      "id": "children/11/children/1/children/3/children/0/children/0",
+                      "a11y": {
+                        "role": "hidden"
+                      },
+                      "component": "Icon",
+                      "icon": {
+                        "name": "circle",
+                        "glyph": ""
+                      },
+                      "size": 14.0,
+                      "color": "muted-stronger-foreground"
+                    },
+                    {
+                      "id": "children/11/children/1/children/3/children/0/children/1",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Text",
+                      "text": {
+                        "text": "Mulch",
+                        "runs": [],
+                        "links": []
+                      },
+                      "inlines": [],
+                      "style": "small",
+                      "color": "foreground",
+                      "weight": "regular",
+                      "italic": false,
+                      "strike": false,
+                      "digits": false,
+                      "max_lines": null
+                    }
+                  ],
+                  "gap": 8.0,
+                  "align": "center",
+                  "justify": "start",
+                  "wrap": false,
+                  "sizing": [
+                    {
+                      "basis": "content",
+                      "length": null,
+                      "grow": 0.0,
+                      "shrink": true
+                    },
+                    {
+                      "basis": "content",
+                      "length": null,
+                      "grow": 0.0,
+                      "shrink": true
+                    }
+                  ]
+                }
+              ],
+              "padding": 8.0,
+              "background": null,
+              "inner_surface": false,
+              "radius": {
+                "kind": "lg",
+                "points": 12.0
+              },
+              "selected": false,
+              "ring": false,
+              "disabled": null
+            },
+            {
+              "id": "children/11/children/1/children/4",
+              "a11y": {
+                "role": "button",
+                "label": "A watering can or drip hose",
+                "on": false
+              },
+              "component": "Pressable",
+              "children": [
+                {
+                  "id": "children/11/children/1/children/4/children/0",
+                  "component": "Row",
+                  "children": [
+                    {
+                      "id": "children/11/children/1/children/4/children/0/children/0",
+                      "a11y": {
+                        "role": "hidden"
+                      },
+                      "component": "Icon",
+                      "icon": {
+                        "name": "circle",
+                        "glyph": ""
+                      },
+                      "size": 14.0,
+                      "color": "muted-stronger-foreground"
+                    },
+                    {
+                      "id": "children/11/children/1/children/4/children/0/children/1",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Text",
+                      "text": {
+                        "text": "A watering can or drip hose",
+                        "runs": [],
+                        "links": []
+                      },
+                      "inlines": [],
+                      "style": "small",
+                      "color": "foreground",
+                      "weight": "regular",
+                      "italic": false,
+                      "strike": false,
+                      "digits": false,
+                      "max_lines": null
+                    }
+                  ],
+                  "gap": 8.0,
+                  "align": "center",
+                  "justify": "start",
+                  "wrap": false,
+                  "sizing": [
+                    {
+                      "basis": "content",
+                      "length": null,
+                      "grow": 0.0,
+                      "shrink": true
+                    },
+                    {
+                      "basis": "content",
+                      "length": null,
+                      "grow": 0.0,
+                      "shrink": true
+                    }
+                  ]
+                }
+              ],
+              "padding": 8.0,
+              "background": null,
+              "inner_surface": false,
+              "radius": {
+                "kind": "lg",
+                "points": 12.0
+              },
+              "selected": false,
+              "ring": false,
+              "disabled": null
+            },
+            {
+              "id": "children/11/children/1/children/5",
+              "a11y": {
+                "role": "button",
+                "label": "Stakes or a trellis",
+                "on": false
+              },
+              "component": "Pressable",
+              "children": [
+                {
+                  "id": "children/11/children/1/children/5/children/0",
+                  "component": "Row",
+                  "children": [
+                    {
+                      "id": "children/11/children/1/children/5/children/0/children/0",
+                      "a11y": {
+                        "role": "hidden"
+                      },
+                      "component": "Icon",
+                      "icon": {
+                        "name": "circle",
+                        "glyph": ""
+                      },
+                      "size": 14.0,
+                      "color": "muted-stronger-foreground"
+                    },
+                    {
+                      "id": "children/11/children/1/children/5/children/0/children/1",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Text",
+                      "text": {
+                        "text": "Stakes or a trellis",
+                        "runs": [],
+                        "links": []
+                      },
+                      "inlines": [],
+                      "style": "small",
+                      "color": "foreground",
+                      "weight": "regular",
+                      "italic": false,
+                      "strike": false,
+                      "digits": false,
+                      "max_lines": null
+                    }
+                  ],
+                  "gap": 8.0,
+                  "align": "center",
+                  "justify": "start",
+                  "wrap": false,
+                  "sizing": [
+                    {
+                      "basis": "content",
+                      "length": null,
+                      "grow": 0.0,
+                      "shrink": true
+                    },
+                    {
+                      "basis": "content",
+                      "length": null,
+                      "grow": 0.0,
+                      "shrink": true
+                    }
+                  ]
+                }
+              ],
+              "padding": 8.0,
+              "background": null,
+              "inner_surface": false,
+              "radius": {
+                "kind": "lg",
+                "points": 12.0
+              },
+              "selected": false,
+              "ring": false,
+              "disabled": null
+            }
+          ],
+          "align": "stretch",
+          "spacing": [
+            0.0,
+            4.0,
+            4.0,
+            4.0,
+            4.0,
+            4.0
+          ]
+        }
+      ],
+      "soft": false,
+      "nested": false,
+      "padding": 16.0,
+      "spacing": [
+        0.0,
+        8.0
+      ]
+    }
+  ],
+  "align": "stretch",
+  "spacing": [
+    0.0,
+    24.0,
+    24.0,
+    12.0,
+    24.0,
+    24.0,
+    12.0,
+    24.0,
+    4.0,
+    12.0,
+    24.0,
+    12.0
+  ]
+}

@@ -124,9 +124,10 @@ shadcn's own colours, opacities and radii are gone from the theme.
   many as the model's context has room for, Codex's as messages (`thread/inject_items`). The
   transcript shows the switch as a `Handoff` item.
 - `mcp.rs`: the `motile` MCP server on the loopback interface, which an agent calls by the token of
-  its own thread: `read_thread` reads any thread of the server, for what a handoff left out, and
-  `list_accounts`, `start_agent`, `agent_status`, `message_agent`, `answer_agent` and `stop_agent`
-  start and follow agents on any of the server's accounts, Claude Code's or Codex's.
+  its own thread: `read_thread` reads any thread of the server, for what a handoff left out,
+  `check_ui` checks a program before the agent shows it, and `list_accounts`, `start_agent`,
+  `agent_status`, `message_agent`, `answer_agent` and `stop_agent` start and follow agents on any of
+  the server's accounts, Claude Code's or Codex's.
 - `hub/children.rs`: those agents. Each works in a thread of its own, which knows the thread and
   the tool call that started it (`parent`); the sidebar doesn't list it. It gets only its prompt,
   works in its parent's folder unless given a worktree, and never has more access than its parent.
@@ -177,7 +178,11 @@ shadcn's own colours, opacities and radii are gone from the theme.
   in for Linear.
 - `ricrac.rs`: the same for Ricrac (ricrac.app, our own tracker), through its REST operations
   (`POST /v1/ops/<name>`) where Linear's is GraphQL. `MOTILE_RICRAC_URL` stands in for Ricrac.
-- `ui.rs`: the programs agents show in their replies (OpenUI Lang in an `openui-lang` fence). An
+- `ui.rs`: the programs agents show in their replies (OpenUI Lang in an `openui-lang` fence), which
+  every agent is taught by the prompt `crates/openui` writes, appended to its instructions. Once a
+  thread has a program, a fence with no `root` statement is a patch merged over the latest. When a
+  turn ends with a program that has errors, the agent is sent them as a `Notice` and asked for a
+  patch, twice at most for a message, never for a turn that was stopped or hit the limit. An
   assistant item keeps the state the user left each program in (`ui`, by block, set with `SetUi`),
   which syncs like the rest of the item. A message that a program sent (`context`) and the state of
   the programs the user changed since the last message (`programs`) reach the agent after its text,
@@ -241,6 +246,14 @@ for tests.
   many servers share it, and a row for each window with when it starts over and its pace.
 - `render/`: turns transcripts into rows ready to draw: `rows.rs` (the row list and its
   splices), `markdown.rs`, `highlight.rs`, `diff.rs`, `agents.rs`.
+- `render/openui/tree.rs`: the tree a client draws for an OpenUI program, a `UiNode` for each
+  component with its props final for drawing (`crates/openui/LAYOUT.md`): colours, points, text
+  runs, the context rules. `tree/` resolves an evaluated program into it, reusing the components
+  that didn't change; the canvas components carry the input of `canvas/`'s layout. Its golden
+  trees are `fixtures/openui`, one for each program of the repo's `fixtures/openui`
+  (`OPENUI_BLESS=1` rewrites them). `scripts/ui-types.sh` writes its Swift and Kotlin copies
+  (`examples/ui_types.rs`), and `scripts/lucide-names.mjs` the Lucide names its icons take
+  (`tree/lucide.rs`). Run them after changing the types or the font.
 - `api.rs`: the JSON the client and the core exchange.
 - `examples/drive.rs` drives the core from a terminal; `examples/seed.rs` makes the dev app's
   account, project and threads.
@@ -445,7 +458,9 @@ redone for its versions in `patches/crates`; the script refuses a patch that `Ca
 - Do not edit generated code: `Cargo.lock`, `pnpm-lock.yaml`, `apps/web/src/routeTree.gen.ts`,
   and what `pnpm tokens` writes from `packages/theme/tokens.json`: `tokens.css`, `theme.css`,
   `Tokens.swift`, `apps/gpui/src/tokens.rs`, the Android app's `Tokens.kt` and its
-  `res/values*/tokens.xml`, and `packages/theme/map-style-*.json`.
+  `res/values*/tokens.xml`, and `packages/theme/map-style-*.json`. Also what
+  `scripts/ui-types.sh` writes, `UiNodes.swift` and `UiNodes.kt`, and what
+  `scripts/lucide-names.mjs` writes, `crates/core/src/render/openui/tree/lucide.rs`.
   The shadcn components in `src/components/ui` are ours once added: they are rewritten on the
   design tokens and edited like any view. Never edit an applied migration in
   `apps/auth/migrations` or `apps/server/migrations`, add a new one.
@@ -583,6 +598,7 @@ clients. It replays the recorded output in `fixtures/` or makes up a turn, depen
 | "show the ui <name>" | Shows the program `fixtures/openui/<name>.oui`, streamed |
 | "show the dashboard" | Shows a program that reads `git_log` and `usage` with `Query` |
 | "ask with a form" | Shows a form that sends its values with `@ToAssistant`; told them, says what they are |
+| "show a broken ui" | Shows a program with an unknown component and a missing prop; told its errors, replies with a patch that fixes them (Claude Code) |
 | "$ship-it", "$review" | Says it followed the skill: the project's in `.claude/skills` (`.agents/skills` for Codex), or one it makes up |
 
 As `claude auth login` it signs in with any code but one with "wrong" in it, as the folder's

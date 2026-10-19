@@ -121,9 +121,6 @@ struct CodeBlock {
     closed: bool,
 }
 
-/// The languages of the fences that hold a program.
-const PROGRAM_LANGUAGES: [&str; 2] = ["openui-lang", "openui"];
-
 #[derive(Default)]
 struct Builder<'a> {
     /// The images that become blocks, by where they point. Any other image is a link.
@@ -546,7 +543,7 @@ impl Builder<'_> {
         if block.code.ends_with('\n') {
             block.code.pop();
         }
-        if block.top_level && PROGRAM_LANGUAGES.contains(&block.language.as_str()) {
+        if block.top_level && motile_openui::fences::holds_program(&block.language) {
             self.blocks.push(Block::Ui { code: block.code, closed: block.closed });
             return;
         }
@@ -812,5 +809,21 @@ mod tests {
     fn single_line_breaks_are_kept() {
         let blocks = parse("first line\nsecond line");
         assert_eq!(prose(&blocks, 0).text, "first line\u{2028}second line");
+    }
+
+    #[test]
+    fn finds_the_programs_the_server_finds() {
+        let text = "```openui\na = 1\n```\n\n- ```openui-lang\n  b = 2\n  ```\n\n> ```openui\n> q = 1\n> ```\n\n| a |\n| - |\n| x |\n\n```rust\nc\n```\n\nText\n\n```openui-lang extra\nd = 3\n```\n\n```openui-lang\ne = 4";
+        let found: Vec<(String, bool)> = parse(text)
+            .into_iter()
+            .filter_map(|block| match block {
+                Block::Ui { code, closed } => Some((code, closed)),
+                _ => None,
+            })
+            .collect();
+        let server: Vec<String> =
+            motile_openui::fences::fences(text).iter().map(|fence| fence.trim_end().to_string()).collect();
+        assert_eq!(found.iter().map(|(code, _)| code.clone()).collect::<Vec<_>>(), server);
+        assert_eq!(found.iter().map(|(_, closed)| *closed).collect::<Vec<_>>(), [true, true, false]);
     }
 }

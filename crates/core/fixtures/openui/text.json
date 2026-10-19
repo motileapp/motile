@@ -1,0 +1,606 @@
+{
+  "id": "",
+  "a11y": {
+    "role": "group"
+  },
+  "component": "Card",
+  "children": [
+    {
+      "id": "children/0",
+      "a11y": {
+        "role": "heading",
+        "level": 2
+      },
+      "component": "Title",
+      "text": {
+        "text": "A little clarity goes a long way",
+        "runs": [],
+        "links": []
+      },
+      "style": "card_heading",
+      "color": "foreground"
+    },
+    {
+      "id": "children/1",
+      "a11y": {
+        "role": "text"
+      },
+      "component": "Text",
+      "text": {
+        "text": "Typography that keeps the answer easy to read.",
+        "runs": [],
+        "links": []
+      },
+      "inlines": [],
+      "style": "small",
+      "color": "muted-foreground",
+      "weight": "regular",
+      "italic": false,
+      "strike": false,
+      "digits": false,
+      "max_lines": null
+    },
+    {
+      "id": "children/2",
+      "a11y": {
+        "role": "text"
+      },
+      "component": "Text",
+      "text": {
+        "text": "The best interface brings the useful details forward: emphasis where it matters, a quiet aside, inline code and a link.",
+        "runs": [
+          [
+            54,
+            25,
+            1
+          ],
+          [
+            81,
+            13,
+            2
+          ],
+          [
+            96,
+            11,
+            4
+          ],
+          [
+            112,
+            6,
+            16
+          ]
+        ],
+        "links": [
+          {
+            "start": 112,
+            "len": 6,
+            "url": "https://openui.com"
+          }
+        ]
+      },
+      "inlines": [],
+      "style": "body_card",
+      "color": "foreground",
+      "weight": "regular",
+      "italic": false,
+      "strike": false,
+      "digits": false,
+      "max_lines": null
+    },
+    {
+      "id": "children/3",
+      "component": "Grid",
+      "children": [
+        {
+          "id": "children/3/children/0",
+          "component": "Col",
+          "children": [
+            {
+              "id": "children/3/children/0/children/0",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Caption",
+              "text": {
+                "text": "Big number, 2xl",
+                "runs": [],
+                "links": []
+              },
+              "style": "caption",
+              "color": "muted-foreground"
+            },
+            {
+              "id": "children/3/children/0/children/1",
+              "a11y": {
+                "role": "heading",
+                "level": 2
+              },
+              "component": "Title",
+              "text": {
+                "text": "$1.00T",
+                "runs": [],
+                "links": []
+              },
+              "style": "title2xl",
+              "color": "foreground"
+            }
+          ],
+          "align": "stretch",
+          "spacing": [
+            0.0,
+            4.0
+          ]
+        },
+        {
+          "id": "children/3/children/1",
+          "component": "Col",
+          "children": [
+            {
+              "id": "children/3/children/1/children/0",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Caption",
+              "text": {
+                "text": "Card title, lg",
+                "runs": [],
+                "links": []
+              },
+              "style": "caption",
+              "color": "muted-foreground"
+            },
+            {
+              "id": "children/3/children/1/children/1",
+              "a11y": {
+                "role": "heading",
+                "level": 2
+              },
+              "component": "Title",
+              "text": {
+                "text": "What makes up GDP?",
+                "runs": [],
+                "links": []
+              },
+              "style": "title_lg",
+              "color": "foreground"
+            }
+          ],
+          "align": "stretch",
+          "spacing": [
+            0.0,
+            4.0
+          ]
+        },
+        {
+          "id": "children/3/children/2",
+          "component": "Col",
+          "children": [
+            {
+              "id": "children/3/children/2/children/0",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Caption",
+              "text": {
+                "text": "Section, sm",
+                "runs": [],
+                "links": []
+              },
+              "style": "caption",
+              "color": "muted-foreground"
+            },
+            {
+              "id": "children/3/children/2/children/1",
+              "a11y": {
+                "role": "heading",
+                "level": 4
+              },
+              "component": "Title",
+              "text": {
+                "text": "Explore a growth scenario",
+                "runs": [],
+                "links": []
+              },
+              "style": "title_sm",
+              "color": "foreground"
+            },
+            {
+              "id": "children/3/children/2/children/2",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Text",
+              "text": {
+                "text": "Struck through",
+                "runs": [],
+                "links": []
+              },
+              "inlines": [],
+              "style": "small",
+              "color": "muted-foreground",
+              "weight": "regular",
+              "italic": false,
+              "strike": true,
+              "digits": false,
+              "max_lines": null
+            }
+          ],
+          "align": "stretch",
+          "spacing": [
+            0.0,
+            4.0,
+            4.0
+          ]
+        }
+      ],
+      "columns": 3,
+      "min_child_width": 150.0,
+      "gap": 16.0
+    },
+    {
+      "id": "children/4",
+      "component": "Row",
+      "children": [
+        {
+          "id": "children/4/children/0",
+          "a11y": {
+            "role": "text"
+          },
+          "component": "Badge",
+          "text": "Illustrative",
+          "tone": null,
+          "icon": null
+        },
+        {
+          "id": "children/4/children/1",
+          "a11y": {
+            "role": "text"
+          },
+          "component": "Badge",
+          "text": "Available",
+          "tone": "success",
+          "icon": null
+        },
+        {
+          "id": "children/4/children/2",
+          "a11y": {
+            "role": "text"
+          },
+          "component": "Badge",
+          "text": "In progress",
+          "tone": null,
+          "icon": null
+        },
+        {
+          "id": "children/4/children/3",
+          "a11y": {
+            "role": "text"
+          },
+          "component": "Badge",
+          "text": "Needs review",
+          "tone": "warning",
+          "icon": null
+        },
+        {
+          "id": "children/4/children/4",
+          "a11y": {
+            "role": "text"
+          },
+          "component": "Badge",
+          "text": "Sold out",
+          "tone": "destructive",
+          "icon": null
+        },
+        {
+          "id": "children/4/children/5",
+          "a11y": {
+            "role": "text"
+          },
+          "component": "Badge",
+          "text": "New",
+          "tone": "merged",
+          "icon": null
+        },
+        {
+          "id": "children/4/children/6",
+          "a11y": {
+            "role": "text"
+          },
+          "component": "Badge",
+          "text": "Popular",
+          "tone": "pink",
+          "icon": null
+        }
+      ],
+      "gap": 8.0,
+      "align": "center",
+      "justify": "start",
+      "wrap": true,
+      "sizing": [
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": false
+        },
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": false
+        },
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": false
+        },
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": false
+        },
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": false
+        },
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": false
+        },
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": false
+        }
+      ]
+    },
+    {
+      "id": "children/5",
+      "component": "Row",
+      "children": [
+        {
+          "id": "children/5/children/0",
+          "a11y": {
+            "role": "text"
+          },
+          "component": "Label",
+          "text": "Source",
+          "color": "foreground"
+        },
+        {
+          "id": "children/5/children/1",
+          "a11y": {
+            "role": "link"
+          },
+          "component": "Link",
+          "text": "Bureau of Economic Analysis",
+          "url": "https://www.bea.gov"
+        },
+        {
+          "id": "children/5/children/2",
+          "a11y": {
+            "role": "text"
+          },
+          "component": "Link",
+          "text": "Unsafe links render as text",
+          "url": null
+        }
+      ],
+      "gap": 12.0,
+      "align": "center",
+      "justify": "start",
+      "wrap": true,
+      "sizing": [
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": true
+        },
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": true
+        },
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": true
+        }
+      ]
+    },
+    {
+      "id": "children/6",
+      "a11y": {
+        "role": "hidden"
+      },
+      "component": "Divider"
+    },
+    {
+      "id": "children/7",
+      "component": "Markdown",
+      "blocks": [
+        {
+          "kind": "prose",
+          "prose": {
+            "text": "Markdown prose\nA paragraph with bold, italic and strike.\n1.\tNumbered steps\n2.\tRead in order\nA quote stays quiet.\nPlan\nSeats\nPrice\nBasic\n1\n$9\nTeam\n10\n$49",
+            "runs": [
+              [
+                32,
+                4,
+                1
+              ],
+              [
+                38,
+                6,
+                2
+              ],
+              [
+                49,
+                6,
+                8
+              ]
+            ],
+            "links": [],
+            "paras": [
+              {
+                "start": 0,
+                "len": 15,
+                "kind": "heading",
+                "level": 3
+              },
+              {
+                "start": 15,
+                "len": 42,
+                "kind": "body"
+              },
+              {
+                "start": 57,
+                "len": 18,
+                "kind": "list_item",
+                "depth": 1,
+                "marker": true,
+                "quote": 0
+              },
+              {
+                "start": 75,
+                "len": 17,
+                "kind": "list_item",
+                "depth": 1,
+                "marker": true,
+                "quote": 0
+              },
+              {
+                "start": 92,
+                "len": 21,
+                "kind": "quote",
+                "depth": 1
+              },
+              {
+                "start": 113,
+                "len": 5,
+                "kind": "cell",
+                "table": 0,
+                "row": 0,
+                "column": 0,
+                "columns": 3,
+                "header": true,
+                "align": 0
+              },
+              {
+                "start": 118,
+                "len": 6,
+                "kind": "cell",
+                "table": 0,
+                "row": 0,
+                "column": 1,
+                "columns": 3,
+                "header": true,
+                "align": 0
+              },
+              {
+                "start": 124,
+                "len": 6,
+                "kind": "cell",
+                "table": 0,
+                "row": 0,
+                "column": 2,
+                "columns": 3,
+                "header": true,
+                "align": 0
+              },
+              {
+                "start": 130,
+                "len": 6,
+                "kind": "cell",
+                "table": 0,
+                "row": 1,
+                "column": 0,
+                "columns": 3,
+                "header": false,
+                "align": 0
+              },
+              {
+                "start": 136,
+                "len": 2,
+                "kind": "cell",
+                "table": 0,
+                "row": 1,
+                "column": 1,
+                "columns": 3,
+                "header": false,
+                "align": 0
+              },
+              {
+                "start": 138,
+                "len": 3,
+                "kind": "cell",
+                "table": 0,
+                "row": 1,
+                "column": 2,
+                "columns": 3,
+                "header": false,
+                "align": 0
+              },
+              {
+                "start": 141,
+                "len": 5,
+                "kind": "cell",
+                "table": 0,
+                "row": 2,
+                "column": 0,
+                "columns": 3,
+                "header": false,
+                "align": 0
+              },
+              {
+                "start": 146,
+                "len": 3,
+                "kind": "cell",
+                "table": 0,
+                "row": 2,
+                "column": 1,
+                "columns": 3,
+                "header": false,
+                "align": 0
+              },
+              {
+                "start": 149,
+                "len": 3,
+                "kind": "cell",
+                "table": 0,
+                "row": 2,
+                "column": 2,
+                "columns": 3,
+                "header": false,
+                "align": 0
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "soft": false,
+  "nested": false,
+  "padding": null,
+  "spacing": [
+    0.0,
+    8.0,
+    12.0,
+    12.0,
+    12.0,
+    12.0,
+    12.0,
+    16.0
+  ]
+}

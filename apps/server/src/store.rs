@@ -633,6 +633,21 @@ impl Store {
         Ok(payloads.filter_map(|payload| serde_json::from_str(&payload.ok()?).ok()).collect())
     }
 
+    /// The thread's own messages, notices, turn ends and replies with a program in them: what its
+    /// programs and the turns that showed them are read from.
+    pub fn program_items(&self, thread_id: &str) -> rusqlite::Result<Vec<Item>> {
+        let connection = self.connection();
+        let mut statement = connection.prepare(
+            "SELECT payload FROM items WHERE thread_id = ?1 AND json_extract(payload, '$.parent') IS NULL
+                 AND (json_extract(payload, '$.type') IN ('user', 'notice', 'turn_end')
+                      OR (json_extract(payload, '$.type') = 'assistant'
+                          AND instr(json_extract(payload, '$.text'), '```openui') > 0))
+             ORDER BY seq",
+        )?;
+        let payloads = statement.query_map([thread_id], |row| row.get::<_, String>(0))?;
+        Ok(payloads.filter_map(|payload| serde_json::from_str(&payload.ok()?).ok()).collect())
+    }
+
     /// How many tools the thread's own agent called.
     pub fn tool_count(&self, thread_id: &str) -> rusqlite::Result<u64> {
         let connection = self.connection();

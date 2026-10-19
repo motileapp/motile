@@ -1,0 +1,511 @@
+{
+  "id": "",
+  "component": "Col",
+  "children": [
+    {
+      "id": "children/0",
+      "a11y": {
+        "role": "heading",
+        "level": 2
+      },
+      "component": "Title",
+      "text": {
+        "text": "New primitives",
+        "runs": [],
+        "links": []
+      },
+      "style": "title_lg",
+      "color": "foreground"
+    },
+    {
+      "id": "children/1",
+      "a11y": {
+        "role": "text"
+      },
+      "component": "Text",
+      "text": {
+        "text": "Text can mix ￼ components, ￼ icons and ￼ math.",
+        "runs": [],
+        "links": []
+      },
+      "inlines": [
+        {
+          "id": "children/1/text/1",
+          "a11y": {
+            "role": "text"
+          },
+          "component": "Badge",
+          "text": "inline",
+          "tone": "merged",
+          "icon": null
+        },
+        {
+          "id": "children/1/text/3",
+          "a11y": {
+            "role": "hidden"
+          },
+          "component": "Icon",
+          "icon": {
+            "name": "sparkles",
+            "glyph": ""
+          },
+          "size": 14.0,
+          "color": "foreground"
+        },
+        {
+          "id": "children/1/text/5",
+          "a11y": {
+            "role": "image",
+            "label": "\\sqrt{2}"
+          },
+          "component": "Math",
+          "canvas": {
+            "kind": "Math",
+            "props": {
+              "tex": "\\sqrt{2}",
+              "inline": true
+            }
+          }
+        }
+      ],
+      "style": "body",
+      "color": "foreground",
+      "weight": "regular",
+      "italic": false,
+      "strike": false,
+      "digits": false,
+      "max_lines": null
+    },
+    {
+      "id": "children/2",
+      "a11y": {
+        "role": "group"
+      },
+      "component": "Carousel",
+      "children": [
+        {
+          "id": "children/2/children/0",
+          "a11y": {
+            "role": "image",
+            "label": "Golden Gate Bridge"
+          },
+          "component": "SearchImage",
+          "query": "Golden Gate Bridge",
+          "aspect_ratio": 1.4,
+          "radius": {
+            "kind": "lg",
+            "points": 12.0
+          },
+          "fit": "cover",
+          "photos": {
+            "state": "waiting",
+            "media": []
+          }
+        },
+        {
+          "id": "children/2/children/1",
+          "a11y": {
+            "role": "image",
+            "label": "Alcatraz Island"
+          },
+          "component": "SearchImage",
+          "query": "Alcatraz Island",
+          "aspect_ratio": 1.4,
+          "radius": {
+            "kind": "lg",
+            "points": 12.0
+          },
+          "fit": "cover",
+          "photos": {
+            "state": "waiting",
+            "media": []
+          }
+        },
+        {
+          "id": "children/2/children/2",
+          "a11y": {
+            "role": "image",
+            "label": "Painted Ladies"
+          },
+          "component": "SearchImage",
+          "query": "Painted Ladies",
+          "aspect_ratio": 1.4,
+          "radius": {
+            "kind": "lg",
+            "points": 12.0
+          },
+          "fit": "cover",
+          "photos": {
+            "state": "waiting",
+            "media": []
+          }
+        },
+        {
+          "id": "children/2/children/3",
+          "a11y": {
+            "role": "image",
+            "label": "Lombard Street"
+          },
+          "component": "SearchImage",
+          "query": "Lombard Street",
+          "aspect_ratio": 1.4,
+          "radius": {
+            "kind": "lg",
+            "points": 12.0
+          },
+          "fit": "cover",
+          "photos": {
+            "state": "waiting",
+            "media": []
+          }
+        }
+      ],
+      "item_width": 220.0,
+      "gap": 12.0,
+      "fill": [
+        false,
+        false,
+        false,
+        false
+      ]
+    },
+    {
+      "id": "children/3",
+      "component": "Row",
+      "children": [
+        {
+          "id": "children/3/children/0",
+          "a11y": {
+            "role": "text"
+          },
+          "component": "Text",
+          "text": {
+            "text": "Inflation adjusts nominal GDP",
+            "runs": [],
+            "links": []
+          },
+          "inlines": [],
+          "style": "body",
+          "color": "foreground",
+          "weight": "regular",
+          "italic": false,
+          "strike": false,
+          "digits": false,
+          "max_lines": null
+        },
+        {
+          "id": "children/3/children/1",
+          "a11y": {
+            "role": "button",
+            "on": false
+          },
+          "component": "Popover",
+          "trigger": {
+            "text": null,
+            "style": "body",
+            "children": [
+              {
+                "id": "children/3/children/1/trigger",
+                "a11y": {
+                  "role": "hidden"
+                },
+                "component": "Icon",
+                "icon": {
+                  "name": "info",
+                  "glyph": ""
+                },
+                "size": 14.0,
+                "color": "muted-foreground"
+              }
+            ]
+          },
+          "content": {
+            "text": null,
+            "style": "body",
+            "children": [
+              {
+                "id": "children/3/children/1/content/0",
+                "a11y": {
+                  "role": "text"
+                },
+                "component": "Text",
+                "text": {
+                  "text": "Real GDP removes price changes, so it measures output.",
+                  "runs": [
+                    [
+                      0,
+                      8,
+                      1
+                    ]
+                  ],
+                  "links": []
+                },
+                "inlines": [],
+                "style": "small",
+                "color": "foreground",
+                "weight": "regular",
+                "italic": false,
+                "strike": false,
+                "digits": false,
+                "max_lines": null
+              },
+              {
+                "id": "children/3/children/1/content/1",
+                "a11y": {
+                  "role": "link"
+                },
+                "component": "Link",
+                "text": "Read more",
+                "url": "https://www.bea.gov"
+              }
+            ]
+          },
+          "open": false
+        }
+      ],
+      "gap": 8.0,
+      "align": "center",
+      "justify": "start",
+      "wrap": false,
+      "sizing": [
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": true
+        },
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": true
+        }
+      ]
+    },
+    {
+      "id": "children/4",
+      "a11y": {
+        "role": "blockquote"
+      },
+      "component": "Quote",
+      "text": {
+        "text": "Simplicity is the ultimate sophistication.",
+        "runs": [],
+        "links": []
+      },
+      "cite": {
+        "text": "Leonardo da Vinci",
+        "runs": [],
+        "links": []
+      }
+    },
+    {
+      "id": "children/5",
+      "a11y": {
+        "role": "image",
+        "label": "\\bar{x} \\sim \\mathcal{N}\\left(\\mu, \\frac{\\sigma^2}{n}\\right)"
+      },
+      "component": "Math",
+      "canvas": {
+        "kind": "Math",
+        "props": {
+          "tex": "\\bar{x} \\sim \\mathcal{N}\\left(\\mu, \\frac{\\sigma^2}{n}\\right)"
+        }
+      }
+    },
+    {
+      "id": "children/6",
+      "a11y": {
+        "role": "code"
+      },
+      "component": "Code",
+      "language": "javascript",
+      "code": "const total = items.reduce((sum, i) => sum + i.price, 0)",
+      "spans": null
+    },
+    {
+      "id": "children/7",
+      "a11y": {
+        "role": "radio_group",
+        "label": "Size"
+      },
+      "component": "RadioGroup",
+      "value": "M",
+      "options": [
+        {
+          "value": "S",
+          "label": "S",
+          "description": null
+        },
+        {
+          "value": "M",
+          "label": "M",
+          "description": null
+        },
+        {
+          "value": "L",
+          "label": "L",
+          "description": null
+        },
+        {
+          "value": "XL",
+          "label": "XL",
+          "description": null
+        }
+      ],
+      "selected": 1,
+      "label": "Size",
+      "variant": "pills",
+      "error": null,
+      "disabled": null
+    },
+    {
+      "id": "children/8",
+      "a11y": {
+        "role": "image",
+        "label": "scatter chart of mpg by hp"
+      },
+      "component": "Chart",
+      "canvas": {
+        "kind": "Chart",
+        "props": {
+          "type": "scatter",
+          "data": [
+            {
+              "car": "Civic",
+              "hp": 158,
+              "mpg": 36
+            },
+            {
+              "car": "Model 3",
+              "hp": 271,
+              "mpg": 132
+            },
+            {
+              "car": "F-150",
+              "hp": 400,
+              "mpg": 20
+            },
+            {
+              "car": "Prius",
+              "hp": 194,
+              "mpg": 57
+            },
+            {
+              "car": "Mustang",
+              "hp": 480,
+              "mpg": 19
+            }
+          ],
+          "x": "hp",
+          "series": [
+            "mpg"
+          ]
+        }
+      }
+    },
+    {
+      "id": "children/9",
+      "component": "Grid",
+      "children": [
+        {
+          "id": "children/9/children/0",
+          "a11y": {
+            "role": "button",
+            "on": false
+          },
+          "component": "Flashcard",
+          "front": {
+            "text": {
+              "text": "Bonjour",
+              "runs": [],
+              "links": []
+            },
+            "style": "word",
+            "children": []
+          },
+          "back": {
+            "text": {
+              "text": "Hello",
+              "runs": [],
+              "links": []
+            },
+            "style": "word_back",
+            "children": []
+          },
+          "hint": "Tap to flip",
+          "flipped": false,
+          "canvas": {
+            "kind": "Flashcard",
+            "props": {
+              "front": "Bonjour",
+              "back": "Hello"
+            }
+          }
+        },
+        {
+          "id": "children/9/children/1",
+          "a11y": {
+            "role": "button",
+            "on": false
+          },
+          "component": "Flashcard",
+          "front": {
+            "text": {
+              "text": "Merci",
+              "runs": [],
+              "links": []
+            },
+            "style": "word",
+            "children": []
+          },
+          "back": {
+            "text": {
+              "text": "Thank you",
+              "runs": [],
+              "links": []
+            },
+            "style": "word_back",
+            "children": []
+          },
+          "hint": "Tap to flip",
+          "flipped": false,
+          "canvas": {
+            "kind": "Flashcard",
+            "props": {
+              "front": "Merci",
+              "back": "Thank you"
+            }
+          }
+        }
+      ],
+      "columns": 2,
+      "min_child_width": 160.0,
+      "gap": 12.0
+    },
+    {
+      "id": "children/10",
+      "a11y": {
+        "role": "region",
+        "label": "A music video"
+      },
+      "component": "YouTube",
+      "url": "https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ",
+      "title": "A music video"
+    }
+  ],
+  "align": "stretch",
+  "spacing": [
+    0.0,
+    8.0,
+    24.0,
+    24.0,
+    24.0,
+    24.0,
+    24.0,
+    24.0,
+    24.0,
+    24.0,
+    24.0
+  ]
+}

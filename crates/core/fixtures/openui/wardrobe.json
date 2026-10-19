@@ -1,0 +1,3080 @@
+{
+  "id": "",
+  "component": "Col",
+  "children": [
+    {
+      "id": "children/0",
+      "component": "Col",
+      "children": [
+        {
+          "id": "children/0/children/0",
+          "a11y": {
+            "role": "heading",
+            "level": 2
+          },
+          "component": "Title",
+          "text": {
+            "text": "A capsule wardrobe for a week away",
+            "runs": [],
+            "links": []
+          },
+          "style": "title_xl",
+          "color": "foreground"
+        },
+        {
+          "id": "children/0/children/1",
+          "a11y": {
+            "role": "text"
+          },
+          "component": "Text",
+          "text": {
+            "text": "A dozen pieces in one palette that all work together. Change the trip and the list and the outfits follow.",
+            "runs": [],
+            "links": []
+          },
+          "inlines": [],
+          "style": "body",
+          "color": "muted-foreground",
+          "weight": "regular",
+          "italic": false,
+          "strike": false,
+          "digits": false,
+          "max_lines": null
+        }
+      ],
+      "align": "stretch",
+      "spacing": [
+        0.0,
+        8.0
+      ]
+    },
+    {
+      "id": "children/1",
+      "component": "Grid",
+      "children": [
+        {
+          "id": "children/1/children/0",
+          "a11y": {
+            "role": "image",
+            "label": "Folded clothes"
+          },
+          "component": "SearchImage",
+          "query": "Folded clothes",
+          "aspect_ratio": 1.2,
+          "radius": {
+            "kind": "lg",
+            "points": 12.0
+          },
+          "fit": "cover",
+          "photos": {
+            "state": "waiting",
+            "media": []
+          }
+        },
+        {
+          "id": "children/1/children/1",
+          "a11y": {
+            "role": "image",
+            "label": "Capsule wardrobe"
+          },
+          "component": "SearchImage",
+          "query": "Capsule wardrobe",
+          "aspect_ratio": 1.2,
+          "radius": {
+            "kind": "lg",
+            "points": 12.0
+          },
+          "fit": "cover",
+          "photos": {
+            "state": "waiting",
+            "media": []
+          }
+        },
+        {
+          "id": "children/1/children/2",
+          "a11y": {
+            "role": "image",
+            "label": "Suitcase"
+          },
+          "component": "SearchImage",
+          "query": "Suitcase",
+          "aspect_ratio": 1.2,
+          "radius": {
+            "kind": "lg",
+            "points": 12.0
+          },
+          "fit": "cover",
+          "photos": {
+            "state": "waiting",
+            "media": []
+          }
+        }
+      ],
+      "columns": 3,
+      "min_child_width": 140.0,
+      "gap": 8.0
+    },
+    {
+      "id": "children/2",
+      "a11y": {
+        "role": "group"
+      },
+      "component": "Card",
+      "children": [
+        {
+          "id": "children/2/children/0",
+          "component": "Grid",
+          "children": [
+            {
+              "id": "children/2/children/0/children/0",
+              "a11y": {
+                "role": "adjustable",
+                "label": "Trip length",
+                "value": "7 days"
+              },
+              "component": "Slider",
+              "value": 7.0,
+              "min": 3.0,
+              "max": 14.0,
+              "step": 1.0,
+              "at": 0.36363636363636365,
+              "label": "Trip length",
+              "readout": "7 days",
+              "head": true,
+              "marks": [],
+              "disabled": null
+            },
+            {
+              "id": "children/2/children/0/children/1",
+              "component": "Col",
+              "children": [
+                {
+                  "id": "children/2/children/0/children/1/children/0",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Label",
+                  "text": "Weather",
+                  "color": "foreground"
+                },
+                {
+                  "id": "children/2/children/0/children/1/children/1",
+                  "a11y": {
+                    "role": "radio_group"
+                  },
+                  "component": "SegmentedControl",
+                  "value": "Mild",
+                  "options": [
+                    {
+                      "value": "Warm",
+                      "label": "Warm",
+                      "description": null
+                    },
+                    {
+                      "value": "Mild",
+                      "label": "Mild",
+                      "description": null
+                    },
+                    {
+                      "value": "Cool",
+                      "label": "Cool",
+                      "description": null
+                    }
+                  ],
+                  "selected": 1,
+                  "block": false,
+                  "disabled": null
+                }
+              ],
+              "align": "stretch",
+              "spacing": [
+                0.0,
+                8.0
+              ]
+            }
+          ],
+          "columns": 2,
+          "min_child_width": 220.0,
+          "gap": 20.0
+        }
+      ],
+      "soft": true,
+      "nested": false,
+      "padding": 16.0,
+      "spacing": [
+        0.0
+      ]
+    },
+    {
+      "id": "children/3",
+      "a11y": {
+        "role": "heading",
+        "level": 3
+      },
+      "component": "Title",
+      "text": {
+        "text": "The palette",
+        "runs": [],
+        "links": []
+      },
+      "style": "title_md",
+      "color": "foreground"
+    },
+    {
+      "id": "children/4",
+      "component": "Row",
+      "children": [
+        {
+          "id": "children/4/children/0",
+          "component": "Col",
+          "children": [
+            {
+              "id": "children/4/children/0/children/0",
+              "component": "Box",
+              "children": [],
+              "direction": "col",
+              "gap": 0.0,
+              "spacing": [],
+              "sizing": [],
+              "padding": 0.0,
+              "background": [
+                47,
+                62,
+                85,
+                255
+              ],
+              "inner_surface": false,
+              "radius": {
+                "kind": "full",
+                "points": 0.0
+              },
+              "border": true,
+              "width": {
+                "unit": "points",
+                "value": 40.0
+              },
+              "height": {
+                "unit": "points",
+                "value": 40.0
+              },
+              "flex": null,
+              "align": "stretch",
+              "justify": "start",
+              "wrap": false
+            },
+            {
+              "id": "children/4/children/0/children/1",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Caption",
+              "text": {
+                "text": "Navy",
+                "runs": [],
+                "links": []
+              },
+              "style": "caption",
+              "color": "muted-foreground"
+            }
+          ],
+          "align": "center",
+          "spacing": [
+            0.0,
+            4.0
+          ]
+        },
+        {
+          "id": "children/4/children/1",
+          "component": "Col",
+          "children": [
+            {
+              "id": "children/4/children/1/children/0",
+              "component": "Box",
+              "children": [],
+              "direction": "col",
+              "gap": 0.0,
+              "spacing": [],
+              "sizing": [],
+              "padding": 0.0,
+              "background": [
+                247,
+                245,
+                240,
+                255
+              ],
+              "inner_surface": false,
+              "radius": {
+                "kind": "full",
+                "points": 0.0
+              },
+              "border": true,
+              "width": {
+                "unit": "points",
+                "value": 40.0
+              },
+              "height": {
+                "unit": "points",
+                "value": 40.0
+              },
+              "flex": null,
+              "align": "stretch",
+              "justify": "start",
+              "wrap": false
+            },
+            {
+              "id": "children/4/children/1/children/1",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Caption",
+              "text": {
+                "text": "White",
+                "runs": [],
+                "links": []
+              },
+              "style": "caption",
+              "color": "muted-foreground"
+            }
+          ],
+          "align": "center",
+          "spacing": [
+            0.0,
+            4.0
+          ]
+        },
+        {
+          "id": "children/4/children/2",
+          "component": "Col",
+          "children": [
+            {
+              "id": "children/4/children/2/children/0",
+              "component": "Box",
+              "children": [],
+              "direction": "col",
+              "gap": 0.0,
+              "spacing": [],
+              "sizing": [],
+              "padding": 0.0,
+              "background": [
+                207,
+                197,
+                184,
+                255
+              ],
+              "inner_surface": false,
+              "radius": {
+                "kind": "full",
+                "points": 0.0
+              },
+              "border": true,
+              "width": {
+                "unit": "points",
+                "value": 40.0
+              },
+              "height": {
+                "unit": "points",
+                "value": 40.0
+              },
+              "flex": null,
+              "align": "stretch",
+              "justify": "start",
+              "wrap": false
+            },
+            {
+              "id": "children/4/children/2/children/1",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Caption",
+              "text": {
+                "text": "Stone",
+                "runs": [],
+                "links": []
+              },
+              "style": "caption",
+              "color": "muted-foreground"
+            }
+          ],
+          "align": "center",
+          "spacing": [
+            0.0,
+            4.0
+          ]
+        },
+        {
+          "id": "children/4/children/3",
+          "component": "Col",
+          "children": [
+            {
+              "id": "children/4/children/3/children/0",
+              "component": "Box",
+              "children": [],
+              "direction": "col",
+              "gap": 0.0,
+              "spacing": [],
+              "sizing": [],
+              "padding": 0.0,
+              "background": [
+                107,
+                115,
+                80,
+                255
+              ],
+              "inner_surface": false,
+              "radius": {
+                "kind": "full",
+                "points": 0.0
+              },
+              "border": true,
+              "width": {
+                "unit": "points",
+                "value": 40.0
+              },
+              "height": {
+                "unit": "points",
+                "value": 40.0
+              },
+              "flex": null,
+              "align": "stretch",
+              "justify": "start",
+              "wrap": false
+            },
+            {
+              "id": "children/4/children/3/children/1",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Caption",
+              "text": {
+                "text": "Olive",
+                "runs": [],
+                "links": []
+              },
+              "style": "caption",
+              "color": "muted-foreground"
+            }
+          ],
+          "align": "center",
+          "spacing": [
+            0.0,
+            4.0
+          ]
+        },
+        {
+          "id": "children/4/children/4",
+          "component": "Col",
+          "children": [
+            {
+              "id": "children/4/children/4/children/0",
+              "component": "Box",
+              "children": [],
+              "direction": "col",
+              "gap": 0.0,
+              "spacing": [],
+              "sizing": [],
+              "padding": 0.0,
+              "background": [
+                185,
+                139,
+                94,
+                255
+              ],
+              "inner_surface": false,
+              "radius": {
+                "kind": "full",
+                "points": 0.0
+              },
+              "border": true,
+              "width": {
+                "unit": "points",
+                "value": 40.0
+              },
+              "height": {
+                "unit": "points",
+                "value": 40.0
+              },
+              "flex": null,
+              "align": "stretch",
+              "justify": "start",
+              "wrap": false
+            },
+            {
+              "id": "children/4/children/4/children/1",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Caption",
+              "text": {
+                "text": "Tan",
+                "runs": [],
+                "links": []
+              },
+              "style": "caption",
+              "color": "muted-foreground"
+            }
+          ],
+          "align": "center",
+          "spacing": [
+            0.0,
+            4.0
+          ]
+        }
+      ],
+      "gap": 16.0,
+      "align": "center",
+      "justify": "start",
+      "wrap": true,
+      "sizing": [
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": true
+        },
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": true
+        },
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": true
+        },
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": true
+        },
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": true
+        }
+      ]
+    },
+    {
+      "id": "children/5",
+      "a11y": {
+        "role": "heading",
+        "level": 3
+      },
+      "component": "Title",
+      "text": {
+        "text": "Packing list",
+        "runs": [],
+        "links": []
+      },
+      "style": "title_md",
+      "color": "foreground"
+    },
+    {
+      "id": "children/6",
+      "a11y": {
+        "role": "group"
+      },
+      "component": "Card",
+      "children": [
+        {
+          "id": "children/6/children/0",
+          "component": "Row",
+          "children": [
+            {
+              "id": "children/6/children/0/children/0",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Text",
+              "text": {
+                "text": "0 of 12 packed",
+                "runs": [],
+                "links": []
+              },
+              "inlines": [],
+              "style": "small",
+              "color": "muted-foreground",
+              "weight": "regular",
+              "italic": false,
+              "strike": false,
+              "digits": true,
+              "max_lines": null
+            },
+            {
+              "id": "children/6/children/0/children/1",
+              "a11y": {
+                "role": "hidden"
+              },
+              "component": "Spacer"
+            },
+            {
+              "id": "children/6/children/0/children/2",
+              "a11y": {
+                "role": "button",
+                "label": "Reset"
+              },
+              "component": "Button",
+              "label": "Reset",
+              "variant": "ghost",
+              "tint": null,
+              "size": "small",
+              "icon": {
+                "name": "rotate-ccw",
+                "glyph": ""
+              },
+              "block": false,
+              "disabled": null
+            }
+          ],
+          "gap": 8.0,
+          "align": "center",
+          "justify": "start",
+          "wrap": false,
+          "sizing": [
+            {
+              "basis": "content",
+              "length": null,
+              "grow": 0.0,
+              "shrink": true
+            },
+            {
+              "basis": "zero",
+              "length": null,
+              "grow": 1.0,
+              "shrink": false
+            },
+            {
+              "basis": "content",
+              "length": null,
+              "grow": 0.0,
+              "shrink": false
+            }
+          ]
+        },
+        {
+          "id": "children/6/children/1",
+          "component": "Box",
+          "children": [
+            {
+              "id": "children/6/children/1/children/0",
+              "component": "Box",
+              "children": [],
+              "direction": "col",
+              "gap": 0.0,
+              "spacing": [],
+              "sizing": [],
+              "padding": 0.0,
+              "background": "foreground",
+              "inner_surface": true,
+              "radius": {
+                "kind": "full",
+                "points": 0.0
+              },
+              "border": false,
+              "width": {
+                "unit": "fraction",
+                "value": 0.0
+              },
+              "height": {
+                "unit": "points",
+                "value": 4.0
+              },
+              "flex": null,
+              "align": "stretch",
+              "justify": "start",
+              "wrap": false
+            }
+          ],
+          "direction": "col",
+          "gap": 0.0,
+          "spacing": [
+            0.0
+          ],
+          "sizing": [],
+          "padding": 0.0,
+          "background": {
+            "surface": "border"
+          },
+          "inner_surface": true,
+          "radius": {
+            "kind": "full",
+            "points": 0.0
+          },
+          "border": false,
+          "width": {
+            "unit": "fraction",
+            "value": 1.0
+          },
+          "height": {
+            "unit": "points",
+            "value": 4.0
+          },
+          "flex": null,
+          "align": "stretch",
+          "justify": "start",
+          "wrap": false
+        },
+        {
+          "id": "children/6/children/2",
+          "component": "Col",
+          "children": [
+            {
+              "id": "children/6/children/2/children/0",
+              "a11y": {
+                "role": "button",
+                "label": "White tee Top",
+                "on": false
+              },
+              "component": "Pressable",
+              "children": [
+                {
+                  "id": "children/6/children/2/children/0/children/0",
+                  "component": "Row",
+                  "children": [
+                    {
+                      "id": "children/6/children/2/children/0/children/0/children/0",
+                      "a11y": {
+                        "role": "hidden"
+                      },
+                      "component": "Icon",
+                      "icon": {
+                        "name": "circle",
+                        "glyph": ""
+                      },
+                      "size": 14.0,
+                      "color": "muted-stronger-foreground"
+                    },
+                    {
+                      "id": "children/6/children/2/children/0/children/0/children/1",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Text",
+                      "text": {
+                        "text": "White tee",
+                        "runs": [],
+                        "links": []
+                      },
+                      "inlines": [],
+                      "style": "small",
+                      "color": "foreground",
+                      "weight": "regular",
+                      "italic": false,
+                      "strike": false,
+                      "digits": false,
+                      "max_lines": null
+                    },
+                    {
+                      "id": "children/6/children/2/children/0/children/0/children/2",
+                      "a11y": {
+                        "role": "hidden"
+                      },
+                      "component": "Spacer"
+                    },
+                    {
+                      "id": "children/6/children/2/children/0/children/0/children/3",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Caption",
+                      "text": {
+                        "text": "Top",
+                        "runs": [],
+                        "links": []
+                      },
+                      "style": "caption",
+                      "color": "muted-foreground"
+                    }
+                  ],
+                  "gap": 8.0,
+                  "align": "center",
+                  "justify": "start",
+                  "wrap": false,
+                  "sizing": [
+                    {
+                      "basis": "content",
+                      "length": null,
+                      "grow": 0.0,
+                      "shrink": true
+                    },
+                    {
+                      "basis": "content",
+                      "length": null,
+                      "grow": 0.0,
+                      "shrink": true
+                    },
+                    {
+                      "basis": "zero",
+                      "length": null,
+                      "grow": 1.0,
+                      "shrink": false
+                    },
+                    {
+                      "basis": "content",
+                      "length": null,
+                      "grow": 0.0,
+                      "shrink": true
+                    }
+                  ]
+                }
+              ],
+              "padding": 8.0,
+              "background": null,
+              "inner_surface": false,
+              "radius": {
+                "kind": "lg",
+                "points": 12.0
+              },
+              "selected": false,
+              "ring": false,
+              "disabled": null
+            },
+            {
+              "id": "children/6/children/2/children/1",
+              "a11y": {
+                "role": "button",
+                "label": "Navy Oxford shirt Top",
+                "on": false
+              },
+              "component": "Pressable",
+              "children": [
+                {
+                  "id": "children/6/children/2/children/1/children/0",
+                  "component": "Row",
+                  "children": [
+                    {
+                      "id": "children/6/children/2/children/1/children/0/children/0",
+                      "a11y": {
+                        "role": "hidden"
+                      },
+                      "component": "Icon",
+                      "icon": {
+                        "name": "circle",
+                        "glyph": ""
+                      },
+                      "size": 14.0,
+                      "color": "muted-stronger-foreground"
+                    },
+                    {
+                      "id": "children/6/children/2/children/1/children/0/children/1",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Text",
+                      "text": {
+                        "text": "Navy Oxford shirt",
+                        "runs": [],
+                        "links": []
+                      },
+                      "inlines": [],
+                      "style": "small",
+                      "color": "foreground",
+                      "weight": "regular",
+                      "italic": false,
+                      "strike": false,
+                      "digits": false,
+                      "max_lines": null
+                    },
+                    {
+                      "id": "children/6/children/2/children/1/children/0/children/2",
+                      "a11y": {
+                        "role": "hidden"
+                      },
+                      "component": "Spacer"
+                    },
+                    {
+                      "id": "children/6/children/2/children/1/children/0/children/3",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Caption",
+                      "text": {
+                        "text": "Top",
+                        "runs": [],
+                        "links": []
+                      },
+                      "style": "caption",
+                      "color": "muted-foreground"
+                    }
+                  ],
+                  "gap": 8.0,
+                  "align": "center",
+                  "justify": "start",
+                  "wrap": false,
+                  "sizing": [
+                    {
+                      "basis": "content",
+                      "length": null,
+                      "grow": 0.0,
+                      "shrink": true
+                    },
+                    {
+                      "basis": "content",
+                      "length": null,
+                      "grow": 0.0,
+                      "shrink": true
+                    },
+                    {
+                      "basis": "zero",
+                      "length": null,
+                      "grow": 1.0,
+                      "shrink": false
+                    },
+                    {
+                      "basis": "content",
+                      "length": null,
+                      "grow": 0.0,
+                      "shrink": true
+                    }
+                  ]
+                }
+              ],
+              "padding": 8.0,
+              "background": null,
+              "inner_surface": false,
+              "radius": {
+                "kind": "lg",
+                "points": 12.0
+              },
+              "selected": false,
+              "ring": false,
+              "disabled": null
+            },
+            {
+              "id": "children/6/children/2/children/2",
+              "a11y": {
+                "role": "button",
+                "label": "Striped long-sleeve tee Top",
+                "on": false
+              },
+              "component": "Pressable",
+              "children": [
+                {
+                  "id": "children/6/children/2/children/2/children/0",
+                  "component": "Row",
+                  "children": [
+                    {
+                      "id": "children/6/children/2/children/2/children/0/children/0",
+                      "a11y": {
+                        "role": "hidden"
+                      },
+                      "component": "Icon",
+                      "icon": {
+                        "name": "circle",
+                        "glyph": ""
+                      },
+                      "size": 14.0,
+                      "color": "muted-stronger-foreground"
+                    },
+                    {
+                      "id": "children/6/children/2/children/2/children/0/children/1",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Text",
+                      "text": {
+                        "text": "Striped long-sleeve tee",
+                        "runs": [],
+                        "links": []
+                      },
+                      "inlines": [],
+                      "style": "small",
+                      "color": "foreground",
+                      "weight": "regular",
+                      "italic": false,
+                      "strike": false,
+                      "digits": false,
+                      "max_lines": null
+                    },
+                    {
+                      "id": "children/6/children/2/children/2/children/0/children/2",
+                      "a11y": {
+                        "role": "hidden"
+                      },
+                      "component": "Spacer"
+                    },
+                    {
+                      "id": "children/6/children/2/children/2/children/0/children/3",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Caption",
+                      "text": {
+                        "text": "Top",
+                        "runs": [],
+                        "links": []
+                      },
+                      "style": "caption",
+                      "color": "muted-foreground"
+                    }
+                  ],
+                  "gap": 8.0,
+                  "align": "center",
+                  "justify": "start",
+                  "wrap": false,
+                  "sizing": [
+                    {
+                      "basis": "content",
+                      "length": null,
+                      "grow": 0.0,
+                      "shrink": true
+                    },
+                    {
+                      "basis": "content",
+                      "length": null,
+                      "grow": 0.0,
+                      "shrink": true
+                    },
+                    {
+                      "basis": "zero",
+                      "length": null,
+                      "grow": 1.0,
+                      "shrink": false
+                    },
+                    {
+                      "basis": "content",
+                      "length": null,
+                      "grow": 0.0,
+                      "shrink": true
+                    }
+                  ]
+                }
+              ],
+              "padding": 8.0,
+              "background": null,
+              "inner_surface": false,
+              "radius": {
+                "kind": "lg",
+                "points": 12.0
+              },
+              "selected": false,
+              "ring": false,
+              "disabled": null
+            },
+            {
+              "id": "children/6/children/2/children/3",
+              "a11y": {
+                "role": "button",
+                "label": "Stone knit polo Top",
+                "on": false
+              },
+              "component": "Pressable",
+              "children": [
+                {
+                  "id": "children/6/children/2/children/3/children/0",
+                  "component": "Row",
+                  "children": [
+                    {
+                      "id": "children/6/children/2/children/3/children/0/children/0",
+                      "a11y": {
+                        "role": "hidden"
+                      },
+                      "component": "Icon",
+                      "icon": {
+                        "name": "circle",
+                        "glyph": ""
+                      },
+                      "size": 14.0,
+                      "color": "muted-stronger-foreground"
+                    },
+                    {
+                      "id": "children/6/children/2/children/3/children/0/children/1",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Text",
+                      "text": {
+                        "text": "Stone knit polo",
+                        "runs": [],
+                        "links": []
+                      },
+                      "inlines": [],
+                      "style": "small",
+                      "color": "foreground",
+                      "weight": "regular",
+                      "italic": false,
+                      "strike": false,
+                      "digits": false,
+                      "max_lines": null
+                    },
+                    {
+                      "id": "children/6/children/2/children/3/children/0/children/2",
+                      "a11y": {
+                        "role": "hidden"
+                      },
+                      "component": "Spacer"
+                    },
+                    {
+                      "id": "children/6/children/2/children/3/children/0/children/3",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Caption",
+                      "text": {
+                        "text": "Top",
+                        "runs": [],
+                        "links": []
+                      },
+                      "style": "caption",
+                      "color": "muted-foreground"
+                    }
+                  ],
+                  "gap": 8.0,
+                  "align": "center",
+                  "justify": "start",
+                  "wrap": false,
+                  "sizing": [
+                    {
+                      "basis": "content",
+                      "length": null,
+                      "grow": 0.0,
+                      "shrink": true
+                    },
+                    {
+                      "basis": "content",
+                      "length": null,
+                      "grow": 0.0,
+                      "shrink": true
+                    },
+                    {
+                      "basis": "zero",
+                      "length": null,
+                      "grow": 1.0,
+                      "shrink": false
+                    },
+                    {
+                      "basis": "content",
+                      "length": null,
+                      "grow": 0.0,
+                      "shrink": true
+                    }
+                  ]
+                }
+              ],
+              "padding": 8.0,
+              "background": null,
+              "inner_surface": false,
+              "radius": {
+                "kind": "lg",
+                "points": 12.0
+              },
+              "selected": false,
+              "ring": false,
+              "disabled": null
+            },
+            {
+              "id": "children/6/children/2/children/4",
+              "a11y": {
+                "role": "button",
+                "label": "Dark jeans Bottom",
+                "on": false
+              },
+              "component": "Pressable",
+              "children": [
+                {
+                  "id": "children/6/children/2/children/4/children/0",
+                  "component": "Row",
+                  "children": [
+                    {
+                      "id": "children/6/children/2/children/4/children/0/children/0",
+                      "a11y": {
+                        "role": "hidden"
+                      },
+                      "component": "Icon",
+                      "icon": {
+                        "name": "circle",
+                        "glyph": ""
+                      },
+                      "size": 14.0,
+                      "color": "muted-stronger-foreground"
+                    },
+                    {
+                      "id": "children/6/children/2/children/4/children/0/children/1",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Text",
+                      "text": {
+                        "text": "Dark jeans",
+                        "runs": [],
+                        "links": []
+                      },
+                      "inlines": [],
+                      "style": "small",
+                      "color": "foreground",
+                      "weight": "regular",
+                      "italic": false,
+                      "strike": false,
+                      "digits": false,
+                      "max_lines": null
+                    },
+                    {
+                      "id": "children/6/children/2/children/4/children/0/children/2",
+                      "a11y": {
+                        "role": "hidden"
+                      },
+                      "component": "Spacer"
+                    },
+                    {
+                      "id": "children/6/children/2/children/4/children/0/children/3",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Caption",
+                      "text": {
+                        "text": "Bottom",
+                        "runs": [],
+                        "links": []
+                      },
+                      "style": "caption",
+                      "color": "muted-foreground"
+                    }
+                  ],
+                  "gap": 8.0,
+                  "align": "center",
+                  "justify": "start",
+                  "wrap": false,
+                  "sizing": [
+                    {
+                      "basis": "content",
+                      "length": null,
+                      "grow": 0.0,
+                      "shrink": true
+                    },
+                    {
+                      "basis": "content",
+                      "length": null,
+                      "grow": 0.0,
+                      "shrink": true
+                    },
+                    {
+                      "basis": "zero",
+                      "length": null,
+                      "grow": 1.0,
+                      "shrink": false
+                    },
+                    {
+                      "basis": "content",
+                      "length": null,
+                      "grow": 0.0,
+                      "shrink": true
+                    }
+                  ]
+                }
+              ],
+              "padding": 8.0,
+              "background": null,
+              "inner_surface": false,
+              "radius": {
+                "kind": "lg",
+                "points": 12.0
+              },
+              "selected": false,
+              "ring": false,
+              "disabled": null
+            },
+            {
+              "id": "children/6/children/2/children/5",
+              "a11y": {
+                "role": "button",
+                "label": "Stone chinos Bottom",
+                "on": false
+              },
+              "component": "Pressable",
+              "children": [
+                {
+                  "id": "children/6/children/2/children/5/children/0",
+                  "component": "Row",
+                  "children": [
+                    {
+                      "id": "children/6/children/2/children/5/children/0/children/0",
+                      "a11y": {
+                        "role": "hidden"
+                      },
+                      "component": "Icon",
+                      "icon": {
+                        "name": "circle",
+                        "glyph": ""
+                      },
+                      "size": 14.0,
+                      "color": "muted-stronger-foreground"
+                    },
+                    {
+                      "id": "children/6/children/2/children/5/children/0/children/1",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Text",
+                      "text": {
+                        "text": "Stone chinos",
+                        "runs": [],
+                        "links": []
+                      },
+                      "inlines": [],
+                      "style": "small",
+                      "color": "foreground",
+                      "weight": "regular",
+                      "italic": false,
+                      "strike": false,
+                      "digits": false,
+                      "max_lines": null
+                    },
+                    {
+                      "id": "children/6/children/2/children/5/children/0/children/2",
+                      "a11y": {
+                        "role": "hidden"
+                      },
+                      "component": "Spacer"
+                    },
+                    {
+                      "id": "children/6/children/2/children/5/children/0/children/3",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Caption",
+                      "text": {
+                        "text": "Bottom",
+                        "runs": [],
+                        "links": []
+                      },
+                      "style": "caption",
+                      "color": "muted-foreground"
+                    }
+                  ],
+                  "gap": 8.0,
+                  "align": "center",
+                  "justify": "start",
+                  "wrap": false,
+                  "sizing": [
+                    {
+                      "basis": "content",
+                      "length": null,
+                      "grow": 0.0,
+                      "shrink": true
+                    },
+                    {
+                      "basis": "content",
+                      "length": null,
+                      "grow": 0.0,
+                      "shrink": true
+                    },
+                    {
+                      "basis": "zero",
+                      "length": null,
+                      "grow": 1.0,
+                      "shrink": false
+                    },
+                    {
+                      "basis": "content",
+                      "length": null,
+                      "grow": 0.0,
+                      "shrink": true
+                    }
+                  ]
+                }
+              ],
+              "padding": 8.0,
+              "background": null,
+              "inner_surface": false,
+              "radius": {
+                "kind": "lg",
+                "points": 12.0
+              },
+              "selected": false,
+              "ring": false,
+              "disabled": null
+            },
+            {
+              "id": "children/6/children/2/children/6",
+              "a11y": {
+                "role": "button",
+                "label": "Unstructured navy jacket Layer",
+                "on": false
+              },
+              "component": "Pressable",
+              "children": [
+                {
+                  "id": "children/6/children/2/children/6/children/0",
+                  "component": "Row",
+                  "children": [
+                    {
+                      "id": "children/6/children/2/children/6/children/0/children/0",
+                      "a11y": {
+                        "role": "hidden"
+                      },
+                      "component": "Icon",
+                      "icon": {
+                        "name": "circle",
+                        "glyph": ""
+                      },
+                      "size": 14.0,
+                      "color": "muted-stronger-foreground"
+                    },
+                    {
+                      "id": "children/6/children/2/children/6/children/0/children/1",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Text",
+                      "text": {
+                        "text": "Unstructured navy jacket",
+                        "runs": [],
+                        "links": []
+                      },
+                      "inlines": [],
+                      "style": "small",
+                      "color": "foreground",
+                      "weight": "regular",
+                      "italic": false,
+                      "strike": false,
+                      "digits": false,
+                      "max_lines": null
+                    },
+                    {
+                      "id": "children/6/children/2/children/6/children/0/children/2",
+                      "a11y": {
+                        "role": "hidden"
+                      },
+                      "component": "Spacer"
+                    },
+                    {
+                      "id": "children/6/children/2/children/6/children/0/children/3",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Caption",
+                      "text": {
+                        "text": "Layer",
+                        "runs": [],
+                        "links": []
+                      },
+                      "style": "caption",
+                      "color": "muted-foreground"
+                    }
+                  ],
+                  "gap": 8.0,
+                  "align": "center",
+                  "justify": "start",
+                  "wrap": false,
+                  "sizing": [
+                    {
+                      "basis": "content",
+                      "length": null,
+                      "grow": 0.0,
+                      "shrink": true
+                    },
+                    {
+                      "basis": "content",
+                      "length": null,
+                      "grow": 0.0,
+                      "shrink": true
+                    },
+                    {
+                      "basis": "zero",
+                      "length": null,
+                      "grow": 1.0,
+                      "shrink": false
+                    },
+                    {
+                      "basis": "content",
+                      "length": null,
+                      "grow": 0.0,
+                      "shrink": true
+                    }
+                  ]
+                }
+              ],
+              "padding": 8.0,
+              "background": null,
+              "inner_surface": false,
+              "radius": {
+                "kind": "lg",
+                "points": 12.0
+              },
+              "selected": false,
+              "ring": false,
+              "disabled": null
+            },
+            {
+              "id": "children/6/children/2/children/7",
+              "a11y": {
+                "role": "button",
+                "label": "White sneakers Shoes",
+                "on": false
+              },
+              "component": "Pressable",
+              "children": [
+                {
+                  "id": "children/6/children/2/children/7/children/0",
+                  "component": "Row",
+                  "children": [
+                    {
+                      "id": "children/6/children/2/children/7/children/0/children/0",
+                      "a11y": {
+                        "role": "hidden"
+                      },
+                      "component": "Icon",
+                      "icon": {
+                        "name": "circle",
+                        "glyph": ""
+                      },
+                      "size": 14.0,
+                      "color": "muted-stronger-foreground"
+                    },
+                    {
+                      "id": "children/6/children/2/children/7/children/0/children/1",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Text",
+                      "text": {
+                        "text": "White sneakers",
+                        "runs": [],
+                        "links": []
+                      },
+                      "inlines": [],
+                      "style": "small",
+                      "color": "foreground",
+                      "weight": "regular",
+                      "italic": false,
+                      "strike": false,
+                      "digits": false,
+                      "max_lines": null
+                    },
+                    {
+                      "id": "children/6/children/2/children/7/children/0/children/2",
+                      "a11y": {
+                        "role": "hidden"
+                      },
+                      "component": "Spacer"
+                    },
+                    {
+                      "id": "children/6/children/2/children/7/children/0/children/3",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Caption",
+                      "text": {
+                        "text": "Shoes",
+                        "runs": [],
+                        "links": []
+                      },
+                      "style": "caption",
+                      "color": "muted-foreground"
+                    }
+                  ],
+                  "gap": 8.0,
+                  "align": "center",
+                  "justify": "start",
+                  "wrap": false,
+                  "sizing": [
+                    {
+                      "basis": "content",
+                      "length": null,
+                      "grow": 0.0,
+                      "shrink": true
+                    },
+                    {
+                      "basis": "content",
+                      "length": null,
+                      "grow": 0.0,
+                      "shrink": true
+                    },
+                    {
+                      "basis": "zero",
+                      "length": null,
+                      "grow": 1.0,
+                      "shrink": false
+                    },
+                    {
+                      "basis": "content",
+                      "length": null,
+                      "grow": 0.0,
+                      "shrink": true
+                    }
+                  ]
+                }
+              ],
+              "padding": 8.0,
+              "background": null,
+              "inner_surface": false,
+              "radius": {
+                "kind": "lg",
+                "points": 12.0
+              },
+              "selected": false,
+              "ring": false,
+              "disabled": null
+            },
+            {
+              "id": "children/6/children/2/children/8",
+              "a11y": {
+                "role": "button",
+                "label": "Tan loafers Shoes",
+                "on": false
+              },
+              "component": "Pressable",
+              "children": [
+                {
+                  "id": "children/6/children/2/children/8/children/0",
+                  "component": "Row",
+                  "children": [
+                    {
+                      "id": "children/6/children/2/children/8/children/0/children/0",
+                      "a11y": {
+                        "role": "hidden"
+                      },
+                      "component": "Icon",
+                      "icon": {
+                        "name": "circle",
+                        "glyph": ""
+                      },
+                      "size": 14.0,
+                      "color": "muted-stronger-foreground"
+                    },
+                    {
+                      "id": "children/6/children/2/children/8/children/0/children/1",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Text",
+                      "text": {
+                        "text": "Tan loafers",
+                        "runs": [],
+                        "links": []
+                      },
+                      "inlines": [],
+                      "style": "small",
+                      "color": "foreground",
+                      "weight": "regular",
+                      "italic": false,
+                      "strike": false,
+                      "digits": false,
+                      "max_lines": null
+                    },
+                    {
+                      "id": "children/6/children/2/children/8/children/0/children/2",
+                      "a11y": {
+                        "role": "hidden"
+                      },
+                      "component": "Spacer"
+                    },
+                    {
+                      "id": "children/6/children/2/children/8/children/0/children/3",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Caption",
+                      "text": {
+                        "text": "Shoes",
+                        "runs": [],
+                        "links": []
+                      },
+                      "style": "caption",
+                      "color": "muted-foreground"
+                    }
+                  ],
+                  "gap": 8.0,
+                  "align": "center",
+                  "justify": "start",
+                  "wrap": false,
+                  "sizing": [
+                    {
+                      "basis": "content",
+                      "length": null,
+                      "grow": 0.0,
+                      "shrink": true
+                    },
+                    {
+                      "basis": "content",
+                      "length": null,
+                      "grow": 0.0,
+                      "shrink": true
+                    },
+                    {
+                      "basis": "zero",
+                      "length": null,
+                      "grow": 1.0,
+                      "shrink": false
+                    },
+                    {
+                      "basis": "content",
+                      "length": null,
+                      "grow": 0.0,
+                      "shrink": true
+                    }
+                  ]
+                }
+              ],
+              "padding": 8.0,
+              "background": null,
+              "inner_surface": false,
+              "radius": {
+                "kind": "lg",
+                "points": 12.0
+              },
+              "selected": false,
+              "ring": false,
+              "disabled": null
+            },
+            {
+              "id": "children/6/children/2/children/9",
+              "a11y": {
+                "role": "button",
+                "label": "Socks and underwear × 7 Basics",
+                "on": false
+              },
+              "component": "Pressable",
+              "children": [
+                {
+                  "id": "children/6/children/2/children/9/children/0",
+                  "component": "Row",
+                  "children": [
+                    {
+                      "id": "children/6/children/2/children/9/children/0/children/0",
+                      "a11y": {
+                        "role": "hidden"
+                      },
+                      "component": "Icon",
+                      "icon": {
+                        "name": "circle",
+                        "glyph": ""
+                      },
+                      "size": 14.0,
+                      "color": "muted-stronger-foreground"
+                    },
+                    {
+                      "id": "children/6/children/2/children/9/children/0/children/1",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Text",
+                      "text": {
+                        "text": "Socks and underwear × 7",
+                        "runs": [],
+                        "links": []
+                      },
+                      "inlines": [],
+                      "style": "small",
+                      "color": "foreground",
+                      "weight": "regular",
+                      "italic": false,
+                      "strike": false,
+                      "digits": false,
+                      "max_lines": null
+                    },
+                    {
+                      "id": "children/6/children/2/children/9/children/0/children/2",
+                      "a11y": {
+                        "role": "hidden"
+                      },
+                      "component": "Spacer"
+                    },
+                    {
+                      "id": "children/6/children/2/children/9/children/0/children/3",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Caption",
+                      "text": {
+                        "text": "Basics",
+                        "runs": [],
+                        "links": []
+                      },
+                      "style": "caption",
+                      "color": "muted-foreground"
+                    }
+                  ],
+                  "gap": 8.0,
+                  "align": "center",
+                  "justify": "start",
+                  "wrap": false,
+                  "sizing": [
+                    {
+                      "basis": "content",
+                      "length": null,
+                      "grow": 0.0,
+                      "shrink": true
+                    },
+                    {
+                      "basis": "content",
+                      "length": null,
+                      "grow": 0.0,
+                      "shrink": true
+                    },
+                    {
+                      "basis": "zero",
+                      "length": null,
+                      "grow": 1.0,
+                      "shrink": false
+                    },
+                    {
+                      "basis": "content",
+                      "length": null,
+                      "grow": 0.0,
+                      "shrink": true
+                    }
+                  ]
+                }
+              ],
+              "padding": 8.0,
+              "background": null,
+              "inner_surface": false,
+              "radius": {
+                "kind": "lg",
+                "points": 12.0
+              },
+              "selected": false,
+              "ring": false,
+              "disabled": null
+            },
+            {
+              "id": "children/6/children/2/children/10",
+              "a11y": {
+                "role": "button",
+                "label": "Sleepwear Basics",
+                "on": false
+              },
+              "component": "Pressable",
+              "children": [
+                {
+                  "id": "children/6/children/2/children/10/children/0",
+                  "component": "Row",
+                  "children": [
+                    {
+                      "id": "children/6/children/2/children/10/children/0/children/0",
+                      "a11y": {
+                        "role": "hidden"
+                      },
+                      "component": "Icon",
+                      "icon": {
+                        "name": "circle",
+                        "glyph": ""
+                      },
+                      "size": 14.0,
+                      "color": "muted-stronger-foreground"
+                    },
+                    {
+                      "id": "children/6/children/2/children/10/children/0/children/1",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Text",
+                      "text": {
+                        "text": "Sleepwear",
+                        "runs": [],
+                        "links": []
+                      },
+                      "inlines": [],
+                      "style": "small",
+                      "color": "foreground",
+                      "weight": "regular",
+                      "italic": false,
+                      "strike": false,
+                      "digits": false,
+                      "max_lines": null
+                    },
+                    {
+                      "id": "children/6/children/2/children/10/children/0/children/2",
+                      "a11y": {
+                        "role": "hidden"
+                      },
+                      "component": "Spacer"
+                    },
+                    {
+                      "id": "children/6/children/2/children/10/children/0/children/3",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Caption",
+                      "text": {
+                        "text": "Basics",
+                        "runs": [],
+                        "links": []
+                      },
+                      "style": "caption",
+                      "color": "muted-foreground"
+                    }
+                  ],
+                  "gap": 8.0,
+                  "align": "center",
+                  "justify": "start",
+                  "wrap": false,
+                  "sizing": [
+                    {
+                      "basis": "content",
+                      "length": null,
+                      "grow": 0.0,
+                      "shrink": true
+                    },
+                    {
+                      "basis": "content",
+                      "length": null,
+                      "grow": 0.0,
+                      "shrink": true
+                    },
+                    {
+                      "basis": "zero",
+                      "length": null,
+                      "grow": 1.0,
+                      "shrink": false
+                    },
+                    {
+                      "basis": "content",
+                      "length": null,
+                      "grow": 0.0,
+                      "shrink": true
+                    }
+                  ]
+                }
+              ],
+              "padding": 8.0,
+              "background": null,
+              "inner_surface": false,
+              "radius": {
+                "kind": "lg",
+                "points": 12.0
+              },
+              "selected": false,
+              "ring": false,
+              "disabled": null
+            },
+            {
+              "id": "children/6/children/2/children/11",
+              "a11y": {
+                "role": "button",
+                "label": "Compact umbrella Basics",
+                "on": false
+              },
+              "component": "Pressable",
+              "children": [
+                {
+                  "id": "children/6/children/2/children/11/children/0",
+                  "component": "Row",
+                  "children": [
+                    {
+                      "id": "children/6/children/2/children/11/children/0/children/0",
+                      "a11y": {
+                        "role": "hidden"
+                      },
+                      "component": "Icon",
+                      "icon": {
+                        "name": "circle",
+                        "glyph": ""
+                      },
+                      "size": 14.0,
+                      "color": "muted-stronger-foreground"
+                    },
+                    {
+                      "id": "children/6/children/2/children/11/children/0/children/1",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Text",
+                      "text": {
+                        "text": "Compact umbrella",
+                        "runs": [],
+                        "links": []
+                      },
+                      "inlines": [],
+                      "style": "small",
+                      "color": "foreground",
+                      "weight": "regular",
+                      "italic": false,
+                      "strike": false,
+                      "digits": false,
+                      "max_lines": null
+                    },
+                    {
+                      "id": "children/6/children/2/children/11/children/0/children/2",
+                      "a11y": {
+                        "role": "hidden"
+                      },
+                      "component": "Spacer"
+                    },
+                    {
+                      "id": "children/6/children/2/children/11/children/0/children/3",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Caption",
+                      "text": {
+                        "text": "Basics",
+                        "runs": [],
+                        "links": []
+                      },
+                      "style": "caption",
+                      "color": "muted-foreground"
+                    }
+                  ],
+                  "gap": 8.0,
+                  "align": "center",
+                  "justify": "start",
+                  "wrap": false,
+                  "sizing": [
+                    {
+                      "basis": "content",
+                      "length": null,
+                      "grow": 0.0,
+                      "shrink": true
+                    },
+                    {
+                      "basis": "content",
+                      "length": null,
+                      "grow": 0.0,
+                      "shrink": true
+                    },
+                    {
+                      "basis": "zero",
+                      "length": null,
+                      "grow": 1.0,
+                      "shrink": false
+                    },
+                    {
+                      "basis": "content",
+                      "length": null,
+                      "grow": 0.0,
+                      "shrink": true
+                    }
+                  ]
+                }
+              ],
+              "padding": 8.0,
+              "background": null,
+              "inner_surface": false,
+              "radius": {
+                "kind": "lg",
+                "points": 12.0
+              },
+              "selected": false,
+              "ring": false,
+              "disabled": null
+            }
+          ],
+          "align": "stretch",
+          "spacing": [
+            0.0,
+            4.0,
+            4.0,
+            4.0,
+            4.0,
+            4.0,
+            4.0,
+            4.0,
+            4.0,
+            4.0,
+            4.0,
+            4.0
+          ]
+        }
+      ],
+      "soft": false,
+      "nested": false,
+      "padding": 16.0,
+      "spacing": [
+        0.0,
+        8.0,
+        8.0
+      ]
+    },
+    {
+      "id": "children/7",
+      "a11y": {
+        "role": "heading",
+        "level": 3
+      },
+      "component": "Title",
+      "text": {
+        "text": "Outfits, day by day",
+        "runs": [],
+        "links": []
+      },
+      "style": "title_md",
+      "color": "foreground"
+    },
+    {
+      "id": "children/8",
+      "a11y": {
+        "role": "group"
+      },
+      "component": "Card",
+      "children": [
+        {
+          "id": "children/8/children/0",
+          "component": "Col",
+          "children": [
+            {
+              "id": "children/8/children/0/children/0",
+              "component": "Row",
+              "children": [
+                {
+                  "id": "children/8/children/0/children/0/children/0",
+                  "component": "Box",
+                  "children": [
+                    {
+                      "id": "children/8/children/0/children/0/children/0/children/0",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Text",
+                      "text": {
+                        "text": "Day 1",
+                        "runs": [],
+                        "links": []
+                      },
+                      "inlines": [],
+                      "style": "caption",
+                      "color": "foreground",
+                      "weight": "semibold",
+                      "italic": false,
+                      "strike": false,
+                      "digits": false,
+                      "max_lines": null
+                    }
+                  ],
+                  "direction": "col",
+                  "gap": 0.0,
+                  "spacing": [
+                    0.0
+                  ],
+                  "sizing": [],
+                  "padding": 4.0,
+                  "background": {
+                    "surface": "box"
+                  },
+                  "inner_surface": true,
+                  "radius": {
+                    "kind": "md",
+                    "points": 8.0
+                  },
+                  "border": false,
+                  "width": {
+                    "unit": "points",
+                    "value": 56.0
+                  },
+                  "height": null,
+                  "flex": null,
+                  "align": "center",
+                  "justify": "center",
+                  "wrap": false
+                },
+                {
+                  "id": "children/8/children/0/children/0/children/1",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Text",
+                  "text": {
+                    "text": "White tee with Dark jeans, Unstructured navy jacket",
+                    "runs": [],
+                    "links": []
+                  },
+                  "inlines": [],
+                  "style": "small",
+                  "color": "foreground",
+                  "weight": "regular",
+                  "italic": false,
+                  "strike": false,
+                  "digits": false,
+                  "max_lines": null
+                },
+                {
+                  "id": "children/8/children/0/children/0/children/2",
+                  "a11y": {
+                    "role": "hidden"
+                  },
+                  "component": "Spacer"
+                },
+                {
+                  "id": "children/8/children/0/children/0/children/3",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Caption",
+                  "text": {
+                    "text": "White sneakers",
+                    "runs": [],
+                    "links": []
+                  },
+                  "style": "caption",
+                  "color": "muted-foreground"
+                }
+              ],
+              "gap": 8.0,
+              "align": "center",
+              "justify": "start",
+              "wrap": false,
+              "sizing": [
+                {
+                  "basis": "length",
+                  "length": {
+                    "unit": "points",
+                    "value": 56.0
+                  },
+                  "grow": 0.0,
+                  "shrink": false
+                },
+                {
+                  "basis": "content",
+                  "length": null,
+                  "grow": 0.0,
+                  "shrink": true
+                },
+                {
+                  "basis": "zero",
+                  "length": null,
+                  "grow": 1.0,
+                  "shrink": false
+                },
+                {
+                  "basis": "content",
+                  "length": null,
+                  "grow": 0.0,
+                  "shrink": true
+                }
+              ]
+            },
+            {
+              "id": "children/8/children/0/children/1",
+              "component": "Row",
+              "children": [
+                {
+                  "id": "children/8/children/0/children/1/children/0",
+                  "component": "Box",
+                  "children": [
+                    {
+                      "id": "children/8/children/0/children/1/children/0/children/0",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Text",
+                      "text": {
+                        "text": "Day 2",
+                        "runs": [],
+                        "links": []
+                      },
+                      "inlines": [],
+                      "style": "caption",
+                      "color": "foreground",
+                      "weight": "semibold",
+                      "italic": false,
+                      "strike": false,
+                      "digits": false,
+                      "max_lines": null
+                    }
+                  ],
+                  "direction": "col",
+                  "gap": 0.0,
+                  "spacing": [
+                    0.0
+                  ],
+                  "sizing": [],
+                  "padding": 4.0,
+                  "background": {
+                    "surface": "box"
+                  },
+                  "inner_surface": true,
+                  "radius": {
+                    "kind": "md",
+                    "points": 8.0
+                  },
+                  "border": false,
+                  "width": {
+                    "unit": "points",
+                    "value": 56.0
+                  },
+                  "height": null,
+                  "flex": null,
+                  "align": "center",
+                  "justify": "center",
+                  "wrap": false
+                },
+                {
+                  "id": "children/8/children/0/children/1/children/1",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Text",
+                  "text": {
+                    "text": "Navy Oxford shirt with Stone chinos, Unstructured navy jacket",
+                    "runs": [],
+                    "links": []
+                  },
+                  "inlines": [],
+                  "style": "small",
+                  "color": "foreground",
+                  "weight": "regular",
+                  "italic": false,
+                  "strike": false,
+                  "digits": false,
+                  "max_lines": null
+                },
+                {
+                  "id": "children/8/children/0/children/1/children/2",
+                  "a11y": {
+                    "role": "hidden"
+                  },
+                  "component": "Spacer"
+                },
+                {
+                  "id": "children/8/children/0/children/1/children/3",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Caption",
+                  "text": {
+                    "text": "Tan loafers",
+                    "runs": [],
+                    "links": []
+                  },
+                  "style": "caption",
+                  "color": "muted-foreground"
+                }
+              ],
+              "gap": 8.0,
+              "align": "center",
+              "justify": "start",
+              "wrap": false,
+              "sizing": [
+                {
+                  "basis": "length",
+                  "length": {
+                    "unit": "points",
+                    "value": 56.0
+                  },
+                  "grow": 0.0,
+                  "shrink": false
+                },
+                {
+                  "basis": "content",
+                  "length": null,
+                  "grow": 0.0,
+                  "shrink": true
+                },
+                {
+                  "basis": "zero",
+                  "length": null,
+                  "grow": 1.0,
+                  "shrink": false
+                },
+                {
+                  "basis": "content",
+                  "length": null,
+                  "grow": 0.0,
+                  "shrink": true
+                }
+              ]
+            },
+            {
+              "id": "children/8/children/0/children/2",
+              "component": "Row",
+              "children": [
+                {
+                  "id": "children/8/children/0/children/2/children/0",
+                  "component": "Box",
+                  "children": [
+                    {
+                      "id": "children/8/children/0/children/2/children/0/children/0",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Text",
+                      "text": {
+                        "text": "Day 3",
+                        "runs": [],
+                        "links": []
+                      },
+                      "inlines": [],
+                      "style": "caption",
+                      "color": "foreground",
+                      "weight": "semibold",
+                      "italic": false,
+                      "strike": false,
+                      "digits": false,
+                      "max_lines": null
+                    }
+                  ],
+                  "direction": "col",
+                  "gap": 0.0,
+                  "spacing": [
+                    0.0
+                  ],
+                  "sizing": [],
+                  "padding": 4.0,
+                  "background": {
+                    "surface": "box"
+                  },
+                  "inner_surface": true,
+                  "radius": {
+                    "kind": "md",
+                    "points": 8.0
+                  },
+                  "border": false,
+                  "width": {
+                    "unit": "points",
+                    "value": 56.0
+                  },
+                  "height": null,
+                  "flex": null,
+                  "align": "center",
+                  "justify": "center",
+                  "wrap": false
+                },
+                {
+                  "id": "children/8/children/0/children/2/children/1",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Text",
+                  "text": {
+                    "text": "Striped long-sleeve tee with Dark jeans, Unstructured navy jacket",
+                    "runs": [],
+                    "links": []
+                  },
+                  "inlines": [],
+                  "style": "small",
+                  "color": "foreground",
+                  "weight": "regular",
+                  "italic": false,
+                  "strike": false,
+                  "digits": false,
+                  "max_lines": null
+                },
+                {
+                  "id": "children/8/children/0/children/2/children/2",
+                  "a11y": {
+                    "role": "hidden"
+                  },
+                  "component": "Spacer"
+                },
+                {
+                  "id": "children/8/children/0/children/2/children/3",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Caption",
+                  "text": {
+                    "text": "White sneakers",
+                    "runs": [],
+                    "links": []
+                  },
+                  "style": "caption",
+                  "color": "muted-foreground"
+                }
+              ],
+              "gap": 8.0,
+              "align": "center",
+              "justify": "start",
+              "wrap": false,
+              "sizing": [
+                {
+                  "basis": "length",
+                  "length": {
+                    "unit": "points",
+                    "value": 56.0
+                  },
+                  "grow": 0.0,
+                  "shrink": false
+                },
+                {
+                  "basis": "content",
+                  "length": null,
+                  "grow": 0.0,
+                  "shrink": true
+                },
+                {
+                  "basis": "zero",
+                  "length": null,
+                  "grow": 1.0,
+                  "shrink": false
+                },
+                {
+                  "basis": "content",
+                  "length": null,
+                  "grow": 0.0,
+                  "shrink": true
+                }
+              ]
+            },
+            {
+              "id": "children/8/children/0/children/3",
+              "component": "Row",
+              "children": [
+                {
+                  "id": "children/8/children/0/children/3/children/0",
+                  "component": "Box",
+                  "children": [
+                    {
+                      "id": "children/8/children/0/children/3/children/0/children/0",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Text",
+                      "text": {
+                        "text": "Day 4",
+                        "runs": [],
+                        "links": []
+                      },
+                      "inlines": [],
+                      "style": "caption",
+                      "color": "foreground",
+                      "weight": "semibold",
+                      "italic": false,
+                      "strike": false,
+                      "digits": false,
+                      "max_lines": null
+                    }
+                  ],
+                  "direction": "col",
+                  "gap": 0.0,
+                  "spacing": [
+                    0.0
+                  ],
+                  "sizing": [],
+                  "padding": 4.0,
+                  "background": {
+                    "surface": "box"
+                  },
+                  "inner_surface": true,
+                  "radius": {
+                    "kind": "md",
+                    "points": 8.0
+                  },
+                  "border": false,
+                  "width": {
+                    "unit": "points",
+                    "value": 56.0
+                  },
+                  "height": null,
+                  "flex": null,
+                  "align": "center",
+                  "justify": "center",
+                  "wrap": false
+                },
+                {
+                  "id": "children/8/children/0/children/3/children/1",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Text",
+                  "text": {
+                    "text": "Stone knit polo with Stone chinos, Unstructured navy jacket",
+                    "runs": [],
+                    "links": []
+                  },
+                  "inlines": [],
+                  "style": "small",
+                  "color": "foreground",
+                  "weight": "regular",
+                  "italic": false,
+                  "strike": false,
+                  "digits": false,
+                  "max_lines": null
+                },
+                {
+                  "id": "children/8/children/0/children/3/children/2",
+                  "a11y": {
+                    "role": "hidden"
+                  },
+                  "component": "Spacer"
+                },
+                {
+                  "id": "children/8/children/0/children/3/children/3",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Caption",
+                  "text": {
+                    "text": "Tan loafers",
+                    "runs": [],
+                    "links": []
+                  },
+                  "style": "caption",
+                  "color": "muted-foreground"
+                }
+              ],
+              "gap": 8.0,
+              "align": "center",
+              "justify": "start",
+              "wrap": false,
+              "sizing": [
+                {
+                  "basis": "length",
+                  "length": {
+                    "unit": "points",
+                    "value": 56.0
+                  },
+                  "grow": 0.0,
+                  "shrink": false
+                },
+                {
+                  "basis": "content",
+                  "length": null,
+                  "grow": 0.0,
+                  "shrink": true
+                },
+                {
+                  "basis": "zero",
+                  "length": null,
+                  "grow": 1.0,
+                  "shrink": false
+                },
+                {
+                  "basis": "content",
+                  "length": null,
+                  "grow": 0.0,
+                  "shrink": true
+                }
+              ]
+            },
+            {
+              "id": "children/8/children/0/children/4",
+              "component": "Row",
+              "children": [
+                {
+                  "id": "children/8/children/0/children/4/children/0",
+                  "component": "Box",
+                  "children": [
+                    {
+                      "id": "children/8/children/0/children/4/children/0/children/0",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Text",
+                      "text": {
+                        "text": "Day 5",
+                        "runs": [],
+                        "links": []
+                      },
+                      "inlines": [],
+                      "style": "caption",
+                      "color": "foreground",
+                      "weight": "semibold",
+                      "italic": false,
+                      "strike": false,
+                      "digits": false,
+                      "max_lines": null
+                    }
+                  ],
+                  "direction": "col",
+                  "gap": 0.0,
+                  "spacing": [
+                    0.0
+                  ],
+                  "sizing": [],
+                  "padding": 4.0,
+                  "background": {
+                    "surface": "box"
+                  },
+                  "inner_surface": true,
+                  "radius": {
+                    "kind": "md",
+                    "points": 8.0
+                  },
+                  "border": false,
+                  "width": {
+                    "unit": "points",
+                    "value": 56.0
+                  },
+                  "height": null,
+                  "flex": null,
+                  "align": "center",
+                  "justify": "center",
+                  "wrap": false
+                },
+                {
+                  "id": "children/8/children/0/children/4/children/1",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Text",
+                  "text": {
+                    "text": "White tee with Dark jeans, Unstructured navy jacket",
+                    "runs": [],
+                    "links": []
+                  },
+                  "inlines": [],
+                  "style": "small",
+                  "color": "foreground",
+                  "weight": "regular",
+                  "italic": false,
+                  "strike": false,
+                  "digits": false,
+                  "max_lines": null
+                },
+                {
+                  "id": "children/8/children/0/children/4/children/2",
+                  "a11y": {
+                    "role": "hidden"
+                  },
+                  "component": "Spacer"
+                },
+                {
+                  "id": "children/8/children/0/children/4/children/3",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Caption",
+                  "text": {
+                    "text": "White sneakers",
+                    "runs": [],
+                    "links": []
+                  },
+                  "style": "caption",
+                  "color": "muted-foreground"
+                }
+              ],
+              "gap": 8.0,
+              "align": "center",
+              "justify": "start",
+              "wrap": false,
+              "sizing": [
+                {
+                  "basis": "length",
+                  "length": {
+                    "unit": "points",
+                    "value": 56.0
+                  },
+                  "grow": 0.0,
+                  "shrink": false
+                },
+                {
+                  "basis": "content",
+                  "length": null,
+                  "grow": 0.0,
+                  "shrink": true
+                },
+                {
+                  "basis": "zero",
+                  "length": null,
+                  "grow": 1.0,
+                  "shrink": false
+                },
+                {
+                  "basis": "content",
+                  "length": null,
+                  "grow": 0.0,
+                  "shrink": true
+                }
+              ]
+            },
+            {
+              "id": "children/8/children/0/children/5",
+              "component": "Row",
+              "children": [
+                {
+                  "id": "children/8/children/0/children/5/children/0",
+                  "component": "Box",
+                  "children": [
+                    {
+                      "id": "children/8/children/0/children/5/children/0/children/0",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Text",
+                      "text": {
+                        "text": "Day 6",
+                        "runs": [],
+                        "links": []
+                      },
+                      "inlines": [],
+                      "style": "caption",
+                      "color": "foreground",
+                      "weight": "semibold",
+                      "italic": false,
+                      "strike": false,
+                      "digits": false,
+                      "max_lines": null
+                    }
+                  ],
+                  "direction": "col",
+                  "gap": 0.0,
+                  "spacing": [
+                    0.0
+                  ],
+                  "sizing": [],
+                  "padding": 4.0,
+                  "background": {
+                    "surface": "box"
+                  },
+                  "inner_surface": true,
+                  "radius": {
+                    "kind": "md",
+                    "points": 8.0
+                  },
+                  "border": false,
+                  "width": {
+                    "unit": "points",
+                    "value": 56.0
+                  },
+                  "height": null,
+                  "flex": null,
+                  "align": "center",
+                  "justify": "center",
+                  "wrap": false
+                },
+                {
+                  "id": "children/8/children/0/children/5/children/1",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Text",
+                  "text": {
+                    "text": "Navy Oxford shirt with Stone chinos, Unstructured navy jacket",
+                    "runs": [],
+                    "links": []
+                  },
+                  "inlines": [],
+                  "style": "small",
+                  "color": "foreground",
+                  "weight": "regular",
+                  "italic": false,
+                  "strike": false,
+                  "digits": false,
+                  "max_lines": null
+                },
+                {
+                  "id": "children/8/children/0/children/5/children/2",
+                  "a11y": {
+                    "role": "hidden"
+                  },
+                  "component": "Spacer"
+                },
+                {
+                  "id": "children/8/children/0/children/5/children/3",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Caption",
+                  "text": {
+                    "text": "Tan loafers",
+                    "runs": [],
+                    "links": []
+                  },
+                  "style": "caption",
+                  "color": "muted-foreground"
+                }
+              ],
+              "gap": 8.0,
+              "align": "center",
+              "justify": "start",
+              "wrap": false,
+              "sizing": [
+                {
+                  "basis": "length",
+                  "length": {
+                    "unit": "points",
+                    "value": 56.0
+                  },
+                  "grow": 0.0,
+                  "shrink": false
+                },
+                {
+                  "basis": "content",
+                  "length": null,
+                  "grow": 0.0,
+                  "shrink": true
+                },
+                {
+                  "basis": "zero",
+                  "length": null,
+                  "grow": 1.0,
+                  "shrink": false
+                },
+                {
+                  "basis": "content",
+                  "length": null,
+                  "grow": 0.0,
+                  "shrink": true
+                }
+              ]
+            },
+            {
+              "id": "children/8/children/0/children/6",
+              "component": "Row",
+              "children": [
+                {
+                  "id": "children/8/children/0/children/6/children/0",
+                  "component": "Box",
+                  "children": [
+                    {
+                      "id": "children/8/children/0/children/6/children/0/children/0",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Text",
+                      "text": {
+                        "text": "Day 7",
+                        "runs": [],
+                        "links": []
+                      },
+                      "inlines": [],
+                      "style": "caption",
+                      "color": "foreground",
+                      "weight": "semibold",
+                      "italic": false,
+                      "strike": false,
+                      "digits": false,
+                      "max_lines": null
+                    }
+                  ],
+                  "direction": "col",
+                  "gap": 0.0,
+                  "spacing": [
+                    0.0
+                  ],
+                  "sizing": [],
+                  "padding": 4.0,
+                  "background": {
+                    "surface": "box"
+                  },
+                  "inner_surface": true,
+                  "radius": {
+                    "kind": "md",
+                    "points": 8.0
+                  },
+                  "border": false,
+                  "width": {
+                    "unit": "points",
+                    "value": 56.0
+                  },
+                  "height": null,
+                  "flex": null,
+                  "align": "center",
+                  "justify": "center",
+                  "wrap": false
+                },
+                {
+                  "id": "children/8/children/0/children/6/children/1",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Text",
+                  "text": {
+                    "text": "Striped long-sleeve tee with Dark jeans, Unstructured navy jacket",
+                    "runs": [],
+                    "links": []
+                  },
+                  "inlines": [],
+                  "style": "small",
+                  "color": "foreground",
+                  "weight": "regular",
+                  "italic": false,
+                  "strike": false,
+                  "digits": false,
+                  "max_lines": null
+                },
+                {
+                  "id": "children/8/children/0/children/6/children/2",
+                  "a11y": {
+                    "role": "hidden"
+                  },
+                  "component": "Spacer"
+                },
+                {
+                  "id": "children/8/children/0/children/6/children/3",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Caption",
+                  "text": {
+                    "text": "White sneakers",
+                    "runs": [],
+                    "links": []
+                  },
+                  "style": "caption",
+                  "color": "muted-foreground"
+                }
+              ],
+              "gap": 8.0,
+              "align": "center",
+              "justify": "start",
+              "wrap": false,
+              "sizing": [
+                {
+                  "basis": "length",
+                  "length": {
+                    "unit": "points",
+                    "value": 56.0
+                  },
+                  "grow": 0.0,
+                  "shrink": false
+                },
+                {
+                  "basis": "content",
+                  "length": null,
+                  "grow": 0.0,
+                  "shrink": true
+                },
+                {
+                  "basis": "zero",
+                  "length": null,
+                  "grow": 1.0,
+                  "shrink": false
+                },
+                {
+                  "basis": "content",
+                  "length": null,
+                  "grow": 0.0,
+                  "shrink": true
+                }
+              ]
+            }
+          ],
+          "align": "stretch",
+          "spacing": [
+            0.0,
+            8.0,
+            8.0,
+            8.0,
+            8.0,
+            8.0,
+            8.0
+          ]
+        }
+      ],
+      "soft": false,
+      "nested": false,
+      "padding": 12.0,
+      "spacing": [
+        0.0
+      ]
+    },
+    {
+      "id": "children/9",
+      "a11y": {
+        "role": "text"
+      },
+      "component": "Text",
+      "text": {
+        "text": "Wear the bulkiest shoes and layer on the travel day, and roll rather than fold to fit everything in a carry-on.",
+        "runs": [],
+        "links": []
+      },
+      "inlines": [],
+      "style": "small",
+      "color": "muted-foreground",
+      "weight": "regular",
+      "italic": false,
+      "strike": false,
+      "digits": false,
+      "max_lines": null
+    }
+  ],
+  "align": "stretch",
+  "spacing": [
+    0.0,
+    24.0,
+    24.0,
+    24.0,
+    12.0,
+    24.0,
+    12.0,
+    24.0,
+    12.0,
+    24.0
+  ]
+}

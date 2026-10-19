@@ -82,23 +82,34 @@ impl Thread {
 /// The row of the first program of item `a`: the prose before it is block 0.
 const PROGRAM: &str = "a/1";
 
-/// The id of the first node of `component` whose props have `text` somewhere.
-fn find(tree: &Value, component: &str, text: &str) -> Option<String> {
-    if tree["component"] == component && tree["props"].to_string().contains(text) {
-        return tree["id"].as_str().map(str::to_string);
+/// Every node of a tree, parents first.
+fn nodes(value: &Value) -> Vec<&Value> {
+    let mut found = Vec::new();
+    if value.get("component").is_some() {
+        found.push(value);
     }
-    tree["children"].as_array()?.iter().find_map(|child| find(child, component, text))
+    match value {
+        Value::Array(items) => found.extend(items.iter().flat_map(nodes)),
+        Value::Object(map) => found.extend(map.values().flat_map(nodes)),
+        _ => {}
+    }
+    found
+}
+
+/// The id of the first node of `component` that has `text` somewhere.
+fn find(tree: &Value, component: &str, text: &str) -> Option<String> {
+    let node =
+        nodes(tree).into_iter().find(|node| node["component"] == component && node.to_string().contains(text))?;
+    node["id"].as_str().map(str::to_string)
+}
+
+fn node<'a>(tree: &'a Value, id: &str) -> &'a Value {
+    nodes(tree).into_iter().find(|node| node["id"] == id).unwrap_or_else(|| panic!("no node {id}"))
 }
 
 fn texts(tree: &Value) -> Vec<String> {
-    let mut found = Vec::new();
-    if tree["component"] == "Text" {
-        found.push(tree["props"]["text"].as_str().unwrap_or_default().to_string());
-    }
-    for child in tree["children"].as_array().into_iter().flatten() {
-        found.extend(texts(child));
-    }
-    found
+    let texts = nodes(tree).into_iter().filter(|node| node["component"] == "Text");
+    texts.map(|node| node["text"]["text"].as_str().unwrap_or_default().to_string()).collect()
 }
 
 fn patches(outs: &[Out]) -> Vec<UiOp> {
@@ -171,7 +182,7 @@ fn streams_a_program_and_completes_it_when_its_fence_closes() {
         programs.dress(&mut splice.rows, &|_, _| None);
         for row in splice.rows {
             let RowKind::Ui { ui } = row.kind else { continue };
-            grown.push((ui.complete, ui.tree.map(|tree| json!(tree).to_string().len()).unwrap_or(0)));
+            grown.push((ui.complete, ui.tree.map(|tree| nodes(&json!(tree)).len()).unwrap_or(0)));
         }
     }
     assert!(grown.len() > 3, "{grown:?}");
@@ -202,7 +213,7 @@ fn a_press_sets_state_and_patches_only_what_changed() {
     let ops = patches(&outs);
     assert_eq!(ops.len(), 1, "{ops:?}");
     assert!(
-        matches!(&ops[0], UiOp::Props { id, set, unset } if *id == text && set["props"]["text"] == "Count 1" && unset.is_empty())
+        matches!(&ops[0], UiOp::Props { id, set, unset } if *id == text && set["text"]["text"] == "Count 1" && unset.is_empty())
     );
     assert!(outs.iter().any(|out| matches!(out, Out::Wake { .. })));
     assert_eq!(texts(&thread.tree()), ["Count 1"]);
@@ -216,8 +227,7 @@ fn types_into_a_bound_field() {
     let field = find(&thread.tree(), "Input", "Name").unwrap();
     thread.event(&field, UiEvent::Value { value: json!("Ada") });
     assert_eq!(texts(&thread.tree()), ["Hello Ada"]);
-    let tree = thread.tree();
-    assert_eq!(tree["children"][0]["props"]["value"], "Ada");
+    assert_eq!(node(&thread.tree(), &field)["value"], "Ada");
 }
 
 #[test]
@@ -228,8 +238,8 @@ fn keeps_an_unbound_field_under_its_label() {
     thread.event(&field, UiEvent::Value { value: json!("Ada") });
     let checkbox = find(&thread.tree(), "Checkbox", "Done").unwrap();
     thread.event(&checkbox, UiEvent::Value { value: json!(true) });
-    assert_eq!(thread.tree()["children"][0]["props"]["value"], "Ada");
-    assert_eq!(thread.tree()["children"][1]["props"]["checked"], true);
+    assert_eq!(node(&thread.tree(), &field)["value"], "Ada");
+    assert_eq!(node(&thread.tree(), &checkbox)["checked"], true);
     let state = thread.programs.snapshot(PROGRAM).unwrap();
     assert_eq!(state["fields"]["Name"]["value"], "Ada");
     assert_eq!(state["fields"]["Done"]["value"], true);
@@ -252,7 +262,7 @@ fn moving_a_slider_patches_the_slider_and_what_reads_it() {
         .collect();
     assert_eq!(ids, [slider.as_str(), "children/3"]);
     let UiOp::Props { set, .. } = &ops[0] else { unreachable!() };
-    assert_eq!(set["props"]["value"], 42);
+    assert_eq!(set["value"], 42.0);
     assert!(patches(&thread.event(&slider, UiEvent::Value { value: json!(42) })).is_empty(), "nothing changed");
 }
 
@@ -458,7 +468,7 @@ fn a_patch_fence_shows_the_program_it_patches_merged() {
     assert_eq!(patched.base.as_deref(), Some("a/1"));
     assert_eq!(patched.source, "$n = 2\nroot = Col([title, Text(\"n\" + $n)])\ntitle = Title(\"After\")");
     let tree = json!(patched.tree);
-    assert_eq!(tree["children"][0]["props"]["text"], "After");
+    assert_eq!(node(&tree, "children/0")["text"]["text"], "After");
     assert_eq!(texts(&tree), ["n5"], "it starts from the state of the program it patches");
     let fresh = thread.ui("c/1");
     assert!(fresh.base.is_none() && fresh.source == "root = Col([Text(\"New\")])");
@@ -492,12 +502,12 @@ fn looks_up_photos_once_the_query_stays_and_routes_at_once() {
     assert!(
         patches(&outs)
             .iter()
-            .any(|op| matches!(op, UiOp::Props { set, .. } if set["props"]["media"] == json!(["p.jpg"])))
+            .any(|op| matches!(op, UiOp::Props { set, .. } if set["photos"]["media"] == json!(["p.jpg"])))
     );
     thread.programs.route(&stops, None);
-    let route = &thread.tree()["children"][1]["props"]["route"];
-    assert_eq!(route["label"], "Route overview");
-    assert_eq!(route["points"], json!(stops));
+    let map = node(&thread.tree(), "children/1").clone();
+    assert_eq!(map["route"], "overview");
+    assert_eq!(map["line"], json!(stops));
 }
 
 #[test]

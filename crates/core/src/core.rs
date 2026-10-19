@@ -217,6 +217,11 @@ enum Input {
         stops: Vec<[f64; 2]>,
         points: Option<Vec<[f64; 2]>>,
     },
+    UiHighlighted {
+        thread_id: String,
+        language: String,
+        code: String,
+    },
     Render,
     Tick,
     Stop,
@@ -615,6 +620,9 @@ impl Core {
             }
             Input::UiRouted { thread_id, stops, points } => {
                 self.with_programs(&thread_id, |programs| programs.route(&stops, points))
+            }
+            Input::UiHighlighted { thread_id, language, code } => {
+                self.with_programs(&thread_id, |programs| programs.highlighted(&language, &code))
             }
             Input::Render => self.render(),
             Input::Stop => {}
@@ -1852,6 +1860,13 @@ impl Core {
                             Err(_) => None,
                         };
                         let _ = inputs.send(Input::UiRouted { thread_id, stops, points });
+                    });
+                }
+                Out::Highlight { language, code } => {
+                    let inputs = inputs.clone();
+                    tokio::task::spawn_blocking(move || {
+                        highlight::highlight(&language, &code);
+                        let _ = inputs.send(Input::UiHighlighted { thread_id, language, code });
                     });
                 }
                 Out::Wake { after } => {

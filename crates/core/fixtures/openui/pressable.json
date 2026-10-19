@@ -1,0 +1,525 @@
+{
+  "id": "",
+  "a11y": {
+    "role": "group"
+  },
+  "component": "Card",
+  "children": [
+    {
+      "id": "children/0",
+      "a11y": {
+        "role": "heading",
+        "level": 2
+      },
+      "component": "Title",
+      "text": {
+        "text": "Your 4 × 4 ft garden plan",
+        "runs": [],
+        "links": []
+      },
+      "style": "card_heading",
+      "color": "foreground"
+    },
+    {
+      "id": "children/1",
+      "a11y": {
+        "role": "text"
+      },
+      "component": "Text",
+      "text": {
+        "text": "Tap a planter to see what grows there.",
+        "runs": [],
+        "links": []
+      },
+      "inlines": [],
+      "style": "small",
+      "color": "muted-foreground",
+      "weight": "regular",
+      "italic": false,
+      "strike": false,
+      "digits": false,
+      "max_lines": null
+    },
+    {
+      "id": "children/2",
+      "component": "Grid",
+      "children": [
+        {
+          "id": "children/2/children/0",
+          "a11y": {
+            "role": "button",
+            "label": "Lettuce + radishes 24-inch planter",
+            "on": true
+          },
+          "component": "Pressable",
+          "children": [
+            {
+              "id": "children/2/children/0/children/0",
+              "component": "Col",
+              "children": [
+                {
+                  "id": "children/2/children/0/children/0/children/0",
+                  "a11y": {
+                    "role": "hidden"
+                  },
+                  "component": "Icon",
+                  "icon": {
+                    "name": "leafy-green",
+                    "glyph": ""
+                  },
+                  "size": 24.0,
+                  "color": [
+                    13,
+                    13,
+                    13,
+                    255
+                  ]
+                },
+                {
+                  "id": "children/2/children/0/children/0/children/1",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Text",
+                  "text": {
+                    "text": "Lettuce + radishes",
+                    "runs": [],
+                    "links": []
+                  },
+                  "inlines": [],
+                  "style": "small",
+                  "color": [
+                    13,
+                    13,
+                    13,
+                    255
+                  ],
+                  "weight": "medium",
+                  "italic": false,
+                  "strike": false,
+                  "digits": false,
+                  "max_lines": null
+                },
+                {
+                  "id": "children/2/children/0/children/0/children/2",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Caption",
+                  "text": {
+                    "text": "24-inch planter",
+                    "runs": [],
+                    "links": []
+                  },
+                  "style": "caption",
+                  "color": [
+                    13,
+                    13,
+                    13,
+                    184
+                  ]
+                }
+              ],
+              "align": "center",
+              "spacing": [
+                0.0,
+                4.0,
+                4.0
+              ]
+            }
+          ],
+          "padding": 24.0,
+          "background": [
+            214,
+            232,
+            207,
+            255
+          ],
+          "inner_surface": false,
+          "radius": {
+            "kind": "lg",
+            "points": 12.0
+          },
+          "selected": true,
+          "ring": true,
+          "disabled": null
+        },
+        {
+          "id": "children/2/children/1",
+          "a11y": {
+            "role": "button",
+            "label": "Snap peas Pot + trellis",
+            "on": false
+          },
+          "component": "Pressable",
+          "children": [
+            {
+              "id": "children/2/children/1/children/0",
+              "component": "Col",
+              "children": [
+                {
+                  "id": "children/2/children/1/children/0/children/0",
+                  "a11y": {
+                    "role": "hidden"
+                  },
+                  "component": "Icon",
+                  "icon": {
+                    "name": "bean",
+                    "glyph": ""
+                  },
+                  "size": 24.0,
+                  "color": [
+                    13,
+                    13,
+                    13,
+                    255
+                  ]
+                },
+                {
+                  "id": "children/2/children/1/children/0/children/1",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Text",
+                  "text": {
+                    "text": "Snap peas",
+                    "runs": [],
+                    "links": []
+                  },
+                  "inlines": [],
+                  "style": "small",
+                  "color": [
+                    13,
+                    13,
+                    13,
+                    255
+                  ],
+                  "weight": "medium",
+                  "italic": false,
+                  "strike": false,
+                  "digits": false,
+                  "max_lines": null
+                },
+                {
+                  "id": "children/2/children/1/children/0/children/2",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Caption",
+                  "text": {
+                    "text": "Pot + trellis",
+                    "runs": [],
+                    "links": []
+                  },
+                  "style": "caption",
+                  "color": [
+                    13,
+                    13,
+                    13,
+                    184
+                  ]
+                }
+              ],
+              "align": "center",
+              "spacing": [
+                0.0,
+                4.0,
+                4.0
+              ]
+            }
+          ],
+          "padding": 24.0,
+          "background": [
+            214,
+            232,
+            207,
+            255
+          ],
+          "inner_surface": false,
+          "radius": {
+            "kind": "lg",
+            "points": 12.0
+          },
+          "selected": false,
+          "ring": false,
+          "disabled": null
+        },
+        {
+          "id": "children/2/children/2",
+          "a11y": {
+            "role": "button",
+            "label": "Kale 12-inch pot",
+            "on": false
+          },
+          "component": "Pressable",
+          "children": [
+            {
+              "id": "children/2/children/2/children/0",
+              "component": "Col",
+              "children": [
+                {
+                  "id": "children/2/children/2/children/0/children/0",
+                  "a11y": {
+                    "role": "hidden"
+                  },
+                  "component": "Icon",
+                  "icon": {
+                    "name": "leaf",
+                    "glyph": ""
+                  },
+                  "size": 24.0,
+                  "color": [
+                    13,
+                    13,
+                    13,
+                    255
+                  ]
+                },
+                {
+                  "id": "children/2/children/2/children/0/children/1",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Text",
+                  "text": {
+                    "text": "Kale",
+                    "runs": [],
+                    "links": []
+                  },
+                  "inlines": [],
+                  "style": "small",
+                  "color": [
+                    13,
+                    13,
+                    13,
+                    255
+                  ],
+                  "weight": "medium",
+                  "italic": false,
+                  "strike": false,
+                  "digits": false,
+                  "max_lines": null
+                },
+                {
+                  "id": "children/2/children/2/children/0/children/2",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Caption",
+                  "text": {
+                    "text": "12-inch pot",
+                    "runs": [],
+                    "links": []
+                  },
+                  "style": "caption",
+                  "color": [
+                    13,
+                    13,
+                    13,
+                    184
+                  ]
+                }
+              ],
+              "align": "center",
+              "spacing": [
+                0.0,
+                4.0,
+                4.0
+              ]
+            }
+          ],
+          "padding": 24.0,
+          "background": [
+            236,
+            223,
+            195,
+            255
+          ],
+          "inner_surface": false,
+          "radius": {
+            "kind": "lg",
+            "points": 12.0
+          },
+          "selected": false,
+          "ring": false,
+          "disabled": null
+        },
+        {
+          "id": "children/2/children/3",
+          "a11y": {
+            "role": "button",
+            "label": "Herbs 1 to 2 small pots",
+            "on": false
+          },
+          "component": "Pressable",
+          "children": [
+            {
+              "id": "children/2/children/3/children/0",
+              "component": "Col",
+              "children": [
+                {
+                  "id": "children/2/children/3/children/0/children/0",
+                  "a11y": {
+                    "role": "hidden"
+                  },
+                  "component": "Icon",
+                  "icon": {
+                    "name": "sprout",
+                    "glyph": ""
+                  },
+                  "size": 24.0,
+                  "color": [
+                    13,
+                    13,
+                    13,
+                    255
+                  ]
+                },
+                {
+                  "id": "children/2/children/3/children/0/children/1",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Text",
+                  "text": {
+                    "text": "Herbs",
+                    "runs": [],
+                    "links": []
+                  },
+                  "inlines": [],
+                  "style": "small",
+                  "color": [
+                    13,
+                    13,
+                    13,
+                    255
+                  ],
+                  "weight": "medium",
+                  "italic": false,
+                  "strike": false,
+                  "digits": false,
+                  "max_lines": null
+                },
+                {
+                  "id": "children/2/children/3/children/0/children/2",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Caption",
+                  "text": {
+                    "text": "1 to 2 small pots",
+                    "runs": [],
+                    "links": []
+                  },
+                  "style": "caption",
+                  "color": [
+                    13,
+                    13,
+                    13,
+                    184
+                  ]
+                }
+              ],
+              "align": "center",
+              "spacing": [
+                0.0,
+                4.0,
+                4.0
+              ]
+            }
+          ],
+          "padding": 24.0,
+          "background": [
+            236,
+            223,
+            195,
+            255
+          ],
+          "inner_surface": false,
+          "radius": {
+            "kind": "lg",
+            "points": 12.0
+          },
+          "selected": false,
+          "ring": false,
+          "disabled": null
+        }
+      ],
+      "columns": 2,
+      "min_child_width": null,
+      "gap": 12.0
+    },
+    {
+      "id": "children/3",
+      "component": "Row",
+      "children": [
+        {
+          "id": "children/3/children/0",
+          "a11y": {
+            "role": "hidden"
+          },
+          "component": "Icon",
+          "icon": {
+            "name": "sun",
+            "glyph": ""
+          },
+          "size": 14.0,
+          "color": "warning"
+        },
+        {
+          "id": "children/3/children/1",
+          "a11y": {
+            "role": "text"
+          },
+          "component": "Text",
+          "text": {
+            "text": "Selected: Lettuce + radishes. Give it 6+ hours of sunlight.",
+            "runs": [
+              [
+                10,
+                18,
+                1
+              ]
+            ],
+            "links": []
+          },
+          "inlines": [],
+          "style": "small",
+          "color": "foreground",
+          "weight": "regular",
+          "italic": false,
+          "strike": false,
+          "digits": false,
+          "max_lines": null
+        }
+      ],
+      "gap": 8.0,
+      "align": "center",
+      "justify": "start",
+      "wrap": false,
+      "sizing": [
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": true
+        },
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": true
+        }
+      ]
+    }
+  ],
+  "soft": false,
+  "nested": false,
+  "padding": null,
+  "spacing": [
+    0.0,
+    8.0,
+    12.0,
+    12.0
+  ]
+}

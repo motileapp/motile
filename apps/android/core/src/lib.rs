@@ -85,6 +85,21 @@ pub extern "system" fn Java_app_motile_core_Native_next<'caller>(
     .resolve::<ThrowRuntimeExAndDefault>()
 }
 
+/// Lays out a canvas component, a `canvas::Canvas` as JSON, and answers with its `canvas::Scene` as
+/// JSON. Synchronous, on any thread.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_app_motile_core_Native_uiLayout<'caller>(
+    mut env: EnvUnowned<'caller>,
+    _class: JClass<'caller>,
+    input: JString<'caller>,
+) -> JString<'caller> {
+    env.with_env(|env| -> Result<JString<'caller>, jni::errors::Error> {
+        let scene = motile_core::render::openui::canvas::layout_json(&input.to_string());
+        JString::from_str(env, scene)
+    })
+    .resolve::<ThrowRuntimeExAndDefault>()
+}
+
 /// Gives the JVM and the application to the crates that ask Android itself through `ndk_context`,
 /// like iroh's DNS resolver, which reads the system's nameservers. The reference is kept for good.
 #[cfg(target_os = "android")]
