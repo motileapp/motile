@@ -25,8 +25,8 @@ use crate::ui::control::{ControlIcon, ControlLabel};
 use crate::ui::menu::{Anchor, MenuIcon};
 use crate::ui::rich_text::RichText;
 use crate::ui::{
-    ActionButton, ActionMenu, AgentAvatars, FadingScroll, Variant, edges, icons, logos, tabular_numbers,
-    tabular_text_width, text_width,
+    ActionButton, ActionMenu, FadingScroll, Variant, edges, icons, logos, tabular_numbers, tabular_text_width,
+    text_width,
 };
 
 pub const STRIP_RADIUS: f32 = Radius::LG;
@@ -83,7 +83,7 @@ pub fn monitoring_strip(
         - agents_button_lead()
         - SPACER
         - stop.natural_width(window, cx);
-    let agents = children.map(|children| agents_button(store, children, false, room, window, cx));
+    let agents = children.map(|children| agents_button(store, children, room, window, cx));
     strip(true, Some(HEIGHT), cx)
         .child(
             div()
@@ -132,16 +132,15 @@ pub fn agents_strip(
     let stop = stops.then(|| stop_button(store, "stop-agents", "Stop its agents", cx));
     let room = width - strip_sides() - INSET - SPACER - stop.as_ref().map_or(0., |stop| stop.natural_width(window, cx));
     strip(true, Some(HEIGHT), cx)
-        .child(div().pl(px(INSET)).flex_shrink_0().child(agents_button(store, children, true, room, window, cx)))
+        .child(div().pl(px(INSET)).flex_shrink_0().child(agents_button(store, children, room, window, cx)))
         .child(div().flex_1().min_w(px(SPACER)))
         .children(stop)
 }
 
 const SPACER: f32 = 8.;
-const AVATAR_SIDE: f32 = 20.;
 const AGENTS_DOT: f32 = 3.;
 
-/// The room between the agents button's side and its avatars.
+/// The room between the agents button's side and its bot.
 fn agents_button_lead() -> f32 {
     ControlSize::Regular.padding() - ControlSize::Regular.symbol_outset()
 }
@@ -173,36 +172,15 @@ fn stop_button(store: &Entity<Store>, id: &'static str, help: &str, cx: &App) ->
     )
 }
 
-/// The agents that work, side by side or as a bot, as the way to the Agents tab. Where its words
-/// don't fit in `room` it only counts them.
-fn agents_button(
-    store: &Entity<Store>,
-    children: &Children,
-    avatars: bool,
-    room: f32,
-    window: &mut Window,
-    cx: &App,
-) -> ActionButton {
+/// The agents that work, as the way to the Agents tab. Where its words don't fit in `room` it
+/// only counts them.
+fn agents_button(store: &Entity<Store>, children: &Children, room: f32, window: &mut Window, cx: &App) -> ActionButton {
     let text = children.running_text.clone().unwrap_or_default();
-    let button = |words: String, tinted: Option<&str>| {
+    let button = |words: String| {
         let store = store.clone();
-        let button = ActionButton::new("composer-agents", words);
-        let button = match avatars {
-            true => {
-                let more = (children.running as usize).saturating_sub(children.working.len());
-                let pictures =
-                    AgentAvatars::new(children.working.iter().copied().map(Some).collect(), more).side(AVATAR_SIDE);
-                let width = pictures.width();
-                // Taller than the words, they reach into the button's room above and below them.
-                button.pictures(
-                    div().my(px((ControlSize::Regular.symbol_side() - AVATAR_SIDE) / 2.)).child(pictures),
-                    width,
-                )
-            }
-            false => button.symbol("bot").gap(SYMBOL_GAP),
-        };
-        button
-            .when_some(tinted, |button, tinted| button.tinted(tinted.to_string()))
+        ActionButton::new("composer-agents", words)
+            .symbol("bot")
+            .gap(SYMBOL_GAP)
             .help(text.clone())
             .ghost()
             .tint(Some(colors(cx).process))
@@ -215,15 +193,11 @@ fn agents_button(
                 })
             })
     };
-    let full = match (avatars, &children.running_count) {
-        (false, _) => button(format!("{} working", children.running), None),
-        (true, Some(count)) => button(count.clone(), Some("working")),
-        (true, None) => button(text.clone(), None),
-    };
+    let full = button(format!("{} working", children.running));
     if full.natural_width(window, cx) <= room {
         return full;
     }
-    button(children.running.to_string(), None)
+    button(children.running.to_string())
 }
 
 /// Why the agent stopped before it finished: the usage limit, with when the thread goes on by
