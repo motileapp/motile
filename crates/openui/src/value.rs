@@ -408,7 +408,7 @@ mod tests {
             Value::from(0.1),
             Value::from(f64::NAN),
             Value::from("a\"\\\n\u{1}é"),
-            Value::from(Element { component: "Text".into(), statement: None, props: Map::new(), partial: false }),
+            Value::from(Element::new("Text", Map::new())),
         ]
         .into_iter()
         .collect();

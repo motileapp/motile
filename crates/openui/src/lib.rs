@@ -11,17 +11,40 @@
 //! `fixtures/` holds the spec's conformance cases (`openui/1.0`, thesysdev/openui at 5a85af6) and
 //! the library open-intelligent-ui generates (`oiu`, at 0321343).
 
+pub mod ast;
 pub mod builtins;
+pub mod check;
 pub mod element;
+pub mod error;
+pub mod eval;
 pub mod js;
+pub mod lexer;
 pub mod library;
+pub mod merge;
+pub mod message;
+pub mod node;
+pub mod parser;
+pub mod program;
+pub mod query;
+pub mod rules;
+pub mod runtime;
 pub mod schema;
+pub mod serialize;
+pub mod source;
+pub mod store;
 pub mod value;
 
-pub use element::{ActionPlan, ActionStep, Element};
+pub use element::{ActionPlan, ActionStep, Binding, Element};
+pub use error::{Code, Error, Severity, Source};
 pub use library::{
     ActionDef, Args, Call, ComponentDef, Env, FixedEnv, FnError, FunctionDef, FunctionImpl, Group, Library, LibraryDef,
     LibraryError,
 };
+pub use merge::merge;
+pub use parser::{Parsed, Parser, parse};
+pub use program::{Lowerer, MutationDecl, Program, QueryDecl};
+pub use query::{Timer, ToolCall, ToolError};
+pub use runtime::{Effects, Event, FieldSpec, Forms, NoForms, Runtime, Step};
 pub use schema::{Field, Schema};
+pub use serialize::serialize;
 pub use value::{Map, Value};
