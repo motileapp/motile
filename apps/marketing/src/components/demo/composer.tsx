@@ -1,5 +1,6 @@
 import {
   ArrowUpIcon,
+  BotIcon,
   EyeIcon,
   FolderGit2Icon,
   FolderIcon,
@@ -12,7 +13,6 @@ import {
 } from "lucide-react"
 import { Fragment, useRef, useState, type ReactNode } from "react"
 import {
-  AgentAvatar,
   AgentIcon,
   EffortHighIcon,
   MenuChevron,
@@ -68,22 +68,10 @@ export function Composer({
           <Strip edge="top">
             <button
               type="button"
-              className="ml-[3px] flex h-7 min-w-0 items-center gap-1.5 rounded-md pr-[11px] pl-[9px] text-[12px] font-medium text-foreground hover:bg-border-composer"
+              className="ml-[3px] flex h-7 min-w-0 items-center gap-1 rounded-md pr-[11px] pl-[7.5px] text-[12px] font-medium text-process hover:bg-border-composer"
             >
-              <span className="flex shrink-0 -space-x-[5px]">
-                {working.map((run, index) => (
-                  <AgentAvatar
-                    key={index}
-                    agent={run.agent}
-                    cut={index > 0}
-                    side={20}
-                  />
-                ))}
-              </span>
-              <span className="truncate">
-                {working.length === 1 ? "1 agent" : `${working.length} agents`}{" "}
-                <span className="text-process">working</span>
-              </span>
+              <BotIcon className="size-3.5 shrink-0" />
+              <span className="truncate">{working.length} working</span>
             </button>
             {status.kind === "agents" && (
               <button

@@ -165,7 +165,7 @@ struct ComposerView: View {
                     .fill(Color.themeMutedStrongerForeground)
                     .frame(width: 3, height: 3)
                     .padding(.leading, Self.agentsButtonLead)
-                agentsButton(text, children: children, avatars: false)
+                agentsButton(text, children: children)
             }
             Spacer(minLength: 8)
             ActionButton("Stop", help: store.shortcuts.help(stopHelp, "thread.stop"), variant: .ghost, margin: ComposerStrip.margin) { store.stop() }
@@ -191,35 +191,24 @@ struct ComposerView: View {
         .modifier(ComposerStrip(edge: .top))
     }
 
-    /// The agents that work, side by side or as a bot, as the way to the Agents tab.
-    private func agentsButton(_ text: String, children: ThreadChildren, avatars: Bool = true) -> some View {
-        let pictures = AgentAvatars(
-            avatars: children.working.map { ($0, nil) }, more: max(0, children.running - children.working.count),
-            side: ComposerView.avatarSide)
-            // Taller than the words, they reach into the button's room above and below them.
-            .padding(.vertical, (ControlSize.regular.symbolSide - ComposerView.avatarSide) / 2)
-        let button = { (words: String, tinted: String?) in
+    /// The agents that work, as the way to the Agents tab.
+    private func agentsButton(_ text: String, children: ThreadChildren) -> some View {
+        let button = { (words: String) in
             ActionButton(
-                words, tinted: tinted, icon: avatars ? nil : .bot, pictures: avatars ? AnyView(pictures) : nil, help: text, variant: .ghost,
-                gap: avatars ? nil : Self.symbolGap, tint: .themeProcess,
+                words, icon: .bot, help: text, variant: .ghost, gap: Self.symbolGap, tint: .themeProcess,
                 margin: EdgeInsets(top: ComposerStrip.inset, leading: 0, bottom: ComposerStrip.inset, trailing: 0)
             ) { store.rightPanel.open(.agents) }
         }
         // A narrow composer only counts them.
         return ViewThatFits(in: .horizontal) {
-            if avatars {
-                button(children.runningCount ?? text, children.runningCount == nil ? nil : "working")
-            } else {
-                button("\(children.running) working", nil)
-            }
-            button("\(children.running)", nil)
+            button("\(children.running) working")
+            button("\(children.running)")
         }
     }
 
-    private static let avatarSide: CGFloat = 20
     /// The room between the monitoring strip's eye and bot and their words.
     private static let symbolGap: CGFloat = 4
-    /// The room between the agents button's side and its avatars.
+    /// The room between the agents button's side and its bot.
     private static let agentsButtonLead = ControlSize.regular.padding - ControlSize.regular.symbolOutset
 
     private var placeholder: String {

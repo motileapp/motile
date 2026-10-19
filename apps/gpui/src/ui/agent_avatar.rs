@@ -176,11 +176,6 @@ impl AgentAvatars {
         Self { agents, more, side: SIDE }
     }
 
-    pub fn side(mut self, side: f32) -> Self {
-        self.side = side;
-        self
-    }
-
     pub fn width(&self) -> f32 {
         let count = self.agents.len() + usize::from(self.more > 0);
         count.saturating_sub(1) as f32 * step(self.side) + self.side
