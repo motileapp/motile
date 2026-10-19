@@ -327,8 +327,12 @@ pub fn build_statement(tokens: &[Token]) -> Option<Statement> {
 /// Parses an expression from its tokens, newlines left out. Tokens after a complete expression
 /// are ignored.
 pub fn parse_expression(tokens: &[&Tok]) -> Expr {
-    ExprParser { tokens, at: 0 }.expr(0)
+    ExprParser { tokens, at: 0, depth: 0 }.expr(0)
 }
+
+/// How deep an expression is parsed: past it, the rest of the statement is left out, and
+/// materializing reports that it nests too deep.
+const MAX_DEPTH: usize = 2 * crate::program::MAX_DEPTH;
 
 const TERNARY: u8 = 1;
 const UNARY: u8 = 8;
@@ -337,6 +341,8 @@ const POSTFIX: u8 = 9;
 struct ExprParser<'a> {
     tokens: &'a [&'a Tok],
     at: usize,
+    /// The expressions open around the one parsed, each operator of a chain counted as one.
+    depth: usize,
 }
 
 impl<'a> ExprParser<'a> {
@@ -357,11 +363,26 @@ impl<'a> ExprParser<'a> {
     }
 
     fn expr(&mut self, min: u8) -> Expr {
-        let mut left = self.prefix();
-        while self.current().map_or(0, infix_precedence) > min {
+        let outside = self.depth;
+        let mut left = Expr::Null;
+        if self.deeper() {
+            left = self.prefix();
+        }
+        while self.current().map_or(0, infix_precedence) > min && self.deeper() {
             left = self.infix(left);
         }
+        self.depth = outside;
         left
+    }
+
+    /// Goes a level deeper, unless that is too deep: then the statement ends here.
+    fn deeper(&mut self) -> bool {
+        if self.depth >= MAX_DEPTH {
+            self.at = self.tokens.len();
+            return false;
+        }
+        self.depth += 1;
+        true
     }
 
     fn prefix(&mut self) -> Expr {

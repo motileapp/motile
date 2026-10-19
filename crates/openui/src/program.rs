@@ -24,6 +24,9 @@ use crate::schema::Field;
 use crate::value::Value;
 
 const ROOT: &str = "root";
+/// How deep a program nests, references followed: past it, the evaluator, the clients' trees and
+/// their JSON would run out of stack. The corpus nests 27 deep at most.
+pub const MAX_DEPTH: usize = 128;
 
 /// A parse, materialized.
 #[derive(Debug, Clone, Default)]
@@ -92,6 +95,9 @@ impl Program {
             scope: Vec::new(),
             cycles: 0,
             statement: None,
+            depth: 0,
+            deepest: 0,
+            too_deep: 0,
         };
         let entry = pick_entry(parsed, library.root());
         let root = entry.as_ref().map(|(name, _)| pass.resolve(name, Position::Value)).filter(Node::contains_element);
@@ -228,6 +234,8 @@ struct Cached {
     reached: Vec<String>,
     /// Every statement its lowering read, as it was.
     deps: Vec<(String, Arc<Statement>)>,
+    /// How many levels deep its node is.
+    height: usize,
     used: u64,
 }
 
@@ -247,6 +255,11 @@ struct Pass<'a> {
     cycles: usize,
     /// The statement being lowered, which errors name.
     statement: Option<String>,
+    /// How deep the expression being lowered is, references followed, the deepest it went, and
+    /// how many times it went too deep.
+    depth: usize,
+    deepest: usize,
+    too_deep: usize,
 }
 
 impl Pass<'_> {
@@ -298,12 +311,14 @@ impl Pass<'_> {
         let key = Key { name: name.to_owned(), position, partial: self.partial };
         if let Some(cached) = self.cache.get_mut(&key)
             && Arc::ptr_eq(&cached.statement, statement)
+            && self.depth + cached.height <= MAX_DEPTH
             && cached
                 .deps
                 .iter()
                 .all(|(name, dep)| self.parsed.statements.get(name).is_some_and(|current| Arc::ptr_eq(current, dep)))
         {
             cached.used = self.pass;
+            self.deepest = self.deepest.max(self.depth + cached.height);
             self.errors.extend(cached.errors.iter().cloned());
             self.reached.extend(cached.reached.iter().cloned());
             self.touched.extend(cached.deps.iter().cloned());
@@ -311,6 +326,7 @@ impl Pass<'_> {
         }
 
         let marks = (self.errors.len(), self.unresolved.len(), self.cycles, self.reached.len(), self.touched.len());
+        let (start, too_deep, deepest) = (self.depth, self.too_deep, std::mem::replace(&mut self.deepest, self.depth));
         self.visiting.push(name.to_owned());
         let statement_before = self.statement.replace(name.to_owned());
         let scope = std::mem::take(&mut self.scope);
@@ -318,13 +334,16 @@ impl Pass<'_> {
         self.scope = scope;
         self.statement = statement_before;
         self.visiting.pop();
-        if self.unresolved.len() == marks.1 && self.cycles == marks.2 {
+        let height = self.deepest - start;
+        self.deepest = self.deepest.max(deepest);
+        if self.unresolved.len() == marks.1 && self.cycles == marks.2 && self.too_deep == too_deep {
             let cached = Cached {
                 statement: statement.clone(),
                 node: node.clone(),
                 errors: self.errors[marks.0..].to_vec(),
                 reached: self.reached[marks.3..].to_vec(),
                 deps: self.touched[marks.4..].to_vec(),
+                height,
                 used: self.pass,
             };
             self.cache.insert(key, cached);
@@ -333,6 +352,23 @@ impl Pass<'_> {
     }
 
     fn lower(&mut self, expr: &Expr, position: Position) -> Node {
+        if self.depth >= MAX_DEPTH {
+            self.too_deep += 1;
+            if !self.errors.iter().any(|error| error.code == Code::ParseFailed) {
+                let message = format!("The program nests deeper than {MAX_DEPTH} levels");
+                let hint = Some("Nest less: split deep values into statements of their own".to_owned());
+                self.error(Code::ParseFailed, "", "", message, hint);
+            }
+            return Node::null();
+        }
+        self.depth += 1;
+        self.deepest = self.deepest.max(self.depth);
+        let node = self.lower_expr(expr, position);
+        self.depth -= 1;
+        node
+    }
+
+    fn lower_expr(&mut self, expr: &Expr, position: Position) -> Node {
         match expr {
             Expr::Str(text) => Node::Lit(Value::String(text.clone())),
             Expr::Num(value) => Node::Lit(Value::Number(*value)),

@@ -554,3 +554,25 @@ fn runs_every_corpus_program_without_errors() {
         assert!(ui.tree.is_some(), "{name} draws a tree");
     }
 }
+
+#[test]
+fn a_program_that_nests_too_deep_shows_an_error_instead_of_running_out_of_stack() {
+    let brackets = format!("root = Col([Text(\"n\" + @Count({}1{}))])", "[".repeat(5000), "]".repeat(5000));
+    let chain = format!("root = Col([Text(\"n\"{})])", " + 1".repeat(5000));
+    let nots = format!("root = Col([Text(\"n\" + {}true)])", "!".repeat(5000));
+    let references: String = (0..3000).map(|at| format!("\na{at} = [a{}]", at + 1)).collect();
+    let references = format!("root = Col([Text(\"n\" + @Count(a0))]){references}\na3000 = 1");
+    let deep_enough = format!("root = Col([Text(\"n\" + @Count({}1{}))])", "[".repeat(60), "]".repeat(60));
+    let errors = std::thread::Builder::new()
+        .stack_size(2 * 1024 * 1024)
+        .spawn(move || {
+            [brackets, chain, nots, references, deep_enough].map(|program| Thread::of(&program).ui(PROGRAM).errors)
+        })
+        .unwrap()
+        .join()
+        .expect("no stack overflow");
+    for errors in &errors[..4] {
+        assert!(errors.iter().any(|error| error.contains("nests deeper than 128 levels")), "{errors:?}");
+    }
+    assert_eq!(errors[4], Vec::<String>::new());
+}
