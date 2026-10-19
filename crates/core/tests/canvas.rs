@@ -186,6 +186,20 @@ fn charts_follow_the_references_rules() {
 }
 
 #[test]
+fn chart_labels_stay_inside_the_scene_at_phone_widths() {
+    for name in CHARTS {
+        for width in [300.0, 390.0] {
+            let scene = canvas::layout("Chart", &chart(name), width, 14.0);
+            for item in &scene.items {
+                let Item::Text(text) = item else { continue };
+                let (left, right) = paint::text_span(text);
+                assert!(left >= 0.0 && right <= scene.width, "{name} at {width}: {:?} spans {left}…{right}", text.text);
+            }
+        }
+    }
+}
+
+#[test]
 fn a_chart_lays_out_well_under_a_millisecond() {
     let props = chart("line-many");
     let started = Instant::now();

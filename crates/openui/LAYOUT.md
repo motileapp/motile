@@ -442,6 +442,9 @@ control, the pair a column.
   (`border` for grid, `muted-stronger-foreground` ticks in `tick`, `muted-foreground` categories in
   `caption`, `chart-1…6` series, the surface's `row` for a hovered bar band, `border-accent` dashed
   3/3 for the hover guide). Text is drawn by the client at core's anchor (end-, middle-aligned).
+  No label leaves the scene: core estimates a label at 0.7 em a character, makes the y gutter
+  that wide plus 12, and sets an x label that would cross an edge against that edge instead of
+  centring it.
 - Hover (pointer): the band under the pointer is lit and its tooltip shows; leaving hides it. Touch:
   a tap shows the tapped band's, a horizontal drag moves it, a vertical drag scrolls the transcript,
   a tap elsewhere hides it.

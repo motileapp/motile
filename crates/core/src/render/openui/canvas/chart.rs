@@ -210,10 +210,15 @@ fn ticks(lo: f64, hi: f64, step: f64) -> Vec<f64> {
     (0..=count as usize).map(|k| lo + k as f64 * step).collect()
 }
 
+/// A label's width by a generous estimate: DM Sans's widest common characters, 0.7 em each.
+fn label_width(label: &str, size: f64) -> f64 {
+    js::utf16_len(label) as f64 * size * 0.7
+}
+
 /// The y axis's gutter: wide enough for its longest tick label.
 fn gutter(ticks: &[f64], format: &Format) -> f64 {
-    let longest = ticks.iter().map(|tick| js::utf16_len(&format.write(*tick, true))).max().unwrap_or(0);
-    longest as f64 * 6.4 + 12.0
+    let longest = ticks.iter().map(|tick| label_width(&format.write(*tick, true), 11.0)).fold(0.0, f64::max);
+    longest + 12.0
 }
 
 fn legend(spec: &Spec) -> Option<Legend> {
@@ -246,6 +251,18 @@ fn text(text: String, x: f64, y: f64, anchor: Anchor, font: Font, color: Color) 
 
 fn tick_label(text_: String, x: f64, y: f64, anchor: Anchor) -> Item {
     text(text_, x, y, anchor, Font::Tick, Color::token("muted-stronger-foreground"))
+}
+
+/// Where a label centred on `x` goes: against the scene's edge instead where it would cross it.
+fn centred(label: &str, x: f64, size: f64, width: f64) -> (f64, Anchor) {
+    let half = label_width(label, size) / 2.0;
+    if x - half < 0.0 {
+        return (0.0, Anchor::Start);
+    }
+    if x + half > width {
+        return (width, Anchor::End);
+    }
+    (x, Anchor::Middle)
 }
 
 fn dot(cx: f64, cy: f64, r: f64, color: Color) -> Item {
@@ -355,7 +372,8 @@ fn cartesian(spec: &Spec, width: f64) -> Scene {
     }
     for (i, row) in rows.iter().enumerate().step_by(every) {
         let label = spec.label(row);
-        items.push(text(label, x_at(i), height - 6.0, Anchor::Middle, Font::Caption, Color::token("muted-foreground")));
+        let (x, anchor) = centred(&label, x_at(i), 12.0, width);
+        items.push(text(label, x, height - 6.0, anchor, Font::Caption, Color::token("muted-foreground")));
     }
     let under_marks = items.len() as u32;
     if *kind == Kind::Bar {
@@ -556,7 +574,9 @@ fn scatter(spec: &Spec, width: f64) -> Scene {
         items.push(tick_label(format.write(*tick, true), left - 10.0, py(*tick) + 4.0, Anchor::End));
     }
     for tick in xa.ticks.iter().step_by(every) {
-        items.push(tick_label(scatter_tick(*tick), px(*tick), height - 6.0, Anchor::Middle));
+        let label = scatter_tick(*tick);
+        let (x, anchor) = centred(&label, px(*tick), 11.0, width);
+        items.push(tick_label(label, x, height - 6.0, anchor));
     }
     let point = |cx: f64, cy: f64, r: f64, si: usize| Item::Circle {
         cx: round(cx),
