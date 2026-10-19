@@ -382,8 +382,8 @@ fn cartesian(spec: &Spec, width: f64) -> Scene {
             if stacked {
                 let base_of = |si: usize| if si == 0 { 0.0 } else { tops[i][si - 1] };
                 let topmost = (0..series.len()).rev().find(|&si| tops[i][si] > base_of(si));
-                for si in 0..series.len() {
-                    let top = y(tops[i][si]);
+                for (si, &stacked_top) in tops[i].iter().enumerate() {
+                    let top = y(stacked_top);
                     let base = y(base_of(si));
                     let end = (Some(si) == topmost).then_some(End::Top);
                     items.extend(bar(
