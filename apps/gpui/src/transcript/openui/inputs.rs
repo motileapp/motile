@@ -17,6 +17,10 @@ use motile_core::render::openui::tree::{
 use serde_json::Value;
 
 use super::layout::column;
+
+/// A text area's line, and the room above and below its lines, as LAYOUT.md has them.
+const TEXT_AREA_LINE: f32 = 18.;
+const TEXT_AREA_ROOM: f32 = 19.;
 use super::style::{self, CAPTION, LABEL, Look};
 use super::text::rich;
 use super::{UiCx, framed, node};
@@ -75,7 +79,10 @@ pub fn input(node: &UiNode, cx: &UiCx, window: &mut Window, app: &mut App) -> St
         }
         UiKind::TextArea { value, label, placeholder, rows, error, disabled } => {
             let area = area(id, value, placeholder.as_deref(), *rows, cx, window, app);
-            let control = TextArea::new(&area).surface(cx.surface);
+            let lines = (*rows).clamp(2, 20) as f32;
+            let control = div()
+                .h(px(lines * TEXT_AREA_LINE + TEXT_AREA_ROOM))
+                .child(TextArea::new(&area).fills(true).surface(cx.surface));
             labelled(element, label.as_deref(), control, error.as_deref(), disabled.is_some(), cx, app)
         }
         UiKind::Select { options, selected, label, placeholder, error, disabled, .. } => {
@@ -568,8 +575,14 @@ fn pressable(element: Stateful<Div>, item: &UiNode, cx: &UiCx, window: &mut Wind
     };
     let ground = (fill.is_some() || *selected == Some(true)).then_some(rest);
     let inner_cx = cx.on(inner).over(ground).within(cx.width - 2. * padding);
-    let laid: Vec<AnyElement> =
-        children.iter().map(|child| framed(&child.id, node(child, &inner_cx, window, app))).collect();
+    let laid: Vec<AnyElement> = children
+        .iter()
+        .map(|child| {
+            let laid = node(child, &inner_cx, window, app)
+                .when(super::layout::keeps_width(&child.kind), |child| child.self_start());
+            framed(&child.id, laid)
+        })
+        .collect();
     let (lit, pressed) = match fill {
         Some(_) => (c.wash(c.foreground, false), c.wash(c.foreground, true)),
         None => (cx.surface.layer(Layer::Row, c), cx.surface.layer(Layer::RowSelected, c)),

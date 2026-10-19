@@ -7,7 +7,7 @@ use gpui_kit::prelude::*;
 use gpui_kit::*;
 use motile_core::render::openui::host::UiEvent;
 use motile_core::render::openui::tree::{
-    Fit, MapPin, PhotoState, Photos, Radius, TableCell, TableColumn, UiKind, UiNode,
+    Fit, MapPin, PhotoState, Photos, Radius, TableCell, TableColumn, TextStyle, UiKind, UiNode,
 };
 
 use super::style::{self, LABEL, Look, SMALL, Type};
@@ -229,11 +229,9 @@ fn table(
     let mut least = Vec::with_capacity(columns.len());
     let mut most = Vec::with_capacity(columns.len());
     for (index, column) in columns.iter().enumerate() {
+        // A header is one line: all of it is as unbreakable as a word.
         let header = header_type.width(&column.title, window) + 2. * padding.header.1;
         let (mut low, mut high) = (header, header);
-        if !column.numeric {
-            low = widest_word(&column.title, header_type, window) + 2. * padding.header.1;
-        }
         for row in rows {
             let (word, line) = match row.get(index) {
                 Some(TableCell::Text { text }) => {
@@ -242,10 +240,10 @@ fn table(
                     let word = if column.numeric { line } else { widest_word(&text.text, ty, window) };
                     (word, line)
                 }
-                Some(TableCell::Node { node }) => {
-                    let width = node_width(node, window);
-                    (width, width)
-                }
+                Some(TableCell::Node { node }) => match node_width(node, cx.narrow(), window) {
+                    Some(width) => (width, width),
+                    None => (UNKNOWN_CELL.0, UNKNOWN_CELL.1),
+                },
                 None => (0., 0.),
             };
             low = low.max(word + 2. * padding.cell.1);
@@ -257,9 +255,13 @@ fn table(
     let widths = column_widths(&least, &most, inner);
     let total: f32 = widths.iter().sum();
     let card_cx = cx.on(Surface::Card);
-    let line = |last: bool| {
-        div().flex().flex_row().items_stretch().when(!last, |row| row.border_b_1().border_color(c.border_card))
-    };
+    // The lines lie inside the rows and the card, as they do on the Mac, taking no room.
+    let line =
+        |last: bool| {
+            div().relative().flex().flex_row().items_stretch().when(!last, |row| {
+                row.child(div().absolute().bottom_0().left_0().right_0().h(px(1.)).bg(c.border_card))
+            })
+        };
     let header = line(rows.is_empty()).children(columns.iter().zip(&widths).map(|(column, width)| {
         header_type
             .text_box()
@@ -318,31 +320,43 @@ fn table(
         .left_0()
         .right_0()
         .h(px(header_type.line + 2. * padding.header.0))
-        .rounded_t(px(Radii::LG - 1.))
+        .rounded_t(px(Radii::LG))
         .bg(c.card_accent);
     element
         .w_full()
         .relative()
         .rounded(px(Radii::LG))
-        .border_1()
-        .border_color(c.border_card)
         .bg(c.card)
         .overflow_hidden()
         .child(header_fill)
         .child(div().id(cx.id(id, "scroll")).w_full().overflow_x_scroll().child(grid))
+        .child(div().absolute().inset_0().rounded(px(Radii::LG)).border_1().border_color(c.border_card))
 }
 
 fn widest_word(text: &str, ty: Type, window: &Window) -> f32 {
     text.split_whitespace().map(|word| ty.width(word, window)).fold(0., f32::max)
 }
 
-/// How wide a component in a cell is at least: a badge or an icon its own width, anything else
-/// none.
-fn node_width(node: &UiNode, window: &Window) -> f32 {
+/// A cell's component that has no width of its own counts this wide at least and at most.
+const UNKNOWN_CELL: (f32, f32) = (120., 240.);
+
+/// How wide a component in a cell is on one line: a text with its inline parts, a badge, an icon.
+fn node_width(node: &UiNode, narrow: bool, window: &Window) -> Option<f32> {
+    let words =
+        |text: &str, style: TextStyle| style::type_of(style, narrow).width(&text.replace('\u{fffc}', ""), window);
     match &node.kind {
-        UiKind::Badge { text, tone, icon } => super::text::badge_width(text, tone.is_some(), icon.is_some(), window),
-        UiKind::Icon { size, .. } => *size,
-        _ => 0.,
+        UiKind::Badge { text, tone, icon } => {
+            Some(super::text::badge_width(text, tone.is_some(), icon.is_some(), window))
+        }
+        UiKind::Icon { size, .. } => Some(*size),
+        UiKind::Text { text, inlines, style, .. } => {
+            let parts: f32 =
+                inlines.iter().filter_map(|inline| node_width(inline, narrow, window)).map(|width| width + 2.).sum();
+            Some(words(&text.text, *style) + parts)
+        }
+        UiKind::Title { text, style, .. } | UiKind::Caption { text, style, .. } => Some(words(&text.text, *style)),
+        UiKind::Label { text, .. } => Some(style::LABEL.width(text, window)),
+        _ => None,
     }
 }
 
