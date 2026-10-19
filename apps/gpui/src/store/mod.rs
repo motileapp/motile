@@ -715,7 +715,9 @@ impl Store {
                     }
                 }
             }
-            Event::Rows { .. } | Event::AgentRows { .. } => {}
+            Event::Rows { .. } | Event::AgentRows { .. } | Event::UiPatch { .. } | Event::UiConfirm { .. } => {}
+            Event::OpenUrl { url } => cx.open_url(&url),
+            Event::Copy { text } => cx.write_to_clipboard(ClipboardItem::new_string(text)),
             Event::Keybindings { keybindings } => self.shortcuts = keybindings.into(),
             Event::ThreadSearch { query, searching, matches } => {
                 self.apply_thread_search(sidebar::MessageSearch::new(query, searching, matches))

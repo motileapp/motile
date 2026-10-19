@@ -552,6 +552,12 @@ final class AppStore {
         case "thread_error":
             let message = event.string("message")
             return { [weak self] in self?.errorMessage = message }
+        case "open_url":
+            guard let url = URL(string: event.string("url")) else { return nil }
+            return { Platform.open(url) }
+        case "copy":
+            let text = event.string("text")
+            return { Platform.copy(text) }
         default:
             return nil
         }

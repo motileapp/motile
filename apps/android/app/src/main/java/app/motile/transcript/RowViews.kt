@@ -92,6 +92,7 @@ fun TranscriptRow(row: RowModel) {
         is RowModel.Kind.TurnEnd -> TurnEndRow(row, kind.content)
         is RowModel.Kind.Handoff -> HandoffRow(kind.content)
         is RowModel.Kind.Removed -> RemovedRow(kind.content)
+        RowModel.Kind.Unknown -> {}
     }
 }
 

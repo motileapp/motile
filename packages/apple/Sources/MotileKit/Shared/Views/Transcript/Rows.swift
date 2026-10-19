@@ -43,6 +43,8 @@ final class RowModel {
         /// The thread's server was unlinked from the account: the last row, in place of the
         /// composer, which says why the thread can only be read.
         case removed(RemovedContent)
+        /// A row this client doesn't know how to show, which takes no room.
+        case unknown
     }
 
     let id: String
@@ -77,6 +79,8 @@ final class RowModel {
             kind = .prose(Typesetter.prose(json), uncoloured: uncoloured)
         case "code":
             kind = .code(CodeContent(language: json.string("language"), code: json.string("code"), spans: json["spans"] as? [NSNumber]))
+        case "ui":
+            kind = .code(CodeContent(language: "openui-lang", code: json.string("source"), spans: []))
         case "tool":
             kind = .tool(ToolContent(json: json))
         case "thinking":
@@ -106,7 +110,7 @@ final class RowModel {
         case "removed":
             kind = .removed(RemovedContent(json: json))
         default:
-            return nil
+            kind = .unknown
         }
         let width = TranscriptColumn.width
         guard width > 0 else { return }

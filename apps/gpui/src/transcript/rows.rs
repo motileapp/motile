@@ -1854,6 +1854,7 @@ pub fn render_row(model: &RowModel, ctx: &RowContext, window: &mut Window, cx: &
         }
         RowKind::Prose { .. } => prose_row(model, ctx, cx),
         RowKind::Code { language, code, .. } => code_row(model, language, code, ctx, cx),
+        RowKind::Ui { ui } => code_row(model, "openui-lang", &ui.source, ctx, cx),
         RowKind::Tool { .. } | RowKind::Thinking { .. } | RowKind::Group { .. } | RowKind::Fold { .. } => {
             tool_row(model, ctx, cx)
         }

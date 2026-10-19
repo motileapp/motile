@@ -66,6 +66,8 @@ class RowModel(
         class Queued(val content: QueuedContent) : Kind
         /** The thread's server was unlinked from the account: the last row, in place of the composer, which says why the thread can only be read. */
         class Removed(val content: RemovedContent) : Kind
+        /** A row this client doesn't know how to show, which takes no room. */
+        object Unknown : Kind
     }
 
     val isUser: Boolean get() = kind is Kind.User
@@ -112,6 +114,7 @@ class RowModel(
                 "user" -> Kind.User(MessageText(json, muted = false), json.objects("attachments").map(::AttachedFile), json.double("at"))
                 "prose" -> Kind.Prose(ProseContent(json))
                 "code" -> Kind.Code(CodeContent(json.string("language"), json.string("code"), json.optionalInts("spans")))
+                "ui" -> Kind.Code(CodeContent("openui-lang", json.string("source"), IntArray(0)))
                 "tool" -> Kind.Tool(ToolContent(json))
                 "thinking" -> Kind.Thinking(json.string("text"))
                 "media" -> Kind.Media(MediaContent(json))
@@ -126,7 +129,7 @@ class RowModel(
                 "agents" -> Kind.Agents(AgentsContent(json))
                 "queued" -> Kind.Queued(QueuedContent(MessageText(json, muted = true), json.objects("attachments").map(::AttachedFile), json.string("status")))
                 "removed" -> Kind.Removed(RemovedContent(json.string("server"), json.string("title"), json.string("message")))
-                else -> return null
+                else -> Kind.Unknown
             }
             return RowModel(json.string("id"), json.string("item"), json.bool("nested"), kind, Typesetter.spaceAbove(json))
         }

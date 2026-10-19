@@ -597,6 +597,14 @@ class AppStore(private val context: Context) {
                 val message = event.string("message")
                 return { errorMessage = message }
             }
+            "open_url" -> {
+                val url = event.string("url")
+                return { Platform.open(url) }
+            }
+            "copy" -> {
+                val text = event.string("text")
+                return { Platform.copy(text) }
+            }
             else -> return null
         }
     }

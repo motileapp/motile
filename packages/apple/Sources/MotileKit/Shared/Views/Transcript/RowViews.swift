@@ -78,7 +78,7 @@ class RowView: FlippedView {
             return TextMeasure.height(of: text, width: width - ErrorRowView.textInset) + ErrorRowView.padding
         case .removed(let content):
             return RemovedRowView.height(textHeight: TextMeasure.height(of: content.message, width: RemovedRowView.inner(width)))
-        case .code, .tool, .thinking, .group, .fold, .agent, .agents, .media, .file, .changes, .turnEnd, .handoff, .queued:
+        case .code, .tool, .thinking, .group, .fold, .agent, .agents, .media, .file, .changes, .turnEnd, .handoff, .queued, .unknown:
             return estimatedHeight(row, width: width)
         }
     }
@@ -115,6 +115,8 @@ class RowView: FlippedView {
         case .queued(let content):
             let attachments = AttachedFilesView.height(content.attachments, width: width)
             return estimatedTextHeight(content.text.length, width: width * 0.75) + 48 + QueuedRowView.footHeight + attachments
+        case .unknown:
+            return 0
         }
     }
 
@@ -139,6 +141,7 @@ class RowView: FlippedView {
         case .handoff: return HandoffRowView()
         case .queued: return QueuedRowView()
         case .removed: return RemovedRowView()
+        case .unknown: return RowView()
         }
     }
 
@@ -158,6 +161,7 @@ class RowView: FlippedView {
         case .handoff: return "handoff"
         case .queued: return "queued"
         case .removed: return "removed"
+        case .unknown: return "unknown"
         }
     }
 }
