@@ -90,6 +90,7 @@ final class WebPageView: FlippedView, WKNavigationDelegate, WKUIDelegate {
     private let address: URL
     private var webView: PageWebView!
     private var loaded = false
+    private var reloads = 0
 
     private static let scheme = "motile-page"
 
@@ -160,6 +161,15 @@ final class WebPageView: FlippedView, WKNavigationDelegate, WKUIDelegate {
         }
         if player, action.navigationType == .linkActivated, let url, Self.isYouTube(url) { Platform.open(url) }
         decisionHandler(.cancel)
+    }
+
+    /// The system ends a page's process to free memory, mostly while the client is away: the page
+    /// loads again, twice at most, so that one that ends its process itself doesn't run forever.
+    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        guard reloads < 2 else { return }
+        reloads += 1
+        loaded = false
+        load()
     }
 
     func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for action: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
