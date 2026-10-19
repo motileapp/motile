@@ -1,0 +1,546 @@
+{
+  "version": 8,
+  "name": "Motile light",
+  "metadata": {
+    "motile:generated": "OpenUI's map style. Generated from tokens.json by build.mjs: edit tokens.json and run `pnpm tokens`."
+  },
+  "glyphs": "https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf",
+  "sources": {
+    "openmaptiles": {
+      "type": "vector",
+      "url": "https://tiles.openfreemap.org/planet",
+      "attribution": "<a href=\"https://openfreemap.org\">OpenFreeMap</a> © <a href=\"https://www.openmaptiles.org\">OpenMapTiles</a> · Data from <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a>"
+    },
+    "route": {
+      "type": "geojson",
+      "data": {
+        "type": "FeatureCollection",
+        "features": []
+      }
+    },
+    "pins": {
+      "type": "geojson",
+      "data": {
+        "type": "FeatureCollection",
+        "features": []
+      }
+    }
+  },
+  "layers": [
+    {
+      "id": "background",
+      "type": "background",
+      "paint": {
+        "background-color": "#eef0f3"
+      }
+    },
+    {
+      "id": "landcover",
+      "type": "fill",
+      "source": "openmaptiles",
+      "source-layer": "landcover",
+      "filter": [
+        "in",
+        "class",
+        "wood",
+        "grass"
+      ],
+      "paint": {
+        "fill-color": "#bce9b0",
+        "fill-opacity": 0.8
+      }
+    },
+    {
+      "id": "parks",
+      "type": "fill",
+      "source": "openmaptiles",
+      "source-layer": "park",
+      "paint": {
+        "fill-color": "#b7e7aa"
+      }
+    },
+    {
+      "id": "school",
+      "type": "fill",
+      "source": "openmaptiles",
+      "source-layer": "landuse",
+      "filter": [
+        "in",
+        "class",
+        "school",
+        "university",
+        "hospital"
+      ],
+      "paint": {
+        "fill-color": "#ede8d7"
+      }
+    },
+    {
+      "id": "water",
+      "type": "fill",
+      "source": "openmaptiles",
+      "source-layer": "water",
+      "paint": {
+        "fill-color": "#a2dff5"
+      }
+    },
+    {
+      "id": "waterways",
+      "type": "line",
+      "source": "openmaptiles",
+      "source-layer": "waterway",
+      "paint": {
+        "line-color": "#91d6ef",
+        "line-width": 1
+      }
+    },
+    {
+      "id": "buildings",
+      "type": "fill",
+      "source": "openmaptiles",
+      "source-layer": "building",
+      "minzoom": 14,
+      "paint": {
+        "fill-color": "#e3e6eb"
+      }
+    },
+    {
+      "id": "streets",
+      "type": "line",
+      "source": "openmaptiles",
+      "source-layer": "transportation",
+      "filter": [
+        "!in",
+        "class",
+        "rail",
+        "transit",
+        "ferry",
+        "motorway",
+        "trunk",
+        "primary"
+      ],
+      "layout": {
+        "line-cap": "round",
+        "line-join": "round"
+      },
+      "paint": {
+        "line-color": "#cdd1d9",
+        "line-width": [
+          "interpolate",
+          [
+            "linear"
+          ],
+          [
+            "zoom"
+          ],
+          9,
+          0.3,
+          12,
+          1.5,
+          14,
+          2.8,
+          17,
+          8
+        ]
+      }
+    },
+    {
+      "id": "main-roads",
+      "type": "line",
+      "source": "openmaptiles",
+      "source-layer": "transportation",
+      "filter": [
+        "in",
+        "class",
+        "motorway",
+        "trunk",
+        "primary"
+      ],
+      "layout": {
+        "line-cap": "round",
+        "line-join": "round"
+      },
+      "paint": {
+        "line-color": "#b1b9c8",
+        "line-width": [
+          "interpolate",
+          [
+            "linear"
+          ],
+          [
+            "zoom"
+          ],
+          9,
+          0.7,
+          12,
+          3,
+          14,
+          5,
+          17,
+          12
+        ]
+      }
+    },
+    {
+      "id": "ferries",
+      "type": "line",
+      "source": "openmaptiles",
+      "source-layer": "transportation",
+      "filter": [
+        "==",
+        "class",
+        "ferry"
+      ],
+      "paint": {
+        "line-color": "#89cfe9",
+        "line-width": 0.8
+      }
+    },
+    {
+      "id": "neighborhood-labels",
+      "type": "symbol",
+      "source": "openmaptiles",
+      "source-layer": "place",
+      "minzoom": 10,
+      "maxzoom": 15,
+      "filter": [
+        "in",
+        "class",
+        "suburb",
+        "quarter",
+        "neighbourhood"
+      ],
+      "layout": {
+        "text-field": [
+          "coalesce",
+          [
+            "get",
+            "name_en"
+          ],
+          [
+            "get",
+            "name"
+          ]
+        ],
+        "text-font": [
+          "Noto Sans Regular"
+        ],
+        "text-size": 10,
+        "text-letter-spacing": 0.08,
+        "text-transform": "uppercase",
+        "text-max-width": 8
+      },
+      "paint": {
+        "text-color": "#606470",
+        "text-halo-color": "#eef0f3",
+        "text-halo-width": 1.2
+      }
+    },
+    {
+      "id": "city-labels",
+      "type": "symbol",
+      "source": "openmaptiles",
+      "source-layer": "place",
+      "minzoom": 7,
+      "maxzoom": 13,
+      "filter": [
+        "in",
+        "class",
+        "city",
+        "town"
+      ],
+      "layout": {
+        "text-field": [
+          "coalesce",
+          [
+            "get",
+            "name_en"
+          ],
+          [
+            "get",
+            "name"
+          ]
+        ],
+        "text-font": [
+          "Noto Sans Regular"
+        ],
+        "text-size": 14,
+        "text-max-width": 8
+      },
+      "paint": {
+        "text-color": "#606470",
+        "text-halo-color": "#eef0f3",
+        "text-halo-width": 1.5
+      }
+    },
+    {
+      "id": "route",
+      "type": "line",
+      "source": "route",
+      "layout": {
+        "line-cap": "round",
+        "line-join": "round"
+      },
+      "paint": {
+        "line-color": "#22242b",
+        "line-width": 3.2
+      }
+    },
+    {
+      "id": "pin-shadow",
+      "type": "circle",
+      "source": "pins",
+      "layout": {
+        "circle-sort-key": [
+          "case",
+          [
+            "boolean",
+            [
+              "get",
+              "selected"
+            ],
+            false
+          ],
+          1,
+          0
+        ]
+      },
+      "paint": {
+        "circle-radius": [
+          "case",
+          [
+            "!",
+            [
+              "has",
+              "icon"
+            ]
+          ],
+          14,
+          18
+        ],
+        "circle-color": "#000000",
+        "circle-opacity": 0.14,
+        "circle-blur": 0.5,
+        "circle-translate": [
+          0,
+          2
+        ]
+      }
+    },
+    {
+      "id": "pin",
+      "type": "circle",
+      "source": "pins",
+      "layout": {
+        "circle-sort-key": [
+          "case",
+          [
+            "boolean",
+            [
+              "get",
+              "selected"
+            ],
+            false
+          ],
+          1,
+          0
+        ]
+      },
+      "paint": {
+        "circle-radius": [
+          "case",
+          [
+            "!",
+            [
+              "has",
+              "icon"
+            ]
+          ],
+          11,
+          16
+        ],
+        "circle-color": [
+          "case",
+          [
+            "!",
+            [
+              "has",
+              "icon"
+            ]
+          ],
+          "#22242b",
+          "#ffffff"
+        ],
+        "circle-stroke-width": [
+          "case",
+          [
+            "!",
+            [
+              "has",
+              "icon"
+            ]
+          ],
+          2,
+          1
+        ],
+        "circle-stroke-color": [
+          "case",
+          [
+            "!",
+            [
+              "has",
+              "icon"
+            ]
+          ],
+          "#ffffff",
+          "#e9ebf0"
+        ]
+      }
+    },
+    {
+      "id": "pin-selected",
+      "type": "circle",
+      "source": "pins",
+      "filter": [
+        "boolean",
+        [
+          "get",
+          "selected"
+        ],
+        false
+      ],
+      "paint": {
+        "circle-radius": [
+          "case",
+          [
+            "!",
+            [
+              "has",
+              "icon"
+            ]
+          ],
+          14,
+          18
+        ],
+        "circle-opacity": 0,
+        "circle-stroke-width": 3,
+        "circle-stroke-color": "#22242b"
+      }
+    },
+    {
+      "id": "pin-mark",
+      "type": "symbol",
+      "source": "pins",
+      "layout": {
+        "symbol-sort-key": [
+          "case",
+          [
+            "boolean",
+            [
+              "get",
+              "selected"
+            ],
+            false
+          ],
+          1,
+          0
+        ],
+        "icon-image": [
+          "coalesce",
+          [
+            "get",
+            "icon"
+          ],
+          ""
+        ],
+        "text-field": [
+          "case",
+          [
+            "!",
+            [
+              "has",
+              "icon"
+            ]
+          ],
+          [
+            "get",
+            "number"
+          ],
+          ""
+        ],
+        "text-font": [
+          "Noto Sans Bold"
+        ],
+        "text-size": 12,
+        "text-allow-overlap": true,
+        "text-ignore-placement": true,
+        "icon-allow-overlap": true,
+        "icon-ignore-placement": true
+      },
+      "paint": {
+        "text-color": "#ffffff"
+      }
+    },
+    {
+      "id": "pin-label",
+      "type": "symbol",
+      "source": "pins",
+      "layout": {
+        "symbol-sort-key": [
+          "case",
+          [
+            "boolean",
+            [
+              "get",
+              "selected"
+            ],
+            false
+          ],
+          1,
+          0
+        ],
+        "text-field": [
+          "get",
+          "label"
+        ],
+        "text-font": [
+          "Noto Sans Bold"
+        ],
+        "text-size": 12,
+        "text-anchor": "top",
+        "text-offset": [
+          "case",
+          [
+            "!",
+            [
+              "has",
+              "icon"
+            ]
+          ],
+          [
+            "literal",
+            [
+              0,
+              1.4
+            ]
+          ],
+          [
+            "literal",
+            [
+              0,
+              1.7
+            ]
+          ]
+        ],
+        "text-max-width": 13,
+        "text-allow-overlap": true,
+        "text-ignore-placement": true
+      },
+      "paint": {
+        "text-color": "#22242b",
+        "text-halo-color": "#eef0f3",
+        "text-halo-width": 1.5
+      }
+    }
+  ]
+}

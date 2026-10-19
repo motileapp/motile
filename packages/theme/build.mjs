@@ -1,6 +1,7 @@
 // Writes the design tokens of tokens.json out as tokens.css, theme.css, the clients' Tokens.swift,
-// the GPUI app's tokens.rs and the Android app's Tokens.kt and colour resources. Run it with
-// `pnpm tokens` after changing tokens.json; what it writes is never edited by hand.
+// the GPUI app's tokens.rs, the Android app's Tokens.kt and colour resources, and the MapLibre
+// style of OpenUI's map in each appearance. Run it with `pnpm tokens` after changing tokens.json;
+// what it writes is never edited by hand.
 import { readFileSync, writeFileSync } from "node:fs"
 
 const here = (path) => new URL(path, import.meta.url)
@@ -293,6 +294,163 @@ function androidResources(mode) {
 `
 }
 
+/** OpenUI's map: OpenFreeMap's vector tiles (the OpenMapTiles schema) drawn in the tokens, with
+ *  the route and the pins as layers whose sources the client fills. */
+function mapStyle(mode) {
+  const c = colors[mode]
+  const name = ["coalesce", ["get", "name_en"], ["get", "name"]]
+  const numbered = ["!", ["has", "icon"]]
+  const selected = ["boolean", ["get", "selected"], false]
+  const empty = { type: "geojson", data: { type: "FeatureCollection", features: [] } }
+  const width = (stops) => ["interpolate", ["linear"], ["zoom"], ...stops]
+  const round = { "line-cap": "round", "line-join": "round" }
+  const overlap = { "text-allow-overlap": true, "text-ignore-placement": true }
+  const tiles = (id, type, layer, rest) => ({ id, type, source: "openmaptiles", "source-layer": layer, ...rest })
+  const style = {
+    version: 8,
+    name: `Motile ${mode}`,
+    metadata: { "motile:generated": generated("OpenUI's map style.") },
+    glyphs: "https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf",
+    sources: {
+      openmaptiles: {
+        type: "vector",
+        url: "https://tiles.openfreemap.org/planet",
+        attribution:
+          '<a href="https://openfreemap.org">OpenFreeMap</a> © <a href="https://www.openmaptiles.org">OpenMapTiles</a> · Data from <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+      },
+      route: empty,
+      pins: empty,
+    },
+    layers: [
+      { id: "background", type: "background", paint: { "background-color": c["map-land"] } },
+      tiles("landcover", "fill", "landcover", {
+        filter: ["in", "class", "wood", "grass"],
+        paint: { "fill-color": c["map-green"], "fill-opacity": 0.8 },
+      }),
+      tiles("parks", "fill", "park", { paint: { "fill-color": c["map-park"] } }),
+      tiles("school", "fill", "landuse", {
+        filter: ["in", "class", "school", "university", "hospital"],
+        paint: { "fill-color": c["map-campus"] },
+      }),
+      tiles("water", "fill", "water", { paint: { "fill-color": c["map-water"] } }),
+      tiles("waterways", "line", "waterway", { paint: { "line-color": c["map-waterway"], "line-width": 1 } }),
+      tiles("buildings", "fill", "building", { minzoom: 14, paint: { "fill-color": c["map-building"] } }),
+      tiles("streets", "line", "transportation", {
+        filter: ["!in", "class", "rail", "transit", "ferry", "motorway", "trunk", "primary"],
+        layout: round,
+        paint: { "line-color": c["map-street"], "line-width": width([9, 0.3, 12, 1.5, 14, 2.8, 17, 8]) },
+      }),
+      tiles("main-roads", "line", "transportation", {
+        filter: ["in", "class", "motorway", "trunk", "primary"],
+        layout: round,
+        paint: { "line-color": c["map-road"], "line-width": width([9, 0.7, 12, 3, 14, 5, 17, 12]) },
+      }),
+      tiles("ferries", "line", "transportation", {
+        filter: ["==", "class", "ferry"],
+        paint: { "line-color": c["map-ferry"], "line-width": 0.8 },
+      }),
+      tiles("neighborhood-labels", "symbol", "place", {
+        minzoom: 10,
+        maxzoom: 15,
+        filter: ["in", "class", "suburb", "quarter", "neighbourhood"],
+        layout: {
+          "text-field": name,
+          "text-font": ["Noto Sans Regular"],
+          "text-size": 10,
+          "text-letter-spacing": 0.08,
+          "text-transform": "uppercase",
+          "text-max-width": 8,
+        },
+        paint: { "text-color": c["muted-foreground"], "text-halo-color": c["map-land"], "text-halo-width": 1.2 },
+      }),
+      tiles("city-labels", "symbol", "place", {
+        minzoom: 7,
+        maxzoom: 13,
+        filter: ["in", "class", "city", "town"],
+        layout: { "text-field": name, "text-font": ["Noto Sans Regular"], "text-size": 14, "text-max-width": 8 },
+        paint: { "text-color": c["muted-foreground"], "text-halo-color": c["map-land"], "text-halo-width": 1.5 },
+      }),
+      {
+        id: "route",
+        type: "line",
+        source: "route",
+        layout: round,
+        paint: { "line-color": c.foreground, "line-width": 3.2 },
+      },
+      {
+        id: "pin-shadow",
+        type: "circle",
+        source: "pins",
+        layout: { "circle-sort-key": ["case", selected, 1, 0] },
+        paint: {
+          "circle-radius": ["case", numbered, 14, 18],
+          "circle-color": c.shadow,
+          "circle-opacity": opacity[mode]["shadow-stronger"],
+          "circle-blur": 0.5,
+          "circle-translate": [0, 2],
+        },
+      },
+      {
+        id: "pin",
+        type: "circle",
+        source: "pins",
+        layout: { "circle-sort-key": ["case", selected, 1, 0] },
+        paint: {
+          "circle-radius": ["case", numbered, 11, 16],
+          "circle-color": ["case", numbered, c.foreground, c.card],
+          "circle-stroke-width": ["case", numbered, 2, 1],
+          "circle-stroke-color": ["case", numbered, c.card, c["border-card"]],
+        },
+      },
+      {
+        id: "pin-selected",
+        type: "circle",
+        source: "pins",
+        filter: selected,
+        paint: {
+          "circle-radius": ["case", numbered, 14, 18],
+          "circle-opacity": 0,
+          "circle-stroke-width": 3,
+          "circle-stroke-color": c.ring,
+        },
+      },
+      {
+        id: "pin-mark",
+        type: "symbol",
+        source: "pins",
+        layout: {
+          "symbol-sort-key": ["case", selected, 1, 0],
+          "icon-image": ["coalesce", ["get", "icon"], ""],
+          "text-field": ["case", numbered, ["get", "number"], ""],
+          "text-font": ["Noto Sans Bold"],
+          "text-size": 12,
+          ...overlap,
+          "icon-allow-overlap": true,
+          "icon-ignore-placement": true,
+        },
+        paint: { "text-color": c.card },
+      },
+      {
+        id: "pin-label",
+        type: "symbol",
+        source: "pins",
+        layout: {
+          "symbol-sort-key": ["case", selected, 1, 0],
+          "text-field": ["get", "label"],
+          "text-font": ["Noto Sans Bold"],
+          "text-size": 12,
+          "text-anchor": "top",
+          "text-offset": ["case", numbered, ["literal", [0, 1.4]], ["literal", [0, 1.7]]],
+          "text-max-width": 13,
+          ...overlap,
+        },
+        paint: { "text-color": c.foreground, "text-halo-color": c["map-land"], "text-halo-width": 1.5 },
+      },
+    ],
+  }
+  return `${JSON.stringify(style, null, 2)}\n`
+}
+
 writeFileSync(here("tokens.css"), tokensCSS())
 writeFileSync(here("theme.css"), themeCSS())
 writeFileSync(here("../apple/Sources/MotileKit/Shared/Theme/Tokens.swift"), swift())
@@ -300,3 +458,5 @@ writeFileSync(here("../../apps/gpui/src/tokens.rs"), rust())
 writeFileSync(here("../../apps/android/app/src/main/java/app/motile/theme/Tokens.kt"), kotlin())
 writeFileSync(here("../../apps/android/app/src/main/res/values/tokens.xml"), androidResources("light"))
 writeFileSync(here("../../apps/android/app/src/main/res/values-night/tokens.xml"), androidResources("dark"))
+writeFileSync(here("map-style-light.json"), mapStyle("light"))
+writeFileSync(here("map-style-dark.json"), mapStyle("dark"))

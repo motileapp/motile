@@ -73,7 +73,10 @@ The design tokens. `tokens.json` is the one source of every colour, opacity, sha
 in the repo; `pnpm tokens` (`build.mjs`) writes it out as `tokens.css` (plain variables, for the
 auth page), `theme.css` (Tailwind, for the web projects), the clients' `Tokens.swift` and the
 GPUI app's `apps/gpui/src/tokens.rs`, and the Android app's `Tokens.kt` with the few colours Android
-itself draws before the app does (`res/values/tokens.xml` and `res/values-night/tokens.xml`). A colour that only one place needs, like the window buttons
+itself draws before the app does (`res/values/tokens.xml` and `res/values-night/tokens.xml`). It
+also writes OpenUI's map style for MapLibre, `map-style-light.json` and `map-style-dark.json`
+beside it, which every client bundles: OpenFreeMap's vector tiles drawn in the `map-*` tokens,
+with the route and the pins as layers. A colour that only one place needs, like the window buttons
 of the demo or the icons' tile, is added to the JSON, never written where it is used.
 
 ### apps/marketing (Astro, static) and apps/web (TanStack Start)
@@ -432,7 +435,7 @@ redone for its versions in `patches/crates`; the script refuses a patch that `Ca
 - Do not edit generated code: `Cargo.lock`, `pnpm-lock.yaml`, `apps/web/src/routeTree.gen.ts`,
   and what `pnpm tokens` writes from `packages/theme/tokens.json`: `tokens.css`, `theme.css`,
   `Tokens.swift`, `apps/gpui/src/tokens.rs`, the Android app's `Tokens.kt` and its
-  `res/values*/tokens.xml`.
+  `res/values*/tokens.xml`, and `packages/theme/map-style-*.json`.
   The shadcn components in `src/components/ui` are ours once added: they are rewritten on the
   design tokens and edited like any view. Never edit an applied migration in
   `apps/auth/migrations` or `apps/server/migrations`, add a new one.
