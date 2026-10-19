@@ -364,8 +364,8 @@ pub fn confirmation(
         let close = close.clone();
         let action = answer.action;
         let run: Run = Rc::new(move |window: &mut Window, cx: &mut App| {
-            close(window, cx);
             action(window, cx);
+            close(window, cx);
         });
         on_return = run.clone();
         buttons.push(
