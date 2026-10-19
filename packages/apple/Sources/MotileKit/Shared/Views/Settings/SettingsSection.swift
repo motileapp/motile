@@ -18,7 +18,7 @@ enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
         case .general: "General"
         case .keyboard: "Keybindings"
         case .servers: "Servers"
-        case .accounts: "Accounts"
+        case .accounts: "Providers"
         case .projects: "Projects"
         case .textGeneration: "Text Generation"
         case .pullRequests: "Pull Requests"
@@ -57,7 +57,7 @@ struct SettingsEntry: Identifiable, Hashable {
         SettingsEntry(id: "appearance", title: "Theme", section: .general, keywords: "appearance light dark system mode"),
         SettingsEntry(id: "messages", title: "Sent while the agent works", section: .general, keywords: "messages queue steer interrupt"),
         SettingsEntry(id: "storage", title: "Images and videos", section: .general, keywords: "storage cache clear media disk"),
-        SettingsEntry(id: "agent-accounts", title: "Accounts", section: .accounts, keywords: "agents claude codex sign in login folder subscription plan api key router"),
+        SettingsEntry(id: "agent-accounts", title: "Provider Accounts", section: .accounts, keywords: "agents claude codex sign in login folder subscription plan api key router"),
         SettingsEntry(id: "servers", title: "Servers", section: .servers, keywords: "add remove unlink unlinked delete copies machine agents connected"),
         SettingsEntry(id: "continue-limits", title: "Continue after usage limits", section: .servers, keywords: "rate limit reset resume quota wait"),
         SettingsEntry(id: "continue-restarts", title: "Continue after restarts", section: .servers, keywords: "restart update crash resume interrupted"),

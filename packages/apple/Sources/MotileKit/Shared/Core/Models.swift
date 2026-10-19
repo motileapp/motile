@@ -1341,21 +1341,25 @@ enum Time {
         return date.formatted(date: today ? .omitted : .abbreviated, time: .shortened)
     }
 
-    /// "850ms", "12s", "3m 5s", "1h 2m".
+    /// "850ms", "12s", "3m 05s", "1h 02m".
     static func duration(milliseconds: Int) -> String {
         if milliseconds < 1000 { return "\(milliseconds)ms" }
         let seconds = milliseconds / 1000
         if seconds < 60 { return "\(seconds)s" }
-        if seconds < 3600 { return "\(seconds / 60)m \(seconds % 60)s" }
-        return "\(seconds / 3600)h \(seconds % 3600 / 60)m"
+        return Self.minutes(seconds)
     }
 
-    /// A running timer: "5s", "12m", "1h 3m".
+    /// "3m 05s", "1h 02m": the second unit always takes two digits, so a timer doesn't jump.
+    private static func minutes(_ seconds: Int) -> String {
+        if seconds < 3600 { return "\(seconds / 60)m \(String(format: "%02d", seconds % 60))s" }
+        return "\(seconds / 3600)h \(String(format: "%02d", seconds % 3600 / 60))m"
+    }
+
+    /// A running timer: "5s", "12m 03s", "1h 03m".
     static func elapsed(since timestamp: Double, now: Double = Date().timeIntervalSince1970) -> String {
         let seconds = max(0, Int(now - timestamp))
         if seconds < 60 { return "\(seconds)s" }
-        if seconds < 3600 { return "\(seconds / 60)m \(seconds % 60)s" }
-        return "\(seconds / 3600)h \(seconds % 3600 / 60)m"
+        return Self.minutes(seconds)
     }
 }
 

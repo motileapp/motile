@@ -212,9 +212,19 @@ pub fn dims<E: StatefulInteractiveElement + Styled>(element: E, cx: &App) -> E {
 
 /// How wide a line of the interface's type is drawn.
 pub fn text_width(text: &str, size: f32, weight: FontWeight, window: &mut Window) -> f32 {
+    line_width(text, size, crate::transcript::rows::font(crate::theme::UI_FONT, weight, false), window)
+}
+
+/// How wide a line of the interface's type is drawn with `tabular_numbers`.
+pub fn tabular_text_width(text: &str, size: f32, weight: FontWeight, window: &mut Window) -> f32 {
+    let font = crate::transcript::rows::font(crate::theme::UI_FONT, weight, false);
+    line_width(text, size, Font { features: tabular_numbers(), ..font }, window)
+}
+
+fn line_width(text: &str, size: f32, font: Font, window: &mut Window) -> f32 {
     let run = TextRun {
         len: text.len(),
-        font: crate::transcript::rows::font(crate::theme::UI_FONT, weight, false),
+        font,
         color: gpui_kit::black(),
         background_color: None,
         underline: None,

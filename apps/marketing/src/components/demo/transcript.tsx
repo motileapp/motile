@@ -314,7 +314,7 @@ function AgentGroup({
   )
 }
 
-/** "1m 4s" in seconds. */
+/** "1m 04s" in seconds. */
 function seconds(took: string) {
   const minutes = Number(/(\d+)m/.exec(took)?.[1] ?? 0)
   return minutes * 60 + Number(/(\d+)s/.exec(took)?.[1] ?? 0)

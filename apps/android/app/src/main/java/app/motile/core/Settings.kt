@@ -13,7 +13,7 @@ enum class SettingsSection(val raw: String) {
             General -> "General"
             Keyboard -> "Keybindings"
             Servers -> "Servers"
-            Accounts -> "Accounts"
+            Accounts -> "Providers"
             Projects -> "Projects"
             TextGeneration -> "Text Generation"
             PullRequests -> "Pull Requests"
@@ -56,7 +56,7 @@ data class SettingsEntry(
             SettingsEntry("appearance", "Theme", SettingsSection.General, "appearance light dark system mode"),
             SettingsEntry("messages", "Sent while the agent works", SettingsSection.General, "messages queue steer interrupt"),
             SettingsEntry("storage", "Images and videos", SettingsSection.General, "storage cache clear media disk"),
-            SettingsEntry("agent-accounts", "Accounts", SettingsSection.Accounts, "agents claude codex sign in login folder subscription plan api key router"),
+            SettingsEntry("agent-accounts", "Provider Accounts", SettingsSection.Accounts, "agents claude codex sign in login folder subscription plan api key router"),
             SettingsEntry("servers", "Servers", SettingsSection.Servers, "add remove unlink unlinked delete copies machine agents connected"),
             SettingsEntry("continue-limits", "Continue after usage limits", SettingsSection.Servers, "rate limit reset resume quota wait"),
             SettingsEntry("continue-restarts", "Continue after restarts", SettingsSection.Servers, "restart update crash resume interrupted"),
