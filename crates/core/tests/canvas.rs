@@ -392,3 +392,46 @@ fn chart_of(input: &str) -> Map {
     let value = Value::from_json_str(input).unwrap();
     value.get("props").unwrap().as_object().unwrap().clone()
 }
+
+/// The cases every client's painter is compared with, in `fixtures/canvas/reference`: each scene as
+/// JSON and as the reference painter paints it in both appearances, and `cases.json`, which names
+/// them with the hit to light and the boxes of their labels, outside which the pictures must agree.
+#[test]
+fn client_references_match() {
+    let mut cases = Vec::new();
+    for name in CHARTS {
+        let props = chart(name);
+        cases.push((format!("chart-{name}-390"), canvas::layout("Chart", &props, 390.0, 14.0), false));
+        cases.push((format!("chart-{name}-720"), canvas::layout("Chart", &props, 720.0, 14.0), true));
+    }
+    for name in ["shapes", "bike", "paths"] {
+        let props = svg(name);
+        cases.push((format!("svg-{name}-390"), canvas::layout("Svg", &props, 390.0, 14.0), false));
+        cases.push((format!("svg-{name}-720"), canvas::layout("Svg", &props, 720.0, 14.0), false));
+    }
+    for (name, tex) in [("integral", FORMULAS[4]), ("matrix", FORMULAS[6]), ("chemistry", FORMULAS[14])] {
+        cases.push((format!("math-{name}"), canvas::math::layout(tex, false, 14.0), false));
+    }
+    cases.push(("math-error".into(), canvas::layout("Math", &props(r#"{"tex": "\\frac{1}{"}"#), 400.0, 14.0), false));
+
+    let manifest: Vec<String> = cases
+        .iter()
+        .map(|(name, scene, hovered)| {
+            let hover = (*hovered && !scene.hits.is_empty()).then_some(scene.hits.len() / 2);
+            golden(&format!("reference/{name}.json"), &json(scene));
+            for theme in [Theme::Dark, Theme::Light] {
+                golden_png(&format!("reference/{name}"), scene, theme, hover);
+            }
+            let masks: Vec<[f64; 4]> = scene
+                .items
+                .iter()
+                .filter_map(|item| match item {
+                    Item::Text(text) => Some(paint::text_box(text).map(|v| (f64::from(v) * 100.0).round() / 100.0)),
+                    _ => None,
+                })
+                .collect();
+            serde_json::json!({"name": name, "hover": hover, "scale": 2, "masks": masks}).to_string()
+        })
+        .collect();
+    golden("reference/cases.json", &format!("[\n{}\n]\n", manifest.join(",\n")));
+}

@@ -106,6 +106,16 @@ extension Theme {
 ${names.map((name) => `    static let ${camel(name)} = tone(${hex(colors.light[name])}, ${hex(colors.dark[name])})`).join("\n")}
 }
 
+extension Theme {
+    /// The colour of a token by its name in tokens.json, as OpenUI's scenes and trees name them.
+    static func named(_ name: String) -> PlatformColor? {
+        switch name {
+${names.map((name) => `        case "${name}": ${camel(name)}`).join("\n")}
+        default: nil
+        }
+    }
+}
+
 extension Color {
 ${names.map((name) => `    static let theme${camel(`-${name}`)} = Color(platform: Theme.${camel(name)})`).join("\n")}
 }
@@ -179,6 +189,14 @@ ${palette("light")}
         Self {
 ${palette("dark")}
         }
+    }
+
+    /// The colour of a token by its name in tokens.json, as OpenUI's scenes and trees name them.
+    pub fn named(&self, name: &str) -> Option<Hsla> {
+        Some(match name {
+${names.map((name) => `            "${name}" => self.${snake(name)},`).join("\n")}
+            _ => return None,
+        })
     }
 }
 
@@ -260,6 +278,12 @@ ${palette("light")}
         val dark = Palette(
 ${palette("dark")}
         )
+    }
+
+    /** The colour of a token by its name in tokens.json, as OpenUI's scenes and trees name them. */
+    fun named(name: String): Color? = when (name) {
+${names.map((name) => `        "${name}" -> ${camel(name)}`).join("\n")}
+        else -> null
     }
 }
 
