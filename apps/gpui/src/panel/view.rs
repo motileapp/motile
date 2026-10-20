@@ -1190,7 +1190,7 @@ impl RightPanelView {
         let c = colors(cx);
         let store = self.store.read(cx);
         let agents = store.agents.clone();
-        let parent = store.parent_thread().map(|thread| (thread.id.clone(), thread.title.clone()));
+        let parent = store.parent_thread().map(|thread| thread.id.clone());
         let shown_agent = store.right_panel.shown_agent.clone();
         if agents.is_empty() && parent.is_none() {
             return Self::message("The agents this thread starts show up here.", false, cx);
@@ -1204,8 +1204,7 @@ impl RightPanelView {
         );
         let (working, ended): (Vec<AgentView>, Vec<AgentView>) = agents.into_iter().partition(|agent| agent.working());
         let shown = self.shows_ended.unwrap_or(working.is_empty());
-        let mut entries: Vec<AgentEntry> =
-            parent.into_iter().map(|(id, title)| AgentEntry::Parent { id, title }).collect();
+        let mut entries: Vec<AgentEntry> = parent.into_iter().map(AgentEntry::Parent).collect();
         entries.extend(working.into_iter().map(|agent| AgentEntry::Agent(Box::new(agent))));
         if !ended.is_empty() {
             let failed = ended.iter().filter(|agent| agent.status == ToolStatus::Failed).count();
@@ -1220,7 +1219,7 @@ impl RightPanelView {
         let list = list(self.agents.clone(), move |index, _, cx| {
             let Some(entry) = entries.get(index) else { return div().into_any_element() };
             match entry {
-                AgentEntry::Parent { id, title } => parent_row(id, title, &store, cx).into_any_element(),
+                AgentEntry::Parent(id) => parent_row(id, &store, cx).into_any_element(),
                 AgentEntry::Ended { count, failed, shown } => {
                     let (view, shown) = (view.clone(), *shown);
                     ended_header(*count, *failed, shown, cx)
@@ -1584,10 +1583,7 @@ fn act_path(
 /// A row of the agents tab.
 enum AgentEntry {
     /// The thread whose agent started this one.
-    Parent {
-        id: String,
-        title: String,
-    },
+    Parent(String),
     Agent(Box<AgentView>),
     /// Over the agents that ended, which it folds.
     Ended {
@@ -1600,7 +1596,7 @@ enum AgentEntry {
 impl AgentEntry {
     fn key(&self) -> String {
         match self {
-            Self::Parent { id, title } => format!("parent:{id}:{title}"),
+            Self::Parent(id) => format!("parent:{id}"),
             Self::Ended { count, failed, shown } => format!("ended:{count}:{failed}:{shown}"),
             Self::Agent(agent) => format!(
                 "agent:{}:{}:{:?}:{:?}:{:?}:{}:{:?}:{}:{}:{}",
@@ -1620,7 +1616,7 @@ impl AgentEntry {
 }
 
 /// The thread whose agent started this one, which a click opens.
-fn parent_row(id: &str, title: &str, store: &Entity<Store>, cx: &App) -> Div {
+fn parent_row(id: &str, store: &Entity<Store>, cx: &App) -> Div {
     let c = colors(cx);
     let group: SharedString = format!("agents-parent-{id}").into();
     let id = id.to_string();
@@ -1637,30 +1633,23 @@ fn parent_row(id: &str, title: &str, store: &Entity<Store>, cx: &App) -> Div {
                     .relative()
                     .flex()
                     .items_center()
-                    .gap(px(9.))
+                    .gap(px(6.))
                     .child(
                         div()
                             .w(px(16.))
                             .flex()
                             .justify_center()
-                            .child(icons::symbol("corner-left-up", 12.).text_color(c.muted_foreground)),
+                            .child(icons::symbol("corner-left-up", 12.).text_color(c.foreground)),
                     )
                     .child(
                         div()
                             .flex_1()
                             .min_w_0()
-                            .flex()
-                            .flex_col()
-                            .gap(px(2.))
-                            .child(div().text_size(px(11.)).text_color(c.muted_stronger_foreground).child("Started by"))
-                            .child(
-                                div()
-                                    .text_size(px(13.))
-                                    .font_weight(FontWeight::MEDIUM)
-                                    .text_color(c.foreground)
-                                    .truncate()
-                                    .child(title.to_string()),
-                            ),
+                            .text_size(px(13.))
+                            .font_weight(FontWeight::MEDIUM)
+                            .text_color(c.foreground)
+                            .truncate()
+                            .child("Go back to parent thread"),
                     ),
             )
             .on_click(act(store, move |store, cx| store.open_started_thread(&id, cx))),

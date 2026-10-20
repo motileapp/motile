@@ -1300,7 +1300,7 @@ final class AgentsRowView: RowView {
 }
 
 /// The way back to the thread whose agent started this one: a line across, broken by a round
-/// button that names it. The transcript shows it above its first row and under its last.
+/// button. The transcript shows it above its first row and under its last.
 final class LineageView: FlippedView {
     static let height = ControlSize.large.height
 
@@ -1308,26 +1308,13 @@ final class LineageView: FlippedView {
     private static let lineGap = ControlSize.regular.padding
     /// The arrow's square leaves room around its ink, so it needs little more from the words.
     private static let arrowGap: CGFloat = 1
+    private static let label = "Go back to parent thread"
 
     private let leading = SurfaceView()
     private let trailing = SurfaceView()
     private let pill = SurfaceView()
-    private let symbol = SymbolView(.cornerLeftUp, size: size.smallSymbol, tint: Theme.mutedForeground)
+    private let symbol = SymbolView(.cornerLeftUp, size: size.smallSymbol, tint: Theme.foreground)
     private let words = TextLabel(font: .ui(size.textSize, weight: .medium), color: Theme.foreground)
-
-    var title = "" {
-        didSet {
-            guard title != oldValue else { return }
-            let line = NSMutableParagraphStyle()
-            line.lineBreakMode = .byTruncatingTail
-            let font = PlatformFont.ui(Self.size.textSize, weight: .medium)
-            let text = NSMutableAttributedString(string: "Started by ", attributes: [.font: font, .foregroundColor: Theme.mutedForeground, .paragraphStyle: line])
-            text.append(NSAttributedString(string: title, attributes: [.font: font, .foregroundColor: Theme.foreground, .paragraphStyle: line]))
-            words.attributed = text
-            describe("Started by \(title)", button: true)
-            placeParts()
-        }
-    }
 
     var action: (() -> Void)?
 
@@ -1338,6 +1325,9 @@ final class LineageView: FlippedView {
         pill.radius = Self.size.height / 2
         pill.stroke = Theme.borderAccent
         [leading, trailing, pill, symbol, words].forEach { addSubview($0) }
+        words.string = Self.label
+        words.breaks = .byTruncatingTail
+        describe(Self.label, button: true)
         light(false)
         onHover = { [weak self] point in
             guard let self else { return }
@@ -1364,16 +1354,18 @@ final class LineageView: FlippedView {
         let side = PlatformImage.symbolSide(size.smallSymbol)
         let ends = size.padding + side + Self.arrowGap + size.padding
         let room = max(0, bounds.width - Self.lineGap * 2 - ends)
-        let wordsWidth = min(ceil(words.attributed.size().width) + 2, room)
-        let width = ends + wordsWidth
+        // The field draws its words inset on both sides, which the pill leaves out.
+        let inset = max(0, (words.natural.width - ceil(words.attributed.size().width)) / 2)
+        let wordsWidth = min(words.natural.width, room + inset * 2)
+        let width = ends + wordsWidth - inset * 2
         let x = ((bounds.width - width) / 2).rounded()
         let y = ((bounds.height - size.height) / 2).rounded()
         pill.frame = CGRect(x: x, y: y, width: width, height: size.height)
         let symbolX = x + size.padding
         // The arrow stands on the baseline, lower than the caps' middle it is raised to.
         symbol.frame = CGRect(x: symbolX, y: y + ((size.height - side) / 2).rounded() - scaled(1), width: side, height: side)
-        let wordsHeight = scaled(16)
-        words.frame = CGRect(x: symbolX + side + Self.arrowGap, y: y + ((size.height - wordsHeight) / 2).rounded(), width: wordsWidth, height: wordsHeight)
+        let wordsHeight = words.natural.height
+        words.frame = CGRect(x: symbolX + side + Self.arrowGap - inset, y: y + (size.height - wordsHeight) / 2, width: wordsWidth, height: wordsHeight)
         let lineY = (bounds.height / 2).rounded()
         leading.frame = CGRect(x: 0, y: lineY, width: max(0, x - Self.lineGap), height: 1)
         let after = x + width + Self.lineGap

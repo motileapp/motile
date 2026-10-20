@@ -50,15 +50,18 @@ final class TranscriptView: FlippedView, RowOwner {
     /// Room left under the last row for what floats over the transcript's end.
     var bottomInset: CGFloat = 0 {
         didSet {
-            guard bottomInset != oldValue else { return }
+            guard !keepsRows, bottomInset != shownBottomInset else { return }
+            let old = shownBottomInset
+            shownBottomInset = bottomInset
             // More room under the rows, as for the keyboard, is glided to, from near the end too.
-            if bottomInset > oldValue, !userScrolling, endY - scroller.offsetY < Self.nearEnd { pinned = true }
+            if bottomInset > old, !userScrolling, endY - scroller.offsetY < Self.nearEnd { pinned = true }
             updateVisible(follows: false)
             land()
             jumpButton.frame.origin.y = jumpButtonY
             layoutFade()
         }
     }
+    private var shownBottomInset: CGFloat = 0
 
     /// How far up from the view's bottom the rows fade out: nothing at the bottom, all there
     /// from this height on.
@@ -86,7 +89,7 @@ final class TranscriptView: FlippedView, RowOwner {
     /// Above the composer, which starts `composerGap` into the inset, or above the inset.
     private var jumpButtonY: CGFloat {
         let composer = underComposer ? Self.composerGap : 0
-        return bounds.height - bottomInset + composer - Self.jumpButtonGap - Self.jumpButtonSide
+        return bounds.height - shownBottomInset + composer - Self.jumpButtonGap - Self.jumpButtonSide
     }
 
     private static let jumpButtonSide: CGFloat = Platform.scale > 1 ? 38 : 32
@@ -106,17 +109,21 @@ final class TranscriptView: FlippedView, RowOwner {
 
     /// The thread whose agent started this one, which a line above the first row and under the
     /// last leads back to.
-    var startedBy: (id: String, title: String)? {
+    var startedBy: String? {
         didSet {
-            guard startedBy?.id != oldValue?.id || startedBy?.title != oldValue?.title else { return }
-            lineageTop.title = startedBy?.title ?? ""
-            lineageEnd.title = startedBy?.title ?? ""
+            guard !keepsRows, startedBy != shownStartedBy else { return }
+            shownStartedBy = startedBy
             updateVisible()
         }
     }
+    private var shownStartedBy: String?
 
-    private var topLineage: CGFloat { startedBy != nil && !hasEarlier ? LineageView.height : 0 }
-    private var endLineage: CGFloat { startedBy == nil ? 0 : LineageView.height }
+    /// The rows of the thread that was open before stay, with the room under them and the way
+    /// back to its parent, until the next thread's rows replace them all in one pass.
+    private var keepsRows = false
+
+    private var topLineage: CGFloat { shownStartedBy != nil && !hasEarlier ? LineageView.height : 0 }
+    private var endLineage: CGFloat { shownStartedBy == nil ? 0 : LineageView.height }
     private static let overscan: CGFloat = 400
     private static let pooledPerKind = 10
     /// As tall as the row that ends a turn, which takes the working line's place.
@@ -214,8 +221,8 @@ final class TranscriptView: FlippedView, RowOwner {
         for lineage in [lineageTop, lineageEnd] {
             lineage.isHidden = true
             lineage.action = { [weak self] in
-                guard let self, let parent = self.startedBy else { return }
-                self.onOpenThread?(parent.id)
+                guard let self, let parent = self.shownStartedBy else { return }
+                self.onOpenThread?(parent)
             }
             document.addSubview(lineage)
         }
@@ -294,13 +301,13 @@ final class TranscriptView: FlippedView, RowOwner {
 
     private var contentHeight: CGFloat {
         let workingHeight = showsWorking ? Self.workingHeight : 0
-        return topPadding + (offsets.last ?? 0) + workingHeight + endLineage + bottomInset
+        return topPadding + (offsets.last ?? 0) + workingHeight + endLineage + shownBottomInset
     }
 
     private func layoutFade() {
         guard bounds.height > 0 else { return }
         scroller.setTopBar(height: topInset)
-        let fadeTop = TranscriptScroller.blursUnderTopBar ? [0, 0] : [topInset, topPadding]
+        let fadeTop = TranscriptScroller.blursUnderTopBar ? [0, 0] : [topInset, topPadding - topLineage]
         let stops = fadeTop + [max(topPadding, bounds.height - bottomFade), bounds.height]
         CATransaction.begin()
         CATransaction.setDisableActions(true)
@@ -435,7 +442,12 @@ final class TranscriptView: FlippedView, RowOwner {
 
     // MARK: Content
 
+    func keepRows() {
+        keepsRows = true
+    }
+
     func reset(rows new: [RowModel]) {
+        if keepsRows { showKept() }
         for id in Array(views.keys) { recycle(id) }
         rows = new
         hasPending = false
@@ -454,6 +466,14 @@ final class TranscriptView: FlippedView, RowOwner {
         pin()
         updateVisible(glides: false)
         measureRows()
+    }
+
+    private func showKept() {
+        keepsRows = false
+        shownStartedBy = startedBy
+        shownBottomInset = bottomInset
+        jumpButton.frame.origin.y = jumpButtonY
+        layoutFade()
     }
 
     func splice(start: Int, remove: Int, rows new: [RowModel]) {

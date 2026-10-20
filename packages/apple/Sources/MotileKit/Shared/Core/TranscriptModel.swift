@@ -5,6 +5,8 @@ import Foundation
 final class TranscriptModel {
     struct Hooks {
         let reset: ([RowModel]) -> Void
+        /// The view keeps what it shows until the next reset.
+        let keep: () -> Void
         let splice: (Int, Int, [RowModel]) -> Void
         let pending: (RowModel?) -> Void
         let activity: (Activity) -> Void
@@ -65,7 +67,10 @@ final class TranscriptModel {
         hasEarlier = false
         setLive(live)
         keepsRows = keepingRows
-        guard !keepingRows else { return }
+        guard !keepingRows else {
+            hooks?.keep()
+            return
+        }
         showState()
     }
 

@@ -228,14 +228,14 @@ pub struct Transcript {
     pub activity: Activity,
     /// The thread has turns before the first row.
     pub earlier: bool,
-    /// The thread whose agent started this one, by its id and title.
-    pub started_by: Option<(String, String)>,
+    /// The thread whose agent started this one.
+    pub started_by: Option<String>,
     /// The thread has caught up with its server. What it had before that is simply there when
     /// the thread opens; only what arrives after it streams in.
     pub live: bool,
     /// The rows shown are another thread's, kept until this one's arrive so the view isn't
-    /// empty in between.
-    keeps_rows: bool,
+    /// empty in between. What is around them stays too, so that they all change in one pass.
+    pub keeps_rows: bool,
     pub list: ListState,
     /// What the list shows, in order.
     pub items: Rc<Vec<Item>>,
@@ -555,8 +555,8 @@ impl Transcript {
     }
 
     /// Names the thread whose agent started this one, which the list leads back to.
-    pub fn set_started_by(&mut self, started_by: Option<(String, String)>) {
-        if self.started_by == started_by {
+    pub fn set_started_by(&mut self, started_by: Option<String>) {
+        if self.keeps_rows || self.started_by == started_by {
             return;
         }
         self.started_by = started_by;

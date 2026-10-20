@@ -17,7 +17,7 @@ struct TranscriptRepresentable {
     private func make(_ coordinator: Coordinator) -> TranscriptView {
         let view = TranscriptView()
         let (store, model) = (store, model)
-        view.startedBy = ofAgent ? nil : store.parentThread.map { ($0.id, $0.title) }
+        view.startedBy = ofAgent ? nil : store.parentThread?.id
         view.topInset = topInset
         view.underComposer = ofAgent || store.openThreadRemovedServer == nil
         view.bottomInset = bottomInset
@@ -62,6 +62,7 @@ struct TranscriptRepresentable {
         }
         let hooks = TranscriptModel.Hooks(
             reset: { [weak view] rows in view?.reset(rows: rows) },
+            keep: { [weak view] in view?.keepRows() },
             splice: { [weak view] start, remove, rows in view?.splice(start: start, remove: remove, rows: rows) },
             pending: { [weak view] row in view?.setPending(row) },
             activity: { [weak view] activity in view?.setActivity(activity) },
@@ -75,7 +76,7 @@ struct TranscriptRepresentable {
     }
 
     private func update(_ view: TranscriptView) {
-        view.startedBy = ofAgent ? nil : store.parentThread.map { ($0.id, $0.title) }
+        view.startedBy = ofAgent ? nil : store.parentThread?.id
         view.topInset = topInset
         view.underComposer = ofAgent || store.openThreadRemovedServer == nil
         view.bottomInset = bottomInset

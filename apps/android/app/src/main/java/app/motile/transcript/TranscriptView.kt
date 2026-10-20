@@ -20,7 +20,6 @@ import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -61,9 +60,6 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
@@ -164,6 +160,8 @@ private object Working
 /** The way back to the thread whose agent started this one, above the first row or, with `end`, under the last. */
 private data class StartedBy(val end: Boolean)
 
+private class Kept(var parent: String?, var bottom: Dp)
+
 object TranscriptView {
     /** The room between the last row and the composer, which the bottom padding the transcript is given starts with. */
     val composerGap = 80.dp
@@ -200,7 +198,14 @@ fun TranscriptView(model: TranscriptModel, modifier: Modifier = Modifier, conten
     val rows = model.rows
     val pending = model.pending
     val shown = remember(model.version, pending) { if (pending == null) rows.toList() else rows + pending }
-    val parent = if (ofAgent) null else store.parentThread
+    // The way back to a parent and the room under the rows stay the kept rows' until the next thread's replace them.
+    val parentNow = if (ofAgent) null else store.parentThread?.id
+    val kept = remember(model) { Kept(parentNow, contentPadding.calculateBottomPadding()) }
+    if (!model.keepsRows) {
+        kept.parent = parentNow
+        kept.bottom = contentPadding.calculateBottomPadding()
+    }
+    val parent = kept.parent
     val entries: List<Any> = remember(shown, model.showsWorking, parent != null, model.earlier) {
         buildList {
             if (parent != null && !model.earlier) add(StartedBy(end = false))
@@ -216,7 +221,7 @@ fun TranscriptView(model: TranscriptModel, modifier: Modifier = Modifier, conten
     val scope = rememberCoroutineScope()
     val animates = model.activity.running && model.live && !Platform.reducesMotion
     val top = contentPadding.calculateTopPadding()
-    val bottom = contentPadding.calculateBottomPadding()
+    val bottom = kept.bottom
 
     actions.holding = { byCore ->
         follower.wasPinned = follower.pinned
@@ -404,7 +409,7 @@ fun TranscriptView(model: TranscriptModel, modifier: Modifier = Modifier, conten
                         when {
                             row != null -> TranscriptRow(row)
                             entry is StartedBy && entry.end && topInSight -> Box(Modifier.height(ControlSize.Large.height))
-                            entry is StartedBy && parent != null -> StartedByLine(parent.title) { store.openStartedThread(parent.id) }
+                            entry is StartedBy && parent != null -> StartedByLine { store.openStartedThread(parent) }
                             else -> WorkingLine(model.activity, Modifier.padding(top = 2.dp))
                         }
                     }
@@ -514,23 +519,18 @@ private fun entryKey(entry: Any): String = when (entry) {
     else -> "working"
 }
 
-/** A line across, broken by a round button that names the thread whose agent started this one and opens it. */
+/** A line across, broken by a round button that opens the thread whose agent started this one. */
 @Composable
-private fun StartedByLine(title: String, open: () -> Unit) {
+private fun StartedByLine(open: () -> Unit) {
     val palette = LocalPalette.current
     val size = ControlSize.Small
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
-    val words = buildAnnotatedString {
-        withStyle(SpanStyle(color = palette.mutedForeground)) { append("Started by ") }
-        withStyle(SpanStyle(color = palette.foreground)) { append(title) }
-    }
     Row(Modifier.fillMaxWidth().height(ControlSize.Large.height), verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.weight(1f).height(1.dp).background(palette.border))
         Row(
             Modifier
                 .padding(horizontal = ControlSize.Regular.padding)
-                .weight(1f, fill = false)
                 .height(size.height)
                 .background(if (pressed) palette.borderAccent else palette.backgroundAccent, CircleShape)
                 .border(1.dp, palette.borderAccent, CircleShape)
@@ -538,10 +538,9 @@ private fun StartedByLine(title: String, open: () -> Unit) {
                 .padding(horizontal = size.padding),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            // The arrow stands on the baseline, lower than the caps' middle it is raised to. Its
-            // square leaves room around its ink, so it needs little more from the words.
-            Icon(Symbol.CornerLeftUp, size.smallSymbol, Modifier.offset(y = (-1).dp).padding(end = 1.dp), color = palette.mutedForeground)
-            Text(words, style = size.font, maxLines = 1)
+            // The arrow's square leaves room around its ink, so it needs little more from the words.
+            Icon(Symbol.CornerLeftUp, size.smallSymbol, Modifier.padding(end = 1.dp), color = palette.foreground)
+            Text("Go back to parent thread", style = size.font, color = palette.foreground, maxLines = 1)
         }
         Box(Modifier.weight(1f).height(1.dp).background(palette.border))
     }

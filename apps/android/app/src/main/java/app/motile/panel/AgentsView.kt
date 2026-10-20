@@ -125,14 +125,11 @@ private fun ParentRow(thread: ThreadInfo) {
     HighlightButton(onClick = { store.openStartedThread(thread.id) }, modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp), inset = panelRowMargin) {
         Row(
             Modifier.fillMaxWidth().padding(panelRowMargin).padding(horizontal = 10.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(9.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box(Modifier.width(16.dp), contentAlignment = Alignment.Center) { Icon(Symbol.CornerLeftUp, 12f, color = palette.mutedForeground) }
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text("Started by", size = 11f, color = palette.mutedStrongerForeground, maxLines = 1)
-                Text(thread.title, size = 13f, weight = FontWeight.Medium, color = palette.foreground, maxLines = 1)
-            }
+            Box(Modifier.width(16.dp), contentAlignment = Alignment.Center) { Icon(Symbol.CornerLeftUp, 12f, color = palette.foreground) }
+            Text("Go back to parent thread", Modifier.weight(1f), size = 13f, weight = FontWeight.Medium, color = palette.foreground, maxLines = 1)
         }
     }
 }
