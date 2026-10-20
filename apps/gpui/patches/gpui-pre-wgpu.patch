@@ -8,6 +8,45 @@ index 29a79af..2e29870 100644
  pub use wgpu_renderer::WgpuHeadlessRenderer;
 -pub use wgpu_renderer::{GpuContext, WgpuRenderer, WgpuSurfaceConfig};
 +pub use wgpu_renderer::{DrawOutcome, GpuContext, WgpuRenderer, WgpuSurfaceConfig};
+diff --git a/src/shaders.wgsl b/src/shaders.wgsl
+index 718cb75..3c0bc7f 100644
+--- a/src/shaders.wgsl
++++ b/src/shaders.wgsl
+@@ -412,16 +412,10 @@ fn prepare_gradient_color(tag: u32, color_space: u32,
+         result.color0 = hsla_to_rgba(colors[0].color);
+         result.color1 = hsla_to_rgba(colors[1].color);
+ 
+-        // Prepare color space in vertex for avoid conversion
+-        // in fragment shader for performance reasons
+-        if (color_space == 0u) {
+-            // sRGB
+-            result.color0 = linear_to_srgba(result.color0);
+-            result.color1 = linear_to_srgba(result.color1);
+-        } else if (color_space == 1u) {
+-            // Oklab
+-            result.color0 = linear_srgb_to_oklab(result.color0);
+-            result.color1 = linear_srgb_to_oklab(result.color1);
++        // The colors are sRGB, as the surface is. Oklab is mixed from linear sRGB.
++        if (color_space == 1u) {
++            result.color0 = linear_srgb_to_oklab(srgba_to_linear(result.color0));
++            result.color1 = linear_srgb_to_oklab(srgba_to_linear(result.color1));
+         }
+     }
+ 
+@@ -470,11 +464,11 @@ fn gradient_color(background: Background, position: vec2<f32>, bounds: Bounds,
+ 
+             switch (background.color_space) {
+                 default: {
+-                    background_color = srgba_to_linear(mix(color0, color1, t));
++                    background_color = mix(color0, color1, t);
+                 }
+                 case 1u: {
+                     let oklab_color = mix(color0, color1, t);
+-                    background_color = oklab_to_linear_srgb(oklab_color);
++                    background_color = linear_to_srgba(oklab_to_linear_srgb(oklab_color));
+                 }
+             }
+         }
 diff --git a/src/wgpu_renderer.rs b/src/wgpu_renderer.rs
 index 8387528..5cef721 100644
 --- a/src/wgpu_renderer.rs

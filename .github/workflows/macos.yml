@@ -137,7 +137,7 @@ jobs:
 
       - name: Build the core for the Mac and the simulator
         run: |
-          cargo build --release -p motile-core --example compare_frames --example program_sheet
+          cargo build --release -p motile-core --lib --example compare_frames --example program_sheet
           cargo build --release --target aarch64-apple-ios-sim -p motile-core
 
       - name: Lay the corpus out on the Mac
