@@ -11,7 +11,7 @@ use gpui_kit::prelude::*;
 use gpui_kit::*;
 
 use crate::composer::Composer;
-use crate::composer::children::{agent_bar, title_crumb};
+use crate::composer::children::agent_bar;
 use crate::models::{AgentViewExt, Project};
 use crate::store::{PanelPage, Store};
 use crate::theme::{self, Radius, colors};
@@ -130,7 +130,7 @@ impl ThreadPane {
         let store = self.store.read(cx);
         let project = store.composer_project();
         let parts = store.composer_project_line();
-        let (crumb, title) = self.title(cx);
+        let title = self.title(cx);
         let git_project = store.git_project();
         let control: Option<AnyElement> = if let Some(button) = crate::git::git_button(&self.store, &self.git_menu, cx)
         {
@@ -162,35 +162,26 @@ impl ThreadPane {
                     .min_w_0()
                     .when_some(parts, |title, parts| title.child(project_line(project.as_ref(), &parts, cx)))
                     .child(
-                        div().min_w_0().flex().items_center().gap(px(4.)).children(crumb.map(gives_way)).child(
-                            div()
-                                .min_w_0()
-                                .text_size(px(13.))
-                                .font_weight(FontWeight::SEMIBOLD)
-                                .text_color(c.foreground)
-                                .truncate()
-                                .child(title),
-                        ),
+                        div()
+                            .min_w_0()
+                            .text_size(px(13.))
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .text_color(c.foreground)
+                            .truncate()
+                            .child(title),
                     ),
             )
             .child(div().flex_1())
             .children(control)
     }
 
-    /// The thread's name, after the thread whose agent started it, or for an agent shown in its
-    /// place, the agent's after the thread's.
-    fn title(&self, cx: &App) -> (Option<AnyElement>, String) {
+    /// The thread's name, or the agent's when one is shown in its place.
+    fn title(&self, cx: &App) -> String {
         let store = self.store.read(cx);
-        let selected = store.selected_thread();
-        if let (Some(agent), Some(thread)) = (store.shown_agent(), selected) {
-            let crumb = title_crumb(&self.store, &thread.title, |store, cx| store.show_agents(cx));
-            return (Some(crumb.into_any_element()), agent.title.clone());
+        if let Some(agent) = store.shown_agent() {
+            return agent.title.clone();
         }
-        let title = selected.map(|thread| thread.title.clone());
-        let Some(parent) = store.parent_thread() else { return (None, title.unwrap_or("New thread".into())) };
-        let id = parent.id.clone();
-        let crumb = title_crumb(&self.store, &parent.title, move |store, cx| store.open_started_thread(&id, cx));
-        (Some(crumb.into_any_element()), title.unwrap_or_default())
+        store.selected_thread().map_or_else(|| "New thread".into(), |thread| thread.title.clone())
     }
 
     /// The empty state of a new thread: a question, and the composer a little above the middle
@@ -567,9 +558,4 @@ fn project_line(project: Option<&Project>, parts: &[String], cx: &App) -> impl I
             .truncate()
             .child(crate::ui::control::dotted(parts.join(" · "), c)),
     )
-}
-
-/// Before the thread's title, the way back is what a narrow bar cuts short first.
-fn gives_way(crumb: AnyElement) -> Div {
-    div().min_w_0().flex().flex_shrink(100.).child(crumb)
 }

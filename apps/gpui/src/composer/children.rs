@@ -1,6 +1,5 @@
 //! What the composer shows of the agents the thread's agent started: the strip over it while
-//! some wait for the user, the bar in its place while one of them is shown, and the crumb before
-//! the title that leads back to the thread they belong to.
+//! some wait for the user, and the bar in its place while one of them is shown.
 
 use gpui_kit::prelude::*;
 use gpui_kit::*;
@@ -95,7 +94,7 @@ impl RenderOnce for ShortWhenNarrow {
     }
 }
 
-/// The way back's arrow stands close to its words, as the crumb's does.
+/// The way back's arrow stands close to its words.
 const BACK_GAP: f32 = 4.;
 /// What the bar says stands twice its gap from the way back.
 const BACK_APART: f32 = 8.;
@@ -158,28 +157,4 @@ pub fn agent_bar(store: &Entity<Store>, agent: &AgentView, cx: &App) -> impl Int
                     })
                 }),
         )
-}
-
-/// The thread before a thread's title, as a button that opens it: the thread whose agent started
-/// the open one, or the thread of the agent shown.
-pub fn title_crumb(
-    store: &Entity<Store>,
-    title: &str,
-    action: impl Fn(&mut Store, &mut Context<Store>) + 'static,
-) -> ActionButton {
-    let store = store.clone();
-    ActionButton::new("title-crumb", title.to_string())
-        .symbol("corner-left-up")
-        .help(format!("Open {title}"))
-        .ghost()
-        .small()
-        .symbol_size(ControlSize::Small.small_symbol())
-        .inline()
-        .truncates(true)
-        .on_click(move |_, _, cx| {
-            store.update(cx, |store, cx| {
-                action(store, cx);
-                cx.notify();
-            })
-        })
 }
