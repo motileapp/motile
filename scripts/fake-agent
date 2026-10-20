@@ -475,14 +475,17 @@ class Turn:
         message_id = self._start()
         block = {"type": "text", "text": ""}
         emit({"type": "stream_event", "event": {"type": "content_block_start", "index": 0, "content_block": block}})
-        for start in range(0, len(text), self.piece):
+        began = time.monotonic()
+        for n, start in enumerate(range(0, len(text), self.piece)):
             steer = steer_waiting()
             if steer:
                 emit({"type": "assistant", "message": {"id": message_id, "content": [{"type": "text", "text": text[:start]}]}})
                 self.done(terminal_reason="aborted_streaming")
                 raise Preempted(steer, self.session_id)
             delta = {"type": "text_delta", "text": text[start:start + self.piece]}
-            emit({"type": "stream_event", "event": {"type": "content_block_delta", "index": 0, "delta": delta}}, self.pause)
+            emit({"type": "stream_event", "event": {"type": "content_block_delta", "index": 0, "delta": delta}})
+            # Paced by the clock rather than by each sleep, which can last far longer than asked.
+            time.sleep(max(0.0, began + (n + 1) * self.pause - time.monotonic()))
         emit({"type": "assistant", "message": {"id": message_id, "content": [{"type": "text", "text": text}]}})
         emit({"type": "stream_event", "event": {"type": "content_block_stop", "index": 0}})
 
