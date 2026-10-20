@@ -61,6 +61,8 @@ pub fn prompt_options(tools: Vec<ToolSpec>) -> PromptOptions {
         tools: tools.into_iter().map(Tool::Spec).collect(),
         examples: EXAMPLES.iter().map(fenced).chain([PATCH_EXAMPLE.to_owned()]).collect(),
         additional_rules,
+        data_workflow: Some(DATA_WORKFLOW.to_owned()),
+        any_root: true,
         ..PromptOptions::default()
     }
 }
@@ -75,7 +77,8 @@ pub fn open_intelligent_ui_options() -> PromptOptions {
     }
 }
 
-const PREAMBLE: &str = "You can show an answer with openui-lang, a small declarative UI language that Motile's \
+/// What every agent is told of programs, before it reads the rest.
+pub const PREAMBLE: &str = "You can show an answer with openui-lang, a small declarative UI language that Motile's \
                         clients draw natively inside your reply. When a visual or interactive answer helps (numbers \
                         to compare or compute, choices, steps, a chart, a drawing, a map, a small tool to play with), \
                         write an openui-lang program in a fenced block that opens with ```openui-lang and closes with \
@@ -87,6 +90,38 @@ Once this thread has a program, a later fence with no `root` statement is a patc
                         latest program of this thread by statement name (the same name replaces a statement, a new \
                         name adds one, `name = null` removes one) and draws the merged program in place of that one. \
                         A fence with `root` starts a new program.";
+
+/// The reference's workflow has the model call the tools first; an agent can't call a program's
+/// tools, and reads their shapes from the prompt instead.
+const DATA_WORKFLOW: &str = "## Data Workflow
+
+The tools below run when the program does, in the thread's folder: only a program's Query and Mutation call them, \
+you can't. When a program shows them:
+1. Use Query() for READ operations (data that should stay live) — NEVER hardcode what a tool returns as literal arrays or objects
+2. Use Mutation() for WRITE operations — triggered by button clicks via @Run(mutationRef)
+3. Start each Query from its shape under \"Default values for Query results\" so the UI renders immediately
+4. Use @-prefixed builtins (@Count, @Filter, @Sort, @Sum) on Query results for KPIs and aggregations — the runtime evaluates these live on every refresh
+5. Hardcoded arrays are ONLY for static display data (labels, options) where no tool exists
+
+WRONG — you read the data yourself, with git or a shell, and inlined it:
+```
+openCount = 2
+item1 = SomeComp(\"first item title\")
+item2 = SomeComp(\"second item title\")
+list = SomeList([item1, item2])
+chart = SomeChart([\"A\", \"B\"], [12, 8])
+```
+This is static — it shows stale data and won't update. Creating item1, item2, item3... manually is ALWAYS wrong when a tool exists.
+
+RIGHT — use Query() for live data, Mutation() for writes, @builtins to derive values:
+```
+data = Query(\"tool_name\", {}, {rows: []})
+openCount = @Count(@Filter(data.rows, \"field\", \"==\", \"value\"))
+list = @Each(data.rows, \"item\", SomeComp(item.title, item.field))
+createResult = Mutation(\"create_tool\", {title: $title})
+submitBtn = Button(\"Create\", Action([@Run(createResult), @Run(data), @Reset($title)]))
+```
+Everything derives from the Query — when data refreshes, the entire dashboard updates automatically.";
 
 const WORKING_TOOL_RULE: &str = "When you answer with a program and the request involves numbers, choices, lists, \
                                  steps, a game or something to explore, make it a working tool: keep inputs and lists \
@@ -293,6 +328,16 @@ mod tests {
                 assert!(known, "{name} is not in the library");
             }
         }
+    }
+
+    #[test]
+    fn asks_nothing_the_agent_cant_do() {
+        let prompt = system_prompt(placeholder_tools());
+        assert!(!prompt.contains("Call the most relevant tool"), "an agent can't call a program's tools");
+        assert!(prompt.contains("only a program's Query and Mutation call them, you can't."));
+        assert!(prompt.contains("must define `root`, usually `root = Col(...)`"));
+        assert!(prompt.contains("1. The root statement is the FIRST line"));
+        assert!(prompt.contains("root = Card([title, stepper, list, copy])"));
     }
 
     #[test]

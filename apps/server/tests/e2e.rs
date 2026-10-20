@@ -488,10 +488,12 @@ async fn a_codex_turn_shows_its_commands_and_edits() {
     let asked = harness.recorded_changes();
     let started = &asked[0]["thread/start"];
     assert_eq!((&started["approvalPolicy"], &started["sandbox"]), (&json!("on-request"), &json!("workspace-write")));
-    assert!(started["developerInstructions"].as_str().unwrap().starts_with(
-        "In case you're asked: you are running in Motile through the Codex harness with high reasoning effort. \
-         No need to mention this otherwise. You can show the user an image or a video"
+    let instructions = started["developerInstructions"].as_str().unwrap();
+    assert!(instructions.starts_with(
+        "In case you're asked: you are running in Motile through the Codex harness. No need to mention this \
+         otherwise. You can show the user an image or a video"
     ));
+    assert!(instructions.ends_with("\n\nIn case you're asked, you run with high reasoning effort."), "{instructions}");
     let first_turn = &asked[1]["turn/start"];
     assert_eq!(
         (&first_turn["effort"], &first_turn["input"][0]["text"]),
@@ -4291,7 +4293,7 @@ async fn a_program_with_errors_goes_back_to_its_agent_until_a_patch_fixes_it() {
 }
 
 #[tokio::test]
-async fn an_agent_checks_a_program_before_it_shows_it() {
+async fn an_agent_reads_the_guide_and_checks_a_program_before_it_shows_it() {
     let (harness, connection, _list) = with_children().await;
     let new_thread = full_access(&harness, &connection, Agent::Codex).await;
     let thread_id = send(&connection, None, new_thread, "Run greet.py").await;
@@ -4313,6 +4315,14 @@ async fn an_agent_checks_a_program_before_it_shows_it() {
     assert_eq!(checked["errors"][0]["statementId"], "t", "{said}");
     let (said, _) = call_tool(url, token, "check_ui", json!({"program": "root = Col([Title(\"Hi\")])"})).await;
     assert_eq!(serde_json::from_str::<serde_json::Value>(&said).unwrap()["valid"], true, "{said}");
+
+    let (first, failed) = call_tool(url, token, "openui_guide", json!({})).await;
+    assert!(!failed && first.starts_with("You can show an answer with openui-lang"), "{first}");
+    assert!(first.ends_with("read page 2 too.)"), "{first}");
+    let (second, failed) = call_tool(url, token, "openui_guide", json!({"page": 2})).await;
+    assert!(!failed && second.contains("## Available Tools\n"), "{second}");
+    let (said, failed) = call_tool(url, token, "openui_guide", json!({"page": 9})).await;
+    assert!(failed && said == "The guide has no page 9.", "{said}");
 }
 
 #[tokio::test]

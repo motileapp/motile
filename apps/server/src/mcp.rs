@@ -1,7 +1,7 @@
 //! The `motile` MCP server, on the loopback interface, which only the agents your server started
 //! can call, each with the token of its thread: `read_thread` reads what a handoff left out,
-//! `check_ui` checks a program before the agent shows it, and the other tools start agents on any
-//! of your server's accounts and follow them.
+//! `openui_guide` teaches programs, `check_ui` checks one before the agent shows it, and the other
+//! tools start agents on any of your server's accounts and follow them.
 
 use std::collections::HashMap;
 use std::sync::{Arc, Weak};
@@ -33,7 +33,7 @@ use crate::ui;
 
 pub const SERVER_NAME: &str = "motile";
 /// The tools as the agents name them.
-pub const TOOLS: [&str; 8] = [
+pub const TOOLS: [&str; 9] = [
     "mcp__motile__read_thread",
     "mcp__motile__list_accounts",
     "mcp__motile__start_agent",
@@ -41,6 +41,7 @@ pub const TOOLS: [&str; 8] = [
     "mcp__motile__message_agent",
     "mcp__motile__answer_agent",
     "mcp__motile__stop_agent",
+    "mcp__motile__openui_guide",
     "mcp__motile__check_ui",
 ];
 /// What Claude Code reads its `Authorization` header from.
@@ -150,6 +151,18 @@ impl Tools {
     #[tool(name = "read_thread", annotations(title = "Read a thread", read_only_hint = true))]
     async fn read_thread(&self, Parameters(request): Parameters<ReadThread>) -> CallToolResult {
         answered(self.hub().and_then(|hub| read_thread(hub.store(), &request)))
+    }
+
+    /// How to write an openui-lang program: the language, Motile's components and functions, the
+    /// tools a program calls and examples, in pages. Read every page before you write a program,
+    /// once in a thread.
+    #[tool(name = "openui_guide", annotations(title = "Read the OpenUI guide", read_only_hint = true))]
+    async fn openui_guide(&self, Parameters(request): Parameters<OpenuiGuide>) -> CallToolResult {
+        let page = request.page.unwrap_or(1);
+        match ui::guide_page(page) {
+            Some(text) => CallToolResult::success(vec![ContentBlock::text(text)]),
+            None => CallToolResult::error(vec![ContentBlock::text(format!("The guide has no page {page}."))]),
+        }
     }
 
     /// Checks an openui-lang program, with or without its fence, as Motile's clients will read it:
@@ -287,6 +300,12 @@ pub struct StartAgent {
     pub timeout_seconds: Option<u64>,
     /// The same id for each retry of one request, so that a retry doesn't start a second agent.
     pub request_id: Option<String>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+struct OpenuiGuide {
+    /// The page, from 1, which it is when not given.
+    page: Option<usize>,
 }
 
 #[derive(Deserialize, JsonSchema)]

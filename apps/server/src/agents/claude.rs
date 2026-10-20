@@ -964,24 +964,30 @@ mod tests {
     }
 
     #[test]
-    fn the_instructions_teach_programs_and_fit_in_one_argument() {
+    fn the_instructions_point_to_the_guide_and_teach_programs_without_it() {
         let mcp = crate::mcp::McpAccess { url: "http://127.0.0.1:9/mcp".into(), token: "secret".into() };
-        let turn = Turn {
+        let turn = |mcp| Turn {
             agent: motile_protocol::wire::Agent::Claude,
             model: None,
             effort: None,
             access: Access::Supervised,
             session_id: None,
             handoff: None,
-            mcp: Some(&mcp),
+            mcp,
         };
-        let instructions = super::super::instructions(&turn);
-        assert!(instructions.contains("only when first called.\n\nYou can show an answer with openui-lang"));
-        assert!(instructions.contains("- run(command: string) → {exit_code?: number | null"));
-        assert!(instructions.contains("It runs only from a click, through Mutation and @Run."));
-        assert!(instructions.ends_with("check it with the motile tool check_ui."));
+        let pointed = super::super::instructions(&turn(Some(&mcp)));
+        assert!(pointed.contains("before you decide it's missing.\n\nYou can show an answer with openui-lang"));
+        assert!(pointed.contains("read the motile tool openui_guide"));
+        assert!(pointed.ends_with("check_ui before you send it."));
+        assert!(!pointed.contains("## Component Signatures"));
+        assert!(pointed.len() < 4 * 1024, "{} bytes", pointed.len());
+
+        let taught = super::super::instructions(&turn(None));
+        assert!(!taught.contains("openui_guide") && !taught.contains("start_agent"));
+        assert!(taught.contains("- run(command: string) → {exit_code?: number | null"));
+        assert!(taught.contains("It runs only from a click, through Mutation and @Run."));
         // Linux takes no single argument longer than 32 pages (MAX_ARG_STRLEN).
-        assert!(instructions.len() < 128 * 1024, "{} bytes", instructions.len());
+        assert!(taught.len() < 128 * 1024, "{} bytes", taught.len());
     }
 
     #[test]
