@@ -24,6 +24,7 @@ final class ProgramPicturesTests: XCTestCase {
         func send(_ node: String, _ event: JSON) {}
         func media(_ id: String, done: @escaping (URL?) -> Void) { done(nil) }
         func resized(_ node: String) {}
+        func watchViewport(_ image: ProgramImageView) {}
     }
 
     func testEveryProgramOfTheCorpusIsPictured() throws {
