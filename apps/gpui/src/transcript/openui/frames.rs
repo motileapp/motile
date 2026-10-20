@@ -161,6 +161,13 @@ fn draw(cx: &mut HeadlessAppContext, window: AnyWindowHandle) {
     .expect("a frame");
 }
 
+/// Closes the window, so that what it drew, a map's animation above all, no longer runs.
+#[cfg(test)]
+fn close(cx: &mut HeadlessAppContext, window: AnyWindowHandle) {
+    cx.update_window(window, |_, window, _| window.remove_window()).expect("a window");
+    cx.run_until_parked();
+}
+
 /// Every node's frame `[x, y, width, height]` in points from the root's top left corner, by its
 /// id, for the tree laid out `width` wide: `{"children/0": [0, 0, 720, 24], …}`. It draws the
 /// tree in a headless window of `cx`, as the transcript draws it; a node drawn twice (a carousel's
@@ -175,6 +182,7 @@ pub fn frame_dump(
     record();
     draw(cx, window);
     let recorded = recorded();
+    close(cx, window);
     let origin = recorded.iter().find(|(id, _)| id.is_empty()).map_or(Point::default(), |(_, bounds)| bounds.origin);
     let mut frames = serde_json::Map::new();
     for (id, bounds) in recorded {
@@ -199,6 +207,7 @@ pub fn picture(
     let window = drawn(cx, tree, width, height);
     draw(cx, window);
     let shot = cx.capture_screenshot(window).expect("a picture");
+    close(cx, window);
     let shown = (shot.width() as f32 * width / WINDOW_WIDTH.max(width)).round() as u32;
     image::imageops::crop_imm(&shot, 0, 0, shown, shot.height()).to_image()
 }
