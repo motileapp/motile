@@ -793,6 +793,7 @@ final class TranscriptView: FlippedView, RowOwner {
         lineageEnd.isHidden = endLineage == 0 || topInSight
         updateJumpButton()
         updateMetaRow()
+        for view in views.values { view.viewportMoved() }
         if !pendingHighlight.isEmpty {
             let ids = pendingHighlight
             pendingHighlight.removeAll()

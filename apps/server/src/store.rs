@@ -5,7 +5,7 @@ use std::path::Path;
 use std::sync::Mutex;
 
 use motile_protocol::wire::{
-    Access, Agent, Item, Queued, Speaker, Thread, ThreadMatch, ThreadParent, Tokens, UsageBucket,
+    Access, Agent, Item, Media, Queued, Speaker, Thread, ThreadMatch, ThreadParent, Tokens, UsageBucket,
 };
 use rusqlite::{Connection, OptionalExtension, params};
 
@@ -31,6 +31,7 @@ pub(crate) const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/0017_drop_plan.sql"),
     include_str!("../migrations/0018_sync.sql"),
     include_str!("../migrations/0019_thread_parents.sql"),
+    include_str!("../migrations/0020_ui_photos.sql"),
 ];
 
 pub struct Store {
@@ -365,6 +366,29 @@ impl Store {
     /// Whether any thread still shows the file.
     pub fn shows_media(&self, media_id: &str) -> rusqlite::Result<bool> {
         self.connection().query_row("SELECT EXISTS (SELECT 1 FROM media WHERE id = ?1)", [media_id], |row| row.get(0))
+    }
+
+    /// The photos kept for a query. One that found none is asked again after a day.
+    pub fn ui_photos(&self, query: &str) -> rusqlite::Result<Option<Vec<Media>>> {
+        let kept: Option<String> = self
+            .connection()
+            .query_row(
+                "SELECT media FROM ui_photos WHERE query = ?1 AND (media != '[]' OR kept_at > unixepoch() - 86400)",
+                [query],
+                |row| row.get(0),
+            )
+            .optional()?;
+        Ok(kept.and_then(|media| serde_json::from_str(&media).ok()))
+    }
+
+    pub fn keep_ui_photos(&self, query: &str, media: &[Media]) -> rusqlite::Result<()> {
+        let media = serde_json::to_string(media).unwrap_or_else(|_| "[]".to_string());
+        self.connection().execute(
+            "INSERT INTO ui_photos (query, media) VALUES (?1, ?2)
+             ON CONFLICT(query) DO UPDATE SET media = excluded.media, kept_at = unixepoch()",
+            [query, &media],
+        )?;
+        Ok(())
     }
 
     pub fn save_attachment(&self, thread_id: &str, path: &str) -> rusqlite::Result<()> {

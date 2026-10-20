@@ -1,7 +1,7 @@
 //! What programs look up outside, through your server: photos of what a query names, from
 //! Wikipedia and Wikimedia Commons as open-intelligent-ui finds them, kept in the media store, and
-//! the streets a car takes between stops, from OSRM's public server. Answers are kept for a while;
-//! failures are not.
+//! the streets a car takes between stops, from OSRM's public server. Photos are kept in the store
+//! and routes for a while; failures are not.
 
 use std::num::NonZeroUsize;
 use std::sync::Mutex;
@@ -12,14 +12,17 @@ use lru::LruCache;
 use motile_protocol::wire::Media;
 use serde_json::Value;
 
+use tokio::sync::Semaphore;
+
 use crate::media::{MediaStore, percent_decode};
+use crate::store::Store;
 
 const USER_AGENT: &str = concat!("Motile/", env!("CARGO_PKG_VERSION"), " (https://motile.app)");
 const WIKI_TIMEOUT: Duration = Duration::from_secs(8);
 const ROUTE_TIMEOUT: Duration = Duration::from_secs(10);
 const PHOTO_TIMEOUT: Duration = Duration::from_secs(15);
 const MAX_PHOTO: usize = 10 * 1024 * 1024;
-const KEPT_IMAGES: usize = 500;
+const LOOKUPS_AT_ONCE: usize = 4;
 const KEPT_ROUTES: usize = 200;
 const MAX_STOPS: usize = 25;
 const THUMBNAIL_WIDTH: &str = "960";
@@ -32,7 +35,8 @@ pub struct Lookups {
     wikipedia: String,
     commons: String,
     osrm: String,
-    images: Mutex<LruCache<String, Vec<Media>>>,
+    /// Wikipedia slows down a burst of lookups, so only a few run at once.
+    at_once: Semaphore,
     routes: Mutex<LruCache<String, Vec<[f64; 2]>>>,
 }
 
@@ -52,43 +56,71 @@ impl Lookups {
             wikipedia: wikipedia.to_string(),
             commons: commons.to_string(),
             osrm: osrm.to_string(),
-            images: Mutex::new(LruCache::new(kept(KEPT_IMAGES))),
+            at_once: Semaphore::new(LOOKUPS_AT_ONCE),
             routes: Mutex::new(LruCache::new(kept(KEPT_ROUTES))),
         }
     }
 
-    /// Photos of what `query` names, the best first: the article with that title, then a search.
-    pub async fn images(&self, media: &MediaStore, query: &str) -> anyhow::Result<Vec<Media>> {
+    /// The photo of what `query` names: the article with that title's, else a search's. Only one
+    /// is shown, so only the best that downloads is fetched.
+    pub async fn images(&self, media: &MediaStore, store: &Store, query: &str) -> anyhow::Result<Vec<Media>> {
         let query = query.split_whitespace().collect::<Vec<_>>().join(" ");
         if !(2..=200).contains(&query.chars().count()) {
             bail!("A photo is looked up by 2 to 200 characters.");
         }
-        let kept = self.images.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).get(&query).cloned();
-        if let Some(kept) = kept.filter(|kept| kept.iter().all(|image| media.has(&image.id))) {
+        let kept =
+            || store.ui_photos(&query).ok().flatten().filter(|kept| kept.iter().all(|image| media.has(&image.id)));
+        if let Some(kept) = kept() {
             return Ok(kept);
         }
-        let (titled, searched) = tokio::join!(self.article_photos(&query), self.searched_photos(&query));
-        let failed = titled.is_err() || searched.is_err();
-        let mut urls: Vec<String> = Vec::new();
-        for url in titled.unwrap_or_default().into_iter().chain(searched.unwrap_or_default()) {
-            if !urls.contains(&url) {
-                urls.push(url);
+        let _turn = self.at_once.acquire().await?;
+        if let Some(kept) = kept() {
+            return Ok(kept);
+        }
+        let titled = async {
+            let urls = self.article_photos(&query).await?;
+            anyhow::Ok((self.first_photo(media, &urls).await, urls.is_empty()))
+        };
+        let searching = self.searched_photos(&query);
+        tokio::pin!(titled, searching);
+        let mut searched = None;
+        let titled = loop {
+            tokio::select! {
+                titled = &mut titled => break titled,
+                found = &mut searching, if searched.is_none() => searched = Some(found),
             }
+        };
+        if let Ok((Some(photo), _)) = titled {
+            store.keep_ui_photos(&query, std::slice::from_ref(&photo))?;
+            return Ok(vec![photo]);
         }
-        let downloads: Vec<_> =
-            urls.into_iter().map(|url| tokio::spawn(download(self.http.clone(), media.clone(), url))).collect();
-        let found = !downloads.is_empty();
-        let mut images = Vec::new();
-        for download in downloads {
-            images.extend(download.await.ok().flatten());
-        }
-        if failed && images.is_empty() {
+        let searched = match searched {
+            Some(searched) => searched,
+            None => searching.await,
+        };
+        let photo = match &searched {
+            Ok(urls) => self.first_photo(media, urls).await,
+            Err(_) => None,
+        };
+        let images: Vec<Media> = photo.into_iter().collect();
+        let none_found = matches!(titled, Ok((None, true))) && searched.is_ok_and(|urls| urls.is_empty());
+        if images.is_empty() && !none_found {
             bail!("Wikipedia couldn't be reached.");
         }
-        if !failed && (!found || !images.is_empty()) {
-            self.images.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).put(query, images.clone());
+        if titled.is_ok() {
+            store.keep_ui_photos(&query, &images)?;
         }
         Ok(images)
+    }
+
+    /// The first of the photos that downloads, kept in the media store.
+    async fn first_photo(&self, media: &MediaStore, urls: &[String]) -> Option<Media> {
+        for url in urls {
+            if let Some(photo) = download(&self.http, media.clone(), url).await {
+                return Some(photo);
+            }
+        }
+        None
     }
 
     /// The lead photo of the Wikipedia article with that title, then up to two more of its photos.
@@ -213,7 +245,8 @@ impl Lookups {
 }
 
 /// The photo at `url`, kept in the media store; `None` when it couldn't be.
-async fn download(http: reqwest::Client, media: MediaStore, url: String) -> Option<Media> {
+async fn download(http: &reqwest::Client, media: MediaStore, url: &str) -> Option<Media> {
+    let url = url.to_string();
     let answer = http.get(&url).timeout(PHOTO_TIMEOUT).send().await.ok()?;
     if !answer.status().is_success() || answer.content_length().is_some_and(|size| size > MAX_PHOTO as u64) {
         return None;
@@ -398,29 +431,23 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn photos_are_kept_as_media_and_answered_again_without_asking() {
+    async fn only_the_best_photo_is_fetched_and_kept_across_restarts() {
         let (base, asked) = stand_in().await;
         let dir = tempfile::tempdir().unwrap();
         let media = MediaStore::new(dir.path().join("media"), "/");
-        let lookups = Lookups::new(&base, &base, &base);
+        let store = Store::open(&dir.path().join("motile.sqlite")).unwrap();
 
-        let found = lookups.images(&media, "  Ferry   Building ").await.unwrap();
+        let found = Lookups::new(&base, &base, &base).images(&media, &store, "  Ferry   Building ").await.unwrap();
         let asked_first = asked.lock().unwrap().len();
-        let again = lookups.images(&media, "Ferry Building").await.unwrap();
+        let again = Lookups::new(&base, &base, &base).images(&media, &store, "Ferry Building").await.unwrap();
 
         let shown: Vec<(&str, Option<u32>)> = found.iter().map(|image| (image.src.as_str(), image.width)).collect();
-        assert_eq!(
-            shown,
-            [
-                (format!("{base}/photos/320px-Ferry.png").as_str(), Some(320)),
-                (format!("{base}/photos/Inside.png").as_str(), Some(640))
-            ]
-        );
+        assert_eq!(shown, [(format!("{base}/photos/320px-Ferry.png").as_str(), Some(320))]);
         assert!(found.iter().all(|image| media.has(&image.id) && !image.video));
         assert_eq!(again, found);
         assert_eq!(asked.lock().unwrap().len(), asked_first, "a kept answer isn't asked again");
-        let searched = asked.lock().unwrap().iter().filter(|asked| asked.contains("filetype:bitmap")).count();
-        assert_eq!(searched, 1, "two words are tried once");
+        let downloaded = asked.lock().unwrap().iter().filter(|asked| asked.starts_with("/photos/")).count();
+        assert_eq!(downloaded, 1);
     }
 
     #[tokio::test]
@@ -428,11 +455,12 @@ mod tests {
         let (base, asked) = stand_in().await;
         let dir = tempfile::tempdir().unwrap();
         let media = MediaStore::new(dir.path().join("media"), "/");
+        let store = Store::open(&dir.path().join("motile.sqlite")).unwrap();
         let lookups = Lookups::new(&base, &base, &base);
 
-        assert!(lookups.images(&media, "Broken thing").await.is_err());
+        assert!(lookups.images(&media, &store, "Broken thing").await.is_err());
         let after_failure = asked.lock().unwrap().len();
-        assert!(lookups.images(&media, "Broken thing").await.is_err());
+        assert!(lookups.images(&media, &store, "Broken thing").await.is_err());
         assert!(asked.lock().unwrap().len() > after_failure, "a failure isn't kept");
 
         let stops = [[37.79, -122.39], [37.8, -122.4]];

@@ -9,8 +9,10 @@ import UIKit
 #endif
 
 /// SearchImage and Image: the photo on the surface's box, shimmering while it is looked for, an
-/// image's symbol when there is none.
+/// image's symbol when there is none. Its photo is only looked up and loaded near the viewport.
 final class ProgramImageView: ProgramNodeView {
+    /// How far outside the window an image counts as near it, as the transcript keeps its rows.
+    private static let nearby: CGFloat = 400
     private let picture = CALayer()
     private let shimmer = CAGradientLayer()
     private let missing = SymbolView()
@@ -20,6 +22,9 @@ final class ProgramImageView: ProgramNodeView {
     private var loading: String?
     private var failed: String?
     private var searching = false
+    private var near = false
+    /// The node it told the core is in view.
+    private var told: String?
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -65,6 +70,31 @@ final class ProgramImageView: ProgramNodeView {
         missing.image = .lucide(ProgramGlyphs.image, side: 26)
         missing.tint = Theme.mutedStrongerForeground
         present(on: box.surface)
+        host?.watchViewport(self)
+        startIfNear()
+    }
+
+    /// Looks again whether it is near the viewport, which moved.
+    func viewportMoved() {
+        guard let window else { return }
+        let frame = convert(bounds, to: nil)
+        #if os(macOS)
+        let height = window.frame.height
+        #else
+        let height = window.bounds.height
+        #endif
+        let isNear = frame.maxY > -Self.nearby && frame.minY < height + Self.nearby
+        guard isNear != near else { return }
+        near = isNear
+        startIfNear()
+    }
+
+    private func startIfNear() {
+        guard near else { return }
+        if searching, told != nodeID {
+            told = nodeID
+            host?.send(nodeID, ["type": "in_view"])
+        }
         guard let source, shown == nil, source != loading, source != failed else { return }
         load(source)
     }
@@ -161,7 +191,8 @@ enum ProgramImages {
         guard let file else { return done(nil) }
         if let cached = cache.object(forKey: file.path as NSString) { return done(cached) }
         queue.async {
-            let image = CGImageSourceCreateWithURL(file as CFURL, nil).flatMap { CGImageSourceCreateImageAtIndex($0, 0, nil) }
+            let decoded = [kCGImageSourceShouldCacheImmediately: true] as CFDictionary
+            let image = CGImageSourceCreateWithURL(file as CFURL, nil).flatMap { CGImageSourceCreateImageAtIndex($0, 0, decoded) }
             if let image { cache.setObject(image, forKey: file.path as NSString) }
             DispatchQueue.main.async { done(image) }
         }

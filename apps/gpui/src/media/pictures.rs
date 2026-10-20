@@ -126,7 +126,8 @@ impl Pictures {
         cx.default_global::<Pictures>().failed.remove(key);
     }
 
-    fn known(key: &str, cx: &mut App) -> Option<Picture> {
+    /// The image kept under `key`, or its failure or its load under way, without starting one.
+    pub fn known(key: &str, cx: &mut App) -> Option<Picture> {
         let pictures = cx.default_global::<Pictures>();
         pictures.clock += 1;
         let clock = pictures.clock;

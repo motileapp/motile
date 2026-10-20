@@ -319,6 +319,9 @@ struct Core {
     media_limit: u64,
     /// The commands waiting for each image, video or file that is being fetched, and what stops it.
     media_waiting: HashMap<String, (Vec<u64>, AbortHandle)>,
+    /// The photos each server found for programs' queries, so that a thread opened again shows them
+    /// at once.
+    photos: HashMap<String, HashMap<String, Vec<Media>>>,
     /// The files on their way to a server, by the key the client gave: the command that waits for
     /// each, and what stops it.
     uploads: HashMap<String, (u64, AbortHandle)>,
@@ -395,6 +398,7 @@ pub fn start(config: Config, sink: EventSink) -> anyhow::Result<Handle> {
         media: Arc::new(MediaCache::new(config.data_dir.join("media"))),
         media_limit: config.media_limit.unwrap_or(media::LIMIT),
         media_waiting: HashMap::new(),
+        photos: HashMap::new(),
         uploads: HashMap::new(),
         browsed: Browsed::default(),
         skills: Skills::default(),
@@ -616,6 +620,10 @@ impl Core {
             Input::UiTick { thread_id, key } => self.with_programs(&thread_id, |programs| programs.tick(&key)),
             Input::UiWake { thread_id } => self.with_programs(&thread_id, |programs| programs.wake(Instant::now())),
             Input::UiImagesFound { thread_id, query, images } => {
+                let server_id = self.open.get(&thread_id).map(|open| open.server_id.clone());
+                if let Some(server_id) = server_id.filter(|_| !images.is_empty()) {
+                    self.photos.entry(server_id).or_default().insert(query.clone(), images.clone());
+                }
                 self.with_programs(&thread_id, |programs| programs.images(&query, images))
             }
             Input::UiRouted { thread_id, stops, points } => {
@@ -2915,7 +2923,7 @@ impl Core {
             unrendered: HashSet::new(),
             unsaved: HashSet::new(),
             saved_at: Instant::now(),
-            programs: Programs::default(),
+            programs: Programs::with_photos(self.photos.get(server_id).unwrap_or(&HashMap::new())),
             ui_timers: UiTimers::default(),
         };
         self.open.insert(thread_id.to_string(), open);

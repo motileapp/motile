@@ -511,17 +511,19 @@ fn a_patch_fence_shows_the_program_it_patches_merged() {
 }
 
 #[test]
-fn looks_up_photos_once_the_query_stays_and_routes_at_once() {
+fn looks_up_a_photo_once_its_image_is_in_view_and_routes_at_once() {
     let mut thread = Thread::of(
         "root = Col([SearchImage(\"Belém Tower\"), Map([MapMarker(\"A\", 38.69, -9.21), MapMarker(\"B\", 38.71, -9.13)], true)])",
     );
     thread.ui(PROGRAM);
     let stops = vec![[38.69, -9.21], [38.71, -9.13]];
     assert!(thread.outs.contains(&Out::Route { stops: stops.clone() }));
-    assert!(thread.outs.iter().any(|out| matches!(out, Out::Wake { .. })));
     assert!(!thread.outs.iter().any(|out| matches!(out, Out::Images { .. })));
-    let outs = thread.programs.wake(Instant::now() + Duration::from_secs(1));
-    assert_eq!(outs, [Out::Images { query: "Belém Tower".into() }]);
+    assert!(thread.programs.wake(Instant::now() + Duration::from_secs(1)).is_empty(), "out of view");
+
+    let outs = thread.event("children/0", UiEvent::InView);
+    assert!(outs.contains(&Out::Images { query: "Belém Tower".into() }), "in view, at once");
+    assert!(thread.event("children/0", UiEvent::InView).is_empty());
     assert!(thread.programs.wake(Instant::now() + Duration::from_secs(2)).is_empty(), "asked once");
 
     let photo = Media {
@@ -544,6 +546,46 @@ fn looks_up_photos_once_the_query_stays_and_routes_at_once() {
     let map = node(&thread.tree(), "children/1").clone();
     assert_eq!(map["route"], "overview");
     assert_eq!(map["line"], json!(stops));
+}
+
+#[test]
+fn a_photo_shows_when_it_comes_while_another_image_comes_into_view() {
+    let mut thread = Thread::of("root = Col([SearchImage(\"Belém Tower\"), SearchImage(\"Pena Palace\")])");
+    thread.ui(PROGRAM);
+    thread.event("children/0", UiEvent::InView);
+    thread.event("children/1", UiEvent::InView);
+
+    let photo = Media {
+        id: "p.jpg".into(),
+        src: "p.jpg".into(),
+        video: false,
+        file: false,
+        size: 1,
+        width: Some(4),
+        height: Some(3),
+        poster: None,
+    };
+    let outs = thread.programs.images("Belém Tower", vec![photo]);
+    assert!(
+        patches(&outs)
+            .iter()
+            .any(|op| matches!(op, UiOp::Props { set, .. } if set["photos"]["media"] == json!(["p.jpg"])))
+    );
+}
+
+#[test]
+fn a_typed_query_is_looked_up_once_it_stays() {
+    let mut thread =
+        Thread::of("$place = \"Lisbon\"\nroot = Col([field, SearchImage($place)])\nfield = Input($place, \"Place\")");
+    thread.ui(PROGRAM);
+    let outs = thread.event("children/1", UiEvent::InView);
+    assert!(outs.contains(&Out::Images { query: "Lisbon".into() }));
+
+    let field = find(&thread.tree(), "Input", "Place").unwrap();
+    let outs = thread.event(&field, UiEvent::Value { value: json!("Porto") });
+    assert!(!outs.iter().any(|out| matches!(out, Out::Images { .. })));
+    let outs = thread.programs.wake(Instant::now() + Duration::from_secs(1));
+    assert!(outs.contains(&Out::Images { query: "Porto".into() }), "after a while");
 }
 
 #[test]

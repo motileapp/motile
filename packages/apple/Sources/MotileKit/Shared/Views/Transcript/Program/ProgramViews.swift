@@ -19,6 +19,8 @@ protocol ProgramHost: AnyObject {
     func resized(_ node: String)
     /// The program still streams in.
     var streaming: Bool { get }
+    /// Tells the image whenever the viewport moves.
+    func watchViewport(_ image: ProgramImageView)
 }
 
 extension ProgramHost {

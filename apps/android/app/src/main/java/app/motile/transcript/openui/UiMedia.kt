@@ -53,7 +53,10 @@ import androidx.compose.ui.layout.Measurable
 import androidx.compose.ui.layout.MeasurePolicy
 import androidx.compose.ui.layout.MeasureResult
 import androidx.compose.ui.layout.MeasureScope
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -114,7 +117,8 @@ private object WebPictures {
 /**
  * A photo the width of its column at its aspect ratio, on the surface's box: shimmering while it is
  * looked for, fading in once it is here, Lucide's image where there is none. An image's own `src`
- * is fetched first; when it fails, core looks one up instead.
+ * is fetched first; when it fails, core looks one up instead. Its photo is only looked up and loaded
+ * once it comes near the viewport, and stays once it has.
  */
 @Composable
 fun UiImage(node: UiNode, name: String, src: String?, aspect: Float, radius: UiRadius, fit: UiFit, photos: UiPhotos) {
@@ -131,9 +135,17 @@ fun UiImage(node: UiNode, name: String, src: String?, aspect: Float, radius: UiR
     var picture by remember(source) { mutableStateOf(source?.let { PictureCache.cached(it.removePrefix("media:")) }) }
     var failed by remember(source) { mutableStateOf(false) }
     val shown = remember(source) { Animatable(if (picture != null) 1f else 0f) }
-    val maxPixels = with(LocalDensity.current) { 720.dp.roundToPx() }
-    LaunchedEffect(source) {
-        if (source == null || picture != null) return@LaunchedEffect
+    val density = LocalDensity.current
+    val maxPixels = with(density) { 720.dp.roundToPx() }
+    val nearby = with(density) { NEARBY.toPx() }
+    val windowHeight = LocalWindowInfo.current.containerSize.height
+    var near by remember(node.id) { mutableStateOf(false) }
+    LaunchedEffect(node.id, near, photos.state) {
+        if (!near || photos.state != UiPhotoState.Waiting) return@LaunchedEffect
+        host?.send(node.id, "in_view")
+    }
+    LaunchedEffect(source, near) {
+        if (!near || source == null || picture != null) return@LaunchedEffect
         val loaded = if (source.startsWith("media:")) {
             val id = source.removePrefix("media:")
             store.mediaFile(id)?.let { PictureCache.decode(it, id, maxPixels) }
@@ -154,6 +166,11 @@ fun UiImage(node: UiNode, name: String, src: String?, aspect: Float, radius: UiR
             .uiNode(node)
             .fillMaxWidth()
             .aspectRatio(aspect.coerceIn(0.2f, 5f))
+            .onGloballyPositioned { coordinates ->
+                if (near) return@onGloballyPositioned
+                val top = coordinates.positionInWindow().y
+                near = top + coordinates.size.height > -nearby && top < windowHeight + nearby
+            }
             .clip(shape)
             .background(surface.color(Surface.Layer.Box), shape)
             .then(if (waiting) Modifier.shimmer() else Modifier),
@@ -169,6 +186,9 @@ fun UiImage(node: UiNode, name: String, src: String?, aspect: Float, radius: UiR
         }
     }
 }
+
+/** How far outside the window an image counts as near it, as the transcript keeps its rows. */
+private val NEARBY = 400.dp
 
 /** Motile's shimmer: a band that sweeps across every 1.4 seconds, still where motion is reduced. */
 @Composable

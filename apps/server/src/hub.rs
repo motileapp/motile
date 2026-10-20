@@ -985,7 +985,7 @@ impl Hub {
     /// Photos of what `query` names, kept as the thread's media.
     pub async fn ui_images(&self, thread_id: &str, query: &str) -> anyhow::Result<Vec<Media>> {
         self.thread(thread_id).await.context("That thread isn't one of your server's own.")?;
-        let images = self.lookups.images(&self.media, query).await?;
+        let images = self.lookups.images(&self.media, &self.store, query).await?;
         for image in &images {
             self.store.save_media(thread_id, &image.id)?;
         }
