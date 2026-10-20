@@ -8,6 +8,7 @@ use tokio::runtime::Runtime;
 
 use crate::api::{Config, Envelope, Event};
 use crate::core::{self, Handle};
+use crate::render::openui::{canvas, map, web};
 
 /// Called on a background thread with one event as NUL-terminated JSON. The text is only valid
 /// during the call.
@@ -76,6 +77,45 @@ pub extern "C" fn motile_send(command_json: *const c_char) {
         Ok(envelope) => running.handle.send(envelope.id, envelope.command),
         Err(error) => tracing::warn!("ignored a malformed command: {error}"),
     }
+}
+
+/// Lays out a canvas component (Chart, Svg, Math, Celebration, Flashcard) at a width: a
+/// `canvas::Canvas` as JSON in, its `canvas::Scene` as JSON out. Synchronous and safe on any thread,
+/// for a client measuring rows. The answer is the caller's to free with `motile_free_string`.
+#[unsafe(no_mangle)]
+pub extern "C" fn motile_ui_layout(input_json: *const c_char) -> *mut c_char {
+    let scene = canvas::layout_json(&text(input_json).unwrap_or_default());
+    CString::new(scene).unwrap_or_default().into_raw()
+}
+
+/// Answers the map's camera maths (`map::map_json`) for the clients whose engines are MapLibre's:
+/// JSON in, JSON out, on any thread. The answer is the caller's to free with `motile_free_string`.
+#[unsafe(no_mangle)]
+pub extern "C" fn motile_ui_map(input_json: *const c_char) -> *mut c_char {
+    let answer = map::map_json(&text(input_json).unwrap_or_default());
+    CString::new(answer).unwrap_or_default().into_raw()
+}
+
+/// Builds the page an HtmlView or a YouTube shows in a web view: a `web::PageRequest` as JSON in,
+/// its `web::Page` as JSON out. Synchronous and safe on any thread. The answer is the caller's to
+/// free with `motile_free_string`.
+#[unsafe(no_mangle)]
+pub extern "C" fn motile_ui_page(input_json: *const c_char) -> *mut c_char {
+    let page = web::page_json(&text(input_json).unwrap_or_default());
+    CString::new(page).unwrap_or_default().into_raw()
+}
+
+/// Frees a string the core gave the client.
+///
+/// # Safety
+///
+/// `string` is null or a string the core answered with, freed only once.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn motile_free_string(string: *mut c_char) {
+    if string.is_null() {
+        return;
+    }
+    drop(unsafe { CString::from_raw(string) });
 }
 
 fn init_logging() {

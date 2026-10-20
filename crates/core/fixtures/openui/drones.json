@@ -1,0 +1,1255 @@
+{
+  "id": "",
+  "component": "Col",
+  "children": [
+    {
+      "id": "children/0",
+      "component": "Col",
+      "children": [
+        {
+          "id": "children/0/children/0",
+          "a11y": {
+            "role": "heading",
+            "level": 2
+          },
+          "component": "Title",
+          "text": {
+            "text": "The drone photography market",
+            "runs": [],
+            "links": []
+          },
+          "style": "title_xl",
+          "color": "foreground"
+        },
+        {
+          "id": "children/0/children/1",
+          "a11y": {
+            "role": "text"
+          },
+          "component": "Text",
+          "text": {
+            "text": "Aerial photos and video for property, events, inspection and media: a young market where cheap hardware meets licensed, skilled work.",
+            "runs": [],
+            "links": []
+          },
+          "inlines": [],
+          "style": "body",
+          "color": "muted-foreground",
+          "weight": "regular",
+          "italic": false,
+          "strike": false,
+          "digits": false,
+          "max_lines": null
+        }
+      ],
+      "align": "stretch",
+      "spacing": [
+        0.0,
+        8.0
+      ]
+    },
+    {
+      "id": "children/1",
+      "a11y": {
+        "role": "heading",
+        "level": 3
+      },
+      "component": "Title",
+      "text": {
+        "text": "How the market is structured",
+        "runs": [],
+        "links": []
+      },
+      "style": "title_md",
+      "color": "foreground"
+    },
+    {
+      "id": "children/2",
+      "component": "Grid",
+      "children": [
+        {
+          "id": "children/2/children/0",
+          "a11y": {
+            "role": "group"
+          },
+          "component": "Card",
+          "children": [
+            {
+              "id": "children/2/children/0/children/0",
+              "a11y": {
+                "role": "image",
+                "label": "Suburb aerial view"
+              },
+              "component": "SearchImage",
+              "query": "Suburb aerial view",
+              "aspect_ratio": 1.7,
+              "radius": {
+                "kind": "md",
+                "points": 8.0
+              },
+              "fit": "cover",
+              "photos": {
+                "state": "waiting",
+                "media": []
+              }
+            },
+            {
+              "id": "children/2/children/0/children/1",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Text",
+              "text": {
+                "text": "Real estate and architecture",
+                "runs": [],
+                "links": []
+              },
+              "inlines": [],
+              "style": "small",
+              "color": "foreground",
+              "weight": "semibold",
+              "italic": false,
+              "strike": false,
+              "digits": false,
+              "max_lines": null
+            },
+            {
+              "id": "children/2/children/0/children/2",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Caption",
+              "text": {
+                "text": "Listing photos and video, the steadiest source of work.",
+                "runs": [],
+                "links": []
+              },
+              "style": "caption",
+              "color": "muted-foreground"
+            }
+          ],
+          "soft": false,
+          "nested": false,
+          "padding": 12.0,
+          "spacing": [
+            0.0,
+            8.0,
+            8.0
+          ]
+        },
+        {
+          "id": "children/2/children/1",
+          "a11y": {
+            "role": "group"
+          },
+          "component": "Card",
+          "children": [
+            {
+              "id": "children/2/children/1/children/0",
+              "a11y": {
+                "role": "image",
+                "label": "Wedding photography"
+              },
+              "component": "SearchImage",
+              "query": "Wedding photography",
+              "aspect_ratio": 1.7,
+              "radius": {
+                "kind": "md",
+                "points": 8.0
+              },
+              "fit": "cover",
+              "photos": {
+                "state": "waiting",
+                "media": []
+              }
+            },
+            {
+              "id": "children/2/children/1/children/1",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Text",
+              "text": {
+                "text": "Weddings and events",
+                "runs": [],
+                "links": []
+              },
+              "inlines": [],
+              "style": "small",
+              "color": "foreground",
+              "weight": "semibold",
+              "italic": false,
+              "strike": false,
+              "digits": false,
+              "max_lines": null
+            },
+            {
+              "id": "children/2/children/1/children/2",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Caption",
+              "text": {
+                "text": "Seasonal and priced per event, often sold with a ground crew.",
+                "runs": [],
+                "links": []
+              },
+              "style": "caption",
+              "color": "muted-foreground"
+            }
+          ],
+          "soft": false,
+          "nested": false,
+          "padding": 12.0,
+          "spacing": [
+            0.0,
+            8.0,
+            8.0
+          ]
+        },
+        {
+          "id": "children/2/children/2",
+          "a11y": {
+            "role": "group"
+          },
+          "component": "Card",
+          "children": [
+            {
+              "id": "children/2/children/2/children/0",
+              "a11y": {
+                "role": "image",
+                "label": "Solar farm aerial"
+              },
+              "component": "SearchImage",
+              "query": "Solar farm aerial",
+              "aspect_ratio": 1.7,
+              "radius": {
+                "kind": "md",
+                "points": 8.0
+              },
+              "fit": "cover",
+              "photos": {
+                "state": "waiting",
+                "media": []
+              }
+            },
+            {
+              "id": "children/2/children/2/children/1",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Text",
+              "text": {
+                "text": "Inspection and surveying",
+                "runs": [],
+                "links": []
+              },
+              "inlines": [],
+              "style": "small",
+              "color": "foreground",
+              "weight": "semibold",
+              "italic": false,
+              "strike": false,
+              "digits": false,
+              "max_lines": null
+            },
+            {
+              "id": "children/2/children/2/children/2",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Caption",
+              "text": {
+                "text": "Roofs, solar farms and building sites; more training, better pay.",
+                "runs": [],
+                "links": []
+              },
+              "style": "caption",
+              "color": "muted-foreground"
+            }
+          ],
+          "soft": false,
+          "nested": false,
+          "padding": 12.0,
+          "spacing": [
+            0.0,
+            8.0,
+            8.0
+          ]
+        },
+        {
+          "id": "children/2/children/3",
+          "a11y": {
+            "role": "group"
+          },
+          "component": "Card",
+          "children": [
+            {
+              "id": "children/2/children/3/children/0",
+              "a11y": {
+                "role": "image",
+                "label": "Aerial photography coastline"
+              },
+              "component": "SearchImage",
+              "query": "Aerial photography coastline",
+              "aspect_ratio": 1.7,
+              "radius": {
+                "kind": "md",
+                "points": 8.0
+              },
+              "fit": "cover",
+              "photos": {
+                "state": "waiting",
+                "media": []
+              }
+            },
+            {
+              "id": "children/2/children/3/children/1",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Text",
+              "text": {
+                "text": "Media and tourism",
+                "runs": [],
+                "links": []
+              },
+              "inlines": [],
+              "style": "small",
+              "color": "foreground",
+              "weight": "semibold",
+              "italic": false,
+              "strike": false,
+              "digits": false,
+              "max_lines": null
+            },
+            {
+              "id": "children/2/children/3/children/2",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Caption",
+              "text": {
+                "text": "Stock footage, tourism boards and film: visible but competitive.",
+                "runs": [],
+                "links": []
+              },
+              "style": "caption",
+              "color": "muted-foreground"
+            }
+          ],
+          "soft": false,
+          "nested": false,
+          "padding": 12.0,
+          "spacing": [
+            0.0,
+            8.0,
+            8.0
+          ]
+        }
+      ],
+      "columns": 2,
+      "min_child_width": 220.0,
+      "gap": 12.0
+    },
+    {
+      "id": "children/3",
+      "a11y": {
+        "role": "heading",
+        "level": 3
+      },
+      "component": "Title",
+      "text": {
+        "text": "How big is it?",
+        "runs": [],
+        "links": []
+      },
+      "style": "title_md",
+      "color": "foreground"
+    },
+    {
+      "id": "children/4",
+      "a11y": {
+        "role": "group"
+      },
+      "component": "Card",
+      "children": [
+        {
+          "id": "children/4/children/0",
+          "component": "Row",
+          "children": [
+            {
+              "id": "children/4/children/0/children/0",
+              "component": "Col",
+              "children": [
+                {
+                  "id": "children/4/children/0/children/0/children/0",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Caption",
+                  "text": {
+                    "text": "Drone photography services, worldwide, 2026",
+                    "runs": [],
+                    "links": []
+                  },
+                  "style": "caption",
+                  "color": "muted-foreground"
+                },
+                {
+                  "id": "children/4/children/0/children/0/children/1",
+                  "a11y": {
+                    "role": "heading",
+                    "level": 2
+                  },
+                  "component": "Title",
+                  "text": {
+                    "text": "$1.1B",
+                    "runs": [],
+                    "links": []
+                  },
+                  "style": "title2xl",
+                  "color": "foreground"
+                }
+              ],
+              "align": "stretch",
+              "spacing": [
+                0.0,
+                4.0
+              ]
+            },
+            {
+              "id": "children/4/children/0/children/1",
+              "a11y": {
+                "role": "hidden"
+              },
+              "component": "Spacer"
+            },
+            {
+              "id": "children/4/children/0/children/2",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Badge",
+              "text": "About 19% a year",
+              "tone": "success",
+              "icon": null
+            }
+          ],
+          "gap": 12.0,
+          "align": "center",
+          "justify": "start",
+          "wrap": true,
+          "sizing": [
+            {
+              "basis": "content",
+              "length": null,
+              "grow": 0.0,
+              "shrink": true
+            },
+            {
+              "basis": "zero",
+              "length": null,
+              "grow": 1.0,
+              "shrink": false
+            },
+            {
+              "basis": "content",
+              "length": null,
+              "grow": 0.0,
+              "shrink": false
+            }
+          ]
+        },
+        {
+          "id": "children/4/children/1",
+          "a11y": {
+            "role": "image",
+            "label": "bar chart of size by year"
+          },
+          "component": "Chart",
+          "canvas": {
+            "kind": "Chart",
+            "props": {
+              "type": "bar",
+              "data": [
+                {
+                  "year": "2024",
+                  "size": 860000000
+                },
+                {
+                  "year": "2026",
+                  "size": 1110000000
+                },
+                {
+                  "year": "2028",
+                  "size": 1520000000
+                },
+                {
+                  "year": "2030",
+                  "size": 2260000000
+                }
+              ],
+              "x": "year",
+              "series": [
+                "size"
+              ],
+              "format": "currency",
+              "stacked": false,
+              "height": 200
+            }
+          }
+        },
+        {
+          "id": "children/4/children/2",
+          "a11y": {
+            "role": "text"
+          },
+          "component": "Caption",
+          "text": {
+            "text": "Illustrative figures in the range of public market reports; estimates vary widely with the market definition.",
+            "runs": [],
+            "links": []
+          },
+          "style": "caption",
+          "color": "muted-foreground"
+        }
+      ],
+      "soft": false,
+      "nested": false,
+      "padding": 16.0,
+      "spacing": [
+        0.0,
+        8.0,
+        8.0
+      ]
+    },
+    {
+      "id": "children/5",
+      "a11y": {
+        "role": "heading",
+        "level": 3
+      },
+      "component": "Title",
+      "text": {
+        "text": "Who makes money",
+        "runs": [],
+        "links": []
+      },
+      "style": "title_md",
+      "color": "foreground"
+    },
+    {
+      "id": "children/6",
+      "a11y": {
+        "role": "table"
+      },
+      "component": "Table",
+      "columns": [
+        {
+          "title": "Who",
+          "numeric": false
+        },
+        {
+          "title": "How they earn",
+          "numeric": false
+        },
+        {
+          "title": "Margin",
+          "numeric": false
+        }
+      ],
+      "rows": [
+        [
+          {
+            "kind": "text",
+            "text": {
+              "text": "Drone makers",
+              "runs": [],
+              "links": []
+            }
+          },
+          {
+            "kind": "text",
+            "text": {
+              "text": "Hardware, cameras and accessories",
+              "runs": [],
+              "links": []
+            }
+          },
+          {
+            "kind": "node",
+            "node": {
+              "id": "children/6/rows/0/2",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Badge",
+              "text": "Medium",
+              "tone": "warning",
+              "icon": null
+            }
+          }
+        ],
+        [
+          {
+            "kind": "text",
+            "text": {
+              "text": "Freelance pilots",
+              "runs": [],
+              "links": []
+            }
+          },
+          {
+            "kind": "text",
+            "text": {
+              "text": "Per shoot or per project",
+              "runs": [],
+              "links": []
+            }
+          },
+          {
+            "kind": "node",
+            "node": {
+              "id": "children/6/rows/1/2",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Badge",
+              "text": "High",
+              "tone": "success",
+              "icon": null
+            }
+          }
+        ],
+        [
+          {
+            "kind": "text",
+            "text": {
+              "text": "Agencies",
+              "runs": [],
+              "links": []
+            }
+          },
+          {
+            "kind": "text",
+            "text": {
+              "text": "Bundles of photo, video and editing",
+              "runs": [],
+              "links": []
+            }
+          },
+          {
+            "kind": "node",
+            "node": {
+              "id": "children/6/rows/2/2",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Badge",
+              "text": "Medium",
+              "tone": "warning",
+              "icon": null
+            }
+          }
+        ],
+        [
+          {
+            "kind": "text",
+            "text": {
+              "text": "Software platforms",
+              "runs": [],
+              "links": []
+            }
+          },
+          {
+            "kind": "text",
+            "text": {
+              "text": "Mapping and processing subscriptions",
+              "runs": [],
+              "links": []
+            }
+          },
+          {
+            "kind": "node",
+            "node": {
+              "id": "children/6/rows/3/2",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Badge",
+              "text": "High",
+              "tone": "success",
+              "icon": null
+            }
+          }
+        ]
+      ]
+    },
+    {
+      "id": "children/7",
+      "a11y": {
+        "role": "heading",
+        "level": 3
+      },
+      "component": "Title",
+      "text": {
+        "text": "Try the economics of a drone photo business",
+        "runs": [],
+        "links": []
+      },
+      "style": "title_md",
+      "color": "foreground"
+    },
+    {
+      "id": "children/8",
+      "a11y": {
+        "role": "group"
+      },
+      "component": "Card",
+      "children": [
+        {
+          "id": "children/8/children/0",
+          "component": "Grid",
+          "children": [
+            {
+              "id": "children/8/children/0/children/0",
+              "a11y": {
+                "role": "adjustable",
+                "label": "Projects per month",
+                "value": "12"
+              },
+              "component": "Slider",
+              "value": 12.0,
+              "min": 0.0,
+              "max": 40.0,
+              "step": 1.0,
+              "at": 0.3,
+              "label": "Projects per month",
+              "readout": "12",
+              "head": true,
+              "marks": [],
+              "disabled": null
+            },
+            {
+              "id": "children/8/children/0/children/1",
+              "a11y": {
+                "role": "adjustable",
+                "label": "Price per project",
+                "value": "$450"
+              },
+              "component": "Slider",
+              "value": 450.0,
+              "min": 100.0,
+              "max": 1500.0,
+              "step": 25.0,
+              "at": 0.25,
+              "label": "Price per project",
+              "readout": "$450",
+              "head": true,
+              "marks": [],
+              "disabled": null
+            },
+            {
+              "id": "children/8/children/0/children/2",
+              "a11y": {
+                "role": "adjustable",
+                "label": "Cost per project",
+                "value": "$90"
+              },
+              "component": "Slider",
+              "value": 90.0,
+              "min": 0.0,
+              "max": 400.0,
+              "step": 10.0,
+              "at": 0.225,
+              "label": "Cost per project",
+              "readout": "$90",
+              "head": true,
+              "marks": [],
+              "disabled": null
+            },
+            {
+              "id": "children/8/children/0/children/3",
+              "a11y": {
+                "role": "adjustable",
+                "label": "Fixed costs per month",
+                "value": "$1,800"
+              },
+              "component": "Slider",
+              "value": 1800.0,
+              "min": 0.0,
+              "max": 6000.0,
+              "step": 100.0,
+              "at": 0.3,
+              "label": "Fixed costs per month",
+              "readout": "$1,800",
+              "head": true,
+              "marks": [],
+              "disabled": null
+            }
+          ],
+          "columns": 2,
+          "min_child_width": 240.0,
+          "gap": 20.0
+        },
+        {
+          "id": "children/8/children/1",
+          "component": "Grid",
+          "children": [
+            {
+              "id": "children/8/children/1/children/0",
+              "a11y": {
+                "role": "group"
+              },
+              "component": "Card",
+              "children": [
+                {
+                  "id": "children/8/children/1/children/0/children/0",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Caption",
+                  "text": {
+                    "text": "Revenue a month",
+                    "runs": [],
+                    "links": []
+                  },
+                  "style": "caption",
+                  "color": "muted-foreground"
+                },
+                {
+                  "id": "children/8/children/1/children/0/children/1",
+                  "a11y": {
+                    "role": "heading",
+                    "level": 2
+                  },
+                  "component": "Title",
+                  "text": {
+                    "text": "$5,400",
+                    "runs": [],
+                    "links": []
+                  },
+                  "style": "card_heading",
+                  "color": "foreground"
+                }
+              ],
+              "soft": true,
+              "nested": true,
+              "padding": 12.0,
+              "spacing": [
+                0.0,
+                4.0
+              ]
+            },
+            {
+              "id": "children/8/children/1/children/1",
+              "a11y": {
+                "role": "group"
+              },
+              "component": "Card",
+              "children": [
+                {
+                  "id": "children/8/children/1/children/1/children/0",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Caption",
+                  "text": {
+                    "text": "Profit a month",
+                    "runs": [],
+                    "links": []
+                  },
+                  "style": "caption",
+                  "color": "muted-foreground"
+                },
+                {
+                  "id": "children/8/children/1/children/1/children/1",
+                  "a11y": {
+                    "role": "heading",
+                    "level": 2
+                  },
+                  "component": "Title",
+                  "text": {
+                    "text": "$2,520",
+                    "runs": [],
+                    "links": []
+                  },
+                  "style": "card_heading",
+                  "color": "success"
+                }
+              ],
+              "soft": true,
+              "nested": true,
+              "padding": 12.0,
+              "spacing": [
+                0.0,
+                4.0
+              ]
+            },
+            {
+              "id": "children/8/children/1/children/2",
+              "a11y": {
+                "role": "group"
+              },
+              "component": "Card",
+              "children": [
+                {
+                  "id": "children/8/children/1/children/2/children/0",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Caption",
+                  "text": {
+                    "text": "Margin",
+                    "runs": [],
+                    "links": []
+                  },
+                  "style": "caption",
+                  "color": "muted-foreground"
+                },
+                {
+                  "id": "children/8/children/1/children/2/children/1",
+                  "a11y": {
+                    "role": "heading",
+                    "level": 2
+                  },
+                  "component": "Title",
+                  "text": {
+                    "text": "46.7%",
+                    "runs": [],
+                    "links": []
+                  },
+                  "style": "card_heading",
+                  "color": "foreground"
+                }
+              ],
+              "soft": true,
+              "nested": true,
+              "padding": 12.0,
+              "spacing": [
+                0.0,
+                4.0
+              ]
+            },
+            {
+              "id": "children/8/children/1/children/3",
+              "a11y": {
+                "role": "group"
+              },
+              "component": "Card",
+              "children": [
+                {
+                  "id": "children/8/children/1/children/3/children/0",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Caption",
+                  "text": {
+                    "text": "Break-even",
+                    "runs": [],
+                    "links": []
+                  },
+                  "style": "caption",
+                  "color": "muted-foreground"
+                },
+                {
+                  "id": "children/8/children/1/children/3/children/1",
+                  "a11y": {
+                    "role": "heading",
+                    "level": 2
+                  },
+                  "component": "Title",
+                  "text": {
+                    "text": "5 projects",
+                    "runs": [],
+                    "links": []
+                  },
+                  "style": "card_heading",
+                  "color": "foreground"
+                }
+              ],
+              "soft": true,
+              "nested": true,
+              "padding": 12.0,
+              "spacing": [
+                0.0,
+                4.0
+              ]
+            }
+          ],
+          "columns": 4,
+          "min_child_width": 130.0,
+          "gap": 12.0
+        },
+        {
+          "id": "children/8/children/2",
+          "a11y": {
+            "role": "image",
+            "label": "line chart of Revenue, Costs by projects"
+          },
+          "component": "Chart",
+          "canvas": {
+            "kind": "Chart",
+            "props": {
+              "type": "line",
+              "data": [
+                {
+                  "projects": "0",
+                  "Revenue": 0,
+                  "Costs": 1800
+                },
+                {
+                  "projects": "5",
+                  "Revenue": 2250,
+                  "Costs": 2250
+                },
+                {
+                  "projects": "10",
+                  "Revenue": 4500,
+                  "Costs": 2700
+                },
+                {
+                  "projects": "15",
+                  "Revenue": 6750,
+                  "Costs": 3150
+                },
+                {
+                  "projects": "20",
+                  "Revenue": 9000,
+                  "Costs": 3600
+                },
+                {
+                  "projects": "25",
+                  "Revenue": 11250,
+                  "Costs": 4050
+                },
+                {
+                  "projects": "30",
+                  "Revenue": 13500,
+                  "Costs": 4500
+                },
+                {
+                  "projects": "35",
+                  "Revenue": 15750,
+                  "Costs": 4950
+                },
+                {
+                  "projects": "40",
+                  "Revenue": 18000,
+                  "Costs": 5400
+                }
+              ],
+              "x": "projects",
+              "series": [
+                "Revenue",
+                "Costs"
+              ],
+              "format": "currency",
+              "stacked": false,
+              "height": 200
+            }
+          }
+        },
+        {
+          "id": "children/8/children/3",
+          "a11y": {
+            "role": "text"
+          },
+          "component": "Text",
+          "text": {
+            "text": "Fixed costs are covered from project 5 each month; every project after that adds $360 of profit.",
+            "runs": [],
+            "links": []
+          },
+          "inlines": [],
+          "style": "small",
+          "color": "foreground",
+          "weight": "regular",
+          "italic": false,
+          "strike": false,
+          "digits": false,
+          "max_lines": null
+        },
+        {
+          "id": "children/8/children/4",
+          "a11y": {
+            "role": "text"
+          },
+          "component": "Caption",
+          "text": {
+            "text": "Illustrative. Fixed costs cover insurance, gear, software and marketing; project costs cover editing and travel.",
+            "runs": [],
+            "links": []
+          },
+          "style": "caption",
+          "color": "muted-foreground"
+        }
+      ],
+      "soft": false,
+      "nested": false,
+      "padding": 16.0,
+      "spacing": [
+        0.0,
+        16.0,
+        16.0,
+        16.0,
+        16.0
+      ]
+    },
+    {
+      "id": "children/9",
+      "a11y": {
+        "role": "heading",
+        "level": 3
+      },
+      "component": "Title",
+      "text": {
+        "text": "What is changing",
+        "runs": [],
+        "links": []
+      },
+      "style": "title_md",
+      "color": "foreground"
+    },
+    {
+      "id": "children/10",
+      "a11y": {
+        "role": "list"
+      },
+      "component": "List",
+      "items": [
+        {
+          "id": "children/10/items/0",
+          "a11y": {
+            "role": "list_item"
+          },
+          "component": "ListItem",
+          "title": {
+            "text": "Cheaper drones with better cameras push basic photo prices down.",
+            "runs": [],
+            "links": []
+          },
+          "style": "body",
+          "medium": false,
+          "description": null,
+          "marker": {
+            "kind": "dot"
+          },
+          "children": []
+        },
+        {
+          "id": "children/10/items/1",
+          "a11y": {
+            "role": "list_item"
+          },
+          "component": "ListItem",
+          "title": {
+            "text": "Licensing, such as FAA Part 107 in the US, keeps casual competition out of paid work.",
+            "runs": [],
+            "links": []
+          },
+          "style": "body",
+          "medium": false,
+          "description": null,
+          "marker": {
+            "kind": "dot"
+          },
+          "children": []
+        },
+        {
+          "id": "children/10/items/2",
+          "a11y": {
+            "role": "list_item"
+          },
+          "component": "ListItem",
+          "title": {
+            "text": "Inspection, mapping and thermal imaging grow faster than photography alone.",
+            "runs": [],
+            "links": []
+          },
+          "style": "body",
+          "medium": false,
+          "description": null,
+          "marker": {
+            "kind": "dot"
+          },
+          "children": []
+        },
+        {
+          "id": "children/10/items/3",
+          "a11y": {
+            "role": "list_item"
+          },
+          "component": "ListItem",
+          "title": {
+            "text": "Clients increasingly want edited video and 3D models, not just photos.",
+            "runs": [],
+            "links": []
+          },
+          "style": "body",
+          "medium": false,
+          "description": null,
+          "marker": {
+            "kind": "dot"
+          },
+          "children": []
+        }
+      ],
+      "marker": "bullet",
+      "timeline": false,
+      "wide": false
+    },
+    {
+      "id": "children/11",
+      "component": "Row",
+      "children": [
+        {
+          "id": "children/11/children/0",
+          "a11y": {
+            "role": "button",
+            "label": "Compare with drone inspection services"
+          },
+          "component": "Button",
+          "label": "Compare with drone inspection services",
+          "variant": "outline",
+          "tint": null,
+          "size": "small",
+          "icon": {
+            "name": "arrow-right",
+            "glyph": ""
+          },
+          "block": false,
+          "disabled": null
+        }
+      ],
+      "gap": 8.0,
+      "align": "center",
+      "justify": "start",
+      "wrap": false,
+      "sizing": [
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": false
+        }
+      ]
+    }
+  ],
+  "align": "stretch",
+  "spacing": [
+    0.0,
+    24.0,
+    12.0,
+    24.0,
+    12.0,
+    24.0,
+    12.0,
+    24.0,
+    12.0,
+    24.0,
+    12.0,
+    24.0
+  ]
+}

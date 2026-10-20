@@ -1,0 +1,8 @@
+root = Card([Title("Your 4 × 4 ft garden plan", "lg"), Text("Tap a planter to see what grows there.", "sm", "muted"), grid, detail])
+$bed = "Lettuce + radishes"
+grid = Grid([p1, p2, p3, p4], 2, null, 3)
+p1 = Pressable([Col([Icon("leafy-green", "lg"), Text("Lettuce + radishes", "sm", null, "medium"), Caption("24-inch planter")], 1, "center")], @Set($bed, "Lettuce + radishes"), $bed == "Lettuce + radishes", 6, "#d6e8cf", "lg")
+p2 = Pressable([Col([Icon("bean", "lg"), Text("Snap peas", "sm", null, "medium"), Caption("Pot + trellis")], 1, "center")], @Set($bed, "Snap peas"), $bed == "Snap peas", 6, "#d6e8cf", "lg")
+p3 = Pressable([Col([Icon("leaf", "lg"), Text("Kale", "sm", null, "medium"), Caption("12-inch pot")], 1, "center")], @Set($bed, "Kale"), $bed == "Kale", 6, "#ecdfc3", "lg")
+p4 = Pressable([Col([Icon("sprout", "lg"), Text("Herbs", "sm", null, "medium"), Caption("1 to 2 small pots")], 1, "center")], @Set($bed, "Herbs"), $bed == "Herbs", 6, "#ecdfc3", "lg")
+detail = Row([Icon("sun", "sm", "warning"), Text("Selected: **" + $bed + "**. Give it 6+ hours of sunlight.", "sm")], 2)

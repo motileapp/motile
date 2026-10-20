@@ -1,0 +1,2 @@
+# What a client is known to draw apart from the others, by program and component, and why. The
+# comparison lets these nodes and what lies around them differ; remove a line once it is fixed.

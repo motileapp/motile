@@ -34,6 +34,7 @@ extension Theme {
     static let processForeground = tone(0xffffff, 0xffffff)
     static let merged = tone(0x8250df, 0xb480ff)
     static let mergedForeground = tone(0xffffff, 0xffffff)
+    static let pink = tone(0xb7377c, 0xf28cc0)
     static let skill = tone(0x47730d, 0xa3e635)
     static let border = tone(0xe2e3e5, 0x191a1e)
     static let borderCard = tone(0xe9ebf0, 0x1e1f25)
@@ -51,6 +52,17 @@ extension Theme {
     static let chart3 = tone(0xc74f0a, 0xe98538)
     static let chart4 = tone(0x8250df, 0xb480ff)
     static let chart5 = tone(0x0284c7, 0x2aa9e5)
+    static let chart6 = tone(0xb7377c, 0xf28cc0)
+    static let mapLand = tone(0xeef0f3, 0x18191e)
+    static let mapGreen = tone(0xbce9b0, 0x1f2b22)
+    static let mapPark = tone(0xb7e7aa, 0x20301f)
+    static let mapCampus = tone(0xede8d7, 0x26241f)
+    static let mapWater = tone(0xa2dff5, 0x1d3540)
+    static let mapWaterway = tone(0x91d6ef, 0x23414d)
+    static let mapBuilding = tone(0xe3e6eb, 0x24252b)
+    static let mapStreet = tone(0xcdd1d9, 0x34363d)
+    static let mapRoad = tone(0xb1b9c8, 0x4a4e57)
+    static let mapFerry = tone(0x89cfe9, 0x2b5566)
     static let claude = tone(0xd97757, 0xd97757)
     static let openai = tone(0x22242b, 0xd0d2d9)
     static let googleBlue = tone(0x4285f4, 0x4285f4)
@@ -68,6 +80,93 @@ extension Theme {
     static let syntaxFunction = tone(0x8250df, 0xd2a8ff)
     static let syntaxType = tone(0x953800, 0xffa657)
     static let syntaxTag = tone(0x116329, 0x7ee787)
+}
+
+extension Theme {
+    /// The colour of a token by its name in tokens.json, as OpenUI's scenes and trees name them.
+    static func named(_ name: String) -> PlatformColor? {
+        switch name {
+        case "background": background
+        case "background-accent": backgroundAccent
+        case "background-accent-stronger": backgroundAccentStronger
+        case "background-accent-strongest": backgroundAccentStrongest
+        case "background-accent-larger": backgroundAccentLarger
+        case "background-accent-larger-stronger": backgroundAccentLargerStronger
+        case "background-secondary": backgroundSecondary
+        case "background-secondary-accent": backgroundSecondaryAccent
+        case "background-secondary-accent-stronger": backgroundSecondaryAccentStronger
+        case "card": card
+        case "card-accent": cardAccent
+        case "popover": popover
+        case "popover-accent": popoverAccent
+        case "foreground": foreground
+        case "emphasized-foreground": emphasizedForeground
+        case "muted-foreground": mutedForeground
+        case "muted-stronger-foreground": mutedStrongerForeground
+        case "muted-strongest-foreground": mutedStrongestForeground
+        case "primary": primary
+        case "primary-foreground": primaryForeground
+        case "destructive": destructive
+        case "destructive-foreground": destructiveForeground
+        case "success": success
+        case "success-foreground": successForeground
+        case "warning": warning
+        case "warning-foreground": warningForeground
+        case "pending": pending
+        case "pending-foreground": pendingForeground
+        case "process": process
+        case "process-foreground": processForeground
+        case "merged": merged
+        case "merged-foreground": mergedForeground
+        case "pink": pink
+        case "skill": skill
+        case "border": border
+        case "border-card": borderCard
+        case "border-input": borderInput
+        case "border-popover": borderPopover
+        case "input": input
+        case "composer": composer
+        case "border-composer": borderComposer
+        case "border-accent": borderAccent
+        case "ring": ring
+        case "overlay": overlay
+        case "shadow": shadow
+        case "chart-1": chart1
+        case "chart-2": chart2
+        case "chart-3": chart3
+        case "chart-4": chart4
+        case "chart-5": chart5
+        case "chart-6": chart6
+        case "map-land": mapLand
+        case "map-green": mapGreen
+        case "map-park": mapPark
+        case "map-campus": mapCampus
+        case "map-water": mapWater
+        case "map-waterway": mapWaterway
+        case "map-building": mapBuilding
+        case "map-street": mapStreet
+        case "map-road": mapRoad
+        case "map-ferry": mapFerry
+        case "claude": claude
+        case "openai": openai
+        case "google-blue": googleBlue
+        case "google-red": googleRed
+        case "google-yellow": googleYellow
+        case "google-green": googleGreen
+        case "linear": linear
+        case "window-close": windowClose
+        case "window-minimize": windowMinimize
+        case "window-zoom": windowZoom
+        case "syntax-comment": syntaxComment
+        case "syntax-keyword": syntaxKeyword
+        case "syntax-string": syntaxString
+        case "syntax-constant": syntaxConstant
+        case "syntax-function": syntaxFunction
+        case "syntax-type": syntaxType
+        case "syntax-tag": syntaxTag
+        default: nil
+        }
+    }
 }
 
 extension Color {
@@ -103,6 +202,7 @@ extension Color {
     static let themeProcessForeground = Color(platform: Theme.processForeground)
     static let themeMerged = Color(platform: Theme.merged)
     static let themeMergedForeground = Color(platform: Theme.mergedForeground)
+    static let themePink = Color(platform: Theme.pink)
     static let themeSkill = Color(platform: Theme.skill)
     static let themeBorder = Color(platform: Theme.border)
     static let themeBorderCard = Color(platform: Theme.borderCard)
@@ -120,6 +220,17 @@ extension Color {
     static let themeChart3 = Color(platform: Theme.chart3)
     static let themeChart4 = Color(platform: Theme.chart4)
     static let themeChart5 = Color(platform: Theme.chart5)
+    static let themeChart6 = Color(platform: Theme.chart6)
+    static let themeMapLand = Color(platform: Theme.mapLand)
+    static let themeMapGreen = Color(platform: Theme.mapGreen)
+    static let themeMapPark = Color(platform: Theme.mapPark)
+    static let themeMapCampus = Color(platform: Theme.mapCampus)
+    static let themeMapWater = Color(platform: Theme.mapWater)
+    static let themeMapWaterway = Color(platform: Theme.mapWaterway)
+    static let themeMapBuilding = Color(platform: Theme.mapBuilding)
+    static let themeMapStreet = Color(platform: Theme.mapStreet)
+    static let themeMapRoad = Color(platform: Theme.mapRoad)
+    static let themeMapFerry = Color(platform: Theme.mapFerry)
     static let themeClaude = Color(platform: Theme.claude)
     static let themeOpenai = Color(platform: Theme.openai)
     static let themeGoogleBlue = Color(platform: Theme.googleBlue)

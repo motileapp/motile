@@ -345,7 +345,7 @@ pub struct PickMark {
 }
 
 impl PickMark {
-    const SIZE: f32 = 16.;
+    pub const SIZE: f32 = 16.;
 
     pub fn new(id: impl Into<ElementId>, picked: bool, multiple: bool) -> Self {
         Self { id: id.into(), picked, multiple }
@@ -474,13 +474,95 @@ impl RenderOnce for FadingScroll {
 /// The look of what drops from a button or lies over the window: the popover's colour, a line
 /// around it and a faint shadow under it. What is inside lies on `Surface::Popover`.
 pub fn dropdown_card(element: Div, cx: &App) -> Div {
+    popover_card(element, Radius::MD, cx)
+}
+
+/// `dropdown_card` with corners of `radius`, as a chart's tooltip has.
+pub fn popover_card(element: Div, radius: f32, cx: &App) -> Div {
     let c = colors(cx);
     element
         .bg(c.popover)
-        .rounded(px(Radius::MD))
+        .rounded(px(radius))
         .border_1()
         .border_color(c.border_popover)
         .shadow(c.shadow(ShadowSize::Md, Opacity::Shadow))
+}
+
+const POPOVER_GAP: f32 = 8.;
+const POPOVER_MARGIN: f32 = 12.;
+
+/// Where the trigger of a popover was last painted, in the window.
+pub type TriggerBounds = Entity<Option<Bounds<Pixels>>>;
+
+/// Keeps `bounds` up to date with the frame of the element it is a child of.
+pub fn tracks_bounds(bounds: TriggerBounds) -> impl IntoElement {
+    canvas(move |frame, _, cx| bounds.update(cx, |bounds, _| *bounds = Some(frame)), |_, _, _, _| {})
+        .absolute()
+        .inset_0()
+}
+
+/// Motile's popover panel, at most `width` wide, padded 12 and 14, its children 8 apart. A press
+/// outside it, Esc while it has `focus`, or a scroll outside it calls `close`.
+pub fn popover_panel(id: ElementId, width: f32, focus: &FocusHandle, close: Run, cx: &App) -> Stateful<Div> {
+    let c = colors(cx);
+    let (escapes, scrolls) = (close.clone(), close.clone());
+    let closes_on_scroll = canvas(
+        |_, _, _| {},
+        move |bounds, _, window, _| {
+            let (scrolls, sent) = (scrolls.clone(), std::cell::Cell::new(false));
+            window.on_mouse_event(move |event: &ScrollWheelEvent, phase, window, cx| {
+                if phase != DispatchPhase::Bubble || bounds.contains(&event.position) || sent.replace(true) {
+                    return;
+                }
+                scrolls(window, cx);
+            });
+        },
+    )
+    .absolute()
+    .inset_0();
+    popover_card(
+        div().py(px(12.)).px(px(14.)).max_w(px(width)).flex().flex_col().gap(px(8.)).text_color(c.foreground),
+        Radius::LG,
+        cx,
+    )
+    .id(id)
+    .role(Role::Dialog)
+    .occlude()
+    .child(closes_on_scroll)
+    .track_focus(focus)
+    .on_key_down(move |event: &KeyDownEvent, window, cx| {
+        if event.keystroke.key == "escape" {
+            cx.stop_propagation();
+            escapes(window, cx);
+        }
+    })
+    .on_mouse_down_out(move |_, window, cx| close(window, cx))
+}
+
+/// A popover's panel by its trigger, a child of it: 8 under it with their leading edges together,
+/// or 8 over it when fewer than 220 are left under it and more than 240 over it, kept 12 inside
+/// the window.
+pub fn anchored_popover(trigger: Option<Bounds<Pixels>>, panel: impl IntoElement, window: &Window) -> Div {
+    let room = f32::from(window.viewport_size().height);
+    let up = trigger.is_some_and(|trigger| {
+        let below = room - f32::from(trigger.bottom());
+        below < 220. + POPOVER_GAP && f32::from(trigger.top()) > 240.
+    });
+    let (place, corner, offset) = if up {
+        (div().absolute().left_0().bottom_full(), gpui_kit::Anchor::BottomLeft, -POPOVER_GAP)
+    } else {
+        (div().absolute().left_0().top_full(), gpui_kit::Anchor::TopLeft, POPOVER_GAP)
+    };
+    place.child(
+        deferred(
+            anchored()
+                .anchor(corner)
+                .snap_to_window_with_margin(px(POPOVER_MARGIN))
+                .offset(point(px(0.), px(offset)))
+                .child(panel),
+        )
+        .with_priority(1),
+    )
 }
 
 /// One of the things a `CheckMenu` turns on and off.
@@ -679,5 +761,68 @@ impl RenderOnce for CheckMenu {
                 .with_priority(crate::ui::menu::PRIORITY)
         });
         div().relative().flex_shrink_0().child(anchor.track()).child(button).children(dropdown)
+    }
+}
+
+/// A round symbol's button that floats on glass over what scrolls under it, as the map's controls
+/// do: the surface's colour at `lit` in its edge, with a small shadow.
+#[derive(IntoElement)]
+pub struct GlassButton {
+    id: ElementId,
+    symbol: SharedString,
+    help: SharedString,
+    surface: Surface,
+    on_click: Option<crate::ui::OnClick>,
+}
+
+impl GlassButton {
+    pub const SIDE: f32 = 34.;
+    const SYMBOL: f32 = 18.;
+
+    pub fn new(id: impl Into<ElementId>, symbol: impl Into<SharedString>, help: impl Into<SharedString>) -> Self {
+        Self { id: id.into(), symbol: symbol.into(), help: help.into(), surface: Surface::Background, on_click: None }
+    }
+
+    pub fn surface(mut self, surface: Surface) -> Self {
+        self.surface = surface;
+        self
+    }
+
+    pub fn on_click(mut self, handler: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static) -> Self {
+        self.on_click = Some(Rc::new(handler));
+        self
+    }
+}
+
+impl RenderOnce for GlassButton {
+    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+        let c = colors(cx);
+        let base = self.surface.color(c);
+        let on_click = self.on_click;
+        div()
+            .id(self.id)
+            .size(px(Self::SIDE))
+            .flex_none()
+            .rounded_full()
+            .bg(c.at(base, Opacity::Lit))
+            .border_1()
+            .border_color(self.surface.border(c))
+            .shadow(c.shadow(ShadowSize::Sm, Opacity::ShadowStronger))
+            .flex()
+            .items_center()
+            .justify_center()
+            .text_color(c.foreground)
+            .cursor_pointer()
+            .hover(move |button| button.bg(base))
+            .role(Role::Button)
+            .aria_label(self.help.clone())
+            .tooltip(crate::ui::tooltip(self.help))
+            .child(icons::symbol(self.symbol, Self::SYMBOL / crate::theme::SYMBOL_SCALE))
+            .when_some(on_click, |button, on_click| {
+                button.on_click(move |event, window, cx| {
+                    cx.stop_propagation();
+                    on_click(event, window, cx)
+                })
+            })
     }
 }

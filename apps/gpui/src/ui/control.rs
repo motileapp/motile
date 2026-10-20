@@ -10,7 +10,7 @@ use std::rc::Rc;
 use gpui_kit::prelude::*;
 use gpui_kit::*;
 
-use crate::theme::{Colors, ControlSize, Layer, Opacity, Radius, Surface, colors};
+use crate::theme::{Colors, ControlSize, Layer, Opacity, Radius, ShadowSize, Surface, colors};
 use crate::ui::menu::{Anchor, Menu};
 use crate::ui::{OnClick, tooltip};
 use crate::ui::{icons, motion};
@@ -27,6 +27,8 @@ pub enum Variant {
     Outline,
     /// What can't be taken back.
     Danger,
+    /// What went well, or is done.
+    Success,
     /// What the user is asked to let happen.
     Warning,
     /// Nothing until the pointer is over it: the buttons of bars and rows.
@@ -37,6 +39,9 @@ pub enum Variant {
     Accent,
     /// A secondary button as it is in the dark, over a picture or a video.
     Overlay,
+    /// The surface's colour, a little see-through, edged and lifted by a shadow: a control that
+    /// floats over a map or a picture in either appearance.
+    Glass,
 }
 
 /// What a button shows before its words: a symbol, a picture of its own like a logo, or
@@ -81,7 +86,7 @@ impl Look {
 
     pub fn foreground(&self, lit: bool, c: &Colors) -> Hsla {
         if let Some(tint) = self.tint
-            && matches!(self.variant, Variant::Ghost | Variant::Secondary)
+            && matches!(self.variant, Variant::Ghost | Variant::Secondary | Variant::Outline)
         {
             return tint;
         }
@@ -89,6 +94,7 @@ impl Look {
             Variant::Secondary | Variant::Outline => c.foreground,
             Variant::Primary => c.primary_foreground,
             Variant::Danger => c.destructive_foreground,
+            Variant::Success => c.success_foreground,
             Variant::Warning => c.warning_foreground,
             Variant::Ghost => {
                 if self.selected || lit {
@@ -99,6 +105,7 @@ impl Look {
             }
             Variant::Link | Variant::Accent => c.primary,
             Variant::Overlay => c.foreground_over_picture,
+            Variant::Glass => c.foreground,
         }
     }
 
@@ -117,6 +124,7 @@ impl Look {
                 }
             }
             Variant::Danger => filled(c.destructive),
+            Variant::Success => filled(c.success),
             Variant::Warning => filled(c.warning),
             Variant::Ghost => {
                 if self.selected {
@@ -142,6 +150,13 @@ impl Look {
                     c.control_over_picture
                 }
             }
+            Variant::Glass => {
+                if on {
+                    self.surface.color(c)
+                } else {
+                    c.at(self.surface.color(c), Opacity::Lit)
+                }
+            }
         }
     }
 
@@ -159,6 +174,21 @@ impl Look {
     /// The line around an outline button.
     pub fn border(&self, c: &Colors) -> Option<Hsla> {
         (self.variant == Variant::Outline).then(|| self.surface.border(c))
+    }
+
+    /// The shadow a glass control floats on, with its edge as a hairline that takes no room.
+    pub fn shadow(&self, c: &Colors) -> Option<Vec<BoxShadow>> {
+        if self.variant != Variant::Glass {
+            return None;
+        }
+        let edge = BoxShadow {
+            color: self.surface.border(c),
+            offset: point(px(0.), px(0.)),
+            blur_radius: px(0.),
+            spread_radius: px(1.),
+            inset: false,
+        };
+        Some([vec![edge], c.shadow(ShadowSize::Sm, Opacity::ShadowStronger)].concat())
     }
 
     pub fn radius(&self) -> f32 {
@@ -229,6 +259,12 @@ pub struct ControlLabel {
     /// the foreground.
     pub tinted: Option<SharedString>,
     pub tint: Option<Hsla>,
+    /// Its words stand for what isn't chosen yet, in the placeholder colour.
+    pub placeholder: bool,
+    /// When it fills, its words are at the start and its chevron at the end.
+    pub spread: bool,
+    /// Its symbol stands after its words, as an Expand button's.
+    pub symbol_after: bool,
 }
 
 impl ControlLabel {
@@ -249,6 +285,9 @@ impl ControlLabel {
             tabular: false,
             tinted: None,
             tint: None,
+            placeholder: false,
+            spread: false,
+            symbol_after: false,
         }
     }
 
@@ -265,8 +304,8 @@ impl ControlLabel {
         let size = self.size;
         let wordless = self.wordless();
         let padding = self.padding.unwrap_or(size.padding());
-        let leading = if wordless { 0. } else { padding - if self.icon.is_some() { size.symbol_outset() } else { 0. } };
-        let trailing = if wordless { 0. } else { padding - if self.chevron { size.chevron_outset() } else { 0. } };
+        let (leading, trailing) = self.outsets();
+        let (leading, trailing) = if wordless { (0., 0.) } else { (padding - leading, padding - trailing) };
         let mark = self.icon.as_ref().map(|icon| match icon {
             ControlIcon::Picture(_) => self.symbol_size.unwrap_or(size.symbol_side()),
             ControlIcon::Pictures(_, width) => *width,
@@ -292,6 +331,13 @@ impl ControlLabel {
         (leading + self.picture_inset() + stack + chevron + trailing).max(size.height())
     }
 
+    /// How much nearer its sides its symbol and its chevron stand than its words would.
+    fn outsets(&self) -> (f32, f32) {
+        let symbol = if self.icon.is_some() { self.size.symbol_outset() } else { 0. };
+        let chevron = if self.chevron { self.size.chevron_outset() } else { 0. };
+        if self.symbol_after { (0., symbol.max(chevron)) } else { (symbol, chevron) }
+    }
+
     /// A picture smaller than the square stays centred where the square would be.
     fn picture_inset(&self) -> f32 {
         match (&self.icon, self.symbol_size) {
@@ -315,6 +361,9 @@ impl ControlLabel {
         let middle = self.middle;
         let tabular = self.tabular;
         let tinted = self.tinted.clone().zip(self.tint);
+        let placeholder = self.placeholder;
+        let spread = self.fills && self.spread;
+        let symbol_after = self.symbol_after;
         let words = |title: Option<SharedString>,
                      tinted: Option<(SharedString, Hsla)>,
                      spins: bool,
@@ -325,6 +374,7 @@ impl ControlLabel {
                 .flex()
                 .items_center()
                 .gap(px(gap))
+                .when(symbol_after, |row| row.flex_row_reverse())
                 .when(spins && !turning, |row| row.child(Spinner::new(mark_size).render(cx)))
                 .when(!spins || turning, |row| {
                     row.when_some(icon, |row, icon| match icon {
@@ -354,6 +404,7 @@ impl ControlLabel {
                             .map(|text| if middle { text.text_ellipsis_middle() } else { text.text_ellipsis() })
                             .when(tabular, |text| text.font_features(crate::ui::tabular_numbers()))
                             .when(hidden, |text| text.opacity(0.))
+                            .when(placeholder, |text| text.text_color(c.muted_stronger_foreground))
                             .map(|text| match tinted {
                                 Some((tinted, tint)) => {
                                     text.text_color(c.foreground).child(tinted_dotted(&title, &tinted, tint, c))
@@ -365,8 +416,8 @@ impl ControlLabel {
         };
         let overlay_spinner = self.pending && !has_icon && waiting_title.is_none();
         let text_hidden = self.pending && !spins;
-        let leading = if wordless { 0. } else { side_padding - if has_icon { size.symbol_outset() } else { 0. } };
-        let trailing = if wordless { 0. } else { side_padding - if self.chevron { size.chevron_outset() } else { 0. } };
+        let (leading, trailing) = self.outsets();
+        let (leading, trailing) = if wordless { (0., 0.) } else { (side_padding - leading, side_padding - trailing) };
         div()
             .relative()
             .flex()
@@ -384,6 +435,7 @@ impl ControlLabel {
                 let stack = div()
                     .relative()
                     .min_w_0()
+                    .when(spread, |stack| stack.flex_1())
                     .child(
                         words(self.title.clone(), tinted, spins, self.icon, text_hidden)
                             .when(waiting_title.is_some(), |w| w.opacity(0.)),
@@ -542,6 +594,12 @@ impl ActionButton {
         self
     }
 
+    /// Its symbol after its words.
+    pub fn symbol_after(mut self) -> Self {
+        self.label.symbol_after = true;
+        self
+    }
+
     pub fn help(mut self, help: impl Into<SharedString>) -> Self {
         self.help = Some(help.into());
         self
@@ -584,6 +642,10 @@ impl ActionButton {
 
     pub fn danger(self) -> Self {
         self.variant(Variant::Danger)
+    }
+
+    pub fn success(self) -> Self {
+        self.variant(Variant::Success)
     }
 
     pub fn link(self) -> Self {
@@ -643,6 +705,18 @@ impl ActionButton {
     /// It opens something to choose from, and shows a chevron for it.
     pub fn opens(mut self, opens: bool) -> Self {
         self.label.chevron = opens;
+        self
+    }
+
+    /// Its words stand for what isn't chosen yet, in the placeholder colour.
+    pub fn placeholder(mut self, placeholder: bool) -> Self {
+        self.label.placeholder = placeholder;
+        self
+    }
+
+    /// When it fills, its words are at the start and its chevron at the end.
+    pub fn spread(mut self, spread: bool) -> Self {
+        self.label.spread = spread;
         self
     }
 
@@ -709,9 +783,8 @@ impl ActionButton {
     }
 
     /// How wide it is with its margin when nothing cuts its words short.
-    pub fn natural_width(&self, window: &mut Window, cx: &App) -> f32 {
-        let border = if self.look.border(colors(cx)).is_some() { 2. } else { 0. };
-        self.margin.left + self.margin.right + self.label.natural_width(window) + border
+    pub fn natural_width(&self, window: &mut Window, _: &App) -> f32 {
+        self.margin.left + self.margin.right + self.label.natural_width(window)
     }
 
     /// Its digits are all one width, as a count that changes.
@@ -757,7 +830,11 @@ impl RenderOnce for ActionButton {
         let bleed = self.inline.then(|| self.inline_bleed(window));
         // An inline button's light hugs its words, while its press keeps the control's height.
         let light_inset = bleed.map_or(0., |(_, vertical)| (vertical - INLINE_LIGHT_ROOM).max(0.));
-        let label = self.label.render(cx).when(truncates, |label| label.min_w_0()).my(px(-light_inset));
+        let border = look.border(c);
+        // An outline button's line lies inside its size, as the other buttons' fill does.
+        let inset = if border.is_some() { 1. } else { 0. };
+        let label =
+            self.label.render(cx).when(truncates, |label| label.min_w_0()).mx(px(-inset)).my(px(-light_inset - inset));
         div()
             .id(self.id.clone())
             .group(group.clone())
@@ -782,7 +859,8 @@ impl RenderOnce for ActionButton {
                     .rounded_bl(corners.bottom_left)
                     .rounded_br(corners.bottom_right)
                     .bg(fill)
-                    .when_some(look.border(c), |inner, border| inner.border_1().border_color(border))
+                    .when_some(border, |inner, border| inner.border_1().border_color(border))
+                    .when_some(look.shadow(c), |inner, shadow| inner.shadow(shadow))
                     .text_color(foreground)
                     .when(active, |inner| {
                         inner
@@ -863,10 +941,12 @@ impl RenderOnce for ActionMenu {
         let anchor = self.anchor.clone();
         let opens = self.anchor.clone();
         let build = self.build;
+        let fills = self.button.label.fills;
         let _ = window;
         div()
             .relative()
             .flex_shrink_0()
+            .when(fills, |menu| menu.w_full())
             .child(anchor.track())
             .children(self.shortcut.map(crate::keyboard::target))
             .child(self.button.on_click(move |_, window, cx| {
@@ -876,6 +956,97 @@ impl RenderOnce for ActionMenu {
                 }
                 menu.show_under(&opens, 4., window, cx);
             }))
+    }
+}
+
+/// One of a few options, as a secondary button that fills its width: the chosen one's title, or
+/// the placeholder in its colour, at the start and the chevron at the end. A press opens the
+/// options under it, with a check by the chosen one.
+#[derive(IntoElement)]
+pub struct Select {
+    id: ElementId,
+    options: Vec<SharedString>,
+    selected: Option<usize>,
+    placeholder: SharedString,
+    size: ControlSize,
+    surface: Surface,
+    disabled: bool,
+    on_select: Option<OnSelect>,
+}
+
+impl Select {
+    pub fn new(id: impl Into<ElementId>, options: Vec<SharedString>, selected: Option<usize>) -> Self {
+        Self {
+            id: id.into(),
+            options,
+            selected,
+            placeholder: "Choose".into(),
+            size: ControlSize::Regular,
+            surface: Surface::Background,
+            disabled: false,
+            on_select: None,
+        }
+    }
+
+    pub fn placeholder(mut self, placeholder: impl Into<SharedString>) -> Self {
+        self.placeholder = placeholder.into();
+        self
+    }
+
+    pub fn size(mut self, size: ControlSize) -> Self {
+        self.size = size;
+        self
+    }
+
+    pub fn surface(mut self, surface: Surface) -> Self {
+        self.surface = surface;
+        self
+    }
+
+    pub fn disabled(mut self, disabled: bool) -> Self {
+        self.disabled = disabled;
+        self
+    }
+
+    pub fn on_select(mut self, handler: impl Fn(usize, &mut Window, &mut App) + 'static) -> Self {
+        self.on_select = Some(Rc::new(handler));
+        self
+    }
+}
+
+impl RenderOnce for Select {
+    fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
+        let chosen = self.selected.and_then(|index| self.options.get(index)).cloned();
+        let title = chosen.clone().unwrap_or_else(|| self.placeholder.clone());
+        let (options, selected, on_select) = (self.options, self.selected, self.on_select);
+        let menu = ActionMenu::new(self.id.clone(), title.clone(), move |_, _| {
+            options.iter().enumerate().fold(Menu::new(), |menu, (index, option)| {
+                let on_select = on_select.clone();
+                menu.checked(selected == Some(index), option.clone(), move |window, cx| {
+                    let Some(on_select) = &on_select else { return };
+                    on_select(index, window, cx)
+                })
+            })
+        })
+        .button(|button| {
+            button
+                .variant(Variant::Secondary)
+                .size(self.size)
+                .surface(self.surface)
+                .fills(true)
+                .alignment(Alignment::Leading)
+                .spread(true)
+                .truncates(true)
+                .placeholder(chosen.is_none())
+                .disabled(self.disabled)
+        });
+        div()
+            .id(ElementId::NamedChild(std::sync::Arc::new(self.id), "select".into()))
+            .w_full()
+            .min_w_0()
+            .role(Role::ComboBox)
+            .aria_label(title)
+            .child(menu)
     }
 }
 
@@ -1281,7 +1452,7 @@ pub enum InputVariant {
 
 /// The fill of a field: the input colour, or on a card, which is as dark as input, the card's
 /// accent.
-fn field_fill(surface: Surface, c: &Colors) -> Hsla {
+pub fn field_fill(surface: Surface, c: &Colors) -> Hsla {
     if surface == Surface::Card { surface.layer(Layer::Box, c) } else { c.input }
 }
 

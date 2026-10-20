@@ -964,6 +964,27 @@ mod tests {
     }
 
     #[test]
+    fn the_instructions_teach_programs_and_fit_in_one_argument() {
+        let mcp = crate::mcp::McpAccess { url: "http://127.0.0.1:9/mcp".into(), token: "secret".into() };
+        let turn = Turn {
+            agent: motile_protocol::wire::Agent::Claude,
+            model: None,
+            effort: None,
+            access: Access::Supervised,
+            session_id: None,
+            handoff: None,
+            mcp: Some(&mcp),
+        };
+        let instructions = super::super::instructions(&turn);
+        assert!(instructions.contains("only when first called.\n\nYou can show an answer with openui-lang"));
+        assert!(instructions.contains("- run(command: string) → {exit_code?: number | null"));
+        assert!(instructions.contains("It runs only from a click, through Mutation and @Run."));
+        assert!(instructions.ends_with("check it with the motile tool check_ui."));
+        // Linux takes no single argument longer than 32 pages (MAX_ARG_STRLEN).
+        assert!(instructions.len() < 128 * 1024, "{} bytes", instructions.len());
+    }
+
+    #[test]
     fn a_prompt_the_agent_repeats_has_been_taken() {
         let mut parser = Parser::default();
         let repeated = r#"{"type":"user","uuid":"m1","isReplay":true,"message":{"role":"user","content":"Also this"}}"#;

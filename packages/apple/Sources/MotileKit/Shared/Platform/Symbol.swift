@@ -14,6 +14,7 @@ enum Symbol: String {
     case box = "\u{e061}"
     case braces = "\u{e36a}"
     case brain = "\u{e3c6}"
+    case calendar = "\u{e063}"
     case camera = "\u{e064}"
     case chartColumn = "\u{e2a3}"
     case check = "\u{e06c}"
@@ -71,6 +72,7 @@ enum Symbol: String {
     case fileBraces = "\u{e36b}"
     case image = "\u{e0f6}"
     case images = "\u{e5c4}"
+    case info = "\u{e0f9}"
     case keyboard = "\u{e284}"
     case layers = "\u{e529}"
     /// Linear's logo, which Lucide doesn't have.
@@ -80,6 +82,7 @@ enum Symbol: String {
     case listChecks = "\u{e1d0}"
     case listFilter = "\u{e460}"
     case loader = "\u{e109}"
+    case locateFixed = "\u{e1db}"
     case lockOpen = "\u{e10c}"
     case logOut = "\u{e10e}"
     case maximize2 = "\u{e113}"
@@ -88,6 +91,7 @@ enum Symbol: String {
     case messageSquareDashed = "\u{e40b}"
     case messageSquareText = "\u{e575}"
     case minimize2 = "\u{e11b}"
+    case minus = "\u{e11c}"
     case panelLeft = "\u{e12a}"
     case panelRight = "\u{e431}"
     case paperclip = "\u{e12d}"
@@ -155,6 +159,11 @@ extension PlatformImage {
         (size * Platform.scale * symbolScale).rounded()
     }
 
+    /// The text size whose symbol is drawn in a square of `side` on the Mac, and enlarged on iOS.
+    static func symbolSize(side: CGFloat) -> CGFloat {
+        side / symbolScale
+    }
+
     /// The symbol in one colour that a view tints, sized for text of `size`. Each is made once.
     /// `trimmed` leaves out the empty room Lucide draws around it, for one like a chevron that
     /// fills little of its square.
@@ -176,12 +185,30 @@ extension PlatformImage {
     }
 
     private static func glyph(_ symbol: Symbol, side: CGFloat) -> CGPath? {
+        glyph(character: symbol.rawValue, side: side)
+    }
+
+    private static func glyph(character: String, side: CGFloat) -> CGPath? {
         guard let symbolFont else { return nil }
         let font = CTFontCreateWithFontDescriptor(symbolFont, side, nil)
-        var character = Array(symbol.rawValue.utf16)
+        var character = Array(character.utf16)
+        guard character.count == 1 else { return nil }
         var glyph = CGGlyph()
         guard CTFontGetGlyphsForCharacters(font, &character, &glyph, 1) else { return nil }
         return CTFontCreatePathForGlyph(font, glyph, nil)
+    }
+
+    /// Any of Lucide's icons by its character in the font, drawn in a square `side` wide, which a
+    /// view tints. A program names icons the apps' own `Symbol` doesn't have.
+    static func lucide(_ character: String, side: CGFloat) -> PlatformImage {
+        let side = side.rounded()
+        let key = "lucide/\(character)/\(side)"
+        symbolLock.lock()
+        defer { symbolLock.unlock() }
+        if let made = symbols[key] { return made }
+        let made = glyph(character: character, side: side).map { drawn($0, box: CGRect(x: 0, y: 0, width: side, height: side)) } ?? PlatformImage()
+        symbols[key] = made
+        return made
     }
 
     private static let linearLogo = "M2.3 14.4 9.6 21.7a10 10 0 0 1-7.3-7.3ZM2 11.4 12.6 22a10 10 0 0 0 2.6-.6L2.6 8.8a10 10 0 0 0-.6 2.6ZM3.3 7 17 20.7a10 10 0 0 0 1.9-1.4L4.7 5.1A10 10 0 0 0 3.3 7ZM5.8 3.8a10 10 0 0 1 14.4 14.4Z"
@@ -222,7 +249,10 @@ extension PlatformImage {
 
     private static func drawn(_ symbol: Symbol, side: CGFloat, trimmed: Bool) -> PlatformImage {
         guard let path = outline(symbol, side: side) else { return PlatformImage() }
-        let box = trimmed ? path.boundingBoxOfPath.integral : CGRect(x: 0, y: 0, width: side, height: side)
+        return drawn(path, box: trimmed ? path.boundingBoxOfPath.integral : CGRect(x: 0, y: 0, width: side, height: side))
+    }
+
+    private static func drawn(_ path: CGPath, box: CGRect) -> PlatformImage {
         #if os(macOS)
         let image = NSImage(size: box.size, flipped: false) { _ in
             guard let context = NSGraphicsContext.current?.cgContext else { return false }

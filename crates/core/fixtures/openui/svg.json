@@ -1,0 +1,248 @@
+{
+  "id": "",
+  "a11y": {
+    "role": "group"
+  },
+  "component": "Card",
+  "children": [
+    {
+      "id": "children/0",
+      "a11y": {
+        "role": "heading",
+        "level": 3
+      },
+      "component": "Title",
+      "text": {
+        "text": "Turn the crank",
+        "runs": [],
+        "links": []
+      },
+      "style": "card_title",
+      "color": "foreground"
+    },
+    {
+      "id": "children/1",
+      "a11y": {
+        "role": "text"
+      },
+      "component": "Text",
+      "text": {
+        "text": "The rear sprocket turns 2.5 times as far as the chainring.",
+        "runs": [],
+        "links": []
+      },
+      "inlines": [],
+      "style": "card_subtitle",
+      "color": "muted-foreground",
+      "weight": "regular",
+      "italic": false,
+      "strike": false,
+      "digits": false,
+      "max_lines": null
+    },
+    {
+      "id": "children/2",
+      "a11y": {
+        "role": "image"
+      },
+      "component": "Svg",
+      "canvas": {
+        "kind": "Svg",
+        "props": {
+          "children": [
+            {
+              "kind": "Path",
+              "props": {
+                "d": "M 90 40 L 240 62 A 18 18 0 0 1 240 98 L 90 120 A 40 40 0 0 1 90 40 Z",
+                "stroke": "faint",
+                "strokeWidth": 2
+              }
+            },
+            {
+              "kind": "G",
+              "props": {
+                "children": [
+                  {
+                    "kind": "Circle",
+                    "props": {
+                      "cx": 90,
+                      "cy": 80,
+                      "r": 40,
+                      "fill": "surface",
+                      "stroke": "ink",
+                      "strokeWidth": 3
+                    }
+                  },
+                  {
+                    "kind": "Line",
+                    "props": {
+                      "x1": 90,
+                      "y1": 80,
+                      "x2": 90,
+                      "y2": 44,
+                      "stroke": "ink",
+                      "strokeWidth": 4
+                    }
+                  },
+                  {
+                    "kind": "Circle",
+                    "props": {
+                      "cx": 90,
+                      "cy": 80,
+                      "r": 6,
+                      "fill": "ink"
+                    }
+                  }
+                ],
+                "transform": "rotate(40 90 80)"
+              }
+            },
+            {
+              "kind": "G",
+              "props": {
+                "children": [
+                  {
+                    "kind": "Circle",
+                    "props": {
+                      "cx": 240,
+                      "cy": 80,
+                      "r": 18,
+                      "fill": "surface",
+                      "stroke": "ink",
+                      "strokeWidth": 3
+                    }
+                  },
+                  {
+                    "kind": "Line",
+                    "props": {
+                      "x1": 240,
+                      "y1": 80,
+                      "x2": 240,
+                      "y2": 64,
+                      "stroke": "info",
+                      "strokeWidth": 3
+                    }
+                  },
+                  {
+                    "kind": "Circle",
+                    "props": {
+                      "cx": 240,
+                      "cy": 80,
+                      "r": 4,
+                      "fill": "ink"
+                    }
+                  }
+                ],
+                "transform": "rotate(100 240 80)"
+              }
+            },
+            {
+              "kind": "SvgText",
+              "props": {
+                "text": "Rear 100°",
+                "x": 240,
+                "y": 132,
+                "size": 12,
+                "fill": "muted",
+                "anchor": "middle"
+              }
+            }
+          ],
+          "viewBox": "0 0 320 160"
+        }
+      }
+    },
+    {
+      "id": "children/3",
+      "a11y": {
+        "role": "adjustable",
+        "label": "Crank angle",
+        "value": "40°"
+      },
+      "component": "Slider",
+      "value": 40.0,
+      "min": 0.0,
+      "max": 360.0,
+      "step": 5.0,
+      "at": 0.1111111111111111,
+      "label": "Crank angle",
+      "readout": "40°",
+      "head": true,
+      "marks": [],
+      "disabled": null
+    },
+    {
+      "id": "children/4",
+      "a11y": {
+        "role": "image"
+      },
+      "component": "Svg",
+      "canvas": {
+        "kind": "Svg",
+        "props": {
+          "children": [
+            {
+              "kind": "Rect",
+              "props": {
+                "x": 10,
+                "y": 10,
+                "width": 60,
+                "height": 40,
+                "fill": "info",
+                "opacity": 0.8,
+                "rx": 8
+              }
+            },
+            {
+              "kind": "Ellipse",
+              "props": {
+                "cx": 120,
+                "cy": 30,
+                "rx": 34,
+                "ry": 20,
+                "fill": "success"
+              }
+            },
+            {
+              "kind": "Polygon",
+              "props": {
+                "points": "180,50 205,10 230,50",
+                "fill": "warning"
+              }
+            },
+            {
+              "kind": "Polyline",
+              "props": {
+                "points": "250,45 265,15 280,40 295,12",
+                "stroke": "danger",
+                "strokeWidth": 3
+              }
+            },
+            {
+              "kind": "SvgText",
+              "props": {
+                "text": "Rect · Ellipse · Polygon · Polyline",
+                "x": 160,
+                "y": 72,
+                "size": 11,
+                "fill": "muted",
+                "anchor": "middle"
+              }
+            }
+          ],
+          "viewBox": "0 0 320 80"
+        }
+      }
+    }
+  ],
+  "soft": false,
+  "nested": false,
+  "padding": null,
+  "spacing": [
+    0.0,
+    8.0,
+    12.0,
+    12.0,
+    12.0
+  ]
+}

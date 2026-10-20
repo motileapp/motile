@@ -544,6 +544,24 @@ struct Notice: Equatable {
 }
 
 /// An action that waits for the user to say where it should happen.
+/// A program's `run` that waits for the user to allow the command.
+struct ProgramConfirm: Identifiable {
+    let threadID: String
+    let rowID: String
+    let callID: UInt64
+    let command: String
+
+    var id: String { "\(rowID)/\(callID)" }
+
+    /// What the user is asked, with the command as it will run.
+    func confirmation(_ store: AppStore) -> Confirmation {
+        Confirmation(
+            title: "Run this command?", message: command,
+            answers: [Answer(title: "Run", variant: .primary) { store.answer(self, allow: true) }],
+            dismissal: "Don’t Run")
+    }
+}
+
 struct PendingGit: Equatable, Identifiable {
     let project: Project
     let action: String

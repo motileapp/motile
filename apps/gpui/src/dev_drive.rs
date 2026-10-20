@@ -11,6 +11,8 @@
 //!   down x y | drag x y | up x y                        a press that moves, and its release
 //!   updater available 9.9.9                             shows the update row in that state
 //!   active on | active off                              as if the window came to the front or left it
+//!   slide <label> <share> | press <label>               drags the latest program's slider with that label
+//!                                                       to a share of its track, or presses its button
 
 use std::io::BufRead;
 use std::path::PathBuf;
@@ -53,11 +55,78 @@ pub fn start(store: &Entity<Store>, cx: &mut App) {
     let done = dir.join("drive.done");
     cx.spawn(async move |cx| {
         while let Some(line) = lines.next().await {
+            if let Some(("slide" | "press", _)) = line.trim().split_once(' ') {
+                touch_program(&line, &store, &done, cx).await;
+                continue;
+            }
             let wait = run(&line, &store, &done, cx);
             cx.background_executor().timer(wait.unwrap_or(PAUSE)).await;
         }
     })
     .detach();
+}
+
+/// Drags or presses a node of the open thread's latest program, by its label, where the next frame
+/// draws it: a press down, moves along the track, and up.
+async fn touch_program(line: &str, store: &Entity<Store>, done: &PathBuf, cx: &mut AsyncApp) {
+    let (verb, rest) = line.trim().split_once(' ').unwrap_or_default();
+    let (label, share) = match (verb, rest.rsplit_once(' ')) {
+        ("slide", Some((label, share))) => (label, share.parse::<f32>().unwrap_or(0.5)),
+        _ => (rest, 0.5),
+    };
+    let Some(id) = cx.update(|cx| labelled(store, label, cx)) else {
+        return tracing::warn!("the latest program has no {label}");
+    };
+    cx.update(|cx| {
+        crate::transcript::openui::record_frames();
+        if let Some(window) = cx.windows().into_iter().next() {
+            let _ = window.update(cx, |_, window, _| window.refresh());
+        }
+    });
+    cx.background_executor().timer(PAUSE).await;
+    let frames = crate::transcript::openui::recorded_frames();
+    let Some((_, bounds)) = frames.iter().rev().find(|(node, _)| *node == id) else {
+        return tracing::warn!("{label} isn't on screen");
+    };
+    let (left, width) = (f32::from(bounds.left()), f32::from(bounds.size.width));
+    let (from, to, y, steps) = match verb {
+        "slide" => (left + width / 2., left + width * share, f32::from(bounds.bottom()) - 8., 10),
+        _ => (left + width / 2., left + width / 2., f32::from(bounds.center().y), 0),
+    };
+    let moves = (1..=steps).map(|step| format!("drag {} {y}", from + (to - from) * step as f32 / steps as f32));
+    for line in std::iter::once(format!("down {from} {y}")).chain(moves).chain([format!("up {to} {y}")]) {
+        run(&line, store, done, cx);
+        cx.background_executor().timer(Duration::from_millis(16)).await;
+    }
+}
+
+/// The id of the latest program's last slider or button read by the label, as the other clients'
+/// drivers pick it.
+fn labelled(store: &Entity<Store>, label: &str, cx: &App) -> Option<String> {
+    use motile_core::render::rows::RowKind;
+    fn find(node: &serde_json::Value, label: &str) -> Option<String> {
+        match node {
+            serde_json::Value::Object(map) => {
+                if let Some(id) = map.values().rev().find_map(|value| find(value, label)) {
+                    return Some(id);
+                }
+                let named = map.get("a11y").and_then(|a11y| a11y["label"].as_str()) == Some(label);
+                let control = matches!(map.get("component").and_then(|kind| kind.as_str()), Some("Slider" | "Button"));
+                if !named || !control {
+                    return None;
+                }
+                map.get("id").and_then(|id| id.as_str()).map(str::to_string)
+            }
+            serde_json::Value::Array(list) => list.iter().rev().find_map(|value| find(value, label)),
+            _ => None,
+        }
+    }
+    let transcript = store.read(cx).transcript.read(cx);
+    let tree = transcript.rows.iter().rev().find_map(|model| match &model.row.kind {
+        RowKind::Ui { ui } => ui.tree.as_deref(),
+        _ => None,
+    })?;
+    find(&serde_json::to_value(tree).ok()?, label)
 }
 
 /// Does what the line says. How long to wait after it, when it says.

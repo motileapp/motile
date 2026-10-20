@@ -49,6 +49,26 @@ What the programs agree on.
 - `media.rs`: names an image, a video or a file an agent sends by its contents.
 - `skills.rs`: how a message names the skills it starts, `$name` at the start of a word.
 
+### crates/openui
+
+OpenUI Lang 1.0, the language of the programs agents show in their replies (thesysdev/openui's
+`spec/`), for the server and the core alike.
+
+- `lexer.rs`, `parser.rs`, `eval.rs`, `store.rs`, `query.rs`, `merge.rs`, `serialize.rs`: the
+  language as the spec says, streamed (a program grows statement by statement while it arrives),
+  with JavaScript's semantics where the spec asks for them (`js.rs`). `runtime.rs` is what a host
+  drives: text, input and tool results in; a tree, tool calls, timers and events out. `fences.rs`
+  finds a reply's programs.
+- `motile.rs`: Motile's library, which is open-intelligent-ui's: 55 components (`components.rs`), 59
+  functions (`functions/`) and `@CopyToClipboard`, with its names, argument order and defaults, so
+  that its programs work unchanged. `prompt.rs` writes the system prompt the server gives the agents
+  from it.
+- `LAYOUT.md`: every component's geometry and behaviour in our tokens. Every client follows it.
+- `fixtures/`: the spec's conformance cases (`openui/1.0`), which `tests/conformance.rs` runs whole
+  and streamed, and open-intelligent-ui's library and prompts (`oiu`), each with its project's
+  licence; and the prompts this crate writes (`prompt`), which `OPENUI_BLESS=1` rewrites. The
+  programs the clients and the fake agent show are the repo's `fixtures/openui`.
+
 ### apps/auth (Rust, Axum, sqlx on Postgres)
 
 - `sign_in.rs`: the browser's side of a sign-in. `google.rs` is the OIDC exchange.
@@ -73,7 +93,11 @@ The design tokens. `tokens.json` is the one source of every colour, opacity, sha
 in the repo; `pnpm tokens` (`build.mjs`) writes it out as `tokens.css` (plain variables, for the
 auth page), `theme.css` (Tailwind, for the web projects), the clients' `Tokens.swift` and the
 GPUI app's `apps/gpui/src/tokens.rs`, and the Android app's `Tokens.kt` with the few colours Android
-itself draws before the app does (`res/values/tokens.xml` and `res/values-night/tokens.xml`). A colour that only one place needs, like the window buttons
+itself draws before the app does (`res/values/tokens.xml` and `res/values-night/tokens.xml`). It
+also writes OpenUI's map style for MapLibre, `map-style-light.json` and `map-style-dark.json`
+beside it, which every client bundles (the Apple package from its copy in
+`Sources/MotileKit/Map`): OpenFreeMap's vector tiles drawn in the `map-*` tokens, with the route and
+the pins as layers. A colour that only one place needs, like the window buttons
 of the demo or the icons' tile, is added to the JSON, never written where it is used.
 
 ### apps/marketing (Astro, static) and apps/web (TanStack Start)
@@ -121,9 +145,10 @@ shadcn's own colours, opacities and radii are gone from the theme.
   many as the model's context has room for, Codex's as messages (`thread/inject_items`). The
   transcript shows the switch as a `Handoff` item.
 - `mcp.rs`: the `motile` MCP server on the loopback interface, which an agent calls by the token of
-  its own thread: `read_thread` reads any thread of the server, for what a handoff left out, and
-  `list_accounts`, `start_agent`, `agent_status`, `message_agent`, `answer_agent` and `stop_agent`
-  start and follow agents on any of the server's accounts, Claude Code's or Codex's.
+  its own thread: `read_thread` reads any thread of the server, for what a handoff left out,
+  `check_ui` checks a program before the agent shows it, and `list_accounts`, `start_agent`,
+  `agent_status`, `message_agent`, `answer_agent` and `stop_agent` start and follow agents on any of
+  the server's accounts, Claude Code's or Codex's.
 - `hub/children.rs`: those agents. Each works in a thread of its own, which knows the thread and
   the tool call that started it (`parent`); the sidebar doesn't list it. It gets only its prompt,
   works in its parent's folder unless given a worktree, and never has more access than its parent.
@@ -174,6 +199,20 @@ shadcn's own colours, opacities and radii are gone from the theme.
   in for Linear.
 - `ricrac.rs`: the same for Ricrac (ricrac.app, our own tracker), through its REST operations
   (`POST /v1/ops/<name>`) where Linear's is GraphQL. `MOTILE_RICRAC_URL` stands in for Ricrac.
+- `ui.rs`: the programs agents show in their replies (OpenUI Lang in an `openui-lang` fence), which
+  every agent is taught by the prompt `crates/openui` writes, appended to its instructions. Once a
+  thread has a program, a fence with no `root` statement is a patch merged over the latest. When a
+  turn ends with a program that has errors, the agent is sent them as a `Notice` and asked for a
+  patch, twice at most for a message, never for a turn that was stopped or hit the limit. An
+  assistant item keeps the state the user left each program in (`ui`, by block, set with `SetUi`),
+  which syncs like the rest of the item. A message that a program sent (`context`) and the state of
+  the programs the user changed since the last message (`programs`) reach the agent after its text,
+  a line each: `context and form values = <JSON>`.
+- `ui_tools.rs`: the tools a program's `Query` and `Mutation` call (`UiTool`), inside the thread's
+  folder, with their JSON schemas for the agent's prompt. `run` runs a command the user confirmed,
+  or any under full access, and only from a `Mutation`, which a click fires.
+- `ui_lookups.rs`: a program's photos from Wikipedia and Wikimedia Commons, kept as the thread's
+  media (`UiImages`), and street routes from OSRM (`UiRoute`), both kept in memory a while.
 - `icons.rs`: finds a project's icon in its folder.
 - `access.rs`: asks the auth server which clients belong to the account, and which servers it
   deleted completely.
@@ -228,6 +267,41 @@ for tests.
   many servers share it, and a row for each window with when it starts over and its pace.
 - `render/`: turns transcripts into rows ready to draw: `rows.rs` (the row list and its
   splices), `markdown.rs`, `highlight.rs`, `diff.rs`, `agents.rs`.
+- `render/openui/host.rs`: runs the programs of an open thread's rows (`RowKind::Ui`), each in a
+  runtime of its own: the row carries its tree, then `ui_patch` events what changed in it, by node
+  id (the path from its root, `node_id` in `render/openui/mod.rs`). What the user does comes as
+  `Command::Ui`; the host calls the program's tools on the thread's server (a `run` asks the user
+  first, `ui_confirm`, unless the thread has full access), keeps its timers, sends its
+  `@ToAssistant` messages with their context, keeps its state with `SetUi` half a second after it
+  stops changing, and looks up its photos and routes. Which fences are programs and which patch
+  the one before is `motile_openui::fences`, as the server finds them.
+- `render/openui/tree.rs`: the tree a client draws for an OpenUI program, a `UiNode` for each
+  component with its props final for drawing (`crates/openui/LAYOUT.md`): colours, points, text
+  runs, the context rules. `tree/` resolves an evaluated program into it, reusing the components
+  that didn't change; the canvas components carry the input of `canvas/`'s layout. Its golden
+  trees are `fixtures/openui`, one for each program of the repo's `fixtures/openui`
+  (`OPENUI_BLESS=1` rewrites them). `scripts/ui-types.sh` writes its Swift and Kotlin copies
+  (`examples/ui_types.rs`), and `scripts/lucide-names.mjs` the Lucide names its icons take
+  (`tree/lucide.rs`). Run them after changing the types or the font.
+- `render/openui/canvas/`: charts, drawings, formulas (RaTeX with the KaTeX fonts), a flashcard's
+  flip and confetti as scenes of paths, text and the regions a pointer lights, which the clients
+  only paint (`motile_ui_layout`, `Native.uiLayout`). `tests/paint` paints them as a reference, into
+  `fixtures/canvas`, which every client's painter is compared with.
+- `render/openui/web.rs`: the pages of HtmlView and YouTube for the clients' sandboxed web views
+  (`motile_ui_page`, `Native.uiPage`).
+- `render/openui/map.rs`: the map's camera in MapLibre's zoom levels: where the first pin and a fit
+  put it, the fly between two cameras, the route revealed along its length. The Apple and Android
+  clients ask it through `motile_ui_map` and `Native.uiMap`.
+- The frames the clients lay the corpus out in: each client's tests write `build/frames/<client>`
+  (`{"<node id>": [x, y, width, height]}`, every golden tree at 390 and 720) and a picture of each,
+  dark, to `build/programs/<client>`. `examples/compare_frames.rs` compares two clients node by
+  node: gaps, paddings, control heights and the widths a column or a grid gives within a point, what
+  text decides within whole lines and the typefaces' widths. `fixtures/frames/mac` and `ios` are the
+  references CI holds every client to (GPUI to the Mac's, Android to iOS's, as LAYOUT.md pairs
+  them), and `known.txt` the drift let through until the client that strays is fixed.
+  `scripts/compare-frames.sh` lays the corpus out on every client, compares them and lays their
+  pictures side by side in `build/programs/sheets` (`examples/program_sheet.rs`); `--bless` makes
+  the Mac's and iOS's frames the references, after a change to how a program is laid out.
 - `api.rs`: the JSON the client and the core exchange.
 - `examples/drive.rs` drives the core from a terminal; `examples/seed.rs` makes the dev app's
   account, project and threads.
@@ -250,7 +324,10 @@ to be AppKit on the Mac and UIKit on iOS has a twin in each, named alike (`KitMa
   the Ricrac tab's.
 - `Shared/Views/Transcript`: the transcript. `TranscriptView.swift` only keeps views for the
   rows on screen, `Rows.swift` builds their text and measures them off the main thread,
-  `RowViews.swift` are the rows.
+  `RowViews.swift` are the rows. `Map/` is OpenUI's map (`MapView.swift`, with `MapPilot.swift`
+  moving its camera and drawing its route as core says): MapLibre Native on iOS
+  (`iOS/MapEngineIOS.swift`) and MapLibre GL JS, bundled in `Sources/MotileKit/Map`, in a web view
+  on the Mac (`Mac/MapEngineMac.swift`). Three run at most, the others show a picture of themselves.
 - `Shared/Views/Sidebar`, `Composer`, `Onboarding`, `Thread`: SwiftUI. In the composer a skill is
   picked from `SkillMenuStrip.swift`, a strip over it, and becomes a chip (`SkillChip.swift`): an
   attachment in the composer's text, which is written `$name`, and in a message a box its layout
@@ -313,13 +390,15 @@ gesture for what Esc does. Its package is `app.motile`, its application `app.mot
   `platform/` is `Platform.swift` and `Symbol.swift`, `ui/` is the component kit of `Shared/Views/UI`
   and `Shared/Views/Shared`, and `transcript/`, `composer/`, `sidebar/`, `thread/`, `panel/`,
   `commandpanel/`, `settings/`, `usage/`, `onboarding/` and `media/` are the views of the same names.
+  `transcript/map/` is OpenUI's map on MapLibre Native (`UiMapView.kt`, `MapDirector.kt`).
   `layout/` lays out the screen: on a phone the sidebar and the panel are under the thread, which a
   swipe slides aside (`Drawer.kt`), on a tablet all three are side by side (`MainScreen.kt`).
   `Keyboard.kt` runs the core's keybindings from a keyboard with keys, where `mod` is Ctrl.
   `Root.kt` shows the sheets, the viewer and the alerts. `DemoDriver.kt` runs the steps `do.sh` writes.
 - `app/src/test` tests the models. `gestures/` uses the client with fingers (`GestureTests.kt`, the
   iOS app's gesture tests): a test module of its own that runs in a process of its own, so that it
-  can stop the client and open it again, as the iOS app's UI tests do.
+  can stop the client and open it again, as the iOS app's UI tests do. The unit tests lay programs
+  out with the core built for this machine, which `scripts/build-core.sh` puts in `app/build/hostLibs`.
 - `scripts/release.sh` builds the signed APK. Only a development build takes the dev scripts'
   variables (launch extras: `MOTILE_AUTH_URL`, `MOTILE_RELEASES_URL` and the others), since any app
   can start the client with extras. The dev app scripts are under Development.
@@ -370,7 +449,8 @@ redone for its versions in `patches/crates`; the script refuses a patch that `Ca
   stack and confirmations (`modal.rs`), the Lucide icons by the names of `Symbol.swift`
   (`icons.rs`). Nothing native is imitated: a menu or a modal is drawn in the app's own style.
 - `transcript/`: `model.rs` (the rows and their splices into GPUI's list), `prose.rs`,
-  `rows.rs`, `view.rs`.
+  `rows.rs`, `view.rs`. `map/` is OpenUI's map, which draws OpenFreeMap's vector tiles itself with
+  the bundled style (`paint.rs`), with no MapLibre and no web view, on every system.
 - `composer/`, `sidebar/`, `thread/`, `git.rs`, `command_panel.rs`, `media/`,
   `onboarding.rs`: the views of the same names in the Apple kit. The skills' menu and chips are
   `composer/skills.rs`, `store/skills.rs` and `ui/skill_chip.rs`; GPUI Kit's inline tokens are the
@@ -385,7 +465,8 @@ redone for its versions in `patches/crates`; the script refuses a patch that `Ca
 - `scripts/dev-app.sh` opens its dev app on the Mac's dev stack (`apps/macos/scripts/dev-stack.sh`),
   a device of its own with its data in `apps/macos/build/dev/gpui`; `--mac` opens the Mac's dev
   app beside it to compare. `scripts/shot.sh` takes a picture of it, and `scripts/do.sh "click 85
-  330" "key cmd-k" "type hello"` clicks, types and runs commands in it, through `dev_drive.rs`.
+  330" "key cmd-k" "type hello" "slide Tip 1" "press Alex"` clicks, types, drags a program's
+  slider, presses its button and runs commands in it, through `dev_drive.rs`.
   `scripts/build-app.sh` builds `Motile GPUI.app`.
 
 ## General Rules:
@@ -432,11 +513,19 @@ redone for its versions in `patches/crates`; the script refuses a patch that `Ca
 - Do not edit generated code: `Cargo.lock`, `pnpm-lock.yaml`, `apps/web/src/routeTree.gen.ts`,
   and what `pnpm tokens` writes from `packages/theme/tokens.json`: `tokens.css`, `theme.css`,
   `Tokens.swift`, `apps/gpui/src/tokens.rs`, the Android app's `Tokens.kt` and its
-  `res/values*/tokens.xml`.
+  `res/values*/tokens.xml`, and `packages/theme/map-style-*.json` with their copies in
+  `packages/apple/Sources/MotileKit/Map`. Also what
+  `scripts/ui-types.sh` writes, `UiNodes.swift` and `UiNodes.kt`, and what
+  `scripts/lucide-names.mjs` writes, `crates/core/src/render/openui/tree/lucide.rs`.
   The shadcn components in `src/components/ui` are ours once added: they are rewritten on the
   design tokens and edited like any view. Never edit an applied migration in
   `apps/auth/migrations` or `apps/server/migrations`, add a new one.
 - Do not write useless tests; tests should cover input/output behaviour.
+- What we take from another project keeps its licence beside it: OpenUI's conformance cases and
+  open-intelligent-ui's library (MIT, `crates/openui/fixtures`), the KaTeX fonts math is drawn with
+  (OFL, `crates/core/fonts/katex`), MapLibre GL JS (BSD, `packages/apple/Sources/MotileKit/Map`),
+  DM Sans (OFL) and Lucide (ISC). The iOS and Android apps draw maps with MapLibre Native (BSD).
+  Maps are OpenFreeMap's tiles of OpenStreetMap's data, which every client credits on the map.
 - Reinvent the wheel but do not reinvent the car. If you are solving a simple problem do not
   introduce a library. If you are solving a complex but common problem, there is likely a
   modern library for it, if so, use it.
@@ -460,11 +549,11 @@ redone for its versions in `patches/crates`; the script refuses a patch that `Ca
 - After you make code changes, run the checks below and fix what they raise.
 - A change must not break what CI runs on it: the checks, the e2e tests, the iOS UI tests and
   the Mac app's demo (`DemoDriver.swift`, run by `scripts/ci-demo.sh` in the `Release` and
-  `macOS` workflows), which signs in, adds a project, and drives threads, git and drafts end to
-  end. When a change touches what one of them does or expects, read it, update it in the same
-  change, and run it (`apps/macos/scripts/build-app.sh`, then `apps/macos/scripts/ci-demo.sh`,
-  then read `screenshots/checks.txt`)
-  before calling the change done. A push to `main` with a red workflow blocks the release.
+  `macOS` workflows), which signs in, adds a project, and drives threads, git, drafts and a program
+  (a slider dragged, a button pressed) end to end. When a change touches what one of them does or
+  expects, read it, update it in the same change, and run it (`apps/macos/scripts/build-app.sh`,
+  then `apps/macos/scripts/ci-demo.sh`, then read `screenshots/checks.txt`) before calling the
+  change done. A push to `main` with a red workflow blocks the release.
 
 ## Development
 
@@ -494,6 +583,7 @@ Checks (`cargo test` needs the compose Postgres; it creates a throwaway database
                                                           # after changing the GPUI app, crates/core or crates/protocol
     (cd apps/android && ./gradlew lintDebug testDebugUnitTest assembleDebug)
                                                           # after changing the Android app, crates/core or crates/protocol
+    scripts/compare-frames.sh                             # after changing how a client lays out a program
 
 The `Release` workflow runs the demo on every push to `main` that touches the client or the server:
 
@@ -516,6 +606,7 @@ app. A change to a view both clients share is then looked at in both.
     scripts/shot.sh shot.png                # a picture of its screen
     scripts/do.sh "sidebar open"            # has the client do something; the steps are in DemoDriverIOS.swift
     scripts/do.sh "type run greet.py" send
+    scripts/do.sh "slide Tip 1" "press Alex"  # drags a program's slider, presses its button
     scripts/ui-test.sh                      # the tests that swipe and tap (MotileUITests)
     MOTILE_SIM="iPad Pro 13-inch (M5)" scripts/dev-app.sh    # another simulator
 
@@ -523,6 +614,7 @@ app. A change to a view both clients share is then looked at in both.
     scripts/dev-app.sh                      # builds what changed and opens the client
     scripts/shot.sh shot.png                # a picture of its screen
     scripts/do.sh "sidebar open"            # has the client do something; the steps are in DemoDriver.kt
+    scripts/do.sh "slide Tip 1" "press Alex"  # drags a program's slider, presses its button
     scripts/ui-test.sh                      # the tests that swipe and tap (GestureTests.kt)
     scripts/check.sh [path]                 # compiles the Kotlin and lists its errors
     MOTILE_AVD=tablet scripts/dev-app.sh    # another emulator, made the first time
@@ -567,6 +659,10 @@ clients. It replays the recorded output in `fixtures/` or makes up a turn, depen
 | "hit the limit" | Is stopped by the usage limit, which resets `FAKE_AGENT_RESET` seconds later |
 | "agents hit the limit" | Is stopped by the usage limit while two agents it started work, which it stops after the turn (Claude Code) |
 | "crash before taking this" | Exits before it takes the prompt (Claude Code) |
+| "show the ui <name>" | Shows the program `fixtures/openui/<name>.oui`, streamed |
+| "show the dashboard" | Shows a program that reads `git_log` and `usage` with `Query` |
+| "ask with a form" | Shows a form that sends its values with `@ToAssistant`; told them, says what they are |
+| "show a broken ui" | Shows a program with an unknown component and a missing prop; told its errors, replies with a patch that fixes them (Claude Code) |
 | "$ship-it", "$review" | Says it followed the skill: the project's in `.claude/skills` (`.agents/skills` for Codex), or one it makes up |
 
 As `claude auth login` it signs in with any code but one with "wrong" in it, as the folder's
@@ -623,7 +719,7 @@ sentence describing the change:
     server | core | macos: Stream replies in finished blocks
 
 The parts are the folders in `apps`, `crates` and `packages`: `auth`, `marketing`, `web`, `server`,
-`macos`, `ios`, `android`, `apple`, `gpui`, `core` and `protocol`. Use `ci` for the workflows and `docs` for README.md and AGENTS.md.
+`macos`, `ios`, `android`, `apple`, `gpui`, `core`, `openui` and `protocol`. Use `ci` for the workflows and `docs` for README.md and AGENTS.md.
 
 The title should be concise. Description should explain the work in more detail (only if
 required) while still being concise. Use simple language, do not try to sound smart.

@@ -109,6 +109,8 @@ struct SidebarScreen: View {
             Mark()
                 .fill(Color.themeForeground)
                 .frame(width: 24, height: 24)
+                .accessibilityElement()
+                .accessibilityAddTraits(.isImage)
                 .accessibilityLabel("Motile")
             Spacer()
             Button {

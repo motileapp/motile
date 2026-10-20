@@ -136,6 +136,10 @@ impl Client {
             | Event::CodeSpans { .. }
             | Event::Agents { .. }
             | Event::AgentRows { .. }
+            | Event::UiPatch { .. }
+            | Event::UiConfirm { .. }
+            | Event::OpenUrl { .. }
+            | Event::Copy { .. }
             | Event::UploadProgress { .. } => {}
         }
     }
@@ -204,6 +208,7 @@ fn kinds(client: &Client) -> Vec<&'static str> {
         RowKind::User { .. } => "user",
         RowKind::Prose { .. } => "prose",
         RowKind::Code { .. } => "code",
+        RowKind::Ui { .. } => "ui",
         RowKind::Tool { .. } => "tool",
         RowKind::Thinking { .. } => "thinking",
         RowKind::Media { .. } => "media",

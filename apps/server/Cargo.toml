@@ -10,6 +10,7 @@ path = "src/main.rs"
 
 [dependencies]
 motile-protocol = { workspace = true, features = ["auth-client"] }
+motile-openui.workspace = true
 reqwest.workspace = true
 anyhow.workspace = true
 axum = { version = "0.8", default-features = false, features = ["tokio", "http1"] }
@@ -20,6 +21,7 @@ hex.workspace = true
 imagesize = "0.15"
 iroh.workspace = true
 libc.workspace = true
+lru = "0.18"
 pulldown-cmark = { version = "0.13", default-features = false }
 rand = "0.10"
 rmcp = { version = "3.5", features = ["server", "macros", "transport-streamable-http-server"] }

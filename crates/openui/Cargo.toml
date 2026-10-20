@@ -1,0 +1,15 @@
+[package]
+name = "motile-openui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+icu_collator = "2"
+indexmap = "2"
+pulldown-cmark = { version = "0.13", default-features = false }
+regress = "0.12"
+ryu-js = "1"
+serde.workspace = true
+serde_json.workspace = true
+url = "2"

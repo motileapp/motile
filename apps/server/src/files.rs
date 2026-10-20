@@ -24,17 +24,23 @@ const SNIFFED: usize = 8000;
 
 /// Where `path` is inside `root`. One that leads out of it, also through a link, is refused,
 /// and so is git's own folder.
-fn inside(root: &str, path: &str) -> anyhow::Result<PathBuf> {
-    let plain = Path::new(path).components().all(|part| matches!(part, Component::Normal(name) if name != ".git"));
-    if !plain {
-        bail!("{path} isn't a path inside the folder.");
-    }
+pub(crate) fn inside(root: &str, path: &str) -> anyhow::Result<PathBuf> {
+    plain(path)?;
     let root = Path::new(root).canonicalize().with_context(|| format!("{root} can't be opened."))?;
     let found = root.join(path).canonicalize().with_context(|| format!("{path} can't be opened."))?;
     if !found.starts_with(&root) {
         bail!("{path} leads out of the folder.");
     }
     Ok(found)
+}
+
+/// Refuses a path that could lead out of the folder it is taken in, or into git's own folder.
+pub(crate) fn plain(path: &str) -> anyhow::Result<()> {
+    let plain = Path::new(path).components().all(|part| matches!(part, Component::Normal(name) if name != ".git"));
+    if !plain {
+        bail!("{path} isn't a path inside the folder.");
+    }
+    Ok(())
 }
 
 /// What is in the folder at `path` inside `root`: folders first, each kind by name.

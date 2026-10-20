@@ -9,8 +9,11 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.sp
+import app.motile.platform.scaled
 import app.motile.theme.LocalForeground
 import app.motile.theme.Theme
 
@@ -64,3 +67,9 @@ fun Text(
         onTextLayout = onTextLayout,
     )
 }
+
+/** The style with every line `height` tall, given as on the Mac, its text centred in it, the first and the last too. */
+fun TextStyle.lined(height: Float): TextStyle = copy(
+    lineHeight = scaled(height).sp,
+    lineHeightStyle = LineHeightStyle(LineHeightStyle.Alignment.Center, LineHeightStyle.Trim.None),
+)

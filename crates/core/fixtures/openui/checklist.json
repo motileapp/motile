@@ -1,0 +1,261 @@
+{
+  "id": "",
+  "a11y": {
+    "role": "group"
+  },
+  "component": "Card",
+  "children": [
+    {
+      "id": "children/0",
+      "component": "Row",
+      "children": [
+        {
+          "id": "children/0/children/0",
+          "a11y": {
+            "role": "heading",
+            "level": 3
+          },
+          "component": "Title",
+          "text": {
+            "text": "Your suitcase",
+            "runs": [],
+            "links": []
+          },
+          "style": "card_title",
+          "color": "foreground"
+        },
+        {
+          "id": "children/0/children/1",
+          "a11y": {
+            "role": "hidden"
+          },
+          "component": "Spacer"
+        },
+        {
+          "id": "children/0/children/2",
+          "a11y": {
+            "role": "text"
+          },
+          "component": "Text",
+          "text": {
+            "text": "2/6 packed",
+            "runs": [],
+            "links": []
+          },
+          "inlines": [],
+          "style": "small",
+          "color": "muted-foreground",
+          "weight": "regular",
+          "italic": false,
+          "strike": false,
+          "digits": true,
+          "max_lines": null
+        }
+      ],
+      "gap": 8.0,
+      "align": "center",
+      "justify": "start",
+      "wrap": false,
+      "sizing": [
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": true
+        },
+        {
+          "basis": "zero",
+          "length": null,
+          "grow": 1.0,
+          "shrink": false
+        },
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": true
+        }
+      ]
+    },
+    {
+      "id": "children/1",
+      "component": "Box",
+      "children": [
+        {
+          "id": "children/1/children/0",
+          "component": "Box",
+          "children": [],
+          "direction": "col",
+          "gap": 0.0,
+          "spacing": [],
+          "sizing": [],
+          "padding": 0.0,
+          "background": "foreground",
+          "inner_surface": true,
+          "radius": {
+            "kind": "full",
+            "points": 0.0
+          },
+          "border": false,
+          "width": {
+            "unit": "fraction",
+            "value": 0.33333334
+          },
+          "height": {
+            "unit": "points",
+            "value": 4.0
+          },
+          "flex": null,
+          "align": "stretch",
+          "justify": "start",
+          "wrap": false
+        }
+      ],
+      "direction": "col",
+      "gap": 0.0,
+      "spacing": [
+        0.0
+      ],
+      "sizing": [],
+      "padding": 0.0,
+      "background": {
+        "surface": "border"
+      },
+      "inner_surface": true,
+      "radius": {
+        "kind": "full",
+        "points": 0.0
+      },
+      "border": false,
+      "width": {
+        "unit": "fraction",
+        "value": 1.0
+      },
+      "height": {
+        "unit": "points",
+        "value": 4.0
+      },
+      "flex": null,
+      "align": "stretch",
+      "justify": "start",
+      "wrap": false
+    },
+    {
+      "id": "children/2",
+      "component": "Grid",
+      "children": [
+        {
+          "id": "children/2/children/0",
+          "a11y": {
+            "role": "checkbox",
+            "label": "The everyday tee",
+            "on": true
+          },
+          "component": "Checkbox",
+          "checked": true,
+          "label": "The everyday tee",
+          "strike": true,
+          "error": null,
+          "disabled": null
+        },
+        {
+          "id": "children/2/children/1",
+          "a11y": {
+            "role": "checkbox",
+            "label": "Relaxed Oxford shirt",
+            "on": false
+          },
+          "component": "Checkbox",
+          "checked": false,
+          "label": "Relaxed Oxford shirt",
+          "strike": false,
+          "error": null,
+          "disabled": null
+        },
+        {
+          "id": "children/2/children/2",
+          "a11y": {
+            "role": "checkbox",
+            "label": "Unstructured jacket",
+            "on": true
+          },
+          "component": "Checkbox",
+          "checked": true,
+          "label": "Unstructured jacket",
+          "strike": true,
+          "error": null,
+          "disabled": null
+        },
+        {
+          "id": "children/2/children/3",
+          "a11y": {
+            "role": "checkbox",
+            "label": "Straight-leg trousers",
+            "on": false
+          },
+          "component": "Checkbox",
+          "checked": false,
+          "label": "Straight-leg trousers",
+          "strike": false,
+          "error": null,
+          "disabled": null
+        },
+        {
+          "id": "children/2/children/4",
+          "a11y": {
+            "role": "checkbox",
+            "label": "Minimal leather sneakers",
+            "on": false
+          },
+          "component": "Checkbox",
+          "checked": false,
+          "label": "Minimal leather sneakers",
+          "strike": false,
+          "error": null,
+          "disabled": null
+        },
+        {
+          "id": "children/2/children/5",
+          "a11y": {
+            "role": "checkbox",
+            "label": "Everywhere tote",
+            "on": false
+          },
+          "component": "Checkbox",
+          "checked": false,
+          "label": "Everywhere tote",
+          "strike": false,
+          "error": null,
+          "disabled": null
+        }
+      ],
+      "columns": 2,
+      "min_child_width": 220.0,
+      "gap": 8.0
+    },
+    {
+      "id": "children/3",
+      "a11y": {
+        "role": "button",
+        "label": "Clear"
+      },
+      "component": "Button",
+      "label": "Clear",
+      "variant": "outline",
+      "tint": null,
+      "size": "small",
+      "icon": null,
+      "block": false,
+      "disabled": null
+    }
+  ],
+  "soft": true,
+  "nested": false,
+  "padding": null,
+  "spacing": [
+    0.0,
+    12.0,
+    12.0,
+    12.0
+  ]
+}

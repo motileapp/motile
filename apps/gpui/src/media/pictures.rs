@@ -82,6 +82,26 @@ impl Pictures {
         Picture::Loading
     }
 
+    /// The image at a web address, kept under `key`: fetched once into `file`, then read as a file
+    /// on this device is.
+    pub fn load_web(key: &str, url: &str, file: &Path, max_pixels: u32, cx: &mut App) -> Picture {
+        if let Some(known) = Self::known(key, cx) {
+            return known;
+        }
+        let generation = Self::start(key, cx);
+        let (key, url, file) = (key.to_string(), url.to_string(), file.to_path_buf());
+        let reading = cx.background_executor().spawn(async move {
+            let fetched = file.exists() || download(&url, &file);
+            fetched.then(|| decode(&file, max_pixels)).flatten()
+        });
+        cx.spawn(async move |cx| {
+            let read = reading.await;
+            cx.update(|cx| Self::finish(&key, generation, read.ok_or(Failure::Decode), cx));
+        })
+        .detach();
+        Picture::Loading
+    }
+
     /// The first frame of a video on this device, kept under `key`.
     pub fn load_video_file(key: &str, file: &Path, max_pixels: u32, cx: &mut App) -> Picture {
         if let Some(known) = Self::known(key, cx) {
@@ -337,4 +357,21 @@ fn shown(mut pixels: image::RgbaImage) -> Shown {
     let (width, height) = pixels.dimensions();
     let frame = image::Frame::new(pixels);
     Shown { image: Arc::new(RenderImage::new(vec![frame])), width, height }
+}
+
+/// Fetches the file at `url` into `file`. Whether it did.
+pub fn download(url: &str, file: &std::path::Path) -> bool {
+    motile_protocol::tls::install();
+    let Ok(runtime) = tokio::runtime::Builder::new_current_thread().enable_all().build() else { return false };
+    let bytes = runtime.block_on(async {
+        let client =
+            reqwest::Client::builder().user_agent("Motile").timeout(std::time::Duration::from_secs(20)).build().ok()?;
+        let response = client.get(url).send().await.ok()?.error_for_status().ok()?;
+        response.bytes().await.ok()
+    });
+    let Some(bytes) = bytes.filter(|bytes| !bytes.is_empty()) else { return false };
+    if let Some(folder) = file.parent() {
+        let _ = std::fs::create_dir_all(folder);
+    }
+    std::fs::write(file, bytes).is_ok()
 }

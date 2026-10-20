@@ -5,6 +5,17 @@ import UniformTypeIdentifiers
 
 /// What the Mac app's executable runs.
 public func runMotile() {
+    #if DEBUG
+    // `Motile --ui-frames tree.json 720` prints the frames of a program's nodes and quits.
+    let arguments = CommandLine.arguments
+    if let flag = arguments.firstIndex(of: "--ui-frames"), arguments.count > flag + 2,
+        let data = FileManager.default.contents(atPath: arguments[flag + 1]),
+        let tree = (try? JSONSerialization.jsonObject(with: data)) as? JSON, let width = Double(arguments[flag + 2])
+    {
+        print(ProgramFrames.json(tree: tree, width: CGFloat(width)))
+        return
+    }
+    #endif
     MotileApp.main()
 }
 
@@ -216,6 +227,7 @@ struct RootView: View {
         .asking(Binding { store.errorMessage.map(ShownError.init) } set: { store.errorMessage = $0?.id }) { _ in
             Confirmation(title: store.errorAlert.title, message: store.errorAlert.detail, dismissal: "OK")
         }
+        .asking(Binding { store.programConfirm } set: { if $0 == nil { store.closeProgramConfirm() } }) { $0.confirmation(store) }
         .asking($store.stopping) { $0.confirmation(store) }
         .overlay { ModalLayer() }
     }

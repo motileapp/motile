@@ -1,0 +1,21 @@
+root = Col([head, kpis, Grid([trend, mix], 2, 300, 4), Grid([regions, top], 2, 300, 4)], 4)
+$days = "90"
+$channel = "All"
+$view = "Weekly"
+orders = Query("get_orders", {days: $days}, {rows: []}, 300)
+rows = $channel == "All" ? orders.rows : @Filter(orders.rows, "channel", "==", $channel)
+weekly = @Bucket(rows, "date", "week", "amount")
+daily = @Bucket(rows, "date", "day", "amount")
+last7 = @Sum(@Take(daily, -7).value)
+prev7 = @Sum(@Slice(daily, -14, -7).value)
+change = @Change(last7, prev7)
+head = Row([Col([Title("Store performance", "lg"), Caption("Demo data, refreshed every 5 minutes")], 1), Spacer(), Box([Select($channel, [{value: "All", label: "All channels"}, "Web", "Mobile", "Retail"])], null, null, null, null, null, null, 150), SegmentedControl($days, [{value: "30", label: "30d"}, {value: "90", label: "90d"}, {value: "365", label: "1y"}])], 3, null, null, true)
+kpis = Grid([k1, k2, k3, k4], 4, 150, 3)
+k1 = Card([Caption("Revenue"), Title(@Format(@Sum(rows.amount), "compact", 1, "USD"), "xl")], null, 3, 1)
+k2 = Card([Caption("Orders"), Title(@Format(@Count(rows)), "xl")], null, 3, 1)
+k3 = Card([Caption("Average order"), Title(@Format(@Avg(rows.amount), "currency"), "xl")], null, 3, 1)
+k4 = Card([Caption("Last 7 days"), Row([Title(@Format(last7, "compact", 1, "USD"), "xl"), change == null ? null : Badge((change >= 0 ? "+" : "") + @Format(change, "percent", 1) + " vs prior 7", change >= 0 ? "success" : "danger")], 2, null, null, true)], null, 3, 1)
+trend = Card([Row([Title("Revenue", "sm"), Spacer(), SegmentedControl($view, ["Weekly", "Cumulative"])], 2), Chart("area", $view == "Weekly" ? weekly : @Cumulative(weekly, "value"), "key", ["value"], "currency")], null, 4, 2)
+mix = Card([Title("Channel mix", "sm"), Chart("donut", @GroupBy(orders.rows, "channel", "amount"), "key", ["value"], "currency")], null, 4, 2)
+regions = Card([Title("Revenue by region and category", "sm"), Chart("bar", @Pivot(rows, "region", "category", "amount"), "key", null, "currency", null, true)], null, 4, 2)
+top = Card([Title("Top products", "sm"), Table(["Product", "Units", "Revenue"], @Each(@Top(@GroupBy(rows, "product", "amount"), "value", 5), "p", [p.key, @Sum(@Filter(rows, "product", "==", p.key).units), @Format(p.value, "currency", 0)]))], null, 4, 2)

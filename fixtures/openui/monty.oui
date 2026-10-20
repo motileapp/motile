@@ -1,0 +1,17 @@
+root = Card([head, doors, status, actions, record, sim], null, 5, 4)
+$choice = -1
+$opened = -1
+$final = -1
+$prize = 0
+$switched = 0
+$switchWins = 0
+$stayed = 0
+$stayWins = 0
+$simStay = 0
+$simGames = 0
+head = Col([Title("Should you switch doors?", "lg"), Text("One car. Two goats. A surprisingly good reason to switch.", "sm", "muted")], 1)
+doors = Grid(@Each(@Range(0, 3), "d", Pressable([Col([Text("Door " + (d + 1), "sm", "muted", "medium"), Title(d == $opened || $final >= 0 ? (d == $prize ? "🚗" : "🐐") : "🚪", "3xl"), Text(d == $choice ? "Your pick" : d == $opened ? "Opened by the host" : "Closed", "xs", d == $choice ? "info" : "muted", "medium")], 1, "center")], $choice < 0 ? Action([@Set($choice, d), @Set($prize, @Random(0, 2, true)), @Set($opened, $prize == d ? (d + 1 + @Random(0, 1, true)) % 3 : 3 - d - $prize)]) : null, d == $choice, 5, d == $opened || $final >= 0 ? "surface" : "warning", "lg")), 3, null, 3)
+status = Box([Title($final >= 0 ? ($final == $prize ? "You found the car!" : "A goat this time.") : $choice >= 0 ? "Door " + ($opened + 1) + " has a goat." : "Start by choosing a door.", "md"), Text($final >= 0 ? "Switching wins whenever your first pick was a goat: 2 out of 3 times." : $choice >= 0 ? "Your door still has a 1 in 3 chance. The other closed door has 2 in 3. Switch or stay?" : "The host knows where the car is and will open another door with a goat behind it.", "sm", "muted")], null, 1, 4, "info", "lg")
+actions = Row([$choice >= 0 && $final < 0 ? Button("Switch doors", Action([@Set($final, 3 - $choice - $opened), @Set($switched, $switched + 1), @Set($switchWins, $switchWins + ($final == $prize ? 1 : 0))]), "solid", null, null, "shuffle") : null, $choice >= 0 && $final < 0 ? Button("Keep my door", Action([@Set($final, $choice), @Set($stayed, $stayed + 1), @Set($stayWins, $stayWins + ($final == $prize ? 1 : 0))]), "outline") : null, $final >= 0 ? Button("Play again", @Reset($choice, $opened, $final), "solid", null, null, "rotate-ccw") : null, Button("Simulate 1,000 games", Action([@Set($simStay, $simStay + @Count(@Filter(@Each(@Range(0, 1000), "g", @Random(0, 2, true) == @Random(0, 2, true)), "", "==", true))), @Set($simGames, $simGames + 1000)]), "ghost", null, null, "dices")], 2, null, null, true)
+record = $switched + $stayed > 0 ? Text("Your games: switched " + @Plural($switched, "time") + " and won " + $switchWins + "; stayed " + @Plural($stayed, "time") + " and won " + $stayWins + ".", "sm", "muted") : null
+sim = $simGames > 0 ? Card([Row([Title("Simulated games", "sm"), Spacer(), Caption(@Format($simGames) + " games")]), Chart("bar", [{strategy: "Stay", wins: @Percent($simStay, $simGames)}, {strategy: "Switch", wins: 100 - @Percent($simStay, $simGames)}], "strategy", ["wins"], "percent", null, false, 160)], "soft", 4, 2) : null

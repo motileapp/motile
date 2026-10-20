@@ -10,6 +10,16 @@ extension Choice {
         }
         menu.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
     }
+
+    /// Opens the choices as a menu under the view, at least as wide as it, as a pop-up button does.
+    static func offer(_ choices: [Choice], under view: NSView) {
+        let menu = NSMenu()
+        for choice in choices {
+            menu.addItem(ChoiceItem(choice))
+        }
+        menu.minimumWidth = view.bounds.width
+        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: view.isFlipped ? view.bounds.maxY + 4 : -4), in: view)
+    }
 }
 
 private final class ChoiceItem: NSMenuItem {

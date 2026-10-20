@@ -1,0 +1,316 @@
+{
+  "id": "",
+  "a11y": {
+    "role": "group"
+  },
+  "component": "Card",
+  "children": [
+    {
+      "id": "children/0",
+      "a11y": {
+        "role": "heading",
+        "level": 3
+      },
+      "component": "Title",
+      "text": {
+        "text": "Who makes money in this market?",
+        "runs": [],
+        "links": []
+      },
+      "style": "card_title",
+      "color": "foreground"
+    },
+    {
+      "id": "children/1",
+      "a11y": {
+        "role": "table"
+      },
+      "component": "Table",
+      "columns": [
+        {
+          "title": "Player",
+          "numeric": false
+        },
+        {
+          "title": "Business model",
+          "numeric": false
+        },
+        {
+          "title": "Typical margin",
+          "numeric": true
+        },
+        {
+          "title": "Difficulty",
+          "numeric": false
+        }
+      ],
+      "rows": [
+        [
+          {
+            "kind": "text",
+            "text": {
+              "text": "Drone manufacturers",
+              "runs": [],
+              "links": []
+            }
+          },
+          {
+            "kind": "text",
+            "text": {
+              "text": "Sell drones, cameras and accessories",
+              "runs": [],
+              "links": []
+            }
+          },
+          {
+            "kind": "text",
+            "text": {
+              "text": "38%",
+              "runs": [],
+              "links": []
+            }
+          },
+          {
+            "kind": "node",
+            "node": {
+              "id": "children/1/rows/0/3",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Badge",
+              "text": "Hard",
+              "tone": "destructive",
+              "icon": null
+            }
+          }
+        ],
+        [
+          {
+            "kind": "text",
+            "text": {
+              "text": "Freelance pilots",
+              "runs": [],
+              "links": []
+            }
+          },
+          {
+            "kind": "text",
+            "text": {
+              "text": "Charge per shoot or project",
+              "runs": [],
+              "links": []
+            }
+          },
+          {
+            "kind": "text",
+            "text": {
+              "text": "55%",
+              "runs": [],
+              "links": []
+            }
+          },
+          {
+            "kind": "node",
+            "node": {
+              "id": "children/1/rows/1/3",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Badge",
+              "text": "Easy",
+              "tone": "success",
+              "icon": null
+            }
+          }
+        ],
+        [
+          {
+            "kind": "text",
+            "text": {
+              "text": "Mapping companies",
+              "runs": [],
+              "links": []
+            }
+          },
+          {
+            "kind": "text",
+            "text": {
+              "text": "SaaS and data processing fees",
+              "runs": [],
+              "links": []
+            }
+          },
+          {
+            "kind": "text",
+            "text": {
+              "text": "24%",
+              "runs": [],
+              "links": []
+            }
+          },
+          {
+            "kind": "node",
+            "node": {
+              "id": "children/1/rows/2/3",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Badge",
+              "text": "Medium",
+              "tone": "warning",
+              "icon": null
+            }
+          }
+        ],
+        [
+          {
+            "kind": "text",
+            "text": {
+              "text": "Enterprises",
+              "runs": [],
+              "links": []
+            }
+          },
+          {
+            "kind": "text",
+            "text": {
+              "text": "Operate their own fleets",
+              "runs": [],
+              "links": []
+            }
+          },
+          {
+            "kind": "text",
+            "text": {
+              "text": "n/a",
+              "runs": [],
+              "links": []
+            }
+          },
+          {
+            "kind": "node",
+            "node": {
+              "id": "children/1/rows/3/3",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Badge",
+              "text": "Medium",
+              "tone": "warning",
+              "icon": null
+            }
+          }
+        ]
+      ]
+    },
+    {
+      "id": "children/2",
+      "a11y": {
+        "role": "table"
+      },
+      "component": "Table",
+      "columns": [
+        {
+          "title": "Month",
+          "numeric": false
+        },
+        {
+          "title": "Shoots",
+          "numeric": true
+        },
+        {
+          "title": "Revenue",
+          "numeric": true
+        }
+      ],
+      "rows": [
+        [
+          {
+            "kind": "text",
+            "text": {
+              "text": "January",
+              "runs": [],
+              "links": []
+            }
+          },
+          {
+            "kind": "text",
+            "text": {
+              "text": "8",
+              "runs": [],
+              "links": []
+            }
+          },
+          {
+            "kind": "text",
+            "text": {
+              "text": "$2,000",
+              "runs": [],
+              "links": []
+            }
+          }
+        ],
+        [
+          {
+            "kind": "text",
+            "text": {
+              "text": "February",
+              "runs": [],
+              "links": []
+            }
+          },
+          {
+            "kind": "text",
+            "text": {
+              "text": "12",
+              "runs": [],
+              "links": []
+            }
+          },
+          {
+            "kind": "text",
+            "text": {
+              "text": "$3,000",
+              "runs": [],
+              "links": []
+            }
+          }
+        ],
+        [
+          {
+            "kind": "text",
+            "text": {
+              "text": "March",
+              "runs": [],
+              "links": []
+            }
+          },
+          {
+            "kind": "text",
+            "text": {
+              "text": "15",
+              "runs": [],
+              "links": []
+            }
+          },
+          {
+            "kind": "text",
+            "text": {
+              "text": "$3,750",
+              "runs": [],
+              "links": []
+            }
+          }
+        ]
+      ]
+    }
+  ],
+  "soft": false,
+  "nested": false,
+  "padding": null,
+  "spacing": [
+    0.0,
+    12.0,
+    12.0
+  ]
+}

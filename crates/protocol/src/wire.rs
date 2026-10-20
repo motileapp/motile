@@ -1,9 +1,10 @@
 //! Messages between a client and a server. Every stream starts with one `Request` from the client; the
 //! server answers with one `Message`, or with a stream of them for `Subscribe` and `Open`.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Hash, Debug)]
 #[serde(rename_all = "snake_case")]
@@ -138,8 +139,29 @@ pub struct Item {
     /// that agent's transcript, not to the thread's.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub parent: Option<String>,
+    /// The state the user left the programs of an assistant item in, by the index of each
+    /// program's block. Only the clients read it. A copy passed on by a server older than protocol
+    /// 34 has lost it, as it has `context` and `programs`, until every server is updated.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty", deserialize_with = "blocks")]
+    pub ui: BTreeMap<u32, Value>,
     #[serde(flatten)]
     pub kind: ItemKind,
+}
+
+/// Reads the blocks' indexes from the strings JSON keys are, which serde doesn't once a message
+/// that holds the item was buffered to find its type. A key that is no index is left out.
+fn blocks<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<BTreeMap<u32, Value>, D::Error> {
+    let read = BTreeMap::<String, Value>::deserialize(deserializer)?;
+    Ok(read.into_iter().filter_map(|(block, state)| Some((block.parse().ok()?, state))).collect())
+}
+
+/// A program of an assistant item whose state the user changed before sending a message, which
+/// the agent is told with it.
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct ProgramState {
+    pub item_id: String,
+    pub block: u32,
+    pub state: Value,
 }
 
 /// An image or a video an agent showed or the user attached, or any other file an agent sent. The
@@ -173,6 +195,12 @@ pub enum ItemKind {
         /// The skills the message starts, each written `$name` in `text`.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         skills: Vec<SkillMention>,
+        /// What a program sent with the message, as `@ToAssistant` gives it: what was clicked,
+        /// the form's values and the program's context.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        context: Option<Value>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        programs: Vec<ProgramState>,
     },
     Assistant {
         text: String,
@@ -200,6 +228,9 @@ pub enum ItemKind {
         notice: AgentNotice,
         text: String,
     },
+    /// An item of a newer server.
+    #[serde(other)]
+    Unknown,
 }
 
 /// Something that happened in a thread an agent started, which the server tells that agent.
@@ -212,6 +243,10 @@ pub struct AgentNotice {
     /// The start of its reply, why it failed, or what it asks.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub summary: Option<String>,
+    /// It asks the thread's own agent to fix the programs it showed. Its event is `Failed`, which
+    /// servers and clients older than protocol 34 read.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub repair: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
@@ -224,6 +259,9 @@ pub enum NoticeEvent {
     Asked,
     /// It reached its account's usage limit, and waits for the limit to reset.
     Limited,
+    /// An event of a newer server.
+    #[serde(other)]
+    Unknown,
 }
 
 /// One side of a handoff.
@@ -455,6 +493,40 @@ pub enum Request {
         attachments: Vec<String>,
         #[serde(default)]
         now: bool,
+        /// What a program sends with the message: `["User clicked: <text>", <form state>,
+        /// <context>]`.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        context: Option<Value>,
+    },
+    /// Keeps the state of the program in the block `block` of an assistant item; `null` forgets
+    /// it. `Ok` answers.
+    SetUi {
+        thread_id: String,
+        item_id: String,
+        block: u32,
+        state: Value,
+    },
+    /// Runs one of the tools a program reads and changes the thread's folder with, as
+    /// `ui_tools` lists them. A `run` under any access but full needs `confirmed`, which the
+    /// client sets once the user has allowed the exact command. `UiToolResult` or `UiToolError`
+    /// answers.
+    UiTool {
+        thread_id: String,
+        tool: String,
+        #[serde(default)]
+        args: Value,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        confirmed: bool,
+    },
+    /// Photos of what `query` names, from Wikipedia and Wikimedia Commons, kept as the thread's
+    /// media. `UiImages` answers.
+    UiImages {
+        thread_id: String,
+        query: String,
+    },
+    /// The streets a car takes through the stops, each `[lat, lng]`, from OSRM. `UiRoute` answers.
+    UiRoute {
+        stops: Vec<[f64; 2]>,
     },
     /// Gives the agent a queued message now.
     SendQueued {
@@ -2125,6 +2197,10 @@ pub struct Queued {
     /// Set when the server tells the agent of a thread it started, which the queue doesn't show.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub notice: Option<AgentNotice>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context: Option<Value>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub programs: Vec<ProgramState>,
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
@@ -2345,6 +2421,22 @@ pub enum Message {
         projects: Vec<Project>,
         threads: Vec<Thread>,
     },
+    UiToolResult {
+        result: Value,
+    },
+    /// `code` is `tool-not-found` or `tool-error`, as OpenUI names them.
+    UiToolError {
+        code: String,
+        message: String,
+    },
+    /// The photos found, the best first; empty when there are none.
+    UiImages {
+        images: Vec<Media>,
+    },
+    /// The route's points, each `[lat, lng]`.
+    UiRoute {
+        points: Vec<[f64; 2]>,
+    },
     Error {
         message: String,
     },
@@ -2363,6 +2455,7 @@ mod tests {
             created_at: 1.0,
             media: Vec::new(),
             parent: None,
+            ui: BTreeMap::new(),
             kind: ItemKind::Assistant { text: "hi".into() },
         };
         let json = serde_json::to_value(&item).unwrap();
@@ -2372,6 +2465,37 @@ mod tests {
             serde_json::json!({"id": "a", "seq": 3, "rev": 7, "created_at": 1.0, "type": "assistant", "text": "hi"})
         );
         assert_eq!(serde_json::from_value::<Item>(json).unwrap(), item);
+    }
+
+    #[test]
+    fn the_state_of_programs_and_a_messages_context_are_read_back_and_may_be_missing() {
+        let reply = serde_json::json!({
+            "id": "a", "seq": 1, "rev": 9, "created_at": 1.0, "type": "assistant", "text": "```openui-lang\n```",
+            "ui": {"0": {"$days": "30"}, "2": [1, 2]},
+        });
+        let message = serde_json::json!({
+            "id": "u", "seq": 2, "rev": 10, "created_at": 2.0, "type": "user", "text": "Book it", "attachments": [],
+            "context": ["User clicked: Book it", {"people": 4}],
+            "programs": [{"item_id": "a", "block": 0, "state": {"$days": "30"}}],
+        });
+
+        let read: Item = serde_json::from_value(reply.clone()).unwrap();
+        let sent: Message =
+            serde_json::from_value(serde_json::json!({"type": "items", "items": [reply.clone()]})).unwrap();
+        let said: Item = serde_json::from_value(message.clone()).unwrap();
+        let before: Item = serde_json::from_value(serde_json::json!({
+            "id": "u", "seq": 2, "rev": 10, "created_at": 2.0, "type": "user", "text": "Hi", "attachments": [],
+        }))
+        .unwrap();
+
+        assert_eq!(read.ui.keys().copied().collect::<Vec<_>>(), [0, 2]);
+        assert_eq!(sent, Message::Items { items: vec![read.clone()] });
+        assert_eq!(serde_json::to_value(&read).unwrap(), reply);
+        assert_eq!(serde_json::to_value(&said).unwrap(), message);
+        assert!(
+            matches!(before.kind, ItemKind::User { context: None, ref programs, .. } if programs.is_empty())
+                && before.ui.is_empty()
+        );
     }
 
     #[test]
@@ -2394,5 +2518,39 @@ mod tests {
         let stage: GitStage = serde_json::from_value(serde_json::json!("squashing")).unwrap();
 
         assert_eq!(stage, GitStage::Unknown);
+    }
+
+    #[test]
+    fn an_item_or_a_notice_of_a_newer_server_is_read_as_unknown() {
+        let items: Message = serde_json::from_value(serde_json::json!({"type": "items", "items": [
+            {"id": "a", "seq": 1, "rev": 1, "created_at": 1.0, "type": "chart", "series": [1, 2]},
+            {"id": "n", "seq": 2, "rev": 2, "created_at": 2.0, "type": "notice", "text": "",
+             "notice": {"thread_id": "t", "title": "Merged", "event": "merged", "agent": "claude"}},
+        ]}))
+        .unwrap();
+
+        let Message::Items { items } = items else { panic!("{items:?}") };
+        assert_eq!(items[0].kind, ItemKind::Unknown);
+        assert!(matches!(&items[1].kind, ItemKind::Notice { notice, .. } if notice.event == NoticeEvent::Unknown));
+    }
+
+    #[test]
+    fn a_repair_notice_is_a_failure_to_a_peer_that_doesnt_know_repairs() {
+        let notice = AgentNotice {
+            thread_id: "t".into(),
+            title: "Program errors".into(),
+            event: NoticeEvent::Failed,
+            agent: Agent::Claude,
+            summary: None,
+            repair: true,
+        };
+
+        let json = serde_json::to_value(&notice).unwrap();
+
+        assert_eq!(json["event"], "failed");
+        assert_eq!(json["repair"], true);
+        assert_eq!(serde_json::from_value::<AgentNotice>(json).unwrap(), notice);
+        let told = AgentNotice { repair: false, ..notice };
+        assert!(serde_json::to_value(&told).unwrap().get("repair").is_none());
     }
 }

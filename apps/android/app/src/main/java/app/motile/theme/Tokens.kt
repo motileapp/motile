@@ -38,6 +38,7 @@ class Palette(
     val processForeground: Color,
     val merged: Color,
     val mergedForeground: Color,
+    val pink: Color,
     val skill: Color,
     val border: Color,
     val borderCard: Color,
@@ -55,6 +56,17 @@ class Palette(
     val chart3: Color,
     val chart4: Color,
     val chart5: Color,
+    val chart6: Color,
+    val mapLand: Color,
+    val mapGreen: Color,
+    val mapPark: Color,
+    val mapCampus: Color,
+    val mapWater: Color,
+    val mapWaterway: Color,
+    val mapBuilding: Color,
+    val mapStreet: Color,
+    val mapRoad: Color,
+    val mapFerry: Color,
     val claude: Color,
     val openai: Color,
     val googleBlue: Color,
@@ -107,6 +119,7 @@ class Palette(
             processForeground = Color(0xFFFFFFFF),
             merged = Color(0xFF8250DF),
             mergedForeground = Color(0xFFFFFFFF),
+            pink = Color(0xFFB7377C),
             skill = Color(0xFF47730D),
             border = Color(0xFFE2E3E5),
             borderCard = Color(0xFFE9EBF0),
@@ -124,6 +137,17 @@ class Palette(
             chart3 = Color(0xFFC74F0A),
             chart4 = Color(0xFF8250DF),
             chart5 = Color(0xFF0284C7),
+            chart6 = Color(0xFFB7377C),
+            mapLand = Color(0xFFEEF0F3),
+            mapGreen = Color(0xFFBCE9B0),
+            mapPark = Color(0xFFB7E7AA),
+            mapCampus = Color(0xFFEDE8D7),
+            mapWater = Color(0xFFA2DFF5),
+            mapWaterway = Color(0xFF91D6EF),
+            mapBuilding = Color(0xFFE3E6EB),
+            mapStreet = Color(0xFFCDD1D9),
+            mapRoad = Color(0xFFB1B9C8),
+            mapFerry = Color(0xFF89CFE9),
             claude = Color(0xFFD97757),
             openai = Color(0xFF22242B),
             googleBlue = Color(0xFF4285F4),
@@ -176,6 +200,7 @@ class Palette(
             processForeground = Color(0xFFFFFFFF),
             merged = Color(0xFFB480FF),
             mergedForeground = Color(0xFFFFFFFF),
+            pink = Color(0xFFF28CC0),
             skill = Color(0xFFA3E635),
             border = Color(0xFF191A1E),
             borderCard = Color(0xFF1E1F25),
@@ -193,6 +218,17 @@ class Palette(
             chart3 = Color(0xFFE98538),
             chart4 = Color(0xFFB480FF),
             chart5 = Color(0xFF2AA9E5),
+            chart6 = Color(0xFFF28CC0),
+            mapLand = Color(0xFF18191E),
+            mapGreen = Color(0xFF1F2B22),
+            mapPark = Color(0xFF20301F),
+            mapCampus = Color(0xFF26241F),
+            mapWater = Color(0xFF1D3540),
+            mapWaterway = Color(0xFF23414D),
+            mapBuilding = Color(0xFF24252B),
+            mapStreet = Color(0xFF34363D),
+            mapRoad = Color(0xFF4A4E57),
+            mapFerry = Color(0xFF2B5566),
             claude = Color(0xFFD97757),
             openai = Color(0xFFD0D2D9),
             googleBlue = Color(0xFF4285F4),
@@ -211,6 +247,89 @@ class Palette(
             syntaxType = Color(0xFFFFA657),
             syntaxTag = Color(0xFF7EE787),
         )
+    }
+
+    /** The colour of a token by its name in tokens.json, as OpenUI's scenes and trees name them. */
+    fun named(name: String): Color? = when (name) {
+        "background" -> background
+        "background-accent" -> backgroundAccent
+        "background-accent-stronger" -> backgroundAccentStronger
+        "background-accent-strongest" -> backgroundAccentStrongest
+        "background-accent-larger" -> backgroundAccentLarger
+        "background-accent-larger-stronger" -> backgroundAccentLargerStronger
+        "background-secondary" -> backgroundSecondary
+        "background-secondary-accent" -> backgroundSecondaryAccent
+        "background-secondary-accent-stronger" -> backgroundSecondaryAccentStronger
+        "card" -> card
+        "card-accent" -> cardAccent
+        "popover" -> popover
+        "popover-accent" -> popoverAccent
+        "foreground" -> foreground
+        "emphasized-foreground" -> emphasizedForeground
+        "muted-foreground" -> mutedForeground
+        "muted-stronger-foreground" -> mutedStrongerForeground
+        "muted-strongest-foreground" -> mutedStrongestForeground
+        "primary" -> primary
+        "primary-foreground" -> primaryForeground
+        "destructive" -> destructive
+        "destructive-foreground" -> destructiveForeground
+        "success" -> success
+        "success-foreground" -> successForeground
+        "warning" -> warning
+        "warning-foreground" -> warningForeground
+        "pending" -> pending
+        "pending-foreground" -> pendingForeground
+        "process" -> process
+        "process-foreground" -> processForeground
+        "merged" -> merged
+        "merged-foreground" -> mergedForeground
+        "pink" -> pink
+        "skill" -> skill
+        "border" -> border
+        "border-card" -> borderCard
+        "border-input" -> borderInput
+        "border-popover" -> borderPopover
+        "input" -> input
+        "composer" -> composer
+        "border-composer" -> borderComposer
+        "border-accent" -> borderAccent
+        "ring" -> ring
+        "overlay" -> overlay
+        "shadow" -> shadow
+        "chart-1" -> chart1
+        "chart-2" -> chart2
+        "chart-3" -> chart3
+        "chart-4" -> chart4
+        "chart-5" -> chart5
+        "chart-6" -> chart6
+        "map-land" -> mapLand
+        "map-green" -> mapGreen
+        "map-park" -> mapPark
+        "map-campus" -> mapCampus
+        "map-water" -> mapWater
+        "map-waterway" -> mapWaterway
+        "map-building" -> mapBuilding
+        "map-street" -> mapStreet
+        "map-road" -> mapRoad
+        "map-ferry" -> mapFerry
+        "claude" -> claude
+        "openai" -> openai
+        "google-blue" -> googleBlue
+        "google-red" -> googleRed
+        "google-yellow" -> googleYellow
+        "google-green" -> googleGreen
+        "linear" -> linear
+        "window-close" -> windowClose
+        "window-minimize" -> windowMinimize
+        "window-zoom" -> windowZoom
+        "syntax-comment" -> syntaxComment
+        "syntax-keyword" -> syntaxKeyword
+        "syntax-string" -> syntaxString
+        "syntax-constant" -> syntaxConstant
+        "syntax-function" -> syntaxFunction
+        "syntax-type" -> syntaxType
+        "syntax-tag" -> syntaxTag
+        else -> null
     }
 }
 

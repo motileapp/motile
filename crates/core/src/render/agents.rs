@@ -43,7 +43,7 @@ impl AgentState {
 
     fn of_notice(event: NoticeEvent) -> Self {
         match event {
-            NoticeEvent::Finished => Self::Done,
+            NoticeEvent::Finished | NoticeEvent::Unknown => Self::Done,
             NoticeEvent::Failed => Self::Failed,
             NoticeEvent::Stopped => Self::Stopped,
             NoticeEvent::Asked => Self::Waiting,
@@ -196,11 +196,13 @@ pub fn worked_since(agent: &AgentView, at: f64) -> bool {
 pub fn noticed(item: &Item, notice: &AgentNotice) -> AgentView {
     let state = AgentState::of_notice(notice.event);
     let label = match notice.event {
+        _ if notice.repair => "Asked to fix",
         NoticeEvent::Finished => "Finished",
         NoticeEvent::Failed => "Failed",
         NoticeEvent::Stopped => "Stopped",
         NoticeEvent::Asked => "Asks a question",
         NoticeEvent::Limited => "Reached its usage limit",
+        NoticeEvent::Unknown => "Told",
     };
     AgentView {
         id: item.id.clone(),
@@ -280,6 +282,7 @@ pub fn workflow_items(item: &Item) -> Vec<Item> {
             created_at,
             media: Vec::new(),
             parent: Some(item.id.clone()),
+            ui: Default::default(),
             kind,
         };
         if agent.phase.is_some() && agent.phase != phase {
@@ -353,7 +356,16 @@ mod tests {
             agent: Some(agent),
         };
         let kind = ItemKind::Tool { call };
-        Item { id: "t".into(), seq: 0, rev: 1, created_at: 5.0, media: Vec::new(), parent: None, kind }
+        Item {
+            id: "t".into(),
+            seq: 0,
+            rev: 1,
+            created_at: 5.0,
+            media: Vec::new(),
+            parent: None,
+            ui: Default::default(),
+            kind,
+        }
     }
 
     #[test]
@@ -454,5 +466,29 @@ mod tests {
         let ItemKind::Tool { call } = &mut item.kind else { unreachable!() };
         call.agent = None;
         assert_eq!(view(&item), None);
+    }
+
+    #[test]
+    fn a_repair_asks_to_fix_and_a_notice_of_a_newer_server_is_only_told() {
+        let item = started(ToolStatus::Succeeded, None, None);
+        let notice = |event, repair| AgentNotice {
+            thread_id: "t".into(),
+            title: "Program errors".into(),
+            event,
+            agent: Agent::Claude,
+            summary: None,
+            repair,
+        };
+
+        let repair = noticed(&item, &notice(NoticeEvent::Failed, true));
+        let failed = noticed(&item, &notice(NoticeEvent::Failed, false));
+        let newer = noticed(&item, &notice(NoticeEvent::Unknown, false));
+
+        assert_eq!((repair.label.as_str(), repair.state), ("Asked to fix", AgentState::Failed));
+        assert_eq!(failed.label, "Failed");
+        assert_eq!(
+            (newer.label.as_str(), newer.state, newer.status),
+            ("Told", AgentState::Done, ToolStatus::Succeeded)
+        );
     }
 }

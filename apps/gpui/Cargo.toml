@@ -27,6 +27,13 @@ image = { version = "0.25", default-features = false, features = ["png", "jpeg",
 reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider", "json", "form", "query"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+kurbo = "0.13"
+mvt-reader = "2.5"
+geo-types = { version = "0.7", default-features = false }
+flate2 = "1"
+lru = "0.18"
+ttf-parser = "0.25"
+lyon = "1"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
@@ -42,6 +49,11 @@ objc2-core-media = { version = "0.3", default-features = false, features = ["std
 objc2-core-video = { version = "0.3", default-features = false, features = ["std", "CVPixelBuffer", "CVBuffer", "CVImageBuffer", "CVReturn"] }
 core-foundation = "0.10"
 
+# The web views of OpenUI's HtmlView and YouTube, where GPUI Kit's run.
+[target.'cfg(any(target_os = "macos", target_os = "windows"))'.dependencies]
+gpui-wry = "0.7.3"
+wry = { package = "lb-wry", version = "0.53.3" }
+
 [target.'cfg(not(target_os = "macos"))'.dependencies]
 netwatch = "0.19"
 n0-watcher = "1"
@@ -51,6 +63,19 @@ uds_windows = "1"
 windows-registry = "0.6"
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Graphics_Dwm", "Win32_UI_WindowsAndMessaging"] }
 raw-window-handle = "0.6"
+
+# GPUI's headless window and its screenshots, for the tests only.
+[dev-dependencies]
+# The map painter's pictures in the tests.
+tiny-skia = "0.11"
+gpui-pre = { version = "=0.3.9", features = ["test-support"] }
+gpui-pre-platform = { version = "=0.3.9", features = ["test-support"] }
+
+[target.'cfg(target_os = "macos")'.dev-dependencies]
+gpui-pre-apple = { version = "=0.3.9", features = ["font-kit"] }
+
+[target.'cfg(target_os = "linux")'.dev-dependencies]
+gpui-pre-wgpu = "=0.3.9"
 
 [profile.release]
 strip = true

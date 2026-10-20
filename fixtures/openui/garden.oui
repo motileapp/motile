@@ -1,0 +1,18 @@
+root = Col([head, size, Title("Pick what to grow", "md"), picker, sunNote, Title("Your bed, square by square", "md"), bed, Caption("Each square is one foot across; the number is how many plants fit in it."), Title("Planting summary", "md"), summary, Title("What you will need", "md"), needs])
+$w = 4
+$l = 6
+$sun = 7
+$chosen = ["Tomatoes", "Lettuce", "Beans", "Radishes", "Basil", "Carrots"]
+$got = []
+head = Col([Title("Plan a small vegetable garden", "xl"), Text("Set the bed size and how much sun it gets, choose your crops, and the square-foot plan fills itself in.", "md", "muted")], 2)
+crops = [{name: "Tomatoes", icon: "🍅", per: 1, weeks: 10, sun: 8, color: "#F6D5CF"}, {name: "Peppers", icon: "🌶️", per: 1, weeks: 11, sun: 8, color: "#F7DCC4"}, {name: "Beans", icon: "🌱", per: 9, weeks: 8, sun: 6, color: "#DCEBD0"}, {name: "Lettuce", icon: "🥬", per: 4, weeks: 6, sun: 4, color: "#E2F0D3"}, {name: "Spinach", icon: "🍃", per: 9, weeks: 6, sun: 4, color: "#D5EAD6"}, {name: "Carrots", icon: "🥕", per: 16, weeks: 10, sun: 6, color: "#FBE2C9"}, {name: "Radishes", icon: "🔴", per: 16, weeks: 4, sun: 4, color: "#F8D9E2"}, {name: "Basil", icon: "🌿", per: 4, weeks: 8, sun: 6, color: "#D8ECCF"}]
+picked = @Each($chosen, "n", @Find(crops, "name", n))
+cells = @Count(picked) == 0 ? [] : @Each(@Range(0, $w * $l), "i", picked[i % @Count(picked)])
+size = Card([Grid([Slider($w, 2, 8, 1, "Bed width", " ft"), Slider($l, 2, 12, 1, "Bed length", " ft"), Slider($sun, 2, 12, 1, "Direct sun", " h")], 3, 200, 5), Row([Badge(@Plural($w * $l, "square foot", "square feet"), "info"), Badge("About " + @Plural(@Ceil($w * $l * 0.83 / 1.5), "bag") + " of soil for 10 inches deep", "neutral")], 2, null, null, true)], "soft", 4, 3)
+picker = Row(@Each(crops, "c", Pressable([Row([Text(c.icon, "md"), Text(c.name, "sm", null, "medium")], 1)], @Set($chosen, @Toggle($chosen, c.name)), @Includes($chosen, c.name), 2, null, "full")), 2, null, null, true)
+shady = @Filter(picked, "sun", ">", $sun)
+sunNote = @Count(shady) > 0 ? Box([Text("With " + @Plural($sun, "hour") + " of sun, " + @Join(shady, ", ", "name") + " will struggle. Leafy greens and radishes cope with 4 hours.", "sm", "warning")], null, null, 3, "warning", "lg") : Box([Text(@Count(picked) == 0 ? "Choose at least one crop to see the plan." : "Everything you picked gets enough sun.", "sm", @Count(picked) == 0 ? "muted" : "success")], null, null, 3, @Count(picked) == 0 ? "surface" : "success", "lg")
+bed = Box([Grid(@Each(cells, "c", Box([Text(c.icon, "lg"), Caption(c.per + "")], null, 0, 1, c.color, "sm", null, null, 56, null, "center", "center")), $w, null, 1)], null, null, 2, "#8B6A4E", "lg")
+summary = Table(["Crop", "Squares", "Plants", "First harvest", "Sun"], @Each(picked, "p", [p.icon + " " + p.name, @Count(@Filter(cells, "name", "==", p.name)), @Count(@Filter(cells, "name", "==", p.name)) * p.per, p.weeks + " weeks", p.sun + "+ h"]))
+items = ["A raised bed or a dug-over plot", "Compost-rich soil", "Seeds or seedlings", "Mulch", "A watering can or drip hose", "Stakes or a trellis"]
+needs = Card([Row([Text(@Count($got) + " of " + @Count(items) + " ready", "sm", "muted"), Spacer(), Button("Reset", @Reset($got), "ghost", null, "sm", "rotate-ccw")], 2), Col(@Each(items, "it", Pressable([Row([Icon(@Includes($got, it) ? "check-circle" : "circle", "sm", @Includes($got, it) ? "success" : "faint"), Text(it, "sm", null, null, false, @Includes($got, it))], 2)], @Set($got, @Toggle($got, it)), @Includes($got, it), 2)), 1)], null, 4, 2)

@@ -6,7 +6,10 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -18,9 +21,11 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.motile.platform.Symbol
+import app.motile.theme.ControlSize
 import app.motile.theme.LocalForeground
 import app.motile.theme.LocalPalette
 import app.motile.theme.LocalRow
@@ -36,9 +41,9 @@ import app.motile.theme.shadow
  * colour a little see-through, with its border around it and a shadow under it.
  */
 @Composable
-fun Modifier.glassButton(shape: Shape): Modifier {
+fun Modifier.glassButton(shape: Shape, size: GlassSize = GlassSize.Regular): Modifier {
     val palette = LocalPalette.current
-    return shadow(ShadowSize.Md, shape)
+    return shadow(size.shadow, shape, size.shadowStrength)
         .clip(shape)
         .background(palette.popover.at(Opacity.InputGlassTint), shape)
         .border(1.dp, palette.borderPopover, shape)
@@ -52,7 +57,17 @@ fun GlassGroup(spacing: Dp, modifier: Modifier = Modifier, content: @Composable 
 
 /** A symbol's button that floats over the client: on a glass circle of its own, or, `bare`, beside others on one glass capsule that `glassButton` draws around them. */
 object GlassButton {
-    val side = 46.dp
+    val side = GlassSize.Regular.side
+}
+
+/**
+ * How large a glass button is: `Regular` over the client, `Inline` and `Compact` over what the
+ * transcript shows, like a map, where they cast a smaller, stronger shadow.
+ */
+enum class GlassSize(val side: Dp, val shadow: ShadowSize, val shadowStrength: Opacity) {
+    Regular(46.dp, ShadowSize.Md, Opacity.Shadow),
+    Inline(34.dp, ShadowSize.Sm, Opacity.ShadowStronger),
+    Compact(28.dp, ShadowSize.Sm, Opacity.ShadowStronger),
 }
 
 @Composable
@@ -62,18 +77,21 @@ fun GlassButton(
     modifier: Modifier = Modifier,
     bare: Boolean = false,
     enabled: Boolean = true,
+    size: GlassSize = GlassSize.Regular,
+    state: String? = null,
     content: @Composable () -> Unit,
 ) {
-    val glass = if (bare) Modifier else Modifier.glassButton(CircleShape)
+    val glass = if (bare) Modifier else Modifier.glassButton(CircleShape, size)
     // One node for accessibility: the label and the press together.
     Box(
-        modifier.size(GlassButton.side).then(glass).semantics(mergeDescendants = true) {
+        modifier.size(size.side).then(glass).semantics(mergeDescendants = true) {
             contentDescription = help
             role = Role.Button
+            state?.let { stateDescription = it }
         },
         contentAlignment = Alignment.Center,
     ) {
-        DimButton(onClick, Modifier.size(GlassButton.side), enabled = enabled, contentAlignment = Alignment.Center) {
+        DimButton(onClick, Modifier.size(size.side), enabled = enabled, contentAlignment = Alignment.Center) {
             CompositionLocalProvider(
                 LocalSurface provides Surface.Popover,
                 LocalRow provides null,
@@ -85,12 +103,54 @@ fun GlassButton(
 }
 
 @Composable
-fun GlassButton(symbol: Symbol, help: String, onClick: () -> Unit, modifier: Modifier = Modifier, symbolSize: Float = 15f, bare: Boolean = false, pending: Boolean = false) {
-    GlassButton(help, onClick, modifier, bare, enabled = !pending) {
+fun GlassButton(
+    symbol: Symbol,
+    help: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    symbolSize: Float = 15f,
+    bare: Boolean = false,
+    pending: Boolean = false,
+    size: GlassSize = GlassSize.Regular,
+    state: String? = null,
+) {
+    GlassButton(help, onClick, modifier, bare, enabled = !pending, size = size, state = state) {
         when {
             symbol.turns -> TurningSymbol(symbol, turning = pending, size = symbolSize)
             pending -> Spinner(symbolSize)
             else -> Icon(symbol, symbolSize)
+        }
+    }
+}
+
+/**
+ * Words on a glass capsule, with a symbol after them: a chevron for a choice it opens, or what it
+ * does. `Inline` is 34 tall with room for the chevron at its end, `Compact` 28 and even.
+ */
+@Composable
+fun GlassCapsule(title: String, symbol: Symbol, onClick: () -> Unit, modifier: Modifier = Modifier, size: GlassSize = GlassSize.Inline, help: String = title) {
+    val (start, end) = if (size == GlassSize.Compact) 10.dp to 10.dp else 12.dp to 10.dp
+    Box(
+        modifier.height(size.side).glassButton(CircleShape, size).semantics(mergeDescendants = true) {
+            contentDescription = help
+            role = Role.Button
+        },
+    ) {
+        DimButton(onClick, Modifier.height(size.side), contentAlignment = Alignment.Center) {
+            CompositionLocalProvider(
+                LocalSurface provides Surface.Popover,
+                LocalRow provides null,
+                LocalForeground provides LocalPalette.current.foreground,
+            ) {
+                Row(
+                    Modifier.height(size.side).padding(start = start, end = end),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(title, Modifier.widthIn(max = 180.dp), style = ControlSize.Regular.font, maxLines = 1)
+                    Icon(symbol, 12f, trimmed = symbol == Symbol.ChevronDown)
+                }
+            }
         }
     }
 }

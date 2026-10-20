@@ -37,6 +37,7 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BINARY" "$APP/Contents/MacOS/Motile"
 cp -R "$ROOT/packages/apple/Sources/MotileKit/Fonts" "$APP/Contents/Resources/Fonts"
+cp -R "$ROOT/packages/apple/Sources/MotileKit/Map" "$APP/Contents/Resources/Map"
 
 # The Icon Composer icon becomes Assets.car for macOS 26, and AppIcon.icns for the ones before.
 xcrun actool "$PWD/Resources/AppIcon.icon" --compile "$PWD/$APP/Contents/Resources" \

@@ -1,6 +1,7 @@
 //! The `motile` MCP server, on the loopback interface, which only the agents your server started
-//! can call, each with the token of its thread: `read_thread` reads what a handoff left out, and
-//! the other tools start agents on any of your server's accounts and follow them.
+//! can call, each with the token of its thread: `read_thread` reads what a handoff left out,
+//! `check_ui` checks a program before the agent shows it, and the other tools start agents on any
+//! of your server's accounts and follow them.
 
 use std::collections::HashMap;
 use std::sync::{Arc, Weak};
@@ -28,10 +29,11 @@ use crate::agents::PLAN_TOOL;
 use crate::handoff::tool_status;
 use crate::hub::Hub;
 use crate::store::Store;
+use crate::ui;
 
 pub const SERVER_NAME: &str = "motile";
 /// The tools as the agents name them.
-pub const TOOLS: [&str; 7] = [
+pub const TOOLS: [&str; 8] = [
     "mcp__motile__read_thread",
     "mcp__motile__list_accounts",
     "mcp__motile__start_agent",
@@ -39,6 +41,7 @@ pub const TOOLS: [&str; 7] = [
     "mcp__motile__message_agent",
     "mcp__motile__answer_agent",
     "mcp__motile__stop_agent",
+    "mcp__motile__check_ui",
 ];
 /// What Claude Code reads its `Authorization` header from.
 pub const AUTHORIZATION_VARIABLE: &str = "MOTILE_MCP_AUTHORIZATION";
@@ -147,6 +150,24 @@ impl Tools {
     #[tool(name = "read_thread", annotations(title = "Read a thread", read_only_hint = true))]
     async fn read_thread(&self, Parameters(request): Parameters<ReadThread>) -> CallToolResult {
         answered(self.hub().and_then(|hub| read_thread(hub.store(), &request)))
+    }
+
+    /// Checks an openui-lang program, with or without its fence, as Motile's clients will read it:
+    /// whether it is valid, its errors with hints, the names it references and never defines
+    /// (`unresolved`) and the statements root can't reach (`orphans`). One with no root statement
+    /// is a patch, checked merged over this thread's latest program. Call it before sending a
+    /// program you aren't sure of.
+    #[tool(name = "check_ui", annotations(title = "Check a program", read_only_hint = true))]
+    async fn check_ui(
+        &self,
+        Extension(parts): Extension<Parts>,
+        Parameters(request): Parameters<CheckUi>,
+    ) -> CallToolResult {
+        let checked = async {
+            let items = self.hub()?.store().program_items(&caller(&parts)?)?;
+            Ok(ui::check(&request.program, ui::latest(&items).as_deref()))
+        };
+        answered(checked.await)
     }
 
     /// Lists the accounts of your server you can start agents on: other Claude Code logins and
@@ -269,6 +290,12 @@ pub struct StartAgent {
 }
 
 #[derive(Deserialize, JsonSchema)]
+struct CheckUi {
+    /// The program's openui-lang text.
+    program: String,
+}
+
+#[derive(Deserialize, JsonSchema)]
 struct AgentStatus {
     /// The ids start_agent gave you.
     ids: Vec<String>,
@@ -385,7 +412,7 @@ fn entry(item: &Item, offset: usize, max_chars: usize) -> Value {
 
 fn described(item: &Item) -> (&'static str, &'static str, String) {
     match &item.kind {
-        ItemKind::User { text, .. } => ("user", "done", text.clone()),
+        ItemKind::User { text, context, programs, .. } => ("user", "done", ui::told(text, context.as_ref(), programs)),
         ItemKind::Assistant { text } => ("assistant", "done", text.clone()),
         ItemKind::Thinking { text } => ("thinking", "done", text.clone()),
         ItemKind::Tool { call } => {
@@ -403,6 +430,7 @@ fn described(item: &Item) -> (&'static str, &'static str, String) {
         ItemKind::TurnEnd { .. } => ("turn_end", "done", "Turn ended".to_string()),
         ItemKind::Handoff { from, to } => ("handoff", "done", format!("{} → {}", end_name(from), end_name(to))),
         ItemKind::Notice { text, .. } => ("notice", "done", text.clone()),
+        ItemKind::Unknown => ("unknown", "done", String::new()),
     }
 }
 
@@ -472,7 +500,13 @@ mod tests {
             agent: None,
         };
         let kinds = [
-            ItemKind::User { text: "Fix the login".into(), attachments: vec![], skills: Vec::new() },
+            ItemKind::User {
+                text: "Fix the login".into(),
+                attachments: vec![],
+                skills: Vec::new(),
+                context: None,
+                programs: Vec::new(),
+            },
             ItemKind::Thinking { text: "hmm".into() },
             ItemKind::Tool { call: call("Bash", r#"{"command":"cargo test"}"#) },
             ItemKind::Tool { call: call("Read", r#"{"file_path":"/a"}"#) },
@@ -487,6 +521,7 @@ mod tests {
                 created_at: 0.0,
                 media: vec![],
                 parent: None,
+                ui: Default::default(),
                 kind,
             };
             store.save_item("t", &item).unwrap();

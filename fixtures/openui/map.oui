@@ -1,0 +1,7 @@
+root = Col([Title("San Francisco, your way", "md"), Text("Tap a pin to choose where to start.", "sm", "muted"), map, Card([Row([Icon("map-pin", "sm"), Text("Starting at **" + $stop + "**", "sm")], 2)], "soft", 3)])
+$stop = "Ferry Building"
+map = Map([m1, m2, m3, m4], true, $stop)
+m1 = MapMarker("Ferry Building", 37.7955, -122.3937, "Food", "☕")
+m2 = MapMarker("Coit Tower", 37.8024, -122.4058, "Views")
+m3 = MapMarker("Palace of Fine Arts", 37.8029, -122.4484, "Landmarks", "🏛️")
+m4 = MapMarker("Golden Gate Bridge", 37.8199, -122.4783, "Views", "🌉")

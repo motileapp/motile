@@ -138,6 +138,11 @@ impl RichText {
         self
     }
 
+    /// Where its glyphs are, once it has been laid out this frame.
+    pub fn text_layout(&self) -> TextLayout {
+        self.styled.layout().clone()
+    }
+
     pub fn skills(mut self, names: Vec<Range<usize>>) -> Self {
         self.skills = names;
         self

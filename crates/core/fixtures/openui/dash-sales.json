@@ -1,0 +1,679 @@
+{
+  "id": "",
+  "component": "Col",
+  "children": [
+    {
+      "id": "children/0",
+      "component": "Row",
+      "children": [
+        {
+          "id": "children/0/children/0",
+          "component": "Col",
+          "children": [
+            {
+              "id": "children/0/children/0/children/0",
+              "a11y": {
+                "role": "heading",
+                "level": 2
+              },
+              "component": "Title",
+              "text": {
+                "text": "Store performance",
+                "runs": [],
+                "links": []
+              },
+              "style": "title_lg",
+              "color": "foreground"
+            },
+            {
+              "id": "children/0/children/0/children/1",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Caption",
+              "text": {
+                "text": "Demo data, refreshed every 5 minutes",
+                "runs": [],
+                "links": []
+              },
+              "style": "caption",
+              "color": "muted-foreground"
+            }
+          ],
+          "align": "stretch",
+          "spacing": [
+            0.0,
+            4.0
+          ]
+        },
+        {
+          "id": "children/0/children/1",
+          "a11y": {
+            "role": "hidden"
+          },
+          "component": "Spacer"
+        },
+        {
+          "id": "children/0/children/2",
+          "component": "Box",
+          "children": [
+            {
+              "id": "children/0/children/2/children/0",
+              "a11y": {
+                "role": "pop_up_button",
+                "label": "Choose…",
+                "value": "All channels"
+              },
+              "component": "Select",
+              "value": "All",
+              "options": [
+                {
+                  "value": "All",
+                  "label": "All channels",
+                  "description": null
+                },
+                {
+                  "value": "Web",
+                  "label": "Web",
+                  "description": null
+                },
+                {
+                  "value": "Mobile",
+                  "label": "Mobile",
+                  "description": null
+                },
+                {
+                  "value": "Retail",
+                  "label": "Retail",
+                  "description": null
+                }
+              ],
+              "selected": 0,
+              "label": null,
+              "placeholder": "Choose…",
+              "error": null,
+              "disabled": null
+            }
+          ],
+          "direction": "col",
+          "gap": 0.0,
+          "spacing": [
+            0.0
+          ],
+          "sizing": [],
+          "padding": 0.0,
+          "background": null,
+          "inner_surface": false,
+          "radius": null,
+          "border": false,
+          "width": {
+            "unit": "points",
+            "value": 150.0
+          },
+          "height": null,
+          "flex": null,
+          "align": "stretch",
+          "justify": "start",
+          "wrap": false
+        },
+        {
+          "id": "children/0/children/3",
+          "a11y": {
+            "role": "radio_group"
+          },
+          "component": "SegmentedControl",
+          "value": "90",
+          "options": [
+            {
+              "value": "30",
+              "label": "30d",
+              "description": null
+            },
+            {
+              "value": "90",
+              "label": "90d",
+              "description": null
+            },
+            {
+              "value": "365",
+              "label": "1y",
+              "description": null
+            }
+          ],
+          "selected": 1,
+          "block": false,
+          "disabled": null
+        }
+      ],
+      "gap": 12.0,
+      "align": "center",
+      "justify": "start",
+      "wrap": true,
+      "sizing": [
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": true
+        },
+        {
+          "basis": "zero",
+          "length": null,
+          "grow": 1.0,
+          "shrink": false
+        },
+        {
+          "basis": "length",
+          "length": {
+            "unit": "points",
+            "value": 150.0
+          },
+          "grow": 0.0,
+          "shrink": false
+        },
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": true
+        }
+      ]
+    },
+    {
+      "id": "children/1",
+      "component": "Grid",
+      "children": [
+        {
+          "id": "children/1/children/0",
+          "a11y": {
+            "role": "group"
+          },
+          "component": "Card",
+          "children": [
+            {
+              "id": "children/1/children/0/children/0",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Caption",
+              "text": {
+                "text": "Revenue",
+                "runs": [],
+                "links": []
+              },
+              "style": "caption",
+              "color": "muted-foreground"
+            },
+            {
+              "id": "children/1/children/0/children/1",
+              "a11y": {
+                "role": "heading",
+                "level": 2
+              },
+              "component": "Title",
+              "text": {
+                "text": "$0",
+                "runs": [],
+                "links": []
+              },
+              "style": "card_heading",
+              "color": "foreground"
+            }
+          ],
+          "soft": false,
+          "nested": false,
+          "padding": 12.0,
+          "spacing": [
+            0.0,
+            4.0
+          ]
+        },
+        {
+          "id": "children/1/children/1",
+          "a11y": {
+            "role": "group"
+          },
+          "component": "Card",
+          "children": [
+            {
+              "id": "children/1/children/1/children/0",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Caption",
+              "text": {
+                "text": "Orders",
+                "runs": [],
+                "links": []
+              },
+              "style": "caption",
+              "color": "muted-foreground"
+            },
+            {
+              "id": "children/1/children/1/children/1",
+              "a11y": {
+                "role": "heading",
+                "level": 2
+              },
+              "component": "Title",
+              "text": {
+                "text": "0",
+                "runs": [],
+                "links": []
+              },
+              "style": "card_heading",
+              "color": "foreground"
+            }
+          ],
+          "soft": false,
+          "nested": false,
+          "padding": 12.0,
+          "spacing": [
+            0.0,
+            4.0
+          ]
+        },
+        {
+          "id": "children/1/children/2",
+          "a11y": {
+            "role": "group"
+          },
+          "component": "Card",
+          "children": [
+            {
+              "id": "children/1/children/2/children/0",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Caption",
+              "text": {
+                "text": "Average order",
+                "runs": [],
+                "links": []
+              },
+              "style": "caption",
+              "color": "muted-foreground"
+            },
+            {
+              "id": "children/1/children/2/children/1",
+              "a11y": {
+                "role": "heading",
+                "level": 2
+              },
+              "component": "Title",
+              "text": {
+                "text": "$0.00",
+                "runs": [],
+                "links": []
+              },
+              "style": "card_heading",
+              "color": "foreground"
+            }
+          ],
+          "soft": false,
+          "nested": false,
+          "padding": 12.0,
+          "spacing": [
+            0.0,
+            4.0
+          ]
+        },
+        {
+          "id": "children/1/children/3",
+          "a11y": {
+            "role": "group"
+          },
+          "component": "Card",
+          "children": [
+            {
+              "id": "children/1/children/3/children/0",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Caption",
+              "text": {
+                "text": "Last 7 days",
+                "runs": [],
+                "links": []
+              },
+              "style": "caption",
+              "color": "muted-foreground"
+            },
+            {
+              "id": "children/1/children/3/children/1",
+              "component": "Row",
+              "children": [
+                {
+                  "id": "children/1/children/3/children/1/children/0",
+                  "a11y": {
+                    "role": "heading",
+                    "level": 2
+                  },
+                  "component": "Title",
+                  "text": {
+                    "text": "$0",
+                    "runs": [],
+                    "links": []
+                  },
+                  "style": "title_xl",
+                  "color": "foreground"
+                }
+              ],
+              "gap": 8.0,
+              "align": "center",
+              "justify": "start",
+              "wrap": true,
+              "sizing": [
+                {
+                  "basis": "content",
+                  "length": null,
+                  "grow": 0.0,
+                  "shrink": true
+                }
+              ]
+            }
+          ],
+          "soft": false,
+          "nested": false,
+          "padding": 12.0,
+          "spacing": [
+            0.0,
+            4.0
+          ]
+        }
+      ],
+      "columns": 4,
+      "min_child_width": 150.0,
+      "gap": 12.0
+    },
+    {
+      "id": "children/2",
+      "component": "Grid",
+      "children": [
+        {
+          "id": "children/2/children/0",
+          "a11y": {
+            "role": "group"
+          },
+          "component": "Card",
+          "children": [
+            {
+              "id": "children/2/children/0/children/0",
+              "component": "Row",
+              "children": [
+                {
+                  "id": "children/2/children/0/children/0/children/0",
+                  "a11y": {
+                    "role": "heading",
+                    "level": 3
+                  },
+                  "component": "Title",
+                  "text": {
+                    "text": "Revenue",
+                    "runs": [],
+                    "links": []
+                  },
+                  "style": "card_title",
+                  "color": "foreground"
+                },
+                {
+                  "id": "children/2/children/0/children/0/children/1",
+                  "a11y": {
+                    "role": "hidden"
+                  },
+                  "component": "Spacer"
+                },
+                {
+                  "id": "children/2/children/0/children/0/children/2",
+                  "a11y": {
+                    "role": "radio_group"
+                  },
+                  "component": "SegmentedControl",
+                  "value": "Weekly",
+                  "options": [
+                    {
+                      "value": "Weekly",
+                      "label": "Weekly",
+                      "description": null
+                    },
+                    {
+                      "value": "Cumulative",
+                      "label": "Cumulative",
+                      "description": null
+                    }
+                  ],
+                  "selected": 0,
+                  "block": false,
+                  "disabled": null
+                }
+              ],
+              "gap": 8.0,
+              "align": "center",
+              "justify": "start",
+              "wrap": false,
+              "sizing": [
+                {
+                  "basis": "content",
+                  "length": null,
+                  "grow": 0.0,
+                  "shrink": true
+                },
+                {
+                  "basis": "zero",
+                  "length": null,
+                  "grow": 1.0,
+                  "shrink": false
+                },
+                {
+                  "basis": "content",
+                  "length": null,
+                  "grow": 0.0,
+                  "shrink": true
+                }
+              ]
+            },
+            {
+              "id": "children/2/children/0/children/1",
+              "a11y": {
+                "role": "image",
+                "label": "area chart of value by key"
+              },
+              "component": "Chart",
+              "canvas": {
+                "kind": "Chart",
+                "props": {
+                  "type": "area",
+                  "data": [],
+                  "x": "key",
+                  "series": [
+                    "value"
+                  ],
+                  "format": "currency"
+                }
+              }
+            }
+          ],
+          "soft": false,
+          "nested": false,
+          "padding": 16.0,
+          "spacing": [
+            0.0,
+            8.0
+          ]
+        },
+        {
+          "id": "children/2/children/1",
+          "a11y": {
+            "role": "group"
+          },
+          "component": "Card",
+          "children": [
+            {
+              "id": "children/2/children/1/children/0",
+              "a11y": {
+                "role": "heading",
+                "level": 3
+              },
+              "component": "Title",
+              "text": {
+                "text": "Channel mix",
+                "runs": [],
+                "links": []
+              },
+              "style": "card_title",
+              "color": "foreground"
+            },
+            {
+              "id": "children/2/children/1/children/1",
+              "a11y": {
+                "role": "image",
+                "label": "donut chart of value by key"
+              },
+              "component": "Chart",
+              "canvas": {
+                "kind": "Chart",
+                "props": {
+                  "type": "donut",
+                  "data": [],
+                  "x": "key",
+                  "series": [
+                    "value"
+                  ],
+                  "format": "currency"
+                }
+              }
+            }
+          ],
+          "soft": false,
+          "nested": false,
+          "padding": 16.0,
+          "spacing": [
+            0.0,
+            8.0
+          ]
+        }
+      ],
+      "columns": 2,
+      "min_child_width": 300.0,
+      "gap": 16.0
+    },
+    {
+      "id": "children/3",
+      "component": "Grid",
+      "children": [
+        {
+          "id": "children/3/children/0",
+          "a11y": {
+            "role": "group"
+          },
+          "component": "Card",
+          "children": [
+            {
+              "id": "children/3/children/0/children/0",
+              "a11y": {
+                "role": "heading",
+                "level": 3
+              },
+              "component": "Title",
+              "text": {
+                "text": "Revenue by region and category",
+                "runs": [],
+                "links": []
+              },
+              "style": "card_title",
+              "color": "foreground"
+            },
+            {
+              "id": "children/3/children/0/children/1",
+              "a11y": {
+                "role": "image",
+                "label": "bar chart"
+              },
+              "component": "Chart",
+              "canvas": {
+                "kind": "Chart",
+                "props": {
+                  "type": "bar",
+                  "data": [],
+                  "x": "key",
+                  "format": "currency",
+                  "stacked": true
+                }
+              }
+            }
+          ],
+          "soft": false,
+          "nested": false,
+          "padding": 16.0,
+          "spacing": [
+            0.0,
+            8.0
+          ]
+        },
+        {
+          "id": "children/3/children/1",
+          "a11y": {
+            "role": "group"
+          },
+          "component": "Card",
+          "children": [
+            {
+              "id": "children/3/children/1/children/0",
+              "a11y": {
+                "role": "heading",
+                "level": 3
+              },
+              "component": "Title",
+              "text": {
+                "text": "Top products",
+                "runs": [],
+                "links": []
+              },
+              "style": "card_title",
+              "color": "foreground"
+            },
+            {
+              "id": "children/3/children/1/children/1",
+              "a11y": {
+                "role": "table"
+              },
+              "component": "Table",
+              "columns": [
+                {
+                  "title": "Product",
+                  "numeric": false
+                },
+                {
+                  "title": "Units",
+                  "numeric": false
+                },
+                {
+                  "title": "Revenue",
+                  "numeric": false
+                }
+              ],
+              "rows": []
+            }
+          ],
+          "soft": false,
+          "nested": false,
+          "padding": 16.0,
+          "spacing": [
+            0.0,
+            8.0
+          ]
+        }
+      ],
+      "columns": 2,
+      "min_child_width": 300.0,
+      "gap": 16.0
+    }
+  ],
+  "align": "stretch",
+  "spacing": [
+    0.0,
+    16.0,
+    16.0,
+    16.0
+  ]
+}

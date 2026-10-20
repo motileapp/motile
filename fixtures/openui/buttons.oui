@@ -1,0 +1,5 @@
+root = Card([main, sizes, colors, icons, Button("Add to my route", @ToAssistant("Add Lands End to my route"), "solid", null, "lg", "plus", false, true)])
+main = Row([Button("Customize my capsule", @ToAssistant("Customize my capsule"), "solid", null, null, "arrow-right"), Button("Copy split", null, "outline", null, null, "copy"), Button("Reset", null, "ghost", null, null, "rotate-ccw"), Button("Soft", null, "soft")], 2, null, null, true)
+sizes = Row([Button("Small", null, "outline", null, "sm"), Button("Medium", null, "outline"), Button("Large", null, "outline", null, "lg"), Button("Disabled", null, "solid", null, null, null, true)], 2, null, null, true)
+colors = Row([Button("Delete", null, "solid", "danger"), Button("Confirm", null, "solid", "success"), Button("Remove", null, "outline", "danger", null, "trash-2"), Button("Open docs", @OpenUrl("https://openui.com"), "ghost", null, null, "external-link")], 2, null, null, true)
+icons = Row([IconButton("heart", null, "Save"), IconButton("share", null, "Share", "ghost"), IconButton("plus", null, "Add", "solid"), IconButton("bookmark", null, "Bookmark")], 2)

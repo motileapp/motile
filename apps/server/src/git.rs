@@ -494,6 +494,35 @@ pub fn before_snapshot(snapshot: &str) -> String {
     format!("{snapshot}^")
 }
 
+pub struct Commit {
+    pub hash: String,
+    pub short: String,
+    pub subject: String,
+    pub author: String,
+    /// When it was written, in ISO 8601.
+    pub date: String,
+}
+
+/// The last `limit` commits of what is checked out, the newest first. None before the first commit.
+pub async fn log(folder: &str, environment: &Environment, limit: u32) -> anyhow::Result<Vec<Commit>> {
+    if !has_commit(folder, environment).await {
+        return Ok(Vec::new());
+    }
+    let count = format!("--max-count={limit}");
+    let listed = git(folder, environment, &["log", &count, "--format=%H%x1f%h%x1f%s%x1f%an%x1f%aI%x1e"]).await?;
+    let commits = listed.split('\x1e').filter_map(|entry| {
+        let mut fields = entry.trim_start_matches('\n').split('\x1f').map(str::to_string);
+        Some(Commit {
+            hash: fields.next().filter(|hash| !hash.is_empty())?,
+            short: fields.next()?,
+            subject: fields.next()?,
+            author: fields.next()?,
+            date: fields.next()?,
+        })
+    });
+    Ok(commits.collect())
+}
+
 /// What isn't committed: from the commit that is checked out to the folder as it is.
 pub async fn uncommitted(folder: &str, environment: &Environment) -> anyhow::Result<(String, String)> {
     let head = commit_named(folder, environment, "HEAD").await.unwrap_or_else(|| EMPTY_TREE.to_string());
@@ -570,7 +599,18 @@ pub async fn patch_between(
     from: &str,
     to: &str,
 ) -> anyhow::Result<(String, bool)> {
-    let arguments = [
+    patch_of(folder, environment, from, to, &[]).await
+}
+
+/// The same, of only the files at `paths` and inside them; of every file without any.
+pub async fn patch_of(
+    folder: &str,
+    environment: &Environment,
+    from: &str,
+    to: &str,
+    paths: &[&str],
+) -> anyhow::Result<(String, bool)> {
+    let options = [
         "-c",
         "core.quotePath=false",
         "diff",
@@ -582,7 +622,9 @@ pub async fn patch_between(
         "--patch",
         from,
         to,
+        "--",
     ];
+    let arguments: Vec<&str> = options.into_iter().chain(paths.iter().copied()).collect();
     let mut diff = command("git", folder, environment, &arguments);
     diff.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped()).kill_on_drop(true);
     let mut child = diff.spawn().context("Git isn't installed on your server.")?;

@@ -30,6 +30,16 @@ extension UIView {
         if button { accessibilityTraits = .button }
     }
 
+    func describe(_ label: String, role: AccessRole, value: String? = nil, checked: Bool? = nil) {
+        isAccessibilityElement = true
+        accessibilityLabel = label
+        accessibilityValue = value
+        var traits: UIAccessibilityTraits = role == .slider ? .adjustable : .button
+        if role == .checkbox { traits.insert(.toggleButton) }
+        if checked == true { traits.insert(.selected) }
+        accessibilityTraits = traits
+    }
+
     func fade(to opacity: CGFloat, duration: TimeInterval) {
         UIView.animate(withDuration: duration, delay: 0, options: [.allowUserInteraction, .curveEaseOut]) { self.alpha = opacity }
     }
@@ -61,7 +71,7 @@ extension UIView {
 
 /// A view that can take taps, say where a finger or the pointer is on it and open a menu. The
 /// Mac's twin has its origin at the top left as every view has here, which is what it is named for.
-class FlippedView: UIView, UIContextMenuInteractionDelegate {
+class FlippedView: UIView, UIContextMenuInteractionDelegate, UIGestureRecognizerDelegate {
     enum Pointer {
         case arrow, hand
     }
@@ -85,9 +95,67 @@ class FlippedView: UIView, UIContextMenuInteractionDelegate {
         }
     }
     var pointer = Pointer.arrow
+    /// Takes the focus of a keyboard, with the system's ring around `focusShape`. Space and Return
+    /// press it unless `onKey` takes them.
+    var focusable = false
+    /// Called with a key it has while focused; says whether it took it.
+    var onKey: ((ControlKey) -> Bool)?
+    /// Called as a sideways drag that starts on the view goes. Up and down stay the scroll's.
+    var onDrag: ((DragPhase, CGPoint) -> Void)? {
+        didSet {
+            guard onDrag != nil, drag == nil else { return }
+            let recognizer = UIPanGestureRecognizer(target: self, action: #selector(dragged(_:)))
+            recognizer.delegate = self
+            addGestureRecognizer(recognizer)
+            drag = recognizer
+        }
+    }
+    /// Called with 1 or -1 when an assistive technology steps its value.
+    var onAdjust: ((Int) -> Void)?
     private var hover: UIHoverGestureRecognizer?
+    private var drag: UIPanGestureRecognizer?
     private var hasMenu = false
     private var pressing = false
+
+    /// Where the focus ring goes, and its corners.
+    var focusShape: (rect: CGRect, radius: CGFloat) { (bounds, 0) }
+
+    override var canBecomeFocused: Bool { focusable }
+
+    override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        guard focusable, isFocused, let key = presses.first?.key.flatMap(ControlKey.init) else { return super.pressesBegan(presses, with: event) }
+        if onKey?(key) == true { return }
+        guard key == .press, let onPress else { return super.pressesBegan(presses, with: event) }
+        onPress(CGPoint(x: bounds.midX, y: bounds.midY))
+    }
+
+    override func accessibilityIncrement() {
+        onAdjust?(1)
+    }
+
+    override func accessibilityDecrement() {
+        onAdjust?(-1)
+    }
+
+    @objc private func dragged(_ recognizer: UIPanGestureRecognizer) {
+        let point = recognizer.location(in: self)
+        switch recognizer.state {
+        case .began: onDrag?(.began, point)
+        case .changed: onDrag?(.moved, point)
+        default: onDrag?(.ended, point)
+        }
+    }
+
+    override func gestureRecognizerShouldBegin(_ recognizer: UIGestureRecognizer) -> Bool {
+        guard recognizer === drag, let drag else { return super.gestureRecognizerShouldBegin(recognizer) }
+        let speed = drag.velocity(in: self)
+        return abs(speed.x) > abs(speed.y)
+    }
+
+    /// The scroll views wait to hear that a drag isn't sideways.
+    func gestureRecognizer(_ recognizer: UIGestureRecognizer, shouldBeRequiredToFailBy other: UIGestureRecognizer) -> Bool {
+        recognizer === drag && other is UIPanGestureRecognizer && other.view is UIScrollView
+    }
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -100,9 +168,17 @@ class FlippedView: UIView, UIContextMenuInteractionDelegate {
     /// Places what is inside the view.
     func layoutNow() {}
 
+    /// Has what is inside placed again before the next frame.
+    func relayout() {
+        setNeedsLayout()
+    }
+
     override func layoutSubviews() {
         super.layoutSubviews()
         layoutNow()
+        guard focusable else { return }
+        let shape = focusShape
+        focusEffect = UIFocusHaloEffect(roundedRect: shape.rect, cornerRadius: shape.radius, curve: .continuous)
     }
 
     /// Whether a tap at the point is the view's.
@@ -167,6 +243,21 @@ class FlippedView: UIView, UIContextMenuInteractionDelegate {
                 UIAction(title: action.title, image: .symbol(action.symbol, size: 15)) { _ in action.run() }
             })
         })
+    }
+}
+
+extension ControlKey {
+    init?(_ key: UIKey) {
+        switch key.keyCode {
+        case .keyboardLeftArrow: self = .left
+        case .keyboardRightArrow: self = .right
+        case .keyboardUpArrow: self = .up
+        case .keyboardDownArrow: self = .down
+        case .keyboardHome: self = .home
+        case .keyboardEnd: self = .end
+        case .keyboardSpacebar, .keyboardReturnOrEnter, .keypadEnter: self = .press
+        default: return nil
+        }
     }
 }
 
@@ -315,9 +406,15 @@ final class ShimmerLabel: TextLabel {
 
 /// A symbol in one colour, in the middle of its frame.
 final class SymbolView: UIImageView {
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        contentMode = .center
+    }
+
+    required init?(coder: NSCoder) { fatalError("not used") }
+
     convenience init(_ symbol: Symbol? = nil, size: CGFloat = 12, tint: UIColor = Theme.mutedForeground) {
         self.init(frame: .zero)
-        contentMode = .center
         tintColor = tint
         if let symbol { show(symbol, size: size) }
     }

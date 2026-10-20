@@ -1,0 +1,1218 @@
+{
+  "id": "",
+  "component": "Col",
+  "children": [
+    {
+      "id": "children/0",
+      "a11y": {
+        "role": "heading",
+        "level": 2
+      },
+      "component": "Title",
+      "text": {
+        "text": "8 Spanish words for the kitchen",
+        "runs": [],
+        "links": []
+      },
+      "style": "title_xl",
+      "color": "foreground"
+    },
+    {
+      "id": "children/1",
+      "a11y": {
+        "role": "text"
+      },
+      "component": "Text",
+      "text": {
+        "text": "￼ Tap a card to see the English, then try the quiz.",
+        "runs": [],
+        "links": []
+      },
+      "inlines": [
+        {
+          "id": "children/1/text/0",
+          "a11y": {
+            "role": "hidden"
+          },
+          "component": "Icon",
+          "icon": {
+            "name": "hand",
+            "glyph": ""
+          },
+          "size": 14.0,
+          "color": "foreground"
+        }
+      ],
+      "style": "body",
+      "color": "muted-foreground",
+      "weight": "regular",
+      "italic": false,
+      "strike": false,
+      "digits": false,
+      "max_lines": null
+    },
+    {
+      "id": "children/2",
+      "a11y": {
+        "role": "group"
+      },
+      "component": "Carousel",
+      "children": [
+        {
+          "id": "children/2/children/0",
+          "a11y": {
+            "role": "button",
+            "on": false
+          },
+          "component": "Flashcard",
+          "front": {
+            "text": null,
+            "style": "body",
+            "children": [
+              {
+                "id": "children/2/children/0/front/0",
+                "a11y": {
+                  "role": "heading",
+                  "level": 2
+                },
+                "component": "Title",
+                "text": {
+                  "text": "🥄",
+                  "runs": [],
+                  "links": []
+                },
+                "style": "title2xl",
+                "color": "foreground"
+              },
+              {
+                "id": "children/2/children/0/front/1",
+                "a11y": {
+                  "role": "heading",
+                  "level": 2
+                },
+                "component": "Title",
+                "text": {
+                  "text": "la cuchara",
+                  "runs": [],
+                  "links": []
+                },
+                "style": "title_lg",
+                "color": "foreground"
+              }
+            ]
+          },
+          "back": {
+            "text": null,
+            "style": "body",
+            "children": [
+              {
+                "id": "children/2/children/0/back/0",
+                "a11y": {
+                  "role": "heading",
+                  "level": 3
+                },
+                "component": "Title",
+                "text": {
+                  "text": "the spoon",
+                  "runs": [],
+                  "links": []
+                },
+                "style": "title_md",
+                "color": "foreground"
+              },
+              {
+                "id": "children/2/children/0/back/1",
+                "a11y": {
+                  "role": "text"
+                },
+                "component": "Caption",
+                "text": {
+                  "text": "la cuchara",
+                  "runs": [],
+                  "links": []
+                },
+                "style": "caption",
+                "color": "muted-foreground"
+              }
+            ]
+          },
+          "hint": "Tap to flip",
+          "flipped": false,
+          "canvas": {
+            "kind": "Flashcard",
+            "props": {
+              "front": [
+                {
+                  "kind": "Title",
+                  "props": {
+                    "text": "🥄",
+                    "size": "2xl"
+                  }
+                },
+                {
+                  "kind": "Title",
+                  "props": {
+                    "text": "la cuchara",
+                    "size": "lg"
+                  }
+                }
+              ],
+              "back": [
+                {
+                  "kind": "Title",
+                  "props": {
+                    "text": "the spoon",
+                    "size": "md"
+                  }
+                },
+                {
+                  "kind": "Caption",
+                  "props": {
+                    "text": "la cuchara"
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "children/2/children/1",
+          "a11y": {
+            "role": "button",
+            "on": false
+          },
+          "component": "Flashcard",
+          "front": {
+            "text": null,
+            "style": "body",
+            "children": [
+              {
+                "id": "children/2/children/1/front/0",
+                "a11y": {
+                  "role": "heading",
+                  "level": 2
+                },
+                "component": "Title",
+                "text": {
+                  "text": "🔪",
+                  "runs": [],
+                  "links": []
+                },
+                "style": "title2xl",
+                "color": "foreground"
+              },
+              {
+                "id": "children/2/children/1/front/1",
+                "a11y": {
+                  "role": "heading",
+                  "level": 2
+                },
+                "component": "Title",
+                "text": {
+                  "text": "el cuchillo",
+                  "runs": [],
+                  "links": []
+                },
+                "style": "title_lg",
+                "color": "foreground"
+              }
+            ]
+          },
+          "back": {
+            "text": null,
+            "style": "body",
+            "children": [
+              {
+                "id": "children/2/children/1/back/0",
+                "a11y": {
+                  "role": "heading",
+                  "level": 3
+                },
+                "component": "Title",
+                "text": {
+                  "text": "the knife",
+                  "runs": [],
+                  "links": []
+                },
+                "style": "title_md",
+                "color": "foreground"
+              },
+              {
+                "id": "children/2/children/1/back/1",
+                "a11y": {
+                  "role": "text"
+                },
+                "component": "Caption",
+                "text": {
+                  "text": "el cuchillo",
+                  "runs": [],
+                  "links": []
+                },
+                "style": "caption",
+                "color": "muted-foreground"
+              }
+            ]
+          },
+          "hint": "Tap to flip",
+          "flipped": false,
+          "canvas": {
+            "kind": "Flashcard",
+            "props": {
+              "front": [
+                {
+                  "kind": "Title",
+                  "props": {
+                    "text": "🔪",
+                    "size": "2xl"
+                  }
+                },
+                {
+                  "kind": "Title",
+                  "props": {
+                    "text": "el cuchillo",
+                    "size": "lg"
+                  }
+                }
+              ],
+              "back": [
+                {
+                  "kind": "Title",
+                  "props": {
+                    "text": "the knife",
+                    "size": "md"
+                  }
+                },
+                {
+                  "kind": "Caption",
+                  "props": {
+                    "text": "el cuchillo"
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "children/2/children/2",
+          "a11y": {
+            "role": "button",
+            "on": false
+          },
+          "component": "Flashcard",
+          "front": {
+            "text": null,
+            "style": "body",
+            "children": [
+              {
+                "id": "children/2/children/2/front/0",
+                "a11y": {
+                  "role": "heading",
+                  "level": 2
+                },
+                "component": "Title",
+                "text": {
+                  "text": "🍴",
+                  "runs": [],
+                  "links": []
+                },
+                "style": "title2xl",
+                "color": "foreground"
+              },
+              {
+                "id": "children/2/children/2/front/1",
+                "a11y": {
+                  "role": "heading",
+                  "level": 2
+                },
+                "component": "Title",
+                "text": {
+                  "text": "el tenedor",
+                  "runs": [],
+                  "links": []
+                },
+                "style": "title_lg",
+                "color": "foreground"
+              }
+            ]
+          },
+          "back": {
+            "text": null,
+            "style": "body",
+            "children": [
+              {
+                "id": "children/2/children/2/back/0",
+                "a11y": {
+                  "role": "heading",
+                  "level": 3
+                },
+                "component": "Title",
+                "text": {
+                  "text": "the fork",
+                  "runs": [],
+                  "links": []
+                },
+                "style": "title_md",
+                "color": "foreground"
+              },
+              {
+                "id": "children/2/children/2/back/1",
+                "a11y": {
+                  "role": "text"
+                },
+                "component": "Caption",
+                "text": {
+                  "text": "el tenedor",
+                  "runs": [],
+                  "links": []
+                },
+                "style": "caption",
+                "color": "muted-foreground"
+              }
+            ]
+          },
+          "hint": "Tap to flip",
+          "flipped": false,
+          "canvas": {
+            "kind": "Flashcard",
+            "props": {
+              "front": [
+                {
+                  "kind": "Title",
+                  "props": {
+                    "text": "🍴",
+                    "size": "2xl"
+                  }
+                },
+                {
+                  "kind": "Title",
+                  "props": {
+                    "text": "el tenedor",
+                    "size": "lg"
+                  }
+                }
+              ],
+              "back": [
+                {
+                  "kind": "Title",
+                  "props": {
+                    "text": "the fork",
+                    "size": "md"
+                  }
+                },
+                {
+                  "kind": "Caption",
+                  "props": {
+                    "text": "el tenedor"
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "children/2/children/3",
+          "a11y": {
+            "role": "button",
+            "on": false
+          },
+          "component": "Flashcard",
+          "front": {
+            "text": null,
+            "style": "body",
+            "children": [
+              {
+                "id": "children/2/children/3/front/0",
+                "a11y": {
+                  "role": "heading",
+                  "level": 2
+                },
+                "component": "Title",
+                "text": {
+                  "text": "🍳",
+                  "runs": [],
+                  "links": []
+                },
+                "style": "title2xl",
+                "color": "foreground"
+              },
+              {
+                "id": "children/2/children/3/front/1",
+                "a11y": {
+                  "role": "heading",
+                  "level": 2
+                },
+                "component": "Title",
+                "text": {
+                  "text": "la sartén",
+                  "runs": [],
+                  "links": []
+                },
+                "style": "title_lg",
+                "color": "foreground"
+              }
+            ]
+          },
+          "back": {
+            "text": null,
+            "style": "body",
+            "children": [
+              {
+                "id": "children/2/children/3/back/0",
+                "a11y": {
+                  "role": "heading",
+                  "level": 3
+                },
+                "component": "Title",
+                "text": {
+                  "text": "the frying pan",
+                  "runs": [],
+                  "links": []
+                },
+                "style": "title_md",
+                "color": "foreground"
+              },
+              {
+                "id": "children/2/children/3/back/1",
+                "a11y": {
+                  "role": "text"
+                },
+                "component": "Caption",
+                "text": {
+                  "text": "la sartén",
+                  "runs": [],
+                  "links": []
+                },
+                "style": "caption",
+                "color": "muted-foreground"
+              }
+            ]
+          },
+          "hint": "Tap to flip",
+          "flipped": false,
+          "canvas": {
+            "kind": "Flashcard",
+            "props": {
+              "front": [
+                {
+                  "kind": "Title",
+                  "props": {
+                    "text": "🍳",
+                    "size": "2xl"
+                  }
+                },
+                {
+                  "kind": "Title",
+                  "props": {
+                    "text": "la sartén",
+                    "size": "lg"
+                  }
+                }
+              ],
+              "back": [
+                {
+                  "kind": "Title",
+                  "props": {
+                    "text": "the frying pan",
+                    "size": "md"
+                  }
+                },
+                {
+                  "kind": "Caption",
+                  "props": {
+                    "text": "la sartén"
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "children/2/children/4",
+          "a11y": {
+            "role": "button",
+            "on": false
+          },
+          "component": "Flashcard",
+          "front": {
+            "text": null,
+            "style": "body",
+            "children": [
+              {
+                "id": "children/2/children/4/front/0",
+                "a11y": {
+                  "role": "heading",
+                  "level": 2
+                },
+                "component": "Title",
+                "text": {
+                  "text": "🍲",
+                  "runs": [],
+                  "links": []
+                },
+                "style": "title2xl",
+                "color": "foreground"
+              },
+              {
+                "id": "children/2/children/4/front/1",
+                "a11y": {
+                  "role": "heading",
+                  "level": 2
+                },
+                "component": "Title",
+                "text": {
+                  "text": "la olla",
+                  "runs": [],
+                  "links": []
+                },
+                "style": "title_lg",
+                "color": "foreground"
+              }
+            ]
+          },
+          "back": {
+            "text": null,
+            "style": "body",
+            "children": [
+              {
+                "id": "children/2/children/4/back/0",
+                "a11y": {
+                  "role": "heading",
+                  "level": 3
+                },
+                "component": "Title",
+                "text": {
+                  "text": "the pot",
+                  "runs": [],
+                  "links": []
+                },
+                "style": "title_md",
+                "color": "foreground"
+              },
+              {
+                "id": "children/2/children/4/back/1",
+                "a11y": {
+                  "role": "text"
+                },
+                "component": "Caption",
+                "text": {
+                  "text": "la olla",
+                  "runs": [],
+                  "links": []
+                },
+                "style": "caption",
+                "color": "muted-foreground"
+              }
+            ]
+          },
+          "hint": "Tap to flip",
+          "flipped": false,
+          "canvas": {
+            "kind": "Flashcard",
+            "props": {
+              "front": [
+                {
+                  "kind": "Title",
+                  "props": {
+                    "text": "🍲",
+                    "size": "2xl"
+                  }
+                },
+                {
+                  "kind": "Title",
+                  "props": {
+                    "text": "la olla",
+                    "size": "lg"
+                  }
+                }
+              ],
+              "back": [
+                {
+                  "kind": "Title",
+                  "props": {
+                    "text": "the pot",
+                    "size": "md"
+                  }
+                },
+                {
+                  "kind": "Caption",
+                  "props": {
+                    "text": "la olla"
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "children/2/children/5",
+          "a11y": {
+            "role": "button",
+            "on": false
+          },
+          "component": "Flashcard",
+          "front": {
+            "text": null,
+            "style": "body",
+            "children": [
+              {
+                "id": "children/2/children/5/front/0",
+                "a11y": {
+                  "role": "heading",
+                  "level": 2
+                },
+                "component": "Title",
+                "text": {
+                  "text": "🔥",
+                  "runs": [],
+                  "links": []
+                },
+                "style": "title2xl",
+                "color": "foreground"
+              },
+              {
+                "id": "children/2/children/5/front/1",
+                "a11y": {
+                  "role": "heading",
+                  "level": 2
+                },
+                "component": "Title",
+                "text": {
+                  "text": "el horno",
+                  "runs": [],
+                  "links": []
+                },
+                "style": "title_lg",
+                "color": "foreground"
+              }
+            ]
+          },
+          "back": {
+            "text": null,
+            "style": "body",
+            "children": [
+              {
+                "id": "children/2/children/5/back/0",
+                "a11y": {
+                  "role": "heading",
+                  "level": 3
+                },
+                "component": "Title",
+                "text": {
+                  "text": "the oven",
+                  "runs": [],
+                  "links": []
+                },
+                "style": "title_md",
+                "color": "foreground"
+              },
+              {
+                "id": "children/2/children/5/back/1",
+                "a11y": {
+                  "role": "text"
+                },
+                "component": "Caption",
+                "text": {
+                  "text": "el horno",
+                  "runs": [],
+                  "links": []
+                },
+                "style": "caption",
+                "color": "muted-foreground"
+              }
+            ]
+          },
+          "hint": "Tap to flip",
+          "flipped": false,
+          "canvas": {
+            "kind": "Flashcard",
+            "props": {
+              "front": [
+                {
+                  "kind": "Title",
+                  "props": {
+                    "text": "🔥",
+                    "size": "2xl"
+                  }
+                },
+                {
+                  "kind": "Title",
+                  "props": {
+                    "text": "el horno",
+                    "size": "lg"
+                  }
+                }
+              ],
+              "back": [
+                {
+                  "kind": "Title",
+                  "props": {
+                    "text": "the oven",
+                    "size": "md"
+                  }
+                },
+                {
+                  "kind": "Caption",
+                  "props": {
+                    "text": "el horno"
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "children/2/children/6",
+          "a11y": {
+            "role": "button",
+            "on": false
+          },
+          "component": "Flashcard",
+          "front": {
+            "text": null,
+            "style": "body",
+            "children": [
+              {
+                "id": "children/2/children/6/front/0",
+                "a11y": {
+                  "role": "heading",
+                  "level": 2
+                },
+                "component": "Title",
+                "text": {
+                  "text": "🧊",
+                  "runs": [],
+                  "links": []
+                },
+                "style": "title2xl",
+                "color": "foreground"
+              },
+              {
+                "id": "children/2/children/6/front/1",
+                "a11y": {
+                  "role": "heading",
+                  "level": 2
+                },
+                "component": "Title",
+                "text": {
+                  "text": "la nevera",
+                  "runs": [],
+                  "links": []
+                },
+                "style": "title_lg",
+                "color": "foreground"
+              }
+            ]
+          },
+          "back": {
+            "text": null,
+            "style": "body",
+            "children": [
+              {
+                "id": "children/2/children/6/back/0",
+                "a11y": {
+                  "role": "heading",
+                  "level": 3
+                },
+                "component": "Title",
+                "text": {
+                  "text": "the fridge",
+                  "runs": [],
+                  "links": []
+                },
+                "style": "title_md",
+                "color": "foreground"
+              },
+              {
+                "id": "children/2/children/6/back/1",
+                "a11y": {
+                  "role": "text"
+                },
+                "component": "Caption",
+                "text": {
+                  "text": "la nevera",
+                  "runs": [],
+                  "links": []
+                },
+                "style": "caption",
+                "color": "muted-foreground"
+              }
+            ]
+          },
+          "hint": "Tap to flip",
+          "flipped": false,
+          "canvas": {
+            "kind": "Flashcard",
+            "props": {
+              "front": [
+                {
+                  "kind": "Title",
+                  "props": {
+                    "text": "🧊",
+                    "size": "2xl"
+                  }
+                },
+                {
+                  "kind": "Title",
+                  "props": {
+                    "text": "la nevera",
+                    "size": "lg"
+                  }
+                }
+              ],
+              "back": [
+                {
+                  "kind": "Title",
+                  "props": {
+                    "text": "the fridge",
+                    "size": "md"
+                  }
+                },
+                {
+                  "kind": "Caption",
+                  "props": {
+                    "text": "la nevera"
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "children/2/children/7",
+          "a11y": {
+            "role": "button",
+            "on": false
+          },
+          "component": "Flashcard",
+          "front": {
+            "text": null,
+            "style": "body",
+            "children": [
+              {
+                "id": "children/2/children/7/front/0",
+                "a11y": {
+                  "role": "heading",
+                  "level": 2
+                },
+                "component": "Title",
+                "text": {
+                  "text": "🥛",
+                  "runs": [],
+                  "links": []
+                },
+                "style": "title2xl",
+                "color": "foreground"
+              },
+              {
+                "id": "children/2/children/7/front/1",
+                "a11y": {
+                  "role": "heading",
+                  "level": 2
+                },
+                "component": "Title",
+                "text": {
+                  "text": "el vaso",
+                  "runs": [],
+                  "links": []
+                },
+                "style": "title_lg",
+                "color": "foreground"
+              }
+            ]
+          },
+          "back": {
+            "text": null,
+            "style": "body",
+            "children": [
+              {
+                "id": "children/2/children/7/back/0",
+                "a11y": {
+                  "role": "heading",
+                  "level": 3
+                },
+                "component": "Title",
+                "text": {
+                  "text": "the glass",
+                  "runs": [],
+                  "links": []
+                },
+                "style": "title_md",
+                "color": "foreground"
+              },
+              {
+                "id": "children/2/children/7/back/1",
+                "a11y": {
+                  "role": "text"
+                },
+                "component": "Caption",
+                "text": {
+                  "text": "el vaso",
+                  "runs": [],
+                  "links": []
+                },
+                "style": "caption",
+                "color": "muted-foreground"
+              }
+            ]
+          },
+          "hint": "Tap to flip",
+          "flipped": false,
+          "canvas": {
+            "kind": "Flashcard",
+            "props": {
+              "front": [
+                {
+                  "kind": "Title",
+                  "props": {
+                    "text": "🥛",
+                    "size": "2xl"
+                  }
+                },
+                {
+                  "kind": "Title",
+                  "props": {
+                    "text": "el vaso",
+                    "size": "lg"
+                  }
+                }
+              ],
+              "back": [
+                {
+                  "kind": "Title",
+                  "props": {
+                    "text": "the glass",
+                    "size": "md"
+                  }
+                },
+                {
+                  "kind": "Caption",
+                  "props": {
+                    "text": "el vaso"
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "item_width": 180.0,
+      "gap": 12.0,
+      "fill": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ]
+    },
+    {
+      "id": "children/3",
+      "a11y": {
+        "role": "heading",
+        "level": 3
+      },
+      "component": "Title",
+      "text": {
+        "text": "Quick quiz",
+        "runs": [],
+        "links": []
+      },
+      "style": "title_md",
+      "color": "foreground"
+    },
+    {
+      "id": "children/4",
+      "a11y": {
+        "role": "group"
+      },
+      "component": "Card",
+      "children": [
+        {
+          "id": "children/4/children/0",
+          "component": "Row",
+          "children": [
+            {
+              "id": "children/4/children/0/children/0",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Caption",
+              "text": {
+                "text": "Question 1 of 4",
+                "runs": [],
+                "links": []
+              },
+              "style": "caption",
+              "color": "muted-foreground"
+            },
+            {
+              "id": "children/4/children/0/children/1",
+              "a11y": {
+                "role": "hidden"
+              },
+              "component": "Spacer"
+            },
+            {
+              "id": "children/4/children/0/children/2",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Badge",
+              "text": "Score 0",
+              "tone": null,
+              "icon": null
+            }
+          ],
+          "gap": 8.0,
+          "align": "center",
+          "justify": "start",
+          "wrap": false,
+          "sizing": [
+            {
+              "basis": "content",
+              "length": null,
+              "grow": 0.0,
+              "shrink": true
+            },
+            {
+              "basis": "zero",
+              "length": null,
+              "grow": 1.0,
+              "shrink": false
+            },
+            {
+              "basis": "content",
+              "length": null,
+              "grow": 0.0,
+              "shrink": false
+            }
+          ]
+        },
+        {
+          "id": "children/4/children/1",
+          "a11y": {
+            "role": "heading",
+            "level": 2
+          },
+          "component": "Title",
+          "text": {
+            "text": "What is la sartén?",
+            "runs": [],
+            "links": []
+          },
+          "style": "card_heading",
+          "color": "foreground"
+        },
+        {
+          "id": "children/4/children/2",
+          "component": "Row",
+          "children": [
+            {
+              "id": "children/4/children/2/children/0",
+              "a11y": {
+                "role": "button",
+                "label": "the pot"
+              },
+              "component": "Button",
+              "label": "the pot",
+              "variant": "outline",
+              "tint": null,
+              "size": "regular",
+              "icon": null,
+              "block": false,
+              "disabled": null
+            },
+            {
+              "id": "children/4/children/2/children/1",
+              "a11y": {
+                "role": "button",
+                "label": "the frying pan"
+              },
+              "component": "Button",
+              "label": "the frying pan",
+              "variant": "outline",
+              "tint": null,
+              "size": "regular",
+              "icon": null,
+              "block": false,
+              "disabled": null
+            },
+            {
+              "id": "children/4/children/2/children/2",
+              "a11y": {
+                "role": "button",
+                "label": "the oven"
+              },
+              "component": "Button",
+              "label": "the oven",
+              "variant": "outline",
+              "tint": null,
+              "size": "regular",
+              "icon": null,
+              "block": false,
+              "disabled": null
+            }
+          ],
+          "gap": 8.0,
+          "align": "center",
+          "justify": "start",
+          "wrap": true,
+          "sizing": [
+            {
+              "basis": "content",
+              "length": null,
+              "grow": 0.0,
+              "shrink": false
+            },
+            {
+              "basis": "content",
+              "length": null,
+              "grow": 0.0,
+              "shrink": false
+            },
+            {
+              "basis": "content",
+              "length": null,
+              "grow": 0.0,
+              "shrink": false
+            }
+          ]
+        }
+      ],
+      "soft": false,
+      "nested": false,
+      "padding": 20.0,
+      "spacing": [
+        0.0,
+        12.0,
+        12.0
+      ]
+    },
+    {
+      "id": "children/5",
+      "a11y": {
+        "role": "hidden"
+      },
+      "component": "Celebration",
+      "burst": 0,
+      "canvas": {
+        "kind": "Celebration",
+        "props": {
+          "when": false
+        }
+      }
+    }
+  ],
+  "align": "stretch",
+  "spacing": [
+    0.0,
+    8.0,
+    24.0,
+    24.0,
+    12.0,
+    24.0
+  ]
+}

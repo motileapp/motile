@@ -303,6 +303,24 @@ pub fn skill_ranges(text: &str, skills: &[motile_core::render::rows::SkillChip])
     skills.iter().filter_map(|skill| Some((piece.range(skill.start, skill.len)?, skill.label.clone()))).collect()
 }
 
+/// Text with the core's `[start, length, style bits]` runs and its links, all in UTF-16 units, as
+/// the string GPUI sets and its runs and links by bytes of it.
+#[allow(clippy::type_complexity)]
+pub fn rich(
+    text: &str,
+    runs: &[[u32; 3]],
+    links: &[motile_core::render::markdown::Link],
+) -> (String, Vec<(Range<usize>, u32)>, Vec<(Range<usize>, String)>) {
+    let units: Vec<u16> = text.encode_utf16().collect();
+    let piece = Piece::new(&units);
+    let runs = runs.iter().filter_map(|run| piece.range(run[0], run[1]).map(|range| (range, run[2]))).collect();
+    let links = links
+        .iter()
+        .filter_map(|link| piece.range(link.start, link.len).map(|range| (range, link.url.clone())))
+        .collect();
+    (piece.text, runs, links)
+}
+
 /// Spans of the core, `[start, length, colour]` in UTF-16 units of `code`, as byte ranges.
 pub fn code_spans(code: &str, spans: &[u32]) -> Vec<(Range<usize>, u32)> {
     let units: Vec<u16> = code.encode_utf16().collect();

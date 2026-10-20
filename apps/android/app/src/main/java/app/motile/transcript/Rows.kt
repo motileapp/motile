@@ -27,6 +27,7 @@ import app.motile.platform.Platform
 import app.motile.platform.Symbol
 import app.motile.theme.Palette
 import app.motile.theme.Theme
+import app.motile.transcript.openui.UiContent
 import java.util.concurrent.Executors
 import android.os.Handler
 import android.os.Looper
@@ -46,9 +47,11 @@ class RowModel(
     val above: Float = 0f,
 ) {
     sealed interface Kind {
-        class User(val text: MessageText, val attachments: List<AttachedFile>, val at: Double) : Kind
+        class User(val text: MessageText, val attachments: List<AttachedFile>, val values: SentValues?, val at: Double) : Kind
         class Prose(val content: ProseContent) : Kind
         class Code(val content: CodeContent) : Kind
+        /** A program the core runs, drawn from the tree it resolves. */
+        class Ui(val content: UiContent) : Kind
         class Tool(val content: ToolContent) : Kind
         class Thinking(val text: String) : Kind
         class Media(val content: MediaContent) : Kind
@@ -66,6 +69,8 @@ class RowModel(
         class Queued(val content: QueuedContent) : Kind
         /** The thread's server was unlinked from the account: the last row, in place of the composer, which says why the thread can only be read. */
         class Removed(val content: RemovedContent) : Kind
+        /** A row this client doesn't know how to show, which takes no room. */
+        object Unknown : Kind
     }
 
     val isUser: Boolean get() = kind is Kind.User
@@ -90,6 +95,7 @@ class RowModel(
         get() = when (kind) {
             is Kind.Prose -> kind.content.plain
             is Kind.Code -> "```${kind.content.language}\n${kind.content.code}\n```"
+            is Kind.Ui -> "```${kind.content.code.language}\n${kind.content.code.code}\n```"
             else -> null
         }
 
@@ -109,9 +115,10 @@ class RowModel(
 
         fun parse(json: JSON): RowModel? {
             val kind = when (json.string("kind")) {
-                "user" -> Kind.User(MessageText(json, muted = false), json.objects("attachments").map(::AttachedFile), json.double("at"))
+                "user" -> Kind.User(MessageText(json, muted = false), json.objects("attachments").map(::AttachedFile), json.obj("values")?.let(::SentValues), json.double("at"))
                 "prose" -> Kind.Prose(ProseContent(json))
                 "code" -> Kind.Code(CodeContent(json.string("language"), json.string("code"), json.optionalInts("spans")))
+                "ui" -> Kind.Ui(UiContent(json))
                 "tool" -> Kind.Tool(ToolContent(json))
                 "thinking" -> Kind.Thinking(json.string("text"))
                 "media" -> Kind.Media(MediaContent(json))
@@ -126,7 +133,7 @@ class RowModel(
                 "agents" -> Kind.Agents(AgentsContent(json))
                 "queued" -> Kind.Queued(QueuedContent(MessageText(json, muted = true), json.objects("attachments").map(::AttachedFile), json.string("status")))
                 "removed" -> Kind.Removed(RemovedContent(json.string("server"), json.string("title"), json.string("message")))
-                else -> return null
+                else -> Kind.Unknown
             }
             return RowModel(json.string("id"), json.string("item"), json.bool("nested"), kind, Typesetter.spaceAbove(json))
         }
@@ -134,7 +141,7 @@ class RowModel(
         /** A message on its way to the server. One sent while the agent works will wait for it, so it shows as it will once the server has it. */
         fun pending(text: String, attachments: List<AttachedFile>, queued: Boolean, skills: List<SkillSpan> = emptyList()): RowModel {
             val message = MessageText(text, emptyList(), skills, muted = queued)
-            val kind = if (queued) Kind.Queued(QueuedContent(message, attachments, "Queued")) else Kind.User(message, attachments, Time.now())
+            val kind = if (queued) Kind.Queued(QueuedContent(message, attachments, "Queued")) else Kind.User(message, attachments, null, Time.now())
             return RowModel(pendingID, pendingID, false, kind)
         }
     }

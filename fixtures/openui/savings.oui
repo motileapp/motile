@@ -1,0 +1,16 @@
+root = Card([head, kpis, chart, milestone, controls, Text("Assumes monthly compounding and contributions at the end of each month. Returns are not guaranteed; this is an illustration, not advice.", "xs", "muted")], null, 5, 4)
+$initial = 10000
+$monthly = 500
+$years = 30
+$rate = 5
+head = Row([Col([Title("Retirement savings", "lg"), Text("Turn today's contributions into a picture of tomorrow.", "sm", "muted")], 1), Spacer(), Button("Reset", @Reset($initial, $monthly, $years, $rate), "ghost", null, "sm", "rotate-ccw")], 3, "start")
+rows = @Each(@Range(0, $years + 1), "y", {year: "Year " + y, Contributions: $initial + $monthly * 12 * y, Balance: $rate == 0 ? $initial + $monthly * 12 * y : $initial * @Pow(1 + $rate / 1200, 12 * y) + $monthly * (@Pow(1 + $rate / 1200, 12 * y) - 1) / ($rate / 1200)})
+final = @Last(rows)
+million = @First(@Filter(rows, "Balance", ">=", 1000000))
+kpis = Grid([k1, k2, k3], 3, 150, 3)
+k1 = Card([Caption("Balance in " + @Plural($years, "year")), Title(@Format(final.Balance, "currency", 0), "xl")], "soft", 3, 1)
+k2 = Card([Caption("You put in"), Title(@Format(final.Contributions, "currency", 0), "xl")], "soft", 3, 1)
+k3 = Card([Caption("Growth"), Title(@Format(final.Balance - final.Contributions, "currency", 0), "xl", "success")], "soft", 3, 1)
+chart = Chart("area", rows, "year", ["Contributions", "Balance"], "currency")
+milestone = Row([Icon(million == null ? "hourglass" : "party-popper", "sm", million == null ? "muted" : "success"), Text(million == null ? "At this pace the balance stays under $1 million." : "You pass **$1 million** in " + million.year + ", " + @Format(@Percent(million.Balance - million.Contributions, million.Balance), "percent", 0) + " of it from growth.", "sm")], 2)
+controls = Grid([Slider($initial, 0, 200000, 1000, "Starting balance", "$"), Slider($monthly, 0, 5000, 50, "Monthly contribution", "$"), Slider($years, 1, 50, 1, "Years", " yrs"), Slider($rate, 0, 12, 0.5, "Annual return", "%")], 2, 240, 6)

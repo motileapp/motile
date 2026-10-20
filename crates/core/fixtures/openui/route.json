@@ -1,0 +1,2203 @@
+{
+  "id": "",
+  "component": "Col",
+  "children": [
+    {
+      "id": "children/0",
+      "component": "Col",
+      "children": [
+        {
+          "id": "children/0/children/0",
+          "a11y": {
+            "role": "heading",
+            "level": 2
+          },
+          "component": "Title",
+          "text": {
+            "text": "San Francisco in one day",
+            "runs": [],
+            "links": []
+          },
+          "style": "title_xl",
+          "color": "foreground"
+        },
+        {
+          "id": "children/0/children/1",
+          "a11y": {
+            "role": "text"
+          },
+          "component": "Text",
+          "text": {
+            "text": "A scenic loop from the waterfront to the Golden Gate, with time to eat, walk and take photos. Tap a pin or a stop for details.",
+            "runs": [],
+            "links": []
+          },
+          "inlines": [],
+          "style": "body",
+          "color": "muted-foreground",
+          "weight": "regular",
+          "italic": false,
+          "strike": false,
+          "digits": false,
+          "max_lines": null
+        }
+      ],
+      "align": "stretch",
+      "spacing": [
+        0.0,
+        8.0
+      ]
+    },
+    {
+      "id": "children/1",
+      "component": "Grid",
+      "children": [
+        {
+          "id": "children/1/children/0",
+          "a11y": {
+            "role": "image",
+            "label": "Golden Gate Bridge"
+          },
+          "component": "SearchImage",
+          "query": "Golden Gate Bridge",
+          "aspect_ratio": 1.4,
+          "radius": {
+            "kind": "lg",
+            "points": 12.0
+          },
+          "fit": "cover",
+          "photos": {
+            "state": "waiting",
+            "media": []
+          }
+        },
+        {
+          "id": "children/1/children/1",
+          "a11y": {
+            "role": "image",
+            "label": "Painted Ladies Alamo Square"
+          },
+          "component": "SearchImage",
+          "query": "Painted Ladies Alamo Square",
+          "aspect_ratio": 1.4,
+          "radius": {
+            "kind": "lg",
+            "points": 12.0
+          },
+          "fit": "cover",
+          "photos": {
+            "state": "waiting",
+            "media": []
+          }
+        },
+        {
+          "id": "children/1/children/2",
+          "a11y": {
+            "role": "image",
+            "label": "San Francisco cable car"
+          },
+          "component": "SearchImage",
+          "query": "San Francisco cable car",
+          "aspect_ratio": 1.4,
+          "radius": {
+            "kind": "lg",
+            "points": 12.0
+          },
+          "fit": "cover",
+          "photos": {
+            "state": "waiting",
+            "media": []
+          }
+        }
+      ],
+      "columns": 3,
+      "min_child_width": 140.0,
+      "gap": 8.0
+    },
+    {
+      "id": "children/2",
+      "component": "Row",
+      "children": [
+        {
+          "id": "children/2/children/0",
+          "a11y": {
+            "role": "text"
+          },
+          "component": "Badge",
+          "text": "8 stops",
+          "tone": null,
+          "icon": null
+        },
+        {
+          "id": "children/2/children/1",
+          "a11y": {
+            "role": "text"
+          },
+          "component": "Badge",
+          "text": "About 9.1 hours",
+          "tone": null,
+          "icon": null
+        },
+        {
+          "id": "children/2/children/2",
+          "a11y": {
+            "role": "text"
+          },
+          "component": "Badge",
+          "text": "Walk, cable car and bus",
+          "tone": "merged",
+          "icon": null
+        }
+      ],
+      "gap": 8.0,
+      "align": "center",
+      "justify": "start",
+      "wrap": true,
+      "sizing": [
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": false
+        },
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": false
+        },
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": false
+        }
+      ]
+    },
+    {
+      "id": "children/3",
+      "a11y": {
+        "role": "region",
+        "label": "Map"
+      },
+      "component": "Map",
+      "pins": [
+        {
+          "key": "Ferry Building",
+          "label": "Ferry Building",
+          "lat": 37.7955,
+          "lng": -122.3937,
+          "category": "Food",
+          "icon": null,
+          "number": 1,
+          "selected": true,
+          "visible": true
+        },
+        {
+          "key": "Coit Tower",
+          "label": "Coit Tower",
+          "lat": 37.8024,
+          "lng": -122.4058,
+          "category": "Views",
+          "icon": null,
+          "number": 2,
+          "selected": false,
+          "visible": true
+        },
+        {
+          "key": "Lombard Street",
+          "label": "Lombard Street",
+          "lat": 37.8021,
+          "lng": -122.4187,
+          "category": "Landmarks",
+          "icon": null,
+          "number": 3,
+          "selected": false,
+          "visible": true
+        },
+        {
+          "key": "Fisherman's Wharf",
+          "label": "Fisherman's Wharf",
+          "lat": 37.808,
+          "lng": -122.4177,
+          "category": "Food",
+          "icon": null,
+          "number": 4,
+          "selected": false,
+          "visible": true
+        },
+        {
+          "key": "Palace of Fine Arts",
+          "label": "Palace of Fine Arts",
+          "lat": 37.8029,
+          "lng": -122.4484,
+          "category": "Landmarks",
+          "icon": null,
+          "number": 5,
+          "selected": false,
+          "visible": true
+        },
+        {
+          "key": "Golden Gate Bridge",
+          "label": "Golden Gate Bridge",
+          "lat": 37.8077,
+          "lng": -122.4752,
+          "category": "Views",
+          "icon": null,
+          "number": 6,
+          "selected": false,
+          "visible": true
+        },
+        {
+          "key": "Golden Gate Park",
+          "label": "Golden Gate Park",
+          "lat": 37.7694,
+          "lng": -122.4862,
+          "category": "Parks",
+          "icon": null,
+          "number": 7,
+          "selected": false,
+          "visible": true
+        },
+        {
+          "key": "Alamo Square",
+          "label": "Alamo Square",
+          "lat": 37.7764,
+          "lng": -122.4346,
+          "category": "Views",
+          "icon": null,
+          "number": 8,
+          "selected": false,
+          "visible": true
+        }
+      ],
+      "route": "loading",
+      "line": [
+        [
+          37.7955,
+          -122.3937
+        ],
+        [
+          37.8024,
+          -122.4058
+        ],
+        [
+          37.8021,
+          -122.4187
+        ],
+        [
+          37.808,
+          -122.4177
+        ],
+        [
+          37.8029,
+          -122.4484
+        ],
+        [
+          37.8077,
+          -122.4752
+        ],
+        [
+          37.7694,
+          -122.4862
+        ],
+        [
+          37.7764,
+          -122.4346
+        ]
+      ],
+      "selected": "Ferry Building",
+      "height": 340.0,
+      "categories": [
+        "Food",
+        "Views",
+        "Landmarks",
+        "Parks"
+      ],
+      "filter": null,
+      "note": "Move and zoom the map to explore. Select a place to highlight it. The line joins the places in order. Street routing is loading or unavailable."
+    },
+    {
+      "id": "children/4",
+      "a11y": {
+        "role": "group"
+      },
+      "component": "Card",
+      "children": [
+        {
+          "id": "children/4/children/0",
+          "component": "Row",
+          "children": [
+            {
+              "id": "children/4/children/0/children/0",
+              "a11y": {
+                "role": "hidden"
+              },
+              "component": "Icon",
+              "icon": {
+                "name": "map-pin",
+                "glyph": ""
+              },
+              "size": 18.0,
+              "color": "foreground"
+            },
+            {
+              "id": "children/4/children/0/children/1",
+              "component": "Col",
+              "children": [
+                {
+                  "id": "children/4/children/0/children/1/children/0",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Text",
+                  "text": {
+                    "text": "Ferry Building",
+                    "runs": [],
+                    "links": []
+                  },
+                  "inlines": [],
+                  "style": "body_card",
+                  "color": "foreground",
+                  "weight": "semibold",
+                  "italic": false,
+                  "strike": false,
+                  "digits": false,
+                  "max_lines": null
+                },
+                {
+                  "id": "children/4/children/0/children/1/children/1",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Caption",
+                  "text": {
+                    "text": "9:00 AM · 45 min · Food",
+                    "runs": [],
+                    "links": []
+                  },
+                  "style": "caption",
+                  "color": "muted-foreground"
+                }
+              ],
+              "align": "stretch",
+              "spacing": [
+                0.0,
+                0.0
+              ]
+            },
+            {
+              "id": "children/4/children/0/children/2",
+              "a11y": {
+                "role": "hidden"
+              },
+              "component": "Spacer"
+            },
+            {
+              "id": "children/4/children/0/children/3",
+              "a11y": {
+                "role": "button",
+                "label": "Directions"
+              },
+              "component": "Button",
+              "label": "Directions",
+              "variant": "outline",
+              "tint": null,
+              "size": "small",
+              "icon": {
+                "name": "navigation",
+                "glyph": ""
+              },
+              "block": false,
+              "disabled": null
+            }
+          ],
+          "gap": 12.0,
+          "align": "center",
+          "justify": "start",
+          "wrap": true,
+          "sizing": [
+            {
+              "basis": "content",
+              "length": null,
+              "grow": 0.0,
+              "shrink": false
+            },
+            {
+              "basis": "content",
+              "length": null,
+              "grow": 0.0,
+              "shrink": true
+            },
+            {
+              "basis": "zero",
+              "length": null,
+              "grow": 1.0,
+              "shrink": false
+            },
+            {
+              "basis": "content",
+              "length": null,
+              "grow": 0.0,
+              "shrink": false
+            }
+          ]
+        },
+        {
+          "id": "children/4/children/1",
+          "a11y": {
+            "role": "text"
+          },
+          "component": "Text",
+          "text": {
+            "text": "Coffee and pastries in the 1898 market hall on the bay.",
+            "runs": [],
+            "links": []
+          },
+          "inlines": [],
+          "style": "small",
+          "color": "foreground",
+          "weight": "regular",
+          "italic": false,
+          "strike": false,
+          "digits": false,
+          "max_lines": null
+        }
+      ],
+      "soft": true,
+      "nested": false,
+      "padding": 12.0,
+      "spacing": [
+        0.0,
+        8.0
+      ]
+    },
+    {
+      "id": "children/5",
+      "component": "Row",
+      "children": [
+        {
+          "id": "children/5/children/0",
+          "a11y": {
+            "role": "heading",
+            "level": 3
+          },
+          "component": "Title",
+          "text": {
+            "text": "Stop by stop",
+            "runs": [],
+            "links": []
+          },
+          "style": "title_md",
+          "color": "foreground"
+        },
+        {
+          "id": "children/5/children/1",
+          "a11y": {
+            "role": "hidden"
+          },
+          "component": "Spacer"
+        },
+        {
+          "id": "children/5/children/2",
+          "a11y": {
+            "role": "radio_group"
+          },
+          "component": "SegmentedControl",
+          "value": "Balanced",
+          "options": [
+            {
+              "value": "Relaxed",
+              "label": "Relaxed",
+              "description": null
+            },
+            {
+              "value": "Balanced",
+              "label": "Balanced",
+              "description": null
+            },
+            {
+              "value": "Packed",
+              "label": "Packed",
+              "description": null
+            }
+          ],
+          "selected": 1,
+          "block": false,
+          "disabled": null
+        }
+      ],
+      "gap": 12.0,
+      "align": "center",
+      "justify": "start",
+      "wrap": true,
+      "sizing": [
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": true
+        },
+        {
+          "basis": "zero",
+          "length": null,
+          "grow": 1.0,
+          "shrink": false
+        },
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": true
+        }
+      ]
+    },
+    {
+      "id": "children/6",
+      "component": "Col",
+      "children": [
+        {
+          "id": "children/6/children/0",
+          "a11y": {
+            "role": "button",
+            "label": "9:00 AM 45 min Ferry Building Coffee and pastries in the 1898 market hall on the bay.",
+            "on": true
+          },
+          "component": "Pressable",
+          "children": [
+            {
+              "id": "children/6/children/0/children/0",
+              "component": "Row",
+              "children": [
+                {
+                  "id": "children/6/children/0/children/0/children/0",
+                  "component": "Box",
+                  "children": [
+                    {
+                      "id": "children/6/children/0/children/0/children/0/children/0",
+                      "a11y": {
+                        "role": "image",
+                        "label": "Ferry Building San Francisco"
+                      },
+                      "component": "SearchImage",
+                      "query": "Ferry Building San Francisco",
+                      "aspect_ratio": 1.3333334,
+                      "radius": {
+                        "kind": "md",
+                        "points": 8.0
+                      },
+                      "fit": "cover",
+                      "photos": {
+                        "state": "waiting",
+                        "media": []
+                      }
+                    }
+                  ],
+                  "direction": "col",
+                  "gap": 0.0,
+                  "spacing": [
+                    0.0
+                  ],
+                  "sizing": [],
+                  "padding": 0.0,
+                  "background": null,
+                  "inner_surface": false,
+                  "radius": {
+                    "kind": "md",
+                    "points": 8.0
+                  },
+                  "border": false,
+                  "width": null,
+                  "height": null,
+                  "flex": null,
+                  "align": "stretch",
+                  "justify": "start",
+                  "wrap": false
+                },
+                {
+                  "id": "children/6/children/0/children/0/children/1",
+                  "component": "Col",
+                  "children": [
+                    {
+                      "id": "children/6/children/0/children/0/children/1/children/0",
+                      "component": "Row",
+                      "children": [
+                        {
+                          "id": "children/6/children/0/children/0/children/1/children/0/children/0",
+                          "a11y": {
+                            "role": "text"
+                          },
+                          "component": "Text",
+                          "text": {
+                            "text": "9:00 AM",
+                            "runs": [],
+                            "links": []
+                          },
+                          "inlines": [],
+                          "style": "small",
+                          "color": "foreground",
+                          "weight": "semibold",
+                          "italic": false,
+                          "strike": false,
+                          "digits": true,
+                          "max_lines": null
+                        },
+                        {
+                          "id": "children/6/children/0/children/0/children/1/children/0/children/1",
+                          "a11y": {
+                            "role": "text"
+                          },
+                          "component": "Caption",
+                          "text": {
+                            "text": "45 min",
+                            "runs": [],
+                            "links": []
+                          },
+                          "style": "caption",
+                          "color": "muted-foreground"
+                        }
+                      ],
+                      "gap": 8.0,
+                      "align": "center",
+                      "justify": "start",
+                      "wrap": false,
+                      "sizing": [
+                        {
+                          "basis": "content",
+                          "length": null,
+                          "grow": 0.0,
+                          "shrink": true
+                        },
+                        {
+                          "basis": "content",
+                          "length": null,
+                          "grow": 0.0,
+                          "shrink": true
+                        }
+                      ]
+                    },
+                    {
+                      "id": "children/6/children/0/children/0/children/1/children/1",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Text",
+                      "text": {
+                        "text": "Ferry Building",
+                        "runs": [],
+                        "links": []
+                      },
+                      "inlines": [],
+                      "style": "small",
+                      "color": "foreground",
+                      "weight": "semibold",
+                      "italic": false,
+                      "strike": false,
+                      "digits": false,
+                      "max_lines": null
+                    },
+                    {
+                      "id": "children/6/children/0/children/0/children/1/children/2",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Caption",
+                      "text": {
+                        "text": "Coffee and pastries in the 1898 market hall on the bay.",
+                        "runs": [],
+                        "links": []
+                      },
+                      "style": "caption",
+                      "color": "muted-foreground"
+                    }
+                  ],
+                  "align": "stretch",
+                  "spacing": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ]
+                }
+              ],
+              "gap": 16.0,
+              "align": "start",
+              "justify": "start",
+              "wrap": false,
+              "sizing": [
+                {
+                  "basis": "media",
+                  "length": null,
+                  "grow": 0.0,
+                  "shrink": false
+                },
+                {
+                  "basis": "content",
+                  "length": null,
+                  "grow": 0.0,
+                  "shrink": true
+                }
+              ]
+            }
+          ],
+          "padding": 8.0,
+          "background": null,
+          "inner_surface": false,
+          "radius": {
+            "kind": "lg",
+            "points": 12.0
+          },
+          "selected": true,
+          "ring": false,
+          "disabled": null
+        },
+        {
+          "id": "children/6/children/1",
+          "a11y": {
+            "role": "button",
+            "label": "10:05 AM 45 min Coit Tower Climb Telegraph Hill for Depression-era murals and a 360° view.",
+            "on": false
+          },
+          "component": "Pressable",
+          "children": [
+            {
+              "id": "children/6/children/1/children/0",
+              "component": "Row",
+              "children": [
+                {
+                  "id": "children/6/children/1/children/0/children/0",
+                  "component": "Box",
+                  "children": [
+                    {
+                      "id": "children/6/children/1/children/0/children/0/children/0",
+                      "a11y": {
+                        "role": "image",
+                        "label": "Coit Tower San Francisco"
+                      },
+                      "component": "SearchImage",
+                      "query": "Coit Tower San Francisco",
+                      "aspect_ratio": 1.3333334,
+                      "radius": {
+                        "kind": "md",
+                        "points": 8.0
+                      },
+                      "fit": "cover",
+                      "photos": {
+                        "state": "waiting",
+                        "media": []
+                      }
+                    }
+                  ],
+                  "direction": "col",
+                  "gap": 0.0,
+                  "spacing": [
+                    0.0
+                  ],
+                  "sizing": [],
+                  "padding": 0.0,
+                  "background": null,
+                  "inner_surface": false,
+                  "radius": {
+                    "kind": "md",
+                    "points": 8.0
+                  },
+                  "border": false,
+                  "width": null,
+                  "height": null,
+                  "flex": null,
+                  "align": "stretch",
+                  "justify": "start",
+                  "wrap": false
+                },
+                {
+                  "id": "children/6/children/1/children/0/children/1",
+                  "component": "Col",
+                  "children": [
+                    {
+                      "id": "children/6/children/1/children/0/children/1/children/0",
+                      "component": "Row",
+                      "children": [
+                        {
+                          "id": "children/6/children/1/children/0/children/1/children/0/children/0",
+                          "a11y": {
+                            "role": "text"
+                          },
+                          "component": "Text",
+                          "text": {
+                            "text": "10:05 AM",
+                            "runs": [],
+                            "links": []
+                          },
+                          "inlines": [],
+                          "style": "small",
+                          "color": "foreground",
+                          "weight": "semibold",
+                          "italic": false,
+                          "strike": false,
+                          "digits": true,
+                          "max_lines": null
+                        },
+                        {
+                          "id": "children/6/children/1/children/0/children/1/children/0/children/1",
+                          "a11y": {
+                            "role": "text"
+                          },
+                          "component": "Caption",
+                          "text": {
+                            "text": "45 min",
+                            "runs": [],
+                            "links": []
+                          },
+                          "style": "caption",
+                          "color": "muted-foreground"
+                        }
+                      ],
+                      "gap": 8.0,
+                      "align": "center",
+                      "justify": "start",
+                      "wrap": false,
+                      "sizing": [
+                        {
+                          "basis": "content",
+                          "length": null,
+                          "grow": 0.0,
+                          "shrink": true
+                        },
+                        {
+                          "basis": "content",
+                          "length": null,
+                          "grow": 0.0,
+                          "shrink": true
+                        }
+                      ]
+                    },
+                    {
+                      "id": "children/6/children/1/children/0/children/1/children/1",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Text",
+                      "text": {
+                        "text": "Coit Tower",
+                        "runs": [],
+                        "links": []
+                      },
+                      "inlines": [],
+                      "style": "small",
+                      "color": "foreground",
+                      "weight": "semibold",
+                      "italic": false,
+                      "strike": false,
+                      "digits": false,
+                      "max_lines": null
+                    },
+                    {
+                      "id": "children/6/children/1/children/0/children/1/children/2",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Caption",
+                      "text": {
+                        "text": "Climb Telegraph Hill for Depression-era murals and a 360° view.",
+                        "runs": [],
+                        "links": []
+                      },
+                      "style": "caption",
+                      "color": "muted-foreground"
+                    }
+                  ],
+                  "align": "stretch",
+                  "spacing": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ]
+                }
+              ],
+              "gap": 16.0,
+              "align": "start",
+              "justify": "start",
+              "wrap": false,
+              "sizing": [
+                {
+                  "basis": "media",
+                  "length": null,
+                  "grow": 0.0,
+                  "shrink": false
+                },
+                {
+                  "basis": "content",
+                  "length": null,
+                  "grow": 0.0,
+                  "shrink": true
+                }
+              ]
+            }
+          ],
+          "padding": 8.0,
+          "background": null,
+          "inner_surface": false,
+          "radius": {
+            "kind": "lg",
+            "points": 12.0
+          },
+          "selected": false,
+          "ring": false,
+          "disabled": null
+        },
+        {
+          "id": "children/6/children/2",
+          "a11y": {
+            "role": "button",
+            "label": "11:10 AM 30 min Lombard Street Walk down the crooked block of brick switchbacks and hydrangeas.",
+            "on": false
+          },
+          "component": "Pressable",
+          "children": [
+            {
+              "id": "children/6/children/2/children/0",
+              "component": "Row",
+              "children": [
+                {
+                  "id": "children/6/children/2/children/0/children/0",
+                  "component": "Box",
+                  "children": [
+                    {
+                      "id": "children/6/children/2/children/0/children/0/children/0",
+                      "a11y": {
+                        "role": "image",
+                        "label": "Lombard Street San Francisco"
+                      },
+                      "component": "SearchImage",
+                      "query": "Lombard Street San Francisco",
+                      "aspect_ratio": 1.3333334,
+                      "radius": {
+                        "kind": "md",
+                        "points": 8.0
+                      },
+                      "fit": "cover",
+                      "photos": {
+                        "state": "waiting",
+                        "media": []
+                      }
+                    }
+                  ],
+                  "direction": "col",
+                  "gap": 0.0,
+                  "spacing": [
+                    0.0
+                  ],
+                  "sizing": [],
+                  "padding": 0.0,
+                  "background": null,
+                  "inner_surface": false,
+                  "radius": {
+                    "kind": "md",
+                    "points": 8.0
+                  },
+                  "border": false,
+                  "width": null,
+                  "height": null,
+                  "flex": null,
+                  "align": "stretch",
+                  "justify": "start",
+                  "wrap": false
+                },
+                {
+                  "id": "children/6/children/2/children/0/children/1",
+                  "component": "Col",
+                  "children": [
+                    {
+                      "id": "children/6/children/2/children/0/children/1/children/0",
+                      "component": "Row",
+                      "children": [
+                        {
+                          "id": "children/6/children/2/children/0/children/1/children/0/children/0",
+                          "a11y": {
+                            "role": "text"
+                          },
+                          "component": "Text",
+                          "text": {
+                            "text": "11:10 AM",
+                            "runs": [],
+                            "links": []
+                          },
+                          "inlines": [],
+                          "style": "small",
+                          "color": "foreground",
+                          "weight": "semibold",
+                          "italic": false,
+                          "strike": false,
+                          "digits": true,
+                          "max_lines": null
+                        },
+                        {
+                          "id": "children/6/children/2/children/0/children/1/children/0/children/1",
+                          "a11y": {
+                            "role": "text"
+                          },
+                          "component": "Caption",
+                          "text": {
+                            "text": "30 min",
+                            "runs": [],
+                            "links": []
+                          },
+                          "style": "caption",
+                          "color": "muted-foreground"
+                        }
+                      ],
+                      "gap": 8.0,
+                      "align": "center",
+                      "justify": "start",
+                      "wrap": false,
+                      "sizing": [
+                        {
+                          "basis": "content",
+                          "length": null,
+                          "grow": 0.0,
+                          "shrink": true
+                        },
+                        {
+                          "basis": "content",
+                          "length": null,
+                          "grow": 0.0,
+                          "shrink": true
+                        }
+                      ]
+                    },
+                    {
+                      "id": "children/6/children/2/children/0/children/1/children/1",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Text",
+                      "text": {
+                        "text": "Lombard Street",
+                        "runs": [],
+                        "links": []
+                      },
+                      "inlines": [],
+                      "style": "small",
+                      "color": "foreground",
+                      "weight": "semibold",
+                      "italic": false,
+                      "strike": false,
+                      "digits": false,
+                      "max_lines": null
+                    },
+                    {
+                      "id": "children/6/children/2/children/0/children/1/children/2",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Caption",
+                      "text": {
+                        "text": "Walk down the crooked block of brick switchbacks and hydrangeas.",
+                        "runs": [],
+                        "links": []
+                      },
+                      "style": "caption",
+                      "color": "muted-foreground"
+                    }
+                  ],
+                  "align": "stretch",
+                  "spacing": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ]
+                }
+              ],
+              "gap": 16.0,
+              "align": "start",
+              "justify": "start",
+              "wrap": false,
+              "sizing": [
+                {
+                  "basis": "media",
+                  "length": null,
+                  "grow": 0.0,
+                  "shrink": false
+                },
+                {
+                  "basis": "content",
+                  "length": null,
+                  "grow": 0.0,
+                  "shrink": true
+                }
+              ]
+            }
+          ],
+          "padding": 8.0,
+          "background": null,
+          "inner_surface": false,
+          "radius": {
+            "kind": "lg",
+            "points": 12.0
+          },
+          "selected": false,
+          "ring": false,
+          "disabled": null
+        },
+        {
+          "id": "children/6/children/3",
+          "a11y": {
+            "role": "button",
+            "label": "12:00 PM 60 min Fisherman's Wharf Sea lions at Pier 39 and clam chowder in a sourdough bowl.",
+            "on": false
+          },
+          "component": "Pressable",
+          "children": [
+            {
+              "id": "children/6/children/3/children/0",
+              "component": "Row",
+              "children": [
+                {
+                  "id": "children/6/children/3/children/0/children/0",
+                  "component": "Box",
+                  "children": [
+                    {
+                      "id": "children/6/children/3/children/0/children/0/children/0",
+                      "a11y": {
+                        "role": "image",
+                        "label": "Fisherman's Wharf San Francisco"
+                      },
+                      "component": "SearchImage",
+                      "query": "Fisherman's Wharf San Francisco",
+                      "aspect_ratio": 1.3333334,
+                      "radius": {
+                        "kind": "md",
+                        "points": 8.0
+                      },
+                      "fit": "cover",
+                      "photos": {
+                        "state": "waiting",
+                        "media": []
+                      }
+                    }
+                  ],
+                  "direction": "col",
+                  "gap": 0.0,
+                  "spacing": [
+                    0.0
+                  ],
+                  "sizing": [],
+                  "padding": 0.0,
+                  "background": null,
+                  "inner_surface": false,
+                  "radius": {
+                    "kind": "md",
+                    "points": 8.0
+                  },
+                  "border": false,
+                  "width": null,
+                  "height": null,
+                  "flex": null,
+                  "align": "stretch",
+                  "justify": "start",
+                  "wrap": false
+                },
+                {
+                  "id": "children/6/children/3/children/0/children/1",
+                  "component": "Col",
+                  "children": [
+                    {
+                      "id": "children/6/children/3/children/0/children/1/children/0",
+                      "component": "Row",
+                      "children": [
+                        {
+                          "id": "children/6/children/3/children/0/children/1/children/0/children/0",
+                          "a11y": {
+                            "role": "text"
+                          },
+                          "component": "Text",
+                          "text": {
+                            "text": "12:00 PM",
+                            "runs": [],
+                            "links": []
+                          },
+                          "inlines": [],
+                          "style": "small",
+                          "color": "foreground",
+                          "weight": "semibold",
+                          "italic": false,
+                          "strike": false,
+                          "digits": true,
+                          "max_lines": null
+                        },
+                        {
+                          "id": "children/6/children/3/children/0/children/1/children/0/children/1",
+                          "a11y": {
+                            "role": "text"
+                          },
+                          "component": "Caption",
+                          "text": {
+                            "text": "60 min",
+                            "runs": [],
+                            "links": []
+                          },
+                          "style": "caption",
+                          "color": "muted-foreground"
+                        }
+                      ],
+                      "gap": 8.0,
+                      "align": "center",
+                      "justify": "start",
+                      "wrap": false,
+                      "sizing": [
+                        {
+                          "basis": "content",
+                          "length": null,
+                          "grow": 0.0,
+                          "shrink": true
+                        },
+                        {
+                          "basis": "content",
+                          "length": null,
+                          "grow": 0.0,
+                          "shrink": true
+                        }
+                      ]
+                    },
+                    {
+                      "id": "children/6/children/3/children/0/children/1/children/1",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Text",
+                      "text": {
+                        "text": "Fisherman's Wharf",
+                        "runs": [],
+                        "links": []
+                      },
+                      "inlines": [],
+                      "style": "small",
+                      "color": "foreground",
+                      "weight": "semibold",
+                      "italic": false,
+                      "strike": false,
+                      "digits": false,
+                      "max_lines": null
+                    },
+                    {
+                      "id": "children/6/children/3/children/0/children/1/children/2",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Caption",
+                      "text": {
+                        "text": "Sea lions at Pier 39 and clam chowder in a sourdough bowl.",
+                        "runs": [],
+                        "links": []
+                      },
+                      "style": "caption",
+                      "color": "muted-foreground"
+                    }
+                  ],
+                  "align": "stretch",
+                  "spacing": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ]
+                }
+              ],
+              "gap": 16.0,
+              "align": "start",
+              "justify": "start",
+              "wrap": false,
+              "sizing": [
+                {
+                  "basis": "media",
+                  "length": null,
+                  "grow": 0.0,
+                  "shrink": false
+                },
+                {
+                  "basis": "content",
+                  "length": null,
+                  "grow": 0.0,
+                  "shrink": true
+                }
+              ]
+            }
+          ],
+          "padding": 8.0,
+          "background": null,
+          "inner_surface": false,
+          "radius": {
+            "kind": "lg",
+            "points": 12.0
+          },
+          "selected": false,
+          "ring": false,
+          "disabled": null
+        },
+        {
+          "id": "children/6/children/4",
+          "a11y": {
+            "role": "button",
+            "label": "1:20 PM 40 min Palace of Fine Arts A Roman-style rotunda reflected in a quiet lagoon.",
+            "on": false
+          },
+          "component": "Pressable",
+          "children": [
+            {
+              "id": "children/6/children/4/children/0",
+              "component": "Row",
+              "children": [
+                {
+                  "id": "children/6/children/4/children/0/children/0",
+                  "component": "Box",
+                  "children": [
+                    {
+                      "id": "children/6/children/4/children/0/children/0/children/0",
+                      "a11y": {
+                        "role": "image",
+                        "label": "Palace of Fine Arts San Francisco"
+                      },
+                      "component": "SearchImage",
+                      "query": "Palace of Fine Arts San Francisco",
+                      "aspect_ratio": 1.3333334,
+                      "radius": {
+                        "kind": "md",
+                        "points": 8.0
+                      },
+                      "fit": "cover",
+                      "photos": {
+                        "state": "waiting",
+                        "media": []
+                      }
+                    }
+                  ],
+                  "direction": "col",
+                  "gap": 0.0,
+                  "spacing": [
+                    0.0
+                  ],
+                  "sizing": [],
+                  "padding": 0.0,
+                  "background": null,
+                  "inner_surface": false,
+                  "radius": {
+                    "kind": "md",
+                    "points": 8.0
+                  },
+                  "border": false,
+                  "width": null,
+                  "height": null,
+                  "flex": null,
+                  "align": "stretch",
+                  "justify": "start",
+                  "wrap": false
+                },
+                {
+                  "id": "children/6/children/4/children/0/children/1",
+                  "component": "Col",
+                  "children": [
+                    {
+                      "id": "children/6/children/4/children/0/children/1/children/0",
+                      "component": "Row",
+                      "children": [
+                        {
+                          "id": "children/6/children/4/children/0/children/1/children/0/children/0",
+                          "a11y": {
+                            "role": "text"
+                          },
+                          "component": "Text",
+                          "text": {
+                            "text": "1:20 PM",
+                            "runs": [],
+                            "links": []
+                          },
+                          "inlines": [],
+                          "style": "small",
+                          "color": "foreground",
+                          "weight": "semibold",
+                          "italic": false,
+                          "strike": false,
+                          "digits": true,
+                          "max_lines": null
+                        },
+                        {
+                          "id": "children/6/children/4/children/0/children/1/children/0/children/1",
+                          "a11y": {
+                            "role": "text"
+                          },
+                          "component": "Caption",
+                          "text": {
+                            "text": "40 min",
+                            "runs": [],
+                            "links": []
+                          },
+                          "style": "caption",
+                          "color": "muted-foreground"
+                        }
+                      ],
+                      "gap": 8.0,
+                      "align": "center",
+                      "justify": "start",
+                      "wrap": false,
+                      "sizing": [
+                        {
+                          "basis": "content",
+                          "length": null,
+                          "grow": 0.0,
+                          "shrink": true
+                        },
+                        {
+                          "basis": "content",
+                          "length": null,
+                          "grow": 0.0,
+                          "shrink": true
+                        }
+                      ]
+                    },
+                    {
+                      "id": "children/6/children/4/children/0/children/1/children/1",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Text",
+                      "text": {
+                        "text": "Palace of Fine Arts",
+                        "runs": [],
+                        "links": []
+                      },
+                      "inlines": [],
+                      "style": "small",
+                      "color": "foreground",
+                      "weight": "semibold",
+                      "italic": false,
+                      "strike": false,
+                      "digits": false,
+                      "max_lines": null
+                    },
+                    {
+                      "id": "children/6/children/4/children/0/children/1/children/2",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Caption",
+                      "text": {
+                        "text": "A Roman-style rotunda reflected in a quiet lagoon.",
+                        "runs": [],
+                        "links": []
+                      },
+                      "style": "caption",
+                      "color": "muted-foreground"
+                    }
+                  ],
+                  "align": "stretch",
+                  "spacing": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ]
+                }
+              ],
+              "gap": 16.0,
+              "align": "start",
+              "justify": "start",
+              "wrap": false,
+              "sizing": [
+                {
+                  "basis": "media",
+                  "length": null,
+                  "grow": 0.0,
+                  "shrink": false
+                },
+                {
+                  "basis": "content",
+                  "length": null,
+                  "grow": 0.0,
+                  "shrink": true
+                }
+              ]
+            }
+          ],
+          "padding": 8.0,
+          "background": null,
+          "inner_surface": false,
+          "radius": {
+            "kind": "lg",
+            "points": 12.0
+          },
+          "selected": false,
+          "ring": false,
+          "disabled": null
+        },
+        {
+          "id": "children/6/children/5",
+          "a11y": {
+            "role": "button",
+            "label": "2:20 PM 75 min Golden Gate Bridge Walk out to the first tower for the classic view back at the city.",
+            "on": false
+          },
+          "component": "Pressable",
+          "children": [
+            {
+              "id": "children/6/children/5/children/0",
+              "component": "Row",
+              "children": [
+                {
+                  "id": "children/6/children/5/children/0/children/0",
+                  "component": "Box",
+                  "children": [
+                    {
+                      "id": "children/6/children/5/children/0/children/0/children/0",
+                      "a11y": {
+                        "role": "image",
+                        "label": "Golden Gate Bridge San Francisco"
+                      },
+                      "component": "SearchImage",
+                      "query": "Golden Gate Bridge San Francisco",
+                      "aspect_ratio": 1.3333334,
+                      "radius": {
+                        "kind": "md",
+                        "points": 8.0
+                      },
+                      "fit": "cover",
+                      "photos": {
+                        "state": "waiting",
+                        "media": []
+                      }
+                    }
+                  ],
+                  "direction": "col",
+                  "gap": 0.0,
+                  "spacing": [
+                    0.0
+                  ],
+                  "sizing": [],
+                  "padding": 0.0,
+                  "background": null,
+                  "inner_surface": false,
+                  "radius": {
+                    "kind": "md",
+                    "points": 8.0
+                  },
+                  "border": false,
+                  "width": null,
+                  "height": null,
+                  "flex": null,
+                  "align": "stretch",
+                  "justify": "start",
+                  "wrap": false
+                },
+                {
+                  "id": "children/6/children/5/children/0/children/1",
+                  "component": "Col",
+                  "children": [
+                    {
+                      "id": "children/6/children/5/children/0/children/1/children/0",
+                      "component": "Row",
+                      "children": [
+                        {
+                          "id": "children/6/children/5/children/0/children/1/children/0/children/0",
+                          "a11y": {
+                            "role": "text"
+                          },
+                          "component": "Text",
+                          "text": {
+                            "text": "2:20 PM",
+                            "runs": [],
+                            "links": []
+                          },
+                          "inlines": [],
+                          "style": "small",
+                          "color": "foreground",
+                          "weight": "semibold",
+                          "italic": false,
+                          "strike": false,
+                          "digits": true,
+                          "max_lines": null
+                        },
+                        {
+                          "id": "children/6/children/5/children/0/children/1/children/0/children/1",
+                          "a11y": {
+                            "role": "text"
+                          },
+                          "component": "Caption",
+                          "text": {
+                            "text": "75 min",
+                            "runs": [],
+                            "links": []
+                          },
+                          "style": "caption",
+                          "color": "muted-foreground"
+                        }
+                      ],
+                      "gap": 8.0,
+                      "align": "center",
+                      "justify": "start",
+                      "wrap": false,
+                      "sizing": [
+                        {
+                          "basis": "content",
+                          "length": null,
+                          "grow": 0.0,
+                          "shrink": true
+                        },
+                        {
+                          "basis": "content",
+                          "length": null,
+                          "grow": 0.0,
+                          "shrink": true
+                        }
+                      ]
+                    },
+                    {
+                      "id": "children/6/children/5/children/0/children/1/children/1",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Text",
+                      "text": {
+                        "text": "Golden Gate Bridge",
+                        "runs": [],
+                        "links": []
+                      },
+                      "inlines": [],
+                      "style": "small",
+                      "color": "foreground",
+                      "weight": "semibold",
+                      "italic": false,
+                      "strike": false,
+                      "digits": false,
+                      "max_lines": null
+                    },
+                    {
+                      "id": "children/6/children/5/children/0/children/1/children/2",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Caption",
+                      "text": {
+                        "text": "Walk out to the first tower for the classic view back at the city.",
+                        "runs": [],
+                        "links": []
+                      },
+                      "style": "caption",
+                      "color": "muted-foreground"
+                    }
+                  ],
+                  "align": "stretch",
+                  "spacing": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ]
+                }
+              ],
+              "gap": 16.0,
+              "align": "start",
+              "justify": "start",
+              "wrap": false,
+              "sizing": [
+                {
+                  "basis": "media",
+                  "length": null,
+                  "grow": 0.0,
+                  "shrink": false
+                },
+                {
+                  "basis": "content",
+                  "length": null,
+                  "grow": 0.0,
+                  "shrink": true
+                }
+              ]
+            }
+          ],
+          "padding": 8.0,
+          "background": null,
+          "inner_surface": false,
+          "radius": {
+            "kind": "lg",
+            "points": 12.0
+          },
+          "selected": false,
+          "ring": false,
+          "disabled": null
+        },
+        {
+          "id": "children/6/children/6",
+          "a11y": {
+            "role": "button",
+            "label": "3:55 PM 60 min Golden Gate Park The Japanese Tea Garden and the Conservatory of Flowers.",
+            "on": false
+          },
+          "component": "Pressable",
+          "children": [
+            {
+              "id": "children/6/children/6/children/0",
+              "component": "Row",
+              "children": [
+                {
+                  "id": "children/6/children/6/children/0/children/0",
+                  "component": "Box",
+                  "children": [
+                    {
+                      "id": "children/6/children/6/children/0/children/0/children/0",
+                      "a11y": {
+                        "role": "image",
+                        "label": "Golden Gate Park San Francisco"
+                      },
+                      "component": "SearchImage",
+                      "query": "Golden Gate Park San Francisco",
+                      "aspect_ratio": 1.3333334,
+                      "radius": {
+                        "kind": "md",
+                        "points": 8.0
+                      },
+                      "fit": "cover",
+                      "photos": {
+                        "state": "waiting",
+                        "media": []
+                      }
+                    }
+                  ],
+                  "direction": "col",
+                  "gap": 0.0,
+                  "spacing": [
+                    0.0
+                  ],
+                  "sizing": [],
+                  "padding": 0.0,
+                  "background": null,
+                  "inner_surface": false,
+                  "radius": {
+                    "kind": "md",
+                    "points": 8.0
+                  },
+                  "border": false,
+                  "width": null,
+                  "height": null,
+                  "flex": null,
+                  "align": "stretch",
+                  "justify": "start",
+                  "wrap": false
+                },
+                {
+                  "id": "children/6/children/6/children/0/children/1",
+                  "component": "Col",
+                  "children": [
+                    {
+                      "id": "children/6/children/6/children/0/children/1/children/0",
+                      "component": "Row",
+                      "children": [
+                        {
+                          "id": "children/6/children/6/children/0/children/1/children/0/children/0",
+                          "a11y": {
+                            "role": "text"
+                          },
+                          "component": "Text",
+                          "text": {
+                            "text": "3:55 PM",
+                            "runs": [],
+                            "links": []
+                          },
+                          "inlines": [],
+                          "style": "small",
+                          "color": "foreground",
+                          "weight": "semibold",
+                          "italic": false,
+                          "strike": false,
+                          "digits": true,
+                          "max_lines": null
+                        },
+                        {
+                          "id": "children/6/children/6/children/0/children/1/children/0/children/1",
+                          "a11y": {
+                            "role": "text"
+                          },
+                          "component": "Caption",
+                          "text": {
+                            "text": "60 min",
+                            "runs": [],
+                            "links": []
+                          },
+                          "style": "caption",
+                          "color": "muted-foreground"
+                        }
+                      ],
+                      "gap": 8.0,
+                      "align": "center",
+                      "justify": "start",
+                      "wrap": false,
+                      "sizing": [
+                        {
+                          "basis": "content",
+                          "length": null,
+                          "grow": 0.0,
+                          "shrink": true
+                        },
+                        {
+                          "basis": "content",
+                          "length": null,
+                          "grow": 0.0,
+                          "shrink": true
+                        }
+                      ]
+                    },
+                    {
+                      "id": "children/6/children/6/children/0/children/1/children/1",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Text",
+                      "text": {
+                        "text": "Golden Gate Park",
+                        "runs": [],
+                        "links": []
+                      },
+                      "inlines": [],
+                      "style": "small",
+                      "color": "foreground",
+                      "weight": "semibold",
+                      "italic": false,
+                      "strike": false,
+                      "digits": false,
+                      "max_lines": null
+                    },
+                    {
+                      "id": "children/6/children/6/children/0/children/1/children/2",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Caption",
+                      "text": {
+                        "text": "The Japanese Tea Garden and the Conservatory of Flowers.",
+                        "runs": [],
+                        "links": []
+                      },
+                      "style": "caption",
+                      "color": "muted-foreground"
+                    }
+                  ],
+                  "align": "stretch",
+                  "spacing": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ]
+                }
+              ],
+              "gap": 16.0,
+              "align": "start",
+              "justify": "start",
+              "wrap": false,
+              "sizing": [
+                {
+                  "basis": "media",
+                  "length": null,
+                  "grow": 0.0,
+                  "shrink": false
+                },
+                {
+                  "basis": "content",
+                  "length": null,
+                  "grow": 0.0,
+                  "shrink": true
+                }
+              ]
+            }
+          ],
+          "padding": 8.0,
+          "background": null,
+          "inner_surface": false,
+          "radius": {
+            "kind": "lg",
+            "points": 12.0
+          },
+          "selected": false,
+          "ring": false,
+          "disabled": null
+        },
+        {
+          "id": "children/6/children/7",
+          "a11y": {
+            "role": "button",
+            "label": "5:15 PM 30 min Alamo Square End with the Painted Ladies and the skyline at sunset.",
+            "on": false
+          },
+          "component": "Pressable",
+          "children": [
+            {
+              "id": "children/6/children/7/children/0",
+              "component": "Row",
+              "children": [
+                {
+                  "id": "children/6/children/7/children/0/children/0",
+                  "component": "Box",
+                  "children": [
+                    {
+                      "id": "children/6/children/7/children/0/children/0/children/0",
+                      "a11y": {
+                        "role": "image",
+                        "label": "Alamo Square San Francisco"
+                      },
+                      "component": "SearchImage",
+                      "query": "Alamo Square San Francisco",
+                      "aspect_ratio": 1.3333334,
+                      "radius": {
+                        "kind": "md",
+                        "points": 8.0
+                      },
+                      "fit": "cover",
+                      "photos": {
+                        "state": "waiting",
+                        "media": []
+                      }
+                    }
+                  ],
+                  "direction": "col",
+                  "gap": 0.0,
+                  "spacing": [
+                    0.0
+                  ],
+                  "sizing": [],
+                  "padding": 0.0,
+                  "background": null,
+                  "inner_surface": false,
+                  "radius": {
+                    "kind": "md",
+                    "points": 8.0
+                  },
+                  "border": false,
+                  "width": null,
+                  "height": null,
+                  "flex": null,
+                  "align": "stretch",
+                  "justify": "start",
+                  "wrap": false
+                },
+                {
+                  "id": "children/6/children/7/children/0/children/1",
+                  "component": "Col",
+                  "children": [
+                    {
+                      "id": "children/6/children/7/children/0/children/1/children/0",
+                      "component": "Row",
+                      "children": [
+                        {
+                          "id": "children/6/children/7/children/0/children/1/children/0/children/0",
+                          "a11y": {
+                            "role": "text"
+                          },
+                          "component": "Text",
+                          "text": {
+                            "text": "5:15 PM",
+                            "runs": [],
+                            "links": []
+                          },
+                          "inlines": [],
+                          "style": "small",
+                          "color": "foreground",
+                          "weight": "semibold",
+                          "italic": false,
+                          "strike": false,
+                          "digits": true,
+                          "max_lines": null
+                        },
+                        {
+                          "id": "children/6/children/7/children/0/children/1/children/0/children/1",
+                          "a11y": {
+                            "role": "text"
+                          },
+                          "component": "Caption",
+                          "text": {
+                            "text": "30 min",
+                            "runs": [],
+                            "links": []
+                          },
+                          "style": "caption",
+                          "color": "muted-foreground"
+                        }
+                      ],
+                      "gap": 8.0,
+                      "align": "center",
+                      "justify": "start",
+                      "wrap": false,
+                      "sizing": [
+                        {
+                          "basis": "content",
+                          "length": null,
+                          "grow": 0.0,
+                          "shrink": true
+                        },
+                        {
+                          "basis": "content",
+                          "length": null,
+                          "grow": 0.0,
+                          "shrink": true
+                        }
+                      ]
+                    },
+                    {
+                      "id": "children/6/children/7/children/0/children/1/children/1",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Text",
+                      "text": {
+                        "text": "Alamo Square",
+                        "runs": [],
+                        "links": []
+                      },
+                      "inlines": [],
+                      "style": "small",
+                      "color": "foreground",
+                      "weight": "semibold",
+                      "italic": false,
+                      "strike": false,
+                      "digits": false,
+                      "max_lines": null
+                    },
+                    {
+                      "id": "children/6/children/7/children/0/children/1/children/2",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Caption",
+                      "text": {
+                        "text": "End with the Painted Ladies and the skyline at sunset.",
+                        "runs": [],
+                        "links": []
+                      },
+                      "style": "caption",
+                      "color": "muted-foreground"
+                    }
+                  ],
+                  "align": "stretch",
+                  "spacing": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ]
+                }
+              ],
+              "gap": 16.0,
+              "align": "start",
+              "justify": "start",
+              "wrap": false,
+              "sizing": [
+                {
+                  "basis": "media",
+                  "length": null,
+                  "grow": 0.0,
+                  "shrink": false
+                },
+                {
+                  "basis": "content",
+                  "length": null,
+                  "grow": 0.0,
+                  "shrink": true
+                }
+              ]
+            }
+          ],
+          "padding": 8.0,
+          "background": null,
+          "inner_surface": false,
+          "radius": {
+            "kind": "lg",
+            "points": 12.0
+          },
+          "selected": false,
+          "ring": false,
+          "disabled": null
+        }
+      ],
+      "align": "stretch",
+      "spacing": [
+        0.0,
+        4.0,
+        4.0,
+        4.0,
+        4.0,
+        4.0,
+        4.0,
+        4.0
+      ]
+    },
+    {
+      "id": "children/7",
+      "component": "Col",
+      "children": [
+        {
+          "id": "children/7/children/0",
+          "a11y": {
+            "role": "text"
+          },
+          "component": "Text",
+          "text": {
+            "text": "Times are estimates and include about 20 minutes to get to each next stop. Cable cars run every 10 minutes or so; a Muni day pass covers them and the buses.",
+            "runs": [],
+            "links": []
+          },
+          "inlines": [],
+          "style": "caption",
+          "color": "muted-foreground",
+          "weight": "regular",
+          "italic": false,
+          "strike": false,
+          "digits": false,
+          "max_lines": null
+        },
+        {
+          "id": "children/7/children/1",
+          "component": "Row",
+          "children": [
+            {
+              "id": "children/7/children/1/children/0",
+              "a11y": {
+                "role": "button",
+                "label": "Plan a second day"
+              },
+              "component": "Button",
+              "label": "Plan a second day",
+              "variant": "outline",
+              "tint": null,
+              "size": "small",
+              "icon": {
+                "name": "calendar-plus",
+                "glyph": ""
+              },
+              "block": false,
+              "disabled": null
+            }
+          ],
+          "gap": 8.0,
+          "align": "center",
+          "justify": "start",
+          "wrap": false,
+          "sizing": [
+            {
+              "basis": "content",
+              "length": null,
+              "grow": 0.0,
+              "shrink": false
+            }
+          ]
+        }
+      ],
+      "align": "stretch",
+      "spacing": [
+        0.0,
+        8.0
+      ]
+    }
+  ],
+  "align": "stretch",
+  "spacing": [
+    0.0,
+    24.0,
+    24.0,
+    24.0,
+    24.0,
+    24.0,
+    24.0,
+    24.0
+  ]
+}

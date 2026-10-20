@@ -1,0 +1,2546 @@
+{
+  "id": "",
+  "component": "Col",
+  "children": [
+    {
+      "id": "children/0",
+      "component": "Col",
+      "children": [
+        {
+          "id": "children/0/children/0",
+          "a11y": {
+            "role": "heading",
+            "level": 2
+          },
+          "component": "Title",
+          "text": {
+            "text": "Ten days in the Pacific Northwest",
+            "runs": [],
+            "links": []
+          },
+          "style": "title_xl",
+          "color": "foreground"
+        },
+        {
+          "id": "children/0/children/1",
+          "a11y": {
+            "role": "text"
+          },
+          "component": "Text",
+          "text": {
+            "text": "Rain forest, wild beaches, the Columbia River Gorge and a volcano, in one loop from Seattle. Tap a day to find it on the map.",
+            "runs": [],
+            "links": []
+          },
+          "inlines": [],
+          "style": "body",
+          "color": "muted-foreground",
+          "weight": "regular",
+          "italic": false,
+          "strike": false,
+          "digits": false,
+          "max_lines": null
+        }
+      ],
+      "align": "stretch",
+      "spacing": [
+        0.0,
+        8.0
+      ]
+    },
+    {
+      "id": "children/1",
+      "component": "Grid",
+      "children": [
+        {
+          "id": "children/1/children/0",
+          "a11y": {
+            "role": "image",
+            "label": "Mount Rainier Paradise"
+          },
+          "component": "SearchImage",
+          "query": "Mount Rainier Paradise",
+          "aspect_ratio": 1.4,
+          "radius": {
+            "kind": "lg",
+            "points": 12.0
+          },
+          "fit": "cover",
+          "photos": {
+            "state": "waiting",
+            "media": []
+          }
+        },
+        {
+          "id": "children/1/children/1",
+          "a11y": {
+            "role": "image",
+            "label": "Hoh Rain Forest"
+          },
+          "component": "SearchImage",
+          "query": "Hoh Rain Forest",
+          "aspect_ratio": 1.4,
+          "radius": {
+            "kind": "lg",
+            "points": 12.0
+          },
+          "fit": "cover",
+          "photos": {
+            "state": "waiting",
+            "media": []
+          }
+        },
+        {
+          "id": "children/1/children/2",
+          "a11y": {
+            "role": "image",
+            "label": "Cannon Beach Haystack Rock"
+          },
+          "component": "SearchImage",
+          "query": "Cannon Beach Haystack Rock",
+          "aspect_ratio": 1.4,
+          "radius": {
+            "kind": "lg",
+            "points": 12.0
+          },
+          "fit": "cover",
+          "photos": {
+            "state": "waiting",
+            "media": []
+          }
+        }
+      ],
+      "columns": 3,
+      "min_child_width": 140.0,
+      "gap": 8.0
+    },
+    {
+      "id": "children/2",
+      "component": "Row",
+      "children": [
+        {
+          "id": "children/2/children/0",
+          "a11y": {
+            "role": "text"
+          },
+          "component": "Badge",
+          "text": "Best July to September",
+          "tone": null,
+          "icon": null
+        },
+        {
+          "id": "children/2/children/1",
+          "a11y": {
+            "role": "text"
+          },
+          "component": "Badge",
+          "text": "About 1,150 miles",
+          "tone": null,
+          "icon": null
+        },
+        {
+          "id": "children/2/children/2",
+          "a11y": {
+            "role": "text"
+          },
+          "component": "Badge",
+          "text": "9 nights",
+          "tone": "merged",
+          "icon": null
+        }
+      ],
+      "gap": 8.0,
+      "align": "center",
+      "justify": "start",
+      "wrap": true,
+      "sizing": [
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": false
+        },
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": false
+        },
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": false
+        }
+      ]
+    },
+    {
+      "id": "children/3",
+      "a11y": {
+        "role": "region",
+        "label": "Map"
+      },
+      "component": "Map",
+      "pins": [
+        {
+          "key": "Seattle",
+          "label": "Seattle",
+          "lat": 47.6062,
+          "lng": -122.3321,
+          "category": "City",
+          "icon": null,
+          "number": 1,
+          "selected": true,
+          "visible": true
+        },
+        {
+          "key": "Port Angeles",
+          "label": "Port Angeles",
+          "lat": 48.1181,
+          "lng": -123.4307,
+          "category": "Town",
+          "icon": null,
+          "number": 2,
+          "selected": false,
+          "visible": true
+        },
+        {
+          "key": "Hoh Rain Forest",
+          "label": "Hoh Rain Forest",
+          "lat": 47.8601,
+          "lng": -123.9348,
+          "category": "Nature",
+          "icon": null,
+          "number": 3,
+          "selected": false,
+          "visible": true
+        },
+        {
+          "key": "Ruby Beach",
+          "label": "Ruby Beach",
+          "lat": 47.7107,
+          "lng": -124.4152,
+          "category": "Nature",
+          "icon": null,
+          "number": 4,
+          "selected": false,
+          "visible": true
+        },
+        {
+          "key": "Astoria",
+          "label": "Astoria",
+          "lat": 46.1879,
+          "lng": -123.8313,
+          "category": "Town",
+          "icon": null,
+          "number": 5,
+          "selected": false,
+          "visible": true
+        },
+        {
+          "key": "Cannon Beach",
+          "label": "Cannon Beach",
+          "lat": 45.8918,
+          "lng": -123.9615,
+          "category": "Nature",
+          "icon": null,
+          "number": 6,
+          "selected": false,
+          "visible": true
+        },
+        {
+          "key": "Portland",
+          "label": "Portland",
+          "lat": 45.5152,
+          "lng": -122.6784,
+          "category": "City",
+          "icon": null,
+          "number": 7,
+          "selected": false,
+          "visible": true
+        },
+        {
+          "key": "Multnomah Falls",
+          "label": "Multnomah Falls",
+          "lat": 45.5762,
+          "lng": -122.1158,
+          "category": "Nature",
+          "icon": null,
+          "number": 8,
+          "selected": false,
+          "visible": true
+        },
+        {
+          "key": "Mount Rainier",
+          "label": "Mount Rainier",
+          "lat": 46.786,
+          "lng": -121.7353,
+          "category": "Nature",
+          "icon": null,
+          "number": 9,
+          "selected": false,
+          "visible": true
+        }
+      ],
+      "route": "loading",
+      "line": [
+        [
+          47.6062,
+          -122.3321
+        ],
+        [
+          48.1181,
+          -123.4307
+        ],
+        [
+          47.8601,
+          -123.9348
+        ],
+        [
+          47.7107,
+          -124.4152
+        ],
+        [
+          46.1879,
+          -123.8313
+        ],
+        [
+          45.8918,
+          -123.9615
+        ],
+        [
+          45.5152,
+          -122.6784
+        ],
+        [
+          45.5762,
+          -122.1158
+        ],
+        [
+          46.786,
+          -121.7353
+        ]
+      ],
+      "selected": "Seattle",
+      "height": 360.0,
+      "categories": [
+        "City",
+        "Town",
+        "Nature"
+      ],
+      "filter": null,
+      "note": "Move and zoom the map to explore. Select a place to highlight it. The line joins the places in order. Street routing is loading or unavailable."
+    },
+    {
+      "id": "children/4",
+      "a11y": {
+        "role": "heading",
+        "level": 3
+      },
+      "component": "Title",
+      "text": {
+        "text": "Day by day",
+        "runs": [],
+        "links": []
+      },
+      "style": "title_md",
+      "color": "foreground"
+    },
+    {
+      "id": "children/5",
+      "component": "Col",
+      "children": [
+        {
+          "id": "children/5/children/0",
+          "a11y": {
+            "role": "button",
+            "label": "1 Seattle Arrive · overnight in Seattle Pike Place Market, the waterfront and the Space Needle at dusk.",
+            "on": true
+          },
+          "component": "Pressable",
+          "children": [
+            {
+              "id": "children/5/children/0/children/0",
+              "component": "Row",
+              "children": [
+                {
+                  "id": "children/5/children/0/children/0/children/0",
+                  "component": "Box",
+                  "children": [
+                    {
+                      "id": "children/5/children/0/children/0/children/0/children/0",
+                      "a11y": {
+                        "role": "heading",
+                        "level": 3
+                      },
+                      "component": "Title",
+                      "text": {
+                        "text": "1",
+                        "runs": [],
+                        "links": []
+                      },
+                      "style": "title_md",
+                      "color": "foreground"
+                    }
+                  ],
+                  "direction": "col",
+                  "gap": 0.0,
+                  "spacing": [
+                    0.0
+                  ],
+                  "sizing": [],
+                  "padding": 8.0,
+                  "background": {
+                    "wash": "foreground"
+                  },
+                  "inner_surface": true,
+                  "radius": {
+                    "kind": "md",
+                    "points": 8.0
+                  },
+                  "border": false,
+                  "width": {
+                    "unit": "points",
+                    "value": 44.0
+                  },
+                  "height": {
+                    "unit": "points",
+                    "value": 44.0
+                  },
+                  "flex": null,
+                  "align": "center",
+                  "justify": "center",
+                  "wrap": false
+                },
+                {
+                  "id": "children/5/children/0/children/0/children/1",
+                  "component": "Col",
+                  "children": [
+                    {
+                      "id": "children/5/children/0/children/0/children/1/children/0",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Text",
+                      "text": {
+                        "text": "Seattle",
+                        "runs": [],
+                        "links": []
+                      },
+                      "inlines": [],
+                      "style": "small",
+                      "color": "foreground",
+                      "weight": "semibold",
+                      "italic": false,
+                      "strike": false,
+                      "digits": false,
+                      "max_lines": null
+                    },
+                    {
+                      "id": "children/5/children/0/children/0/children/1/children/1",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Caption",
+                      "text": {
+                        "text": "Arrive · overnight in Seattle",
+                        "runs": [],
+                        "links": []
+                      },
+                      "style": "caption",
+                      "color": "muted-foreground"
+                    },
+                    {
+                      "id": "children/5/children/0/children/0/children/1/children/2",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Text",
+                      "text": {
+                        "text": "Pike Place Market, the waterfront and the Space Needle at dusk.",
+                        "runs": [],
+                        "links": []
+                      },
+                      "inlines": [],
+                      "style": "small",
+                      "color": "muted-foreground",
+                      "weight": "regular",
+                      "italic": false,
+                      "strike": false,
+                      "digits": false,
+                      "max_lines": null
+                    }
+                  ],
+                  "align": "stretch",
+                  "spacing": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ]
+                }
+              ],
+              "gap": 12.0,
+              "align": "start",
+              "justify": "start",
+              "wrap": false,
+              "sizing": [
+                {
+                  "basis": "length",
+                  "length": {
+                    "unit": "points",
+                    "value": 44.0
+                  },
+                  "grow": 0.0,
+                  "shrink": false
+                },
+                {
+                  "basis": "content",
+                  "length": null,
+                  "grow": 0.0,
+                  "shrink": true
+                }
+              ]
+            }
+          ],
+          "padding": 8.0,
+          "background": null,
+          "inner_surface": false,
+          "radius": {
+            "kind": "lg",
+            "points": 12.0
+          },
+          "selected": true,
+          "ring": false,
+          "disabled": null
+        },
+        {
+          "id": "children/5/children/1",
+          "a11y": {
+            "role": "button",
+            "label": "2 Ferry to the Olympic Peninsula 2.5 h with the ferry · overnight in Port Angeles Take the Edmonds ferry, then drive up ",
+            "on": false
+          },
+          "component": "Pressable",
+          "children": [
+            {
+              "id": "children/5/children/1/children/0",
+              "component": "Row",
+              "children": [
+                {
+                  "id": "children/5/children/1/children/0/children/0",
+                  "component": "Box",
+                  "children": [
+                    {
+                      "id": "children/5/children/1/children/0/children/0/children/0",
+                      "a11y": {
+                        "role": "heading",
+                        "level": 3
+                      },
+                      "component": "Title",
+                      "text": {
+                        "text": "2",
+                        "runs": [],
+                        "links": []
+                      },
+                      "style": "title_md",
+                      "color": "foreground"
+                    }
+                  ],
+                  "direction": "col",
+                  "gap": 0.0,
+                  "spacing": [
+                    0.0
+                  ],
+                  "sizing": [],
+                  "padding": 8.0,
+                  "background": {
+                    "surface": "box"
+                  },
+                  "inner_surface": true,
+                  "radius": {
+                    "kind": "md",
+                    "points": 8.0
+                  },
+                  "border": false,
+                  "width": {
+                    "unit": "points",
+                    "value": 44.0
+                  },
+                  "height": {
+                    "unit": "points",
+                    "value": 44.0
+                  },
+                  "flex": null,
+                  "align": "center",
+                  "justify": "center",
+                  "wrap": false
+                },
+                {
+                  "id": "children/5/children/1/children/0/children/1",
+                  "component": "Col",
+                  "children": [
+                    {
+                      "id": "children/5/children/1/children/0/children/1/children/0",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Text",
+                      "text": {
+                        "text": "Ferry to the Olympic Peninsula",
+                        "runs": [],
+                        "links": []
+                      },
+                      "inlines": [],
+                      "style": "small",
+                      "color": "foreground",
+                      "weight": "semibold",
+                      "italic": false,
+                      "strike": false,
+                      "digits": false,
+                      "max_lines": null
+                    },
+                    {
+                      "id": "children/5/children/1/children/0/children/1/children/1",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Caption",
+                      "text": {
+                        "text": "2.5 h with the ferry · overnight in Port Angeles",
+                        "runs": [],
+                        "links": []
+                      },
+                      "style": "caption",
+                      "color": "muted-foreground"
+                    },
+                    {
+                      "id": "children/5/children/1/children/0/children/1/children/2",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Text",
+                      "text": {
+                        "text": "Take the Edmonds ferry, then drive up to Hurricane Ridge for mountain views.",
+                        "runs": [],
+                        "links": []
+                      },
+                      "inlines": [],
+                      "style": "small",
+                      "color": "muted-foreground",
+                      "weight": "regular",
+                      "italic": false,
+                      "strike": false,
+                      "digits": false,
+                      "max_lines": null
+                    }
+                  ],
+                  "align": "stretch",
+                  "spacing": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ]
+                }
+              ],
+              "gap": 12.0,
+              "align": "start",
+              "justify": "start",
+              "wrap": false,
+              "sizing": [
+                {
+                  "basis": "length",
+                  "length": {
+                    "unit": "points",
+                    "value": 44.0
+                  },
+                  "grow": 0.0,
+                  "shrink": false
+                },
+                {
+                  "basis": "content",
+                  "length": null,
+                  "grow": 0.0,
+                  "shrink": true
+                }
+              ]
+            }
+          ],
+          "padding": 8.0,
+          "background": null,
+          "inner_surface": false,
+          "radius": {
+            "kind": "lg",
+            "points": 12.0
+          },
+          "selected": false,
+          "ring": false,
+          "disabled": null
+        },
+        {
+          "id": "children/5/children/2",
+          "a11y": {
+            "role": "button",
+            "label": "3 Hoh Rain Forest 2 h · overnight in Forks Walk the Hall of Mosses under moss-draped maples; stop at Lake Crescent on th",
+            "on": false
+          },
+          "component": "Pressable",
+          "children": [
+            {
+              "id": "children/5/children/2/children/0",
+              "component": "Row",
+              "children": [
+                {
+                  "id": "children/5/children/2/children/0/children/0",
+                  "component": "Box",
+                  "children": [
+                    {
+                      "id": "children/5/children/2/children/0/children/0/children/0",
+                      "a11y": {
+                        "role": "heading",
+                        "level": 3
+                      },
+                      "component": "Title",
+                      "text": {
+                        "text": "3",
+                        "runs": [],
+                        "links": []
+                      },
+                      "style": "title_md",
+                      "color": "foreground"
+                    }
+                  ],
+                  "direction": "col",
+                  "gap": 0.0,
+                  "spacing": [
+                    0.0
+                  ],
+                  "sizing": [],
+                  "padding": 8.0,
+                  "background": {
+                    "surface": "box"
+                  },
+                  "inner_surface": true,
+                  "radius": {
+                    "kind": "md",
+                    "points": 8.0
+                  },
+                  "border": false,
+                  "width": {
+                    "unit": "points",
+                    "value": 44.0
+                  },
+                  "height": {
+                    "unit": "points",
+                    "value": 44.0
+                  },
+                  "flex": null,
+                  "align": "center",
+                  "justify": "center",
+                  "wrap": false
+                },
+                {
+                  "id": "children/5/children/2/children/0/children/1",
+                  "component": "Col",
+                  "children": [
+                    {
+                      "id": "children/5/children/2/children/0/children/1/children/0",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Text",
+                      "text": {
+                        "text": "Hoh Rain Forest",
+                        "runs": [],
+                        "links": []
+                      },
+                      "inlines": [],
+                      "style": "small",
+                      "color": "foreground",
+                      "weight": "semibold",
+                      "italic": false,
+                      "strike": false,
+                      "digits": false,
+                      "max_lines": null
+                    },
+                    {
+                      "id": "children/5/children/2/children/0/children/1/children/1",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Caption",
+                      "text": {
+                        "text": "2 h · overnight in Forks",
+                        "runs": [],
+                        "links": []
+                      },
+                      "style": "caption",
+                      "color": "muted-foreground"
+                    },
+                    {
+                      "id": "children/5/children/2/children/0/children/1/children/2",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Text",
+                      "text": {
+                        "text": "Walk the Hall of Mosses under moss-draped maples; stop at Lake Crescent on the way.",
+                        "runs": [],
+                        "links": []
+                      },
+                      "inlines": [],
+                      "style": "small",
+                      "color": "muted-foreground",
+                      "weight": "regular",
+                      "italic": false,
+                      "strike": false,
+                      "digits": false,
+                      "max_lines": null
+                    }
+                  ],
+                  "align": "stretch",
+                  "spacing": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ]
+                }
+              ],
+              "gap": 12.0,
+              "align": "start",
+              "justify": "start",
+              "wrap": false,
+              "sizing": [
+                {
+                  "basis": "length",
+                  "length": {
+                    "unit": "points",
+                    "value": 44.0
+                  },
+                  "grow": 0.0,
+                  "shrink": false
+                },
+                {
+                  "basis": "content",
+                  "length": null,
+                  "grow": 0.0,
+                  "shrink": true
+                }
+              ]
+            }
+          ],
+          "padding": 8.0,
+          "background": null,
+          "inner_surface": false,
+          "radius": {
+            "kind": "lg",
+            "points": 12.0
+          },
+          "selected": false,
+          "ring": false,
+          "disabled": null
+        },
+        {
+          "id": "children/5/children/3",
+          "a11y": {
+            "role": "button",
+            "label": "4 The wild coast 1 h · overnight in Kalaloch Sea stacks, driftwood and tide pools at Ruby Beach and Rialto Beach.",
+            "on": false
+          },
+          "component": "Pressable",
+          "children": [
+            {
+              "id": "children/5/children/3/children/0",
+              "component": "Row",
+              "children": [
+                {
+                  "id": "children/5/children/3/children/0/children/0",
+                  "component": "Box",
+                  "children": [
+                    {
+                      "id": "children/5/children/3/children/0/children/0/children/0",
+                      "a11y": {
+                        "role": "heading",
+                        "level": 3
+                      },
+                      "component": "Title",
+                      "text": {
+                        "text": "4",
+                        "runs": [],
+                        "links": []
+                      },
+                      "style": "title_md",
+                      "color": "foreground"
+                    }
+                  ],
+                  "direction": "col",
+                  "gap": 0.0,
+                  "spacing": [
+                    0.0
+                  ],
+                  "sizing": [],
+                  "padding": 8.0,
+                  "background": {
+                    "surface": "box"
+                  },
+                  "inner_surface": true,
+                  "radius": {
+                    "kind": "md",
+                    "points": 8.0
+                  },
+                  "border": false,
+                  "width": {
+                    "unit": "points",
+                    "value": 44.0
+                  },
+                  "height": {
+                    "unit": "points",
+                    "value": 44.0
+                  },
+                  "flex": null,
+                  "align": "center",
+                  "justify": "center",
+                  "wrap": false
+                },
+                {
+                  "id": "children/5/children/3/children/0/children/1",
+                  "component": "Col",
+                  "children": [
+                    {
+                      "id": "children/5/children/3/children/0/children/1/children/0",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Text",
+                      "text": {
+                        "text": "The wild coast",
+                        "runs": [],
+                        "links": []
+                      },
+                      "inlines": [],
+                      "style": "small",
+                      "color": "foreground",
+                      "weight": "semibold",
+                      "italic": false,
+                      "strike": false,
+                      "digits": false,
+                      "max_lines": null
+                    },
+                    {
+                      "id": "children/5/children/3/children/0/children/1/children/1",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Caption",
+                      "text": {
+                        "text": "1 h · overnight in Kalaloch",
+                        "runs": [],
+                        "links": []
+                      },
+                      "style": "caption",
+                      "color": "muted-foreground"
+                    },
+                    {
+                      "id": "children/5/children/3/children/0/children/1/children/2",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Text",
+                      "text": {
+                        "text": "Sea stacks, driftwood and tide pools at Ruby Beach and Rialto Beach.",
+                        "runs": [],
+                        "links": []
+                      },
+                      "inlines": [],
+                      "style": "small",
+                      "color": "muted-foreground",
+                      "weight": "regular",
+                      "italic": false,
+                      "strike": false,
+                      "digits": false,
+                      "max_lines": null
+                    }
+                  ],
+                  "align": "stretch",
+                  "spacing": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ]
+                }
+              ],
+              "gap": 12.0,
+              "align": "start",
+              "justify": "start",
+              "wrap": false,
+              "sizing": [
+                {
+                  "basis": "length",
+                  "length": {
+                    "unit": "points",
+                    "value": 44.0
+                  },
+                  "grow": 0.0,
+                  "shrink": false
+                },
+                {
+                  "basis": "content",
+                  "length": null,
+                  "grow": 0.0,
+                  "shrink": true
+                }
+              ]
+            }
+          ],
+          "padding": 8.0,
+          "background": null,
+          "inner_surface": false,
+          "radius": {
+            "kind": "lg",
+            "points": 12.0
+          },
+          "selected": false,
+          "ring": false,
+          "disabled": null
+        },
+        {
+          "id": "children/5/children/4",
+          "a11y": {
+            "role": "button",
+            "label": "5 South to Astoria 3.5 h · overnight in Astoria Cross the Columbia at its mouth and climb the Astoria Column.",
+            "on": false
+          },
+          "component": "Pressable",
+          "children": [
+            {
+              "id": "children/5/children/4/children/0",
+              "component": "Row",
+              "children": [
+                {
+                  "id": "children/5/children/4/children/0/children/0",
+                  "component": "Box",
+                  "children": [
+                    {
+                      "id": "children/5/children/4/children/0/children/0/children/0",
+                      "a11y": {
+                        "role": "heading",
+                        "level": 3
+                      },
+                      "component": "Title",
+                      "text": {
+                        "text": "5",
+                        "runs": [],
+                        "links": []
+                      },
+                      "style": "title_md",
+                      "color": "foreground"
+                    }
+                  ],
+                  "direction": "col",
+                  "gap": 0.0,
+                  "spacing": [
+                    0.0
+                  ],
+                  "sizing": [],
+                  "padding": 8.0,
+                  "background": {
+                    "surface": "box"
+                  },
+                  "inner_surface": true,
+                  "radius": {
+                    "kind": "md",
+                    "points": 8.0
+                  },
+                  "border": false,
+                  "width": {
+                    "unit": "points",
+                    "value": 44.0
+                  },
+                  "height": {
+                    "unit": "points",
+                    "value": 44.0
+                  },
+                  "flex": null,
+                  "align": "center",
+                  "justify": "center",
+                  "wrap": false
+                },
+                {
+                  "id": "children/5/children/4/children/0/children/1",
+                  "component": "Col",
+                  "children": [
+                    {
+                      "id": "children/5/children/4/children/0/children/1/children/0",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Text",
+                      "text": {
+                        "text": "South to Astoria",
+                        "runs": [],
+                        "links": []
+                      },
+                      "inlines": [],
+                      "style": "small",
+                      "color": "foreground",
+                      "weight": "semibold",
+                      "italic": false,
+                      "strike": false,
+                      "digits": false,
+                      "max_lines": null
+                    },
+                    {
+                      "id": "children/5/children/4/children/0/children/1/children/1",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Caption",
+                      "text": {
+                        "text": "3.5 h · overnight in Astoria",
+                        "runs": [],
+                        "links": []
+                      },
+                      "style": "caption",
+                      "color": "muted-foreground"
+                    },
+                    {
+                      "id": "children/5/children/4/children/0/children/1/children/2",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Text",
+                      "text": {
+                        "text": "Cross the Columbia at its mouth and climb the Astoria Column.",
+                        "runs": [],
+                        "links": []
+                      },
+                      "inlines": [],
+                      "style": "small",
+                      "color": "muted-foreground",
+                      "weight": "regular",
+                      "italic": false,
+                      "strike": false,
+                      "digits": false,
+                      "max_lines": null
+                    }
+                  ],
+                  "align": "stretch",
+                  "spacing": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ]
+                }
+              ],
+              "gap": 12.0,
+              "align": "start",
+              "justify": "start",
+              "wrap": false,
+              "sizing": [
+                {
+                  "basis": "length",
+                  "length": {
+                    "unit": "points",
+                    "value": 44.0
+                  },
+                  "grow": 0.0,
+                  "shrink": false
+                },
+                {
+                  "basis": "content",
+                  "length": null,
+                  "grow": 0.0,
+                  "shrink": true
+                }
+              ]
+            }
+          ],
+          "padding": 8.0,
+          "background": null,
+          "inner_surface": false,
+          "radius": {
+            "kind": "lg",
+            "points": 12.0
+          },
+          "selected": false,
+          "ring": false,
+          "disabled": null
+        },
+        {
+          "id": "children/5/children/5",
+          "a11y": {
+            "role": "button",
+            "label": "6 Cannon Beach 40 min · overnight in Cannon Beach Haystack Rock at low tide, then the trail at Ecola State Park.",
+            "on": false
+          },
+          "component": "Pressable",
+          "children": [
+            {
+              "id": "children/5/children/5/children/0",
+              "component": "Row",
+              "children": [
+                {
+                  "id": "children/5/children/5/children/0/children/0",
+                  "component": "Box",
+                  "children": [
+                    {
+                      "id": "children/5/children/5/children/0/children/0/children/0",
+                      "a11y": {
+                        "role": "heading",
+                        "level": 3
+                      },
+                      "component": "Title",
+                      "text": {
+                        "text": "6",
+                        "runs": [],
+                        "links": []
+                      },
+                      "style": "title_md",
+                      "color": "foreground"
+                    }
+                  ],
+                  "direction": "col",
+                  "gap": 0.0,
+                  "spacing": [
+                    0.0
+                  ],
+                  "sizing": [],
+                  "padding": 8.0,
+                  "background": {
+                    "surface": "box"
+                  },
+                  "inner_surface": true,
+                  "radius": {
+                    "kind": "md",
+                    "points": 8.0
+                  },
+                  "border": false,
+                  "width": {
+                    "unit": "points",
+                    "value": 44.0
+                  },
+                  "height": {
+                    "unit": "points",
+                    "value": 44.0
+                  },
+                  "flex": null,
+                  "align": "center",
+                  "justify": "center",
+                  "wrap": false
+                },
+                {
+                  "id": "children/5/children/5/children/0/children/1",
+                  "component": "Col",
+                  "children": [
+                    {
+                      "id": "children/5/children/5/children/0/children/1/children/0",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Text",
+                      "text": {
+                        "text": "Cannon Beach",
+                        "runs": [],
+                        "links": []
+                      },
+                      "inlines": [],
+                      "style": "small",
+                      "color": "foreground",
+                      "weight": "semibold",
+                      "italic": false,
+                      "strike": false,
+                      "digits": false,
+                      "max_lines": null
+                    },
+                    {
+                      "id": "children/5/children/5/children/0/children/1/children/1",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Caption",
+                      "text": {
+                        "text": "40 min · overnight in Cannon Beach",
+                        "runs": [],
+                        "links": []
+                      },
+                      "style": "caption",
+                      "color": "muted-foreground"
+                    },
+                    {
+                      "id": "children/5/children/5/children/0/children/1/children/2",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Text",
+                      "text": {
+                        "text": "Haystack Rock at low tide, then the trail at Ecola State Park.",
+                        "runs": [],
+                        "links": []
+                      },
+                      "inlines": [],
+                      "style": "small",
+                      "color": "muted-foreground",
+                      "weight": "regular",
+                      "italic": false,
+                      "strike": false,
+                      "digits": false,
+                      "max_lines": null
+                    }
+                  ],
+                  "align": "stretch",
+                  "spacing": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ]
+                }
+              ],
+              "gap": 12.0,
+              "align": "start",
+              "justify": "start",
+              "wrap": false,
+              "sizing": [
+                {
+                  "basis": "length",
+                  "length": {
+                    "unit": "points",
+                    "value": 44.0
+                  },
+                  "grow": 0.0,
+                  "shrink": false
+                },
+                {
+                  "basis": "content",
+                  "length": null,
+                  "grow": 0.0,
+                  "shrink": true
+                }
+              ]
+            }
+          ],
+          "padding": 8.0,
+          "background": null,
+          "inner_surface": false,
+          "radius": {
+            "kind": "lg",
+            "points": 12.0
+          },
+          "selected": false,
+          "ring": false,
+          "disabled": null
+        },
+        {
+          "id": "children/5/children/6",
+          "a11y": {
+            "role": "button",
+            "label": "7 Portland 1.5 h · overnight in Portland Food carts, Powell's Books and the Japanese Garden.",
+            "on": false
+          },
+          "component": "Pressable",
+          "children": [
+            {
+              "id": "children/5/children/6/children/0",
+              "component": "Row",
+              "children": [
+                {
+                  "id": "children/5/children/6/children/0/children/0",
+                  "component": "Box",
+                  "children": [
+                    {
+                      "id": "children/5/children/6/children/0/children/0/children/0",
+                      "a11y": {
+                        "role": "heading",
+                        "level": 3
+                      },
+                      "component": "Title",
+                      "text": {
+                        "text": "7",
+                        "runs": [],
+                        "links": []
+                      },
+                      "style": "title_md",
+                      "color": "foreground"
+                    }
+                  ],
+                  "direction": "col",
+                  "gap": 0.0,
+                  "spacing": [
+                    0.0
+                  ],
+                  "sizing": [],
+                  "padding": 8.0,
+                  "background": {
+                    "surface": "box"
+                  },
+                  "inner_surface": true,
+                  "radius": {
+                    "kind": "md",
+                    "points": 8.0
+                  },
+                  "border": false,
+                  "width": {
+                    "unit": "points",
+                    "value": 44.0
+                  },
+                  "height": {
+                    "unit": "points",
+                    "value": 44.0
+                  },
+                  "flex": null,
+                  "align": "center",
+                  "justify": "center",
+                  "wrap": false
+                },
+                {
+                  "id": "children/5/children/6/children/0/children/1",
+                  "component": "Col",
+                  "children": [
+                    {
+                      "id": "children/5/children/6/children/0/children/1/children/0",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Text",
+                      "text": {
+                        "text": "Portland",
+                        "runs": [],
+                        "links": []
+                      },
+                      "inlines": [],
+                      "style": "small",
+                      "color": "foreground",
+                      "weight": "semibold",
+                      "italic": false,
+                      "strike": false,
+                      "digits": false,
+                      "max_lines": null
+                    },
+                    {
+                      "id": "children/5/children/6/children/0/children/1/children/1",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Caption",
+                      "text": {
+                        "text": "1.5 h · overnight in Portland",
+                        "runs": [],
+                        "links": []
+                      },
+                      "style": "caption",
+                      "color": "muted-foreground"
+                    },
+                    {
+                      "id": "children/5/children/6/children/0/children/1/children/2",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Text",
+                      "text": {
+                        "text": "Food carts, Powell's Books and the Japanese Garden.",
+                        "runs": [],
+                        "links": []
+                      },
+                      "inlines": [],
+                      "style": "small",
+                      "color": "muted-foreground",
+                      "weight": "regular",
+                      "italic": false,
+                      "strike": false,
+                      "digits": false,
+                      "max_lines": null
+                    }
+                  ],
+                  "align": "stretch",
+                  "spacing": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ]
+                }
+              ],
+              "gap": 12.0,
+              "align": "start",
+              "justify": "start",
+              "wrap": false,
+              "sizing": [
+                {
+                  "basis": "length",
+                  "length": {
+                    "unit": "points",
+                    "value": 44.0
+                  },
+                  "grow": 0.0,
+                  "shrink": false
+                },
+                {
+                  "basis": "content",
+                  "length": null,
+                  "grow": 0.0,
+                  "shrink": true
+                }
+              ]
+            }
+          ],
+          "padding": 8.0,
+          "background": null,
+          "inner_surface": false,
+          "radius": {
+            "kind": "lg",
+            "points": 12.0
+          },
+          "selected": false,
+          "ring": false,
+          "disabled": null
+        },
+        {
+          "id": "children/5/children/7",
+          "a11y": {
+            "role": "button",
+            "label": "8 Columbia River Gorge 1 h each way · overnight in Portland Multnomah Falls and the waterfall corridor; check whether a ",
+            "on": false
+          },
+          "component": "Pressable",
+          "children": [
+            {
+              "id": "children/5/children/7/children/0",
+              "component": "Row",
+              "children": [
+                {
+                  "id": "children/5/children/7/children/0/children/0",
+                  "component": "Box",
+                  "children": [
+                    {
+                      "id": "children/5/children/7/children/0/children/0/children/0",
+                      "a11y": {
+                        "role": "heading",
+                        "level": 3
+                      },
+                      "component": "Title",
+                      "text": {
+                        "text": "8",
+                        "runs": [],
+                        "links": []
+                      },
+                      "style": "title_md",
+                      "color": "foreground"
+                    }
+                  ],
+                  "direction": "col",
+                  "gap": 0.0,
+                  "spacing": [
+                    0.0
+                  ],
+                  "sizing": [],
+                  "padding": 8.0,
+                  "background": {
+                    "surface": "box"
+                  },
+                  "inner_surface": true,
+                  "radius": {
+                    "kind": "md",
+                    "points": 8.0
+                  },
+                  "border": false,
+                  "width": {
+                    "unit": "points",
+                    "value": 44.0
+                  },
+                  "height": {
+                    "unit": "points",
+                    "value": 44.0
+                  },
+                  "flex": null,
+                  "align": "center",
+                  "justify": "center",
+                  "wrap": false
+                },
+                {
+                  "id": "children/5/children/7/children/0/children/1",
+                  "component": "Col",
+                  "children": [
+                    {
+                      "id": "children/5/children/7/children/0/children/1/children/0",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Text",
+                      "text": {
+                        "text": "Columbia River Gorge",
+                        "runs": [],
+                        "links": []
+                      },
+                      "inlines": [],
+                      "style": "small",
+                      "color": "foreground",
+                      "weight": "semibold",
+                      "italic": false,
+                      "strike": false,
+                      "digits": false,
+                      "max_lines": null
+                    },
+                    {
+                      "id": "children/5/children/7/children/0/children/1/children/1",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Caption",
+                      "text": {
+                        "text": "1 h each way · overnight in Portland",
+                        "runs": [],
+                        "links": []
+                      },
+                      "style": "caption",
+                      "color": "muted-foreground"
+                    },
+                    {
+                      "id": "children/5/children/7/children/0/children/1/children/2",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Text",
+                      "text": {
+                        "text": "Multnomah Falls and the waterfall corridor; check whether a timed permit is needed.",
+                        "runs": [],
+                        "links": []
+                      },
+                      "inlines": [],
+                      "style": "small",
+                      "color": "muted-foreground",
+                      "weight": "regular",
+                      "italic": false,
+                      "strike": false,
+                      "digits": false,
+                      "max_lines": null
+                    }
+                  ],
+                  "align": "stretch",
+                  "spacing": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ]
+                }
+              ],
+              "gap": 12.0,
+              "align": "start",
+              "justify": "start",
+              "wrap": false,
+              "sizing": [
+                {
+                  "basis": "length",
+                  "length": {
+                    "unit": "points",
+                    "value": 44.0
+                  },
+                  "grow": 0.0,
+                  "shrink": false
+                },
+                {
+                  "basis": "content",
+                  "length": null,
+                  "grow": 0.0,
+                  "shrink": true
+                }
+              ]
+            }
+          ],
+          "padding": 8.0,
+          "background": null,
+          "inner_surface": false,
+          "radius": {
+            "kind": "lg",
+            "points": 12.0
+          },
+          "selected": false,
+          "ring": false,
+          "disabled": null
+        },
+        {
+          "id": "children/5/children/8",
+          "a11y": {
+            "role": "button",
+            "label": "9 Mount Rainier 3.5 h · overnight in Ashford Wildflower meadows and glacier views on the Skyline Trail at Paradise.",
+            "on": false
+          },
+          "component": "Pressable",
+          "children": [
+            {
+              "id": "children/5/children/8/children/0",
+              "component": "Row",
+              "children": [
+                {
+                  "id": "children/5/children/8/children/0/children/0",
+                  "component": "Box",
+                  "children": [
+                    {
+                      "id": "children/5/children/8/children/0/children/0/children/0",
+                      "a11y": {
+                        "role": "heading",
+                        "level": 3
+                      },
+                      "component": "Title",
+                      "text": {
+                        "text": "9",
+                        "runs": [],
+                        "links": []
+                      },
+                      "style": "title_md",
+                      "color": "foreground"
+                    }
+                  ],
+                  "direction": "col",
+                  "gap": 0.0,
+                  "spacing": [
+                    0.0
+                  ],
+                  "sizing": [],
+                  "padding": 8.0,
+                  "background": {
+                    "surface": "box"
+                  },
+                  "inner_surface": true,
+                  "radius": {
+                    "kind": "md",
+                    "points": 8.0
+                  },
+                  "border": false,
+                  "width": {
+                    "unit": "points",
+                    "value": 44.0
+                  },
+                  "height": {
+                    "unit": "points",
+                    "value": 44.0
+                  },
+                  "flex": null,
+                  "align": "center",
+                  "justify": "center",
+                  "wrap": false
+                },
+                {
+                  "id": "children/5/children/8/children/0/children/1",
+                  "component": "Col",
+                  "children": [
+                    {
+                      "id": "children/5/children/8/children/0/children/1/children/0",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Text",
+                      "text": {
+                        "text": "Mount Rainier",
+                        "runs": [],
+                        "links": []
+                      },
+                      "inlines": [],
+                      "style": "small",
+                      "color": "foreground",
+                      "weight": "semibold",
+                      "italic": false,
+                      "strike": false,
+                      "digits": false,
+                      "max_lines": null
+                    },
+                    {
+                      "id": "children/5/children/8/children/0/children/1/children/1",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Caption",
+                      "text": {
+                        "text": "3.5 h · overnight in Ashford",
+                        "runs": [],
+                        "links": []
+                      },
+                      "style": "caption",
+                      "color": "muted-foreground"
+                    },
+                    {
+                      "id": "children/5/children/8/children/0/children/1/children/2",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Text",
+                      "text": {
+                        "text": "Wildflower meadows and glacier views on the Skyline Trail at Paradise.",
+                        "runs": [],
+                        "links": []
+                      },
+                      "inlines": [],
+                      "style": "small",
+                      "color": "muted-foreground",
+                      "weight": "regular",
+                      "italic": false,
+                      "strike": false,
+                      "digits": false,
+                      "max_lines": null
+                    }
+                  ],
+                  "align": "stretch",
+                  "spacing": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ]
+                }
+              ],
+              "gap": 12.0,
+              "align": "start",
+              "justify": "start",
+              "wrap": false,
+              "sizing": [
+                {
+                  "basis": "length",
+                  "length": {
+                    "unit": "points",
+                    "value": 44.0
+                  },
+                  "grow": 0.0,
+                  "shrink": false
+                },
+                {
+                  "basis": "content",
+                  "length": null,
+                  "grow": 0.0,
+                  "shrink": true
+                }
+              ]
+            }
+          ],
+          "padding": 8.0,
+          "background": null,
+          "inner_surface": false,
+          "radius": {
+            "kind": "lg",
+            "points": 12.0
+          },
+          "selected": false,
+          "ring": false,
+          "disabled": null
+        },
+        {
+          "id": "children/5/children/9",
+          "a11y": {
+            "role": "button",
+            "label": "10 Back to Seattle 2.5 h A last morning hike, then return the car in Seattle.",
+            "on": true
+          },
+          "component": "Pressable",
+          "children": [
+            {
+              "id": "children/5/children/9/children/0",
+              "component": "Row",
+              "children": [
+                {
+                  "id": "children/5/children/9/children/0/children/0",
+                  "component": "Box",
+                  "children": [
+                    {
+                      "id": "children/5/children/9/children/0/children/0/children/0",
+                      "a11y": {
+                        "role": "heading",
+                        "level": 3
+                      },
+                      "component": "Title",
+                      "text": {
+                        "text": "10",
+                        "runs": [],
+                        "links": []
+                      },
+                      "style": "title_md",
+                      "color": "foreground"
+                    }
+                  ],
+                  "direction": "col",
+                  "gap": 0.0,
+                  "spacing": [
+                    0.0
+                  ],
+                  "sizing": [],
+                  "padding": 8.0,
+                  "background": {
+                    "wash": "foreground"
+                  },
+                  "inner_surface": true,
+                  "radius": {
+                    "kind": "md",
+                    "points": 8.0
+                  },
+                  "border": false,
+                  "width": {
+                    "unit": "points",
+                    "value": 44.0
+                  },
+                  "height": {
+                    "unit": "points",
+                    "value": 44.0
+                  },
+                  "flex": null,
+                  "align": "center",
+                  "justify": "center",
+                  "wrap": false
+                },
+                {
+                  "id": "children/5/children/9/children/0/children/1",
+                  "component": "Col",
+                  "children": [
+                    {
+                      "id": "children/5/children/9/children/0/children/1/children/0",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Text",
+                      "text": {
+                        "text": "Back to Seattle",
+                        "runs": [],
+                        "links": []
+                      },
+                      "inlines": [],
+                      "style": "small",
+                      "color": "foreground",
+                      "weight": "semibold",
+                      "italic": false,
+                      "strike": false,
+                      "digits": false,
+                      "max_lines": null
+                    },
+                    {
+                      "id": "children/5/children/9/children/0/children/1/children/1",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Caption",
+                      "text": {
+                        "text": "2.5 h",
+                        "runs": [],
+                        "links": []
+                      },
+                      "style": "caption",
+                      "color": "muted-foreground"
+                    },
+                    {
+                      "id": "children/5/children/9/children/0/children/1/children/2",
+                      "a11y": {
+                        "role": "text"
+                      },
+                      "component": "Text",
+                      "text": {
+                        "text": "A last morning hike, then return the car in Seattle.",
+                        "runs": [],
+                        "links": []
+                      },
+                      "inlines": [],
+                      "style": "small",
+                      "color": "muted-foreground",
+                      "weight": "regular",
+                      "italic": false,
+                      "strike": false,
+                      "digits": false,
+                      "max_lines": null
+                    }
+                  ],
+                  "align": "stretch",
+                  "spacing": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ]
+                }
+              ],
+              "gap": 12.0,
+              "align": "start",
+              "justify": "start",
+              "wrap": false,
+              "sizing": [
+                {
+                  "basis": "length",
+                  "length": {
+                    "unit": "points",
+                    "value": 44.0
+                  },
+                  "grow": 0.0,
+                  "shrink": false
+                },
+                {
+                  "basis": "content",
+                  "length": null,
+                  "grow": 0.0,
+                  "shrink": true
+                }
+              ]
+            }
+          ],
+          "padding": 8.0,
+          "background": null,
+          "inner_surface": false,
+          "radius": {
+            "kind": "lg",
+            "points": 12.0
+          },
+          "selected": true,
+          "ring": false,
+          "disabled": null
+        }
+      ],
+      "align": "stretch",
+      "spacing": [
+        0.0,
+        4.0,
+        4.0,
+        4.0,
+        4.0,
+        4.0,
+        4.0,
+        4.0,
+        4.0,
+        4.0
+      ]
+    },
+    {
+      "id": "children/6",
+      "a11y": {
+        "role": "group"
+      },
+      "component": "Card",
+      "children": [
+        {
+          "id": "children/6/children/0",
+          "component": "Row",
+          "children": [
+            {
+              "id": "children/6/children/0/children/0",
+              "a11y": {
+                "role": "heading",
+                "level": 3
+              },
+              "component": "Title",
+              "text": {
+                "text": "Estimated budget",
+                "runs": [],
+                "links": []
+              },
+              "style": "card_title",
+              "color": "foreground"
+            },
+            {
+              "id": "children/6/children/0/children/1",
+              "a11y": {
+                "role": "hidden"
+              },
+              "component": "Spacer"
+            },
+            {
+              "id": "children/6/children/0/children/2",
+              "a11y": {
+                "role": "radio_group"
+              },
+              "component": "SegmentedControl",
+              "value": "Mid-range",
+              "options": [
+                {
+                  "value": "Budget",
+                  "label": "Budget",
+                  "description": null
+                },
+                {
+                  "value": "Mid-range",
+                  "label": "Mid-range",
+                  "description": null
+                },
+                {
+                  "value": "Comfort",
+                  "label": "Comfort",
+                  "description": null
+                }
+              ],
+              "selected": 1,
+              "block": false,
+              "disabled": null
+            }
+          ],
+          "gap": 12.0,
+          "align": "center",
+          "justify": "start",
+          "wrap": true,
+          "sizing": [
+            {
+              "basis": "content",
+              "length": null,
+              "grow": 0.0,
+              "shrink": true
+            },
+            {
+              "basis": "zero",
+              "length": null,
+              "grow": 1.0,
+              "shrink": false
+            },
+            {
+              "basis": "content",
+              "length": null,
+              "grow": 0.0,
+              "shrink": true
+            }
+          ]
+        },
+        {
+          "id": "children/6/children/1",
+          "component": "Row",
+          "children": [
+            {
+              "id": "children/6/children/1/children/0",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Text",
+              "text": {
+                "text": "Travelers",
+                "runs": [],
+                "links": []
+              },
+              "inlines": [],
+              "style": "small",
+              "color": "foreground",
+              "weight": "regular",
+              "italic": false,
+              "strike": false,
+              "digits": false,
+              "max_lines": null
+            },
+            {
+              "id": "children/6/children/1/children/1",
+              "a11y": {
+                "role": "hidden"
+              },
+              "component": "Spacer"
+            },
+            {
+              "id": "children/6/children/1/children/2",
+              "a11y": {
+                "role": "button",
+                "label": "Fewer travelers"
+              },
+              "component": "IconButton",
+              "icon": {
+                "name": "minus",
+                "glyph": ""
+              },
+              "label": "Fewer travelers",
+              "tooltip": "Fewer travelers",
+              "variant": "outline",
+              "disabled": null
+            },
+            {
+              "id": "children/6/children/1/children/3",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Text",
+              "text": {
+                "text": "2",
+                "runs": [],
+                "links": []
+              },
+              "inlines": [],
+              "style": "body_card",
+              "color": "foreground",
+              "weight": "semibold",
+              "italic": false,
+              "strike": false,
+              "digits": true,
+              "max_lines": null
+            },
+            {
+              "id": "children/6/children/1/children/4",
+              "a11y": {
+                "role": "button",
+                "label": "More travelers"
+              },
+              "component": "IconButton",
+              "icon": {
+                "name": "plus",
+                "glyph": ""
+              },
+              "label": "More travelers",
+              "tooltip": "More travelers",
+              "variant": "outline",
+              "disabled": null
+            }
+          ],
+          "gap": 8.0,
+          "align": "center",
+          "justify": "start",
+          "wrap": false,
+          "sizing": [
+            {
+              "basis": "content",
+              "length": null,
+              "grow": 0.0,
+              "shrink": true
+            },
+            {
+              "basis": "zero",
+              "length": null,
+              "grow": 1.0,
+              "shrink": false
+            },
+            {
+              "basis": "content",
+              "length": null,
+              "grow": 0.0,
+              "shrink": false
+            },
+            {
+              "basis": "content",
+              "length": null,
+              "grow": 0.0,
+              "shrink": true
+            },
+            {
+              "basis": "content",
+              "length": null,
+              "grow": 0.0,
+              "shrink": false
+            }
+          ]
+        },
+        {
+          "id": "children/6/children/2",
+          "component": "Grid",
+          "children": [
+            {
+              "id": "children/6/children/2/children/0",
+              "a11y": {
+                "role": "group"
+              },
+              "component": "Card",
+              "children": [
+                {
+                  "id": "children/6/children/2/children/0/children/0",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Caption",
+                  "text": {
+                    "text": "Trip total",
+                    "runs": [],
+                    "links": []
+                  },
+                  "style": "caption",
+                  "color": "muted-foreground"
+                },
+                {
+                  "id": "children/6/children/2/children/0/children/1",
+                  "a11y": {
+                    "role": "heading",
+                    "level": 2
+                  },
+                  "component": "Title",
+                  "text": {
+                    "text": "$4,136",
+                    "runs": [],
+                    "links": []
+                  },
+                  "style": "card_heading",
+                  "color": "foreground"
+                }
+              ],
+              "soft": true,
+              "nested": true,
+              "padding": 12.0,
+              "spacing": [
+                0.0,
+                4.0
+              ]
+            },
+            {
+              "id": "children/6/children/2/children/1",
+              "a11y": {
+                "role": "group"
+              },
+              "component": "Card",
+              "children": [
+                {
+                  "id": "children/6/children/2/children/1/children/0",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Caption",
+                  "text": {
+                    "text": "Per person",
+                    "runs": [],
+                    "links": []
+                  },
+                  "style": "caption",
+                  "color": "muted-foreground"
+                },
+                {
+                  "id": "children/6/children/2/children/1/children/1",
+                  "a11y": {
+                    "role": "heading",
+                    "level": 2
+                  },
+                  "component": "Title",
+                  "text": {
+                    "text": "$2,068",
+                    "runs": [],
+                    "links": []
+                  },
+                  "style": "card_heading",
+                  "color": "foreground"
+                }
+              ],
+              "soft": true,
+              "nested": true,
+              "padding": 12.0,
+              "spacing": [
+                0.0,
+                4.0
+              ]
+            }
+          ],
+          "columns": 2,
+          "min_child_width": 150.0,
+          "gap": 12.0
+        },
+        {
+          "id": "children/6/children/3",
+          "a11y": {
+            "role": "image",
+            "label": "bar chart of amount by item"
+          },
+          "component": "Chart",
+          "canvas": {
+            "kind": "Chart",
+            "props": {
+              "type": "bar",
+              "data": [
+                {
+                  "item": "Lodging",
+                  "amount": 1710
+                },
+                {
+                  "item": "Rental car",
+                  "amount": 600
+                },
+                {
+                  "item": "Gas",
+                  "amount": 196
+                },
+                {
+                  "item": "Food",
+                  "amount": 1300
+                },
+                {
+                  "item": "Park pass",
+                  "amount": 80
+                },
+                {
+                  "item": "Ferries and extras",
+                  "amount": 250
+                }
+              ],
+              "x": "item",
+              "series": [
+                "amount"
+              ],
+              "format": "currency",
+              "stacked": false,
+              "height": 200
+            }
+          }
+        },
+        {
+          "id": "children/6/children/4",
+          "a11y": {
+            "role": "text"
+          },
+          "component": "Caption",
+          "text": {
+            "text": "Summer prices for 9 nights, 1 room, one rental car. Treat it as a starting point.",
+            "runs": [],
+            "links": []
+          },
+          "style": "caption",
+          "color": "muted-foreground"
+        }
+      ],
+      "soft": false,
+      "nested": false,
+      "padding": 16.0,
+      "spacing": [
+        0.0,
+        12.0,
+        12.0,
+        12.0,
+        12.0
+      ]
+    },
+    {
+      "id": "children/7",
+      "a11y": {
+        "role": "group"
+      },
+      "component": "Card",
+      "children": [
+        {
+          "id": "children/7/children/0",
+          "a11y": {
+            "role": "heading",
+            "level": 3
+          },
+          "component": "Title",
+          "text": {
+            "text": "Before you go",
+            "runs": [],
+            "links": []
+          },
+          "style": "card_title",
+          "color": "foreground"
+        },
+        {
+          "id": "children/7/children/1",
+          "a11y": {
+            "role": "list"
+          },
+          "component": "List",
+          "items": [
+            {
+              "id": "children/7/children/1/items/0",
+              "a11y": {
+                "role": "list_item"
+              },
+              "component": "ListItem",
+              "title": {
+                "text": "Book lodges near Olympic and Rainier months ahead for summer.",
+                "runs": [],
+                "links": []
+              },
+              "style": "body_card",
+              "medium": false,
+              "description": null,
+              "marker": {
+                "kind": "dot"
+              },
+              "children": []
+            },
+            {
+              "id": "children/7/children/1/items/1",
+              "a11y": {
+                "role": "list_item"
+              },
+              "component": "ListItem",
+              "title": {
+                "text": "Multnomah Falls may need a timed-use permit in peak season.",
+                "runs": [],
+                "links": []
+              },
+              "style": "body_card",
+              "medium": false,
+              "description": null,
+              "marker": {
+                "kind": "dot"
+              },
+              "children": []
+            },
+            {
+              "id": "children/7/children/1/items/2",
+              "a11y": {
+                "role": "list_item"
+              },
+              "component": "ListItem",
+              "title": {
+                "text": "Check wildfire closures and air quality the week you leave.",
+                "runs": [],
+                "links": []
+              },
+              "style": "body_card",
+              "medium": false,
+              "description": null,
+              "marker": {
+                "kind": "dot"
+              },
+              "children": []
+            },
+            {
+              "id": "children/7/children/1/items/3",
+              "a11y": {
+                "role": "list_item"
+              },
+              "component": "ListItem",
+              "title": {
+                "text": "An America the Beautiful pass covers both national parks.",
+                "runs": [],
+                "links": []
+              },
+              "style": "body_card",
+              "medium": false,
+              "description": null,
+              "marker": {
+                "kind": "dot"
+              },
+              "children": []
+            }
+          ],
+          "marker": "bullet",
+          "timeline": false,
+          "wide": false
+        }
+      ],
+      "soft": true,
+      "nested": false,
+      "padding": 16.0,
+      "spacing": [
+        0.0,
+        8.0
+      ]
+    },
+    {
+      "id": "children/8",
+      "component": "Row",
+      "children": [
+        {
+          "id": "children/8/children/0",
+          "a11y": {
+            "role": "button",
+            "label": "Swap a day for the San Juan Islands"
+          },
+          "component": "Button",
+          "label": "Swap a day for the San Juan Islands",
+          "variant": "outline",
+          "tint": null,
+          "size": "small",
+          "icon": {
+            "name": "ship",
+            "glyph": ""
+          },
+          "block": false,
+          "disabled": null
+        }
+      ],
+      "gap": 8.0,
+      "align": "center",
+      "justify": "start",
+      "wrap": false,
+      "sizing": [
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": false
+        }
+      ]
+    }
+  ],
+  "align": "stretch",
+  "spacing": [
+    0.0,
+    24.0,
+    24.0,
+    24.0,
+    24.0,
+    12.0,
+    24.0,
+    24.0,
+    24.0
+  ]
+}

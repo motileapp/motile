@@ -1,0 +1,1397 @@
+{
+  "id": "",
+  "component": "Col",
+  "children": [
+    {
+      "id": "children/0",
+      "component": "Col",
+      "children": [
+        {
+          "id": "children/0/children/0",
+          "a11y": {
+            "role": "heading",
+            "level": 2
+          },
+          "component": "Title",
+          "text": {
+            "text": "Find your living room color",
+            "runs": [],
+            "links": []
+          },
+          "style": "title_xl",
+          "color": "foreground"
+        },
+        {
+          "id": "children/0/children/1",
+          "a11y": {
+            "role": "text"
+          },
+          "component": "Text",
+          "text": {
+            "text": "Answer three questions and the matches update. Tap any color to paint the room.",
+            "runs": [],
+            "links": []
+          },
+          "inlines": [],
+          "style": "body",
+          "color": "muted-foreground",
+          "weight": "regular",
+          "italic": false,
+          "strike": false,
+          "digits": false,
+          "max_lines": null
+        }
+      ],
+      "align": "stretch",
+      "spacing": [
+        0.0,
+        8.0
+      ]
+    },
+    {
+      "id": "children/1",
+      "a11y": {
+        "role": "group"
+      },
+      "component": "Card",
+      "children": [
+        {
+          "id": "children/1/children/0",
+          "a11y": {
+            "role": "image"
+          },
+          "component": "Svg",
+          "canvas": {
+            "kind": "Svg",
+            "props": {
+              "children": [
+                {
+                  "kind": "Rect",
+                  "props": {
+                    "x": 0,
+                    "y": 0,
+                    "width": 320,
+                    "height": 132,
+                    "fill": "#EFE6D3"
+                  }
+                },
+                {
+                  "kind": "Rect",
+                  "props": {
+                    "x": 0,
+                    "y": 132,
+                    "width": 320,
+                    "height": 48,
+                    "fill": "#B08D6A"
+                  }
+                },
+                {
+                  "kind": "Rect",
+                  "props": {
+                    "x": 0,
+                    "y": 128,
+                    "width": 320,
+                    "height": 6,
+                    "fill": "#E9E4DA"
+                  }
+                },
+                {
+                  "kind": "Rect",
+                  "props": {
+                    "x": 28,
+                    "y": 24,
+                    "width": 70,
+                    "height": 76,
+                    "fill": "#DCE9F5",
+                    "stroke": "#FFFFFF",
+                    "strokeWidth": 5
+                  }
+                },
+                {
+                  "kind": "Line",
+                  "props": {
+                    "x1": 63,
+                    "y1": 24,
+                    "x2": 63,
+                    "y2": 100,
+                    "stroke": "#FFFFFF",
+                    "strokeWidth": 4
+                  }
+                },
+                {
+                  "kind": "Line",
+                  "props": {
+                    "x1": 28,
+                    "y1": 62,
+                    "x2": 98,
+                    "y2": 62,
+                    "stroke": "#FFFFFF",
+                    "strokeWidth": 4
+                  }
+                },
+                {
+                  "kind": "Rect",
+                  "props": {
+                    "x": 196,
+                    "y": 30,
+                    "width": 70,
+                    "height": 44,
+                    "fill": "#F4F1EA",
+                    "stroke": "#8A7A66",
+                    "strokeWidth": 3
+                  }
+                },
+                {
+                  "kind": "Circle",
+                  "props": {
+                    "cx": 214,
+                    "cy": 52,
+                    "r": 9,
+                    "fill": "#C9785A",
+                    "opacity": 0.7
+                  }
+                },
+                {
+                  "kind": "Circle",
+                  "props": {
+                    "cx": 238,
+                    "cy": 48,
+                    "r": 12,
+                    "fill": "#9DB0BF",
+                    "opacity": 0.7
+                  }
+                },
+                {
+                  "kind": "Rect",
+                  "props": {
+                    "x": 150,
+                    "y": 98,
+                    "width": 150,
+                    "height": 40,
+                    "fill": "#8D9197",
+                    "opacity": 1,
+                    "rx": 10
+                  }
+                },
+                {
+                  "kind": "Rect",
+                  "props": {
+                    "x": 160,
+                    "y": 84,
+                    "width": 62,
+                    "height": 26,
+                    "fill": "#8D9197",
+                    "opacity": 1,
+                    "rx": 8
+                  }
+                },
+                {
+                  "kind": "Rect",
+                  "props": {
+                    "x": 228,
+                    "y": 84,
+                    "width": 62,
+                    "height": 26,
+                    "fill": "#8D9197",
+                    "opacity": 1,
+                    "rx": 8
+                  }
+                },
+                {
+                  "kind": "Rect",
+                  "props": {
+                    "x": 144,
+                    "y": 104,
+                    "width": 16,
+                    "height": 34,
+                    "fill": "#8D9197",
+                    "opacity": 1,
+                    "rx": 6
+                  }
+                },
+                {
+                  "kind": "Rect",
+                  "props": {
+                    "x": 290,
+                    "y": 104,
+                    "width": 16,
+                    "height": 34,
+                    "fill": "#8D9197",
+                    "opacity": 1,
+                    "rx": 6
+                  }
+                },
+                {
+                  "kind": "Rect",
+                  "props": {
+                    "x": 0,
+                    "y": 0,
+                    "width": 320,
+                    "height": 180,
+                    "fill": "#9EC5FF",
+                    "opacity": 0.14
+                  }
+                }
+              ],
+              "viewBox": "0 0 320 180"
+            }
+          }
+        },
+        {
+          "id": "children/1/children/1",
+          "component": "Row",
+          "children": [
+            {
+              "id": "children/1/children/1/children/0",
+              "component": "Box",
+              "children": [],
+              "direction": "col",
+              "gap": 0.0,
+              "spacing": [],
+              "sizing": [],
+              "padding": 0.0,
+              "background": [
+                239,
+                230,
+                211,
+                255
+              ],
+              "inner_surface": false,
+              "radius": {
+                "kind": "full",
+                "points": 0.0
+              },
+              "border": true,
+              "width": {
+                "unit": "points",
+                "value": 18.0
+              },
+              "height": {
+                "unit": "points",
+                "value": 18.0
+              },
+              "flex": null,
+              "align": "stretch",
+              "justify": "start",
+              "wrap": false
+            },
+            {
+              "id": "children/1/children/1/children/1",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Text",
+              "text": {
+                "text": "Warm ivory",
+                "runs": [],
+                "links": []
+              },
+              "inlines": [],
+              "style": "small",
+              "color": "foreground",
+              "weight": "semibold",
+              "italic": false,
+              "strike": false,
+              "digits": false,
+              "max_lines": null
+            },
+            {
+              "id": "children/1/children/1/children/2",
+              "a11y": {
+                "role": "hidden"
+              },
+              "component": "Spacer"
+            },
+            {
+              "id": "children/1/children/1/children/3",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Caption",
+              "text": {
+                "text": "North light is cool and flat: warm colors stay warm",
+                "runs": [],
+                "links": []
+              },
+              "style": "caption",
+              "color": "muted-foreground"
+            }
+          ],
+          "gap": 8.0,
+          "align": "center",
+          "justify": "start",
+          "wrap": true,
+          "sizing": [
+            {
+              "basis": "length",
+              "length": {
+                "unit": "points",
+                "value": 18.0
+              },
+              "grow": 0.0,
+              "shrink": false
+            },
+            {
+              "basis": "content",
+              "length": null,
+              "grow": 0.0,
+              "shrink": true
+            },
+            {
+              "basis": "zero",
+              "length": null,
+              "grow": 1.0,
+              "shrink": false
+            },
+            {
+              "basis": "content",
+              "length": null,
+              "grow": 0.0,
+              "shrink": true
+            }
+          ]
+        }
+      ],
+      "soft": false,
+      "nested": false,
+      "padding": 12.0,
+      "spacing": [
+        0.0,
+        8.0
+      ]
+    },
+    {
+      "id": "children/2",
+      "a11y": {
+        "role": "heading",
+        "level": 3
+      },
+      "component": "Title",
+      "text": {
+        "text": "Tell me about your room",
+        "runs": [],
+        "links": []
+      },
+      "style": "title_md",
+      "color": "foreground"
+    },
+    {
+      "id": "children/3",
+      "component": "Grid",
+      "children": [
+        {
+          "id": "children/3/children/0",
+          "a11y": {
+            "role": "radio_group",
+            "label": "How should it feel?"
+          },
+          "component": "RadioGroup",
+          "value": "calm",
+          "options": [
+            {
+              "value": "calm",
+              "label": "Calm and restful",
+              "description": null
+            },
+            {
+              "value": "cozy",
+              "label": "Warm and cozy",
+              "description": null
+            },
+            {
+              "value": "bright",
+              "label": "Light and airy",
+              "description": null
+            },
+            {
+              "value": "bold",
+              "label": "A bold statement",
+              "description": null
+            }
+          ],
+          "selected": 0,
+          "label": "How should it feel?",
+          "variant": "list",
+          "error": null,
+          "disabled": null
+        },
+        {
+          "id": "children/3/children/1",
+          "a11y": {
+            "role": "radio_group",
+            "label": "What light does it get?"
+          },
+          "component": "RadioGroup",
+          "value": "north",
+          "options": [
+            {
+              "value": "north",
+              "label": "North facing, cool light",
+              "description": null
+            },
+            {
+              "value": "south",
+              "label": "South facing, warm sun",
+              "description": null
+            },
+            {
+              "value": "east",
+              "label": "East or west, changing",
+              "description": null
+            },
+            {
+              "value": "low",
+              "label": "Little daylight",
+              "description": null
+            }
+          ],
+          "selected": 0,
+          "label": "What light does it get?",
+          "variant": "list",
+          "error": null,
+          "disabled": null
+        },
+        {
+          "id": "children/3/children/2",
+          "a11y": {
+            "role": "radio_group",
+            "label": "Your sofa"
+          },
+          "component": "RadioGroup",
+          "value": "grey",
+          "options": [
+            {
+              "value": "grey",
+              "label": "Grey",
+              "description": null
+            },
+            {
+              "value": "blue",
+              "label": "Blue",
+              "description": null
+            },
+            {
+              "value": "green",
+              "label": "Green",
+              "description": null
+            },
+            {
+              "value": "brown",
+              "label": "Brown leather",
+              "description": null
+            },
+            {
+              "value": "white",
+              "label": "White or cream",
+              "description": null
+            }
+          ],
+          "selected": 0,
+          "label": "Your sofa",
+          "variant": "list",
+          "error": null,
+          "disabled": null
+        }
+      ],
+      "columns": 3,
+      "min_child_width": 200.0,
+      "gap": 16.0
+    },
+    {
+      "id": "children/4",
+      "a11y": {
+        "role": "heading",
+        "level": 3
+      },
+      "component": "Title",
+      "text": {
+        "text": "Your best matches",
+        "runs": [],
+        "links": []
+      },
+      "style": "title_md",
+      "color": "foreground"
+    },
+    {
+      "id": "children/5",
+      "component": "Grid",
+      "children": [
+        {
+          "id": "children/5/children/0",
+          "a11y": {
+            "role": "button",
+            "label": "Warm ivory Soft and bright, never stark Great match",
+            "on": true
+          },
+          "component": "Pressable",
+          "children": [
+            {
+              "id": "children/5/children/0/children/0",
+              "component": "Box",
+              "children": [],
+              "direction": "col",
+              "gap": 0.0,
+              "spacing": [],
+              "sizing": [],
+              "padding": 0.0,
+              "background": [
+                239,
+                230,
+                211,
+                255
+              ],
+              "inner_surface": false,
+              "radius": {
+                "kind": "md",
+                "points": 8.0
+              },
+              "border": true,
+              "width": {
+                "unit": "fraction",
+                "value": 1.0
+              },
+              "height": {
+                "unit": "points",
+                "value": 64.0
+              },
+              "flex": null,
+              "align": "stretch",
+              "justify": "start",
+              "wrap": false
+            },
+            {
+              "id": "children/5/children/0/children/1",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Text",
+              "text": {
+                "text": "Warm ivory",
+                "runs": [],
+                "links": []
+              },
+              "inlines": [],
+              "style": "small",
+              "color": "foreground",
+              "weight": "semibold",
+              "italic": false,
+              "strike": false,
+              "digits": false,
+              "max_lines": null
+            },
+            {
+              "id": "children/5/children/0/children/2",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Caption",
+              "text": {
+                "text": "Soft and bright, never stark",
+                "runs": [],
+                "links": []
+              },
+              "style": "caption",
+              "color": "muted-foreground"
+            },
+            {
+              "id": "children/5/children/0/children/3",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Badge",
+              "text": "Great match",
+              "tone": "success",
+              "icon": null
+            }
+          ],
+          "padding": 8.0,
+          "background": null,
+          "inner_surface": false,
+          "radius": {
+            "kind": "lg",
+            "points": 12.0
+          },
+          "selected": true,
+          "ring": true,
+          "disabled": null
+        },
+        {
+          "id": "children/5/children/1",
+          "a11y": {
+            "role": "button",
+            "label": "Greige A warm neutral that goes with everything Great match",
+            "on": false
+          },
+          "component": "Pressable",
+          "children": [
+            {
+              "id": "children/5/children/1/children/0",
+              "component": "Box",
+              "children": [],
+              "direction": "col",
+              "gap": 0.0,
+              "spacing": [],
+              "sizing": [],
+              "padding": 0.0,
+              "background": [
+                207,
+                197,
+                184,
+                255
+              ],
+              "inner_surface": false,
+              "radius": {
+                "kind": "md",
+                "points": 8.0
+              },
+              "border": true,
+              "width": {
+                "unit": "fraction",
+                "value": 1.0
+              },
+              "height": {
+                "unit": "points",
+                "value": 64.0
+              },
+              "flex": null,
+              "align": "stretch",
+              "justify": "start",
+              "wrap": false
+            },
+            {
+              "id": "children/5/children/1/children/1",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Text",
+              "text": {
+                "text": "Greige",
+                "runs": [],
+                "links": []
+              },
+              "inlines": [],
+              "style": "small",
+              "color": "foreground",
+              "weight": "semibold",
+              "italic": false,
+              "strike": false,
+              "digits": false,
+              "max_lines": null
+            },
+            {
+              "id": "children/5/children/1/children/2",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Caption",
+              "text": {
+                "text": "A warm neutral that goes with everything",
+                "runs": [],
+                "links": []
+              },
+              "style": "caption",
+              "color": "muted-foreground"
+            },
+            {
+              "id": "children/5/children/1/children/3",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Badge",
+              "text": "Great match",
+              "tone": "success",
+              "icon": null
+            }
+          ],
+          "padding": 8.0,
+          "background": null,
+          "inner_surface": false,
+          "radius": {
+            "kind": "lg",
+            "points": 12.0
+          },
+          "selected": false,
+          "ring": false,
+          "disabled": null
+        },
+        {
+          "id": "children/5/children/2",
+          "a11y": {
+            "role": "button",
+            "label": "Sage green Grounded and restful Good match",
+            "on": false
+          },
+          "component": "Pressable",
+          "children": [
+            {
+              "id": "children/5/children/2/children/0",
+              "component": "Box",
+              "children": [],
+              "direction": "col",
+              "gap": 0.0,
+              "spacing": [],
+              "sizing": [],
+              "padding": 0.0,
+              "background": [
+                181,
+                191,
+                161,
+                255
+              ],
+              "inner_surface": false,
+              "radius": {
+                "kind": "md",
+                "points": 8.0
+              },
+              "border": true,
+              "width": {
+                "unit": "fraction",
+                "value": 1.0
+              },
+              "height": {
+                "unit": "points",
+                "value": 64.0
+              },
+              "flex": null,
+              "align": "stretch",
+              "justify": "start",
+              "wrap": false
+            },
+            {
+              "id": "children/5/children/2/children/1",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Text",
+              "text": {
+                "text": "Sage green",
+                "runs": [],
+                "links": []
+              },
+              "inlines": [],
+              "style": "small",
+              "color": "foreground",
+              "weight": "semibold",
+              "italic": false,
+              "strike": false,
+              "digits": false,
+              "max_lines": null
+            },
+            {
+              "id": "children/5/children/2/children/2",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Caption",
+              "text": {
+                "text": "Grounded and restful",
+                "runs": [],
+                "links": []
+              },
+              "style": "caption",
+              "color": "muted-foreground"
+            },
+            {
+              "id": "children/5/children/2/children/3",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Badge",
+              "text": "Good match",
+              "tone": null,
+              "icon": null
+            }
+          ],
+          "padding": 8.0,
+          "background": null,
+          "inner_surface": false,
+          "radius": {
+            "kind": "lg",
+            "points": 12.0
+          },
+          "selected": false,
+          "ring": false,
+          "disabled": null
+        }
+      ],
+      "columns": 3,
+      "min_child_width": 150.0,
+      "gap": 12.0
+    },
+    {
+      "id": "children/6",
+      "a11y": {
+        "role": "heading",
+        "level": 3
+      },
+      "component": "Title",
+      "text": {
+        "text": "All six colors",
+        "runs": [],
+        "links": []
+      },
+      "style": "title_md",
+      "color": "foreground"
+    },
+    {
+      "id": "children/7",
+      "component": "Row",
+      "children": [
+        {
+          "id": "children/7/children/0",
+          "a11y": {
+            "role": "button",
+            "label": "Warm ivory",
+            "on": true
+          },
+          "component": "Pressable",
+          "children": [
+            {
+              "id": "children/7/children/0/children/0",
+              "component": "Col",
+              "children": [
+                {
+                  "id": "children/7/children/0/children/0/children/0",
+                  "component": "Box",
+                  "children": [],
+                  "direction": "col",
+                  "gap": 0.0,
+                  "spacing": [],
+                  "sizing": [],
+                  "padding": 0.0,
+                  "background": [
+                    239,
+                    230,
+                    211,
+                    255
+                  ],
+                  "inner_surface": false,
+                  "radius": {
+                    "kind": "full",
+                    "points": 0.0
+                  },
+                  "border": true,
+                  "width": {
+                    "unit": "points",
+                    "value": 40.0
+                  },
+                  "height": {
+                    "unit": "points",
+                    "value": 40.0
+                  },
+                  "flex": null,
+                  "align": "stretch",
+                  "justify": "start",
+                  "wrap": false
+                },
+                {
+                  "id": "children/7/children/0/children/0/children/1",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Caption",
+                  "text": {
+                    "text": "Warm ivory",
+                    "runs": [],
+                    "links": []
+                  },
+                  "style": "caption",
+                  "color": "muted-foreground"
+                }
+              ],
+              "align": "center",
+              "spacing": [
+                0.0,
+                4.0
+              ]
+            }
+          ],
+          "padding": 8.0,
+          "background": null,
+          "inner_surface": false,
+          "radius": {
+            "kind": "lg",
+            "points": 12.0
+          },
+          "selected": true,
+          "ring": true,
+          "disabled": null
+        },
+        {
+          "id": "children/7/children/1",
+          "a11y": {
+            "role": "button",
+            "label": "Sage green",
+            "on": false
+          },
+          "component": "Pressable",
+          "children": [
+            {
+              "id": "children/7/children/1/children/0",
+              "component": "Col",
+              "children": [
+                {
+                  "id": "children/7/children/1/children/0/children/0",
+                  "component": "Box",
+                  "children": [],
+                  "direction": "col",
+                  "gap": 0.0,
+                  "spacing": [],
+                  "sizing": [],
+                  "padding": 0.0,
+                  "background": [
+                    181,
+                    191,
+                    161,
+                    255
+                  ],
+                  "inner_surface": false,
+                  "radius": {
+                    "kind": "full",
+                    "points": 0.0
+                  },
+                  "border": true,
+                  "width": {
+                    "unit": "points",
+                    "value": 40.0
+                  },
+                  "height": {
+                    "unit": "points",
+                    "value": 40.0
+                  },
+                  "flex": null,
+                  "align": "stretch",
+                  "justify": "start",
+                  "wrap": false
+                },
+                {
+                  "id": "children/7/children/1/children/0/children/1",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Caption",
+                  "text": {
+                    "text": "Sage green",
+                    "runs": [],
+                    "links": []
+                  },
+                  "style": "caption",
+                  "color": "muted-foreground"
+                }
+              ],
+              "align": "center",
+              "spacing": [
+                0.0,
+                4.0
+              ]
+            }
+          ],
+          "padding": 8.0,
+          "background": null,
+          "inner_surface": false,
+          "radius": {
+            "kind": "lg",
+            "points": 12.0
+          },
+          "selected": false,
+          "ring": false,
+          "disabled": null
+        },
+        {
+          "id": "children/7/children/2",
+          "a11y": {
+            "role": "button",
+            "label": "Greige",
+            "on": false
+          },
+          "component": "Pressable",
+          "children": [
+            {
+              "id": "children/7/children/2/children/0",
+              "component": "Col",
+              "children": [
+                {
+                  "id": "children/7/children/2/children/0/children/0",
+                  "component": "Box",
+                  "children": [],
+                  "direction": "col",
+                  "gap": 0.0,
+                  "spacing": [],
+                  "sizing": [],
+                  "padding": 0.0,
+                  "background": [
+                    207,
+                    197,
+                    184,
+                    255
+                  ],
+                  "inner_surface": false,
+                  "radius": {
+                    "kind": "full",
+                    "points": 0.0
+                  },
+                  "border": true,
+                  "width": {
+                    "unit": "points",
+                    "value": 40.0
+                  },
+                  "height": {
+                    "unit": "points",
+                    "value": 40.0
+                  },
+                  "flex": null,
+                  "align": "stretch",
+                  "justify": "start",
+                  "wrap": false
+                },
+                {
+                  "id": "children/7/children/2/children/0/children/1",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Caption",
+                  "text": {
+                    "text": "Greige",
+                    "runs": [],
+                    "links": []
+                  },
+                  "style": "caption",
+                  "color": "muted-foreground"
+                }
+              ],
+              "align": "center",
+              "spacing": [
+                0.0,
+                4.0
+              ]
+            }
+          ],
+          "padding": 8.0,
+          "background": null,
+          "inner_surface": false,
+          "radius": {
+            "kind": "lg",
+            "points": 12.0
+          },
+          "selected": false,
+          "ring": false,
+          "disabled": null
+        },
+        {
+          "id": "children/7/children/3",
+          "a11y": {
+            "role": "button",
+            "label": "Dusty blue",
+            "on": false
+          },
+          "component": "Pressable",
+          "children": [
+            {
+              "id": "children/7/children/3/children/0",
+              "component": "Col",
+              "children": [
+                {
+                  "id": "children/7/children/3/children/0/children/0",
+                  "component": "Box",
+                  "children": [],
+                  "direction": "col",
+                  "gap": 0.0,
+                  "spacing": [],
+                  "sizing": [],
+                  "padding": 0.0,
+                  "background": [
+                    157,
+                    176,
+                    191,
+                    255
+                  ],
+                  "inner_surface": false,
+                  "radius": {
+                    "kind": "full",
+                    "points": 0.0
+                  },
+                  "border": true,
+                  "width": {
+                    "unit": "points",
+                    "value": 40.0
+                  },
+                  "height": {
+                    "unit": "points",
+                    "value": 40.0
+                  },
+                  "flex": null,
+                  "align": "stretch",
+                  "justify": "start",
+                  "wrap": false
+                },
+                {
+                  "id": "children/7/children/3/children/0/children/1",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Caption",
+                  "text": {
+                    "text": "Dusty blue",
+                    "runs": [],
+                    "links": []
+                  },
+                  "style": "caption",
+                  "color": "muted-foreground"
+                }
+              ],
+              "align": "center",
+              "spacing": [
+                0.0,
+                4.0
+              ]
+            }
+          ],
+          "padding": 8.0,
+          "background": null,
+          "inner_surface": false,
+          "radius": {
+            "kind": "lg",
+            "points": 12.0
+          },
+          "selected": false,
+          "ring": false,
+          "disabled": null
+        },
+        {
+          "id": "children/7/children/4",
+          "a11y": {
+            "role": "button",
+            "label": "Terracotta",
+            "on": false
+          },
+          "component": "Pressable",
+          "children": [
+            {
+              "id": "children/7/children/4/children/0",
+              "component": "Col",
+              "children": [
+                {
+                  "id": "children/7/children/4/children/0/children/0",
+                  "component": "Box",
+                  "children": [],
+                  "direction": "col",
+                  "gap": 0.0,
+                  "spacing": [],
+                  "sizing": [],
+                  "padding": 0.0,
+                  "background": [
+                    201,
+                    120,
+                    90,
+                    255
+                  ],
+                  "inner_surface": false,
+                  "radius": {
+                    "kind": "full",
+                    "points": 0.0
+                  },
+                  "border": true,
+                  "width": {
+                    "unit": "points",
+                    "value": 40.0
+                  },
+                  "height": {
+                    "unit": "points",
+                    "value": 40.0
+                  },
+                  "flex": null,
+                  "align": "stretch",
+                  "justify": "start",
+                  "wrap": false
+                },
+                {
+                  "id": "children/7/children/4/children/0/children/1",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Caption",
+                  "text": {
+                    "text": "Terracotta",
+                    "runs": [],
+                    "links": []
+                  },
+                  "style": "caption",
+                  "color": "muted-foreground"
+                }
+              ],
+              "align": "center",
+              "spacing": [
+                0.0,
+                4.0
+              ]
+            }
+          ],
+          "padding": 8.0,
+          "background": null,
+          "inner_surface": false,
+          "radius": {
+            "kind": "lg",
+            "points": 12.0
+          },
+          "selected": false,
+          "ring": false,
+          "disabled": null
+        },
+        {
+          "id": "children/7/children/5",
+          "a11y": {
+            "role": "button",
+            "label": "Deep navy",
+            "on": false
+          },
+          "component": "Pressable",
+          "children": [
+            {
+              "id": "children/7/children/5/children/0",
+              "component": "Col",
+              "children": [
+                {
+                  "id": "children/7/children/5/children/0/children/0",
+                  "component": "Box",
+                  "children": [],
+                  "direction": "col",
+                  "gap": 0.0,
+                  "spacing": [],
+                  "sizing": [],
+                  "padding": 0.0,
+                  "background": [
+                    47,
+                    62,
+                    85,
+                    255
+                  ],
+                  "inner_surface": false,
+                  "radius": {
+                    "kind": "full",
+                    "points": 0.0
+                  },
+                  "border": true,
+                  "width": {
+                    "unit": "points",
+                    "value": 40.0
+                  },
+                  "height": {
+                    "unit": "points",
+                    "value": 40.0
+                  },
+                  "flex": null,
+                  "align": "stretch",
+                  "justify": "start",
+                  "wrap": false
+                },
+                {
+                  "id": "children/7/children/5/children/0/children/1",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Caption",
+                  "text": {
+                    "text": "Deep navy",
+                    "runs": [],
+                    "links": []
+                  },
+                  "style": "caption",
+                  "color": "muted-foreground"
+                }
+              ],
+              "align": "center",
+              "spacing": [
+                0.0,
+                4.0
+              ]
+            }
+          ],
+          "padding": 8.0,
+          "background": null,
+          "inner_surface": false,
+          "radius": {
+            "kind": "lg",
+            "points": 12.0
+          },
+          "selected": false,
+          "ring": false,
+          "disabled": null
+        }
+      ],
+      "gap": 8.0,
+      "align": "center",
+      "justify": "start",
+      "wrap": true,
+      "sizing": [
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": true
+        },
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": true
+        },
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": true
+        },
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": true
+        },
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": true
+        },
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": true
+        }
+      ]
+    },
+    {
+      "id": "children/8",
+      "a11y": {
+        "role": "text"
+      },
+      "component": "Text",
+      "text": {
+        "text": "Paint chips look different on the wall. Try a large sample on two walls and look at it in the morning and the evening before you commit.",
+        "runs": [],
+        "links": []
+      },
+      "inlines": [],
+      "style": "small",
+      "color": "muted-foreground",
+      "weight": "regular",
+      "italic": false,
+      "strike": false,
+      "digits": false,
+      "max_lines": null
+    }
+  ],
+  "align": "stretch",
+  "spacing": [
+    0.0,
+    24.0,
+    24.0,
+    12.0,
+    24.0,
+    12.0,
+    24.0,
+    12.0,
+    24.0
+  ]
+}

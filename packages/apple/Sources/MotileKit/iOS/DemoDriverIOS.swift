@@ -29,6 +29,8 @@ import UIKit
 ///     skill up|down|pick|dismiss        presses a key of the skills' menu
 ///     search [text]                     gives the front field the keyboard, and types in it
 ///     access <supervised|…>             sets how much the agent may do without asking
+///     slide <label> <share>             drags the program's slider with that label to a share of its track
+///     press <label>                     presses the program's button with that label
 enum DemoDriver {
     private static var watcher: Timer?
     private static var done = 0
@@ -56,6 +58,15 @@ enum DemoDriver {
         }
         guard !store.account.signedIn else { return }
         store.devSignIn(email: email)
+    }
+
+    /// The views of a kind in the key window.
+    private static func views<View: UIView>(_ type: View.Type) -> [View] {
+        func find(in view: UIView) -> [View] {
+            ((view as? View).map { [$0] } ?? []) + view.subviews.flatMap(find)
+        }
+        let window = UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.keyWindow }.first
+        return window.map(find) ?? []
     }
 
     private static func run(_ step: String, store: AppStore, drawer: Drawer) {
@@ -205,6 +216,32 @@ enum DemoDriver {
                 return ViewedMedia(name: media.name, video: media.video, source: .media(media.id))
             }
             store.view(shown, at: 0)
+        case "slide":
+            let words = rest.split(separator: " ").map(String.init)
+            guard let share = words.last.flatMap(Double.init),
+                  let slider = views(SliderView.self).last(where: { $0.label == words.dropLast().joined(separator: " ") })
+            else { return }
+            let y = slider.bounds.maxY - 8
+            slider.onDrag?(.began, CGPoint(x: slider.bounds.width / 2, y: y))
+            slider.onDrag?(.moved, CGPoint(x: slider.bounds.width * share, y: y))
+            slider.onDrag?(.ended, CGPoint(x: slider.bounds.width * share, y: y))
+        case "press":
+            guard let button = views(ControlView.self).last(where: { $0.title == rest }) else { return }
+            button.onPress?(CGPoint(x: button.bounds.midX, y: button.bounds.midY))
+        case "scroll":
+            let window = UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.keyWindow }.first
+            guard let scroll = UIView.first(TranscriptScroller.self, in: window)?.subviews.first as? UIScrollView, let by = Double(rest) else { return }
+            let most = max(0, scroll.contentSize.height - scroll.bounds.height)
+            scroll.setContentOffset(CGPoint(x: 0, y: min(most, max(0, scroll.contentOffset.y + by))), animated: false)
+        case "map":
+            let words = rest.split(separator: " ", maxSplits: 1).map(String.init)
+            guard words.count == 2 else { return }
+            let map = views(MapView.self).last
+            switch words[0] {
+            case "pin": map?.press(pin: words[1])
+            case "filter": map?.onFilter(words[1] == "All places" ? nil : words[1])
+            default: views(GlassButtonView.self).last { $0.title == words[1] || $0.help == words[1] }?.press()
+            }
         case "branches":
             guard let project = store.composerProject else { return }
             store.showsThreadSettings = true

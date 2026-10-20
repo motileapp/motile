@@ -1,0 +1,25 @@
+root = Col([head, Title("How the market is structured", "md"), segments, Title("How big is it?", "md"), sizeCard, Title("Who makes money", "md"), players, Title("Try the economics of a drone photo business", "md"), sim, Title("What is changing", "md"), changes, ask])
+$projects = 12
+$price = 450
+$cost = 90
+$fixed = 1800
+head = Col([Title("The drone photography market", "xl"), Text("Aerial photos and video for property, events, inspection and media: a young market where cheap hardware meets licensed, skilled work.", "md", "muted")], 2)
+segs = [{name: "Real estate and architecture", query: "Suburb aerial view", text: "Listing photos and video, the steadiest source of work."}, {name: "Weddings and events", query: "Wedding photography", text: "Seasonal and priced per event, often sold with a ground crew."}, {name: "Inspection and surveying", query: "Solar farm aerial", text: "Roofs, solar farms and building sites; more training, better pay."}, {name: "Media and tourism", query: "Aerial photography coastline", text: "Stock footage, tourism boards and film: visible but competitive."}]
+segments = Grid(@Each(segs, "s", Card([SearchImage(s.query, 1.7, "md"), Text(s.name, "sm", null, "semibold"), Caption(s.text)], null, 3, 2)), 2, 220, 3)
+market = [{year: "2024", size: 860000000}, {year: "2026", size: 1110000000}, {year: "2028", size: 1520000000}, {year: "2030", size: 2260000000}]
+sizeCard = Card([Row([Col([Caption("Drone photography services, worldwide, 2026"), Title(@Format(1110000000, "compact", 1, "USD"), "2xl")], 1), Spacer(), Badge("About 19% a year", "success")], 3, null, null, true), Chart("bar", market, "year", ["size"], "currency", null, false, 200), Caption("Illustrative figures in the range of public market reports; estimates vary widely with the market definition.")], null, 4, 2)
+players = Table(["Who", "How they earn", "Margin"], [["Drone makers", "Hardware, cameras and accessories", Badge("Medium", "warning")], ["Freelance pilots", "Per shoot or per project", Badge("High", "success")], ["Agencies", "Bundles of photo, video and editing", Badge("Medium", "warning")], ["Software platforms", "Mapping and processing subscriptions", Badge("High", "success")]])
+revenue = $projects * $price
+costs = $fixed + $projects * $cost
+profit = revenue - costs
+margin = revenue > 0 ? profit / revenue * 100 : 0
+breakeven = $price > $cost ? @Ceil($fixed / ($price - $cost)) : null
+curve = @Each(@Range(0, 41, 5), "n", {projects: n + "", Revenue: n * $price, Costs: $fixed + n * $cost})
+sim = Card([Grid([Slider($projects, 0, 40, 1, "Projects per month"), Slider($price, 100, 1500, 25, "Price per project", "$"), Slider($cost, 0, 400, 10, "Cost per project", "$"), Slider($fixed, 0, 6000, 100, "Fixed costs per month", "$")], 2, 240, 5), Grid([k1, k2, k3, k4], 4, 130, 3), Chart("line", curve, "projects", ["Revenue", "Costs"], "currency", null, false, 200), Text(breakevenText, "sm"), Caption("Illustrative. Fixed costs cover insurance, gear, software and marketing; project costs cover editing and travel.")], null, 4, 4)
+k1 = Card([Caption("Revenue a month"), Title(@Format(revenue, "currency", 0), "lg")], "soft", 3, 1)
+k2 = Card([Caption("Profit a month"), Title(@Format(profit, "currency", 0), "lg", profit >= 0 ? "success" : "danger")], "soft", 3, 1)
+k3 = Card([Caption("Margin"), Title(@Format(margin, "percent", 1), "lg")], "soft", 3, 1)
+k4 = Card([Caption("Break-even"), Title(breakeven == null ? "Never" : @Plural(breakeven, "project"), "lg")], "soft", 3, 1)
+breakevenText = breakeven == null ? "Each project costs more than it earns, so more work only loses more money." : breakeven > 40 ? "You would need " + @Plural(breakeven, "project") + " a month just to cover fixed costs: raise the price or cut costs." : "Fixed costs are covered from project " + breakeven + " each month; every project after that adds " + @Format($price - $cost, "currency", 0) + " of profit."
+changes = List(["Cheaper drones with better cameras push basic photo prices down.", "Licensing, such as FAA Part 107 in the US, keeps casual competition out of paid work.", "Inspection, mapping and thermal imaging grow faster than photography alone.", "Clients increasingly want edited video and 3D models, not just photos."])
+ask = Row([Button("Compare with drone inspection services", @ToAssistant("Compare the drone photography market with drone inspection services"), "outline", null, "sm", "arrow-right")])

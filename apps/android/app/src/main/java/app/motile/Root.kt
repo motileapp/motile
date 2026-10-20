@@ -50,6 +50,7 @@ import app.motile.theme.Surface
 import app.motile.theme.Theme
 import app.motile.thread.CommitSheet
 import app.motile.thread.ThreadSettingsSheet
+import app.motile.transcript.canvas.ConfettiLayer
 import app.motile.ui.Answer
 import app.motile.ui.Asking
 import app.motile.ui.ButtonVariant
@@ -144,6 +145,7 @@ fun Root(store: AppStore) {
                 store.servers.isEmpty() && store.removedServers.isEmpty() -> ConnectServerView(isFirst = true)
                 else -> MainScreen(drawer)
             }
+            ConfettiLayer()
         }
         store.escapes?.let { escape -> BackHandler { escape() } }
         Sheets(store)
@@ -164,6 +166,9 @@ fun Root(store: AppStore) {
                 text = if (detail.isEmpty()) null else ({ Text(detail, size = 14f, color = palette.mutedForeground) }),
                 containerColor = palette.popover,
             )
+        }
+        Asking(store.uiConfirm, onDismiss = { store.dismissUiConfirm() }) { asked ->
+            Confirmation("Run this command?", asked.command, listOf(Answer("Run") { store.allowUiConfirm(asked) }), dismissal = "Don't Run")
         }
         Asking(store.stopping, onDismiss = { store.stopping = null }) { stopping ->
             Confirmation(

@@ -46,6 +46,7 @@
   --color-process-foreground: var(--process-foreground);
   --color-merged: var(--merged);
   --color-merged-foreground: var(--merged-foreground);
+  --color-pink: var(--pink);
   --color-skill: var(--skill);
   --color-border: var(--border);
   --color-border-card: var(--border-card);
@@ -63,6 +64,17 @@
   --color-chart-3: var(--chart-3);
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
+  --color-chart-6: var(--chart-6);
+  --color-map-land: var(--map-land);
+  --color-map-green: var(--map-green);
+  --color-map-park: var(--map-park);
+  --color-map-campus: var(--map-campus);
+  --color-map-water: var(--map-water);
+  --color-map-waterway: var(--map-waterway);
+  --color-map-building: var(--map-building);
+  --color-map-street: var(--map-street);
+  --color-map-road: var(--map-road);
+  --color-map-ferry: var(--map-ferry);
   --color-claude: var(--claude);
   --color-openai: var(--openai);
   --color-google-blue: var(--google-blue);

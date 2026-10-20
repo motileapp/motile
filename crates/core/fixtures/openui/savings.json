@@ -1,0 +1,604 @@
+{
+  "id": "",
+  "a11y": {
+    "role": "group"
+  },
+  "component": "Card",
+  "children": [
+    {
+      "id": "children/0",
+      "component": "Row",
+      "children": [
+        {
+          "id": "children/0/children/0",
+          "component": "Col",
+          "children": [
+            {
+              "id": "children/0/children/0/children/0",
+              "a11y": {
+                "role": "heading",
+                "level": 2
+              },
+              "component": "Title",
+              "text": {
+                "text": "Retirement savings",
+                "runs": [],
+                "links": []
+              },
+              "style": "title_lg",
+              "color": "foreground"
+            },
+            {
+              "id": "children/0/children/0/children/1",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Text",
+              "text": {
+                "text": "Turn today's contributions into a picture of tomorrow.",
+                "runs": [],
+                "links": []
+              },
+              "inlines": [],
+              "style": "small",
+              "color": "muted-foreground",
+              "weight": "regular",
+              "italic": false,
+              "strike": false,
+              "digits": false,
+              "max_lines": null
+            }
+          ],
+          "align": "stretch",
+          "spacing": [
+            0.0,
+            4.0
+          ]
+        },
+        {
+          "id": "children/0/children/1",
+          "a11y": {
+            "role": "hidden"
+          },
+          "component": "Spacer"
+        },
+        {
+          "id": "children/0/children/2",
+          "a11y": {
+            "role": "button",
+            "label": "Reset"
+          },
+          "component": "Button",
+          "label": "Reset",
+          "variant": "ghost",
+          "tint": null,
+          "size": "small",
+          "icon": {
+            "name": "rotate-ccw",
+            "glyph": ""
+          },
+          "block": false,
+          "disabled": null
+        }
+      ],
+      "gap": 12.0,
+      "align": "start",
+      "justify": "start",
+      "wrap": false,
+      "sizing": [
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": true
+        },
+        {
+          "basis": "zero",
+          "length": null,
+          "grow": 1.0,
+          "shrink": false
+        },
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": false
+        }
+      ]
+    },
+    {
+      "id": "children/1",
+      "component": "Grid",
+      "children": [
+        {
+          "id": "children/1/children/0",
+          "a11y": {
+            "role": "group"
+          },
+          "component": "Card",
+          "children": [
+            {
+              "id": "children/1/children/0/children/0",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Caption",
+              "text": {
+                "text": "Balance in 30 years",
+                "runs": [],
+                "links": []
+              },
+              "style": "caption",
+              "color": "muted-foreground"
+            },
+            {
+              "id": "children/1/children/0/children/1",
+              "a11y": {
+                "role": "heading",
+                "level": 2
+              },
+              "component": "Title",
+              "text": {
+                "text": "$460,807",
+                "runs": [],
+                "links": []
+              },
+              "style": "card_heading",
+              "color": "foreground"
+            }
+          ],
+          "soft": true,
+          "nested": true,
+          "padding": 12.0,
+          "spacing": [
+            0.0,
+            4.0
+          ]
+        },
+        {
+          "id": "children/1/children/1",
+          "a11y": {
+            "role": "group"
+          },
+          "component": "Card",
+          "children": [
+            {
+              "id": "children/1/children/1/children/0",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Caption",
+              "text": {
+                "text": "You put in",
+                "runs": [],
+                "links": []
+              },
+              "style": "caption",
+              "color": "muted-foreground"
+            },
+            {
+              "id": "children/1/children/1/children/1",
+              "a11y": {
+                "role": "heading",
+                "level": 2
+              },
+              "component": "Title",
+              "text": {
+                "text": "$190,000",
+                "runs": [],
+                "links": []
+              },
+              "style": "card_heading",
+              "color": "foreground"
+            }
+          ],
+          "soft": true,
+          "nested": true,
+          "padding": 12.0,
+          "spacing": [
+            0.0,
+            4.0
+          ]
+        },
+        {
+          "id": "children/1/children/2",
+          "a11y": {
+            "role": "group"
+          },
+          "component": "Card",
+          "children": [
+            {
+              "id": "children/1/children/2/children/0",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Caption",
+              "text": {
+                "text": "Growth",
+                "runs": [],
+                "links": []
+              },
+              "style": "caption",
+              "color": "muted-foreground"
+            },
+            {
+              "id": "children/1/children/2/children/1",
+              "a11y": {
+                "role": "heading",
+                "level": 2
+              },
+              "component": "Title",
+              "text": {
+                "text": "$270,807",
+                "runs": [],
+                "links": []
+              },
+              "style": "card_heading",
+              "color": "success"
+            }
+          ],
+          "soft": true,
+          "nested": true,
+          "padding": 12.0,
+          "spacing": [
+            0.0,
+            4.0
+          ]
+        }
+      ],
+      "columns": 3,
+      "min_child_width": 150.0,
+      "gap": 12.0
+    },
+    {
+      "id": "children/2",
+      "a11y": {
+        "role": "image",
+        "label": "area chart of Contributions, Balance by year"
+      },
+      "component": "Chart",
+      "canvas": {
+        "kind": "Chart",
+        "props": {
+          "type": "area",
+          "data": [
+            {
+              "year": "Year 0",
+              "Contributions": 10000,
+              "Balance": 10000
+            },
+            {
+              "year": "Year 1",
+              "Contributions": 16000,
+              "Balance": 16651.04672462529
+            },
+            {
+              "year": "Year 2",
+              "Contributions": 22000,
+              "Balance": 23642.37362258249
+            },
+            {
+              "year": "Year 3",
+              "Contributions": 28000,
+              "Balance": 30991.390073350813
+            },
+            {
+              "year": "Year 4",
+              "Contributions": 34000,
+              "Balance": 38716.396153304486
+            },
+            {
+              "year": "Year 5",
+              "Contributions": 40000,
+              "Balance": 46836.628205456545
+            },
+            {
+              "year": "Year 6",
+              "Contributions": 46000,
+              "Balance": 55372.30674063676
+            },
+            {
+              "year": "Year 7",
+              "Contributions": 52000,
+              "Balance": 64344.686789385174
+            },
+            {
+              "year": "Year 8",
+              "Contributions": 58000,
+              "Balance": 73776.11082994375
+            },
+            {
+              "year": "Year 9",
+              "Contributions": 64000,
+              "Balance": 83690.0644241447
+            },
+            {
+              "year": "Year 10",
+              "Contributions": 70000,
+              "Balance": 94111.23469973641
+            },
+            {
+              "year": "Year 11",
+              "Contributions": 76000,
+              "Balance": 105065.57182477611
+            },
+            {
+              "year": "Year 12",
+              "Contributions": 82000,
+              "Balance": 116580.35362716914
+            },
+            {
+              "year": "Year 13",
+              "Contributions": 88000,
+              "Balance": 128684.25352026665
+            },
+            {
+              "year": "Year 14",
+              "Contributions": 94000,
+              "Balance": 141407.41190366552
+            },
+            {
+              "year": "Year 15",
+              "Contributions": 100000,
+              "Balance": 154781.51121700899
+            },
+            {
+              "year": "Year 16",
+              "Contributions": 106000,
+              "Balance": 168839.85483368183
+            },
+            {
+              "year": "Year 17",
+              "Contributions": 112000,
+              "Balance": 183617.44999085728
+            },
+            {
+              "year": "Year 18",
+              "Contributions": 118000,
+              "Balance": 199151.09496240172
+            },
+            {
+              "year": "Year 19",
+              "Contributions": 124000,
+              "Balance": 215479.4706917114
+            },
+            {
+              "year": "Year 20",
+              "Contributions": 130000,
+              "Balance": 232643.23711265853
+            },
+            {
+              "year": "Year 21",
+              "Contributions": 136000,
+              "Balance": 250685.13439850014
+            },
+            {
+              "year": "Year 22",
+              "Contributions": 142000,
+              "Balance": 269650.0893908727
+            },
+            {
+              "year": "Year 23",
+              "Contributions": 148000,
+              "Balance": 289585.3274738966
+            },
+            {
+              "year": "Year 24",
+              "Contributions": 154000,
+              "Balance": 310540.4901719723
+            },
+            {
+              "year": "Year 25",
+              "Contributions": 160000,
+              "Balance": 332567.758764102
+            },
+            {
+              "year": "Year 26",
+              "Contributions": 166000,
+              "Balance": 355721.9842225559
+            },
+            {
+              "year": "Year 27",
+              "Contributions": 172000,
+              "Balance": 380060.82379944564
+            },
+            {
+              "year": "Year 28",
+              "Contributions": 178000,
+              "Balance": 405644.88460132806
+            },
+            {
+              "year": "Year 29",
+              "Contributions": 184000,
+              "Balance": 432537.87450935657
+            },
+            {
+              "year": "Year 30",
+              "Contributions": 190000,
+              "Balance": 460806.76082079415
+            }
+          ],
+          "x": "year",
+          "series": [
+            "Contributions",
+            "Balance"
+          ],
+          "format": "currency"
+        }
+      }
+    },
+    {
+      "id": "children/3",
+      "component": "Row",
+      "children": [
+        {
+          "id": "children/3/children/0",
+          "a11y": {
+            "role": "hidden"
+          },
+          "component": "Icon",
+          "icon": {
+            "name": "hourglass",
+            "glyph": ""
+          },
+          "size": 14.0,
+          "color": "muted-foreground"
+        },
+        {
+          "id": "children/3/children/1",
+          "a11y": {
+            "role": "text"
+          },
+          "component": "Text",
+          "text": {
+            "text": "At this pace the balance stays under $1 million.",
+            "runs": [],
+            "links": []
+          },
+          "inlines": [],
+          "style": "small",
+          "color": "foreground",
+          "weight": "regular",
+          "italic": false,
+          "strike": false,
+          "digits": false,
+          "max_lines": null
+        }
+      ],
+      "gap": 8.0,
+      "align": "center",
+      "justify": "start",
+      "wrap": false,
+      "sizing": [
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": false
+        },
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": true
+        }
+      ]
+    },
+    {
+      "id": "children/4",
+      "component": "Grid",
+      "children": [
+        {
+          "id": "children/4/children/0",
+          "a11y": {
+            "role": "adjustable",
+            "label": "Starting balance",
+            "value": "$10,000"
+          },
+          "component": "Slider",
+          "value": 10000.0,
+          "min": 0.0,
+          "max": 200000.0,
+          "step": 1000.0,
+          "at": 0.05,
+          "label": "Starting balance",
+          "readout": "$10,000",
+          "head": true,
+          "marks": [],
+          "disabled": null
+        },
+        {
+          "id": "children/4/children/1",
+          "a11y": {
+            "role": "adjustable",
+            "label": "Monthly contribution",
+            "value": "$500"
+          },
+          "component": "Slider",
+          "value": 500.0,
+          "min": 0.0,
+          "max": 5000.0,
+          "step": 50.0,
+          "at": 0.1,
+          "label": "Monthly contribution",
+          "readout": "$500",
+          "head": true,
+          "marks": [],
+          "disabled": null
+        },
+        {
+          "id": "children/4/children/2",
+          "a11y": {
+            "role": "adjustable",
+            "label": "Years",
+            "value": "30 yrs"
+          },
+          "component": "Slider",
+          "value": 30.0,
+          "min": 1.0,
+          "max": 50.0,
+          "step": 1.0,
+          "at": 0.5918367346938775,
+          "label": "Years",
+          "readout": "30 yrs",
+          "head": true,
+          "marks": [],
+          "disabled": null
+        },
+        {
+          "id": "children/4/children/3",
+          "a11y": {
+            "role": "adjustable",
+            "label": "Annual return",
+            "value": "5%"
+          },
+          "component": "Slider",
+          "value": 5.0,
+          "min": 0.0,
+          "max": 12.0,
+          "step": 0.5,
+          "at": 0.4166666666666667,
+          "label": "Annual return",
+          "readout": "5%",
+          "head": true,
+          "marks": [],
+          "disabled": null
+        }
+      ],
+      "columns": 2,
+      "min_child_width": 240.0,
+      "gap": 24.0
+    },
+    {
+      "id": "children/5",
+      "a11y": {
+        "role": "text"
+      },
+      "component": "Text",
+      "text": {
+        "text": "Assumes monthly compounding and contributions at the end of each month. Returns are not guaranteed; this is an illustration, not advice.",
+        "runs": [],
+        "links": []
+      },
+      "inlines": [],
+      "style": "caption",
+      "color": "muted-foreground",
+      "weight": "regular",
+      "italic": false,
+      "strike": false,
+      "digits": false,
+      "max_lines": null
+    }
+  ],
+  "soft": false,
+  "nested": false,
+  "padding": 20.0,
+  "spacing": [
+    0.0,
+    16.0,
+    16.0,
+    16.0,
+    16.0,
+    16.0
+  ]
+}

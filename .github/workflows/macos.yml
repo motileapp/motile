@@ -2,7 +2,8 @@ name: macOS
 
 # Builds the Mac app and the server for Macs, walks the client through a demo against a real auth server
 # and a real server on the runner, and keeps the client, the server and the screenshots as artifacts.
-# Builds the GPUI app for Macs beside it, which the release carries but motile.app doesn't offer.
+# Builds the GPUI app for Macs beside it, which the release carries but motile.app doesn't offer, and
+# lays the OpenUI corpus out on the Mac and on iOS, against the frames the other clients are held to.
 # The release runs it on every push to main that touches them.
 on:
   workflow_dispatch:
@@ -54,6 +55,17 @@ jobs:
       - name: Build the core, the server and the auth server
         run: cargo build --release -p motile-core -p motile-server -p motile-auth
 
+      # Paints the core's canvas scenes and compares them with its reference pictures.
+      - name: Test the Apple kit
+        run: swift test --package-path packages/apple
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: canvas-apple
+          path: build/canvas/apple
+          if-no-files-found: ignore
+
       - name: Import the signing certificate
         if: inputs.sign
         env:
@@ -104,6 +116,56 @@ jobs:
         with:
           name: screenshots
           path: apps/macos/screenshots
+
+  # The corpus's frames on the Mac and in an iPhone simulator against crates/core/fixtures/frames,
+  # which scripts/compare-frames.sh --bless writes, with their pictures side by side.
+  programs:
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain
+        run: |
+          rustup update stable --no-self-update
+          rustup default stable
+          rustup target add aarch64-apple-ios-sim
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: programs
+
+      - name: Build the core for the Mac and the simulator
+        run: |
+          cargo build --release -p motile-core --example compare_frames --example program_sheet
+          cargo build --release --target aarch64-apple-ios-sim -p motile-core
+
+      - name: Lay the corpus out on the Mac
+        run: swift test --package-path packages/apple --filter 'ProgramFramesTests|ProgramPicturesTests'
+
+      - name: Lay the corpus out on iOS
+        working-directory: packages/apple
+        run: >-
+          xcodebuild test -quiet -scheme MotileKit -destination 'platform=iOS Simulator,name=iPhone 17'
+          -only-testing:MotileKitTests/ProgramFramesTests -only-testing:MotileKitTests/ProgramPicturesTests
+
+      - name: Compare the frames with the references
+        run: |
+          target/release/examples/compare_frames crates/core/fixtures/frames/mac build/frames/mac --known crates/core/fixtures/frames/known.txt
+          target/release/examples/compare_frames crates/core/fixtures/frames/ios build/frames/ios --mobile --known crates/core/fixtures/frames/known.txt
+
+      - name: Lay the pictures side by side
+        if: always()
+        run: target/release/examples/program_sheet build/programs/sheets
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: programs-apple
+          path: |
+            build/frames
+            build/programs
+          if-no-files-found: ignore
 
   gpui:
     runs-on: macos-26

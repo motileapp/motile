@@ -18,6 +18,8 @@ use serde_json::Value;
 use super::agents::{self, AgentState, AgentView, workflow_name};
 use super::highlight::{self, Incremental, Spans};
 use super::markdown::{self, Block, ParaKind, Prose};
+use super::openui::UiRow;
+use super::openui::sent::{SentValues, sent_values};
 
 /// Tool output beyond this is cut; nobody reads more of it in a chat.
 const MAX_OUTPUT_CHARS: usize = 20_000;
@@ -62,6 +64,9 @@ pub enum RowKind {
         /// The skills the message starts, each drawn as a chip in place of its `$name`.
         skills: Vec<SkillChip>,
         attachments: Vec<Attached>,
+        /// What programs sent with the message, drawn as a chip that opens them.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        values: Option<SentValues>,
         at: f64,
     },
     Prose {
@@ -80,6 +85,12 @@ pub enum RowKind {
     },
     Thinking {
         text: String,
+    },
+    /// A program the reply shows, which the core runs. Its tree comes with the row and changes
+    /// through `ui_patch` events.
+    Ui {
+        #[serde(flatten)]
+        ui: UiRow,
     },
     /// An image or a video the reply shows. The client asks the core for the file `media` names.
     Media {
@@ -328,7 +339,7 @@ impl After {
                 _ => Self::Prose,
             }),
             RowKind::Code { .. } => Some(Self::Code),
-            RowKind::Media { .. } | RowKind::File { .. } => Some(Self::Media),
+            RowKind::Media { .. } | RowKind::File { .. } | RowKind::Ui { .. } => Some(Self::Media),
             RowKind::Tool { .. }
             | RowKind::Thinking { .. }
             | RowKind::Group { .. }
@@ -439,6 +450,9 @@ pub struct Transcript {
     settled: bool,
     /// The agents the thread's agent started, as they are now, by the thread each works in.
     agents: HashMap<String, AgentView>,
+    /// Each patch's program, by its row: the program it was merged over, the patch, and the two
+    /// merged.
+    merged: HashMap<String, (String, String, String)>,
 }
 
 /// Code that came without highlighting: a code row, or the code paragraph `para` of a prose row.
@@ -621,6 +635,7 @@ impl Transcript {
 
     /// Works out the rows to show and returns how they differ from the ones shown before.
     fn show(&mut self) -> Option<Splice> {
+        self.link_programs();
         let mut shown = present(&self.items, &self.rendered, &self.opened, self.settled);
         shown.extend(queued_rows(&self.queued).into_iter().map(Cow::Owned));
         if let Some(server) = &self.removed {
@@ -649,9 +664,43 @@ impl Transcript {
         Some(splice)
     }
 
-    /// Stops keeping highlighters for a finished turn's code blocks.
-    pub fn end_streaming(&mut self) {
+    /// Merges each patch over the latest program before it, which it shows in its place.
+    fn link_programs(&mut self) {
+        let mut latest: Option<(String, String)> = None;
+        for row in self.rendered.iter_mut().flatten() {
+            let RowKind::Ui { ui } = &mut row.kind else { continue };
+            match latest.as_ref().filter(|_| ui.patch) {
+                Some((base, program)) => {
+                    let merged = match self.merged.get(&row.id) {
+                        Some((before, fence, merged)) if before == program && *fence == ui.fence => merged.clone(),
+                        _ => {
+                            let merged = motile_openui::merge(program, &ui.fence);
+                            self.merged.insert(row.id.clone(), (program.clone(), ui.fence.clone(), merged.clone()));
+                            merged
+                        }
+                    };
+                    ui.source = merged;
+                    ui.base = Some(base.clone());
+                }
+                None => {
+                    ui.source.clone_from(&ui.fence);
+                    ui.base = None;
+                }
+            }
+            latest = Some((row.id.clone(), ui.source.clone()));
+        }
+    }
+
+    /// Stops keeping highlighters for a finished turn's code blocks. A program whose fence never
+    /// closed is complete now.
+    pub fn end_streaming(&mut self) -> Option<Splice> {
         self.streaming.clear();
+        let growing = |rows: &Vec<Row>| rows.iter().any(|row| matches!(&row.kind, RowKind::Ui { ui } if !ui.complete));
+        let indices: Vec<usize> = (0..self.rendered.len()).filter(|&index| growing(&self.rendered[index])).collect();
+        for index in indices {
+            self.rendered[index] = render(&self.items[index], &self.cwd, &self.agents, None);
+        }
+        self.show()
     }
 
     /// The code among `row_ids` that has no highlighting yet.
@@ -1183,11 +1232,12 @@ fn render(
         after: None,
     };
     match &item.kind {
-        ItemKind::User { text, attachments, skills } => {
+        ItemKind::User { text, attachments, skills, context, programs } => {
             let attachments = attached(attachments, &item.media);
             let links = markdown::links_in(text);
             let skills = skill_chips(text, skills);
-            vec![row(0, RowKind::User { text: text.clone(), links, skills, attachments, at: item.created_at })]
+            let values = sent_values(context.as_ref(), programs);
+            vec![row(0, RowKind::User { text: text.clone(), links, skills, attachments, values, at: item.created_at })]
         }
         ItemKind::Assistant { text } => render_markdown(item, text, streaming),
         ItemKind::Thinking { text } => vec![row(0, RowKind::Thinking { text: text.clone() })],
@@ -1223,6 +1273,7 @@ fn render(
             };
             vec![row(0, RowKind::Agent { agent })]
         }
+        ItemKind::Unknown => Vec::new(),
     }
 }
 
@@ -1266,6 +1317,7 @@ fn render_markdown(item: &Item, text: &str, mut streaming: Option<&mut HashMap<S
                 let spans = colour(&id, &language, &code, &mut streaming);
                 RowKind::Code { language, code, spans }
             }
+            Block::Ui { code, closed } => RowKind::Ui { ui: UiRow::new(code, closed || streaming.is_none()) },
             Block::Image { src, alt } => {
                 let Some(media) = item.media.iter().find(|media| media.src == src) else { continue };
                 let name = file_name(&src).to_string();
@@ -1472,7 +1524,26 @@ mod tests {
     use motile_protocol::wire::{AgentNotice, NoticeEvent};
 
     fn item(id: &str, seq: u64, kind: ItemKind) -> Item {
-        Item { id: id.to_string(), seq, rev: seq + 1, created_at: 0.0, media: Vec::new(), parent: None, kind }
+        Item {
+            id: id.to_string(),
+            seq,
+            rev: seq + 1,
+            created_at: 0.0,
+            media: Vec::new(),
+            parent: None,
+            ui: Default::default(),
+            kind,
+        }
+    }
+
+    fn said(text: &str) -> ItemKind {
+        ItemKind::User {
+            text: text.into(),
+            attachments: Vec::new(),
+            skills: Vec::new(),
+            context: None,
+            programs: Vec::new(),
+        }
     }
 
     fn assistant(id: &str, seq: u64, text: &str) -> Item {
@@ -1504,7 +1575,17 @@ mod tests {
             height: None,
             poster: poster.map(str::to_string),
         };
-        let mut message = item("u", 0, ItemKind::User { text: "Look".into(), attachments, skills: Vec::new() });
+        let mut message = item(
+            "u",
+            0,
+            ItemKind::User {
+                text: "Look".into(),
+                attachments,
+                skills: Vec::new(),
+                context: None,
+                programs: Vec::new(),
+            },
+        );
         message.media = vec![
             media("abc.png", "/up/1/shot.png", false, None),
             media("def.mov", "/up/3/demo.mov", true, Some("fed.jpg")),
@@ -1595,7 +1676,7 @@ mod tests {
         );
         let mut transcript = Transcript::new("");
         transcript.load(vec![
-            item("u", 0, ItemKind::User { text: "Hi".into(), attachments: Vec::new(), skills: Vec::new() }),
+            item("u", 0, said("Hi")),
             assistant("a", 1, &reply),
             assistant("b", 2, "The next message"),
             call("t", 3, "Read", serde_json::json!({ "file_path": "/srv/api/hello.py" }), ToolStatus::Succeeded),
@@ -1633,7 +1714,13 @@ mod tests {
         let user = item(
             "u",
             0,
-            ItemKind::User { text: "Hi".into(), attachments: vec!["/tmp/a/notes.txt".into()], skills: Vec::new() },
+            ItemKind::User {
+                text: "Hi".into(),
+                attachments: vec!["/tmp/a/notes.txt".into()],
+                skills: Vec::new(),
+                context: None,
+                programs: Vec::new(),
+            },
         );
         apply(&mut shown, transcript.upsert(user, true).unwrap());
         apply(
@@ -1717,11 +1804,7 @@ mod tests {
     fn earlier_turns_are_let_go_whole_and_come_back_in_front() {
         let turn = |start: u64| {
             vec![
-                item(
-                    &format!("u{start}"),
-                    start,
-                    ItemKind::User { text: "Go on".into(), attachments: Vec::new(), skills: Vec::new() },
-                ),
+                item(&format!("u{start}"), start, said("Go on")),
                 assistant(&format!("a{start}"), start + 1, "Done."),
                 item(&format!("e{start}"), start + 2, ItemKind::TurnEnd { summary: Default::default() }),
             ]
@@ -1763,11 +1846,7 @@ mod tests {
 
     #[test]
     fn a_web_address_in_a_user_message_is_a_link() {
-        let message = item(
-            "u",
-            0,
-            ItemKind::User { text: "Open https://motile.app now".into(), attachments: Vec::new(), skills: Vec::new() },
-        );
+        let message = item("u", 0, said("Open https://motile.app now"));
         let mut transcript = Transcript::new("");
         transcript.upsert(message, false);
 
@@ -1811,7 +1890,7 @@ mod tests {
         let done = ToolStatus::Succeeded;
         let mut transcript = Transcript::new("/srv/api");
         transcript.load(vec![
-            item("u", 0, ItemKind::User { text: "Fix it".into(), attachments: Vec::new(), skills: Vec::new() }),
+            item("u", 0, said("Fix it")),
             assistant("a1", 1, "Looking."),
             call("t1", 2, "Read", serde_json::json!({"file_path": "/srv/api/a.rs"}), done),
             call("t2", 3, "Read", serde_json::json!({"file_path": "/srv/api/b.rs"}), done),
@@ -1970,6 +2049,7 @@ mod tests {
             event: NoticeEvent::Finished,
             agent: Agent::Claude,
             summary: Some("It compiles.".into()),
+            repair: false,
         };
         let notice = Item { created_at: 12.0, ..item("n", 5, ItemKind::Notice { notice, text: String::new() }) };
         let mut transcript = Transcript::new("");
@@ -1991,7 +2071,7 @@ mod tests {
     fn the_agents_a_finished_turn_started_stay_in_view_past_its_fold() {
         let mut transcript = Transcript::new("");
         transcript.load(vec![
-            item("u", 0, ItemKind::User { text: "Go".into(), attachments: Vec::new(), skills: Vec::new() }),
+            item("u", 0, said("Go")),
             call("t0", 1, "Read", serde_json::json!({"file_path": "a.rs"}), ToolStatus::Succeeded),
             agent_call("t1", 2, "Review", None, ToolStatus::Running),
             assistant("a", 3, "It works on it."),
@@ -2075,10 +2155,7 @@ mod tests {
 
         // The next turn is its own: it neither joins the fold nor is folded while it runs.
         transcript.toggle("a1/fold");
-        transcript.upsert(
-            item("u2", 10, ItemKind::User { text: "Thanks".into(), attachments: Vec::new(), skills: Vec::new() }),
-            true,
-        );
+        transcript.upsert(item("u2", 10, said("Thanks")), true);
         transcript.upsert(assistant("b1", 11, "Welcome."), true);
         assert_eq!(outline(&transcript), ["user", "fold", "Fixed.", "end folded", "user", "Welcome."]);
     }
@@ -2089,9 +2166,7 @@ mod tests {
             call(id, seq, "Read", serde_json::json!({"file_path": "/srv/api/a.rs"}), ToolStatus::Succeeded)
         };
         let at = |created_at, item: Item| Item { created_at, ..item };
-        let user = |id: &str, seq| {
-            item(id, seq, ItemKind::User { text: "Go".into(), attachments: Vec::new(), skills: Vec::new() })
-        };
+        let user = |id: &str, seq| item(id, seq, said("Go"));
         let mut transcript = Transcript::new("/srv/api");
         transcript.load(vec![
             at(100.0, user("u1", 0)),
@@ -2145,7 +2220,7 @@ mod tests {
         let summary = motile_protocol::wire::TurnSummary { changes: Some(changes), ..Default::default() };
         let mut transcript = Transcript::new("");
         transcript.load(vec![
-            item("u", 0, ItemKind::User { text: "Go".into(), attachments: Vec::new(), skills: Vec::new() }),
+            item("u", 0, said("Go")),
             assistant("a", 1, "Done."),
             item("e", 2, ItemKind::TurnEnd { summary }),
         ]);
@@ -2187,9 +2262,7 @@ mod tests {
             name: name.map(str::to_string),
             account: None,
         };
-        let user = |id: &str, seq| {
-            item(id, seq, ItemKind::User { text: "Go".into(), attachments: Vec::new(), skills: Vec::new() })
-        };
+        let user = |id: &str, seq| item(id, seq, said("Go"));
         let read = call("t1", 2, "Read", serde_json::json!({"file_path": "/srv/api/a.rs"}), ToolStatus::Succeeded);
         let from = end(Agent::Claude, Some("claude-opus-5-5"), Some("Claude Opus 5.5"));
         let to = end(Agent::Codex, Some("gpt-6.1-sol"), Some("GPT-6.1-Sol"));
@@ -2228,6 +2301,8 @@ mod tests {
             held,
             sending: false,
             notice: None,
+            context: None,
+            programs: Vec::new(),
         };
         let statuses = |transcript: &Transcript| {
             let rows = transcript.rows().iter().filter_map(|row| match &row.kind {
@@ -2269,13 +2344,15 @@ mod tests {
             held: false,
             sending: false,
             notice: None,
+            context: None,
+            programs: Vec::new(),
         };
         let mut transcript = Transcript::new("");
         transcript.load(vec![assistant("a", 0, "Working on it.")]);
         transcript.set_queued(vec![message]);
         let mut rows = transcript.rows().to_vec();
 
-        let user = ItemKind::User { text: "Also this".into(), attachments: Vec::new(), skills: Vec::new() };
+        let user = said("Also this");
         apply(&mut rows, transcript.upsert(item("m1", 1, user), true).unwrap());
         let ids: Vec<&str> = rows.iter().map(|row| row.id.as_str()).collect();
         assert_eq!(ids, ["a/0", "m1/0"]);
@@ -2308,11 +2385,7 @@ mod tests {
         let summary = motile_protocol::wire::TurnSummary::default();
         let mut transcript = Transcript::new("");
         transcript.load(vec![
-            item(
-                "u",
-                0,
-                ItemKind::User { text: "Watch the deploy".into(), attachments: Vec::new(), skills: Vec::new() },
-            ),
+            item("u", 0, said("Watch the deploy")),
             call(
                 "t1",
                 1,
@@ -2338,7 +2411,7 @@ mod tests {
         let summary = motile_protocol::wire::TurnSummary::default();
         let mut short = Transcript::new("");
         short.load(vec![
-            item("u", 0, ItemKind::User { text: "Hi".into(), attachments: Vec::new(), skills: Vec::new() }),
+            item("u", 0, said("Hi")),
             assistant("a", 1, "Hello."),
             item("e", 2, ItemKind::TurnEnd { summary: summary.clone() }),
         ]);
@@ -2346,7 +2419,7 @@ mod tests {
 
         let mut failed = Transcript::new("");
         failed.load(vec![
-            item("u", 0, ItemKind::User { text: "Hi".into(), attachments: Vec::new(), skills: Vec::new() }),
+            item("u", 0, said("Hi")),
             call("t", 1, "Bash", serde_json::json!({"command": "ls"}), ToolStatus::Succeeded),
             assistant("a", 2, "Listing."),
             item("x", 3, ItemKind::Error { message: "The agent stopped.".into() }),
@@ -2393,7 +2466,7 @@ mod tests {
     fn a_plan_is_shown_as_prose_and_not_put_away_with_the_tool_calls() {
         let mut transcript = Transcript::new("");
         transcript.load(vec![
-            item("u", 0, ItemKind::User { text: "Plan it".into(), attachments: Vec::new(), skills: Vec::new() }),
+            item("u", 0, said("Plan it")),
             call("t1", 1, "Read", serde_json::json!({"file_path": "a.rs"}), ToolStatus::Succeeded),
             call("t2", 2, "ToolSearch", serde_json::json!({"query": "select:ExitPlanMode"}), ToolStatus::Succeeded),
             call("p", 3, "ExitPlanMode", serde_json::json!({"plan": "Add `hello`."}), ToolStatus::Running),

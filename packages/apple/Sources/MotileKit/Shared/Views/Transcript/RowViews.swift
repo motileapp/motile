@@ -40,6 +40,10 @@ protocol RowOwner: AnyObject {
     func continueElsewhere()
     /// Opens the settings' servers, where an unlinked server's threads are deleted with it.
     func openServerSettings()
+    /// The user did something to a node of the program in the row.
+    func programEvent(rowID: String, node: String, event: JSON)
+    /// The row's height changed without the core: it is measured again.
+    func rowResized(id: String)
 }
 
 /// The base of every row. A row is as wide as the transcript's column; `layout(width:)` places
@@ -60,6 +64,9 @@ class RowView: FlippedView {
 
     func layout(width: CGFloat) -> CGFloat { 0 }
 
+    /// The row left the screen: its view goes to the pool or away.
+    func recycled() {}
+
     func clearSelection() {}
 
     /// What the row says about its message, like when it was sent, is shown or faded out.
@@ -69,8 +76,8 @@ class RowView: FlippedView {
     /// the main thread. A queued message is only estimated: it is always among the last rows.
     class func height(_ row: RowModel, width: CGFloat) -> CGFloat {
         switch row.kind {
-        case .user(let text, let attachments, _):
-            let fit = BubbleFit(text: text, attachments: attachments, width: width)
+        case .user(let text, let attachments, let values, _):
+            let fit = BubbleFit(text: text, attachments: attachments, values: values, width: width)
             return UserRowView.height(fit, textHeight: fit.hasText ? TextMeasure.height(of: text, width: fit.innerWidth) : 0)
         case .prose(let text, _):
             return TextMeasure.height(of: text, width: width) + ProseRowView.gap + row.above
@@ -78,7 +85,9 @@ class RowView: FlippedView {
             return TextMeasure.height(of: text, width: width - ErrorRowView.textInset) + ErrorRowView.padding
         case .removed(let content):
             return RemovedRowView.height(textHeight: TextMeasure.height(of: content.message, width: RemovedRowView.inner(width)))
-        case .code, .tool, .thinking, .group, .fold, .agent, .agents, .media, .file, .changes, .turnEnd, .handoff, .queued:
+        case .ui(let content):
+            return ProgramRowView.height(content, width: width)
+        case .code, .tool, .thinking, .group, .fold, .agent, .agents, .media, .file, .changes, .turnEnd, .handoff, .queued, .unknown:
             return estimatedHeight(row, width: width)
         }
     }
@@ -86,12 +95,15 @@ class RowView: FlippedView {
     /// What the row would be without measuring its text, until it has been measured.
     class func estimatedHeight(_ row: RowModel, width: CGFloat) -> CGFloat {
         switch row.kind {
-        case .user(let text, let attachments, _):
-            return estimatedTextHeight(text.length, width: width * 0.75) + 34 + UserRowView.footHeight + AttachedFilesView.height(attachments, width: width)
+        case .user(let text, let attachments, let values, _):
+            let chip = values == nil ? 0 : SentValuesChip.gap + SentValuesChip.size.height + BubbleFit.padding - 10
+            return estimatedTextHeight(text.length, width: width * 0.75) + 34 + chip + UserRowView.footHeight + AttachedFilesView.height(attachments, width: width)
         case .prose(let text, _):
             return estimatedTextHeight(text.length, width: width) + ProseRowView.gap + row.above
         case .code(let content):
             return CodeRowView.height(lines: content.lineCount)
+        case .ui(let content):
+            return ProgramRowView.height(content, width: width)
         case .tool, .thinking, .group, .fold:
             return ToolRowView.rowHeight + row.above
         case .agent(let content):
@@ -115,6 +127,8 @@ class RowView: FlippedView {
         case .queued(let content):
             let attachments = AttachedFilesView.height(content.attachments, width: width)
             return estimatedTextHeight(content.text.length, width: width * 0.75) + 48 + QueuedRowView.footHeight + attachments
+        case .unknown:
+            return 0
         }
     }
 
@@ -128,6 +142,7 @@ class RowView: FlippedView {
         case .user: return UserRowView()
         case .prose: return ProseRowView()
         case .code: return CodeRowView()
+        case .ui: return ProgramRowView()
         case .tool, .thinking, .group, .fold: return ToolRowView()
         case .agent: return AgentRowView()
         case .agents: return AgentsRowView()
@@ -139,6 +154,7 @@ class RowView: FlippedView {
         case .handoff: return HandoffRowView()
         case .queued: return QueuedRowView()
         case .removed: return RemovedRowView()
+        case .unknown: return RowView()
         }
     }
 
@@ -147,6 +163,7 @@ class RowView: FlippedView {
         case .user: return "user"
         case .prose: return "prose"
         case .code: return "code"
+        case .ui: return "program"
         case .tool, .thinking, .group, .fold: return "tool"
         case .agent: return "agent"
         case .agents: return "agents"
@@ -158,6 +175,7 @@ class RowView: FlippedView {
         case .handoff: return "handoff"
         case .queued: return "queued"
         case .removed: return "removed"
+        case .unknown: return "unknown"
         }
     }
 }
@@ -172,15 +190,19 @@ struct BubbleFit {
     let innerWidth: CGFloat
     let top: CGFloat
     let between: CGFloat
+    /// The room the chip of the message's values takes under the rest.
+    let chip: CGFloat
 
-    init(text: NSAttributedString, attachments: [AttachedFile], width: CGFloat, least: CGFloat = 12) {
+    init(text: NSAttributedString, attachments: [AttachedFile], values: SentValues? = nil, width: CGFloat, least: CGFloat = 12) {
         let widest = max(120, width * 0.8) - Self.padding * 2
         let natural = text.bounds(width: widest)
         hasText = text.length > 0
         files = AttachedFilesView.size(attachments, width: widest)
-        innerWidth = min(widest, max(hasText ? ceil(natural.width) + 2 : 0, files.width, least))
+        let chipWidth = values.map(SentValuesChip.width) ?? 0
+        innerWidth = min(widest, max(hasText ? ceil(natural.width) + 2 : 0, files.width, chipWidth, least))
         top = files.height > 0 ? Self.padding : 10
         between = files.height > 0 && hasText ? 8 : 0
+        chip = values == nil ? 0 : SentValuesChip.gap + SentValuesChip.size.height
     }
 }
 
@@ -188,8 +210,10 @@ final class UserRowView: RowView {
     private let bubble = SurfaceView()
     private let text = RowTextView.make()
     private let attachments = AttachedFilesView()
+    private let chip = SentValuesChip()
     private let meta = MessageMeta(trailing: true, tooltip: "Copy message")
     private var files: [AttachedFile] = []
+    private var values: SentValues?
     private var pending = false
 
     override var showsMeta: Bool {
@@ -203,6 +227,7 @@ final class UserRowView: RowView {
         addSubview(bubble)
         bubble.addSubview(text)
         bubble.addSubview(attachments)
+        bubble.addSubview(chip)
         addSubview(meta)
         meta.onCopy = { [weak self] in
             guard let self else { return }
@@ -218,10 +243,12 @@ final class UserRowView: RowView {
 
     override func configure(_ row: RowModel) {
         super.configure(row)
-        guard case .user(let content, let files, let at) = row.kind else { return }
+        guard case .user(let content, let files, let values, let at) = row.kind else { return }
         meta.show(Time.stamp(at))
         text.content = content
         self.files = files
+        self.values = values
+        chip.show(values)
         text.isHidden = content.length == 0
         attachments.show(files, owner: owner)
         pending = row.id == RowModel.pendingID
@@ -238,19 +265,23 @@ final class UserRowView: RowView {
     }
 
     private static func bubbleHeight(_ fit: BubbleFit, textHeight: CGFloat) -> CGFloat {
-        let bottom: CGFloat = fit.hasText ? 10 : BubbleFit.padding
-        return fit.top + fit.files.height + fit.between + textHeight + bottom
+        let bottom: CGFloat = fit.hasText && fit.chip == 0 ? 10 : BubbleFit.padding
+        return fit.top + fit.files.height + fit.between + textHeight + fit.chip + bottom
     }
 
     override func layout(width: CGFloat) -> CGFloat {
         let padding = BubbleFit.padding
-        let fit = BubbleFit(text: text.content, attachments: files, width: width)
+        let fit = BubbleFit(text: text.content, attachments: files, values: values, width: width)
         let textHeight = fit.hasText ? text.height(forWidth: fit.innerWidth) : 0
         let bubbleSize = CGSize(width: fit.innerWidth + padding * 2, height: Self.bubbleHeight(fit, textHeight: textHeight))
         bubble.frame = CGRect(x: width - bubbleSize.width, y: Self.margin, width: bubbleSize.width, height: bubbleSize.height)
         attachments.frame = CGRect(x: padding, y: fit.top, width: fit.innerWidth, height: fit.files.height)
         attachments.layout(width: fit.innerWidth)
         text.frame = CGRect(x: padding, y: fit.top + fit.files.height + fit.between, width: fit.innerWidth, height: textHeight)
+        if let values {
+            let size = SentValuesChip.size
+            chip.frame = CGRect(x: padding, y: text.frame.maxY + SentValuesChip.gap, width: SentValuesChip.width(values), height: size.height)
+        }
         meta.frame = CGRect(x: 0, y: bubble.frame.maxY + Self.metaGap, width: width, height: MessageMeta.height)
         return Self.height(fit, textHeight: textHeight)
     }
@@ -507,7 +538,9 @@ final class CodeRowView: RowView {
 
     override func configure(_ row: RowModel) {
         super.configure(row)
-        guard case .code(let content) = row.kind else { return }
+        let content: CodeContent
+        guard case .code(let code) = row.kind else { return }
+        content = code
         lines = content.lineCount
         header.show(language: content.language, code: content.code)
         text.content = content.attributed
@@ -745,23 +778,59 @@ final class ToolRowView: RowView {
     }
 }
 
-final class ErrorRowView: RowView {
+/// An error on its tint with its sign before it: the transcript's error row, and a program's
+/// errors under it.
+final class ErrorBox {
     /// The room beside the text, and the room above and under it.
     static let textInset: CGFloat = 36 + 14
-    static let padding: CGFloat = 20 + 14
+    static let padding: CGFloat = 20
 
+    let text = RowTextView.make()
     private let surface = SurfaceView()
     private let icon = SymbolView(.circleAlert, size: 13, tint: Theme.destructive)
-    private let text = RowTextView.make()
+
+    init(in view: PlatformView) {
+        surface.fill = Theme.destructiveTint
+        surface.radius = Radius.lg
+        view.addSubview(surface)
+        surface.addSubview(icon)
+        surface.addSubview(text)
+    }
+
+    static func message(_ text: String) -> NSAttributedString {
+        Typesetter.plain(text, color: Theme.destructive, size: 13 * Platform.scale)
+    }
+
+    static func height(_ message: NSAttributedString, width: CGFloat) -> CGFloat {
+        TextMeasure.height(of: message, width: width - textInset) + padding
+    }
+
+    var isHidden: Bool {
+        get { surface.isHidden }
+        set { surface.isHidden = newValue }
+    }
+
+    /// Lays the box out from `y`, as wide as `width`: its height.
+    func layout(y: CGFloat, width: CGFloat) -> CGFloat {
+        let inner = width - Self.textInset
+        let height = text.height(forWidth: inner)
+        surface.frame = CGRect(x: 0, y: y, width: width, height: height + Self.padding)
+        icon.frame = CGRect(x: 12, y: 10, width: 16, height: 18)
+        text.frame = CGRect(x: 36, y: 10, width: inner, height: height)
+        return height + Self.padding
+    }
+}
+
+final class ErrorRowView: RowView {
+    static let textInset = ErrorBox.textInset
+    /// The box's height and the room above and under it.
+    static let padding: CGFloat = ErrorBox.padding + 14
+
+    private lazy var box = ErrorBox(in: self)
 
     override init(frame: CGRect) {
         super.init(frame: frame)
-        surface.fill = Theme.destructiveTint
-        surface.radius = Radius.lg
-        addSubview(surface)
-        surface.addSubview(icon)
-        surface.addSubview(text)
-        text.onSelect = { [weak self] in
+        box.text.onSelect = { [weak self] in
             guard let self else { return }
             self.owner?.rowWillSelect(self)
         }
@@ -772,19 +841,14 @@ final class ErrorRowView: RowView {
     override func configure(_ row: RowModel) {
         super.configure(row)
         guard case .error(let message) = row.kind else { return }
-        text.content = message
+        box.text.content = message
     }
 
     override func layout(width: CGFloat) -> CGFloat {
-        let inner = width - Self.textInset
-        let height = text.height(forWidth: inner)
-        surface.frame = CGRect(x: 0, y: 4, width: width, height: height + 20)
-        icon.frame = CGRect(x: 12, y: 10, width: 16, height: 18)
-        text.frame = CGRect(x: 36, y: 10, width: inner, height: height)
-        return height + Self.padding
+        box.layout(y: 4, width: width) + 14
     }
 
-    override func clearSelection() { text.clearSelection() }
+    override func clearSelection() { box.text.clearSelection() }
 }
 
 /// What a turn changed: how many files and lines, and the files under their folders. A click on

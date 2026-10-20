@@ -13,4 +13,8 @@ object DemoHooks {
     var scrollTranscriptToTop: (() -> Unit)? = null
     /** Gives the front search field the keyboard, and types the text in it. */
     var search: ((String) -> Unit)? = null
+    /** Where the nodes of each program were laid out, by its row, while the driver runs. */
+    var programFrames: MutableMap<String, app.motile.transcript.openui.UiFrames>? = null
+    /** Touches the window as a finger does. */
+    var touch: ((android.view.MotionEvent) -> Unit)? = null
 }

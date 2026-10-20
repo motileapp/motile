@@ -267,7 +267,14 @@ async fn thread_where(list: &mut Follow, mut wanted: impl FnMut(&Thread) -> bool
 }
 
 async fn send(connection: &Connection, thread_id: Option<String>, new_thread: Option<NewThread>, text: &str) -> String {
-    let request = Request::Send { thread_id, new_thread, text: text.to_string(), attachments: Vec::new(), now: false };
+    let request = Request::Send {
+        thread_id,
+        new_thread,
+        text: text.to_string(),
+        attachments: Vec::new(),
+        now: false,
+        context: None,
+    };
     match connection.request(&request).await.unwrap() {
         Message::Sent { thread_id } => thread_id,
         other => panic!("unexpected answer to send: {other:?}"),
@@ -561,6 +568,25 @@ async fn codex_reads_the_skills_a_message_starts_from_its_text() {
     assert_eq!(message, Some(vec![SkillMention { name: "imagegen".into(), label: "Image Gen".into() }]));
     assert_eq!(transcript.texts().last().unwrap(), &"I followed the `imagegen` skill.");
     assert_eq!(harness.recorded_requests("turn/start")[0]["input"][0]["text"], "Draw it with $imagegen");
+}
+
+#[tokio::test]
+async fn a_reply_from_a_new_process_of_the_agent_follows_the_replies_before_it() {
+    let mut harness = Harness::start("fixtures/read-and-bash.jsonl", "0").await;
+    let connection = harness.connect().await;
+    let new_thread = harness.new_thread(&connection, Agent::Claude).await;
+    let thread_id = send(&connection, None, new_thread, "Show the ui gdp").await;
+    finished_transcript(&connection, &thread_id).await;
+
+    harness.restart().await;
+    let connection = harness.connect().await;
+    send(&connection, Some(thread_id.clone()), None, "Show the ui gdp").await;
+    let transcript = finished_transcript(&connection, &thread_id).await;
+
+    let programs = transcript.texts().into_iter().filter(|text| text.contains("```openui-lang")).count();
+    assert_eq!((programs, transcript.turn_ends().len()), (2, 2), "{:?}", transcript.texts());
+    let seqs: Vec<u64> = transcript.items.iter().map(|item| item.seq).collect();
+    assert!(seqs.windows(2).all(|pair| pair[0] < pair[1]), "{seqs:?}");
 }
 
 #[tokio::test]
@@ -1160,6 +1186,7 @@ async fn a_message_sent_to_steer_is_taken_by_the_turn_that_runs() {
         text: "Just say pineapple".to_string(),
         attachments: Vec::new(),
         now: true,
+        context: None,
     };
     assert_eq!(connection.request(&steer).await.unwrap(), Message::Sent { thread_id: thread_id.clone() });
     transcript.follow_until_idle(&mut follow).await;
@@ -3220,7 +3247,8 @@ async fn attached_images_and_videos_are_shown_in_the_message_and_go_with_its_thr
 
     let attachments = vec![shot.clone(), video.clone(), notes.clone()];
     let new_thread = harness.new_thread(&connection, Agent::Claude).await;
-    let request = Request::Send { thread_id: None, new_thread, text: "Look".to_string(), attachments, now: false };
+    let request =
+        Request::Send { thread_id: None, new_thread, text: "Look".to_string(), attachments, now: false, context: None };
     let Message::Sent { thread_id } = connection.request(&request).await.unwrap() else { panic!("not sent") };
     let transcript = finished_transcript(&connection, &thread_id).await;
 
@@ -3240,6 +3268,7 @@ async fn attached_images_and_videos_are_shown_in_the_message_and_go_with_its_thr
         text: String::new(),
         attachments: vec![poster.clone() + "x"],
         now: false,
+        context: None,
     };
     assert!(matches!(connection.request(&gone).await.unwrap(), Message::Error { .. }));
 
@@ -4164,6 +4193,159 @@ async fn a_removed_servers_thread_goes_on_on_another_server_with_its_history() {
         text: "Go on".into(),
         attachments: Vec::new(),
         now: false,
+        context: None,
     };
     assert!(matches!(on_b.request(&request).await.unwrap(), Message::Error { .. }));
+}
+
+#[tokio::test]
+async fn a_program_keeps_its_state_and_a_message_tells_the_agent_what_it_sent() {
+    let a = Harness::with_sessions(fixture(Agent::Claude), &[]).await;
+    let b = a.another(fixture(Agent::Claude)).await;
+    let connection = a.connect().await;
+    let new_thread = a.new_thread(&connection, Agent::Claude).await;
+    let thread_id = send(&connection, None, new_thread, "Ask with a form").await;
+    let mut follow = open(&connection, &thread_id, 0).await;
+    let mut transcript = Transcript::default();
+    transcript.follow_until_idle(&mut follow).await;
+
+    let reply = transcript.items.iter().find(|item| matches!(item.kind, ItemKind::Assistant { .. })).unwrap().clone();
+    let ItemKind::Assistant { text } = &reply.kind else { unreachable!() };
+    assert!(text.contains("```openui-lang\nroot = Card(") && text.contains("@ToAssistant(\"Customize my trip\""));
+
+    let state = json!({ "$name": "Ada", "$people": 4 });
+    let set = |item_id: &str, state: serde_json::Value| Request::SetUi {
+        thread_id: thread_id.clone(),
+        item_id: item_id.to_string(),
+        block: 1,
+        state,
+    };
+    assert_eq!(connection.request(&set(&reply.id, state.clone())).await.unwrap(), Message::Ok);
+    let Message::Items { items } = next(&mut follow).await else { panic!("the change is sent to the open thread") };
+    assert_eq!((items[0].id.as_str(), &items[0].ui[&1]), (reply.id.as_str(), &state));
+    assert!(items[0].rev > transcript.rev);
+    let reopened = finished_transcript(&connection, &thread_id).await;
+    assert_eq!(reopened.items.iter().find(|item| item.id == reply.id).unwrap().ui[&1], state);
+    let message_id = transcript.items[0].id.clone();
+    assert!(matches!(connection.request(&set(&message_id, json!(1))).await.unwrap(), Message::Error { .. }));
+
+    relay::round(peers(&[&a, &b]).await, named(&[&a, &b]), false).await;
+    let copied = copied_transcript(&b.connect().await, &a, &thread_id).await;
+    assert_eq!(copied.iter().find(|item| item.id == reply.id).unwrap().ui[&1], state);
+    let on_b = b.connect().await;
+    let on_copy = Request::SetUi { thread_id: thread_id.clone(), item_id: reply.id.clone(), block: 1, state: json!(2) };
+    assert!(matches!(on_b.request(&on_copy).await.unwrap(), Message::Error { .. }));
+
+    let context = json!(["User clicked: Customize my trip", { "name": { "value": "Ada", "componentType": "input" } }, { "people": 4 }]);
+    let request = Request::Send {
+        thread_id: Some(thread_id.clone()),
+        new_thread: None,
+        text: "Customize my trip".into(),
+        attachments: Vec::new(),
+        now: false,
+        context: Some(context.clone()),
+    };
+    assert_eq!(connection.request(&request).await.unwrap(), Message::Sent { thread_id: thread_id.clone() });
+    transcript.running = true;
+    transcript.follow_until_idle(&mut follow).await;
+
+    let told = format!(
+        "Customize my trip\ncontext and form values = {context}\ncontext and form values = {}",
+        json!({ "item": reply.id, "block": 1, "state": state })
+    );
+    assert_eq!(a.recorded_prompts().last().unwrap(), &told);
+    let message = transcript.items.iter().rev().find(|item| matches!(item.kind, ItemKind::User { .. })).unwrap();
+    let ItemKind::User { context: kept, programs, .. } = &message.kind else { unreachable!() };
+    assert_eq!((kept.as_ref(), programs.len()), (Some(&context), 1));
+    assert!(transcript.texts().last().unwrap().contains("name is \"Ada\", people is 4"));
+
+    send(&connection, Some(thread_id.clone()), None, "Thanks").await;
+    finished_transcript(&connection, &thread_id).await;
+    assert_eq!(a.recorded_prompts().last().unwrap(), "Thanks", "a state is told once");
+}
+
+#[tokio::test]
+async fn a_program_with_errors_goes_back_to_its_agent_until_a_patch_fixes_it() {
+    let (harness, connection, _list) = with_children().await;
+    let new_thread = harness.new_thread(&connection, Agent::Claude).await;
+    let thread_id = send(&connection, None, new_thread, "Show a broken ui").await;
+
+    let fixed = transcript_once(&connection, &thread_id, |transcript| transcript.turn_ends().len() == 2).await;
+    use motile_protocol::wire::NoticeEvent::Failed;
+    assert_eq!(notices(&fixed), [("Program errors".to_string(), Failed)]);
+    let repairs =
+        fixed.items.iter().filter(|item| matches!(&item.kind, ItemKind::Notice { notice, .. } if notice.repair));
+    assert_eq!(repairs.count(), 1);
+    let told = harness.recorded_prompts();
+    let asked = told.last().unwrap();
+    assert!(asked.starts_with("Motile's clients can't draw all of what you showed:"), "{told:?}");
+    assert!(asked.contains("- unknown-component in `chart` (BarChart): Unknown component \"BarChart\". Hint:"));
+    assert!(asked.contains("- missing-required in `note` (Badge)"), "{asked}");
+    let patch = fixed.texts().last().unwrap().to_string();
+    assert!(patch.starts_with("```openui-lang\nchart = Chart(\"bar\""), "{patch}");
+
+    tokio::time::sleep(Duration::from_secs(1)).await;
+    let settled = finished_transcript(&connection, &thread_id).await;
+    assert_eq!((settled.turn_ends().len(), notices(&settled).len()), (2, 1), "the patch fixed it");
+    assert_eq!(harness.recorded_prompts().len(), 2);
+}
+
+#[tokio::test]
+async fn an_agent_checks_a_program_before_it_shows_it() {
+    let (harness, connection, _list) = with_children().await;
+    let new_thread = full_access(&harness, &connection, Agent::Codex).await;
+    let thread_id = send(&connection, None, new_thread, "Run greet.py").await;
+    finished_transcript(&connection, &thread_id).await;
+    let started = harness.recorded_requests("thread/start");
+    let server = &started.last().unwrap()["config"]["mcp_servers"]["motile"];
+    let url = server["url"].as_str().unwrap();
+    let token = server["http_headers"]["Authorization"].as_str().unwrap().strip_prefix("Bearer ").unwrap();
+
+    let program = json!({"program": "```openui-lang\nroot = Col([t, gone])\nt = Title()\n```"});
+    let (said, failed) = call_tool(url, token, "check_ui", program).await;
+    let checked: serde_json::Value = serde_json::from_str(&said).unwrap();
+    assert!(!failed, "{said}");
+    assert_eq!(
+        (&checked["valid"], &checked["patch"], &checked["unresolved"]),
+        (&json!(false), &json!(false), &json!(["gone"]))
+    );
+    assert_eq!(checked["errors"][0]["code"], "missing-required", "{said}");
+    assert_eq!(checked["errors"][0]["statementId"], "t", "{said}");
+    let (said, _) = call_tool(url, token, "check_ui", json!({"program": "root = Col([Title(\"Hi\")])"})).await;
+    assert_eq!(serde_json::from_str::<serde_json::Value>(&said).unwrap()["valid"], true, "{said}");
+}
+
+#[tokio::test]
+async fn a_programs_tools_read_the_threads_folder_and_run_only_what_its_access_allows() {
+    let harness = Harness::start(fixture(Agent::Claude), "0").await;
+    let connection = harness.connect().await;
+    let new_thread = harness.new_thread(&connection, Agent::Claude).await;
+    let thread_id = send(&connection, None, new_thread, "Say hello").await;
+    finished_transcript(&connection, &thread_id).await;
+    std::fs::write(Path::new(&harness.folder("project")).join("notes.txt"), "Hello\n").unwrap();
+    let tool = |tool: &str, args: serde_json::Value, confirmed: bool| Request::UiTool {
+        thread_id: thread_id.clone(),
+        tool: tool.to_string(),
+        args,
+        confirmed,
+    };
+
+    let read = connection.request(&tool("read_file", json!({ "path": "notes.txt" }), false)).await.unwrap();
+    let outside = connection.request(&tool("read_file", json!({ "path": "../motile.sqlite" }), false)).await.unwrap();
+    let unknown = connection.request(&tool("get_orders", json!({}), false)).await.unwrap();
+    let unconfirmed = connection.request(&tool("run", json!({ "command": "touch made" }), false)).await.unwrap();
+    let confirmed = connection.request(&tool("run", json!({ "command": "cat notes.txt" }), true)).await.unwrap();
+
+    let Message::UiToolResult { result } = read else { panic!("{read:?}") };
+    assert_eq!(result["text"], "Hello\n");
+    assert!(matches!(outside, Message::UiToolError { code, .. } if code == "tool-error"));
+    assert!(matches!(unknown, Message::UiToolError { code, .. } if code == "tool-not-found"));
+    assert!(matches!(unconfirmed, Message::UiToolError { code, .. } if code == "tool-error"));
+    assert!(!Path::new(&harness.folder("project")).join("made").exists(), "a supervised thread waits for the user");
+    assert_eq!(
+        confirmed,
+        Message::UiToolResult {
+            result: json!({ "exit_code": 0, "stdout": "Hello\n", "stderr": "", "truncated": false })
+        }
+    );
 }

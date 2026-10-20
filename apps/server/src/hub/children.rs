@@ -17,7 +17,7 @@ use motile_protocol::wire::{
 use serde::Serialize;
 use serde_json::{Value, json};
 
-use super::{Hub, Live, TitleSource, agent_name, new_id, thread_worktree};
+use super::{Hub, Live, TitleSource, agent_name, new_id, plain_message, thread_worktree};
 use crate::git;
 use crate::mcp::StartAgent;
 
@@ -273,7 +273,7 @@ impl Hub {
         };
         threads.insert(child_id.clone(), Live::new(stored, self.media.clone()));
         let live = threads.get_mut(&child_id).context("The agent's thread is gone.")?;
-        live.append_message(&self.store, new_id(), prompt.clone(), Vec::new(), Vec::new(), Vec::new())?;
+        live.append_queued(&self.store, plain_message(prompt.clone()))?;
         self.start_turn(live, prompt)?;
         if let (Some(tool_id), Some(parent)) = (&tool_id, threads.get_mut(caller)) {
             let agent = Subagent {
@@ -457,7 +457,7 @@ impl Hub {
             live.stored.reports = true;
             self.store.save_thread(&live.stored)?;
         }
-        self.send(Some(id.to_string()), None, text, Vec::new(), true).await?;
+        self.send(Some(id.to_string()), None, text, Vec::new(), true, None).await?;
         Ok(self.child_states(caller, &[id.to_string()], None).await?.remove(0))
     }
 
@@ -732,15 +732,20 @@ impl Hub {
             event,
             agent: thread.agent,
             summary,
+            repair: false,
         };
         Ok(Some((notice, text)))
     }
 
-    /// Tells the thread's agent of an agent it started: at once while it works, in a turn of its
-    /// own when it doesn't, and after the turn it is about to start otherwise.
     async fn notify(self: &Arc<Self>, thread_id: &str, notice: AgentNotice, text: String) -> anyhow::Result<()> {
         let mut threads = self.threads.lock().await;
         let Some(live) = threads.get_mut(thread_id) else { return Ok(()) };
+        self.tell(live, notice, text)
+    }
+
+    /// Tells the thread's agent what the notice is about: at once while it works, in a turn of its
+    /// own when it doesn't, and after the turn it is about to start otherwise.
+    pub(super) fn tell(self: &Arc<Self>, live: &mut Live, notice: AgentNotice, text: String) -> anyhow::Result<()> {
         let queued = Queued {
             id: new_id(),
             text,
@@ -750,6 +755,8 @@ impl Hub {
             held: false,
             sending: false,
             notice: Some(notice),
+            context: None,
+            programs: Vec::new(),
         };
         let waits = live.preparing.is_some() || live.limited();
         let Some(run) = live.run.as_ref().filter(|run| run.resting.is_none()).filter(|_| !waits) else {

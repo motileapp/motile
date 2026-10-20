@@ -1,0 +1,17 @@
+root = Card([head, SegmentedControl($dist, ["Skewed", "Uniform", "Bimodal"]), Grid([popCard, meanCard], 2, 260, 4), Slider($n, 1, 50, 1, "Values per sample"), buttons, stats, Text("As the sample size grows, the averages of samples pile up in a bell shape around the population mean, even when the population itself is skewed.", "sm", "muted"), quiz], null, 5, 4)
+$dist = "Skewed"
+$n = 5
+$means = []
+$answer = ""
+head = Col([Title("The central limit theorem", "lg"), Text("Different populations. The same bell-shaped pattern.", "sm", "muted")], 1)
+pop = @Each(@Range(0.0025, 1, 0.005), "u", $dist == "Skewed" ? @Pow(u, 3) : $dist == "Uniform" ? u : (u < 0.5 ? 0.05 + 0.4 * u : 0.55 + 0.4 * u))
+current = @Filter(@Filter($means, "dist", "==", $dist), "n", "==", $n).mean
+draw = @Each(@Range(0, 100), "s", {dist: $dist, n: $n, mean: @Avg(@Each(@Each(@Range(0, $n), "k", @Random(0, 1)), "u", $dist == "Skewed" ? @Pow(u, 3) : $dist == "Uniform" ? u : (u < 0.5 ? 0.05 + 0.4 * u : 0.55 + 0.4 * u)))})
+popCard = Col([Title("Population", "sm"), Caption("The values we draw from"), Chart("bar", @Histogram(pop, 20, 0, 1), "key", ["value"], null, null, false, 150)], 1)
+meanCard = Col([Title("Sample means", "sm"), Caption("The average of each sample of " + $n), @Count(current) == 0 ? Box([Text("Draw samples to see the pattern", "sm", "muted")], null, null, 6, "surface", "lg", true, "100%", 150, null, "center", "center") : Chart("bar", @Histogram(current, 20, 0, 1), "key", ["value"], null, null, false, 150)], 1)
+buttons = Row([Button("Draw 100 samples", @Set($means, @Take(@Concat($means, draw), -6000)), "solid", null, null, "dices"), Button("Draw 500", Action([@Set($means, @Take(@Concat($means, draw), -6000)), @Set($means, @Take(@Concat($means, draw), -6000)), @Set($means, @Take(@Concat($means, draw), -6000)), @Set($means, @Take(@Concat($means, draw), -6000)), @Set($means, @Take(@Concat($means, draw), -6000))]), "outline"), Button("Reset", @Reset($means), "ghost", null, null, "rotate-ccw")], 2, null, null, true)
+stats = Grid([s1, s2, s3], 3, 140, 3)
+s1 = Card([Caption("Samples"), Title(@Format(@Count(current)), "xl")], "soft", 3, 1)
+s2 = Card([Caption("Mean of the means"), Title(@Count(current) == 0 ? "-" : @Format(@Stats(current).mean, "number", 3), "xl"), Caption("Population: " + @Format(@Stats(pop).mean, "number", 3))], "soft", 3, 1)
+s3 = Card([Caption("Spread of the means"), Title(@Count(current) == 0 ? "-" : @Format(@Stats(current).stdev, "number", 3), "xl"), Caption("Theory, σ/√n: " + @Format(@Stats(pop).stdev / @Sqrt($n), "number", 3))], "soft", 3, 1)
+quiz = Card([RadioGroup($answer, [{value: "a", label: "The population becomes normal"}, {value: "b", label: "The sample means form a narrower bell shape"}, {value: "c", label: "Every mean becomes exactly the same"}], "What changes when the sample size grows?"), $answer == "" ? null : Text(($answer == "b" ? "**Correct.** " : "**Not quite.** ") + "The population stays the same. The means become more normal and their spread shrinks like 1/√n.", "sm")], "soft", 4, 2)
