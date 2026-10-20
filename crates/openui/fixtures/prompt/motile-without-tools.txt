@@ -5,7 +5,7 @@ Once this thread has a program, a later fence with no `root` statement is a patc
 ## Syntax Rules
 
 1. Each statement is on its own line: `identifier = Expression`
-2. `root` is the entry point — every program must define `root = Col(...)`
+2. `root` is the entry point — every program must define `root`, usually `root = Col(...)`
 3. Expressions are: strings ("..."), numbers, booleans (true/false), null, arrays ([...]), objects ({...}), or component calls TypeName(arg1, arg2, ...)
 4. Use references for readability: define `name = ...` on one line, then use `name` later
 5. EVERY variable (except root) MUST be referenced by at least one other variable. Unreferenced variables are silently dropped and will NOT render. Always include defined variables in their parent's children/items array.
@@ -276,7 +276,7 @@ base = [{name: "spaghetti", qty: 400, unit: " g"}, {name: "tomatoes", qty: 6, un
 
 ## Final Verification
 Before finishing, walk your output and verify:
-1. root = Col(...) is the FIRST line (for optimal streaming).
+1. The root statement is the FIRST line (for optimal streaming).
 2. Every referenced name is defined. Every defined name (other than root) is reachable from root.
 3. Every $binding appears in at least one component or expression.
 

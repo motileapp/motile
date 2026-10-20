@@ -34,6 +34,10 @@ pub struct PromptOptions {
     pub tool_examples: Vec<String>,
     /// Bullets at the end.
     pub additional_rules: Vec<String>,
+    /// Replaces the Data Workflow section, for a host whose model can't call the tools itself.
+    pub data_workflow: Option<String>,
+    /// Lets `root` be any component: the library's root is then only the usual one.
+    pub any_root: bool,
     pub edit_mode: bool,
     pub inline_mode: bool,
 }
@@ -75,7 +79,7 @@ pub fn generate_system_prompt(library: &Library, options: &PromptOptions) -> Str
     let mut parts = vec![
         options.preamble.clone().unwrap_or_else(|| PREAMBLE.to_owned()),
         String::new(),
-        syntax_rules(root, expressions, bindings),
+        syntax_rules(root, options.any_root, expressions, bindings),
         String::new(),
         component_signatures(library, &flags, uses_action_expression),
     ];
@@ -119,7 +123,7 @@ pub fn generate_system_prompt(library: &Library, options: &PromptOptions) -> Str
     }
     if tool_calls {
         parts.push(String::new());
-        parts.push(TOOL_WORKFLOW_SECTION.to_owned());
+        parts.push(options.data_workflow.clone().unwrap_or_else(|| TOOL_WORKFLOW_SECTION.to_owned()));
     }
     if !options.tools.is_empty() {
         parts.push(String::new());
@@ -149,7 +153,7 @@ pub fn generate_system_prompt(library: &Library, options: &PromptOptions) -> Str
         parts.push(INLINE_MODE_SECTION.to_owned());
     }
 
-    parts.push(important_rules(root, &flags));
+    parts.push(important_rules(root, options.any_root, &flags));
 
     if !options.additional_rules.is_empty() {
         parts.push(String::new());
@@ -175,12 +179,18 @@ fn function_line(signature: &str, description: &str) -> String {
     format!("@{signature} — {description}")
 }
 
-fn syntax_rules(root: &str, expressions: bool, bindings: bool) -> String {
+fn syntax_rules(root: &str, any_root: bool, expressions: bool, bindings: bool) -> String {
+    let entry = match any_root {
+        true => {
+            format!("2. `root` is the entry point — every program must define `root`, usually `root = {root}(...)`")
+        }
+        false => format!("2. `root` is the entry point — every program must define `root = {root}(...)`"),
+    };
     let mut lines = vec![
         "## Syntax Rules".to_owned(),
         String::new(),
         "1. Each statement is on its own line: `identifier = Expression`".to_owned(),
-        format!("2. `root` is the entry point — every program must define `root = {root}(...)`"),
+        entry,
         "3. Expressions are: strings (\"...\"), numbers, booleans (true/false), null, arrays ([...]), objects ({...}), \
          or component calls TypeName(arg1, arg2, ...)"
             .to_owned(),
@@ -538,9 +548,13 @@ Always write the root = {root}(...) statement first so the UI shell appears imme
     )
 }
 
-fn important_rules(root: &str, flags: &Flags) -> String {
+fn important_rules(root: &str, any_root: bool, flags: &Flags) -> String {
+    let first = match any_root {
+        true => "1. The root statement is the FIRST line (for optimal streaming).".to_owned(),
+        false => format!("1. root = {root}(...) is the FIRST line (for optimal streaming)."),
+    };
     let mut lines = vec![
-        format!("1. root = {root}(...) is the FIRST line (for optimal streaming)."),
+        first,
         "2. Every referenced name is defined. Every defined name (other than root) is reachable from root.".to_owned(),
     ];
     if flags.tool_calls {

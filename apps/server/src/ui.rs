@@ -21,10 +21,43 @@ const CONTEXT: &str = "context and form values = ";
 
 static LIBRARY: LazyLock<Library> = LazyLock::new(motile::library);
 
-/// What every agent is told of programs: OpenUI Lang, Motile's library and the tools a program
-/// calls.
+/// What an agent is told of programs: OpenUI Lang, Motile's library and the tools a program
+/// calls. One that can call the motile MCP server reads it with `openui_guide` instead.
 pub static PROMPT: LazyLock<String> =
     LazyLock::new(|| motile::system_prompt(ui_tools::definitions().into_iter().map(tool_spec).collect()));
+
+/// How much of the guide one answer of `openui_guide` holds: Codex keeps 10,000 tokens of a
+/// tool's answer, four bytes each, and cuts the middle out of a longer one.
+const GUIDE_PAGE: usize = 28 * 1024;
+
+/// `PROMPT` in pages, cut between its sections.
+static GUIDE: LazyLock<Vec<String>> = LazyLock::new(|| pages(&PROMPT, GUIDE_PAGE));
+
+/// The guide's page, counted from 1, which tells the agent to read the next one.
+pub fn guide_page(page: usize) -> Option<String> {
+    let text = GUIDE.get(page.checked_sub(1)?)?;
+    let count = GUIDE.len();
+    if page == count {
+        return Some(text.clone());
+    }
+    Some(format!("{text}\n\n(Page {page} of {count}: read page {} too.)", page + 1))
+}
+
+fn pages(text: &str, size: usize) -> Vec<String> {
+    let starts: Vec<usize> = std::iter::once(0).chain(text.match_indices("\n## ").map(|(at, _)| at)).collect();
+    let ends = starts.iter().skip(1).copied().chain([text.len()]);
+    let mut pages: Vec<String> = Vec::new();
+    let mut page = String::new();
+    for (start, end) in starts.iter().copied().zip(ends) {
+        let section = &text[start..end];
+        if !page.is_empty() && page.len() + section.len() > size {
+            pages.push(std::mem::take(&mut page));
+        }
+        page += section;
+    }
+    pages.push(page);
+    pages
+}
 
 fn tool_spec(tool: ToolDefinition) -> ToolSpec {
     let mut description = tool.description.to_string();
@@ -224,6 +257,23 @@ chart = BarChart([{day: \"Mon\", signups: 12}, {day: \"Tue\", signups: 18}])
 note = Badge()";
     const FIX: &str = "chart = Chart(\"bar\", [{day: \"Mon\", signups: 12}, {day: \"Tue\", signups: 18}], \"day\")
 note = Badge(\"Tuesday was the best day\", \"success\")";
+
+    #[test]
+    fn the_guide_is_the_prompt_in_pages_a_tool_answer_keeps_whole() {
+        let pages: Vec<String> = (1..).map_while(guide_page).collect();
+        assert!(pages.len() > 1, "{} bytes fit in one page", PROMPT.len());
+        assert!(pages.iter().all(|page| page.len() <= GUIDE_PAGE + 64), "{:?}", pages.iter().map(String::len));
+        assert!(pages[0].starts_with(motile::PREAMBLE) && pages[0].ends_with("read page 2 too.)"));
+        assert_eq!(GUIDE.concat(), *PROMPT);
+        assert!(guide_page(0).is_none() && guide_page(pages.len() + 1).is_none());
+    }
+
+    #[test]
+    fn pages_are_cut_between_sections() {
+        let text = "Intro\n## One\naaaa\n## Two\nbbbb\n## Three\ncccccccccccccccccccc";
+        assert_eq!(pages(text, 24), ["Intro\n## One\naaaa", "\n## Two\nbbbb", "\n## Three\ncccccccccccccccccccc"]);
+        assert_eq!(pages(text, 1000), [text]);
+    }
 
     fn item(id: &str, kind: ItemKind) -> Item {
         let item = json!({ "id": id, "seq": 0, "rev": 0, "created_at": 0.0, "type": "assistant", "text": "" });

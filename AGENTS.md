@@ -146,6 +146,7 @@ shadcn's own colours, opacities and radii are gone from the theme.
   transcript shows the switch as a `Handoff` item.
 - `mcp.rs`: the `motile` MCP server on the loopback interface, which an agent calls by the token of
   its own thread: `read_thread` reads any thread of the server, for what a handoff left out,
+  `openui_guide` gives the prompt that teaches programs in pages that fit in a tool's answer,
   `check_ui` checks a program before the agent shows it, and `list_accounts`, `start_agent`,
   `agent_status`, `message_agent`, `answer_agent` and `stop_agent` start and follow agents on any of
   the server's accounts, Claude Code's or Codex's.
@@ -200,7 +201,9 @@ shadcn's own colours, opacities and radii are gone from the theme.
 - `ricrac.rs`: the same for Ricrac (ricrac.app, our own tracker), through its REST operations
   (`POST /v1/ops/<name>`) where Linear's is GraphQL. `MOTILE_RICRAC_URL` stands in for Ricrac.
 - `ui.rs`: the programs agents show in their replies (OpenUI Lang in an `openui-lang` fence), which
-  every agent is taught by the prompt `crates/openui` writes, appended to its instructions. Once a
+  every agent is taught by the prompt `crates/openui` writes. Its instructions only say what a
+  program is and to read that prompt with `openui_guide`, unless it has no motile MCP server, when
+  they hold the whole prompt. Once a
   thread has a program, a fence with no `root` statement is a patch merged over the latest. When a
   turn ends with a program that has errors, the agent is sent them as a `Notice` and asked for a
   patch, twice at most for a message, never for a turn that was stopped or hit the limit. An

@@ -24,37 +24,47 @@ const SHOWING_MEDIA: &str = "You can show the user an image or a video by embedd
      ![The report](/path/to/report.pdf), is sent to the user to download; send a folder as an archive.";
 
 /// Told to an agent when it starts: where it runs, that it shows or sends what it made instead of
-/// naming a file, and how it shows a program. Claude Code knows its own model and effort; Codex is
-/// told them.
+/// naming a file, and how it shows a program, which one with the motile MCP server reads with
+/// `openui_guide`. Codex is told its model and effort last, so that the rest stays the same when a
+/// thread switches models; Claude Code knows its own.
 pub fn instructions(turn: &Turn) -> String {
     let harness = match turn.agent {
         Agent::Claude => "Claude Code",
         Agent::Codex => "Codex",
     };
-    let mut text = format!("In case you're asked: you are running in Motile through the {harness} harness");
-    if turn.agent == Agent::Codex {
+    let mut text = format!(
+        "In case you're asked: you are running in Motile through the {harness} harness. No need to mention this otherwise. "
+    );
+    text += SHOWING_MEDIA;
+    match turn.mcp {
+        Some(_) => {
+            text += STARTING_AGENTS;
+            text += "\n\n";
+            text += motile_openui::motile::PREAMBLE;
+            text += READING_THE_GUIDE;
+        }
+        None => {
+            text += "\n\n";
+            text += &crate::ui::PROMPT;
+        }
+    }
+    if turn.agent == Agent::Codex && (turn.model.is_some() || turn.effort.is_some()) {
+        text += "\n\nIn case you're asked, you run";
         if let Some(model) = turn.model {
-            text += &format!(", as {model}");
+            text += &format!(" as {model}");
         }
         if let Some(effort) = turn.effort {
             text += &format!(" with {effort} reasoning effort");
         }
-    }
-    text += ". No need to mention this otherwise. ";
-    text += SHOWING_MEDIA;
-    if turn.mcp.is_some() {
-        text += STARTING_AGENTS;
-    }
-    text += "\n\n";
-    text += &crate::ui::PROMPT;
-    if turn.mcp.is_some() {
-        text += CHECKING_PROGRAMS;
+        text += ".";
     }
     text
 }
 
-const CHECKING_PROGRAMS: &str =
-    "\n- Before you send a program you aren't sure of, check it with the motile tool check_ui.";
+const READING_THE_GUIDE: &str = "\n\nBefore you write a program, read the motile tool openui_guide: the language, \
+     Motile's components and functions, and the tools a program's Query and Mutation call. Read all of its pages, once \
+     in a thread and again when they are no longer in your context. Check a program you aren't sure of with the motile \
+     tool check_ui before you send it.";
 
 /// How the agents start agents on the server's other accounts.
 const STARTING_AGENTS: &str = "\n\nYou can start agents on the other accounts of the user's server, other Claude Code \
@@ -62,8 +72,8 @@ const STARTING_AGENTS: &str = "\n\nYou can start agents on the other accounts of
      stop_agent. Use them when the user asks for another account, agent or model, or for work that goes better apart \
      while you go on. For work your own subagents do as well, use those. Each agent is given only the prompt you write. \
      You are told when one finishes or asks something, so end your turn instead of checking on it, unless you need its \
-     result to go on, which start_agent's and agent_status's wait is for. If a motile tool seems missing, call it \
-     anyway: some tools load only when first called.";
+     result to go on, which start_agent's and agent_status's wait is for. A motile tool that isn't listed may load only \
+     when first used: look it up with your tool search, or call it by name, before you decide it's missing.";
 
 pub use motile_protocol::wire::PLAN_TOOL;
 

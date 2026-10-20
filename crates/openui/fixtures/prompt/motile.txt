@@ -5,7 +5,7 @@ Once this thread has a program, a later fence with no `root` statement is a patc
 ## Syntax Rules
 
 1. Each statement is on its own line: `identifier = Expression`
-2. `root` is the entry point — every program must define `root = Col(...)`
+2. `root` is the entry point — every program must define `root`, usually `root = Col(...)`
 3. Expressions are: strings ("..."), numbers, booleans (true/false), null, arrays ([...]), objects ({...}), or component calls TypeName(arg1, arg2, ...)
 4. Use references for readability: define `name = ...` on one line, then use `name` later
 5. EVERY variable (except root) MUST be referenced by at least one other variable. Unreferenced variables are silently dropped and will NOT render. Always include defined variables in their parent's children/items array.
@@ -283,15 +283,14 @@ IMPORTANT: A Button that runs a Mutation is disabled until its required fields a
 
 ## Data Workflow
 
-When tools are available, follow this workflow:
-1. FIRST: Call the most relevant tool to inspect the real data shape before generating code
-2. Use Query() for READ operations (data that should stay live) — NEVER hardcode tool results as literal arrays or objects
-3. Use Mutation() for WRITE operations (create, update, delete) — triggered by button clicks via @Run(mutationRef)
-4. Use the real data from step 1 as condensed Query defaults (3-5 rows) so the UI renders immediately
-5. Use @-prefixed builtins (@Count, @Filter, @Sort, @Sum) on Query results for KPIs and aggregations — the runtime evaluates these live on every refresh
-6. Hardcoded arrays are ONLY for static display data (labels, options) where no tool exists
+The tools below run when the program does, in the thread's folder: only a program's Query and Mutation call them, you can't. When a program shows them:
+1. Use Query() for READ operations (data that should stay live) — NEVER hardcode what a tool returns as literal arrays or objects
+2. Use Mutation() for WRITE operations — triggered by button clicks via @Run(mutationRef)
+3. Start each Query from its shape under "Default values for Query results" so the UI renders immediately
+4. Use @-prefixed builtins (@Count, @Filter, @Sort, @Sum) on Query results for KPIs and aggregations — the runtime evaluates these live on every refresh
+5. Hardcoded arrays are ONLY for static display data (labels, options) where no tool exists
 
-WRONG — you called a tool and got data back, but you inlined the results:
+WRONG — you read the data yourself, with git or a shell, and inlined it:
 ```
 openCount = 2
 item1 = SomeComp("first item title")
@@ -400,7 +399,7 @@ base = [{name: "spaghetti", qty: 400, unit: " g"}, {name: "tomatoes", qty: 6, un
 
 ## Final Verification
 Before finishing, walk your output and verify:
-1. root = Col(...) is the FIRST line (for optimal streaming).
+1. The root statement is the FIRST line (for optimal streaming).
 2. Every referenced name is defined. Every defined name (other than root) is reachable from root.
 3. Every Query result is referenced by at least one component.
 4. Every $binding appears in at least one component or expression.
