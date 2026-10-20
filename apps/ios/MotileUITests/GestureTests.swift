@@ -207,7 +207,7 @@ final class GestureTests: XCTestCase {
         XCTAssertTrue(shown(newThread))
         app.textFields["Search"].tap()
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 3))
-        app.staticTexts["Motile"].tap()
+        app.images["Motile"].tap()
         XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 3))
         XCTAssertTrue(newThread.isHittable)
     }
