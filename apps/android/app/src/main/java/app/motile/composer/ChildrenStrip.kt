@@ -91,16 +91,7 @@ fun AgentBar(agent: AgentInfo, modifier: Modifier = Modifier) {
                 }
             },
         )
-        // The way back's arrow stands close to its words, as the crumb's does.
+        // The way back's arrow stands close to its words.
         ActionButton("Go Back", Symbol.CornerLeftUp, help = "Back to the thread", variant = ButtonVariant.Primary, gap = 4.dp, round = true) { store.rightPanel.showAgents() }
     }
-}
-
-/** The thread before a thread's title, as a button that opens it: the thread whose agent started the open one, or the thread of the agent shown. */
-@Composable
-fun TitleCrumb(title: String, modifier: Modifier = Modifier, compact: Boolean = false, action: () -> Unit) {
-    // Compact, where the title has no room, it is only the symbol.
-    val symbol = ControlSize.Small.smallSymbol
-    if (compact) return ActionButton(icon = Symbol.CornerLeftUp, modifier = modifier, help = "Open $title", size = ControlSize.Small, symbolSize = symbol, inline = true, onClick = action)
-    ActionButton(title, Symbol.CornerLeftUp, modifier, help = "Open $title", variant = ButtonVariant.Ghost, size = ControlSize.Small, symbolSize = symbol, inline = true, onClick = action)
 }

@@ -1307,7 +1307,7 @@ final class AgentsRowView: RowView {
 final class LineageView: FlippedView {
     static let height = ControlSize.large.height
 
-    private static let size = ControlSize.small
+    private static let size = ControlSize.regular
     private static let lineGap = ControlSize.regular.padding
     /// The arrow's square leaves room around its ink, so it needs little more from the words.
     private static let arrowGap: CGFloat = 4
@@ -1316,7 +1316,7 @@ final class LineageView: FlippedView {
     private let leading = SurfaceView()
     private let trailing = SurfaceView()
     private let pill = SurfaceView()
-    private let symbol = SymbolView(.cornerLeftUp, size: size.smallSymbol, tint: Theme.foreground)
+    private let symbol = SymbolView(.cornerLeftUp, size: size.symbol, tint: Theme.foreground)
     private let words = TextLabel(font: .ui(size.textSize, weight: .medium), color: Theme.foreground)
 
     var action: (() -> Void)?
@@ -1354,8 +1354,10 @@ final class LineageView: FlippedView {
 
     private func placeParts() {
         let size = Self.size
-        let side = PlatformImage.symbolSide(size.smallSymbol)
-        let ends = size.padding + side + Self.arrowGap + size.padding
+        let side = PlatformImage.symbolSide(size.symbol)
+        // Lucide leaves an eighth of the arrow's square empty on each side; its ink starts at the padding.
+        let lead = size.padding - side / 8
+        let ends = lead + side + Self.arrowGap + size.padding
         let room = max(0, bounds.width - Self.lineGap * 2 - ends)
         // The field draws its words inset on both sides, which the pill leaves out.
         let inset = max(0, (words.natural.width - ceil(words.attributed.size().width)) / 2)
@@ -1364,7 +1366,7 @@ final class LineageView: FlippedView {
         let x = ((bounds.width - width) / 2).rounded()
         let y = ((bounds.height - size.height) / 2).rounded()
         pill.frame = CGRect(x: x, y: y, width: width, height: size.height)
-        let symbolX = x + size.padding
+        let symbolX = x + lead
         // The arrow stands on the baseline, lower than the caps' middle it is raised to.
         symbol.frame = CGRect(x: symbolX, y: y + ((size.height - side) / 2).rounded() - scaled(1), width: side, height: side)
         let wordsHeight = words.natural.height

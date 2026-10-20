@@ -123,47 +123,18 @@ struct ThreadScreen: View {
         }
     }
 
-    /// The thread's name, after the thread whose agent started it, or for an agent shown in its
-    /// place, the agent's after the thread's. Then the project.
+    /// The project, then the thread's name, or the agent's when one is shown in its place.
     private var title: some View {
         VStack(alignment: .leading, spacing: 1) {
-            titleLine
             if let parts = store.composerProjectLine {
                 ProjectLine(project: store.composerProject, parts: parts, size: 12, iconSize: 12)
             }
+            Text(store.shownAgent?.title ?? store.selectedThread?.title ?? "New thread")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(Color.themeForeground)
         }
         .lineLimit(1)
         .frame(idealWidth: 10000, maxWidth: .infinity, alignment: .leading)
-    }
-
-    /// A narrow screen keeps the title whole and the way back only as its symbol.
-    private var titleLine: some View {
-        ViewThatFits(in: .horizontal) {
-            titleLine(compact: false)
-            titleLine(compact: true)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    /// The symbol alone stands as close to the title as it does to its words.
-    private func titleLine(compact: Bool) -> some View {
-        HStack(spacing: compact ? 0 : 4) {
-            if let agent = store.shownAgent, let thread = store.selectedThread {
-                TitleCrumb(title: thread.title, compact: compact) { store.rightPanel.showAgents() }
-                titleText(agent.title).layoutPriority(1)
-            } else if let parent = store.parentThread {
-                TitleCrumb(title: parent.title, compact: compact) { store.openStartedThread(parent.id) }
-                titleText(store.selectedThread?.title ?? "").layoutPriority(1)
-            } else {
-                titleText(store.selectedThread?.title ?? "New thread")
-            }
-        }
-    }
-
-    private func titleText(_ text: String) -> some View {
-        Text(text)
-            .font(.system(size: 15, weight: .semibold))
-            .foregroundStyle(Color.themeForeground)
     }
 
     /// The empty state of a new thread: a question, over the composer.

@@ -89,34 +89,18 @@ struct ThreadPane: View {
         }
     }
 
-    /// The project, then the thread's name: after the thread whose agent started it, or for an
-    /// agent shown in its place, the agent's after the thread's.
+    /// The project, then the thread's name, or the agent's when one is shown in its place.
     private var title: some View {
         VStack(alignment: .leading, spacing: 2) {
             if let parts = store.composerProjectLine {
                 ProjectLine(project: store.composerProject, parts: parts, size: 11, iconSize: 12)
-                    .allowsHitTesting(false)
             }
-            HStack(spacing: 4) {
-                if let agent = store.shownAgent, let thread = store.selectedThread {
-                    TitleCrumb(title: thread.title) { store.rightPanel.showAgents() }
-                    titleText(agent.title).layoutPriority(1)
-                } else if let parent = store.parentThread {
-                    TitleCrumb(title: parent.title) { store.openStartedThread(parent.id) }
-                    titleText(store.selectedThread?.title ?? "").layoutPriority(1)
-                } else {
-                    titleText(store.selectedThread?.title ?? "New thread")
-                }
-            }
+            Text(store.shownAgent?.title ?? store.selectedThread?.title ?? "New thread")
+                .font(.ui(size: 13, weight: .semibold))
+                .foregroundStyle(Color.themeForeground)
         }
         .lineLimit(1)
-    }
-
-    private func titleText(_ text: String) -> some View {
-        Text(text)
-            .font(.ui(size: 13, weight: .semibold))
-            .foregroundStyle(Color.themeForeground)
-            .allowsHitTesting(false)
+        .allowsHitTesting(false)
     }
 
     /// The empty state of a new thread: a question, and the composer a little above the middle

@@ -75,6 +75,7 @@ import app.motile.theme.LocalPalette
 import app.motile.theme.ShadowSize
 import app.motile.theme.Theme
 import app.motile.theme.shadow
+import app.motile.theme.symbolSide
 import app.motile.ui.Icon
 import app.motile.ui.Text
 import kotlin.math.floor
@@ -523,7 +524,7 @@ private fun entryKey(entry: Any): String = when (entry) {
 @Composable
 private fun StartedByLine(open: () -> Unit) {
     val palette = LocalPalette.current
-    val size = ControlSize.Small
+    val size = ControlSize.Regular
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     Row(Modifier.fillMaxWidth().height(ControlSize.Large.height), verticalAlignment = Alignment.CenterVertically) {
@@ -535,11 +536,12 @@ private fun StartedByLine(open: () -> Unit) {
                 .background(if (pressed) palette.borderAccent else palette.backgroundAccent, CircleShape)
                 .border(1.dp, palette.borderAccent, CircleShape)
                 .clickable(interaction, indication = null, role = Role.Button, onClick = open)
-                .padding(horizontal = size.padding),
+                // Lucide leaves an eighth of the arrow's square empty on each side; its ink starts at the padding.
+                .padding(start = size.padding - symbolSide(size.symbol) / 8, end = size.padding),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             // The arrow's square leaves room around its ink, so it needs little more from the words.
-            Icon(Symbol.CornerLeftUp, size.smallSymbol, Modifier.padding(end = 4.dp), color = palette.foreground)
+            Icon(Symbol.CornerLeftUp, size.symbol, Modifier.padding(end = 4.dp), color = palette.foreground)
             Text("Go back to parent thread", style = size.font, color = palette.foreground, maxLines = 1)
         }
         Box(Modifier.weight(1f).height(1.dp).background(palette.border))

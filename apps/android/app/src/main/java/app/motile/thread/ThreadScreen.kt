@@ -53,8 +53,6 @@ import androidx.compose.ui.unit.dp
 import app.motile.LocalStore
 import app.motile.composer.AgentBar
 import app.motile.composer.ComposerView
-import app.motile.composer.FirstThatFits
-import app.motile.composer.TitleCrumb
 import app.motile.core.AppStore
 import app.motile.core.Notice
 import app.motile.core.PanelPage
@@ -226,32 +224,8 @@ private fun MenuIcon(attention: Color?) {
 private fun Title(modifier: Modifier) {
     val store = LocalStore.current
     Column(modifier, verticalArrangement = Arrangement.spacedBy(1.dp)) {
-        // A narrow screen keeps the title whole and the way back only as its symbol.
-        FirstThatFits(Modifier.fillMaxWidth(), { TitleLine(compact = false) }, { TitleLine(compact = true) })
         store.composerProjectLine?.let { parts -> ProjectLine(store.composerProject, parts, size = 12f, iconSize = 12f) }
-    }
-}
-
-@Composable
-private fun TitleLine(compact: Boolean) {
-    val store = LocalStore.current
-    val agent = store.shownAgent
-    val thread = store.selectedThread
-    val parent = store.parentThread
-    // The symbol alone stands as close to the title as it does to its words.
-    Row(horizontalArrangement = Arrangement.spacedBy(if (compact) 0.dp else 4.dp), verticalAlignment = Alignment.CenterVertically) {
-        val title = @Composable { text: String -> Text(text, Modifier.weight(1f, fill = false), style = system(15f, FontWeight.SemiBold), maxLines = 1) }
-        when {
-            agent != null && thread != null -> {
-                TitleCrumb(thread.title, compact = compact) { store.rightPanel.showAgents() }
-                title(agent.title)
-            }
-            parent != null -> {
-                TitleCrumb(parent.title, compact = compact) { store.openStartedThread(parent.id) }
-                title(thread?.title.orEmpty())
-            }
-            else -> title(thread?.title ?: "New thread")
-        }
+        Text(store.shownAgent?.title ?: store.selectedThread?.title ?: "New thread", style = system(15f, FontWeight.SemiBold), maxLines = 1)
     }
 }
 

@@ -1682,14 +1682,16 @@ fn reply_text(rows: &[Arc<RowModel>], end_id: &str) -> String {
 pub fn started_by(end: bool, parent: &str, ctx: &RowContext, cx: &App) -> AnyElement {
     let c = colors(cx);
     let id = parent.to_string();
-    let size = ControlSize::Small;
+    let size = ControlSize::Regular;
     let line = || div().flex_1().h(px(1.)).bg(c.border);
     let store = ctx.store.clone();
     let pill = div()
         .id(("started-by", usize::from(end)))
         .min_w_0()
         .h(px(size.height()))
-        .px(px(size.padding()))
+        // Lucide leaves an eighth of the arrow's square empty on each side; its ink starts at the padding.
+        .pl(px(size.padding() - theme::symbol_side(size.symbol()) / 8.))
+        .pr(px(size.padding()))
         .flex()
         .items_center()
         .rounded_full()
@@ -1702,10 +1704,7 @@ pub fn started_by(end: bool, parent: &str, ctx: &RowContext, cx: &App) -> AnyEle
         // The arrow stands on the baseline, lower than the caps' middle it is raised to. Its
         // square leaves room around its ink, so it needs little more from the words.
         .child(
-            div()
-                .mt(px(-1.))
-                .mr(px(4.))
-                .child(icons::symbol("corner-left-up", size.small_symbol()).text_color(c.foreground)),
+            div().mt(px(-1.)).mr(px(4.)).child(icons::symbol("corner-left-up", size.symbol()).text_color(c.foreground)),
         )
         .child(
             div()

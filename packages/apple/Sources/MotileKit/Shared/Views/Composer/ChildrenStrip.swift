@@ -41,7 +41,7 @@ struct AgentBar: View {
     let agent: AgentInfo
 
     private static let height = ControlSize.large.height + 8
-    /// The way back's arrow stands close to its words, as the crumb's does.
+    /// The way back's arrow stands close to its words.
     private static let backGap: CGFloat = 4
     /// What it says stands twice the bar's gap from the way back.
     private static let backApart: CGFloat = 8
@@ -81,27 +81,6 @@ struct AgentBar: View {
                     .padding(.trailing, Self.backApart)
             }
             ActionButton("Go Back", icon: .cornerLeftUp, help: "Back to the thread", variant: .primary, gap: Self.backGap, round: true) { store.rightPanel.showAgents() }
-        }
-    }
-}
-
-/// The thread before a thread's title, as a button that opens it: the thread whose agent started
-/// the open one, or the thread of the agent shown.
-struct TitleCrumb: View {
-    let title: String
-    /// Where the title has no room, it is only the symbol.
-    var compact = false
-    let action: () -> Void
-
-    var body: some View {
-        if compact {
-            ActionButton(
-                icon: .cornerLeftUp, help: "Open \(title)", size: .small, symbolSize: ControlSize.small.smallSymbol, inline: true,
-                action: action)
-        } else {
-            ActionButton(
-                title, icon: .cornerLeftUp, help: "Open \(title)", variant: .ghost, size: .small, symbolSize: ControlSize.small.smallSymbol,
-                inline: true, action: action)
         }
     }
 }
