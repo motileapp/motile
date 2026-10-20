@@ -224,12 +224,20 @@ struct RootView: View {
             ConnectServerView(isFirst: false)
                 .frame(width: 620)
         }
-        .asking(Binding { store.errorMessage.map(ShownError.init) } set: { store.errorMessage = $0?.id }) { _ in
+        .asking(shownError) { _ in
             Confirmation(title: store.errorAlert.title, message: store.errorAlert.detail, dismissal: "OK")
         }
-        .asking(Binding { store.programConfirm } set: { if $0 == nil { store.closeProgramConfirm() } }) { $0.confirmation(store) }
+        .asking(programConfirm) { $0.confirmation(store) }
         .asking($store.stopping) { $0.confirmation(store) }
         .overlay { ModalLayer() }
+    }
+
+    private var shownError: Binding<ShownError?> {
+        Binding { store.errorMessage.map(ShownError.init) } set: { store.errorMessage = $0?.id }
+    }
+
+    private var programConfirm: Binding<ProgramConfirm?> {
+        Binding { store.programConfirm } set: { if $0 == nil { store.closeProgramConfirm() } }
     }
 }
 

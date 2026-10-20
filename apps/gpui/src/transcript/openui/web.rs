@@ -459,7 +459,11 @@ mod live {
     #[derive(Clone)]
     pub enum Page {
         Html(String),
-        YouTube { url: String, title: String },
+        YouTube {
+            url: String,
+            #[allow(dead_code)]
+            title: String,
+        },
     }
 
     #[derive(Clone)]
