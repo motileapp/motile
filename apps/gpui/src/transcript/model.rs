@@ -236,6 +236,8 @@ pub struct Transcript {
     /// The rows shown are another thread's, kept until this one's arrive so the view isn't
     /// empty in between. What is around them stays too, so that they all change in one pass.
     pub keeps_rows: bool,
+    /// What the agent of the thread opened does, shown once its rows replace the ones kept.
+    opened_activity: Activity,
     pub list: ListState,
     /// What the list shows, in order.
     pub items: Rc<Vec<Item>>,
@@ -264,6 +266,7 @@ impl Transcript {
             started_by: None,
             live: false,
             keeps_rows: false,
+            opened_activity: Activity::default(),
             list,
             items: Rc::default(),
             keys: Vec::new(),
@@ -416,8 +419,7 @@ impl Transcript {
         self.pending = None;
         self.earlier = false;
         self.live = live;
-        self.activity = Activity::default();
-        self.end_of_running_turn = None;
+        self.opened_activity = Activity::default();
         self.keeps_rows = keeping_rows && !self.rows.is_empty();
         if self.keeps_rows {
             return;
@@ -429,6 +431,7 @@ impl Transcript {
     pub fn drop_kept_rows(&mut self) {
         if std::mem::take(&mut self.keeps_rows) {
             self.clear();
+            self.activity = std::mem::take(&mut self.opened_activity);
         }
     }
 
@@ -463,7 +466,9 @@ impl Transcript {
         }
         let changed: HashSet<String> = rows.iter().map(|row| row.row.id.clone()).collect();
         if reset {
-            self.keeps_rows = false;
+            if std::mem::take(&mut self.keeps_rows) {
+                self.activity = std::mem::take(&mut self.opened_activity);
+            }
             self.rows = Rc::new(rows);
             self.end_of_running_turn = None;
             self.fresh.clear();
@@ -518,6 +523,10 @@ impl Transcript {
     }
 
     pub fn set_activity(&mut self, activity: Activity) {
+        if self.keeps_rows {
+            self.opened_activity = activity;
+            return;
+        }
         if !activity.running || activity.started_at != self.activity.started_at {
             self.end_of_running_turn = None;
         }

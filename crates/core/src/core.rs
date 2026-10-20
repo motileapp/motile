@@ -2880,16 +2880,36 @@ impl Core {
         self.emit_rows(thread_id, false, splice);
     }
 
+    /// What the agent was last seen doing, until the server says what it does now.
+    fn last_activity(&self, server_id: &str, thread_id: &str) -> Option<Activity> {
+        let server = self.servers.iter().find(|server| server.device.public_key == server_id)?;
+        let thread = server.threads.get(thread_id)?;
+        Some(if server.removed {
+            Activity::default()
+        } else {
+            restored_activity(thread, self.cache.activity(thread_id))
+        })
+    }
+
+    /// Opens the thread's rows with what the agent does and the agents it started, which come
+    /// first so that the client shows them with the rows, not a moment after.
     fn open_thread(&mut self, server_id: &str, thread_id: &str) -> Result<(), String> {
-        if let Some(open) = self.open.get(thread_id) {
+        if self.open.contains_key(thread_id) {
+            let activity = self.last_activity(server_id, thread_id);
+            let open = self.open.get_mut(thread_id).ok_or("The thread closed.")?;
+            let activity = activity.map(|activity| activity_changed(thread_id, &mut open.transcript, activity).1);
             let rows = open.transcript.rows().to_vec();
             let agents = agents_event(thread_id, &open.agents);
             let live = open.live;
+            if let Some(activity) = activity {
+                self.emit(activity);
+            }
+            self.emit(agents);
             self.emit_rows(thread_id, true, Splice { start: 0, remove: 0, rows });
             self.emit(Event::Live { thread_id: thread_id.to_string(), live });
-            self.emit(agents);
             return Ok(());
         }
+        let activity = self.last_activity(server_id, thread_id);
         let server =
             self.servers.iter().find(|server| server.device.public_key == server_id).ok_or("That server is gone.")?;
         let thread = server.threads.get(thread_id).cloned();
@@ -2911,6 +2931,7 @@ impl Core {
         transcript.set_removed(removed.clone());
         transcript.set_agents(&agents);
         transcript.load(newest);
+        let activity = activity.map(|activity| activity_changed(thread_id, &mut transcript, activity).1);
         let rows = transcript.rows().to_vec();
         let open = OpenThread {
             server_id: server_id.to_string(),
@@ -2927,6 +2948,10 @@ impl Core {
             ui_timers: UiTimers::default(),
         };
         self.open.insert(thread_id.to_string(), open);
+        if let Some(activity) = activity {
+            self.emit(activity);
+        }
+        self.emit(agents_event(thread_id, &agents));
         self.emit_rows(thread_id, true, Splice { start: 0, remove: 0, rows });
         let open = self.open.get_mut(thread_id).ok_or("The thread closed.")?;
         if let Some(rest) =
@@ -2934,21 +2959,6 @@ impl Core {
         {
             self.emit_rows(thread_id, false, rest);
         }
-        // What the agent was last seen doing, until the server says what it does now.
-        if let Some(thread) = &thread {
-            let activity = match removed {
-                Some(_) => Activity::default(),
-                None => restored_activity(thread, self.cache.activity(thread_id)),
-            };
-            let open = self.open.get_mut(thread_id).ok_or("The thread closed.")?;
-            let (queued, event) = activity_changed(thread_id, &mut open.transcript, activity);
-            if let Some(queued) = queued {
-                self.emit_rows(thread_id, false, queued);
-            }
-            self.emit(event);
-        }
-
-        self.emit(agents_event(thread_id, &agents));
         if live {
             self.emit(Event::Live { thread_id: thread_id.to_string(), live });
         }
