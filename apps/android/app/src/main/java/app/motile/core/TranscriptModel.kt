@@ -38,8 +38,12 @@ class TranscriptModel {
     /** The row that ended the turn the server still reports as running. */
     private var endOfRunningTurn by mutableStateOf<String?>(null)
 
-    /** The view still shows the rows of the thread that was open before. */
-    private var keepsRows = false
+    /** The view still shows the rows of the thread that was open before, and what is around them, until this one's replace them all at once. */
+    var keepsRows by mutableStateOf(false)
+        private set
+    /** What the thread opened has, shown once its rows replace the ones kept. */
+    private var keptActivity = Activity()
+    private var keptLive = false
     /** The text of the message on its way. */
     private var pendingText: String? = null
 
@@ -69,11 +73,18 @@ class TranscriptModel {
         this.threadID = threadID
         pending = null
         pendingText = null
-        activity = Activity()
-        earlier = false
-        this.live = live
+        keptActivity = Activity()
+        keptLive = live
         keepsRows = keepingRows
-        if (!keepingRows) clear()
+        if (!keepingRows) showOpened()
+    }
+
+    private fun showOpened() {
+        keepsRows = false
+        activity = keptActivity
+        earlier = false
+        live = keptLive
+        clear()
     }
 
     private fun clear() {
@@ -85,9 +96,7 @@ class TranscriptModel {
 
     /** The thread's rows aren't coming: the view lets go of the ones it kept. */
     fun dropKeptRows() {
-        if (!keepsRows) return
-        keepsRows = false
-        clear()
+        if (keepsRows) showOpened()
     }
 
     /** The message on screen now belongs to a thread; its rows are about to arrive. */
@@ -96,12 +105,17 @@ class TranscriptModel {
     }
 
     fun apply(reset: Boolean, start: Int, remove: Int, new: List<RowModel>, earlier: Boolean) {
+        if (keepsRows && !reset) return
         this.earlier = earlier
         // The server has the message now, so the copy shown while it travelled goes.
         val sent = pending != null && new.any { it.isSentMessage }
         if (reset) {
             if (sent) pending = null
-            keepsRows = false
+            if (keepsRows) {
+                keepsRows = false
+                activity = keptActivity
+                live = keptLive
+            }
             rows.clear()
             rows.addAll(new)
             endOfRunningTurn = null
@@ -109,7 +123,7 @@ class TranscriptModel {
             version += 1
             return
         }
-        if (keepsRows || start < 0 || remove < 0 || start + remove > rows.size) return
+        if (start < 0 || remove < 0 || start + remove > rows.size) return
         if (sent) pending = null
         if (remove > 0) rows.removeRange(start, start + remove)
         rows.addAll(start, new)
@@ -130,12 +144,16 @@ class TranscriptModel {
     }
 
     fun changeActivity(activity: Activity) {
+        if (keepsRows) {
+            keptActivity = activity
+            return
+        }
         if (!activity.running || activity.startedAt != this.activity.startedAt) endOfRunningTurn = null
         if (this.activity != activity) this.activity = activity
     }
 
     fun changeLive(live: Boolean) {
-        this.live = live
+        if (keepsRows) keptLive = live else this.live = live
     }
 
     fun apply(spans: IntArray, rowID: String) {

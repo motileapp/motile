@@ -76,19 +76,14 @@ private struct ParentRow: View {
         Button {
             store.openStartedThread(thread.id)
         } label: {
-            HStack(spacing: 9) {
+            HStack(spacing: 6) {
                 Image(.cornerLeftUp, size: 12)
-                    .foregroundStyle(Color.themeMutedForeground)
+                    .foregroundStyle(Color.themeForeground)
                     .frame(width: 16)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Started by")
-                        .font(.ui(size: 11))
-                        .foregroundStyle(Color.themeMutedStrongerForeground)
-                    Text(thread.title)
-                        .font(.ui(size: 13, weight: .medium))
-                        .foregroundStyle(Color.themeForeground)
-                        .lineLimit(1)
-                }
+                Text("Go back to parent thread")
+                    .font(.ui(size: 13, weight: .medium))
+                    .foregroundStyle(Color.themeForeground)
+                    .lineLimit(1)
                 Spacer(minLength: 6)
             }
             .padding(.horizontal, 10)

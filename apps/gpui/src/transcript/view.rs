@@ -51,8 +51,10 @@ pub struct TranscriptView {
     /// The way back at the top of the list is in sight, so the one at the end leaves its room empty.
     top_in_sight: bool,
     trimming: bool,
-    /// Room left under the last row for what floats over the transcript's end.
+    /// Room left under the last row for what floats over the transcript's end, and the room
+    /// asked for, which waits while the rows of the thread open before are kept.
     bottom_inset: f32,
+    wanted_bottom_inset: f32,
     /// The rows changed: once they are laid out, whether to ask for earlier turns or let go of
     /// the ones far above is looked at again.
     measures_after_layout: bool,
@@ -103,6 +105,7 @@ impl TranscriptView {
             top_in_sight: false,
             trimming: false,
             bottom_inset: 0.,
+            wanted_bottom_inset: 0.,
             measures_after_layout: false,
             glide: None,
             _ticks: ticks,
@@ -190,7 +193,13 @@ impl TranscriptView {
     /// Room under the last row for what floats over its end. More room near the end, as when
     /// the composer grows, keeps the end in view.
     pub fn set_bottom_inset(&mut self, inset: f32, cx: &mut Context<Self>) {
-        if inset == self.bottom_inset {
+        self.wanted_bottom_inset = inset;
+        self.show_bottom_inset(cx);
+    }
+
+    fn show_bottom_inset(&mut self, cx: &mut Context<Self>) {
+        let inset = self.wanted_bottom_inset;
+        if inset == self.bottom_inset || self.model.read(cx).keeps_rows {
             return;
         }
         let near_end = self.distance_to_end(cx) < NEAR_END;
@@ -439,9 +448,10 @@ impl Render for TranscriptView {
             && self.distance_to_end(cx) >= (viewport / 2.).max(200.);
         let started_by = match self.agent {
             true => None,
-            false => self.store.read(cx).parent_thread().map(|thread| (thread.id.clone(), thread.title.clone())),
+            false => self.store.read(cx).parent_thread().map(|thread| thread.id.clone()),
         };
         self.model.update(cx, |model, _| model.set_started_by(started_by));
+        self.show_bottom_inset(cx);
         let model = self.model.read(cx);
         let list_state = model.list.clone();
         let items = model.items.clone();
@@ -452,6 +462,7 @@ impl Render for TranscriptView {
         let rows = model.rows.clone();
         let pending = model.pending.clone();
         let activity = model.activity.clone();
+        let started_by = model.started_by.clone();
         let fresh = Rc::new(model.fresh_rows());
         let grown = Rc::new(model.grown_rows());
         let removed = self.store.read(cx).open_thread_removed();
@@ -501,7 +512,10 @@ impl Render for TranscriptView {
                 Item::StartedBy(true) if top_in_sight => {
                     (div().h(px(ControlSize::Large.height())).into_any_element(), None)
                 }
-                Item::StartedBy(end) => (rows::started_by(*end, &ctx, cx), None),
+                Item::StartedBy(end) => match &started_by {
+                    Some(parent) => (rows::started_by(*end, parent, &ctx, cx), None),
+                    None => (div().into_any_element(), None),
+                },
                 Item::Pending => match &pending {
                     Some(model) => (rows::render_row(model, &ctx, window, cx), key(model)),
                     None => (div().into_any_element(), None),

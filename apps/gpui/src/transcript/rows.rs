@@ -1678,21 +1678,13 @@ fn reply_text(rows: &[Arc<RowModel>], end_id: &str) -> String {
 }
 
 /// The way back to the thread whose agent started this one: a line across, broken by a round
-/// button that names it. The transcript shows it above its first row and under its last.
-pub fn started_by(end: bool, ctx: &RowContext, cx: &App) -> AnyElement {
+/// button. The transcript shows it above its first row and under its last.
+pub fn started_by(end: bool, parent: &str, ctx: &RowContext, cx: &App) -> AnyElement {
     let c = colors(cx);
-    let Some((id, title)) = ctx.store.read(cx).parent_thread().map(|thread| (thread.id.clone(), thread.title.clone()))
-    else {
-        return div().into_any_element();
-    };
+    let id = parent.to_string();
     let size = ControlSize::Small;
     let line = || div().flex_1().h(px(1.)).bg(c.border);
     let store = ctx.store.clone();
-    let words = format!("Started by {title}");
-    let runs = vec![
-        run("Started by ".len(), font(theme::UI_FONT, FontWeight::MEDIUM, false), c.muted_foreground),
-        run(title.len(), font(theme::UI_FONT, FontWeight::MEDIUM, false), c.foreground),
-    ];
     let pill = div()
         .id(("started-by", usize::from(end)))
         .min_w_0()
@@ -1713,9 +1705,17 @@ pub fn started_by(end: bool, ctx: &RowContext, cx: &App) -> AnyElement {
             div()
                 .mt(px(-1.))
                 .mr(px(1.))
-                .child(icons::symbol("corner-left-up", size.small_symbol()).text_color(c.muted_foreground)),
+                .child(icons::symbol("corner-left-up", size.small_symbol()).text_color(c.foreground)),
         )
-        .child(div().min_w_0().text_size(px(size.text_size())).truncate().child(StyledText::new(words).with_runs(runs)))
+        .child(
+            div()
+                .min_w_0()
+                .text_size(px(size.text_size()))
+                .font_weight(FontWeight::MEDIUM)
+                .text_color(c.foreground)
+                .truncate()
+                .child("Go back to parent thread"),
+        )
         .on_click(move |_, _, cx| {
             store.update(cx, |store, cx| store.open_started_thread(&id, cx));
         });
