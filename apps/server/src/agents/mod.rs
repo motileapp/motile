@@ -20,7 +20,7 @@ use crate::mcp::McpAccess;
 const SHOWING_MEDIA: &str = "You can show the user an image or a video by embedding it in your reply as a \
      Markdown image with the absolute path of the file, like ![what it shows](/path/to/file.png). Give a \
      video a preview image as its title, like ![what it shows](/path/to/video.mp4 \"/path/to/preview.png\"), \
-     so that it shows before it plays. Any other file embedded the same way, like \
+     so that it shows before it plays. Send videos as H.264 MP4. Any other file embedded the same way, like \
      ![The report](/path/to/report.pdf), is sent to the user to download; send a folder as an archive.";
 
 /// Told to an agent when it starts: where it runs, that it shows or sends what it made instead of
