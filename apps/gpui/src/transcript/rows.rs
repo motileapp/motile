@@ -1704,7 +1704,7 @@ pub fn started_by(end: bool, parent: &str, ctx: &RowContext, cx: &App) -> AnyEle
         .child(
             div()
                 .mt(px(-1.))
-                .mr(px(1.))
+                .mr(px(4.))
                 .child(icons::symbol("corner-left-up", size.small_symbol()).text_color(c.foreground)),
         )
         .child(
