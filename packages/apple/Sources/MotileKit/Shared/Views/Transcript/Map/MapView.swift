@@ -63,7 +63,6 @@ final class MapView: FlippedView {
         pilot = MapPilot(memory: memory)
         super.init(frame: .zero)
         placeholder.fill = Theme.mapWater
-        placeholder.radius = Radius.xl
         addSubview(placeholder)
         addSubview(stage)
         stage.onLayout = { [weak self] in self?.layoutStage() }
@@ -161,6 +160,10 @@ final class MapView: FlippedView {
 
     private var narrow: Bool { stage.bounds.width < MapLayout.narrowColumn }
 
+    private var radius: CGFloat {
+        node.map { ProgramStyle.radius($0.radius, side: min(bounds.width, bounds.height)) } ?? Radius.xl
+    }
+
     private func layoutStage() {
         let bounds = stage.bounds
         guard bounds.width > 0, bounds.height > 0 else { return }
@@ -206,6 +209,8 @@ final class MapView: FlippedView {
         expand.title = expansion == nil ? "Expand" : "Collapse"
         expand.symbol = expansion == nil ? .maximize2 : .minimize2
         expand.expanded = expansion != nil
+        stage.radius = expansion == nil ? radius : Radius.xl
+        placeholder.radius = radius
         stage.relayout()
     }
 
@@ -338,6 +343,12 @@ struct MapPinAccess {
 /// window with the map when the map is expanded.
 final class MapStage: LayerView {
     var onLayout: () -> Void = {}
+    var radius = Radius.xl {
+        didSet {
+            guard radius != oldValue else { return }
+            repaint()
+        }
+    }
 
     override func layoutNow() {
         onLayout()
@@ -345,7 +356,7 @@ final class MapStage: LayerView {
 
     override func paint(_ layer: CALayer) {
         layer.backgroundColor = resolved(Theme.mapWater)
-        layer.cornerRadius = Radius.xl
+        layer.cornerRadius = radius
         layer.cornerCurve = .continuous
         layer.masksToBounds = true
     }

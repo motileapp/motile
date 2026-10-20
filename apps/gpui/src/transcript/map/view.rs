@@ -49,11 +49,14 @@ pub struct MapNode {
     pub categories: Vec<String>,
     pub filter: Option<String>,
     pub note: String,
+    pub radius: f32,
 }
 
 impl MapNode {
     pub fn from_kind(kind: &UiKind) -> Option<MapNode> {
-        let UiKind::Map { pins, route, line, selected, height, categories, filter, note } = kind else { return None };
+        let UiKind::Map { pins, route, line, selected, height, categories, filter, note, radius } = kind else {
+            return None;
+        };
         Some(MapNode {
             pins: pins.clone(),
             route: *route,
@@ -63,6 +66,7 @@ impl MapNode {
             categories: categories.clone(),
             filter: filter.clone(),
             note: note.clone(),
+            radius: crate::transcript::openui::style::radius(radius),
         })
     }
 
@@ -525,6 +529,7 @@ impl MapView {
         let size = self.size;
         let live = self.live;
         let corners = if self.expanded { c.background } else { self.under };
+        let radius = if self.expanded { Radius::XL } else { self.node.radius };
         let map_canvas = canvas(
             move |frame, _, _| bounds.set(frame),
             move |frame, _, window, cx| {
@@ -593,7 +598,7 @@ impl MapView {
             .id(("map", self.id))
             .relative()
             .size_full()
-            .rounded(px(Radius::XL))
+            .rounded(px(radius))
             .overflow_hidden()
             .bg(water)
             .cursor(if self.drag.as_ref().is_some_and(|drag| drag.moved >= CLICK_SLOP) {
@@ -612,7 +617,7 @@ impl MapView {
             .children(pin_buttons.into_iter().flatten())
             .child(self.controls(window, cx))
             .child(
-                canvas(|_, _, _| {}, move |bounds, _, window, _| paint_corners(bounds, Radius::XL, corners, window))
+                canvas(|_, _, _| {}, move |bounds, _, window, _| paint_corners(bounds, radius, corners, window))
                     .absolute()
                     .inset_0(),
             )

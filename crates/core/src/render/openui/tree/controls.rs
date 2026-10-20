@@ -7,7 +7,7 @@ use motile_openui::{ActionStep, Element, Value, js};
 use regress::Regex;
 
 use super::color;
-use super::resolve::{Cx, Pass, flag, items, number, radius, steps, str_of, string};
+use super::resolve::{Cx, Pass, block_radius, flag, items, number, radius, steps, str_of, string};
 use super::*;
 
 static DATE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^\d{4}-\d{2}-\d{2}$").expect("a valid pattern"));
@@ -152,7 +152,7 @@ impl Pass<'_, '_> {
             padding: steps(element.prop("padding")).unwrap_or(0.0),
             background,
             inner_surface,
-            radius: element.prop("radius").and_then(radius).unwrap_or(Radius { kind: RadiusKind::Lg, points: 12.0 }),
+            radius: element.prop("radius").and_then(radius).unwrap_or(block_radius(cx, Radius::LG)),
             selected,
             ring: selected == Some(true) && !row_inside,
             disabled: self.disabled(element, false),
@@ -264,7 +264,7 @@ impl Pass<'_, '_> {
         }
     }
 
-    pub(super) fn radio_group(&mut self, element: &Element) -> UiKind {
+    pub(super) fn radio_group(&mut self, element: &Element, cx: Cx) -> UiKind {
         let value = shown(self.value(element, "value").as_deref());
         let options = choices(element.prop("options"));
         let variant = match string(element, "variant").as_str() {
@@ -280,6 +280,7 @@ impl Pass<'_, '_> {
             variant,
             error: self.error(),
             disabled: self.disabled(element, false),
+            radius: block_radius(cx, Radius::LG),
         }
     }
 
@@ -301,7 +302,7 @@ impl Pass<'_, '_> {
         }
     }
 
-    pub(super) fn timer(&mut self, element: &Element) -> UiKind {
+    pub(super) fn timer(&mut self, element: &Element, cx: Cx) -> UiKind {
         let raw = self.value(element, "seconds").map_or(f64::NAN, |value| js::to_number(&value));
         let left = if raw.is_finite() { raw.floor().max(0.0) } else { 0.0 };
         let widgets = self.widgets();
@@ -330,6 +331,7 @@ impl Pass<'_, '_> {
                 icon: glyph("rotate-ccw"),
                 disabled: streaming.or(widgets.started.is_none().then_some(Disabled::Program)),
             },
+            radius: block_radius(cx, Radius::LG),
         }
     }
 }

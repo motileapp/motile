@@ -358,7 +358,11 @@
       "spacing": [
         0.0,
         8.0
-      ]
+      ],
+      "radius": {
+        "kind": "lg",
+        "points": 12.0
+      }
     },
     {
       "id": "children/2",
@@ -413,7 +417,11 @@
           "label": "How should it feel?",
           "variant": "list",
           "error": null,
-          "disabled": null
+          "disabled": null,
+          "radius": {
+            "kind": "lg",
+            "points": 12.0
+          }
         },
         {
           "id": "children/3/children/1",
@@ -449,7 +457,11 @@
           "label": "What light does it get?",
           "variant": "list",
           "error": null,
-          "disabled": null
+          "disabled": null,
+          "radius": {
+            "kind": "lg",
+            "points": 12.0
+          }
         },
         {
           "id": "children/3/children/2",
@@ -490,7 +502,11 @@
           "label": "Your sofa",
           "variant": "list",
           "error": null,
-          "disabled": null
+          "disabled": null,
+          "radius": {
+            "kind": "lg",
+            "points": 12.0
+          }
         }
       ],
       "columns": 3,

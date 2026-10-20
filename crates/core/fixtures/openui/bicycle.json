@@ -290,7 +290,11 @@
             }
           }
         ]
-      ]
+      ],
+      "radius": {
+        "kind": "lg",
+        "points": 12.0
+      }
     },
     {
       "id": "children/4",
@@ -783,7 +787,11 @@
       "spacing": [
         0.0,
         8.0
-      ]
+      ],
+      "radius": {
+        "kind": "lg",
+        "points": 12.0
+      }
     },
     {
       "id": "children/6",
@@ -1251,7 +1259,11 @@
               "spacing": [
                 0.0,
                 4.0
-              ]
+              ],
+              "radius": {
+                "kind": "xs",
+                "points": 4.0
+              }
             },
             {
               "id": "children/6/children/3/children/1",
@@ -1296,7 +1308,11 @@
               "spacing": [
                 0.0,
                 4.0
-              ]
+              ],
+              "radius": {
+                "kind": "xs",
+                "points": 4.0
+              }
             },
             {
               "id": "children/6/children/3/children/2",
@@ -1341,7 +1357,11 @@
               "spacing": [
                 0.0,
                 4.0
-              ]
+              ],
+              "radius": {
+                "kind": "xs",
+                "points": 4.0
+              }
             }
           ],
           "columns": 3,
@@ -1413,7 +1433,11 @@
         12.0,
         12.0,
         12.0
-      ]
+      ],
+      "radius": {
+        "kind": "lg",
+        "points": 12.0
+      }
     },
     {
       "id": "children/7",
@@ -1505,7 +1529,11 @@
               "spacing": [
                 0.0,
                 4.0
-              ]
+              ],
+              "radius": {
+                "kind": "lg",
+                "points": 12.0
+              }
             },
             {
               "id": "children/8/children/1/children/1",
@@ -1555,7 +1583,11 @@
               "spacing": [
                 0.0,
                 4.0
-              ]
+              ],
+              "radius": {
+                "kind": "lg",
+                "points": 12.0
+              }
             }
           ],
           "columns": 2,

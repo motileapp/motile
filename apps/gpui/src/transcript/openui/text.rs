@@ -87,7 +87,7 @@ pub fn text(node: &UiNode, cx: &UiCx, window: &mut Window, app: &mut App) -> Sta
                 .child(words)
                 .children(cite)
         }
-        UiKind::Code { language, code, spans } => {
+        UiKind::Code { language, code, spans, radius } => {
             let shown = CodeBox {
                 language: language.clone(),
                 code: code.clone().into(),
@@ -95,7 +95,8 @@ pub fn text(node: &UiNode, cx: &UiCx, window: &mut Window, app: &mut App) -> Sta
                 indent: 0.,
             };
             let key = format!("{}:{}", cx.row, node.id);
-            element.child(code_box(&key, &shown, true, cx.key, copy(&key, &shown.code, cx), cx.surface, app).mb(px(0.)))
+            let code = code_box(&key, &shown, true, cx.key, copy(&key, &shown.code, cx), cx.surface, app);
+            element.child(code.rounded(px(style::radius(radius))).mb(px(0.)))
         }
         _ => element,
     }

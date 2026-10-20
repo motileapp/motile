@@ -201,13 +201,11 @@ final class ProgramTableView: ProgramNodeView {
         super.init(frame: frame)
         face.fill = Theme.card
         face.stroke = Theme.borderCard
-        face.radius = Radius.lg
         header.fill = Theme.cardAccent
         addSubview(face)
         addSubview(clipView)
         clipView.addSubview(content)
         content.addSubview(header)
-        clip(radius: Radius.lg)
     }
 
     required init?(coder: NSCoder) { fatalError("not used") }
@@ -216,7 +214,9 @@ final class ProgramTableView: ProgramNodeView {
     override var textHolder: PlatformView { content }
 
     override func configure(_ box: ProgramBox) {
-        guard let layout = box.extra as? ProgramTable.Layout else { return }
+        guard let layout = box.extra as? ProgramTable.Layout, case .table(let node) = box.node.kind else { return }
+        face.radius = ProgramStyle.radius(node.radius, side: min(box.size.width, box.size.height))
+        clip(radius: face.radius)
         let rows = layout.rows
         header.frame = CGRect(x: 0, y: 0, width: layout.contentWidth, height: rows.first?.height ?? 0)
         let edges = rows.dropLast().map { $0.y + $0.height }
@@ -323,7 +323,6 @@ final class ProgramFlashcardView: ProgramNodeView {
         #if os(macOS)
         card.wantsLayer = true
         #endif
-        face.radius = Radius.lg
         addSubview(card)
         card.addSubview(face)
         focusable = true
@@ -360,7 +359,8 @@ final class ProgramFlashcardView: ProgramNodeView {
     }
 
     private func showSide(_ back: Bool) {
-        guard let box, let parts = box.extra as? ProgramFlashcardParts else { return }
+        guard let box, let parts = box.extra as? ProgramFlashcardParts, case .flashcard(let node) = box.node.kind else { return }
+        face.radius = ProgramStyle.radius(node.radius, side: min(box.size.width, box.size.height))
         for (index, child) in box.children.enumerated() {
             children[child.id]?.isHidden = (index < parts.front) == back
         }

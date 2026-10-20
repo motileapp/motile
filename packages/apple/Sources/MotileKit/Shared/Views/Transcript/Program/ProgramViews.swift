@@ -343,7 +343,7 @@ final class ProgramStackView: ProgramNodeView {
         case .card(let card):
             face.fill = card.soft ? box.surface.platform(.box) : Theme.card
             face.stroke = card.soft ? nil : Theme.borderCard
-            face.radius = card.nested ? Radius.md : Radius.lg
+            face.radius = ProgramStyle.radius(card.radius, side: min(box.size.width, box.size.height))
             clip(radius: CGFloat(card.padding ?? 16) < face.radius ? face.radius : nil)
         default:
             break
@@ -662,7 +662,6 @@ final class ProgramCodeBox: FlippedView {
 
     override init(frame: CGRect) {
         super.init(frame: frame)
-        surface.radius = Radius.lg
         addSubview(surface)
         surface.addSubview(header)
         surface.addSubview(text)
@@ -670,7 +669,8 @@ final class ProgramCodeBox: FlippedView {
 
     required init?(coder: NSCoder) { fatalError("not used") }
 
-    func show(_ content: CodeContent, surface lying: Surface) {
+    func show(_ content: CodeContent, surface lying: Surface, radius: CGFloat = Radius.lg) {
+        surface.radius = radius
         surface.fill = lying.platform(.box)
         surface.stroke = lying.platformBorder
         header.show(language: content.language, code: content.code)
@@ -697,8 +697,8 @@ final class ProgramCodeView: ProgramNodeView {
     required init?(coder: NSCoder) { fatalError("not used") }
 
     override func configure(_ box: ProgramBox) {
-        guard let content = box.extra as? CodeContent else { return }
-        code.show(content, surface: box.surface)
+        guard let content = box.extra as? CodeContent, case .code(let node) = box.node.kind else { return }
+        code.show(content, surface: box.surface, radius: ProgramStyle.radius(node.radius, side: min(box.size.width, box.size.height)))
     }
 
     override func layoutNow() {

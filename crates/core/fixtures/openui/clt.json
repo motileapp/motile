@@ -513,7 +513,11 @@
           "spacing": [
             0.0,
             4.0
-          ]
+          ],
+          "radius": {
+            "kind": "xs",
+            "points": 4.0
+          }
         },
         {
           "id": "children/5/children/1",
@@ -573,7 +577,11 @@
             0.0,
             4.0,
             4.0
-          ]
+          ],
+          "radius": {
+            "kind": "xs",
+            "points": 4.0
+          }
         },
         {
           "id": "children/5/children/2",
@@ -633,7 +641,11 @@
             0.0,
             4.0,
             4.0
-          ]
+          ],
+          "radius": {
+            "kind": "xs",
+            "points": 4.0
+          }
         }
       ],
       "columns": 3,
@@ -696,7 +708,11 @@
           "label": "What changes when the sample size grows?",
           "variant": "list",
           "error": null,
-          "disabled": null
+          "disabled": null,
+          "radius": {
+            "kind": "xs",
+            "points": 4.0
+          }
         }
       ],
       "soft": true,
@@ -704,7 +720,11 @@
       "padding": 16.0,
       "spacing": [
         0.0
-      ]
+      ],
+      "radius": {
+        "kind": "xs",
+        "points": 4.0
+      }
     }
   ],
   "soft": false,
@@ -719,5 +739,9 @@
     16.0,
     16.0,
     16.0
-  ]
+  ],
+  "radius": {
+    "kind": "lg",
+    "points": 12.0
+  }
 }

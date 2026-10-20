@@ -13,7 +13,7 @@ use motile_core::render::openui::web::{self, Bridge, PageStyle};
 use super::UiCx;
 use super::style::{self, SMALL};
 use crate::media::pictures::{Picture, Pictures, Shown};
-use crate::theme::{self, Radius, colors};
+use crate::theme::{self, colors};
 use crate::ui::{ActionButton, Spinner};
 
 const PLAY_SYMBOL: f32 = 40.;
@@ -37,6 +37,7 @@ pub fn html_view(
     height: Option<f32>,
     title: &str,
     streaming: bool,
+    radius: f32,
     cx: &UiCx,
     window: &mut Window,
     app: &mut App,
@@ -48,7 +49,7 @@ pub fn html_view(
         .relative()
         .w_full()
         .h(px(height))
-        .rounded(px(Radius::LG))
+        .rounded(px(radius))
         .border_1()
         .border_color(cx.surface.border(c))
         .bg(cx.surface.color(c))
@@ -92,11 +93,13 @@ pub fn html_view(
 
 /// YouTube's player, 16:9 and the column's width: its thumbnail, with the player over it once
 /// played.
+#[allow(clippy::too_many_arguments)]
 pub fn youtube(
     element: Stateful<Div>,
     id: &str,
     url: &str,
     title: &str,
+    radius: f32,
     cx: &UiCx,
     window: &mut Window,
     app: &mut App,
@@ -104,7 +107,7 @@ pub fn youtube(
     let c = colors(app);
     let key = format!("{}/{id}", cx.row);
     let frame =
-        element.relative().w_full().h(px(cx.width * 9. / 16.)).rounded(px(Radius::LG)).overflow_hidden().bg(c.overlay);
+        element.relative().w_full().h(px(cx.width * 9. / 16.)).rounded(px(radius)).overflow_hidden().bg(c.overlay);
     let live = live::page(cx.id(id, "live"), &key, window, app);
     let frame = frame.child(live.track());
     if let Some(view) = live.view(app) {

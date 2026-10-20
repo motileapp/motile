@@ -50,7 +50,11 @@
       "html": "<style>body{display:flex;flex-direction:column;gap:10px;padding:14px}canvas{width:100%;height:220px;border-radius:12px;background:light-dark(#f7f7f8,#2a2a2a);touch-action:none;cursor:crosshair}.bar{display:flex;justify-content:space-between;font-size:13px}button{font:inherit;font-weight:500;padding:7px 14px;border-radius:999px;border:0;background:light-dark(#0d0d0d,#ececec);color:light-dark(#fff,#171717);cursor:pointer}</style>\n<div class=\"bar\"><span id=\"score\">Score 0</span><span id=\"time\">Press start</span></div>\n<canvas id=\"c\"></canvas>\n<div><button id=\"go\">Start</button></div>\n<script>\nconst c=document.getElementById('c'),g=c.getContext('2d'),dpr=devicePixelRatio||1;\nlet dot={x:.5,y:.5,vx:.004,vy:.003},score=0,end=0,raf;\nfunction fit(){c.width=c.clientWidth*dpr;c.height=c.clientHeight*dpr}\nfunction draw(){fit();g.clearRect(0,0,c.width,c.height);g.fillStyle='#0285ff';g.beginPath();g.arc(dot.x*c.width,dot.y*c.height,16*dpr,0,7);g.fill()}\nfunction tick(){const left=Math.max(0,end-Date.now());document.getElementById('time').textContent=(left/1000).toFixed(1)+' s';\ndot.x+=dot.vx;dot.y+=dot.vy;if(dot.x<.05||dot.x>.95)dot.vx*=-1;if(dot.y<.08||dot.y>.92)dot.vy*=-1;draw();\nif(left>0)raf=requestAnimationFrame(tick);else document.getElementById('time').textContent='Time! Final score '+score}\nc.addEventListener('pointerdown',e=>{if(Date.now()>end)return;const r=c.getBoundingClientRect(),dx=(e.clientX-r.left)/r.width-dot.x,dy=(e.clientY-r.top)/r.height-dot.y;\nif(Math.hypot(dx*r.width,dy*r.height)<26){score++;document.getElementById('score').textContent='Score '+score;dot.vx=(Math.random()-.5)*.02;dot.vy=(Math.random()-.5)*.02;dot.x=.1+Math.random()*.8;dot.y=.15+Math.random()*.7}});\ndocument.getElementById('go').onclick=()=>{score=0;document.getElementById('score').textContent='Score 0';end=Date.now()+15000;cancelAnimationFrame(raf);tick()};\ndraw();\n</script>",
       "height": null,
       "title": "Catch the dot",
-      "streaming": false
+      "streaming": false,
+      "radius": {
+        "kind": "xs",
+        "points": 4.0
+      }
     }
   ],
   "soft": false,
@@ -60,5 +64,9 @@
     0.0,
     8.0,
     12.0
-  ]
+  ],
+  "radius": {
+    "kind": "lg",
+    "points": 12.0
+  }
 }

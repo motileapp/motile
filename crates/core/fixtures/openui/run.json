@@ -106,5 +106,9 @@
   "padding": 16.0,
   "spacing": [
     0.0
-  ]
+  ],
+  "radius": {
+    "kind": "lg",
+    "points": 12.0
+  }
 }

@@ -153,7 +153,11 @@
           "spacing": [
             0.0,
             4.0
-          ]
+          ],
+          "radius": {
+            "kind": "xs",
+            "points": 4.0
+          }
         },
         {
           "id": "children/1/children/1",
@@ -198,7 +202,11 @@
           "spacing": [
             0.0,
             4.0
-          ]
+          ],
+          "radius": {
+            "kind": "xs",
+            "points": 4.0
+          }
         },
         {
           "id": "children/1/children/2",
@@ -243,7 +251,11 @@
           "spacing": [
             0.0,
             4.0
-          ]
+          ],
+          "radius": {
+            "kind": "xs",
+            "points": 4.0
+          }
         }
       ],
       "columns": 3,
@@ -600,5 +612,9 @@
     16.0,
     16.0,
     16.0
-  ]
+  ],
+  "radius": {
+    "kind": "lg",
+    "points": 12.0
+  }
 }

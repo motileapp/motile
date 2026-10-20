@@ -21,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.motile.theme.LocalPalette
 import app.motile.theme.LocalSurface
@@ -43,6 +44,7 @@ fun OptionCard(
     modifier: Modifier = Modifier,
     detail: String? = null,
     disabled: Boolean = false,
+    radius: Dp = Radius.lg,
 ) {
     val palette = LocalPalette.current
     val surface = LocalSurface.current
@@ -51,7 +53,7 @@ fun OptionCard(
     val hovered by interaction.collectIsHoveredAsState()
     val pressed by interaction.collectIsPressedAsState()
     val focused by interaction.collectIsFocusedAsState()
-    val shape = RoundedCornerShape(Radius.lg)
+    val shape = RoundedCornerShape(radius)
     val target = when {
         selected -> palette.primary.wash()
         enabled && pressed -> surface.color(Surface.Layer.RowSelected)
@@ -64,7 +66,7 @@ fun OptionCard(
         modifier
             .fillMaxWidth()
             .opacity(Opacity.Disabled, on = !enabled)
-            .focusRing(focused, Radius.lg)
+            .focusRing(focused, radius)
             .background(fill, shape)
             .border(1.dp, edge, shape)
             .hoverable(interaction, enabled)

@@ -237,7 +237,7 @@ when it has a token background.
 | --- | --- |
 | Look | Motile's card: `card` fill, 1 `border-card`, `Radius.lg`, content on `Surface.card` |
 | Padding | 20 (narrow 16), or the `padding` prop, from the card's edge: its line lies inside the padding (Motile's), as a Box's does |
-| Nested (a Card in a Card) | `Radius.md`, padding 16 |
+| Nested (a Card in a Card) | `Radius.xs` (below), padding 16 |
 | `soft` | No border; fill the surface's `box` layer; content on that box's surface; padding 20 (narrow 16) |
 | Width | The parent's |
 
@@ -249,6 +249,10 @@ when it has a token background.
 - Card typography: the direct children of a Card, of a grid cell that is a flow, and of a carousel
   item that is a flow: Title lg, xl, 2xl, 3xl → `card-heading`; Text with no size or md →
   `body-card`.
+- Corners in a card: inside a Card or a Table, every component that draws its own corner (a Card, an
+  Image or SearchImage, Code, a Table, a Map, YouTube, HtmlView, a Pressable, a Timer, RadioGroup's
+  cards, a Flashcard's faces) has `Radius.xs`, which fits the card's corner; a `radius` the program
+  gives wins. Core gives the corner as the node's `radius`.
 - Media row: a Row whose direct child is an Image or SearchImage, or a Box holding only one: the row
   aligns to the top, gap 16; that child is clamp(120, a third of the row, 200) wide, never grows or
   shrinks, and its image is 4:3. A Box holding the image loses its own width and height (the

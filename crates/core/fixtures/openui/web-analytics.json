@@ -165,7 +165,11 @@
             0.0,
             4.0,
             4.0
-          ]
+          ],
+          "radius": {
+            "kind": "lg",
+            "points": 12.0
+          }
         },
         {
           "id": "children/1/children/1",
@@ -221,7 +225,11 @@
             0.0,
             4.0,
             4.0
-          ]
+          ],
+          "radius": {
+            "kind": "lg",
+            "points": 12.0
+          }
         },
         {
           "id": "children/1/children/2",
@@ -277,7 +285,11 @@
             0.0,
             4.0,
             4.0
-          ]
+          ],
+          "radius": {
+            "kind": "lg",
+            "points": 12.0
+          }
         },
         {
           "id": "children/1/children/3",
@@ -333,7 +345,11 @@
             0.0,
             4.0,
             4.0
-          ]
+          ],
+          "radius": {
+            "kind": "lg",
+            "points": 12.0
+          }
         }
       ],
       "columns": 4,
@@ -602,7 +618,11 @@
       "spacing": [
         0.0,
         12.0
-      ]
+      ],
+      "radius": {
+        "kind": "lg",
+        "points": 12.0
+      }
     },
     {
       "id": "children/3",
@@ -1501,7 +1521,11 @@
           "spacing": [
             0.0,
             12.0
-          ]
+          ],
+          "radius": {
+            "kind": "lg",
+            "points": 12.0
+          }
         },
         {
           "id": "children/3/children/1",
@@ -1676,7 +1700,11 @@
                     }
                   }
                 ]
-              ]
+              ],
+              "radius": {
+                "kind": "xs",
+                "points": 4.0
+              }
             }
           ],
           "soft": false,
@@ -1685,7 +1713,11 @@
           "spacing": [
             0.0,
             12.0
-          ]
+          ],
+          "radius": {
+            "kind": "lg",
+            "points": 12.0
+          }
         }
       ],
       "columns": 2,
@@ -2206,7 +2238,11 @@
           "spacing": [
             0.0,
             12.0
-          ]
+          ],
+          "radius": {
+            "kind": "lg",
+            "points": 12.0
+          }
         },
         {
           "id": "children/4/children/1",
@@ -4499,7 +4535,11 @@
             0.0,
             12.0,
             12.0
-          ]
+          ],
+          "radius": {
+            "kind": "lg",
+            "points": 12.0
+          }
         }
       ],
       "columns": 2,

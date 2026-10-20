@@ -24,7 +24,7 @@ const TEXT_AREA_ROOM: f32 = 19.;
 use super::style::{self, CAPTION, LABEL, Look};
 use super::text::rich;
 use super::{UiCx, framed, node};
-use crate::theme::{ControlSize, Layer, Opacity, Radius, colors};
+use crate::theme::{ControlSize, Layer, Opacity, colors};
 use crate::ui::{
     ActionButton, InputField, OptionCard, PickMark, PickRow, Segmented, Select, Slider, TextArea, Variant,
     text_area_state,
@@ -152,8 +152,8 @@ pub fn input(node: &UiNode, cx: &UiCx, window: &mut Window, app: &mut App) -> St
                 .on_press(move |_, cx| sender.send(&node_id, UiEvent::Value { value: Value::Bool(!checked) }, cx));
             element.flex().flex_col().child(row).children(error_text(error.as_deref(), app))
         }
-        UiKind::RadioGroup { options, selected, label, variant, error, disabled, .. } => {
-            let choices = radio(id, options, *selected, *variant, disabled.is_some(), cx);
+        UiKind::RadioGroup { options, selected, label, variant, error, disabled, radius, .. } => {
+            let choices = radio(id, options, *selected, *variant, disabled.is_some(), style::radius(radius), cx);
             let label = label.as_ref().map(|label| {
                 rich(cx.id(id, "label"), &plain(label), Look::new(LABEL, colors(app).foreground), cx, app)
                     .mb(px(RADIO_LABEL_GAP))
@@ -179,8 +179,8 @@ pub fn input(node: &UiNode, cx: &UiCx, window: &mut Window, app: &mut App) -> St
                 });
             labelled(element, label.as_deref(), field, error.as_deref(), false, cx, app)
         }
-        UiKind::Timer { label, time, done, toggle, reset, running, .. } => {
-            timer(element, id, label.as_deref(), time, *done, *running, toggle, reset, cx, app)
+        UiKind::Timer { label, time, done, toggle, reset, running, radius, .. } => {
+            timer(element, id, label.as_deref(), time, *done, *running, toggle, reset, style::radius(radius), cx, app)
         }
         UiKind::Form { children, spacing } => {
             column(element, children, Align::Stretch, spacing, false, cx, window, app)
@@ -445,7 +445,15 @@ fn area(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn radio(id: &str, options: &[Choice], selected: Option<u32>, variant: RadioVariant, disabled: bool, cx: &UiCx) -> Div {
+fn radio(
+    id: &str,
+    options: &[Choice],
+    selected: Option<u32>,
+    variant: RadioVariant,
+    disabled: bool,
+    radius: f32,
+    cx: &UiCx,
+) -> Div {
     let values = values(options);
     let press = |index: usize| {
         let (sender, node_id, values) = (cx.clone(), id.to_string(), values.clone());
@@ -482,6 +490,7 @@ fn radio(id: &str, options: &[Choice], selected: Option<u32>, variant: RadioVari
                     OptionCard::new(cx.id(id, &format!("option-{index}")), option.label.clone(), chosen(index))
                         .when_some(option.description.clone(), |card, description| card.detail(description))
                         .surface(cx.surface)
+                        .radius(radius)
                         .disabled(disabled)
                         .on_press(move |_, cx| press(cx))
                         .into_any_element()
@@ -515,6 +524,7 @@ fn timer(
     running: bool,
     toggle: &TimerButton,
     reset: &TimerButton,
+    radius: f32,
     cx: &UiCx,
     app: &App,
 ) -> Stateful<Div> {
@@ -541,7 +551,7 @@ fn timer(
         .w_full()
         .py(px(12.))
         .px(px(16.))
-        .rounded(px(Radius::LG))
+        .rounded(px(radius))
         .border_1()
         .border_color(cx.surface.border(c))
         .flex()

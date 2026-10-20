@@ -92,6 +92,7 @@ pub enum UiKind {
         /// The program's padding, else the client's for the column's width.
         padding: Option<f32>,
         spacing: Vec<f32>,
+        radius: Radius,
     },
     Carousel {
         children: Nodes,
@@ -174,6 +175,7 @@ pub enum UiKind {
         code: String,
         /// `None` until the code has been highlighted, like a code row's.
         spans: Option<Spans>,
+        radius: Radius,
     },
     Math {
         canvas: Canvas,
@@ -268,6 +270,7 @@ pub enum UiKind {
         variant: RadioVariant,
         error: Option<String>,
         disabled: Option<Disabled>,
+        radius: Radius,
     },
     DatePicker {
         /// `YYYY-MM-DD`.
@@ -288,6 +291,7 @@ pub enum UiKind {
         done: bool,
         toggle: TimerButton,
         reset: TimerButton,
+        radius: Radius,
     },
     Form {
         children: Nodes,
@@ -317,6 +321,7 @@ pub enum UiKind {
     Table {
         columns: Vec<TableColumn>,
         rows: Vec<Vec<TableCell>>,
+        radius: Radius,
     },
     Chart {
         canvas: Canvas,
@@ -332,6 +337,7 @@ pub enum UiKind {
         /// The category shown, none for every place.
         filter: Option<String>,
         note: String,
+        radius: Radius,
     },
     MapMarker {
         label: String,
@@ -344,6 +350,7 @@ pub enum UiKind {
         /// The embed's address; none for a video it can't name, which shows nothing.
         url: Option<String>,
         title: String,
+        radius: Radius,
     },
     Flashcard {
         front: Slot,
@@ -352,6 +359,7 @@ pub enum UiKind {
         flipped: bool,
         /// The flip.
         canvas: Canvas,
+        radius: Radius,
     },
     Celebration {
         /// Counts the bursts: a new one fires the confetti.
@@ -394,6 +402,7 @@ pub enum UiKind {
         title: String,
         /// The spinner shows in its place.
         streaming: bool,
+        radius: Radius,
     },
 }
 
@@ -474,9 +483,16 @@ pub struct Radius {
     pub points: f32,
 }
 
+impl Radius {
+    pub const XS: Radius = Radius { kind: RadiusKind::Xs, points: 4.0 };
+    pub const LG: Radius = Radius { kind: RadiusKind::Lg, points: 12.0 };
+    pub const XL: Radius = Radius { kind: RadiusKind::Xl, points: 16.0 };
+}
+
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum RadiusKind {
+    Xs,
     Sm,
     Md,
     Lg,

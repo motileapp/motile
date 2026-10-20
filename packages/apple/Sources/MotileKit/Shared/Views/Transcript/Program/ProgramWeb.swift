@@ -48,7 +48,6 @@ final class ProgramWebView: ProgramNodeView {
 
     override init(frame: CGRect) {
         super.init(frame: frame)
-        face.radius = Radius.lg
         addSubview(face)
         addSubview(spinner)
         #if os(iOS)
@@ -80,12 +79,17 @@ final class ProgramWebView: ProgramNodeView {
     #endif
 
     override func configure(_ box: ProgramBox) {
-        clip(radius: Radius.lg)
-        if case .youTube = box.node.kind {
+        switch box.node.kind {
+        case .youTube(let node):
             face.fill = Theme.overlay
-        } else {
+            face.radius = ProgramStyle.radius(node.radius, side: min(box.size.width, box.size.height))
+        case .htmlView(let node):
             face.fill = box.surface.platform
+            face.radius = ProgramStyle.radius(node.radius, side: min(box.size.width, box.size.height))
+        default:
+            break
         }
+        clip(radius: face.radius)
         paintEdge()
         spinner.isHidden = box.rects["spinner"] == nil
         spinner.frame = box.rects["spinner"] ?? .zero

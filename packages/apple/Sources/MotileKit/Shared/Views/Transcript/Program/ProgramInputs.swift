@@ -290,6 +290,7 @@ final class ProgramRadioView: ProgramFieldHolder {
         let enabled = node.disabled == nil
         for (index, option) in node.options.enumerated() {
             let chosen = node.selected == index
+            let frame = index < frames.count ? frames[index] : .zero
             switch options[index] {
             case let row as PickRowView:
                 row.title = PickRowView.title(option.label)
@@ -306,11 +307,12 @@ final class ProgramRadioView: ProgramFieldHolder {
                 card.detail = option.description
                 card.selected = chosen
                 card.surface = box.surface
+                card.radius = ProgramStyle.radius(node.radius, side: min(frame.width, frame.height))
                 card.enabled = enabled
             default:
                 break
             }
-            options[index].frame = index < frames.count ? frames[index] : .zero
+            options[index].frame = frame
         }
     }
 
@@ -368,7 +370,6 @@ final class ProgramTimerView: ProgramFieldHolder {
 
     override init(frame: CGRect) {
         super.init(frame: frame)
-        face.radius = Radius.lg
         addSubview(face)
         addSubview(toggle)
         addSubview(reset)
@@ -379,6 +380,7 @@ final class ProgramTimerView: ProgramFieldHolder {
     override func configure(_ box: ProgramBox) {
         guard case .timer(let node) = box.node.kind else { return }
         face.stroke = box.surface.platformBorder
+        face.radius = ProgramStyle.radius(node.radius, side: min(box.size.width, box.size.height))
         for (control, button) in [(toggle, node.toggle), (reset, node.reset)] {
             control.title = button.label
             control.glyph = button.icon?.glyph

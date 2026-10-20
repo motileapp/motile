@@ -321,7 +321,11 @@
       "component": "Code",
       "language": "javascript",
       "code": "const total = items.reduce((sum, i) => sum + i.price, 0)",
-      "spans": null
+      "spans": null,
+      "radius": {
+        "kind": "lg",
+        "points": 12.0
+      }
     },
     {
       "id": "children/7",
@@ -357,7 +361,11 @@
       "label": "Size",
       "variant": "pills",
       "error": null,
-      "disabled": null
+      "disabled": null,
+      "radius": {
+        "kind": "lg",
+        "points": 12.0
+      }
     },
     {
       "id": "children/8",
@@ -441,6 +449,10 @@
               "front": "Bonjour",
               "back": "Hello"
             }
+          },
+          "radius": {
+            "kind": "lg",
+            "points": 12.0
           }
         },
         {
@@ -476,6 +488,10 @@
               "front": "Merci",
               "back": "Thank you"
             }
+          },
+          "radius": {
+            "kind": "lg",
+            "points": 12.0
           }
         }
       ],
@@ -491,7 +507,11 @@
       },
       "component": "YouTube",
       "url": "https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ",
-      "title": "A music video"
+      "title": "A music video",
+      "radius": {
+        "kind": "lg",
+        "points": 12.0
+      }
     }
   ],
   "align": "stretch",

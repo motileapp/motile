@@ -9,7 +9,7 @@ mod layout;
 mod map;
 mod media;
 pub mod patch;
-mod style;
+pub(super) mod style;
 mod text;
 mod web;
 

@@ -222,7 +222,11 @@
           "spacing": [
             0.0,
             4.0
-          ]
+          ],
+          "radius": {
+            "kind": "lg",
+            "points": 12.0
+          }
         },
         {
           "id": "children/5/children/1",
@@ -267,7 +271,11 @@
           "spacing": [
             0.0,
             4.0
-          ]
+          ],
+          "radius": {
+            "kind": "lg",
+            "points": 12.0
+          }
         },
         {
           "id": "children/5/children/2",
@@ -312,7 +320,11 @@
           "spacing": [
             0.0,
             4.0
-          ]
+          ],
+          "radius": {
+            "kind": "lg",
+            "points": 12.0
+          }
         }
       ],
       "columns": 3,

@@ -233,11 +233,11 @@ impl Pass<'_, '_> {
         UiKind::Markdown { blocks }
     }
 
-    fn code(&mut self, element: &Element) -> UiKind {
+    fn code(&mut self, element: &Element, cx: Cx) -> UiKind {
         let language = string(element, "language");
         let language = if language.is_empty() { "code".to_owned() } else { language };
         let code = string(element, "code");
-        UiKind::Code { spans: self.spans(&language, &code), language, code }
+        UiKind::Code { spans: self.spans(&language, &code), language, code, radius: block_radius(cx, Radius::LG) }
     }
 
     /// A component, from the last pass when nothing it reads changed.
@@ -306,7 +306,7 @@ impl Pass<'_, '_> {
             "ListItem" => self.list_item(element, cx, None),
             "Markdown" => self.markdown(element),
             "Quote" => quote(element),
-            "Code" => self.code(element),
+            "Code" => self.code(element, cx),
             "Math" => UiKind::Math { canvas: canvas(element) },
             "Button" => self.button(element),
             "IconButton" => self.icon_button(element),
@@ -317,18 +317,18 @@ impl Pass<'_, '_> {
             "SegmentedControl" => self.segmented(element),
             "Slider" => self.slider(element),
             "Checkbox" => self.checkbox(element),
-            "RadioGroup" => self.radio_group(element),
+            "RadioGroup" => self.radio_group(element, cx),
             "DatePicker" => self.date_picker(element),
-            "Timer" => self.timer(element),
+            "Timer" => self.timer(element, cx),
             "Form" => self.form(element, cx),
             "SearchImage" => self.search_image(element, cx),
             "Image" => self.image(element, cx),
             "Icon" => icon(element, cx),
             "Table" => self.table(element, cx),
             "Chart" => UiKind::Chart { canvas: canvas(element) },
-            "Map" => self.map(element),
+            "Map" => self.map(element, cx),
             "MapMarker" => map_marker(element),
-            "YouTube" => youtube(element),
+            "YouTube" => youtube(element, cx),
             "Flashcard" => self.flashcard(element, cx),
             "Celebration" => self.celebration(element),
             "Svg" => UiKind::Svg { canvas: canvas(element) },
@@ -341,7 +341,7 @@ impl Pass<'_, '_> {
             "Polyline" => UiKind::Polyline { canvas: canvas(element) },
             "Polygon" => UiKind::Polygon { canvas: canvas(element) },
             "SvgText" => UiKind::SvgText { canvas: canvas(element) },
-            "HtmlView" => self.html_view(element),
+            "HtmlView" => self.html_view(element, cx),
             _ => UiKind::Spacer {},
         };
         let mut node = self.leaf(kind);
@@ -477,7 +477,8 @@ impl Pass<'_, '_> {
         let gap = steps(element.prop("gap"));
         let (children, spacing) = self.column(element, "children", gap, Column::Card, cx);
         let padding = steps(element.prop("padding")).or(cx.card.then_some(16.0));
-        UiKind::Card { children, soft: string(element, "variant") == "soft", nested: cx.card, padding, spacing }
+        let soft = string(element, "variant") == "soft";
+        UiKind::Card { children, soft, nested: cx.card, padding, spacing, radius: block_radius(cx, Radius::LG) }
     }
 
     fn carousel(&mut self, element: &Element, cx: Cx) -> UiKind {
@@ -1087,6 +1088,11 @@ pub(super) fn length(value: &Value) -> Option<Length> {
         }
         _ => None,
     }
+}
+
+/// The corner of something drawn as a block: `xs` inside a card, so that it fits the card's.
+pub(super) fn block_radius(cx: Cx, outside: Radius) -> Radius {
+    if cx.card { Radius::XS } else { outside }
 }
 
 /// A Radius prop: a token, `full`, or points.

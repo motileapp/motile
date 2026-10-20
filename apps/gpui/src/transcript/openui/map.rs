@@ -11,7 +11,7 @@ use motile_core::render::openui::host::UiEvent;
 use motile_core::render::openui::tree::UiNode;
 
 use super::UiCx;
-use crate::theme::{Radius, colors};
+use crate::theme::colors;
 use crate::transcript::map::height;
 use crate::transcript::map::view::{MapNode, MapView, OnExpand, OnFilter, OnSelect};
 
@@ -29,6 +29,7 @@ impl Global for Maps {}
 /// The map's box: the map's height for this window, and the map in it once it was painted.
 pub fn map(element: Stateful<Div>, node: &UiNode, cx: &UiCx, window: &mut Window, app: &mut App) -> Stateful<Div> {
     let Some(map) = MapNode::from_kind(&node.kind) else { return element };
+    let radius = map.radius;
     let element = element.w_full().h(px(height(map.height, f32::from(window.viewport_size().width))));
     let key = format!("{:?}/{}/{}", window.window_handle().window_id(), cx.row, node.id);
     let streaming = cx.streaming;
@@ -57,7 +58,7 @@ pub fn map(element: Stateful<Div>, node: &UiNode, cx: &UiCx, window: &mut Window
         },
     )
     .size_full();
-    element.rounded(px(Radius::XL)).overflow_hidden().bg(c.map_water).child(make)
+    element.rounded(px(radius)).overflow_hidden().bg(c.map_water).child(make)
 }
 
 /// The map kept for the key, which was drawn now.

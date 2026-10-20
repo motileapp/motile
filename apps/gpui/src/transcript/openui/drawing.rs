@@ -13,7 +13,7 @@ use motile_core::render::openui::tree::{Canvas, Slot, UiKind, UiNode};
 use super::UiCx;
 use super::layout::slot;
 use super::style;
-use crate::theme::{Layer, Radius, colors};
+use crate::theme::{Layer, colors};
 use crate::transcript::canvas::{ConfettiOverlay, Prepared, SceneView, laid_out, squashed, turned};
 
 const MATH_MARGIN: f32 = 4.;
@@ -65,12 +65,12 @@ pub fn drawing(node: &UiNode, cx: &UiCx, window: &mut Window, app: &mut App) -> 
                 .self_center()
                 .child(SceneView::new(cx.id(id, "svg"), prepared, width).surface(cx.surface).current(c.foreground))
         }
-        UiKind::Flashcard { front, back, hint, flipped, canvas } => {
-            flashcard(element, id, front, back, hint, *flipped, canvas, cx, window, app)
+        UiKind::Flashcard { front, back, hint, flipped, canvas, radius } => {
+            flashcard(element, id, front, back, hint, *flipped, canvas, style::radius(radius), cx, window, app)
         }
         UiKind::Celebration { burst, canvas } => celebration(element, id, *burst, canvas, cx, window, app),
-        UiKind::HtmlView { html, height, title, streaming } => {
-            super::web::html_view(element, id, html, *height, title, *streaming, cx, window, app)
+        UiKind::HtmlView { html, height, title, streaming, radius } => {
+            super::web::html_view(element, id, html, *height, title, *streaming, style::radius(radius), cx, window, app)
         }
         _ => element,
     }
@@ -110,6 +110,7 @@ fn flashcard(
     hint: &str,
     flipped: bool,
     canvas: &Canvas,
+    radius: f32,
     cx: &UiCx,
     window: &mut Window,
     app: &mut App,
@@ -157,7 +158,7 @@ fn flashcard(
             .pt(px(FACE_PADDING.0))
             .px(px(FACE_PADDING.1))
             .pb(px(FACE_PADDING.2))
-            .rounded(px(Radius::LG))
+            .rounded(px(radius))
             .border_1()
             .border_color(border)
             .bg(fill)

@@ -1045,7 +1045,11 @@
           "label": "The same goods cost 10% more this year. What changes?",
           "variant": "list",
           "error": null,
-          "disabled": null
+          "disabled": null,
+          "radius": {
+            "kind": "xs",
+            "points": 4.0
+          }
         }
       ],
       "soft": true,
@@ -1053,7 +1057,11 @@
       "padding": 16.0,
       "spacing": [
         0.0
-      ]
+      ],
+      "radius": {
+        "kind": "xs",
+        "points": 4.0
+      }
     }
   ],
   "soft": false,
@@ -1069,5 +1077,9 @@
     16.0,
     16.0,
     16.0
-  ]
+  ],
+  "radius": {
+    "kind": "lg",
+    "points": 12.0
+  }
 }

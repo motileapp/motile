@@ -30,6 +30,7 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.motile.core.UiKind
 import app.motile.core.UiNode
@@ -37,7 +38,6 @@ import app.motile.core.UiSlot
 import app.motile.core.UiTextStyle
 import app.motile.theme.LocalPalette
 import app.motile.theme.LocalSurface
-import app.motile.theme.Radius
 import app.motile.theme.Surface
 import app.motile.transcript.canvas.Celebrations
 import app.motile.transcript.canvas.Confetti
@@ -65,10 +65,11 @@ fun UiFlashcard(node: UiNode, kind: UiKind.Flashcard) {
     val hovered by interaction.collectIsHoveredAsState()
     val border = if (hovered) palette.borderAccent else surface.border(palette)
     val shown = if (kind.flipped) kind.back else kind.front
+    val radius = UiStyle.radius(kind.radius)
     Layout(
         content = {
-            FlashcardFace(kind.front, kind.hint, surface.color(palette), border)
-            FlashcardFace(kind.back, null, surface.color(Surface.Layer.Box, palette), border)
+            FlashcardFace(kind.front, kind.hint, surface.color(palette), border, radius)
+            FlashcardFace(kind.back, null, surface.color(Surface.Layer.Box, palette), border, radius)
         },
         modifier = Modifier
             .uiNode(node)
@@ -91,9 +92,9 @@ fun UiFlashcard(node: UiNode, kind: UiKind.Flashcard) {
 
 /** A face: its words or components centred both ways, and the hint under them on the front. */
 @Composable
-private fun FlashcardFace(slot: UiSlot, hint: String?, fill: Color, border: Color) {
+private fun FlashcardFace(slot: UiSlot, hint: String?, fill: Color, border: Color, radius: Dp) {
     val palette = LocalPalette.current
-    val shape = RoundedCornerShape(Radius.lg)
+    val shape = RoundedCornerShape(radius)
     Box(Modifier.background(fill, shape).border(1.dp, border, shape)) {
         CompositionLocalProvider(LocalUiTextAlign provides TextAlign.Center) {
             Column(

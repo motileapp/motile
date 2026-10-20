@@ -14,7 +14,7 @@ use super::style::{self, LABEL, Look, SMALL, Type};
 use super::text::rich;
 use super::{UiCx, framed, node};
 use crate::media::pictures::{Picture, Pictures};
-use crate::theme::{Layer, Radius as Radii, Surface, colors};
+use crate::theme::{Layer, Surface, colors};
 use crate::transcript::kit::ShimmerBox;
 
 const FADE_IN: Duration = Duration::from_millis(300);
@@ -35,9 +35,9 @@ pub fn media(node: &UiNode, cx: &UiCx, window: &mut Window, app: &mut App) -> St
                 element.child(svg().path(crate::ui::icons::path(&icon.name)).size(px(*size)).text_color(color))
             })
         }
-        UiKind::Table { columns, rows } => table(element, &node.id, columns, rows, cx, window, app),
-        UiKind::YouTube { url: Some(url), title } => {
-            super::web::youtube(element, &node.id, url, title, cx, window, app)
+        UiKind::Table { columns, rows, radius } => table(element, &node.id, columns, rows, radius, cx, window, app),
+        UiKind::YouTube { url: Some(url), title, radius } => {
+            super::web::youtube(element, &node.id, url, title, style::radius(radius), cx, window, app)
         }
         UiKind::Map { .. } => super::map::map(element, node, cx, window, app),
         _ => element,
@@ -208,6 +208,7 @@ fn table(
     id: &str,
     columns: &[TableColumn],
     rows: &[Vec<TableCell>],
+    radius: &Radius,
     cx: &UiCx,
     window: &mut Window,
     app: &mut App,
@@ -305,23 +306,24 @@ fn table(
         })
         .collect();
     let grid = div().w(px(total)).flex().flex_col().child(header).children(body);
+    let radius = style::radius(radius);
     let header_fill = div()
         .absolute()
         .top_0()
         .left_0()
         .right_0()
         .h(px(header_type.line + 2. * padding.header.0))
-        .rounded_t(px(Radii::LG))
+        .rounded_t(px(radius))
         .bg(c.card_accent);
     element
         .w_full()
         .relative()
-        .rounded(px(Radii::LG))
+        .rounded(px(radius))
         .bg(c.card)
         .overflow_hidden()
         .child(header_fill)
         .child(div().id(cx.id(id, "scroll")).w_full().overflow_x_scroll().child(grid))
-        .child(div().absolute().inset_0().rounded(px(Radii::LG)).border_1().border_color(c.border_card))
+        .child(div().absolute().inset_0().rounded(px(radius)).border_1().border_color(c.border_card))
 }
 
 fn widest_word(text: &str, ty: Type, window: &Window) -> f32 {

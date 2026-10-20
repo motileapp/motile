@@ -191,5 +191,9 @@
   "padding": null,
   "spacing": [
     0.0
-  ]
+  ],
+  "radius": {
+    "kind": "lg",
+    "points": 12.0
+  }
 }

@@ -2,6 +2,8 @@ package app.motile.transcript.map
 
 import app.motile.core.UiKind
 import app.motile.core.UiMapPin
+import app.motile.core.UiRadius
+import app.motile.core.UiRadiusKind
 import app.motile.core.UiRouteKind
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -70,6 +72,7 @@ class MapDirectorTest {
         categories = pins.mapNotNull { it.category }.distinct(),
         filter = filter,
         note = "",
+        radius = UiRadius(UiRadiusKind.Xl, 0f),
     )
 
     private fun director(engine: FakeEngine?, clock: FakeClock = FakeClock()) = MapDirector(FakeMaths, clock).apply {
