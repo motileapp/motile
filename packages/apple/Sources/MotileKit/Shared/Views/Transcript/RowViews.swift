@@ -1310,7 +1310,7 @@ final class LineageView: FlippedView {
     private static let size = ControlSize.small
     private static let lineGap = ControlSize.regular.padding
     /// The arrow's square leaves room around its ink, so it needs little more from the words.
-    private static let arrowGap: CGFloat = 1
+    private static let arrowGap: CGFloat = 4
     private static let label = "Go back to parent thread"
 
     private let leading = SurfaceView()
