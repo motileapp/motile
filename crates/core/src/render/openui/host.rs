@@ -64,6 +64,8 @@ pub enum UiEvent {
     Reset,
     /// An image's `src` couldn't be loaded.
     Fallback,
+    /// An image waiting for its photo is in or near the viewport: the photo is looked up.
+    InView,
     /// Fetches the queries that failed again.
     Retry,
 }
@@ -163,6 +165,7 @@ struct NodeState {
     /// The marker picked on a map with no `$variable` for it.
     selected: Option<String>,
     failed: bool,
+    in_view: bool,
     countdown: Option<Countdown>,
     /// How many times a `Celebration` went off.
     burst: u32,
@@ -215,7 +218,7 @@ impl UiState for HostState<'_> {
         self.runtime.error_at(path).map(str::to_string)
     }
 
-    fn photos(&self, query: &str) -> Photos {
+    fn photos(&self, query: &str, in_view: bool) -> Photos {
         let missing = Photos { state: PhotoState::Missing, media: Vec::new() };
         if self.limited {
             return missing;
@@ -225,9 +228,10 @@ impl UiState for HostState<'_> {
                 Photos { state: PhotoState::Found, media: found.iter().map(|media| media.id.clone()).collect() }
             }
             Some(Some(_)) => missing,
-            Some(None) => Photos { state: PhotoState::Waiting, media: Vec::new() },
-            None => {
-                self.wanted.borrow_mut().images.insert(query.to_string());
+            asked => {
+                if in_view || asked.is_some() {
+                    self.wanted.borrow_mut().images.insert(query.to_string());
+                }
                 Photos { state: PhotoState::Waiting, media: Vec::new() }
             }
         }
@@ -258,6 +262,7 @@ impl UiState for HostState<'_> {
             filter: node.filter.clone(),
             burst: node.burst,
             failed: node.failed,
+            in_view: node.in_view,
         }
     }
 
@@ -313,6 +318,13 @@ pub struct Programs {
 }
 
 impl Programs {
+    /// The programs of a thread, with the photos its server found for other threads' programs.
+    pub fn with_photos(found: &HashMap<String, Vec<Media>>) -> Self {
+        let mut programs = Self::default();
+        programs.lookups.images = found.iter().map(|(query, found)| (query.clone(), Some(found.clone()))).collect();
+        programs
+    }
+
     /// Runs the programs of the rows about to be sent and puts their trees in them. `saved` is the
     /// state an item keeps for a block.
     pub fn dress(&mut self, rows: &mut [Row], saved: &dyn Fn(&str, u32) -> Option<Value>) -> Vec<Out> {
@@ -496,6 +508,16 @@ impl Programs {
         let Some(path) = node_path(node) else { return outs };
         let Some(hosted) = self.programs.get_mut(row_id) else { return outs };
         let Some(element) = hosted.runtime.root().and_then(|root| element_at(root, &path)) else { return outs };
+        if event == UiEvent::InView {
+            let state = hosted.nodes.entry(node.to_string()).or_default();
+            if !state.in_view {
+                state.in_view = true;
+                let waiting: HashSet<String> = self.wanted.keys().cloned().collect();
+                self.repaint(row_id, &mut outs);
+                outs.extend(self.look_up_now(&waiting));
+            }
+            return outs;
+        }
         let prop = value_prop(&library(), &element.component);
         let action = element.props.iter().find(|(_, value)| value.as_plan().is_some()).map(|(name, _)| name.clone());
         let label = element.prop("label").and_then(|label| label.as_str()).map(str::to_string);
@@ -540,6 +562,7 @@ impl Programs {
                 state.failed = true;
                 Effects::default()
             }
+            UiEvent::InView => Effects::default(),
             UiEvent::Retry => runtime.retry(),
             UiEvent::Start | UiEvent::Pause | UiEvent::Reset => {
                 let Some(prop) = prop else { return outs };
@@ -694,6 +717,23 @@ impl Programs {
     /// Keeps every state that changed now, as the thread closes.
     pub fn flush(&mut self) -> Vec<Out> {
         self.programs.values_mut().filter(|hosted| hosted.dirty.is_some()).map(save).collect()
+    }
+
+    /// Looks up at once the photos wanted since `waiting`, which came into view rather than being
+    /// typed.
+    fn look_up_now(&mut self, waiting: &HashSet<String>) -> Vec<Out> {
+        let now = Instant::now();
+        let mut fresh = false;
+        for (query, since) in &mut self.wanted {
+            if !waiting.contains(query) {
+                *since = now.checked_sub(LOOK_UP_AFTER).unwrap_or(*since);
+                fresh = true;
+            }
+        }
+        match fresh {
+            true => self.wake(now),
+            false => Vec::new(),
+        }
     }
 
     /// The photos found for a query.

@@ -14,6 +14,8 @@ final class ProgramRowView: RowView, ProgramHost {
     private var root: ProgramNodeView?
     private let source = ProgramCodeBox()
     private lazy var errors = ErrorBox(in: self)
+    private let images = NSHashTable<ProgramImageView>.weakObjects()
+    private var lookingSoon = false
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -90,6 +92,20 @@ final class ProgramRowView: RowView, ProgramHost {
     }
 
     var streaming: Bool { content?.complete == false }
+
+    func watchViewport(_ image: ProgramImageView) {
+        images.add(image)
+        guard !lookingSoon else { return }
+        lookingSoon = true
+        DispatchQueue.main.async { [weak self] in
+            self?.lookingSoon = false
+            self?.viewportMoved()
+        }
+    }
+
+    override func viewportMoved() {
+        for image in images.allObjects { image.viewportMoved() }
+    }
 
     func resized(_ node: String) {
         content?.cache.forget(node)

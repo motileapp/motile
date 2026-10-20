@@ -67,6 +67,9 @@ class RowView: FlippedView {
     /// The row left the screen: its view goes to the pool or away.
     func recycled() {}
 
+    /// The transcript scrolled or laid its rows out again.
+    func viewportMoved() {}
+
     func clearSelection() {}
 
     /// What the row says about its message, like when it was sent, is shown or faded out.

@@ -19,6 +19,8 @@ use crate::transcript::kit::ShimmerBox;
 
 const FADE_IN: Duration = Duration::from_millis(300);
 const MISSING_SYMBOL: f32 = 26.;
+/// How far outside the window an image counts as near it, as the transcript keeps its rows.
+const NEARBY: f32 = 400.;
 
 pub fn media(node: &UiNode, cx: &UiCx, window: &mut Window, app: &mut App) -> Stateful<Div> {
     let element = div().id(cx.id(&node.id, "node"));
@@ -67,9 +69,14 @@ fn image(
     let c = colors(app);
     let width = cx.width.max(1.);
     let max_pixels = (width.max(width / aspect_ratio) * window.scale_factor()).ceil() as u32;
+    let near = window.use_keyed_state(cx.id(id, "near"), app, |_, _| false);
+    let is_near = *near.read(app);
+    if is_near && photos.state == PhotoState::Waiting {
+        tell_once(id, "in-view", UiEvent::InView, cx, window, app);
+    }
     let picture = match (photos.state, src) {
-        (PhotoState::Idle, Some(src)) => web_picture(id, src, max_pixels, cx, window, app),
-        (PhotoState::Found, _) => photo(&photos.media, max_pixels, cx, app),
+        (PhotoState::Idle, Some(src)) => web_picture(id, src, max_pixels, is_near, cx, window, app),
+        (PhotoState::Found, _) => photo(&photos.media, max_pixels, is_near, cx, app),
         (PhotoState::Waiting, _) => Picture::Loading,
         _ => Picture::Failed(crate::media::pictures::Failure::Decode),
     };
@@ -127,19 +134,58 @@ fn image(
         .overflow_hidden()
         .bg(cx.surface.layer(Layer::Box, c))
         .child(content)
+        .when(!is_near, |element| element.child(watch_viewport(near)))
+}
+
+/// Marks the image near once its bounds come within `NEARBY` of the window.
+fn watch_viewport(near: Entity<bool>) -> impl IntoElement {
+    canvas(
+        move |bounds, window, cx| {
+            let height = f32::from(window.viewport_size().height);
+            let (top, bottom) = (f32::from(bounds.top()), f32::from(bounds.bottom()));
+            if bottom <= -NEARBY || top >= height + NEARBY {
+                return;
+            }
+            cx.defer(move |cx| {
+                near.update(cx, |near, cx| {
+                    *near = true;
+                    cx.notify();
+                })
+            });
+        },
+        |_, _, _, _| {},
+    )
+    .absolute()
+    .inset_0()
+}
+
+/// Sends the node's `event` to core the first time it is asked to, while the node stays drawn.
+fn tell_once(id: &str, part: &str, event: UiEvent, cx: &UiCx, window: &mut Window, app: &mut App) {
+    let told = window.use_keyed_state(cx.id(id, part), app, |_, _| false);
+    if *told.read(app) {
+        return;
+    }
+    told.update(app, |told, _| *told = true);
+    let (sender, node_id) = (cx.clone(), id.to_string());
+    app.defer(move |app| sender.send(&node_id, event, app));
 }
 
 fn ease(progress: f32) -> f32 {
     progress * progress * (3. - 2. * progress)
 }
 
-/// The best photo core found that can be shown: the next when one fails.
-fn photo(media: &[String], max_pixels: u32, cx: &UiCx, app: &mut App) -> Picture {
+/// The best photo core found that can be shown: the next when one fails. Only an image `near` the
+/// window loads one.
+fn photo(media: &[String], max_pixels: u32, near: bool, cx: &UiCx, app: &mut App) -> Picture {
     let Some(store) = cx.store.clone() else { return Picture::Loading };
     let mut last = Picture::Failed(crate::media::pictures::Failure::Decode);
     for media in media {
         let key = format!("ui:{media}:{max_pixels}");
-        match Pictures::load(&store, &key, media, max_pixels, app) {
+        let picture = match near {
+            true => Pictures::load(&store, &key, media, max_pixels, app),
+            false => Pictures::known(&key, app).unwrap_or(Picture::Loading),
+        };
+        match picture {
             Picture::Failed(failure) => last = Picture::Failed(failure),
             picture => return picture,
         }
@@ -148,20 +194,27 @@ fn photo(media: &[String], max_pixels: u32, cx: &UiCx, app: &mut App) -> Picture
 }
 
 /// A picture at a web address, fetched once into the temporary folder; when it can't be had, core
-/// is told so and looks for photos instead.
-fn web_picture(id: &str, src: &str, max_pixels: u32, cx: &UiCx, window: &mut Window, app: &mut App) -> Picture {
+/// is told so and looks for photos instead. Only an image `near` the window fetches one.
+fn web_picture(
+    id: &str,
+    src: &str,
+    max_pixels: u32,
+    near: bool,
+    cx: &UiCx,
+    window: &mut Window,
+    app: &mut App,
+) -> Picture {
     let mut hasher = DefaultHasher::new();
     src.hash(&mut hasher);
     let name = format!("{:016x}", hasher.finish());
+    let key = format!("web:{name}:{max_pixels}");
     let file = std::env::temp_dir().join("motile-web-images").join(&name);
-    let picture = Pictures::load_web(&format!("web:{name}:{max_pixels}"), src, &file, max_pixels, app);
+    let picture = match near {
+        true => Pictures::load_web(&key, src, &file, max_pixels, app),
+        false => Pictures::known(&key, app).unwrap_or(Picture::Loading),
+    };
     let Picture::Failed(_) = picture else { return picture };
-    let told = window.use_keyed_state(cx.id(id, "fallback"), app, |_, _| false);
-    if !*told.read(app) {
-        told.update(app, |told, _| *told = true);
-        let (sender, node_id) = (cx.clone(), id.to_string());
-        app.defer(move |app| sender.send(&node_id, UiEvent::Fallback, app));
-    }
+    tell_once(id, "fallback", UiEvent::Fallback, cx, window, app);
     Picture::Loading
 }
 

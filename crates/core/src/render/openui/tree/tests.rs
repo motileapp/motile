@@ -518,7 +518,7 @@ impl UiState for Running {
         Some("Required".into())
     }
 
-    fn photos(&self, query: &str) -> Photos {
+    fn photos(&self, query: &str, _in_view: bool) -> Photos {
         Photos { state: PhotoState::Found, media: vec![format!("media:{query}")] }
     }
 
@@ -535,6 +535,7 @@ impl UiState for Running {
             filter: Some("food".into()),
             burst: 2,
             failed: false,
+            in_view: true,
         }
     }
 

@@ -29,8 +29,8 @@ pub trait UiState {
     fn value(&self, path: &[Step], prop: &str) -> Option<Value>;
     /// A field's validation error, as `Runtime::error_at` says.
     fn error(&self, path: &[Step]) -> Option<String>;
-    /// The photos found for an image's query.
-    fn photos(&self, query: &str) -> Photos;
+    /// The photos found for an image's query, looked up once the image is in view.
+    fn photos(&self, query: &str, in_view: bool) -> Photos;
     /// The street route through stops, `[lat, lng]`.
     fn route(&self, stops: &[[f64; 2]]) -> Route;
     /// The state core keeps for a node: a timer, a popover, a flip, the map's filter.
@@ -56,6 +56,8 @@ pub struct Widgets {
     pub burst: u32,
     /// An image whose address couldn't be loaded: a photo is found for its `alt`.
     pub failed: bool,
+    /// An image in or near the viewport.
+    pub in_view: bool,
 }
 
 /// Nothing beside the tree: controls show their props and every lookup waits.
@@ -70,7 +72,7 @@ impl UiState for NoState {
         None
     }
 
-    fn photos(&self, _query: &str) -> Photos {
+    fn photos(&self, _query: &str, _in_view: bool) -> Photos {
         Photos { state: PhotoState::Waiting, media: Vec::new() }
     }
 
@@ -187,7 +189,8 @@ impl Pass<'_, '_> {
 
     pub fn photos(&mut self, query: &str) -> Photos {
         self.impure = true;
-        self.ctx.state.photos(query)
+        let in_view = self.ctx.state.widgets(&self.id()).in_view;
+        self.ctx.state.photos(query, in_view)
     }
 
     pub fn route(&mut self, stops: &[[f64; 2]]) -> Route {
