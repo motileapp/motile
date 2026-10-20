@@ -125,8 +125,11 @@ final class TranscriptModel {
         setPending(text, attachments: attachments, queued: queued, skills: skills)
     }
 
+    /// While the view keeps the rows of the thread open before, what this one's agent does waits
+    /// to be shown with its rows.
     func setActivity(_ activity: Activity) {
         self.activity = activity
+        guard !keepsRows else { return }
         hooks?.activity(activity)
     }
 
