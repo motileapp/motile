@@ -315,7 +315,11 @@
         "Parks"
       ],
       "filter": null,
-      "note": "Move and zoom the map to explore. Select a place to highlight it. The line joins the places in order. Street routing is loading or unavailable."
+      "note": "Move and zoom the map to explore. Select a place to highlight it. The line joins the places in order. Street routing is loading or unavailable.",
+      "radius": {
+        "kind": "xl",
+        "points": 16.0
+      }
     },
     {
       "id": "children/4",
@@ -470,7 +474,11 @@
       "spacing": [
         0.0,
         8.0
-      ]
+      ],
+      "radius": {
+        "kind": "lg",
+        "points": 12.0
+      }
     },
     {
       "id": "children/5",

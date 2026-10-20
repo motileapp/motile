@@ -728,7 +728,11 @@
             }
           }
         ]
-      ]
+      ],
+      "radius": {
+        "kind": "lg",
+        "points": 12.0
+      }
     },
     {
       "id": "children/5",
@@ -773,7 +777,11 @@
       "label": null,
       "variant": "cards",
       "error": null,
-      "disabled": null
+      "disabled": null,
+      "radius": {
+        "kind": "lg",
+        "points": 12.0
+      }
     },
     {
       "id": "children/7",
@@ -920,7 +928,11 @@
       "padding": null,
       "spacing": [
         0.0
-      ]
+      ],
+      "radius": {
+        "kind": "lg",
+        "points": 12.0
+      }
     }
   ],
   "align": "stretch",

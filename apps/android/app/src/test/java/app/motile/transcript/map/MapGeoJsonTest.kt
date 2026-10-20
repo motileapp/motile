@@ -2,6 +2,8 @@ package app.motile.transcript.map
 
 import app.motile.core.UiKind
 import app.motile.core.UiMapPin
+import app.motile.core.UiRadius
+import app.motile.core.UiRadiusKind
 import app.motile.core.UiRouteKind
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -60,7 +62,7 @@ class MapGeoJsonTest {
 
     @Test
     fun aMapIsShorterOnANarrowWindow() {
-        val node = UiKind.Map(emptyList(), UiRouteKind.Off, emptyList(), null, 400f, emptyList(), null, "")
+        val node = UiKind.Map(emptyList(), UiRouteKind.Off, emptyList(), null, 400f, emptyList(), null, "", UiRadius(UiRadiusKind.Xl, 0f))
         assertEquals(400f, mapHeight(node, 1200f))
         assertEquals(319.8f, mapHeight(node, 390f), 0.01f)
         assertEquals(280f, mapHeight(node, 200f))

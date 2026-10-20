@@ -96,6 +96,7 @@ object UiStyle {
 
     fun radius(radius: UiRadius?, side: Dp = 0.dp): Dp = when (radius?.kind) {
         null -> 0.dp
+        UiRadiusKind.Xs -> Radius.xs
         UiRadiusKind.Sm -> Radius.sm
         UiRadiusKind.Md -> Radius.md
         UiRadiusKind.Lg -> Radius.lg

@@ -564,6 +564,7 @@ final class OptionCardView: FlippedView {
     }
     var surface = Surface.background { didSet { paint() } }
     var enabled = true { didSet { opacity = enabled ? 1 : Opacity.disabled.fixed; paint() } }
+    var radius = Radius.lg { didSet { box.radius = radius } }
 
     private let box = SurfaceView()
     private let titleView = TextBlockView()
@@ -572,7 +573,7 @@ final class OptionCardView: FlippedView {
 
     init(onPress: @escaping () -> Void) {
         super.init(frame: .zero)
-        box.radius = Radius.lg
+        box.radius = radius
         for view in [box, titleView, detailView] as [PlatformView] { addSubview(view) }
         focusable = true
         self.onPress = { [weak self] _ in
@@ -599,7 +600,7 @@ final class OptionCardView: FlippedView {
         return 2 * padding.ends + ControlText.height(Self.title(title), width: words) + under
     }
 
-    override var focusShape: (rect: CGRect, radius: CGFloat) { (bounds, Radius.lg) }
+    override var focusShape: (rect: CGRect, radius: CGFloat) { (bounds, radius) }
 
     override func layoutNow() {
         box.frame = bounds

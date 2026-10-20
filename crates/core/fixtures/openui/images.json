@@ -39,8 +39,8 @@
               "alt": "Golden Gate Bridge from Battery East",
               "aspect_ratio": 1.5,
               "radius": {
-                "kind": "lg",
-                "points": 12.0
+                "kind": "xs",
+                "points": 4.0
               },
               "fit": "cover",
               "photos": {
@@ -104,8 +104,8 @@
               "query": "Alcatraz Island",
               "aspect_ratio": 1.5,
               "radius": {
-                "kind": "lg",
-                "points": 12.0
+                "kind": "xs",
+                "points": 4.0
               },
               "fit": "cover",
               "photos": {
@@ -170,8 +170,8 @@
               "alt": "Palace of Fine Arts",
               "aspect_ratio": 1.5,
               "radius": {
-                "kind": "lg",
-                "points": 12.0
+                "kind": "xs",
+                "points": 4.0
               },
               "fit": "cover",
               "photos": {
@@ -299,5 +299,9 @@
   "spacing": [
     0.0,
     12.0
-  ]
+  ],
+  "radius": {
+    "kind": "lg",
+    "points": 12.0
+  }
 }

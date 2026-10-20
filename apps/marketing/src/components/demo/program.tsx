@@ -216,7 +216,7 @@ function Figure({
   success?: boolean
 }) {
   return (
-    <div className="flex flex-col gap-1 rounded-md bg-card-accent p-3">
+    <div className="flex flex-col gap-1 rounded-xs bg-card-accent p-3">
       <p className="text-[12px] leading-[18px] text-muted-foreground">
         {caption}
       </p>

@@ -62,7 +62,6 @@ import app.motile.theme.LocalDark
 import app.motile.theme.LocalPalette
 import app.motile.theme.LocalSurface
 import app.motile.theme.Palette
-import app.motile.theme.Radius
 import app.motile.theme.Theme
 import app.motile.ui.ActionButton
 import app.motile.ui.Spinner
@@ -131,7 +130,7 @@ fun UiHtmlView(node: UiNode, kind: UiKind.HtmlView) {
     val palette = LocalPalette.current
     val surface = LocalSurface.current
     val dark = LocalDark.current
-    val shape = RoundedCornerShape(Radius.lg)
+    val shape = RoundedCornerShape(UiStyle.radius(kind.radius))
     val key = "${LocalUiHost.current?.rowID}/${node.id}"
     val foreground = palette.foreground
     val background = surface.color
@@ -177,7 +176,7 @@ fun UiHtmlView(node: UiNode, kind: UiKind.HtmlView) {
 @Composable
 fun UiYouTube(node: UiNode, kind: UiKind.YouTube) {
     val url = kind.url ?: return
-    val shape = RoundedCornerShape(Radius.lg)
+    val shape = RoundedCornerShape(UiStyle.radius(kind.radius))
     val page by produceState<UiPage?>(null, url, kind.title) {
         value = withContext(Dispatchers.Default) {
             UiPage.build(

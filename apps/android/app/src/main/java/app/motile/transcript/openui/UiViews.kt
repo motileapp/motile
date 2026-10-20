@@ -273,9 +273,9 @@ private fun UiCard(node: UiNode, kind: UiKind.Card) {
     val palette = LocalPalette.current
     val surface = LocalSurface.current
     val narrow = LocalUiNarrow.current
-    val shape = RoundedCornerShape(if (kind.nested) Radius.md else Radius.lg)
+    val radius = UiStyle.radius(kind.radius)
+    val shape = RoundedCornerShape(radius)
     val padding = kind.padding ?: if (kind.nested) 16f else UiStyle.cardPadding(narrow)
-    val radius = if (kind.nested) Radius.md else Radius.lg
     val clipped = if (padding < radius.value) Modifier.clip(shape) else Modifier
     val frame = if (kind.soft) {
         clipped.background(surface.color(Surface.Layer.Box), shape)

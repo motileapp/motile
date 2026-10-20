@@ -172,7 +172,11 @@
       "spacing": [
         0.0,
         12.0
-      ]
+      ],
+      "radius": {
+        "kind": "lg",
+        "points": 12.0
+      }
     },
     {
       "id": "children/2",
@@ -3238,7 +3242,11 @@
             }
           }
         ]
-      ]
+      ],
+      "radius": {
+        "kind": "lg",
+        "points": 12.0
+      }
     },
     {
       "id": "children/10",
@@ -3412,8 +3420,8 @@
               "background": null,
               "inner_surface": false,
               "radius": {
-                "kind": "lg",
-                "points": 12.0
+                "kind": "xs",
+                "points": 4.0
               },
               "selected": false,
               "ring": false,
@@ -3490,8 +3498,8 @@
               "background": null,
               "inner_surface": false,
               "radius": {
-                "kind": "lg",
-                "points": 12.0
+                "kind": "xs",
+                "points": 4.0
               },
               "selected": false,
               "ring": false,
@@ -3568,8 +3576,8 @@
               "background": null,
               "inner_surface": false,
               "radius": {
-                "kind": "lg",
-                "points": 12.0
+                "kind": "xs",
+                "points": 4.0
               },
               "selected": false,
               "ring": false,
@@ -3646,8 +3654,8 @@
               "background": null,
               "inner_surface": false,
               "radius": {
-                "kind": "lg",
-                "points": 12.0
+                "kind": "xs",
+                "points": 4.0
               },
               "selected": false,
               "ring": false,
@@ -3724,8 +3732,8 @@
               "background": null,
               "inner_surface": false,
               "radius": {
-                "kind": "lg",
-                "points": 12.0
+                "kind": "xs",
+                "points": 4.0
               },
               "selected": false,
               "ring": false,
@@ -3802,8 +3810,8 @@
               "background": null,
               "inner_surface": false,
               "radius": {
-                "kind": "lg",
-                "points": 12.0
+                "kind": "xs",
+                "points": 4.0
               },
               "selected": false,
               "ring": false,
@@ -3827,7 +3835,11 @@
       "spacing": [
         0.0,
         8.0
-      ]
+      ],
+      "radius": {
+        "kind": "lg",
+        "points": 12.0
+      }
     }
   ],
   "align": "stretch",

@@ -56,7 +56,6 @@ import app.motile.theme.ControlSize
 import app.motile.theme.LocalPalette
 import app.motile.theme.LocalSurface
 import app.motile.theme.Opacity
-import app.motile.theme.Radius
 import app.motile.theme.Surface
 import app.motile.theme.opacity
 import app.motile.theme.wash
@@ -359,7 +358,7 @@ fun UiRadioGroup(node: UiNode, kind: UiKind.RadioGroup) {
             }
             UiRadioVariant.Cards -> UiGridLayout(12, 200f, 8f, Modifier.fillMaxWidth()) {
                 kind.options.forEachIndexed { index, option ->
-                    OptionCard(option.label, index == kind.selected, { pick(index) }, detail = option.description, disabled = disabled)
+                    OptionCard(option.label, index == kind.selected, { pick(index) }, detail = option.description, disabled = disabled, radius = UiStyle.radius(kind.radius))
                 }
             }
         }
@@ -390,7 +389,7 @@ fun UiTimer(node: UiNode, kind: UiKind.Timer) {
     val palette = LocalPalette.current
     val surface = LocalSurface.current
     val host = LocalUiHost.current
-    val shape = RoundedCornerShape(Radius.lg)
+    val shape = RoundedCornerShape(UiStyle.radius(kind.radius))
     val sizing = listOf(UiSizing(UiBasis.Content, null, 0f, true), UiSizing(UiBasis.Content, null, 0f, false))
     UiRowLayout(
         12f, UiAlign.Center, UiJustify.Between, wrap = true, sizing = sizing, extent = LocalUiExtent.current,

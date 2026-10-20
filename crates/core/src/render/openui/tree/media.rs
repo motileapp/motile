@@ -8,7 +8,7 @@ use regress::Regex;
 use unicode_segmentation::UnicodeSegmentation;
 
 use super::controls::number_text;
-use super::resolve::{Cx, Part, Pass, flag, items, number, radius, str_of, string};
+use super::resolve::{Cx, Part, Pass, block_radius, flag, items, number, radius, str_of, string};
 use super::text;
 use super::*;
 
@@ -38,7 +38,7 @@ impl Pass<'_, '_> {
             photos: self.photo_search(&query),
             query,
             aspect_ratio: aspect_ratio(element, cx),
-            radius: image_radius(element),
+            radius: image_radius(element, cx),
             fit: fit(element),
         }
     }
@@ -55,7 +55,7 @@ impl Pass<'_, '_> {
             src,
             alt,
             aspect_ratio: aspect_ratio(element, cx),
-            radius: image_radius(element),
+            radius: image_radius(element, cx),
             fit: fit(element),
         }
     }
@@ -116,10 +116,10 @@ impl Pass<'_, '_> {
                     .collect()
             })
             .collect();
-        UiKind::Table { columns, rows }
+        UiKind::Table { columns, rows, radius: block_radius(cx, Radius::LG) }
     }
 
-    pub(super) fn map(&mut self, element: &Element) -> UiKind {
+    pub(super) fn map(&mut self, element: &Element, cx: Cx) -> UiKind {
         let mut seen: std::collections::HashMap<String, u32> = std::collections::HashMap::new();
         let mut pins = Vec::new();
         for (order, (_, value)) in items(element.prop("markers")).into_iter().enumerate() {
@@ -186,6 +186,7 @@ impl Pass<'_, '_> {
             categories,
             filter,
             note,
+            radius: block_radius(cx, Radius::XL),
         }
     }
 
@@ -199,14 +200,15 @@ impl Pass<'_, '_> {
         let front = face(self, "front", TextStyle::Word);
         let back = face(self, "back", TextStyle::WordBack);
         let hint = str_of(element, "hint").filter(|hint| !hint.is_empty()).unwrap_or("Tap to flip").to_owned();
-        UiKind::Flashcard { front, back, hint, flipped: self.widgets().flipped, canvas: canvas(element) }
+        let radius = block_radius(cx, Radius::LG);
+        UiKind::Flashcard { front, back, hint, flipped: self.widgets().flipped, canvas: canvas(element), radius }
     }
 
     pub(super) fn celebration(&mut self, element: &Element) -> UiKind {
         UiKind::Celebration { burst: self.widgets().burst, canvas: canvas(element) }
     }
 
-    pub(super) fn html_view(&mut self, element: &Element) -> UiKind {
+    pub(super) fn html_view(&mut self, element: &Element, cx: Cx) -> UiKind {
         UiKind::HtmlView {
             html: string(element, "html"),
             height: number(element, "height")
@@ -214,6 +216,7 @@ impl Pass<'_, '_> {
                 .map(|height| height.clamp(80.0, 2400.0) as f32),
             title: str_of(element, "title").filter(|title| !title.is_empty()).unwrap_or("Interactive view").to_owned(),
             streaming: self.ctx.streaming,
+            radius: block_radius(cx, Radius::LG),
         }
     }
 }
@@ -238,11 +241,11 @@ fn aspect_ratio(element: &Element, cx: Cx) -> f32 {
     number(element, "aspectRatio").filter(|ratio| *ratio > 0.2 && *ratio < 5.0).unwrap_or(1.5) as f32
 }
 
-fn image_radius(element: &Element) -> Radius {
+fn image_radius(element: &Element, cx: Cx) -> Radius {
     let none = Radius { kind: RadiusKind::Points, points: 0.0 };
     match element.prop("radius") {
         Some(value) => radius(value).unwrap_or(none),
-        None => Radius { kind: RadiusKind::Lg, points: 12.0 },
+        None => block_radius(cx, Radius::LG),
     }
 }
 
@@ -289,12 +292,13 @@ pub(super) fn map_marker(element: &Element) -> UiKind {
     }
 }
 
-pub(super) fn youtube(element: &Element) -> UiKind {
+pub(super) fn youtube(element: &Element, cx: Cx) -> UiKind {
     let video = string(element, "video");
     let video = video.trim();
     let id = YOUTUBE.find(video).and_then(|found| found.group(1).or_else(|| found.group(2))).map(|range| &video[range]);
     UiKind::YouTube {
         url: id.map(|id| format!("https://www.youtube-nocookie.com/embed/{id}")),
         title: str_of(element, "title").filter(|title| !title.is_empty()).unwrap_or("YouTube video").to_owned(),
+        radius: block_radius(cx, Radius::LG),
     }
 }

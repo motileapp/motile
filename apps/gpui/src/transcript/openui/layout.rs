@@ -13,7 +13,7 @@ use motile_core::render::openui::tree::{
 
 use super::style::{self, Look};
 use super::{UiCx, framed, node};
-use crate::theme::{Layer, Radius, Surface, colors};
+use crate::theme::{Layer, Surface, colors};
 use crate::ui::GlassButton;
 
 const CARD_PADDING: f32 = 20.;
@@ -37,10 +37,10 @@ pub fn layout(node: &UiNode, cx: &UiCx, window: &mut Window, app: &mut App) -> S
         UiKind::Grid { children, columns, min_child_width, gap } => {
             grid(element, children, *columns, *min_child_width, *gap, cx, window, app)
         }
-        UiKind::Card { children, soft, nested, padding, spacing } => {
+        UiKind::Card { children, soft, padding, spacing, radius, .. } => {
             let c = colors(app);
             let padding = padding.unwrap_or(if cx.narrow() { NARROW_CARD_PADDING } else { CARD_PADDING });
-            let radius = if *nested { Radius::MD } else { Radius::LG };
+            let radius = style::radius(radius);
             let (inner, border) = match soft {
                 true => (cx.surface.in_box(), 0.),
                 false => (Surface::Card, 1.),

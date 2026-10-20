@@ -234,8 +234,8 @@ fun ProseBlockView(block: ProseBlock) {
 
 /** Code in a box with its language and a button that copies it, which scrolls sideways when it is wider than the column, or `wraps`. */
 @Composable
-fun CodeBox(language: String, code: String, text: AnnotatedString, modifier: Modifier = Modifier, wraps: Boolean = false) {
-    SurfaceBox(RoundedCornerShape(Radius.lg), modifier.fillMaxWidth(), bordered = true) {
+fun CodeBox(language: String, code: String, text: AnnotatedString, modifier: Modifier = Modifier, wraps: Boolean = false, radius: Dp = Radius.lg) {
+    SurfaceBox(RoundedCornerShape(radius), modifier.fillMaxWidth(), bordered = true) {
         Column {
             CodeHeader(language, code)
             BasicText(

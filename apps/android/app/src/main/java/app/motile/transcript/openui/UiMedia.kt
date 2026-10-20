@@ -218,7 +218,7 @@ fun UiIcon(node: UiNode, kind: UiKind.Icon) {
 fun UiTable(node: UiNode, kind: UiKind.Table) {
     val palette = LocalPalette.current
     val narrow = LocalUiNarrow.current
-    val shape = RoundedCornerShape(Radius.lg)
+    val shape = RoundedCornerShape(UiStyle.radius(kind.radius))
     val columns = kind.columns.size
     if (columns == 0) return
     val horizontal = if (narrow) 10.dp else 12.dp

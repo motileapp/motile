@@ -119,6 +119,7 @@ pub fn color(color: &Color, cx: &UiCx, app: &App) -> Hsla {
 
 pub fn radius(radius: &Radius) -> f32 {
     match radius.kind {
+        RadiusKind::Xs => Radii::XS,
         RadiusKind::Sm => Radii::SM,
         RadiusKind::Md => Radii::MD,
         RadiusKind::Lg => Radii::LG,
@@ -229,10 +230,12 @@ fn fills_corner(node: &UiNode, inset: f32) -> bool {
         UiKind::Col { children, .. } | UiKind::Row { children, .. } | UiKind::Grid { children, .. } => {
             children.iter().any(|child| fills_corner(child, inset))
         }
-        UiKind::Image { radius: own, .. } | UiKind::SearchImage { radius: own, .. } => radius(own) < inset,
-        UiKind::Pressable { radius: own, .. } => radius(own) < inset,
-        UiKind::Card { nested, .. } => (if *nested { Radii::MD } else { Radii::LG }) < inset,
-        UiKind::Table { .. } | UiKind::Code { .. } => Radii::LG < inset,
+        UiKind::Image { radius: own, .. }
+        | UiKind::SearchImage { radius: own, .. }
+        | UiKind::Pressable { radius: own, .. }
+        | UiKind::Card { radius: own, .. }
+        | UiKind::Table { radius: own, .. }
+        | UiKind::Code { radius: own, .. } => radius(own) < inset,
         _ => false,
     }
 }

@@ -75,6 +75,7 @@ import app.motile.theme.Opacity
 import app.motile.theme.Radius
 import app.motile.theme.Theme
 import app.motile.theme.at
+import app.motile.transcript.openui.UiStyle
 import app.motile.ui.Choice
 import app.motile.ui.Choices
 import app.motile.ui.DropdownCard
@@ -139,7 +140,7 @@ fun UiMapView(
         modifier
             .fillMaxWidth()
             .height(height.dp)
-            .clip(RoundedCornerShape(Radius.xl))
+            .clip(RoundedCornerShape(UiStyle.radius(node.radius)))
             .background(palette.mapWater)
             .onSizeChanged { width = with(density) { it.width.toDp().value } }
             .onVisibilityChanged { shown ->

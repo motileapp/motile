@@ -171,6 +171,7 @@ pub struct OptionCard {
     detail: Option<SharedString>,
     selected: bool,
     surface: Surface,
+    radius: f32,
     disabled: bool,
     on_press: Option<OnPress>,
 }
@@ -188,6 +189,7 @@ impl OptionCard {
             detail: None,
             selected,
             surface: Surface::Background,
+            radius: Radius::LG,
             disabled: false,
             on_press: None,
         }
@@ -200,6 +202,11 @@ impl OptionCard {
 
     pub fn surface(mut self, surface: Surface) -> Self {
         self.surface = surface;
+        self
+    }
+
+    pub fn radius(mut self, radius: f32) -> Self {
+        self.radius = radius;
         self
     }
 
@@ -248,7 +255,7 @@ impl RenderOnce for OptionCard {
             .pb(inset(Self::PADDING_Y))
             .pl(inset(Self::PADDING_X))
             .pr(inset(Self::PADDING_X))
-            .rounded(px(Radius::LG))
+            .rounded(px(self.radius))
             .border(px(Self::BORDER))
             .border_color(border)
             .bg(fill)
@@ -275,7 +282,7 @@ impl RenderOnce for OptionCard {
             .when(disabled, |option| option.opacity(c.opacity(Opacity::Disabled)))
             .on_hover(crate::ui::track_hover(&hovered))
             .child(card)
-            .when(ring, |option| option.child(crate::ui::focus_ring(Radius::LG, cx)));
+            .when(ring, |option| option.child(crate::ui::focus_ring(self.radius, cx)));
         pressable(option, &focus, self.on_press.filter(|_| !disabled))
     }
 }

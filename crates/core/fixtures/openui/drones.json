@@ -135,7 +135,11 @@
             0.0,
             8.0,
             8.0
-          ]
+          ],
+          "radius": {
+            "kind": "lg",
+            "points": 12.0
+          }
         },
         {
           "id": "children/2/children/1",
@@ -205,7 +209,11 @@
             0.0,
             8.0,
             8.0
-          ]
+          ],
+          "radius": {
+            "kind": "lg",
+            "points": 12.0
+          }
         },
         {
           "id": "children/2/children/2",
@@ -275,7 +283,11 @@
             0.0,
             8.0,
             8.0
-          ]
+          ],
+          "radius": {
+            "kind": "lg",
+            "points": 12.0
+          }
         },
         {
           "id": "children/2/children/3",
@@ -345,7 +357,11 @@
             0.0,
             8.0,
             8.0
-          ]
+          ],
+          "radius": {
+            "kind": "lg",
+            "points": 12.0
+          }
         }
       ],
       "columns": 2,
@@ -522,7 +538,11 @@
         0.0,
         8.0,
         8.0
-      ]
+      ],
+      "radius": {
+        "kind": "lg",
+        "points": 12.0
+      }
     },
     {
       "id": "children/5",
@@ -684,7 +704,11 @@
             }
           }
         ]
-      ]
+      ],
+      "radius": {
+        "kind": "lg",
+        "points": 12.0
+      }
     },
     {
       "id": "children/7",
@@ -840,7 +864,11 @@
               "spacing": [
                 0.0,
                 4.0
-              ]
+              ],
+              "radius": {
+                "kind": "xs",
+                "points": 4.0
+              }
             },
             {
               "id": "children/8/children/1/children/1",
@@ -885,7 +913,11 @@
               "spacing": [
                 0.0,
                 4.0
-              ]
+              ],
+              "radius": {
+                "kind": "xs",
+                "points": 4.0
+              }
             },
             {
               "id": "children/8/children/1/children/2",
@@ -930,7 +962,11 @@
               "spacing": [
                 0.0,
                 4.0
-              ]
+              ],
+              "radius": {
+                "kind": "xs",
+                "points": 4.0
+              }
             },
             {
               "id": "children/8/children/1/children/3",
@@ -975,7 +1011,11 @@
               "spacing": [
                 0.0,
                 4.0
-              ]
+              ],
+              "radius": {
+                "kind": "xs",
+                "points": 4.0
+              }
             }
           ],
           "columns": 4,
@@ -1095,7 +1135,11 @@
         16.0,
         16.0,
         16.0
-      ]
+      ],
+      "radius": {
+        "kind": "lg",
+        "points": 12.0
+      }
     },
     {
       "id": "children/9",

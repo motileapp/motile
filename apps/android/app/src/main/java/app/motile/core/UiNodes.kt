@@ -191,6 +191,7 @@ sealed interface UiKind {
         /** The program's padding, else the client's for the column's width. */
         val padding: Float?,
         val spacing: kotlin.collections.List<Float>,
+        val radius: UiRadius,
     ) : UiKind {
         companion object {
             fun from(json: JSON): Card {
@@ -200,6 +201,7 @@ sealed interface UiKind {
                     nested = json["nested"].uiOptBool() ?: false,
                     padding = json["padding"].uiOptDouble()?.toFloat(),
                     spacing = json["spacing"].uiList().map { it.uiOptDouble()?.toFloat() ?: 0f },
+                    radius = UiRadius.from(json["radius"].uiObject() ?: EmptyJSON),
                 )
             }
         }
@@ -426,6 +428,7 @@ sealed interface UiKind {
         val code: String,
         /** `None` until the code has been highlighted, like a code row's. */
         val spans: kotlin.collections.List<Int>?,
+        val radius: UiRadius,
     ) : UiKind {
         companion object {
             fun from(json: JSON): Code {
@@ -433,6 +436,7 @@ sealed interface UiKind {
                     language = json["language"].uiOptString() ?: "",
                     code = json["code"].uiOptString() ?: "",
                     spans = json["spans"]?.takeIf { it !is JsonNull }?.let { it.uiList().map { it.uiOptInt() ?: 0 } },
+                    radius = UiRadius.from(json["radius"].uiObject() ?: EmptyJSON),
                 )
             }
         }
@@ -671,6 +675,7 @@ sealed interface UiKind {
         val variant: UiRadioVariant,
         val error: String?,
         val disabled: UiDisabled?,
+        val radius: UiRadius,
     ) : UiKind {
         companion object {
             fun from(json: JSON): RadioGroup {
@@ -682,6 +687,7 @@ sealed interface UiKind {
                     variant = UiRadioVariant.of(json["variant"].uiOptString()) ?: UiRadioVariant.List,
                     error = json["error"].uiOptString(),
                     disabled = UiDisabled.of(json["disabled"].uiOptString()),
+                    radius = UiRadius.from(json["radius"].uiObject() ?: EmptyJSON),
                 )
             }
         }
@@ -721,6 +727,7 @@ sealed interface UiKind {
         val done: Boolean,
         val toggle: UiTimerButton,
         val reset: UiTimerButton,
+        val radius: UiRadius,
     ) : UiKind {
         companion object {
             fun from(json: JSON): Timer {
@@ -732,6 +739,7 @@ sealed interface UiKind {
                     done = json["done"].uiOptBool() ?: false,
                     toggle = UiTimerButton.from(json["toggle"].uiObject() ?: EmptyJSON),
                     reset = UiTimerButton.from(json["reset"].uiObject() ?: EmptyJSON),
+                    radius = UiRadius.from(json["radius"].uiObject() ?: EmptyJSON),
                 )
             }
         }
@@ -813,12 +821,14 @@ sealed interface UiKind {
     data class Table(
         val columns: kotlin.collections.List<UiTableColumn>,
         val rows: kotlin.collections.List<kotlin.collections.List<UiTableCell>>,
+        val radius: UiRadius,
     ) : UiKind {
         companion object {
             fun from(json: JSON): Table {
                 return Table(
                     columns = json["columns"].uiList().map { UiTableColumn.from(it.uiObject() ?: EmptyJSON) },
                     rows = json["rows"].uiList().map { it.uiList().mapNotNull { UiTableCell.from(it.uiObject() ?: EmptyJSON) } },
+                    radius = UiRadius.from(json["radius"].uiObject() ?: EmptyJSON),
                 )
             }
         }
@@ -847,6 +857,7 @@ sealed interface UiKind {
         /** The category shown, none for every place. */
         val filter: String?,
         val note: String,
+        val radius: UiRadius,
     ) : UiKind {
         companion object {
             fun from(json: JSON): Map {
@@ -859,6 +870,7 @@ sealed interface UiKind {
                     categories = json["categories"].uiList().map { it.uiOptString() ?: "" },
                     filter = json["filter"].uiOptString(),
                     note = json["note"].uiOptString() ?: "",
+                    radius = UiRadius.from(json["radius"].uiObject() ?: EmptyJSON),
                 )
             }
         }
@@ -888,12 +900,14 @@ sealed interface UiKind {
         /** The embed's address; none for a video it can't name, which shows nothing. */
         val url: String?,
         val title: String,
+        val radius: UiRadius,
     ) : UiKind {
         companion object {
             fun from(json: JSON): YouTube {
                 return YouTube(
                     url = json["url"].uiOptString(),
                     title = json["title"].uiOptString() ?: "",
+                    radius = UiRadius.from(json["radius"].uiObject() ?: EmptyJSON),
                 )
             }
         }
@@ -906,6 +920,7 @@ sealed interface UiKind {
         val flipped: Boolean,
         /** The flip. */
         val canvas: UiCanvas,
+        val radius: UiRadius,
     ) : UiKind {
         companion object {
             fun from(json: JSON): Flashcard {
@@ -915,6 +930,7 @@ sealed interface UiKind {
                     hint = json["hint"].uiOptString() ?: "",
                     flipped = json["flipped"].uiOptBool() ?: false,
                     canvas = UiCanvas.from(json["canvas"].uiObject() ?: EmptyJSON),
+                    radius = UiRadius.from(json["radius"].uiObject() ?: EmptyJSON),
                 )
             }
         }
@@ -1061,6 +1077,7 @@ sealed interface UiKind {
         val title: String,
         /** The spinner shows in its place. */
         val streaming: Boolean,
+        val radius: UiRadius,
     ) : UiKind {
         companion object {
             fun from(json: JSON): HtmlView {
@@ -1069,6 +1086,7 @@ sealed interface UiKind {
                     height = json["height"].uiOptDouble()?.toFloat(),
                     title = json["title"].uiOptString() ?: "",
                     streaming = json["streaming"].uiOptBool() ?: false,
+                    radius = UiRadius.from(json["radius"].uiObject() ?: EmptyJSON),
                 )
             }
         }
@@ -1231,7 +1249,7 @@ data class UiRadius(
     companion object {
         fun from(json: JSON): UiRadius {
             return UiRadius(
-                kind = UiRadiusKind.of(json["kind"].uiOptString()) ?: UiRadiusKind.Sm,
+                kind = UiRadiusKind.of(json["kind"].uiOptString()) ?: UiRadiusKind.Xs,
                 points = json["points"].uiOptDouble()?.toFloat() ?: 0f,
             )
         }
@@ -1239,6 +1257,7 @@ data class UiRadius(
 }
 
 enum class UiRadiusKind(val raw: String) {
+    Xs("xs"),
     Sm("sm"),
     Md("md"),
     Lg("lg"),

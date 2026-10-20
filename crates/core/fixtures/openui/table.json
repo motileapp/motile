@@ -201,7 +201,11 @@
             }
           }
         ]
-      ]
+      ],
+      "radius": {
+        "kind": "xs",
+        "points": 4.0
+      }
     },
     {
       "id": "children/2",
@@ -302,7 +306,11 @@
             }
           }
         ]
-      ]
+      ],
+      "radius": {
+        "kind": "xs",
+        "points": 4.0
+      }
     }
   ],
   "soft": false,
@@ -312,5 +320,9 @@
     0.0,
     12.0,
     12.0
-  ]
+  ],
+  "radius": {
+    "kind": "lg",
+    "points": 12.0
+  }
 }

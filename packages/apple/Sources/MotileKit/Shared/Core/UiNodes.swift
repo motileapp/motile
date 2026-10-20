@@ -363,6 +363,7 @@ indirect enum UiKind {
         /// The program's padding, else the client's for the column's width.
         let padding: Double?
         let spacing: [Double]
+        let radius: UiRadius
 
         init(json: JSON) {
             children = (json["children"] as? [Any] ?? []).compactMap { UiNode(json: $0 as? JSON ?? [:]) }
@@ -370,6 +371,7 @@ indirect enum UiKind {
             nested = json["nested"] as? Bool ?? false
             padding = (json["padding"] as? NSNumber)?.doubleValue
             spacing = (json["spacing"] as? [Any] ?? []).map { ($0 as? NSNumber)?.doubleValue ?? 0 }
+            radius = UiRadius(json: json["radius"] as? JSON ?? [:])
         }
     }
 
@@ -547,11 +549,13 @@ indirect enum UiKind {
         let code: String
         /// `None` until the code has been highlighted, like a code row's.
         let spans: [Int]?
+        let radius: UiRadius
 
         init(json: JSON) {
             language = json["language"] as? String ?? ""
             code = json["code"] as? String ?? ""
             spans = json["spans"] == nil ? nil : (json["spans"] as? [Any] ?? []).map { ($0 as? NSNumber)?.intValue ?? 0 }
+            radius = UiRadius(json: json["radius"] as? JSON ?? [:])
         }
     }
 
@@ -748,6 +752,7 @@ indirect enum UiKind {
         let variant: UiRadioVariant
         let error: String?
         let disabled: UiDisabled?
+        let radius: UiRadius
 
         init(json: JSON) {
             value = json["value"] as? String ?? ""
@@ -757,6 +762,7 @@ indirect enum UiKind {
             variant = UiRadioVariant(rawValue: json["variant"] as? String ?? "") ?? .list
             error = json["error"] as? String
             disabled = (json["disabled"] as? String).flatMap(UiDisabled.init(rawValue:))
+            radius = UiRadius(json: json["radius"] as? JSON ?? [:])
         }
     }
 
@@ -790,6 +796,7 @@ indirect enum UiKind {
         let done: Bool
         let toggle: UiTimerButton
         let reset: UiTimerButton
+        let radius: UiRadius
 
         init(json: JSON) {
             label = json["label"] as? String
@@ -799,6 +806,7 @@ indirect enum UiKind {
             done = json["done"] as? Bool ?? false
             toggle = UiTimerButton(json: json["toggle"] as? JSON ?? [:])
             reset = UiTimerButton(json: json["reset"] as? JSON ?? [:])
+            radius = UiRadius(json: json["radius"] as? JSON ?? [:])
         }
     }
 
@@ -863,10 +871,12 @@ indirect enum UiKind {
     struct Table {
         let columns: [UiTableColumn]
         let rows: [[UiTableCell]]
+        let radius: UiRadius
 
         init(json: JSON) {
             columns = (json["columns"] as? [Any] ?? []).map { UiTableColumn(json: $0 as? JSON ?? [:]) }
             rows = (json["rows"] as? [Any] ?? []).map { ($0 as? [Any] ?? []).compactMap { UiTableCell(json: $0 as? JSON ?? [:]) } }
+            radius = UiRadius(json: json["radius"] as? JSON ?? [:])
         }
     }
 
@@ -889,6 +899,7 @@ indirect enum UiKind {
         /// The category shown, none for every place.
         let filter: String?
         let note: String
+        let radius: UiRadius
 
         init(json: JSON) {
             pins = (json["pins"] as? [Any] ?? []).map { UiMapPin(json: $0 as? JSON ?? [:]) }
@@ -899,6 +910,7 @@ indirect enum UiKind {
             categories = (json["categories"] as? [Any] ?? []).map { $0 as? String ?? "" }
             filter = json["filter"] as? String
             note = json["note"] as? String ?? ""
+            radius = UiRadius(json: json["radius"] as? JSON ?? [:])
         }
     }
 
@@ -922,10 +934,12 @@ indirect enum UiKind {
         /// The embed's address; none for a video it can't name, which shows nothing.
         let url: String?
         let title: String
+        let radius: UiRadius
 
         init(json: JSON) {
             url = json["url"] as? String
             title = json["title"] as? String ?? ""
+            radius = UiRadius(json: json["radius"] as? JSON ?? [:])
         }
     }
 
@@ -936,6 +950,7 @@ indirect enum UiKind {
         let flipped: Bool
         /// The flip.
         let canvas: UiCanvas
+        let radius: UiRadius
 
         init(json: JSON) {
             front = UiSlot(json: json["front"] as? JSON ?? [:])
@@ -943,6 +958,7 @@ indirect enum UiKind {
             hint = json["hint"] as? String ?? ""
             flipped = json["flipped"] as? Bool ?? false
             canvas = UiCanvas(json: json["canvas"] as? JSON ?? [:])
+            radius = UiRadius(json: json["radius"] as? JSON ?? [:])
         }
     }
 
@@ -1043,12 +1059,14 @@ indirect enum UiKind {
         let title: String
         /// The spinner shows in its place.
         let streaming: Bool
+        let radius: UiRadius
 
         init(json: JSON) {
             html = json["html"] as? String ?? ""
             height = (json["height"] as? NSNumber)?.doubleValue
             title = json["title"] as? String ?? ""
             streaming = json["streaming"] as? Bool ?? false
+            radius = UiRadius(json: json["radius"] as? JSON ?? [:])
         }
     }
 }
@@ -1125,12 +1143,13 @@ struct UiRadius {
     let points: Double
 
     init(json: JSON) {
-        kind = UiRadiusKind(rawValue: json["kind"] as? String ?? "") ?? .sm
+        kind = UiRadiusKind(rawValue: json["kind"] as? String ?? "") ?? .xs
         points = (json["points"] as? NSNumber)?.doubleValue ?? 0
     }
 }
 
 enum UiRadiusKind: String {
+    case xs
     case sm
     case md
     case lg

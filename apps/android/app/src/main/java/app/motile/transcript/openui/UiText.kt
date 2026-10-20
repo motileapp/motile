@@ -289,7 +289,7 @@ fun UiQuote(node: UiNode, kind: UiKind.Quote) {
 fun UiCode(node: UiNode, kind: UiKind.Code) {
     val palette = LocalPalette.current
     val text = remember(kind, palette) { Typesetter.code(kind.code, kind.spans?.toIntArray() ?: IntArray(0), palette) }
-    SelectionContainer(Modifier.uiNode(node)) { CodeBox(kind.language, kind.code, text, wraps = true) }
+    SelectionContainer(Modifier.uiNode(node)) { CodeBox(kind.language, kind.code, text, wraps = true, radius = UiStyle.radius(kind.radius)) }
 }
 
 /** Markdown as the transcript's own prose. */

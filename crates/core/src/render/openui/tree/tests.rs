@@ -246,7 +246,7 @@ fn text_keeps_its_line_breaks_and_formatting() {
 #[test]
 fn numeric_columns_align_to_the_end() {
     let program = r#"root = Col([Table(["Plan", "Seats", "Price", "Note", "Mixed"], [["Basic", 1, "$9", "n/a", 1], ["Team", 10, "$1.2k", "—", "lots"], ["Big", "", "45%", null, 3]])])"#;
-    let UiKind::Table { columns, rows } = kind(program, "children/0") else { panic!() };
+    let UiKind::Table { columns, rows, .. } = kind(program, "children/0") else { panic!() };
     let numeric: Vec<bool> = columns.iter().map(|column| column.numeric).collect();
     assert_eq!(numeric, [false, true, true, false, false]);
     let TableCell::Text { text } = &rows[1][1] else { panic!() };
@@ -601,7 +601,8 @@ fn media_props_are_checked() {
         kind(program, "children/0"),
         UiKind::YouTube {
             url: Some("https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ".into()),
-            title: "YouTube video".into()
+            title: "YouTube video".into(),
+            radius: Radius::LG
         }
     );
     let UiKind::YouTube { url, .. } = kind(program, "children/1") else { panic!() };
@@ -617,6 +618,35 @@ fn media_props_are_checked() {
     assert_eq!((src, photos.state), (None, PhotoState::Waiting), "http is looked up as a photo");
     let UiKind::Image { src, photos, .. } = kind(program, "children/5") else { panic!() };
     assert_eq!((src.as_deref(), photos.state), (Some("https://x.dev/a.png"), PhotoState::Idle));
+}
+
+#[test]
+fn blocks_in_a_card_take_a_smaller_radius() {
+    let blocks = r#"[SearchImage("Porto"), Code("fn main() {}", "rust"), Table(["A"], [["1"]]), Map([]), YouTube("dQw4w9WgXcQ"), HtmlView("<p>"), Card([Text("Nested")]), Pressable([Text("Tap")]), Timer(60), RadioGroup("a", ["a"], null, "cards")]"#;
+    let program = format!(
+        "root = Col([Col({blocks}), Card({blocks}), Card([Image(\"https://x.dev/a.png\", \"A\", 1, \"md\")])])"
+    );
+    let radius = |id: &str| match kind(&program, id) {
+        UiKind::SearchImage { radius, .. }
+        | UiKind::Image { radius, .. }
+        | UiKind::Code { radius, .. }
+        | UiKind::Table { radius, .. }
+        | UiKind::Map { radius, .. }
+        | UiKind::YouTube { radius, .. }
+        | UiKind::HtmlView { radius, .. }
+        | UiKind::Card { radius, .. }
+        | UiKind::Pressable { radius, .. }
+        | UiKind::Timer { radius, .. }
+        | UiKind::RadioGroup { radius, .. } => radius.kind,
+        other => panic!("{other:?}"),
+    };
+    use RadiusKind::*;
+    let outside = [Lg, Lg, Lg, Xl, Lg, Lg, Lg, Lg, Lg, Lg];
+    for (index, kind) in outside.into_iter().enumerate() {
+        assert_eq!(radius(&format!("children/0/children/{index}")), kind, "block {index} outside a card");
+        assert_eq!(radius(&format!("children/1/children/{index}")), Xs, "block {index} in a card");
+    }
+    assert_eq!(radius("children/2/children/0"), Md, "a radius the program gives wins");
 }
 
 #[test]

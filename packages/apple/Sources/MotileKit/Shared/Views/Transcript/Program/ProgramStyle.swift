@@ -85,6 +85,7 @@ enum ProgramStyle {
 
     static func radius(_ radius: UiRadius, side: CGFloat) -> CGFloat {
         switch radius.kind {
+        case .xs: Radius.xs
         case .sm: Radius.sm
         case .md: Radius.md
         case .lg: Radius.lg

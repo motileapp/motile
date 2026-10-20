@@ -299,7 +299,11 @@
       "spacing": [
         0.0,
         8.0
-      ]
+      ],
+      "radius": {
+        "kind": "lg",
+        "points": 12.0
+      }
     },
     {
       "id": "children/4",
@@ -1581,7 +1585,11 @@
         0.0,
         8.0,
         8.0
-      ]
+      ],
+      "radius": {
+        "kind": "lg",
+        "points": 12.0
+      }
     },
     {
       "id": "children/10",
