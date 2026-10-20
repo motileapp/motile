@@ -34,6 +34,7 @@ final class SentValuesChip: ControlView {
     init() {
         super.init(nil, symbol: .braces, variant: .outline, size: Self.size) {}
         surface = .secondary
+        isHidden = true
         action = { [weak self] in self?.toggle() }
     }
 
