@@ -14,8 +14,12 @@ final class ProgramImageView: ProgramNodeView {
     private let picture = CALayer()
     private let shimmer = CAGradientLayer()
     private let missing = SymbolView()
+    /// The photo the node asks for, the one on screen, the one being fetched and the last that failed.
+    private var source: String?
     private var shown: String?
+    private var loading: String?
     private var failed: String?
+    private var searching = false
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -52,18 +56,24 @@ final class ProgramImageView: ProgramNodeView {
         picture.contentsGravity = fit == .cover ? .resizeAspectFill : .resizeAspect
         picture.masksToBounds = true
         let source = photos.state == .found ? photos.media.first.map { "media:\($0)" } : photos.state == .idle ? src.map { "url:\($0)" } : nil
-        let waiting = photos.state == .waiting || source != nil && shown != source
-        showShimmer(waiting && !Platform.reducesMotion, on: box.surface)
-        let none = photos.state == .missing || (source == nil && photos.state != .waiting)
-        missing.isHidden = !none
-        missing.image = .lucide(ProgramGlyphs.image, side: 26)
-        missing.tint = Theme.mutedStrongerForeground
-        if none {
+        self.source = source
+        searching = photos.state == .waiting
+        if source != shown {
             picture.contents = nil
             shown = nil
         }
-        guard let source, source != shown, source != failed else { return }
+        missing.image = .lucide(ProgramGlyphs.image, side: 26)
+        missing.tint = Theme.mutedStrongerForeground
+        present(on: box.surface)
+        guard let source, shown == nil, source != loading, source != failed else { return }
         load(source)
+    }
+
+    /// The shimmer while there is a photo to wait for, the symbol when there is none.
+    private func present(on surface: Surface) {
+        let waiting = shown == nil && (searching || source != nil && source != failed)
+        showShimmer(waiting && !Platform.reducesMotion, on: surface)
+        missing.isHidden = shown != nil || waiting
     }
 
     private func resolvedColor(_ color: PlatformColor) -> CGColor {
@@ -77,10 +87,14 @@ final class ProgramImageView: ProgramNodeView {
     }
 
     private func load(_ source: String) {
+        loading = source
         let done = { [weak self] (image: CGImage?) in
             guard let self else { return }
+            if loading == source { loading = nil }
+            guard self.source == source else { return }
             guard let image else {
                 failed = source
+                present(on: box?.surface ?? .background)
                 guard source.hasPrefix("url:") else { return }
                 host?.send(nodeID, ["type": "fallback"])
                 return
@@ -97,7 +111,7 @@ final class ProgramImageView: ProgramNodeView {
     private func show(_ image: CGImage, source: String) {
         shown = source
         picture.contents = image
-        showShimmer(false, on: box?.surface ?? .background)
+        present(on: box?.surface ?? .background)
         guard !Platform.reducesMotion else { return }
         let fade = CABasicAnimation(keyPath: "opacity")
         fade.fromValue = 0
