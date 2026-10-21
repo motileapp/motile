@@ -31,18 +31,27 @@ struct ShortcutSettings: View {
                     .id(adding ?? "")
             }
         }
-        let groups = found(in: shortcuts.groups)
-        ForEach(groups) { group in
-            SettingsGroup("shortcuts-\(group.title)", group.title) {
-                ForEach(group.rows) { row in
-                    ShortcutRowView(row: row) { adding = .some($0) }
-                        .id(row.id == group.rows.first(where: { $0.command == row.command })?.id ? "shortcut-\(row.command)" : row.id)
-                    if row.id != group.rows.last?.id { ThemeDivider() }
+        let items = Self.items(of: found(in: shortcuts.groups))
+        if items.isEmpty {
+            SettingsNote("No shortcuts found")
+        } else {
+            // Lazy, so that a search that brings every row back only builds the ones on screen.
+            LazyVStack(alignment: .leading, spacing: 0) {
+                ForEach(items) { item in
+                    switch item.kind {
+                    case .title(let title, let first):
+                        SettingsGroupTitle(title)
+                            .padding(.top, first ? 0 : SettingsGroupTitle.groupGap)
+                            .padding(.bottom, SettingsGroupTitle.gap)
+                    case .row(let row, let first, let last):
+                        VStack(spacing: 0) {
+                            ShortcutRowView(row: row) { adding = .some($0) }
+                            if !last { ThemeDivider() }
+                        }
+                        .cardSlice(top: first, bottom: last)
+                    }
                 }
             }
-        }
-        if groups.isEmpty {
-            SettingsNote("No shortcuts found")
         }
     }
 
@@ -56,6 +65,20 @@ struct ShortcutSettings: View {
                 return words.allSatisfy { text.localizedCaseInsensitiveContains($0) }
             }
             return rows.isEmpty ? nil : ShortcutGroup(title: group.title, rows: rows)
+        }
+    }
+
+    /// The groups as one list, each title followed by its rows. A command's first row goes by the
+    /// command, which the settings' search scrolls to.
+    private static func items(of groups: [ShortcutGroup]) -> [ShortcutItem] {
+        groups.enumerated().flatMap { index, group in
+            var seen: Set<String> = []
+            let rows = group.rows.enumerated().map { place, row in
+                ShortcutItem(
+                    id: seen.insert(row.command).inserted ? "shortcut-\(row.command)" : row.id,
+                    kind: .row(row, first: place == 0, last: place == group.rows.count - 1))
+            }
+            return [ShortcutItem(id: "shortcuts-\(group.title)", kind: .title(group.title, first: index == 0))] + rows
         }
     }
 
@@ -81,6 +104,17 @@ struct ShortcutSettings: View {
         .padding(.vertical, scaled(12))
         .card()
     }
+}
+
+/// A group's title or one of its rows, in the list of every shortcut.
+private struct ShortcutItem: Identifiable {
+    enum Kind {
+        case title(String, first: Bool)
+        case row(ShortcutRow, first: Bool, last: Bool)
+    }
+
+    let id: String
+    let kind: Kind
 }
 
 /// A command and one of its keys, or a command that has none yet.

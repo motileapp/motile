@@ -10,7 +10,10 @@ use motile_protocol::wire::{Agent, AgentAccount, ContinueSettings, PullRequestSe
 
 use super::account_sheet::AccountSheet;
 use super::keybindings::KeybindingsPage;
-use super::layout::{Cut, INSET, Targets, group, label, large_outset, more, note, row, switch_row, target};
+use super::layout::{
+    Cut, END_ROOM, GROUP_GAP, INSET, PAGE_PADDING, Targets, column, group, label, large_outset, more, note, row,
+    switch_row, target,
+};
 use crate::format;
 use crate::models::{AgentAccountExt, Project, Server, agent_name, new_account};
 use crate::sidebar::{AppUpdateRow, ServerUpdateStatus};
@@ -24,8 +27,6 @@ use crate::ui::motion::{SPRING, Tween, spring};
 use crate::ui::{ActionButton, ActionMenu, Switch, TextArea, Variant, divider_on, icons, logos, text_area_state};
 use crate::updater::UpdateState;
 
-/// How wide the groups are at most, however wide the window.
-const CONTENT_WIDTH: f32 = 640.;
 /// What a row's menu runs, kept for each time the menu is built again.
 type Run = Rc<dyn Fn(&mut Window, &mut App)>;
 
@@ -712,10 +713,9 @@ impl SettingsPage {
         groups
     }
 
-    fn keyboard(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Vec<AnyElement> {
+    fn keybindings(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Entity<KeybindingsPage> {
         let store = self.store.clone();
-        let page = self.keybindings.get_or_insert_with(|| cx.new(|cx| KeybindingsPage::new(store, window, cx)));
-        vec![page.clone().into_any_element()]
+        self.keybindings.get_or_insert_with(|| cx.new(|cx| KeybindingsPage::new(store, window, cx))).clone()
     }
 
     /// Each integration's switch.
@@ -821,7 +821,7 @@ impl Render for SettingsPage {
         Targets::clear(cx);
         let groups = match section {
             SettingsSection::General => self.general(cx),
-            SettingsSection::Keyboard => self.keyboard(window, cx),
+            SettingsSection::Keyboard => Vec::new(),
             SettingsSection::Servers => self.servers(cx),
             SettingsSection::Accounts => self.agents(cx),
             SettingsSection::Projects => self.projects(cx),
@@ -829,9 +829,13 @@ impl Render for SettingsPage {
             SettingsSection::PullRequests => self.pull_requests(cx),
             SettingsSection::Integrations => self.integrations(cx),
         };
+        let keybindings = (section == SettingsSection::Keyboard).then(|| self.keybindings(window, cx));
         if let Some(target) = self.store.read(cx).settings.target.clone() {
             self.store.update(cx, |store, _| store.settings.target = None);
-            self.scroll_to(target, window, cx);
+            match &keybindings {
+                Some(keybindings) => keybindings.update(cx, |page, _| page.reveal(target)),
+                None => self.scroll_to(target, window, cx),
+            }
         }
         self.step_scrolling(window);
         let removal = self.removal_confirmation(window, cx);
@@ -842,17 +846,22 @@ impl Render for SettingsPage {
             .size_full()
             .pt(px(theme::TOP_BAR))
             .relative()
-            .child(
-                div()
+            .child(match keybindings {
+                // Its own list, which lays out only the rows on screen.
+                Some(keybindings) => div().size_full().child(keybindings).into_any_element(),
+                None => div()
                     .id("settings-scroll")
                     .size_full()
                     .overflow_y_scroll()
                     .track_scroll(&self.scroll)
                     .on_scroll_wheel(cx.listener(|page, _, _, _| page.scrolling = None))
-                    .child(div().w_full().flex().justify_center().px(px(20.)).pt(px(20.)).pb(px(80.)).child(
-                        div().w_full().max_w(px(CONTENT_WIDTH)).flex().flex_col().gap(px(22.)).children(groups),
-                    )),
-            )
+                    .child(
+                        column(div().flex().flex_col().gap(px(GROUP_GAP)).children(groups))
+                            .pt(px(PAGE_PADDING))
+                            .pb(px(END_ROOM)),
+                    )
+                    .into_any_element(),
+            })
             .child(top_fade(c.background))
             .children(setup)
             .children(account)

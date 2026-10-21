@@ -14,6 +14,15 @@ use crate::ui::{ActionMenu, Switch, card_default, icons};
 pub const INSET: f32 = 14.;
 /// How tall a row is at least.
 pub const ROW_HEIGHT: f32 = 48.;
+/// How wide the groups are at most, however wide the window.
+pub const CONTENT_WIDTH: f32 = 640.;
+/// The room around the page's groups, and under the last one.
+pub const PAGE_PADDING: f32 = 20.;
+pub const END_ROOM: f32 = 80.;
+/// The room between one group and the next.
+pub const GROUP_GAP: f32 = 22.;
+/// The room between a group's title and its rows.
+pub const TITLE_GAP: f32 = 12.;
 
 /// What stands a control this tall as far from its row's right as from its top and bottom.
 pub fn row_outset(height: f32) -> f32 {
@@ -55,6 +64,16 @@ pub fn target(id: impl Into<String>) -> impl IntoElement {
     .size_full()
 }
 
+/// The page's column: as wide as the page at most `CONTENT_WIDTH`, in the middle.
+pub fn column(content: impl IntoElement) -> Div {
+    div()
+        .w_full()
+        .flex()
+        .justify_center()
+        .px(px(PAGE_PADDING))
+        .child(div().w_full().max_w(px(CONTENT_WIDTH)).child(content))
+}
+
 /// A title, a caption under it when it has one, and its rows in one card, or each in its own
 /// card when it isn't `carded`.
 pub fn group(
@@ -65,7 +84,6 @@ pub fn group(
     rows: Vec<AnyElement>,
     cx: &App,
 ) -> AnyElement {
-    let c = colors(cx);
     let rows = if carded {
         card_default(div().flex().flex_col(), cx).children(rows)
     } else {
@@ -75,23 +93,25 @@ pub fn group(
         .relative()
         .flex()
         .flex_col()
-        .gap(px(12.))
+        .gap(px(TITLE_GAP))
         .child(target(id))
-        .child(
-            div()
-                .px(px(4.))
-                .flex()
-                .flex_col()
-                .gap(px(2.))
-                .child(div().text_size(px(13.)).text_color(c.foreground).child(title.into()))
-                .when_some(caption, |heading, caption| {
-                    heading.child(
-                        div().text_size(px(11.5)).text_color(c.muted_stronger_foreground).child(caption.to_string()),
-                    )
-                }),
-        )
+        .child(group_title(title, caption, cx))
         .child(rows)
         .into_any_element()
+}
+
+/// The title of a group, with its caption under it when it has one.
+pub fn group_title(title: impl Into<SharedString>, caption: Option<&str>, cx: &App) -> Div {
+    let c = colors(cx);
+    div()
+        .px(px(4.))
+        .flex()
+        .flex_col()
+        .gap(px(2.))
+        .child(div().text_size(px(13.)).text_color(c.foreground).child(title.into()))
+        .when_some(caption, |heading, caption| {
+            heading.child(div().text_size(px(11.5)).text_color(c.muted_stronger_foreground).child(caption.to_string()))
+        })
 }
 
 /// What the row is about on the left, its controls on the right, a large one as far from the
