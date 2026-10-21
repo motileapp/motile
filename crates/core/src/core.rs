@@ -1548,7 +1548,7 @@ impl Core {
         }
         let (inputs, server_id) = (self.inputs.clone(), server_id.to_string());
         tokio::spawn(async move {
-            let Ok(Message::Limits { agents }) = link.request(&Request::Limits { refresh: false }).await else {
+            let Ok(Message::Limits { agents }) = link.request(&Request::Limits).await else {
                 return;
             };
             let _ = inputs.send(keep_limits(&server_id, &agents));
@@ -2635,7 +2635,7 @@ impl Core {
                         reads.extend(agents.into_iter().map(|limits| limits::Read { server: name.clone(), limits }));
                         continue;
                     };
-                    asked.spawn(async move { (server_id, name, link.request(&Request::Limits { refresh }).await) });
+                    asked.spawn(async move { (server_id, name, link.request(&Request::Limits).await) });
                 }
                 let (sink, inputs) = (self.sink.clone(), self.inputs.clone());
                 tokio::spawn(async move {

@@ -163,7 +163,7 @@ impl Hub {
             let live = threads.get(caller).context("Your thread is no longer on your server.")?;
             self.account_of(&live.stored.thread).id
         };
-        let limits = match self.limits(false).await {
+        let limits = match self.limits().await {
             Message::Limits { agents } => agents,
             _ => Vec::new(),
         };

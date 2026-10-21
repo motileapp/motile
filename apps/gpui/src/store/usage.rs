@@ -316,7 +316,7 @@ impl Store {
         }
     }
 
-    /// Reads again what the tab shows, the limits from the agents themselves.
+    /// Asks the servers again for what the tab shows.
     pub fn refresh_usage(&mut self) {
         self.load_usage(true);
     }

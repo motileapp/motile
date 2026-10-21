@@ -200,7 +200,7 @@ impl Server {
             Request::Usage { since, until, bucket_secs, utc_offset_secs, removed } => {
                 hub.usage(since, until, bucket_secs, utc_offset_secs, &removed)
             }
-            Request::Limits { refresh } => Ok(hub.limits(refresh).await),
+            Request::Limits => Ok(hub.limits().await),
             Request::RefreshModels => {
                 hub.refresh_models_soon();
                 Ok(Message::Ok)

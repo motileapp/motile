@@ -3313,7 +3313,7 @@ async fn written(connection: &Connection, agent: Agent) -> Vec<UsageBucket> {
 async fn the_agents_say_what_their_logins_have_used_of_their_plans() {
     let harness = Harness::start("fixtures/read-and-bash.jsonl", "0").await;
     let connection = harness.connect().await;
-    let Message::Limits { agents } = connection.request(&Request::Limits { refresh: true }).await.unwrap() else {
+    let Message::Limits { agents } = connection.request(&Request::Limits).await.unwrap() else {
         panic!("no limits came")
     };
     let [claude, codex] = &agents[..] else { panic!("both agents answered") };

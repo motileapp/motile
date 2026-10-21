@@ -318,7 +318,7 @@ pub enum Command {
         kept: bool,
     },
     /// How much of their plans the agents' logins on the connected `servers`, or all of them,
-    /// have used, read anew with `refresh`: `sections`, each a `limits::Section`. `kept` answers
+    /// have used, asked of the servers again with `refresh`: `sections`, each a `limits::Section`. `kept` answers
     /// at once with what was last read, `stale` when some of it is old or missing.
     Limits {
         #[serde(default)]
