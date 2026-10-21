@@ -25,8 +25,8 @@ struct AgentsSurface: View {
         if agents.isEmpty && parent == nil {
             PanelMessage(text: "The agents this thread starts show up here.")
         } else {
-            let working = agents.filter(\.working)
-            let ended = agents.filter { !$0.working }
+            let working = agents.filter { !$0.previous }
+            let ended = agents.filter(\.previous)
             let shown = showsEnded ?? working.isEmpty
             VStack(spacing: 0) {
                 PanelBar {

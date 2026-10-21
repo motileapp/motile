@@ -1202,7 +1202,7 @@ impl RightPanelView {
             ),
             cx,
         );
-        let (working, ended): (Vec<AgentView>, Vec<AgentView>) = agents.into_iter().partition(|agent| agent.working());
+        let (working, ended): (Vec<AgentView>, Vec<AgentView>) = agents.into_iter().partition(|agent| !agent.previous);
         let shown = self.shows_ended.unwrap_or(working.is_empty());
         let mut entries: Vec<AgentEntry> = parent.into_iter().map(AgentEntry::Parent).collect();
         entries.extend(working.into_iter().map(|agent| AgentEntry::Agent(Box::new(agent))));

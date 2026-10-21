@@ -70,8 +70,8 @@ fun AgentsSurface() {
     val palette = LocalPalette.current
     // Whether the agents that ended are shown, once the user has said. Until then they are while none works.
     var showsEnded by remember { mutableStateOf<Boolean?>(null) }
-    val working = agents.filter { it.working }
-    val ended = agents.filter { !it.working }
+    val working = agents.filter { !it.previous }
+    val ended = agents.filter { it.previous }
     val shown = showsEnded ?: working.isEmpty()
     Column(Modifier.fillMaxSize()) {
         PanelBar {

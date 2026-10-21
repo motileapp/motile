@@ -82,6 +82,8 @@ pub struct AgentView {
     pub kind: Option<String>,
     pub status: ToolStatus,
     pub state: AgentState,
+    /// Whether it is listed under the previous agents: it and every agent of its family ended.
+    pub previous: bool,
     /// "Working", "Needs approval", "Failed".
     pub label: String,
     /// What it is doing now, or what it reported once it has ended, on one line.
@@ -167,6 +169,7 @@ pub fn starting(item: &Item, call: &ToolCall) -> Option<AgentView> {
         kind,
         status,
         state,
+        previous: !working,
         label,
         detail: one_line(&detail),
         prompt,
@@ -182,6 +185,28 @@ pub fn starting(item: &Item, call: &ToolCall) -> Option<AgentView> {
             .map(|model| short_model_name(model).unwrap_or(model).to_string()),
         account: runs_on.and_then(|on| on.account.clone()),
     })
+}
+
+/// The agents as the agents tab lists them: the newest first, each followed by the ones it
+/// started, and a family under the previous agents only once all of it ended.
+pub fn listed(agents: impl DoubleEndedIterator<Item = AgentView>) -> Vec<AgentView> {
+    let newest: Vec<AgentView> = agents.rev().collect();
+    let known = |id: &String| newest.iter().any(|agent| &agent.id == id);
+    let mut listed = Vec::with_capacity(newest.len());
+    for root in newest.iter().filter(|agent| !agent.parent.as_ref().is_some_and(known)) {
+        let mut family = Vec::new();
+        add_family(root, &newest, &mut family);
+        let previous = family.iter().all(|agent| agent.status != ToolStatus::Running);
+        listed.extend(family.into_iter().map(|agent| AgentView { previous, ..agent }));
+    }
+    listed
+}
+
+fn add_family(agent: &AgentView, all: &[AgentView], family: &mut Vec<AgentView>) {
+    family.push(agent.clone());
+    for child in all.iter().filter(|child| child.parent.as_ref() == Some(&agent.id)) {
+        add_family(child, all, family);
+    }
 }
 
 /// Whether the agent has worked since `at`, when the thread's agent was told of it, so that what
@@ -215,6 +240,7 @@ pub fn noticed(item: &Item, notice: &AgentNotice) -> AgentView {
             _ => ToolStatus::Failed,
         },
         state,
+        previous: !matches!(state, AgentState::Waiting | AgentState::Limited),
         label: label.to_string(),
         detail: notice.summary.as_deref().map(one_line).unwrap_or_default(),
         prompt: String::new(),
@@ -376,6 +402,27 @@ mod tests {
 
         let ended = view(&started(ToolStatus::Succeeded, Some("Reading a.txt"), Some("Three\n\nfiles"))).unwrap();
         assert_eq!((ended.detail.as_str(), ended.duration_ms), ("Three files", Some(30_000)));
+    }
+
+    #[test]
+    fn agents_are_listed_newest_first_each_with_the_ones_it_started_under_it() {
+        let agent = |id: &str, parent: Option<&str>, status: ToolStatus| AgentView {
+            id: id.into(),
+            parent: parent.map(String::from),
+            previous: status != ToolStatus::Running,
+            ..view(&started(status, None, None)).unwrap()
+        };
+        let started = [
+            agent("spec", None, ToolStatus::Running),
+            agent("build", None, ToolStatus::Succeeded),
+            agent("sketch", Some("spec"), ToolStatus::Succeeded),
+            agent("solver", Some("build"), ToolStatus::Succeeded),
+            agent("drawings", Some("spec"), ToolStatus::Succeeded),
+        ];
+        let listed: Vec<(String, bool)> =
+            listed(started.into_iter()).into_iter().map(|agent| (agent.id, agent.previous)).collect();
+        let expected = [("build", true), ("solver", true), ("spec", false), ("drawings", false), ("sketch", false)];
+        assert_eq!(listed, expected.map(|(id, previous)| (id.to_string(), previous)));
     }
 
     #[test]
