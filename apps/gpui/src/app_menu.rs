@@ -126,7 +126,7 @@ fn on_window<A: Action + Clone>(cx: &mut App, run: impl Fn(&A, &mut Window, &mut
 }
 
 /// The commands the menus run, whose keys they show.
-const COMMANDS: [&str; 25] = [
+const COMMANDS: [&str; 27] = [
     "settings.open",
     "usage.open",
     "chat.new",
@@ -152,6 +152,8 @@ const COMMANDS: [&str; 25] = [
     "thread.stop",
     "thread.previous",
     "thread.next",
+    "navigation.back",
+    "navigation.forward",
 ];
 
 /// What the menus say and allow, which they are made again from when it changes.
@@ -178,6 +180,8 @@ struct State {
     read_only: bool,
     busy: bool,
     jumps: bool,
+    can_go_back: bool,
+    can_go_forward: bool,
     has_servers: bool,
     signed_in: bool,
     full_screen: bool,
@@ -211,6 +215,8 @@ fn follow(store: &Entity<Store>, shown: &mut Option<State>, cx: &mut App) {
         read_only: store.open_thread_removed(),
         busy: store.activity.busy(),
         jumps: store.has_jump_threads(),
+        can_go_back: store.can_go(true),
+        can_go_forward: store.can_go(false),
         has_servers: store.has_live_servers(),
         signed_in: store.account.signed_in,
         full_screen: store.full_screen,
@@ -333,6 +339,8 @@ fn menus(state: &State) -> Vec<Menu> {
             item("Stop", "thread.stop").disabled(!state.busy || state.read_only),
             item("Previous Thread", "thread.previous").disabled(!state.jumps),
             item("Next Thread", "thread.next").disabled(!state.jumps),
+            item("Go Back", "navigation.back").disabled(!state.can_go_back),
+            item("Go Forward", "navigation.forward").disabled(!state.can_go_forward),
             MenuItem::separator(),
             MenuItem::action("Add a Project", AddProject).disabled(!state.has_servers),
             MenuItem::action("Add a Server", AddServer).disabled(!state.signed_in),

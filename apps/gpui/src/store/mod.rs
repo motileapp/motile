@@ -5,6 +5,7 @@ mod account;
 mod attachments;
 mod commands;
 mod git;
+mod history;
 pub mod integrations;
 pub mod linear;
 mod projects;
@@ -346,6 +347,9 @@ pub struct Store {
     pub shows_usage: bool,
     pub usage: usage::Usage,
     _events: Option<Task<()>>,
+    /// The pages behind and ahead of this one, for Go Back and Go Forward.
+    history: history::PageHistory,
+    _page_watch: Subscription,
 }
 
 impl Store {
@@ -450,6 +454,8 @@ impl Store {
             shows_usage: false,
             usage: usage::Usage::default(),
             _events: None,
+            history: history::PageHistory::default(),
+            _page_watch: Self::watch_page(cx),
         };
         store.load_preferences();
         store

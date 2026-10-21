@@ -64,6 +64,7 @@ extension AppStore {
         case "chat.newWithoutProject":
             guard let project = noProjects.first(where: { $0.serverID == composerServer?.id }) ?? noProjects.first else { return false }
             startNewThread(in: project)
+        case "navigation.back", "navigation.forward": return go(back: command == "navigation.back")
         case "thread.previous": return showThread(offset: -1)
         case "thread.next": return showThread(offset: 1)
         case "thread.done":

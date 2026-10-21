@@ -26,6 +26,8 @@ struct MenuState: Equatable {
     var removedServer = false
     var busy = false
     var hasJumps = false
+    var canGoBack = false
+    var canGoForward = false
     var hasServers = false
 
     @MainActor init() {}
@@ -52,6 +54,8 @@ struct MenuState: Equatable {
         removedServer = store.openThreadRemovedServer != nil
         busy = store.activity.busy
         hasJumps = !store.jumpThreads.isEmpty
+        canGoBack = store.canGo(back: true)
+        canGoForward = store.canGo(back: false)
         hasServers = !store.servers.isEmpty
     }
 }

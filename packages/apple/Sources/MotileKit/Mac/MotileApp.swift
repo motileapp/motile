@@ -135,6 +135,12 @@ struct MotileApp: App {
                 Button("Next Thread") { _ = store.perform("thread.next") }
                     .shortcut("thread.next", in: keys)
                     .disabled(!menu.hasJumps)
+                Button("Go Back") { _ = store.go(back: true) }
+                    .shortcut("navigation.back", in: keys)
+                    .disabled(!menu.canGoBack)
+                Button("Go Forward") { _ = store.go(back: false) }
+                    .shortcut("navigation.forward", in: keys)
+                    .disabled(!menu.canGoForward)
                 Divider()
                 Button("Add a Project") { store.addProject() }
                     .disabled(!menu.hasServers)
