@@ -8,7 +8,8 @@ struct ThreadPane: View {
     @Environment(AppStore.self) private var store
     /// How far the title starts from the pane's left edge: past the window's buttons when the
     /// sidebar is hidden.
-    var titleInset: CGFloat = 20
+    var titleInset: CGFloat = besideSidebarInset
+    static let besideSidebarInset: CGFloat = 20
     /// The right panel is beside the pane, so the window's last button isn't over it.
     var besidePanel = false
     @State private var removal: Removal?
@@ -70,7 +71,12 @@ struct ThreadPane: View {
     private var topBar: some View {
         GeometryReader { proxy in
             HStack(spacing: 8) {
-                title
+                HStack(spacing: ControlSize.regular.padding) {
+                    if let parent = backTo {
+                        backButton(to: parent, bar: proxy.safeAreaInsets.top)
+                    }
+                    title
+                }
                 Spacer(minLength: 0)
                 if let project = store.gitProject, let control = project.gitControl {
                     GitButton(project: project, control: control)
@@ -87,6 +93,20 @@ struct ThreadPane: View {
             .frame(height: proxy.safeAreaInsets.top)
             .offset(y: -proxy.safeAreaInsets.top)
         }
+    }
+
+    /// The thread whose agent started the open one, which the button before the title opens.
+    private var backTo: ThreadInfo? {
+        store.shownAgent == nil ? store.parentThread : nil
+    }
+
+    /// Its light is as far from the pane's side as from the bar's top, beside the sidebar.
+    private func backButton(to parent: ThreadInfo, bar: CGFloat) -> some View {
+        let size = ControlSize.large
+        let light = (size.height - size.symbolSide) / 2
+        return ActionButton(icon: .cornerLeftUp, help: "Open \(parent.title)", size: size) { store.openStartedThread(parent.id) }
+            .padding(.leading, (bar - size.height) / 2 - Self.besideSidebarInset)
+            .padding(.trailing, -light)
     }
 
     /// The project, then the thread's name, or the agent's when one is shown in its place.
