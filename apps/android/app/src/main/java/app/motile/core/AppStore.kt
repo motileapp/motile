@@ -2046,6 +2046,15 @@ class AppStore(private val context: Context) {
         openPanel(PanelPage.Projects)
     }
 
+    /** What Ctrl+Alt+N opens: the composer's server's "No project", or the next server's while an empty draft without a project is open, so that pressing it again goes through the servers. */
+    val noProjectToOpen: Project?
+        get() {
+            val draft = selectedDraft?.takeIf { preview(it) == null }
+            val index = noProjects.indexOfFirst { it.id == draft?.projectID }
+            if (draft != null && index >= 0) return noProjects[(index + 1) % noProjects.size]
+            return noProjects.firstOrNull { it.serverID == composerServer?.id } ?: noProjects.firstOrNull()
+        }
+
     /** Opens an empty draft. The one that was open stays in the sidebar if something was written in it. */
     fun startNewThread(project: Project? = null) {
         openEmptyDraft()

@@ -151,12 +151,7 @@ impl Store {
                 self.start_new_thread(Some(project.id), cx);
             }
             "chat.newWithoutProject" => {
-                let server_id = self.composer_server().map(|server| server.id.clone());
-                let project = self
-                    .live_no_projects()
-                    .find(|project| Some(&project.server_id) == server_id.as_ref())
-                    .or(self.live_no_projects().next());
-                let Some(project) = project.map(|project| project.id.clone()) else { return false };
+                let Some(project) = self.no_project_to_open().map(|project| project.id.clone()) else { return false };
                 self.start_new_thread(Some(project), cx);
             }
             "navigation.back" => return self.go(true, cx),

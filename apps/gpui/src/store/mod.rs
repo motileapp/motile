@@ -922,6 +922,20 @@ impl Store {
         self.no_projects.iter().filter(|project| self.is_live(project))
     }
 
+    /// What ⌘⌥N opens: the composer's server's "No project", or the next server's while an empty
+    /// draft without a project is open, so that pressing it again goes through the servers.
+    fn no_project_to_open(&self) -> Option<&Project> {
+        let live: Vec<&Project> = self.live_no_projects().collect();
+        let open = self.selected_draft().filter(|draft| self.preview(draft).is_none());
+        if let Some(index) = open
+            .and_then(|draft| live.iter().position(|project| draft.project_id.as_deref() == Some(project.id.as_str())))
+        {
+            return Some(live[(index + 1) % live.len()]);
+        }
+        let server_id = self.composer_server().map(|server| server.id.as_str());
+        live.iter().find(|project| Some(project.server_id.as_str()) == server_id).or(live.first()).copied()
+    }
+
     /// The first project a thread can start in: a folder, else a server's "No project".
     fn first_live_project(&self) -> Option<&Project> {
         self.projects.iter().find(|project| self.is_live(project)).or_else(|| self.live_no_projects().next())

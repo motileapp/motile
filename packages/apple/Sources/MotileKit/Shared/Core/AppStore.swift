@@ -2066,6 +2066,15 @@ final class AppStore {
         openPanel(.projects)
     }
 
+    /// What ⌘⌥N opens: the composer's server's "No project", or the next server's while an empty
+    /// draft without a project is open, so that pressing it again goes through the servers.
+    var noProjectToOpen: Project? {
+        if let draft = selectedDraft, preview(of: draft) == nil, let index = noProjects.firstIndex(where: { $0.id == draft.projectID }) {
+            return noProjects[(index + 1) % noProjects.count]
+        }
+        return noProjects.first { $0.serverID == composerServer?.id } ?? noProjects.first
+    }
+
     /// Opens an empty draft. The one that was open stays in the sidebar if something was written
     /// in it.
     func startNewThread(in project: Project? = nil) {
