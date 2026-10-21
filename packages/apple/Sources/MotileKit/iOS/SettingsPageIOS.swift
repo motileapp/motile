@@ -183,6 +183,8 @@ struct SettingsPage: View {
                 } label: {
                     SettingsItem(server.name, description: server.state == .connected ? "Connected · version \(server.version)" : server.stateLabel) {
                         SettingsTile(symbol: .server)
+                    } footer: {
+                        if let sync = server.sync { ServerSyncLine(sync: sync).padding(.top, 2) }
                     }
                 }
             }
@@ -684,17 +686,20 @@ struct SettingsActionLabel: View {
 }
 
 /// A row that names something, with what it is under it and its picture before it.
-private struct SettingsItem<Picture: View>: View {
+private struct SettingsItem<Picture: View, Footer: View>: View {
     let title: String
     let description: String
     var truncates: Text.TruncationMode = .tail
     @ViewBuilder let picture: Picture
+    /// What stands under the description.
+    @ViewBuilder let footer: Footer
 
-    init(_ title: String, description: String, truncates: Text.TruncationMode = .tail, @ViewBuilder picture: () -> Picture) {
+    init(_ title: String, description: String, truncates: Text.TruncationMode = .tail, @ViewBuilder picture: () -> Picture, @ViewBuilder footer: () -> Footer) {
         self.title = title
         self.description = description
         self.truncates = truncates
         self.picture = picture()
+        self.footer = footer()
     }
 
     var body: some View {
@@ -708,9 +713,16 @@ private struct SettingsItem<Picture: View>: View {
                     .foregroundStyle(Color.themeMutedForeground)
                     .lineLimit(1)
                     .truncationMode(truncates)
+                footer
             }
         }
         .padding(.vertical, 2)
+    }
+}
+
+extension SettingsItem where Footer == EmptyView {
+    init(_ title: String, description: String, truncates: Text.TruncationMode = .tail, @ViewBuilder picture: () -> Picture) {
+        self.init(title, description: description, truncates: truncates, picture: picture) { EmptyView() }
     }
 }
 

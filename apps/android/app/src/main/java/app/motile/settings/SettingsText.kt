@@ -4,6 +4,8 @@ import android.text.format.Formatter
 import app.motile.core.AgentAccount
 import app.motile.core.AppStore
 import app.motile.core.Server
+import app.motile.core.ServerSync
+import app.motile.core.Time
 import app.motile.platform.Platform
 
 // What the settings say of a server, an account and the images kept here.
@@ -21,6 +23,14 @@ val Server.stateLabel: String
         Server.State.Disconnected -> "Offline"
         Server.State.Refused -> "This server no longer accepts this ${Platform.device}"
     }
+
+/** The line under a server, with when it last synced unless it is syncing now. */
+fun ServerSync.line(now: Double): String {
+    val syncedAt = syncedAt?.takeIf { state != ServerSync.State.Copying } ?: return text
+    val ago = Time.ago(syncedAt, now)
+    val whenSynced = if (ago == "now") "just now" else "$ago ago"
+    return if (state == ServerSync.State.Synced) "$text $whenSynced" else "$text · synced $whenSynced"
+}
 
 val Server.installedAgents: String
     get() {

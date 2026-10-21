@@ -4,7 +4,7 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use motile_core::api::{Children, ProjectView, ServerView, ThreadView};
+use motile_core::api::{Children, ProjectView, ServerView, SyncState, SyncView, ThreadView};
 use motile_core::connection::PathKind;
 use motile_core::git::Control;
 use motile_core::link::State;
@@ -65,6 +65,8 @@ pub struct Server {
     pub known: bool,
     /// The update the server is putting in place, as it last said.
     pub update: Option<ServerUpdate>,
+    /// How its copies of the account's other servers' threads stand.
+    pub sync: Option<SyncView>,
 }
 
 impl From<ServerView> for Server {
@@ -94,6 +96,7 @@ impl From<ServerView> for Server {
             models: info.as_ref().map(|info| info.models.clone()).unwrap_or_default(),
             short_model_names: view.short_model_names,
             roomier_accounts: view.roomier_accounts,
+            sync: view.sync,
             text_model: info.as_ref().and_then(|info| info.text_model.clone()),
             branch_instructions: info.as_ref().map(|info| info.branch_instructions.text.clone()).unwrap_or_default(),
             default_branch_instructions: info
@@ -928,6 +931,21 @@ pub fn now() -> f64 {
         .unwrap_or(0.)
 }
 
+/// The line under a server, with when it last synced unless it is syncing now.
+pub fn sync_line(sync: &SyncView) -> String {
+    let Some(synced_at) = sync.synced_at.filter(|_| sync.state != SyncState::Copying) else {
+        return sync.text.clone();
+    };
+    let when = match ago(synced_at) {
+        now if now == "now" => "just now".to_string(),
+        ago => format!("{ago} ago"),
+    };
+    match sync.state {
+        SyncState::Synced => format!("{} {when}", sync.text),
+        _ => format!("{} · synced {when}", sync.text),
+    }
+}
+
 /// "now", "5m", "3h", "2d": how long ago, as short as a sidebar needs.
 pub fn ago(timestamp: f64) -> String {
     let seconds = (now() - timestamp).max(0.);
@@ -1096,6 +1114,7 @@ mod tests {
             info: None,
             short_model_names: HashMap::new(),
             roomier_accounts: roomier,
+            sync: None,
         });
         let server = Server {
             models: vec![model("opus", ""), model("sonnet", "")],
@@ -1142,6 +1161,7 @@ mod tests {
             info: None,
             short_model_names: HashMap::new(),
             roomier_accounts: HashMap::new(),
+            sync: None,
         };
         let server = Server::from(view);
         assert!(server.removed);

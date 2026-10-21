@@ -665,6 +665,30 @@ pub struct ServerView {
     /// The account a new thread is better off starting on, by account id and model id: the one
     /// of the same agent that runs the model and has used clearly less of its limits.
     pub roomier_accounts: HashMap<String, HashMap<String, String>>,
+    /// How its copies of the account's other servers' threads stand. None for a removed server.
+    pub sync: Option<SyncView>,
+}
+
+/// What the settings say under a server of the copies it keeps of the others' threads.
+#[derive(Serialize, Clone, Debug, PartialEq)]
+pub struct SyncView {
+    pub state: SyncState,
+    /// "Synced", "Syncing · 48%", "Couldn't sync from vibe", "Not syncing".
+    pub text: String,
+    /// Why the last round couldn't copy to it.
+    pub error: Option<String>,
+    /// When a round last left its copies whole, in seconds since the epoch.
+    pub synced_at: Option<f64>,
+}
+
+#[derive(Serialize, Clone, Copy, Debug, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum SyncState {
+    Synced,
+    Copying,
+    Waiting,
+    Failed,
+    Off,
 }
 
 #[derive(Serialize, Clone, Debug, PartialEq)]

@@ -5,17 +5,18 @@ use std::rc::Rc;
 
 use gpui_kit::prelude::*;
 use gpui_kit::*;
+use motile_core::api::{SyncState, SyncView};
 use motile_core::link::State;
 use motile_protocol::wire::{Agent, AgentAccount, ContinueSettings, PullRequestSettings};
 
 use super::account_sheet::AccountSheet;
 use super::keybindings::KeybindingsPage;
 use super::layout::{
-    Cut, END_ROOM, GROUP_GAP, INSET, PAGE_PADDING, Targets, column, group, label, large_outset, more, note, row,
-    switch_row, target,
+    Cut, END_ROOM, GROUP_GAP, INSET, PAGE_PADDING, Targets, column, footed_label, group, label, large_outset, more,
+    note, row, switch_row, target,
 };
 use crate::format;
-use crate::models::{AgentAccountExt, Project, Server, agent_name, new_account};
+use crate::models::{self, AgentAccountExt, Project, Server, agent_name, new_account};
 use crate::sidebar::{AppUpdateRow, ServerUpdateStatus};
 use crate::store::integrations::Integration;
 use crate::store::settings::{PULL_DEFAULT_BRANCH_CAPTION, SettingsSection};
@@ -24,7 +25,9 @@ use crate::theme::{self, Appearance, ControlSize, Layer, Radius, Surface, colors
 use crate::ui::menu::Menu;
 use crate::ui::modal::{Answer, Confirmation, confirmation, modal, present_sheet, presented};
 use crate::ui::motion::{SPRING, Tween, spring};
-use crate::ui::{ActionButton, ActionMenu, Switch, TextArea, Variant, divider_on, icons, logos, text_area_state};
+use crate::ui::{
+    ActionButton, ActionMenu, Spinner, Switch, TextArea, Variant, divider_on, icons, logos, text_area_state, tooltip,
+};
 use crate::updater::UpdateState;
 
 /// What a row's menu runs, kept for each time the menu is built again.
@@ -323,7 +326,9 @@ impl SettingsPage {
                     .danger_symbol_item("Unlink Server", "unlink", move |window, cx| remove(window, cx))
                     .danger_symbol_item("Delete", "trash-2", move |window, cx| delete(window, cx))
             });
-            let leading = label(server.name.clone(), Some(description(server)), Some("server"), Cut::End, cx);
+            let sync = server.sync.as_ref().map(|sync| sync_line(sync, cx));
+            let leading =
+                footed_label(server.name.clone(), Some(description(server)), Some("server"), Cut::End, sync, cx);
             rows.push(row(vec![leading], vec![status.into_any_element(), menu.into_any_element()]).into_any_element());
             rows.push(divider_on(Surface::Card, cx).into_any_element());
         }
@@ -920,6 +925,33 @@ fn state_label(server: &Server) -> String {
         State::Connecting => "Connecting".into(),
         State::Disconnected => "Offline".into(),
         State::Refused => format!("This server no longer accepts {}", crate::models::THIS_DEVICE),
+    }
+}
+
+/// The line under a server that says whether it has every thread of the others. Always one line,
+/// so the rows around it never move.
+fn sync_line(sync: &SyncView, cx: &App) -> AnyElement {
+    const SIZE: f32 = 11.5;
+    let c = colors(cx);
+    let symbol = match sync.state {
+        SyncState::Synced => div().text_color(c.success).child(icons::symbol("check", SIZE)).into_any_element(),
+        SyncState::Copying => Spinner::new(SIZE).render(cx).into_any_element(),
+        SyncState::Failed => {
+            div().text_color(c.warning).child(icons::symbol("triangle-alert", SIZE - 1.)).into_any_element()
+        }
+        SyncState::Waiting | SyncState::Off => icons::symbol("circle-dashed", SIZE - 1.).into_any_element(),
+    };
+    let line = div()
+        .flex()
+        .items_center()
+        .gap(px(5.))
+        .text_size(px(SIZE))
+        .text_color(c.muted_foreground)
+        .child(div().flex_shrink_0().size(px(SIZE)).flex().items_center().justify_center().child(symbol))
+        .child(div().min_w_0().whitespace_nowrap().overflow_hidden().text_ellipsis().child(models::sync_line(sync)));
+    match &sync.error {
+        Some(error) => line.id("sync-line").tooltip(tooltip(error.clone())).into_any_element(),
+        None => line.into_any_element(),
     }
 }
 

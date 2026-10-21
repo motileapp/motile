@@ -24,7 +24,10 @@ use serde_json::{Value, json};
 use tokio::sync::mpsc;
 use tokio::task::AbortHandle;
 
-use crate::api::{AccountView, Children, Command, Config, Event, ProjectView, ServerView, ThreadView, WaitingChild};
+use crate::api::{
+    AccountView, Children, Command, Config, Event, ProjectView, ServerView, SyncState, SyncView, ThreadView,
+    WaitingChild,
+};
 use crate::browse;
 use crate::cache::{Cache, Page};
 use crate::connection::{NOT_CONNECTED, ServerAddr, bind, offline};
@@ -172,6 +175,7 @@ enum Input {
     },
     /// Time to copy the servers' threads between them.
     Relay,
+    RelayProgress(relay::Progress),
     Relayed(relay::Round),
     /// A server's copy of a removed server's projects and threads.
     CopiesFetched {
@@ -354,6 +358,14 @@ struct Relay {
     marks: HashMap<String, relay::Marks>,
     /// The removed servers whose copies have been read since the client started.
     read: HashSet<String>,
+    /// What the running round carries, with how far each log has reached.
+    copying: Vec<(relay::Transfer, u64)>,
+    /// Why the last round couldn't copy to a server, by server id.
+    failed: HashMap<String, relay::Failure>,
+    /// The servers the last round left behind until a network that isn't metered.
+    waiting: HashSet<String>,
+    /// When a round last left each server's copies whole.
+    synced_at: HashMap<String, f64>,
 }
 
 type Skills = Arc<tokio::sync::Mutex<HashMap<(String, String), (Instant, Vec<AccountSkills>)>>>;
@@ -623,6 +635,7 @@ impl Core {
                 }
             }
             Input::Relay => self.start_relay(),
+            Input::RelayProgress(progress) => self.relay_progress(progress),
             Input::Relayed(round) => self.relayed(round),
             Input::CopiesFetched { origin, projects, threads } => self.copies_fetched(&origin, projects, threads),
             Input::CopyOpened { thread_id, result } => self.copy_opened(&thread_id, result),
@@ -1083,6 +1096,7 @@ impl Core {
                 .as_ref()
                 .map(|info| limits::roomier(&info.agent_accounts, &info.models, &server.limits, now()))
                 .unwrap_or_default(),
+            sync: self.sync_view(server),
         };
         self.emit(Event::Servers { servers: self.servers.iter().map(view).collect() });
     }
@@ -1304,6 +1318,69 @@ impl Core {
 
     // ---- copies of the servers' threads ----
 
+    /// Whether the server has every thread of the account's other servers it can reach.
+    fn sync_view(&self, server: &Server) -> Option<SyncView> {
+        if server.removed {
+            return None;
+        }
+        let id = &server.device.public_key;
+        let synced_at = self.relay.synced_at.get(id).copied();
+        let view = |state, text: &str| Some(SyncView { state, text: text.into(), error: None, synced_at });
+        let others: Vec<&Server> = self.servers.iter().filter(|other| other.device.public_key != *id).collect();
+        if others.is_empty() {
+            return Some(SyncView {
+                state: SyncState::Off,
+                text: "Nothing to sync with yet".into(),
+                error: None,
+                synced_at: None,
+            });
+        }
+        if server.info.as_ref().is_some_and(|info| info.protocol < SYNC_PROTOCOL) {
+            return Some(SyncView {
+                state: SyncState::Off,
+                text: "Update it to sync".into(),
+                error: None,
+                synced_at: None,
+            });
+        }
+        if server.status.state != State::Connected {
+            return view(SyncState::Off, "Not syncing");
+        }
+        let copying: Vec<&(relay::Transfer, u64)> =
+            self.relay.copying.iter().filter(|(transfer, _)| transfer.target == *id).collect();
+        if copying.iter().any(|(transfer, reached)| *reached < transfer.until) {
+            let total: u64 = copying.iter().map(|(transfer, _)| transfer.until.saturating_sub(transfer.after)).sum();
+            let done: u64 = copying
+                .iter()
+                .map(|(transfer, reached)| reached.min(&transfer.until).saturating_sub(transfer.after))
+                .sum();
+            let text = format!("Syncing · {}%", done * 100 / total.max(1));
+            return view(SyncState::Copying, &text);
+        }
+        if let Some(failure) = self.relay.failed.get(id) {
+            let from = failure
+                .origin
+                .as_ref()
+                .and_then(|origin| self.servers.iter().find(|server| server.device.public_key == *origin));
+            let text = match from {
+                Some(from) => format!("Couldn't sync from {}", from.device.name),
+                None => "Couldn't sync".into(),
+            };
+            return Some(SyncView { state: SyncState::Failed, text, error: Some(failure.error.clone()), synced_at });
+        }
+        if self.relay.waiting.contains(id) {
+            return view(SyncState::Waiting, "Metered network");
+        }
+        let peers = self.peers();
+        if !others.iter().any(|other| other.removed || peers.contains_key(&other.device.public_key)) {
+            return view(SyncState::Waiting, "Others offline");
+        }
+        match synced_at {
+            Some(_) => view(SyncState::Synced, "Synced"),
+            None => view(SyncState::Copying, "Syncing"),
+        }
+    }
+
     fn schedule_relay(&mut self, delay: Duration) {
         if self.relay.timer.is_some() || !self.signed_in_now() {
             return;
@@ -1345,14 +1422,45 @@ impl Core {
         let (inputs, metered) = (self.inputs.clone(), self.relay.metered);
         self.relay.running = true;
         tokio::spawn(async move {
-            let round = relay::round(peers, origins, metered).await;
+            let progress = inputs.clone();
+            let report = move |step| drop(progress.send(Input::RelayProgress(step)));
+            let round = relay::round(peers, origins, metered, report).await;
             let _ = inputs.send(Input::Relayed(round));
         });
     }
 
+    fn relay_progress(&mut self, progress: relay::Progress) {
+        match progress {
+            relay::Progress::Planned(transfers) => {
+                self.relay.copying = transfers.into_iter().map(|transfer| (transfer.clone(), transfer.after)).collect();
+            }
+            relay::Progress::Carried { origin, target, mark } => {
+                let mut copying = self.relay.copying.iter_mut();
+                let Some((_, reached)) =
+                    copying.find(|(transfer, _)| transfer.origin == origin && transfer.target == target)
+                else {
+                    return;
+                };
+                *reached = mark.change;
+            }
+        }
+        self.emit_servers();
+    }
+
     fn relayed(&mut self, round: relay::Round) {
         self.relay.running = false;
+        self.relay.copying.clear();
+        let origins: Vec<String> = self.servers.iter().map(|server| server.device.public_key.clone()).collect();
+        let behind = relay::plan(&round.marks, &origins, false);
+        self.relay.waiting = behind.into_iter().map(|transfer| transfer.target).collect();
+        for server_id in round.marks.keys() {
+            if !round.failed.contains_key(server_id) && !self.relay.waiting.contains(server_id) {
+                self.relay.synced_at.insert(server_id.clone(), now());
+            }
+        }
+        self.relay.failed = round.failed;
         self.relay.marks = round.marks;
+        self.emit_servers();
         let removed: Vec<String> = self
             .servers
             .iter()

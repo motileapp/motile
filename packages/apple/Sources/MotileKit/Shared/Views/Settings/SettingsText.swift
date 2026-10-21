@@ -33,6 +33,16 @@ extension Server {
     }
 }
 
+extension ServerSync {
+    /// The line under a server, with when it last synced unless it is copying now.
+    func line(now: Double) -> String {
+        guard state != .copying, let syncedAt else { return text }
+        let ago = Time.ago(syncedAt, now: now)
+        let when = ago == "now" ? "just now" : "\(ago) ago"
+        return state == .synced ? "\(text) \(when)" : "\(text) · synced \(when)"
+    }
+}
+
 extension AgentAccount {
     var settingsDescription: String {
         let signedIn = email.map { [$0, plan].compactMap { $0 }.joined(separator: " · ") }

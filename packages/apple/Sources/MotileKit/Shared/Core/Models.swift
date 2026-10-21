@@ -166,6 +166,28 @@ struct AgentAccount: Equatable, Identifiable {
     }
 }
 
+/// What a server keeps of the account's other servers' threads, as the core says it.
+struct ServerSync: Equatable {
+    enum State: String {
+        case synced, copying, waiting, failed, off
+    }
+
+    let state: State
+    /// "Synced", "Syncing · 48%", "Couldn't sync from vibe".
+    let text: String
+    /// Why the last round couldn't copy to it.
+    let error: String?
+    /// When a round last left its copies whole.
+    let syncedAt: Double?
+
+    init(json: JSON) {
+        state = State(rawValue: json.string("state")) ?? .off
+        text = json.string("text")
+        error = json.optionalString("error")
+        syncedAt = (json["synced_at"] as? NSNumber)?.doubleValue
+    }
+}
+
 struct Server: Equatable, Identifiable {
     enum State: String {
         case connecting, connected, disconnected, refused
@@ -212,6 +234,8 @@ struct Server: Equatable, Identifiable {
     let known: Bool
     /// The update the server is putting in place, as it last said.
     let update: ServerUpdate?
+    /// How its copies of the account's other servers' threads stand.
+    let sync: ServerSync?
 
     init(json: JSON) {
         id = json.string("id")
@@ -224,6 +248,7 @@ struct Server: Equatable, Identifiable {
         path = json.optionalString("path")
         rttMs = (json["rtt_ms"] as? NSNumber)?.intValue
         roomierAccounts = json["roomier_accounts"] as? [String: [String: String]] ?? [:]
+        sync = json.object("sync").map(ServerSync.init(json:))
         let info = json.object("info")
         known = info != nil
         home = info?.string("home") ?? ""

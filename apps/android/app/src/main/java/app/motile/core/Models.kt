@@ -182,6 +182,8 @@ data class Server(
     val known: Boolean,
     /** The update the server is putting in place, as it last said. */
     val update: ServerUpdate?,
+    /** How its copies of the account's other servers' threads stand. */
+    val sync: ServerSync? = null,
 ) {
     enum class State(val raw: String) {
         Connecting("connecting"), Connected("connected"), Disconnected("disconnected"), Refused("refused");
@@ -277,6 +279,7 @@ data class Server(
                 roomierAccounts = json.obj("roomier_accounts")?.let { byAccount -> byAccount.keys.associateWith(byAccount::stringMap) } ?: emptyMap(),
                 known = info != null,
                 update = info?.obj("update")?.let { ServerUpdate(it, version) },
+                sync = json.obj("sync")?.let(::ServerSync),
             )
         }
 
@@ -293,6 +296,32 @@ data class Server(
 }
 
 /** A server that is installing a new version of itself. */
+/** What a server keeps of the account's other servers' threads, as the core says it. */
+data class ServerSync(
+    val state: State,
+    /** "Synced", "Syncing · 48%", "Couldn't sync from vibe". */
+    val text: String,
+    /** Why the last round couldn't copy to it. */
+    val error: String?,
+    /** When a round last left its copies whole. */
+    val syncedAt: Double?,
+) {
+    constructor(json: JSON) : this(
+        State.of(json.string("state")),
+        json.string("text"),
+        json.optionalString("error"),
+        json.optionalDouble("synced_at"),
+    )
+
+    enum class State(val raw: String) {
+        Synced("synced"), Copying("copying"), Waiting("waiting"), Failed("failed"), Off("off");
+
+        companion object {
+            fun of(raw: String) = entries.firstOrNull { it.raw == raw } ?: Off
+        }
+    }
+}
+
 data class ServerUpdate(
     /** The version it had when the update began. */
     val from: String,

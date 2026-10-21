@@ -4068,7 +4068,7 @@ async fn a_servers_threads_are_copied_to_the_accounts_other_servers_and_their_de
     let transcript = finished_transcript(&on_a, &kept).await;
     finished_transcript(&on_a, &deleted).await;
 
-    let round = relay::round(peers(&[&a, &b]).await, named(&[&a, &b]), false).await;
+    let round = relay::round(peers(&[&a, &b]).await, named(&[&a, &b]), false, |_| {}).await;
     assert!(round.changed.contains(&a.server_key.public()));
 
     let on_b = b.connect().await;
@@ -4084,14 +4084,14 @@ async fn a_servers_threads_are_copied_to_the_accounts_other_servers_and_their_de
 
     assert_eq!(update(&on_a, &deleted, ThreadChange::default()).await, Message::Ok);
     assert_eq!(on_a.request(&Request::Delete { thread_id: deleted.clone() }).await.unwrap(), Message::Ok);
-    let again = relay::round(peers(&[&a, &b]).await, named(&[&a, &b]), false).await;
+    let again = relay::round(peers(&[&a, &b]).await, named(&[&a, &b]), false, |_| {}).await;
     assert!(again.changed.contains(&a.server_key.public()));
     let (_, threads) = copies(&on_b, &a).await;
     assert_eq!(threads.iter().map(|thread| thread.id.as_str()).collect::<Vec<_>>(), vec![kept.as_str()]);
     assert!(copied_transcript(&on_b, &a, &deleted).await.is_empty());
 
     // A round with nothing new moves nothing.
-    let quiet = relay::round(peers(&[&a, &b]).await, named(&[&a, &b]), false).await;
+    let quiet = relay::round(peers(&[&a, &b]).await, named(&[&a, &b]), false, |_| {}).await;
     assert!(quiet.changed.is_empty());
 }
 
@@ -4102,13 +4102,14 @@ async fn a_removed_servers_threads_reach_a_new_server_from_a_copy_and_are_search
     let on_a = a.connect().await;
     let thread_id = send(&on_a, None, a.new_thread(&on_a, Agent::Claude).await, "Find the needle").await;
     let transcript = finished_transcript(&on_a, &thread_id).await;
-    relay::round(peers(&[&a, &b]).await, named(&[&a, &b]), false).await;
+    relay::round(peers(&[&a, &b]).await, named(&[&a, &b]), false, |_| {}).await;
 
     // A is removed: no client reaches it any more, and a new server joins.
     let c = a.another("fixtures/read-and-bash.jsonl").await;
-    let round = relay::round(peers(&[&b, &c]).await, named(&[&a, &b, &c]), false).await;
+    let round = relay::round(peers(&[&b, &c]).await, named(&[&a, &b, &c]), false, |_| {}).await;
     assert!(round.changed.contains(&a.server_key.public()));
-    assert_eq!(relay::best_holder(&round.marks, &a.server_key.public()), Some(b.server_key.public()));
+    let copy_of_a = |server: &Harness| round.marks[&server.server_key.public()].copies[&a.server_key.public()].clone();
+    assert_eq!(copy_of_a(&c), copy_of_a(&b), "the round's marks say how far the copies went after it");
 
     let on_c = c.connect().await;
     assert_eq!(copied_transcript(&on_c, &a, &thread_id).await, transcript.items);
@@ -4148,8 +4149,8 @@ async fn two_clients_relaying_at_once_leave_the_same_copy_as_one() {
     }
 
     tokio::join!(
-        relay::round(peers(&[&a, &b]).await, named(&[&a, &b]), false),
-        relay::round(peers(&[&a, &b]).await, named(&[&a, &b]), false),
+        relay::round(peers(&[&a, &b]).await, named(&[&a, &b]), false, |_| {}),
+        relay::round(peers(&[&a, &b]).await, named(&[&a, &b]), false, |_| {}),
     );
 
     let Message::Watermarks { own, .. } = on_a.request(&Request::Watermarks).await.unwrap() else { panic!() };
@@ -4169,7 +4170,7 @@ async fn a_removed_servers_thread_goes_on_on_another_server_with_its_history() {
     let on_a = a.connect().await;
     let thread_id = send(&on_a, None, a.new_thread(&on_a, Agent::Claude).await, "Remember the word heron").await;
     let history = finished_transcript(&on_a, &thread_id).await;
-    relay::round(peers(&[&a, &b]).await, named(&[&a, &b]), false).await;
+    relay::round(peers(&[&a, &b]).await, named(&[&a, &b]), false, |_| {}).await;
 
     let on_b = b.connect().await;
     let new_thread = b.new_thread(&on_b, Agent::Claude).await.map(|new_thread| NewThread {
@@ -4231,7 +4232,7 @@ async fn a_program_keeps_its_state_and_a_message_tells_the_agent_what_it_sent() 
     let message_id = transcript.items[0].id.clone();
     assert!(matches!(connection.request(&set(&message_id, json!(1))).await.unwrap(), Message::Error { .. }));
 
-    relay::round(peers(&[&a, &b]).await, named(&[&a, &b]), false).await;
+    relay::round(peers(&[&a, &b]).await, named(&[&a, &b]), false, |_| {}).await;
     let copied = copied_transcript(&b.connect().await, &a, &thread_id).await;
     assert_eq!(copied.iter().find(|item| item.id == reply.id).unwrap().ui[&1], state);
     let on_b = b.connect().await;

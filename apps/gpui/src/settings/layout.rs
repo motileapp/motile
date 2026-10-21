@@ -165,6 +165,18 @@ pub fn label(
     cut: Cut,
     cx: &App,
 ) -> AnyElement {
+    footed_label(title, description, icon, cut, None, cx)
+}
+
+/// A label with something under its description.
+pub fn footed_label(
+    title: impl Into<SharedString>,
+    description: Option<String>,
+    icon: Option<&'static str>,
+    cut: Cut,
+    footer: Option<AnyElement>,
+    cx: &App,
+) -> AnyElement {
     let c = colors(cx);
     div()
         .flex_1()
@@ -197,7 +209,8 @@ pub fn label(
                             })
                             .child(description),
                     )
-                }),
+                })
+                .when_some(footer, |label, footer| label.child(div().pt(px(2.)).child(footer))),
         )
         .into_any_element()
 }

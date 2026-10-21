@@ -261,12 +261,14 @@ fun RowScope.SettingsItem(
     description: String,
     truncates: TextOverflow = TextOverflow.Ellipsis,
     lines: Int = 1,
+    footer: (@Composable () -> Unit)? = null,
     picture: (@Composable () -> Unit)? = null,
 ) {
     picture?.invoke()
     Column(Modifier.weight(1f).padding(vertical = 2.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
         RowText(title, color = LocalPalette.current.foreground, maxLines = 1)
         Text(description, size = NOTE_TEXT, color = LocalPalette.current.mutedForeground, maxLines = lines, overflow = truncates)
+        footer?.let { Box(Modifier.padding(top = 2.dp)) { it() } }
     }
 }
 

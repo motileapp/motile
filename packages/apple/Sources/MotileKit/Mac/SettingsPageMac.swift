@@ -131,7 +131,9 @@ struct SettingsPage: View {
         SettingsGroup("servers", "Servers") {
             ForEach(store.servers) { server in
                 SettingsRow {
-                    SettingsLabel(server.name, description: server.settingsDescription, icon: .server, truncates: .tail)
+                    SettingsLabel(server.name, description: server.settingsDescription, icon: .server, truncates: .tail) {
+                        if let sync = server.sync { ServerSyncLine(sync: sync).padding(.top, 2) }
+                    }
                 } trailing: {
                     ServerUpdateStatus(server: server, variant: .outline, size: .large) { EmptyView() }
                     more("What to do with \(server.name)") {
@@ -542,18 +544,21 @@ struct SettingsGroupTitle: View {
 }
 
 /// What a row is about: its name, and under it what it does.
-struct SettingsLabel: View {
+struct SettingsLabel<Footer: View>: View {
     let title: String
     var description: String?
     var icon: Symbol?
     /// A description that is cut on one line instead of wrapped: a path at its start, a sentence at its end.
     var truncates: Text.TruncationMode?
+    /// What stands under the description.
+    @ViewBuilder var footer: Footer
 
-    init(_ title: String, description: String? = nil, icon: Symbol? = nil, truncates: Text.TruncationMode? = nil) {
+    init(_ title: String, description: String? = nil, icon: Symbol? = nil, truncates: Text.TruncationMode? = nil, @ViewBuilder footer: () -> Footer) {
         self.title = title
         self.description = description
         self.icon = icon
         self.truncates = truncates
+        self.footer = footer()
     }
 
     var body: some View {
@@ -573,8 +578,15 @@ struct SettingsLabel: View {
                         .truncationMode(truncates ?? .tail)
                         .fixedSize(horizontal: false, vertical: truncates == nil)
                 }
+                footer
             }
         }
+    }
+}
+
+extension SettingsLabel where Footer == EmptyView {
+    init(_ title: String, description: String? = nil, icon: Symbol? = nil, truncates: Text.TruncationMode? = nil) {
+        self.init(title, description: description, icon: icon, truncates: truncates) { EmptyView() }
     }
 }
 

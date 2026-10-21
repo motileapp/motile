@@ -61,6 +61,8 @@ pub struct Transfer {
     pub source: String,
     pub target: String,
     pub after: u64,
+    /// How far the log went when the round started.
+    pub until: u64,
     /// The target's copy is made again: the origin's log went back.
     pub reset: bool,
 }
@@ -71,11 +73,29 @@ impl Transfer {
     }
 }
 
-/// What a round did: how far every server's logs went before it, and which origins' copies changed.
+/// What a round did: how far every server's logs went after it, which origins' copies changed,
+/// and why it couldn't copy to a server, by server id.
 #[derive(Debug, Default)]
 pub struct Round {
     pub marks: HashMap<String, Marks>,
     pub changed: HashSet<String>,
+    pub failed: HashMap<String, Failure>,
+}
+
+/// Why a round couldn't copy to a server: the origin it was copying, if it got that far.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Failure {
+    pub origin: Option<String>,
+    pub error: String,
+}
+
+/// What a round says while it runs.
+#[derive(Clone, Debug)]
+pub enum Progress {
+    /// What each server lacks, once the connected ones have said how far their logs go.
+    Planned(Vec<Transfer>),
+    /// A batch of `origin`'s log reached `target`.
+    Carried { origin: String, target: String, mark: Watermark },
 }
 
 /// The server whose copy of `origin` goes furthest, among the ones in `marks`.
@@ -118,6 +138,7 @@ pub fn plan(marks: &HashMap<String, Marks>, origins: &[String], metered: bool) -
                 source: source.clone(),
                 target: (*target).clone(),
                 after,
+                until: log.change,
                 reset,
             });
         }
@@ -145,16 +166,24 @@ async fn batch<P: Ask>(source: &P, transfer: &Transfer, after: u64) -> anyhow::R
     Ok(batch)
 }
 
-/// Carries one log to one server, fetching each batch while the one before is kept.
-async fn carry<P: Ask>(source: &P, target: &P, transfer: &Transfer, origin: &Origin) -> anyhow::Result<bool> {
+/// Carries one log to one server, fetching each batch while the one before is kept. Says where
+/// the target's copy ended, if it changed.
+async fn carry<P: Ask>(
+    source: &P,
+    target: &P,
+    transfer: &Transfer,
+    origin: &Origin,
+    report: &(dyn Fn(Progress) + Send + Sync),
+) -> anyhow::Result<Option<Watermark>> {
     let mut next = batch(source, transfer, transfer.after).await?;
     let mut reset = transfer.reset;
-    let mut changed = false;
+    let mut reached = None;
     loop {
         let current = next;
         if current.up_to <= current.after && !reset {
-            return Ok(changed);
+            return Ok(reached);
         }
+        let mark = Watermark { log_id: current.log_id.clone(), change: current.up_to };
         let apply = Request::Apply {
             origin: transfer.origin.clone(),
             name: origin.name.clone(),
@@ -162,67 +191,100 @@ async fn carry<P: Ask>(source: &P, target: &P, transfer: &Transfer, origin: &Ori
             batch: current.clone(),
             reset,
         };
-        if !current.more {
+        let more = current.more;
+        let fetched = if more {
+            let (applied, fetched) = tokio::join!(ask(target, apply), batch(source, transfer, current.up_to));
+            applied?;
+            Some(fetched)
+        } else {
             ask(target, apply).await?;
-            return Ok(true);
-        }
-        let (applied, fetched) = tokio::join!(ask(target, apply), batch(source, transfer, current.up_to));
-        applied?;
+            None
+        };
+        report(Progress::Carried {
+            origin: transfer.origin.clone(),
+            target: transfer.target.clone(),
+            mark: mark.clone(),
+        });
+        reached = Some(mark);
+        let Some(fetched) = fetched else { return Ok(reached) };
         next = fetched?;
         reset = false;
-        changed = true;
     }
 }
 
-/// Runs a round between the connected `peers`, by server id, for the account's `origins`.
-pub async fn round<P: Ask>(peers: HashMap<String, P>, origins: HashMap<String, Origin>, metered: bool) -> Round {
+/// Runs a round between the connected `peers`, by server id, for the account's `origins`, telling
+/// `report` what it plans and each batch it carries.
+pub async fn round<P: Ask>(
+    peers: HashMap<String, P>,
+    origins: HashMap<String, Origin>,
+    metered: bool,
+    report: impl Fn(Progress) + Send + Sync + 'static,
+) -> Round {
     let mut asked = tokio::task::JoinSet::new();
     for (server_id, peer) in &peers {
         let (server_id, peer) = (server_id.clone(), peer.clone());
         asked.spawn(async move { (server_id, marks_of(&peer).await) });
     }
     let mut marks = HashMap::new();
+    let mut failed = HashMap::new();
     while let Some(Ok((server_id, answer))) = asked.join_next().await {
         match answer {
             Ok(found) => drop(marks.insert(server_id, found)),
-            Err(error) => tracing::debug!(server_id, "couldn't read how far a server's logs go: {error:#}"),
+            Err(error) => {
+                tracing::debug!(server_id, "couldn't read how far a server's logs go: {error:#}");
+                failed.insert(server_id, Failure { origin: None, error: motile_protocol::error_text(&error) });
+            }
         }
     }
     let mut names: Vec<String> = origins.keys().cloned().collect();
     names.sort();
+    let planned = plan(&marks, &names, metered);
+    report(Progress::Planned(planned.clone()));
     let mut by_target: HashMap<String, Vec<Transfer>> = HashMap::new();
-    for transfer in plan(&marks, &names, metered) {
+    for transfer in planned {
         by_target.entry(transfer.target.clone()).or_default().push(transfer);
     }
     let peers = Arc::new(peers);
     let origins = Arc::new(origins);
+    let report = Arc::new(report);
     let mut carried = tokio::task::JoinSet::new();
     for (target, transfers) in by_target {
-        let (peers, origins) = (peers.clone(), origins.clone());
+        let (peers, origins, report) = (peers.clone(), origins.clone(), report.clone());
         carried.spawn(async move {
-            let mut changed = Vec::new();
+            let mut reached = Vec::new();
+            let mut failure = None;
             for transfer in transfers {
                 let (Some(source), Some(target), Some(origin)) =
                     (peers.get(&transfer.source), peers.get(&target), origins.get(&transfer.origin))
                 else {
                     continue;
                 };
-                match carry(source, target, &transfer, origin).await {
-                    Ok(true) => changed.push(transfer.origin.clone()),
-                    Ok(false) => {}
+                match carry(source, target, &transfer, origin, report.as_ref()).await {
+                    Ok(Some(mark)) => reached.push((transfer.origin.clone(), mark)),
+                    Ok(None) => {}
                     Err(error) => {
-                        tracing::warn!(origin = transfer.origin, "couldn't copy a server's threads: {error:#}")
+                        tracing::warn!(origin = transfer.origin, "couldn't copy a server's threads: {error:#}");
+                        let error = motile_protocol::error_text(&error);
+                        failure = Some(Failure { origin: Some(transfer.origin.clone()), error });
                     }
                 }
             }
-            changed
+            (target, reached, failure)
         });
     }
     let mut changed = HashSet::new();
-    while let Some(Ok(origins)) = carried.join_next().await {
-        changed.extend(origins);
+    while let Some(Ok((target, reached, failure))) = carried.join_next().await {
+        for (origin, mark) in reached {
+            if let Some(marks) = marks.get_mut(&target) {
+                marks.copies.insert(origin.clone(), mark);
+            }
+            changed.insert(origin);
+        }
+        if let Some(failure) = failure {
+            failed.insert(target, failure);
+        }
     }
-    Round { marks, changed }
+    Round { marks, changed, failed }
 }
 
 #[cfg(test)]
