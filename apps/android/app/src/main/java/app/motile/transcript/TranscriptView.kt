@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -541,7 +542,7 @@ private fun StartedByLine(open: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             // The arrow's square leaves room around its ink, so it needs little more from the words.
-            Icon(Symbol.CornerLeftUp, size.symbol, Modifier.padding(end = 4.dp), color = palette.foreground)
+            Icon(Symbol.CornerLeftUp, size.symbol, Modifier.offset(y = (-1).dp).padding(end = 4.dp), color = palette.foreground)
             Text("Go back to parent thread", style = size.font, color = palette.foreground, maxLines = 1)
         }
         Box(Modifier.weight(1f).height(1.dp).background(palette.border))

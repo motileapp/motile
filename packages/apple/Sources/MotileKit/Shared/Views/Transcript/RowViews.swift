@@ -1368,7 +1368,7 @@ final class LineageView: FlippedView {
         pill.frame = CGRect(x: x, y: y, width: width, height: size.height)
         let symbolX = x + lead
         // The arrow stands on the baseline, lower than the caps' middle it is raised to.
-        symbol.frame = CGRect(x: symbolX, y: y + ((size.height - side) / 2).rounded() - scaled(1), width: side, height: side)
+        symbol.frame = CGRect(x: symbolX, y: y + ((size.height - side) / 2).rounded() - scaled(2), width: side, height: side)
         let wordsHeight = words.natural.height
         words.frame = CGRect(x: symbolX + side + Self.arrowGap - inset, y: y + (size.height - wordsHeight) / 2, width: wordsWidth, height: wordsHeight)
         let lineY = (bounds.height / 2).rounded()
