@@ -1022,6 +1022,8 @@ struct AgentInfo: Equatable, Identifiable {
     let kind: String?
     let status: ToolContent.Status
     let state: AgentState
+    /// Whether it is listed under the previous agents: it and every agent of its family ended.
+    let previous: Bool
     /// "Working", "Needs approval", "Failed".
     let label: String
     /// What it is doing now, or what it reported once it has ended.
@@ -1047,6 +1049,7 @@ struct AgentInfo: Equatable, Identifiable {
         kind = json.optionalString("kind")
         status = ToolContent.Status(rawValue: json.string("status")) ?? .succeeded
         state = AgentState(rawValue: json.string("state")) ?? .done
+        previous = json.bool("previous")
         label = json.string("label")
         detail = json.string("detail")
         startedAt = json.double("started_at")

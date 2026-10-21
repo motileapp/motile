@@ -949,6 +949,8 @@ data class AgentInfo(
     val kind: String?,
     val status: ToolStatus,
     val state: AgentState,
+    /** Whether it is listed under the previous agents: it and every agent of its family ended. */
+    val previous: Boolean,
     /** "Working", "Needs approval", "Failed". */
     val label: String,
     /** What it is doing now, or what it reported once it has ended. */
@@ -973,6 +975,7 @@ data class AgentInfo(
         kind = json.optionalString("kind"),
         status = ToolStatus.of(json.string("status")),
         state = AgentState.of(json.string("state")),
+        previous = json.bool("previous"),
         label = json.string("label"),
         detail = json.string("detail"),
         startedAt = json.double("started_at"),

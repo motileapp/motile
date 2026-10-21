@@ -3169,7 +3169,7 @@ fn children_of(threads: &HashMap<String, Thread>, thread_id: &str) -> Option<Chi
 }
 
 fn agents_event(thread_id: &str, started: &[Item]) -> Event {
-    Event::Agents { thread_id: thread_id.to_string(), agents: started.iter().filter_map(agents::view).collect() }
+    Event::Agents { thread_id: thread_id.to_string(), agents: agents::listed(started.iter().filter_map(agents::view)) }
 }
 
 /// Keeps the tool call that started an agent, in the place the thread has it.
