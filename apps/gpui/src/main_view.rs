@@ -217,7 +217,7 @@ impl Render for MainView {
             0.
         };
         self.thread.update(cx, |thread, cx| {
-            thread.title_inset = if hidden { past_window_buttons } else { 20. };
+            thread.title_inset = if hidden { past_window_buttons } else { crate::thread::BESIDE_SIDEBAR_INSET };
             thread.beside_panel = beside;
             thread.trailing_room = trailing_room;
             thread.covered = covered;

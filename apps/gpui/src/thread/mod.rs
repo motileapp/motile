@@ -14,7 +14,7 @@ use crate::composer::Composer;
 use crate::composer::children::agent_bar;
 use crate::models::{AgentViewExt, Project};
 use crate::store::{PanelPage, Store};
-use crate::theme::{self, Radius, colors};
+use crate::theme::{self, ControlSize, Radius, colors};
 use crate::ui::menu::{Anchor, Menu, MenuIcon};
 use crate::ui::modal::{Answer, Confirmation, Modal, confirmation, present_sheet, presented};
 use crate::ui::{ActionButton, Highlight, TOOLBAR_WIDTH, icons, logos};
@@ -26,6 +26,9 @@ const COMPOSER_BOTTOM_GAP: f32 = 16.;
 const START_LIFT: f32 = 0.03;
 const HEADLINE_SIZE: f32 = 28.;
 const NOTICE_FADE: Duration = Duration::from_millis(150);
+
+/// How far the title starts from the pane's side beside the sidebar.
+pub const BESIDE_SIDEBAR_INSET: f32 = 20.;
 
 pub struct ThreadPane {
     store: Entity<Store>,
@@ -86,7 +89,7 @@ impl ThreadPane {
             composer,
             transcript,
             agent_transcript,
-            title_inset: 20.,
+            title_inset: BESIDE_SIDEBAR_INSET,
             trailing_room: 0.,
             beside_panel: false,
             covered: 0.,
@@ -156,23 +159,60 @@ impl ThreadPane {
             .gap(px(8.))
             .child(
                 div()
-                    .flex()
-                    .flex_col()
-                    .gap(px(2.))
                     .min_w_0()
-                    .when_some(parts, |title, parts| title.child(project_line(project.as_ref(), &parts, cx)))
+                    .flex()
+                    .items_center()
+                    .gap(px(ControlSize::Regular.padding()))
+                    .children(self.back_button(cx))
                     .child(
                         div()
+                            .flex()
+                            .flex_col()
+                            .gap(px(2.))
                             .min_w_0()
-                            .text_size(px(13.))
-                            .font_weight(FontWeight::SEMIBOLD)
-                            .text_color(c.foreground)
-                            .truncate()
-                            .child(title),
+                            .when_some(parts, |title, parts| title.child(project_line(project.as_ref(), &parts, cx)))
+                            .child(
+                                div()
+                                    .min_w_0()
+                                    .text_size(px(13.))
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .text_color(c.foreground)
+                                    .truncate()
+                                    .child(title),
+                            ),
                     ),
             )
             .child(div().flex_1())
             .children(control)
+    }
+
+    /// Before the title, the button that opens the thread whose agent started the open one. Its
+    /// light is as far from the pane's side as from the bar's top, beside the sidebar.
+    fn back_button(&self, cx: &App) -> Option<Div> {
+        let store = self.store.read(cx);
+        if store.shown_agent().is_some() {
+            return None;
+        }
+        let parent = store.parent_thread()?;
+        let id = parent.id.clone();
+        let handle = self.store.clone();
+        let button = ActionButton::icon("parent-thread", "corner-left-up", format!("Open {}", parent.title))
+            .large()
+            .on_click(move |_, _, cx| {
+                handle.update(cx, |store, cx| {
+                    store.open_started_thread(&id, cx);
+                    cx.notify();
+                })
+            });
+        let size = ControlSize::Large;
+        let light = (size.height() - size.symbol_side()) / 2.;
+        Some(
+            div()
+                .flex_none()
+                .ml(px((theme::TOP_BAR - size.height()) / 2. - BESIDE_SIDEBAR_INSET))
+                .mr(px(-light))
+                .child(button),
+        )
     }
 
     /// The thread's name, or the agent's when one is shown in its place.

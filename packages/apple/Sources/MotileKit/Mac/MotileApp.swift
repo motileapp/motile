@@ -291,7 +291,7 @@ struct MainView: View {
                     PaneDivider(width: $sidebarWidth, widths: widths)
                         .zIndex(1)
                 }
-                ThreadPane(titleInset: sidebarHidden ? Self.pastWindowButtons : 20, besidePanel: beside)
+                ThreadPane(titleInset: sidebarHidden ? Self.pastWindowButtons : ThreadPane.besideSidebarInset, besidePanel: beside)
                     // Behind the maximized panel the thread keeps the width it has beside it,
                     // so the transcript isn't laid out again for a width nobody sees.
                     .frame(width: fits ? rest - 1 - shownPanel : nil)

@@ -66,14 +66,22 @@ struct ThreadScreen: View {
     }
 
     @ToolbarContentBuilder private var bar: some ToolbarContent {
-        if overSidebar {
-            ToolbarItem(placement: .topBarLeading) {
+        ToolbarItemGroup(placement: .topBarLeading) {
+            if overSidebar {
                 Button {
                     drawer.isOpen.toggle()
                 } label: {
                     menuIcon
                 }
                 .accessibilityLabel("Threads")
+            }
+            if let parent = store.shownAgent == nil ? store.parentThread : nil {
+                Button {
+                    store.openStartedThread(parent.id)
+                } label: {
+                    Image(.cornerLeftUp, size: 16)
+                }
+                .accessibilityLabel("Open \(parent.title)")
             }
         }
         ToolbarItem(placement: .principal) { title }

@@ -166,8 +166,16 @@ private fun TopBar(overSidebar: Boolean) {
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (overSidebar) {
-            GlassButton(help = "Threads", onClick = { drawer.isOpen = !drawer.isOpen }) { MenuIcon(store.attention(Theme.colors)) }
+        val parent = if (store.shownAgent == null) store.parentThread else null
+        if (overSidebar || parent != null) {
+            Row(Modifier.glassButton(CircleShape), verticalAlignment = Alignment.CenterVertically) {
+                if (overSidebar) {
+                    GlassButton(help = "Threads", onClick = { drawer.isOpen = !drawer.isOpen }, bare = true) { MenuIcon(store.attention(Theme.colors)) }
+                }
+                parent?.let {
+                    GlassButton(Symbol.CornerLeftUp, "Open ${it.title}", onClick = { store.openStartedThread(it.id) }, symbolSize = 16f, bare = true)
+                }
+            }
         }
         Title(Modifier.weight(1f))
         Row(Modifier.glassButton(CircleShape), verticalAlignment = Alignment.CenterVertically) {
