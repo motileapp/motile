@@ -57,8 +57,7 @@ fun AppStore.perform(command: String): Boolean {
         }
         "chat.newLocal" -> startNewThread(composerProject?.takeIf(::startsThreads) ?: return false)
         "chat.newWithoutProject" -> {
-            val project = noProjects.firstOrNull { it.serverID == composerServer?.id } ?: noProjects.firstOrNull() ?: return false
-            startNewThread(project)
+            startNewThread(noProjectToOpen ?: return false)
         }
         "navigation.back", "navigation.forward" -> return go(back = command == "navigation.back")
         "thread.previous" -> return showThreadOffset(-1)
