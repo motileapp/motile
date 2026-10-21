@@ -145,9 +145,21 @@ class AppStore(private val context: Context) {
         private set
     var showsAddServer by mutableStateOf(false)
     /** The section of the settings open over the client, while they are. */
-    var settings by mutableStateOf<SettingsSection?>(null)
+    private var settingsState by mutableStateOf<SettingsSection?>(null)
+    var settings: SettingsSection?
+        get() = settingsState
+        set(value) {
+            settingsState = value
+            pageChanged()
+        }
     /** What the agents spent and what is left of their plans is open over the client. */
-    var showsUsage by mutableStateOf(false)
+    private var showsUsageState by mutableStateOf(false)
+    var showsUsage: Boolean
+        get() = showsUsageState
+        set(value) {
+            showsUsageState = value
+            pageChanged()
+        }
     /** What the usage shows, kept while it is closed so that it opens with what was last read. */
     var usage by mutableStateOf(UsageModel())
         private set
@@ -281,6 +293,7 @@ class AppStore(private val context: Context) {
             selectionState = value
             Preferences.set("selection", value.id)
             showSelectedThread()
+            pageChanged()
         }
     var activity by mutableStateOf(Activity())
         private set
@@ -374,6 +387,8 @@ class AppStore(private val context: Context) {
 
     val updater = AppUpdater()
     val rightPanel = RightPanel()
+    /** The pages behind and ahead of this one, for Go Back and Go Forward. */
+    val history = PageHistory()
     val linear = Linear()
     val ricrac = Ricrac()
     var integrations by mutableStateOf(Integration.kept())

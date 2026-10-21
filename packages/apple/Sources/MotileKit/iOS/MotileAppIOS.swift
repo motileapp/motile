@@ -140,6 +140,12 @@ struct MotileCommands: Commands {
             Button("Next Thread") { _ = store.perform("thread.next") }
                 .shortcut("thread.next", in: keys)
                 .disabled(store.jumpThreads.isEmpty)
+            Button("Go Back") { _ = store.go(back: true) }
+                .shortcut("navigation.back", in: keys)
+                .disabled(!store.canGo(back: true))
+            Button("Go Forward") { _ = store.go(back: false) }
+                .shortcut("navigation.forward", in: keys)
+                .disabled(!store.canGo(back: false))
             Button("Close Tab") { _ = store.rightPanel.closeActive() }
                 .shortcut("rightPanel.close", in: keys)
                 .disabled(!store.rightPanel.isOpen)

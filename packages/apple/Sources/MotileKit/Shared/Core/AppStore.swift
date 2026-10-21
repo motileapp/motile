@@ -144,9 +144,13 @@ final class AppStore {
     private(set) var enrollTokenPending = false
     var showsAddServer = false
     /// The section of the settings open over the client, while they are.
-    var settings: SettingsSection?
+    var settings: SettingsSection? {
+        didSet { pageChanged() }
+    }
     /// What the agents spent and what is left of their plans is open over the client.
-    var showsUsage = false
+    var showsUsage = false {
+        didSet { pageChanged() }
+    }
     /// What the usage shows, kept while it is closed so that it opens with what was last read.
     private(set) var usage = UsageModel()
     /// The group of settings a search picked, until its page has scrolled to it.
@@ -259,6 +263,7 @@ final class AppStore {
         didSet {
             defaults.set(draftKey, forKey: "selection")
             showSelectedThread()
+            pageChanged()
         }
     }
     /// The open thread and the one whose agent started it, kept apart from `threads` so that the
@@ -331,6 +336,9 @@ final class AppStore {
 
     let updater = AppUpdater()
     let rightPanel = RightPanel()
+    /// The pages behind and ahead of this one, for Go Back and Go Forward.
+    var history = PageHistory()
+    @ObservationIgnored var pageCheckPending = false
     let linear = Linear()
     let ricrac = Ricrac()
     private(set) var integrations = Integration.kept(in: .standard)

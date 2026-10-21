@@ -60,6 +60,7 @@ fun AppStore.perform(command: String): Boolean {
             val project = noProjects.firstOrNull { it.serverID == composerServer?.id } ?: noProjects.firstOrNull() ?: return false
             startNewThread(project)
         }
+        "navigation.back", "navigation.forward" -> return go(back = command == "navigation.back")
         "thread.previous" -> return showThreadOffset(-1)
         "thread.next" -> return showThreadOffset(1)
         "thread.done" -> {

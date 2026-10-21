@@ -225,7 +225,9 @@ final class RightPanel {
     /// The turns of the open thread that changed files, the first one first.
     var turns: [TurnChange] = []
     /// The agent whose transcript shows in the thread's place, read only.
-    private(set) var shownAgent: String?
+    private(set) var shownAgent: String? {
+        didSet { store?.pageChanged() }
+    }
 
     private(set) var diff: Loaded<CodeDocument> = .loading
     /// The files of the diff that are closed, by path.

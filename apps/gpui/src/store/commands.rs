@@ -159,6 +159,8 @@ impl Store {
                 let Some(project) = project.map(|project| project.id.clone()) else { return false };
                 self.start_new_thread(Some(project), cx);
             }
+            "navigation.back" => return self.go(true, cx),
+            "navigation.forward" => return self.go(false, cx),
             "thread.previous" => return self.show_thread_offset(-1, cx),
             "thread.next" => return self.show_thread_offset(1, cx),
             "thread.done" => {

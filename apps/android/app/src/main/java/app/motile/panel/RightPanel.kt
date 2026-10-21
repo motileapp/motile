@@ -17,6 +17,7 @@ import app.motile.core.obj
 import app.motile.core.objects
 import app.motile.core.optionalBool
 import app.motile.core.optionalInt
+import app.motile.core.pageChanged
 import app.motile.core.parseJSON
 import app.motile.core.string
 import app.motile.platform.Platform
@@ -272,8 +273,13 @@ class RightPanel {
     /** The turns of the open thread that changed files, the first one first. */
     var turns by mutableStateOf(emptyList<TurnChange>())
     /** The agent whose transcript shows in the thread's place, read only. */
-    var shownAgent by mutableStateOf<String?>(null)
-        private set
+    private var shownAgentState by mutableStateOf<String?>(null)
+    var shownAgent: String?
+        get() = shownAgentState
+        private set(value) {
+            shownAgentState = value
+            store?.pageChanged()
+        }
 
     private fun loadTabs(): Map<String, PanelTabs> {
         val saved = Preferences.string("panel.tabs")?.let(::parseJSON) ?: return emptyMap()
