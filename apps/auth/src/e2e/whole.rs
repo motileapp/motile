@@ -398,7 +398,8 @@ async fn a_client_signs_in_links_a_server_and_runs_a_thread_it_still_has_after_a
         now: false,
     };
     let showing = client.ask(send).await.unwrap()["thread_id"].as_str().unwrap().to_string();
-    client.ask(Command::OpenThread { server_id: server.id.clone(), thread_id: showing }).await.unwrap();
+    client.ask(Command::CloseThread { thread_id: thread_id.clone() }).await.unwrap();
+    client.ask(Command::OpenThread { server_id: server.id.clone(), thread_id: showing.clone() }).await.unwrap();
     client.until("the image is shown", |client| client.turn_ended() && kinds(client).contains(&"media")).await;
     assert_eq!(kinds(&client), ["user", "fold", "prose", "media", "prose", "turn_end"]);
     let RowKind::Media { media, width, height, size, alt, name, .. } = client.rows[3].kind.clone() else {
@@ -433,6 +434,33 @@ async fn a_client_signs_in_links_a_server_and_runs_a_thread_it_still_has_after_a
     assert_eq!(std::fs::read(&fetched).unwrap(), screenshot);
     let storage = client.ask(Command::Storage).await.unwrap();
     assert_eq!((storage["media_bytes"].as_u64(), storage["media_limit"].as_u64()), (Some(size), Some(2_000_000_000)));
+
+    // A thread left for another is back at once as it was left, highlighted and folded.
+    client.ask(Command::CloseThread { thread_id: showing.clone() }).await.unwrap();
+    client.ask(Command::OpenThread { server_id: server.id.clone(), thread_id: thread_id.clone() }).await.unwrap();
+    assert_eq!(client.rows, before);
+
+    // One left while its agent works keeps up without the client hearing of it.
+    let ended = client.threads[&showing].thread.turn_ended_at;
+    let more = Command::Send {
+        server_id: server.id.clone(),
+        thread_id: Some(showing.clone()),
+        new_thread: None,
+        text: "Show the screenshot".into(),
+        attachments: Vec::new(),
+        now: false,
+    };
+    client.ask(more).await.unwrap();
+    client
+        .until("the left thread's turn has ended", |client| {
+            let thread = &client.threads[&showing].thread;
+            !thread.running && thread.turn_ended_at != ended
+        })
+        .await;
+    assert_eq!(client.rows, before);
+    client.ask(Command::CloseThread { thread_id: thread_id.clone() }).await.unwrap();
+    client.ask(Command::OpenThread { server_id: server.id.clone(), thread_id: showing }).await.unwrap();
+    assert_eq!(kinds(&client).iter().filter(|kind| **kind == "media").count(), 2);
 
     // A thread that is never opened here is followed while its agent works.
     let send = Command::Send {

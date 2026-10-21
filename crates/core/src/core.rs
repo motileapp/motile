@@ -49,6 +49,8 @@ use crate::usage;
 
 /// The newest items are rendered and sent first, so a long thread opens at once.
 const FIRST_ITEMS: usize = 30;
+/// How many threads the client left stay open and current, so that going back to one is instant.
+const LEFT_OPEN: usize = 4;
 /// Streamed text is rendered at most this often.
 const RENDER_EVERY: Duration = Duration::from_millis(33);
 const SAVE_EVERY: Duration = Duration::from_secs(1);
@@ -263,6 +265,9 @@ struct OpenThread {
     programs: Programs,
     /// The timers of its programs, which stop with it.
     ui_timers: UiTimers,
+    /// When the client left it. It stays open and current until it is one too many, but the client
+    /// isn't told about it.
+    left: Option<Instant>,
 }
 
 #[derive(Default)]
@@ -461,7 +466,14 @@ async fn list_skills(link: Arc<Link>, key: (String, String), listed: Skills) {
 
 impl Core {
     fn emit(&self, event: Event) {
+        if transcript_of(&event).is_some_and(|thread_id| self.is_left(thread_id)) {
+            return;
+        }
         (self.sink)(event);
+    }
+
+    fn is_left(&self, thread_id: &str) -> bool {
+        self.open.get(thread_id).is_some_and(|open| open.left.is_some())
     }
 
     fn reply(&self, id: u64, result: Result<Value, String>) {
@@ -617,7 +629,12 @@ impl Core {
             Input::UiToolDone { thread_id, row_id, serial, call, result } => {
                 self.with_programs(&thread_id, |programs| programs.tool_result(&row_id, serial, call, result))
             }
-            Input::UiTick { thread_id, key } => self.with_programs(&thread_id, |programs| programs.tick(&key)),
+            Input::UiTick { thread_id, key } => {
+                if self.is_left(&thread_id) {
+                    return;
+                }
+                self.with_programs(&thread_id, |programs| programs.tick(&key))
+            }
             Input::UiWake { thread_id } => self.with_programs(&thread_id, |programs| programs.wake(Instant::now())),
             Input::UiImagesFound { thread_id, query, images } => {
                 let server_id = self.open.get(&thread_id).map(|open| open.server_id.clone());
@@ -1707,7 +1724,11 @@ impl Core {
                 self.emit(event);
             }
             Message::Error { message } => {
+                let left = open.left.is_some();
                 self.open.remove(thread_id);
+                if left {
+                    return;
+                }
                 self.emit(Event::ThreadError { thread_id: thread_id.to_string(), message });
             }
             other => tracing::debug!("unexpected message on a thread: {other:?}"),
@@ -1715,6 +1736,9 @@ impl Core {
     }
 
     fn emit_rows(&mut self, thread_id: &str, reset: bool, mut splice: Splice) {
+        if self.is_left(thread_id) {
+            return;
+        }
         self.dress(thread_id, &mut splice.rows);
         self.emit(Event::Rows {
             thread_id: thread_id.to_string(),
@@ -1727,7 +1751,8 @@ impl Core {
     }
 
     fn emit_agent_rows(&mut self, thread_id: &str, reset: bool, mut splice: Splice) {
-        let Some((agent_id, _)) = self.open.get(thread_id).and_then(|open| open.agent.as_ref()) else { return };
+        let shown = self.open.get(thread_id).filter(|open| open.left.is_none());
+        let Some((agent_id, _)) = shown.and_then(|open| open.agent.as_ref()) else { return };
         let agent_id = agent_id.clone();
         self.dress(thread_id, &mut splice.rows);
         self.emit(Event::AgentRows {
@@ -2897,6 +2922,7 @@ impl Core {
         if self.open.contains_key(thread_id) {
             let activity = self.last_activity(server_id, thread_id);
             let open = self.open.get_mut(thread_id).ok_or("The thread closed.")?;
+            open.left = None;
             let activity = activity.map(|activity| activity_changed(thread_id, &mut open.transcript, activity).1);
             let rows = open.transcript.rows().to_vec();
             let agents = agents_event(thread_id, &open.agents);
@@ -2946,6 +2972,7 @@ impl Core {
             saved_at: Instant::now(),
             programs: Programs::with_photos(self.photos.get(server_id).unwrap_or(&HashMap::new())),
             ui_timers: UiTimers::default(),
+            left: None,
         };
         self.open.insert(thread_id.to_string(), open);
         if let Some(activity) = activity {
@@ -2972,8 +2999,22 @@ impl Core {
         Ok(())
     }
 
+    /// Keeps the thread open without showing it, and closes the one left longest ago when too many are.
     fn close_thread(&mut self, thread_id: &str) {
         self.with_programs(thread_id, Programs::flush);
+        let Some(open) = self.open.get_mut(thread_id) else { return };
+        save_streamed(&self.cache, thread_id, open);
+        open.left = Some(Instant::now());
+        let left: Vec<(Instant, &String)> =
+            self.open.iter().filter_map(|(id, open)| open.left.map(|at| (at, id))).collect();
+        if left.len() <= LEFT_OPEN {
+            return;
+        }
+        let Some(oldest) = left.into_iter().min().map(|(_, id)| id.clone()) else { return };
+        self.drop_thread(&oldest);
+    }
+
+    fn drop_thread(&mut self, thread_id: &str) {
         let Some(mut open) = self.open.remove(thread_id) else { return };
         save_streamed(&self.cache, thread_id, &mut open);
         let server = self.servers.iter().find(|server| server.device.public_key == open.server_id);
@@ -3014,8 +3055,22 @@ impl Core {
     }
 }
 
-/// Writes a project's icon where `emit_projects` looks for it, and removes the icons the project
-/// had before.
+/// The thread whose transcript an event is about, which a thread the client left keeps to itself.
+fn transcript_of(event: &Event) -> Option<&str> {
+    match event {
+        Event::Rows { thread_id, .. }
+        | Event::Live { thread_id, .. }
+        | Event::Agents { thread_id, .. }
+        | Event::AgentRows { thread_id, .. }
+        | Event::Spans { thread_id, .. }
+        | Event::UiPatch { thread_id, .. }
+        | Event::UiConfirm { thread_id, .. }
+        | Event::Activity { thread_id, .. }
+        | Event::ThreadError { thread_id, .. } => Some(thread_id),
+        _ => None,
+    }
+}
+
 /// What the client is told when a thread's activity changes: the rows of the messages that wait
 /// for the agent, when those changed, and what the agent is doing.
 fn activity_changed(thread_id: &str, transcript: &mut Transcript, activity: Activity) -> (Option<Splice>, Event) {
@@ -3040,6 +3095,8 @@ fn short_name(name: &str) -> String {
     short.trim_end().to_string()
 }
 
+/// Writes a project's icon where `emit_projects` looks for it, and removes the icons the project
+/// had before.
 fn save_icon(folder: &std::path::Path, project_id: &str, name: &str, bytes: &[u8]) -> anyhow::Result<()> {
     std::fs::create_dir_all(folder)?;
     let unfinished = folder.join(format!("{name}.part"));
