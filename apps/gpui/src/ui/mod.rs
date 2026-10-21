@@ -24,7 +24,7 @@ use crate::theme::{Layer, Opacity, Radius, Surface, colors};
 pub use agent_avatar::{AgentAvatar, AgentAvatars};
 pub use control::{
     ActionButton, ActionMenu, Chip, InputField, InputVariant, Segmented, Select, Spinner, Switch, TextArea, Variant,
-    card_default, text_area_state,
+    card_default, card_slice, text_area_state,
 };
 pub use date_field::DateField;
 pub use parts::{

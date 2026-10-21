@@ -18,7 +18,7 @@ struct SettingsPage: View {
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                VStack(alignment: .leading, spacing: 22) {
+                VStack(alignment: .leading, spacing: SettingsGroupTitle.groupGap) {
                     switch section {
                     case .general: general
                     case .servers: servers
@@ -39,7 +39,12 @@ struct SettingsPage: View {
             .scrollDismissesKeyboard(.immediately)
             .onChange(of: store.settingsTarget, initial: true) {
                 guard let target = store.settingsTarget else { return }
-                withAnimation { proxy.scrollTo(target, anchor: .center) }
+                // A lazy list guesses the rows it hasn't built yet, so the scroll is set right once they are.
+                withAnimation {
+                    proxy.scrollTo(target, anchor: .center)
+                } completion: {
+                    withAnimation { proxy.scrollTo(target, anchor: .center) }
+                }
                 store.settingsTarget = nil
             }
         }
@@ -488,19 +493,8 @@ struct SettingsGroup<Content: View>: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.ui(size: 13))
-                    .foregroundStyle(Color.themeForeground)
-                if let caption {
-                    Text(caption)
-                        .font(.ui(size: 11.5))
-                        .foregroundStyle(Color.themeMutedStrongerForeground)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-            .padding(.horizontal, 4)
+        VStack(alignment: .leading, spacing: SettingsGroupTitle.gap) {
+            SettingsGroupTitle(title, caption: caption)
             if carded {
                 VStack(spacing: 0) {
                     content
@@ -513,6 +507,37 @@ struct SettingsGroup<Content: View>: View {
             }
         }
         .id(id)
+    }
+}
+
+/// The title of a group of settings, with a caption under it when it has one.
+struct SettingsGroupTitle: View {
+    /// The room between the title and the group's rows.
+    static let gap: CGFloat = 12
+    /// The room between one group and the next.
+    static let groupGap: CGFloat = 22
+
+    let title: String
+    var caption: String?
+
+    init(_ title: String, caption: String? = nil) {
+        self.title = title
+        self.caption = caption
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title)
+                .font(.ui(size: 13))
+                .foregroundStyle(Color.themeForeground)
+            if let caption {
+                Text(caption)
+                    .font(.ui(size: 11.5))
+                    .foregroundStyle(Color.themeMutedStrongerForeground)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(.horizontal, 4)
     }
 }
 

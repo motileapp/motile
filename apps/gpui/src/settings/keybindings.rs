@@ -8,14 +8,19 @@ use gpui_kit::prelude::*;
 use gpui_kit::*;
 use motile_core::keybindings::{Group, Row};
 
-use super::layout::{INSET, ROW_HEIGHT, group, large_outset, note, row, target};
+use super::layout::{
+    END_ROOM, GROUP_GAP, INSET, PAGE_PADDING, ROW_HEIGHT, TITLE_GAP, column, group, group_title, large_outset, note,
+    row,
+};
 use crate::store::Store;
 use crate::store::shortcuts::ShortcutCheck;
 use crate::theme::{ControlSize, Opacity, ShadowSize, Surface, colors};
 use crate::ui::control::Look;
 use crate::ui::menu::{Anchor, Menu};
 use crate::ui::motion;
-use crate::ui::{ActionButton, ActionMenu, Chip, InputField, KeyCaps, Variant, card_default, edges, icons, tooltip};
+use crate::ui::{
+    ActionButton, ActionMenu, Chip, InputField, KeyCaps, Variant, card_default, card_slice, edges, icons, tooltip,
+};
 
 /// The field the new shortcut records its keys in.
 const NEW_FIELD: &str = "new-shortcut";
@@ -48,6 +53,41 @@ enum Editing {
     New,
 }
 
+/// A part of the page, which the list lays out only while it is on screen.
+enum Item {
+    Header,
+    Issues(Vec<String>),
+    New,
+    Title(String),
+    Row { row: Row, first: bool, last: bool },
+    Empty,
+}
+
+impl Item {
+    /// What the part is: a group's title, or a row, which is its command for the command's first
+    /// row, as the settings' search reveals them.
+    fn name(&self, first_of_command: bool) -> String {
+        match self {
+            Item::Header => "header".into(),
+            Item::Issues(_) => "issues".into(),
+            Item::New => "new".into(),
+            Item::Title(title) => format!("shortcuts-{title}"),
+            Item::Row { row, .. } if first_of_command => format!("shortcut-{}", row.command),
+            Item::Row { row, .. } => row.id.clone(),
+            Item::Empty => "empty".into(),
+        }
+    }
+
+    /// What the part is and how it looks, which a list laid out again keeps its place by.
+    fn key(&self, name: &str) -> String {
+        match self {
+            Item::Issues(issues) => format!("{name}\n{}", issues.join("\n")),
+            Item::Row { first, last, .. } => format!("{name}\n{first}\n{last}"),
+            _ => name.to_string(),
+        }
+    }
+}
+
 pub struct KeybindingsPage {
     store: Entity<Store>,
     query: Entity<InputState>,
@@ -55,6 +95,12 @@ pub struct KeybindingsPage {
     editing: Option<(Editing, Entity<ConditionEditor>)>,
     /// Where the label of the shortcut whose condition is edited was drawn.
     anchor: Anchor,
+    /// The parts of the page, of which only those on screen are laid out.
+    list: ListState,
+    items: Vec<Item>,
+    listed: Vec<String>,
+    /// What a search picked, to reveal once the page is drawn.
+    revealing: Option<String>,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -66,7 +112,35 @@ impl KeybindingsPage {
             cx.observe(&store, |this, _, cx| this.take_recorded(cx)),
             cx.on_release(|_, cx| crate::ui::popover_shown("condition-editor", false, cx)),
         ];
-        Self { store, query, adding: None, editing: None, anchor: Anchor::default(), _subscriptions: subscriptions }
+        Self {
+            store,
+            query,
+            adding: None,
+            editing: None,
+            anchor: Anchor::default(),
+            list: ListState::new(0, ListAlignment::Top, px(ROW_HEIGHT * 4.)),
+            items: Vec::new(),
+            listed: Vec::new(),
+            revealing: None,
+            _subscriptions: subscriptions,
+        }
+    }
+
+    /// Shows what a search picked in the middle of the page: a group or a command's first row.
+    pub fn reveal(&mut self, target: String) {
+        self.revealing = Some(target);
+    }
+
+    /// Scrolls to the part, roughly at once, as the rows before it aren't laid out, and right to
+    /// the middle on the next frame, once it is.
+    fn scroll_to_item(&self, index: usize, window: &mut Window, cx: &mut Context<Self>) {
+        let rows_above = (self.list.viewport_bounds().size.height / 2. / px(ROW_HEIGHT)) as usize;
+        self.list.scroll_to(ListOffset { item_ix: index.saturating_sub(rows_above), offset_in_item: px(0.) });
+        cx.on_next_frame(window, move |page, _, cx| {
+            let Some(bounds) = page.list.bounds_for_item(index) else { return };
+            page.list.scroll_by(bounds.center().y - page.list.viewport_bounds().center().y);
+            cx.notify();
+        });
     }
 
     /// The keys a field of the page recorded.
@@ -313,7 +387,7 @@ impl KeybindingsPage {
         Some(group("new-shortcut", "New shortcut", None, true, rows, cx))
     }
 
-    fn shortcut_row(&self, shortcut: &Row, first: bool, cx: &mut Context<Self>) -> AnyElement {
+    fn shortcut_row(&self, shortcut: &Row, cx: &mut Context<Self>) -> AnyElement {
         let id = shortcut.id.clone();
         let editing = self.editing.as_ref().is_some_and(|(editing, _)| *editing == Editing::Row(id.clone()));
         let title = div()
@@ -354,8 +428,7 @@ impl KeybindingsPage {
             .into_any_element();
         let mut trailing = conflict_mark(&shortcut.conflicts, cx).into_iter().collect::<Vec<_>>();
         trailing.push(buttons);
-        let target_id = if first { format!("shortcut-{}", shortcut.command) } else { shortcut.id.clone() };
-        div().relative().child(target(target_id)).child(row(vec![leading], trailing)).into_any_element()
+        row(vec![leading], trailing).into_any_element()
     }
 
     fn row_menu(&self, shortcut: &Row, cx: &mut Context<Self>) -> AnyElement {
@@ -467,35 +540,76 @@ impl KeybindingsPage {
     }
 }
 
-impl Render for KeybindingsPage {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let (groups, issues) = {
-            let shortcuts = &self.store.read(cx).shortcuts;
-            (shortcuts.groups.clone(), shortcuts.issues.clone())
-        };
-        let found = self.found(&groups, cx);
-        let mut parts = vec![self.header(self.adding.is_some(), cx)];
-        if !issues.is_empty() {
-            parts.push(self.issues(&issues, cx));
+impl KeybindingsPage {
+    /// The parts of the page: the search, then each group's title and rows.
+    fn items(&self, cx: &App) -> Vec<Item> {
+        let shortcuts = &self.store.read(cx).shortcuts;
+        let found = self.found(&shortcuts.groups, cx);
+        let mut items = vec![Item::Header];
+        if !shortcuts.issues.is_empty() {
+            items.push(Item::Issues(shortcuts.issues.clone()));
         }
-        parts.extend(self.new_row(cx));
+        if self.adding.is_some() {
+            items.push(Item::New);
+        }
         for shortcut_group in &found {
-            let mut seen = HashSet::new();
-            let mut rows = Vec::new();
-            for (index, shortcut) in shortcut_group.rows.iter().enumerate() {
-                let first = seen.insert(shortcut.command.clone());
-                rows.push(self.shortcut_row(shortcut, first, cx));
-                if index + 1 < shortcut_group.rows.len() {
-                    rows.push(crate::ui::divider_on(Surface::Card, cx).into_any_element());
-                }
-            }
-            let id = format!("shortcuts-{}", shortcut_group.title);
-            parts.push(group(id, shortcut_group.title.clone(), None, true, rows, cx));
+            items.push(Item::Title(shortcut_group.title.clone()));
+            let last = shortcut_group.rows.len().saturating_sub(1);
+            items.extend(shortcut_group.rows.iter().enumerate().map(|(place, row)| Item::Row {
+                row: row.clone(),
+                first: place == 0,
+                last: place == last,
+            }));
         }
         if found.is_empty() {
-            parts.push(note("No shortcuts found", cx));
+            items.push(Item::Empty);
         }
-        div().flex().flex_col().gap(px(22.)).children(parts).children(self.popover(window, cx))
+        items
+    }
+
+    fn item(&self, index: usize, cx: &mut Context<Self>) -> AnyElement {
+        let Some(item) = self.items.get(index) else { return div().into_any_element() };
+        let part = match item {
+            Item::Header => self.header(self.adding.is_some(), cx),
+            Item::Issues(issues) => self.issues(issues, cx),
+            Item::New => self.new_row(cx).unwrap_or_else(|| div().into_any_element()),
+            Item::Title(title) => group_title(title.clone(), None, cx).pb(px(TITLE_GAP)).into_any_element(),
+            Item::Row { row, first, last } => card_slice(div(), *first, *last, cx)
+                .child(self.shortcut_row(row, cx))
+                .when(!last, |slice| slice.child(crate::ui::divider_on(Surface::Card, cx)))
+                .into_any_element(),
+            Item::Empty => note("No shortcuts found", cx),
+        };
+        let spaced = !matches!(item, Item::Header | Item::Row { .. });
+        column(part).when(spaced, |part| part.pt(px(GROUP_GAP))).into_any_element()
+    }
+}
+
+impl Render for KeybindingsPage {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.items = self.items(cx);
+        let mut commands = HashSet::new();
+        let names: Vec<String> = self
+            .items
+            .iter()
+            .map(|item| item.name(matches!(item, Item::Row { row, .. } if commands.insert(row.command.clone()))))
+            .collect();
+        let keys = self.items.iter().zip(&names).map(|(item, name)| item.key(name)).collect();
+        crate::ui::relist(&self.list, &mut self.listed, keys);
+        if let Some(target) = self.revealing.take()
+            && let Some(index) = names.iter().position(|name| *name == target)
+        {
+            self.scroll_to_item(index, window, cx);
+        }
+        div()
+            .size_full()
+            .child(
+                list(self.list.clone(), cx.processor(|this, index, _, cx| this.item(index, cx)))
+                    .size_full()
+                    .pt(px(PAGE_PADDING))
+                    .pb(px(END_ROOM)),
+            )
+            .children(self.popover(window, cx))
     }
 }
 

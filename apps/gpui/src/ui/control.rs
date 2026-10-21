@@ -1439,6 +1439,19 @@ pub fn card_default(element: Div, cx: &App) -> Div {
     card(element, Radius::LG, cx)
 }
 
+/// One row of a card that a list lays out a row at a time: the card's top edge on its first row,
+/// its bottom edge on its last, and its sides on every one.
+pub fn card_slice(element: Div, top: bool, bottom: bool, cx: &App) -> Div {
+    let c = colors(cx);
+    element
+        .bg(c.card)
+        .border_color(c.border_card)
+        .border_l_1()
+        .border_r_1()
+        .when(top, |slice| slice.border_t_1().rounded_t(px(Radius::LG)))
+        .when(bottom, |slice| slice.border_b_1().rounded_b(px(Radius::LG)))
+}
+
 /// How a field is set off from what it lies on.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub enum InputVariant {
