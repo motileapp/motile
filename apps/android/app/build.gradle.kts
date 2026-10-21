@@ -76,10 +76,19 @@ android {
         unitTests.isReturnDefaultValues = true
         unitTests.isIncludeAndroidResources = true
         // The canvas and program tests write their pictures with Roborazzi, to build/ at the repository's
-        // root, and lay programs out with the core built for this machine.
+        // root, and lay programs out with the core built for this machine. Both are the task's, so that
+        // a new core runs them again and a cached run still leaves their frames.
         unitTests.all {
+            val repository = rootDir.resolve("../..")
+            val hostLibs = layout.buildDirectory.dir("hostLibs")
+            it.inputs.files(hostLibs).withPathSensitivity(PathSensitivity.RELATIVE)
+            it.inputs.files(repository.resolve("crates/core/fixtures/openui")).withPathSensitivity(PathSensitivity.RELATIVE)
+            it.inputs.files(repository.resolve("crates/core/fixtures/canvas/reference")).withPathSensitivity(PathSensitivity.RELATIVE)
+            it.outputs.dir(repository.resolve("build/frames/android"))
+            it.outputs.dir(repository.resolve("build/programs/android"))
+            it.outputs.dir(repository.resolve("build/canvas/android"))
             it.systemProperty("roborazzi.test.record", "true")
-            it.systemProperty("java.library.path", layout.buildDirectory.dir("hostLibs").get().asFile.path)
+            it.systemProperty("java.library.path", hostLibs.get().asFile.path)
             // Robolectric reaches into FileDescriptor for Android 16's shared memory.
             it.jvmArgs("--add-exports=java.base/jdk.internal.access=ALL-UNNAMED")
         }
