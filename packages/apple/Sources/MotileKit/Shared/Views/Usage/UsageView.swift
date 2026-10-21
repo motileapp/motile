@@ -84,7 +84,7 @@ final class UsageModel {
         load()
     }
 
-    /// Reads again what the tab shows, the limits from the agents themselves.
+    /// Asks the servers again for what the tab shows.
     func refresh() {
         load(refresh: true)
     }

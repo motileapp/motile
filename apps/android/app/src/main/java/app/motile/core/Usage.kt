@@ -83,7 +83,7 @@ class UsageModel {
         load()
     }
 
-    /** Reads again what the tab shows, the limits from the agents themselves. */
+    /** Asks the servers again for what the tab shows. */
     fun refresh() = load(refresh = true)
 
     /** The servers counted among these, or null for all of them. */

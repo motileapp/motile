@@ -88,8 +88,8 @@ const RESTING_PROCESS_STAYS: Duration = Duration::from_secs(10 * 60);
 const MCP_WAIT: Duration = Duration::from_secs(5);
 const MCP_ASK_EVERY: Duration = Duration::from_millis(250);
 const PRICES: &str = "prices";
-/// How long what the agents' logins had used is answered again before it is read anew.
-const LIMITS_STALE: Duration = Duration::from_secs(5 * 60);
+/// How often what the agents' logins have used is read.
+const LIMITS_READ_EVERY: Duration = Duration::from_secs(5 * 60);
 const PRICES_STALE: Duration = Duration::from_secs(24 * 3600);
 const PRICES_RETRY: Duration = Duration::from_secs(3600);
 const MAX_INSTRUCTIONS_CHARS: usize = 4000;
@@ -157,7 +157,7 @@ pub struct Hub {
     /// What the models cost at the API's prices, as last fetched.
     prices: std::sync::Mutex<Prices>,
     /// What the agents' logins had used of their plans, and when that was read.
-    limits: Mutex<Option<(Instant, Vec<AgentLimits>)>>,
+    limits: Mutex<Option<Vec<AgentLimits>>>,
     /// What was last seen of each watched thread's pull request, by thread.
     watched: std::sync::Mutex<HashMap<String, Seen>>,
     /// Held while a folder is kept as it is, so a thread's snapshots follow one another.
@@ -694,7 +694,19 @@ impl Hub {
     /// Reads what the accounts have used in the background, which also says who they are.
     pub fn refresh_limits(self: &Arc<Self>) {
         let hub = self.clone();
-        tokio::spawn(async move { hub.limits(true).await });
+        tokio::spawn(async move { hub.read_limits().await });
+    }
+
+    /// Reads what the accounts have used now and every few minutes, so that a client never waits
+    /// on the agents for it.
+    pub fn keep_limits_current(self: &Arc<Self>) {
+        let hub = self.clone();
+        tokio::spawn(async move {
+            loop {
+                hub.read_limits().await;
+                tokio::time::sleep(LIMITS_READ_EVERY).await;
+            }
+        });
     }
 
     /// Notes who is signed in to each account, as its read said, and tells the clients when that
@@ -2092,22 +2104,29 @@ impl Hub {
         Ok(Message::Watermarks { own: self.store.watermark()?, copies: self.store.origin_watermarks()? })
     }
 
-    /// What the agents' accounts have used of their plans, read again once it is a few minutes
-    /// old. An account that can't be read keeps what it said last time, beside why.
-    pub async fn limits(&self, refresh: bool) -> Message {
-        let mut read = self.limits.lock().await;
-        if let Some((_, agents)) = read.as_ref().filter(|(at, _)| !refresh && at.elapsed() < LIMITS_STALE) {
-            return Message::Limits { agents: agents.clone() };
-        }
-        let before = read.as_ref().map(|(_, agents)| agents.clone()).unwrap_or_default();
+    /// What the agents' accounts had used of their plans when they were last read, read now if
+    /// they never were.
+    pub async fn limits(&self) -> Message {
+        let kept = self.limits.lock().await.clone();
+        let agents = match kept {
+            Some(agents) => agents,
+            None => self.read_limits().await,
+        };
+        Message::Limits { agents }
+    }
+
+    /// Reads what the agents' accounts have used of their plans. An account that can't be read
+    /// keeps what it said last time, beside why.
+    async fn read_limits(&self) -> Vec<AgentLimits> {
+        let mut kept = self.limits.lock().await;
         let accounts = self.agent_accounts().into_iter().map(|account| {
             let environment = self.account_environment(&account);
             (account, environment)
         });
-        let agents = limits::kept(limits::read(accounts.collect()).await, &before);
+        let agents = limits::kept(limits::read(accounts.collect()).await, kept.as_deref().unwrap_or_default());
         self.note_signed_in(&agents);
-        *read = Some((Instant::now(), agents.clone()));
-        Message::Limits { agents }
+        *kept = Some(agents.clone());
+        agents
     }
 
     /// Looks at the watched pull requests every so often and tells their threads' agents what
