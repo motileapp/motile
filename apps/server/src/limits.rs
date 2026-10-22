@@ -60,8 +60,8 @@ async fn read_account(account: &AgentAccount, environment: &Environment) -> Opti
 async fn read_claude(environment: &Environment) -> anyhow::Result<AgentLimits> {
     let answers = ask::claude(environment, &CLAUDE_ARGUMENTS, &["initialize", "get_usage"]).await?;
     let account = answers.get("initialize").cloned().unwrap_or(Ok(Value::Null)).unwrap_or_default();
-    let usage = answers.get("get_usage").cloned().ok_or_else(|| anyhow::anyhow!("Claude Code didn't say"))?;
-    Ok(claude_limits(&account["account"], &usage.map_err(anyhow::Error::msg)?))
+    let usage = answers.get("get_usage").cloned().unwrap_or_else(|| Err("Claude Code didn't say".to_string()));
+    Ok(claude_limits(&account["account"], usage))
 }
 
 /// Who is signed in to Claude Code in `environment`, and their plan.
@@ -76,18 +76,26 @@ fn claude_plan(account: &Value) -> Option<String> {
     account["subscriptionType"].as_str().map(|plan| plan.trim_start_matches("Claude ").to_string())
 }
 
-fn claude_limits(account: &Value, usage: &Value) -> AgentLimits {
-    let plan = claude_plan(account);
-    let windows = if usage["rate_limits_available"] == false { vec![] } else { claude_windows(&usage["rate_limits"]) };
-    AgentLimits {
+/// Who `account` is with what `usage` says, or with why it couldn't be read.
+fn claude_limits(account: &Value, usage: Result<Value, String>) -> AgentLimits {
+    let mut read = AgentLimits {
         agent: Agent::Claude,
         account_name: String::new(),
         account: account["email"].as_str().map(String::from),
-        plan: plan.or_else(|| usage["subscription_type"].as_str().map(capitalized)),
-        windows,
+        plan: claude_plan(account),
+        windows: vec![],
         reset_credits: 0,
         error: None,
+    };
+    let usage = match usage {
+        Ok(usage) => usage,
+        Err(error) => return AgentLimits { error: Some(error), ..read },
+    };
+    read.plan = read.plan.or_else(|| usage["subscription_type"].as_str().map(capitalized));
+    if usage["rate_limits_available"] != false {
+        read.windows = claude_windows(&usage["rate_limits"]);
     }
+    read
 }
 
 fn claude_windows(limits: &Value) -> Vec<LimitWindow> {
@@ -134,10 +142,11 @@ async fn read_codex(environment: &Environment) -> anyhow::Result<AgentLimits> {
     let account = answers.get("account/read").cloned().ok_or_else(|| anyhow::anyhow!("Codex didn't say"))?;
     let account = account.map_err(anyhow::Error::msg)?;
     let limits = answers.get("account/rateLimits/read").cloned().unwrap_or(Ok(Value::Null));
-    codex_limits(&account["account"], limits)
+    Ok(codex_limits(&account["account"], limits))
 }
 
-fn codex_limits(account: &Value, limits: Result<Value, String>) -> anyhow::Result<AgentLimits> {
+/// Who `account` is with what `limits` says, or with why it couldn't be read.
+fn codex_limits(account: &Value, limits: Result<Value, String>) -> AgentLimits {
     let plan = account["planType"].as_str().map(codex_plan);
     let mut read = AgentLimits {
         agent: Agent::Codex,
@@ -149,16 +158,19 @@ fn codex_limits(account: &Value, limits: Result<Value, String>) -> anyhow::Resul
         error: None,
     };
     if account["type"] != "chatgpt" {
-        return Ok(read);
+        return read;
     }
-    let limits = limits.map_err(anyhow::Error::msg)?;
+    let limits = match limits {
+        Ok(limits) => limits,
+        Err(error) => return AgentLimits { error: Some(error), ..read },
+    };
     let snapshot = match &limits["rateLimitsByLimitId"]["codex"] {
         Value::Null => &limits["rateLimits"],
         codex => codex,
     };
     read.windows = ["primary", "secondary"].iter().filter_map(|key| codex_window(&snapshot[key])).collect();
     read.reset_credits = limits["rateLimitResetCredits"]["availableCount"].as_u64().unwrap_or_default() as u32;
-    Ok(read)
+    read
 }
 
 fn codex_window(window: &Value) -> Option<LimitWindow> {
@@ -203,7 +215,7 @@ mod tests {
             {"kind": "weekly_scoped", "group": "weekly", "percent": 79, "resets_at": "2026-10-12T04:00:00+00:00", "severity": "warning",
              "scope": {"model": {"display_name": "Fable"}}}
         ]}});
-        let limits = claude_limits(&account, &usage);
+        let limits = claude_limits(&account, Ok(usage));
         assert_eq!(limits.account.as_deref(), Some("a@b.c"));
         assert_eq!(limits.plan.as_deref(), Some("Max"));
         let session = &limits.windows[0];
@@ -220,7 +232,7 @@ mod tests {
             "five_hour": {"utilization": 8.0, "resets_at": "2026-10-06T20:30:00+00:00"},
             "seven_day": {"utilization": 45.0, "resets_at": null}
         }});
-        let limits = claude_limits(&Value::Null, &usage);
+        let limits = claude_limits(&Value::Null, Ok(usage));
         assert_eq!(limits.plan.as_deref(), Some("Pro"));
         let labels: Vec<_> = limits.windows.iter().map(|window| (window.label.as_str(), window.used_percent)).collect();
         assert_eq!(labels, [("Session", 8.0), ("Weekly", 45.0)]);
@@ -228,8 +240,16 @@ mod tests {
 
     #[test]
     fn claude_code_with_an_api_key_has_no_windows() {
-        let limits = claude_limits(&json!({"email": "a@b.c"}), &json!({"rate_limits_available": false}));
+        let limits = claude_limits(&json!({"email": "a@b.c"}), Ok(json!({"rate_limits_available": false})));
         assert!(limits.windows.is_empty() && limits.error.is_none());
+    }
+
+    #[test]
+    fn claude_code_whose_usage_cant_be_read_still_says_who_is_signed_in() {
+        let account = json!({"email": "a@b.c", "subscriptionType": "Claude Max"});
+        let limits = claude_limits(&account, Err("It didn't answer in time.".into()));
+        assert_eq!((limits.account.as_deref(), limits.plan.as_deref()), (Some("a@b.c"), Some("Max")));
+        assert_eq!(limits.error.as_deref(), Some("It didn't answer in time."));
     }
 
     #[test]
@@ -243,7 +263,7 @@ mod tests {
             }},
             "rateLimitResetCredits": {"availableCount": 2}
         });
-        let limits = codex_limits(&account, Ok(limits)).unwrap();
+        let limits = codex_limits(&account, Ok(limits));
         assert_eq!(limits.plan.as_deref(), Some("Pro Lite"));
         assert_eq!(limits.reset_credits, 2);
         let windows: Vec<_> =
@@ -285,9 +305,11 @@ mod tests {
 
     #[test]
     fn codex_with_an_api_key_has_no_windows_and_a_failed_read_says_why() {
-        let api_key = codex_limits(&json!({"type": "apiKey"}), Err("unused".into())).unwrap();
+        let api_key = codex_limits(&json!({"type": "apiKey"}), Err("unused".into()));
         assert!(api_key.windows.is_empty() && api_key.error.is_none());
         let account = json!({"type": "chatgpt", "email": "a@b.c", "planType": "plus"});
-        assert!(codex_limits(&account, Err("backend unavailable".into())).is_err());
+        let failed = codex_limits(&account, Err("backend unavailable".into()));
+        assert_eq!(failed.account.as_deref(), Some("a@b.c"));
+        assert_eq!(failed.error.as_deref(), Some("backend unavailable"));
     }
 }

@@ -710,7 +710,7 @@ impl Hub {
     }
 
     /// Notes who is signed in to each account, as its read said, and tells the clients when that
-    /// changed.
+    /// changed. A read that failed before it said who is signed in changes nothing.
     fn note_signed_in(&self, read: &[AgentLimits]) {
         let kept = {
             let mut accounts = self.lock_agent_accounts();
@@ -719,6 +719,9 @@ impl Hub {
                 let found =
                     read.iter().find(|limits| limits.agent == account.agent && limits.account_name == account.name);
                 let Some(limits) = found else { continue };
+                if limits.error.is_some() && limits.account.is_none() {
+                    continue;
+                }
                 let (email, plan) = (limits.account.clone(), limits.plan.clone());
                 if (&account.email, &account.plan) != (&email, &plan) {
                     (account.email, account.plan) = (email, plan);

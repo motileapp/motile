@@ -13,9 +13,10 @@ use tokio::process::Command;
 
 use super::environment::Environment;
 
-const ANSWER_WITHIN: Duration = Duration::from_secs(30);
+const ANSWER_WITHIN: Duration = Duration::from_secs(60);
 
-/// What each request was answered, under its id, or what the CLI refused it with.
+/// What each request was answered, under its id, or what the CLI refused it with, or that it
+/// didn't answer in time.
 pub type Answers = HashMap<String, Result<Value, String>>;
 
 /// Claude Code's answers to the control requests of `subtypes`, each under its subtype, with
@@ -99,21 +100,26 @@ async fn converse(
     let stdout = child.stdout.take().ok_or_else(|| anyhow::anyhow!("no stdout"))?;
     let input: String = requests.iter().map(|request| format!("{request}\n")).collect();
     stdin.write_all(input.as_bytes()).await?;
-    let awaited =
-        requests.iter().filter(|request| request["id"].is_string() || request["request_id"].is_string()).count();
+    let awaited: Vec<&str> =
+        requests.iter().filter_map(|request| request["id"].as_str().or(request["request_id"].as_str())).collect();
+    let mut answers = Answers::new();
     let gather = async {
-        let mut answers = Answers::new();
         let mut lines = BufReader::new(stdout).lines();
-        while answers.len() < awaited {
+        while answers.len() < awaited.len() {
             let Some(line) = lines.next_line().await? else { break };
             let Ok(message) = serde_json::from_str::<Value>(&line) else { continue };
             answers.extend(answer(&message));
         }
-        anyhow::Ok(answers)
+        anyhow::Ok(())
     };
-    let answers = tokio::time::timeout(ANSWER_WITHIN, gather)
-        .await
-        .map_err(|_| anyhow::anyhow!("It didn't answer in time."))??;
+    match tokio::time::timeout(ANSWER_WITHIN, gather).await {
+        Ok(gathered) => gathered?,
+        Err(_) => {
+            for id in awaited {
+                answers.entry(id.to_string()).or_insert_with(|| Err("It didn't answer in time.".to_string()));
+            }
+        }
+    }
     drop(stdin);
     Ok(answers)
 }
