@@ -53,6 +53,19 @@ pub struct Marks {
     pub copies: HashMap<String, Watermark>,
 }
 
+impl Marks {
+    /// The source of `transfer` handed out its log up to `mark`, which can be further than it
+    /// said at the start of the round, while its agents work.
+    fn went_to(&mut self, transfer: &Transfer, mark: &Watermark) {
+        let log = match transfer.is_from_origin() {
+            true => Some(&mut self.own),
+            false => self.copies.get_mut(&transfer.origin),
+        };
+        let Some(log) = log.filter(|log| log.log_id == mark.log_id) else { return };
+        log.change = log.change.max(mark.change);
+    }
+}
+
 /// One server's log carried to another, starting after `after`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Transfer {
@@ -260,7 +273,7 @@ pub async fn round<P: Ask>(
                     continue;
                 };
                 match carry(source, target, &transfer, origin, report.as_ref()).await {
-                    Ok(Some(mark)) => reached.push((transfer.origin.clone(), mark)),
+                    Ok(Some(mark)) => reached.push((transfer, mark)),
                     Ok(None) => {}
                     Err(error) => {
                         tracing::warn!(origin = transfer.origin, "couldn't copy a server's threads: {error:#}");
@@ -274,11 +287,14 @@ pub async fn round<P: Ask>(
     }
     let mut changed = HashSet::new();
     while let Some(Ok((target, reached, failure))) = carried.join_next().await {
-        for (origin, mark) in reached {
-            if let Some(marks) = marks.get_mut(&target) {
-                marks.copies.insert(origin.clone(), mark);
+        for (transfer, mark) in reached {
+            if let Some(source) = marks.get_mut(&transfer.source) {
+                source.went_to(&transfer, &mark);
             }
-            changed.insert(origin);
+            if let Some(marks) = marks.get_mut(&target) {
+                marks.copies.insert(transfer.origin.clone(), mark);
+            }
+            changed.insert(transfer.origin);
         }
         if let Some(failure) = failure {
             failed.insert(target, failure);
@@ -389,6 +405,45 @@ mod tests {
         let plan = plan(&marks, &origins(&["a", "b"]), true);
 
         assert_eq!(transfers(&plan), vec![("a", "a", "b", 4, false)]);
+    }
+
+    /// A server whose own log is at `own` when asked, and at `grown` by the time its changes are read.
+    #[derive(Clone)]
+    struct Busy {
+        own: Watermark,
+        grown: u64,
+    }
+
+    impl Ask for Busy {
+        async fn ask(&self, request: Request) -> anyhow::Result<Message> {
+            Ok(match request {
+                Request::Watermarks => Message::Watermarks { own: self.own.clone(), copies: Vec::new() },
+                Request::Changes { after, .. } => Message::Changes {
+                    batch: ChangeBatch {
+                        log_id: self.own.log_id.clone(),
+                        after,
+                        up_to: self.grown,
+                        more: false,
+                        data: String::new(),
+                    },
+                },
+                _ => Message::Ok,
+            })
+        }
+    }
+
+    #[tokio::test]
+    async fn a_log_that_grows_during_a_round_leaves_its_copy_whole() {
+        let origin = |name: &str| (name.to_string(), Origin { name: name.to_string(), platform: "linux".into() });
+        let peers = HashMap::from([
+            ("a".to_string(), Busy { own: mark("la", 5), grown: 8 }),
+            ("b".to_string(), Busy { own: mark("lb", 3), grown: 3 }),
+        ]);
+
+        let round = round(peers, HashMap::from([origin("a"), origin("b")]), false, |_| {}).await;
+
+        assert_eq!(round.marks["b"].copies["a"], mark("la", 8));
+        assert!(plan(&round.marks, &origins(&["a", "b"]), false).is_empty());
     }
 
     #[test]
