@@ -1369,7 +1369,7 @@ impl Core {
             return Some(SyncView { state: SyncState::Failed, text, error: Some(failure.error.clone()), synced_at });
         }
         if self.relay.waiting.contains(id) {
-            return view(SyncState::Waiting, "Metered network");
+            return view(SyncState::Waiting, "Paused until Wi-Fi");
         }
         let peers = self.peers();
         if !others.iter().any(|other| other.removed || peers.contains_key(&other.device.public_key)) {
@@ -1451,10 +1451,11 @@ impl Core {
         self.relay.running = false;
         self.relay.copying.clear();
         let origins: Vec<String> = self.servers.iter().map(|server| server.device.public_key.clone()).collect();
-        let behind = relay::plan(&round.marks, &origins, false);
-        self.relay.waiting = behind.into_iter().map(|transfer| transfer.target).collect();
+        let behind: HashSet<String> =
+            relay::plan(&round.marks, &origins, false).into_iter().map(|transfer| transfer.target).collect();
+        self.relay.waiting = if self.relay.metered { behind.clone() } else { HashSet::new() };
         for server_id in round.marks.keys() {
-            if !round.failed.contains_key(server_id) && !self.relay.waiting.contains(server_id) {
+            if !round.failed.contains_key(server_id) && !behind.contains(server_id) {
                 self.relay.synced_at.insert(server_id.clone(), now());
             }
         }
@@ -2211,6 +2212,7 @@ impl Core {
             Command::SetMetered { metered } => {
                 let was = std::mem::replace(&mut self.relay.metered, metered);
                 if was && !metered {
+                    self.relay.waiting.clear();
                     self.schedule_relay(RELAY_SOON);
                 }
                 self.reply(id, Ok(json!({})));
