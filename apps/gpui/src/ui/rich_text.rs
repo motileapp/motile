@@ -15,6 +15,7 @@ use gpui_kit::prelude::*;
 use gpui_kit::*;
 
 type OnLink = Rc<dyn Fn(&str, &mut Window, &mut App)>;
+type LinkPress = Rc<std::cell::Cell<Option<Point<Pixels>>>>;
 
 pub struct RichText {
     id: ElementId,
@@ -85,10 +86,13 @@ fn scope_of(row: Option<u64>, cx: &App) -> TextSelectionScopeId {
     }
 }
 
-/// What a `RichText` keeps between frames: its part in the selection and the text it said it has.
-struct Kept {
+/// What a `RichText` keeps between frames: its part in the selection, the text it said it has and
+/// where a press on a link fell.
+#[derive(Clone)]
+pub struct Kept {
     handle: TextSelectionHandle,
     text: SharedString,
+    link_press: LinkPress,
 }
 
 impl RichText {
@@ -276,7 +280,7 @@ impl IntoElement for RichText {
 }
 
 impl Element for RichText {
-    type RequestLayoutState = TextSelectionHandle;
+    type RequestLayoutState = Kept;
     type PrepaintState = Hitbox;
 
     fn id(&self) -> Option<ElementId> {
@@ -294,24 +298,24 @@ impl Element for RichText {
         window: &mut Window,
         cx: &mut App,
     ) -> (LayoutId, Self::RequestLayoutState) {
-        let (handle, changed) =
+        let (kept, changed) =
             window.with_element_state(global_id.expect("RichText has an id"), |kept: Option<Kept>, _| {
                 let kept = kept.unwrap_or_else(|| {
                     let handle = TextSelectionHandle::new(self.text.clone(), cx);
                     // Selecting takes the keys from a field, as a text view of the Mac's becomes the
                     // first responder, so that ⌘C copies the selection.
                     handle.focus_with(|window, cx| window.focus(&selection_focus(cx), cx), cx);
-                    Kept { handle, text: self.text.clone() }
+                    Kept { handle, text: self.text.clone(), link_press: Rc::default() }
                 });
                 let changed = kept.text != self.text;
-                let handle = kept.handle.clone();
-                ((handle, changed), Kept { text: self.text.clone(), ..kept })
+                let kept = Kept { text: self.text.clone(), ..kept };
+                ((kept.clone(), changed), kept)
             });
         if changed {
-            handle.set_fallback_copy_text(self.text.to_string(), cx);
+            kept.handle.set_fallback_copy_text(self.text.to_string(), cx);
         }
         let (layout_id, ()) = self.styled.request_layout(global_id, inspector_id, window, cx);
-        (layout_id, handle)
+        (layout_id, kept)
     }
 
     fn prepaint(
@@ -319,7 +323,7 @@ impl Element for RichText {
         global_id: Option<&GlobalElementId>,
         inspector_id: Option<&InspectorElementId>,
         bounds: Bounds<Pixels>,
-        handle: &mut Self::RequestLayoutState,
+        kept: &mut Self::RequestLayoutState,
         window: &mut Window,
         cx: &mut App,
     ) -> Self::PrepaintState {
@@ -330,8 +334,8 @@ impl Element for RichText {
             .with_scope(scope_of(self.row, cx))
             .with_document_order(self.order)
             .with_text_bounds(vec![bounds])
-            .with_rendered_element(handle, window, cx);
-        handle.register(registration, window, cx);
+            .with_rendered_element(&kept.handle, window, cx);
+        kept.handle.register(registration, window, cx);
         hitbox
     }
 
@@ -340,15 +344,16 @@ impl Element for RichText {
         global_id: Option<&GlobalElementId>,
         inspector_id: Option<&InspectorElementId>,
         bounds: Bounds<Pixels>,
-        handle: &mut Self::RequestLayoutState,
+        kept: &mut Self::RequestLayoutState,
         hitbox: &mut Self::PrepaintState,
         window: &mut Window,
         cx: &mut App,
     ) {
         let layout = self.styled.layout().clone();
-        let projection = handle.update_runs(&[TextSelectionRun::new(self.text.clone(), layout.clone(), bounds)], cx);
+        let projection =
+            kept.handle.update_runs(&[TextSelectionRun::new(self.text.clone(), layout.clone(), bounds)], cx);
         window.set_cursor_style(CursorStyle::IBeam, hitbox);
-        self.listen_for_presses(handle, hitbox, bounds, window);
+        self.listen_for_presses(&kept.handle, hitbox, bounds, window);
         let glyphs =
             self.tint_glyphs.unwrap_or_else(|| window.text_style().font_size.to_pixels(window.rem_size()) * 1.22);
         for range in self.tinted.clone() {
@@ -385,7 +390,7 @@ impl Element for RichText {
         }
         let Some(on_link) = self.on_link.clone() else { return };
         let hitbox = hitbox.clone();
-        let pressed: Rc<std::cell::Cell<Option<Point<Pixels>>>> = Rc::default();
+        let pressed = kept.link_press.clone();
         let down = pressed.clone();
         let down_link = link_at.clone();
         window.on_mouse_event(move |event: &MouseDownEvent, phase, window, _| {
@@ -398,10 +403,10 @@ impl Element for RichText {
             }
         });
         window.on_mouse_event(move |event: &MouseUpEvent, phase, window, cx| {
-            let Some(start) = pressed.take() else { return };
             if !phase.bubble() || event.button != MouseButton::Left {
                 return;
             }
+            let Some(start) = pressed.take() else { return };
             // A drag selects; only a click opens the link.
             let moved = (event.position.x - start.x).abs() + (event.position.y - start.y).abs();
             if moved > px(4.) {
@@ -652,8 +657,91 @@ pub fn prose_blocks(id: &str, prepared: &PreparedProse, size: f32, surface: them
 
 #[cfg(test)]
 mod tests {
+    use core::prelude::v1::test;
+    use std::cell::RefCell;
+
+    use super::*;
+
     #[test]
     fn a_search_takes_the_words_as_they_are_typed() {
         assert_eq!(super::search_url("café  au\nlait?"), "https://www.google.com/search?q=caf%C3%A9+au+lait%3F");
+    }
+
+    struct Linked {
+        opened: Rc<RefCell<Vec<String>>>,
+    }
+
+    impl Render for Linked {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            let opened = self.opened.clone();
+            div().font_family(crate::theme::UI_FONT).child(
+                RichText::new("linked", "open the site")
+                    .links(vec![(5..13, "https://motile.app".into())], move |url, _, _| {
+                        opened.borrow_mut().push(url.into())
+                    }),
+            )
+        }
+    }
+
+    #[test]
+    fn a_link_opens_when_the_window_redraws_while_it_is_pressed() {
+        let Some(text) = crate::transcript::canvas::tests::platform_text() else {
+            eprintln!("skipped: GPUI has no text system here");
+            return;
+        };
+        let mut cx = HeadlessAppContext::new(text);
+        let fonts = crate::assets::FONTS.iter().map(|bytes| std::borrow::Cow::Borrowed(*bytes)).collect();
+        cx.update(|cx| {
+            gpui_kit::init(cx);
+            cx.text_system().add_fonts(fonts)
+        })
+        .expect("the fonts");
+        crate::fonts::load();
+        let opened = Rc::new(RefCell::new(Vec::new()));
+        let window = cx
+            .open_window(size(px(400.), px(100.)), |window, cx| {
+                crate::theme::apply(true, window, cx);
+                cx.new(|_| Linked { opened: opened.clone() })
+            })
+            .expect("a window");
+        let draw = |cx: &mut HeadlessAppContext| {
+            cx.update_window(window.into(), |_, window, cx| {
+                window.refresh();
+                window.draw(cx).clear(cx);
+            })
+            .expect("a frame");
+        };
+        draw(&mut cx);
+        let on_link = point(px(60.), px(8.));
+        cx.update_window(window.into(), |_, window, cx| {
+            window.dispatch_event(
+                PlatformInput::MouseMove(MouseMoveEvent { position: on_link, ..Default::default() }),
+                cx,
+            );
+            window.dispatch_event(
+                PlatformInput::MouseDown(MouseDownEvent {
+                    position: on_link,
+                    button: MouseButton::Left,
+                    click_count: 1,
+                    ..Default::default()
+                }),
+                cx,
+            );
+        })
+        .expect("a press");
+        draw(&mut cx);
+        cx.update_window(window.into(), |_, window, cx| {
+            window.dispatch_event(
+                PlatformInput::MouseUp(MouseUpEvent {
+                    position: on_link,
+                    button: MouseButton::Left,
+                    click_count: 1,
+                    ..Default::default()
+                }),
+                cx,
+            );
+        })
+        .expect("a release");
+        assert_eq!(*opened.borrow(), ["https://motile.app"]);
     }
 }
