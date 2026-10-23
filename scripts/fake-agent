@@ -400,6 +400,8 @@ def title_answer():
         title = "Screenshot of the Landing Page"
     if "show the ui html" in message:
         title = "Catch the Dot"
+    if "show the ui map" in message:
+        title = "San Francisco, Your Way"
     if "send the report" in message:
         title = "Weekly Signups Report"
     if "show the recording" in message:

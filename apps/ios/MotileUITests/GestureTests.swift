@@ -246,18 +246,7 @@ final class GestureTests: XCTestCase {
     /// where it is and the sidebar doesn't come in. One beside the page scrolls the transcript. In a
     /// thread of its own, deleted after, so that the others don't find a canvas where they swipe.
     func testADragOnAProgramsCanvasIsThePagesAndOneBesideItScrollsTheTranscript() {
-        addTeardownBlock { [self] in
-            app.buttons["Threads"].tap()
-            guard let thread = row("Catch the Dot") else { return }
-            thread.press(forDuration: 1.2)
-            for _ in 0..<2 {
-                let delete = app.buttons["Delete"].firstMatch
-                XCTAssertTrue(shown(delete))
-                delete.tap()
-            }
-            let rows = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "Catch the Dot"))
-            XCTAssertTrue(rows.firstMatch.waitForNonExistence(timeout: 5))
-        }
+        addTeardownBlock { [self] in deleteThread("Catch the Dot") }
         app.buttons["Threads"].tap()
         XCTAssertTrue(shown(newThread))
         newThread.tap()
@@ -275,6 +264,43 @@ final class GestureTests: XCTestCase {
         let beside = page.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 1)).withOffset(CGVector(dx: 0, dy: 40))
         beside.press(forDuration: 0.1, thenDragTo: beside.withOffset(CGVector(dx: 0, dy: 160)), withVelocity: .slow, thenHoldForDuration: 0)
         XCTAssertGreaterThan(title.frame.minY, top + 50)
+    }
+
+    /// A finger dragged on a map pans it: the transcript stays where it is and the sidebar doesn't
+    /// come in. In a thread of its own, deleted after.
+    func testAFingerDraggedOnAMapPansItAndLeavesTheTranscript() {
+        addTeardownBlock { [self] in deleteThread("San Francisco, Your Way") }
+        app.buttons["Threads"].tap()
+        XCTAssertTrue(shown(newThread))
+        newThread.tap()
+        send("show the ui map")
+        send("show the ui map")
+        guard let map = lastShown(app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "Map"))),
+            let title = lastShown(app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "San Francisco, your way")))
+        else { return XCTFail("no map") }
+        let top = settled(title)
+        let pin = { self.lastShown(self.app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "Coit Tower")))?.frame.midY ?? 0 }
+        let before = pin()
+        let start = map.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.4))
+        start.press(forDuration: 0.1, thenDragTo: start.withOffset(CGVector(dx: 0, dy: 80)), withVelocity: .slow, thenHoldForDuration: 0)
+        sleep(2)
+        XCTAssertEqual(title.frame.minY, top, accuracy: 1)
+        XCTAssertGreaterThan(pin(), before + 40)
+        start.press(forDuration: 0.1, thenDragTo: start.withOffset(CGVector(dx: 160, dy: 0)), withVelocity: .slow, thenHoldForDuration: 0)
+        XCTAssertFalse(newThread.exists && newThread.isHittable)
+    }
+
+    private func deleteThread(_ title: String) {
+        app.buttons["Threads"].tap()
+        guard let thread = row(title) else { return }
+        thread.press(forDuration: 1.2)
+        for _ in 0..<2 {
+            let delete = app.buttons["Delete"].firstMatch
+            XCTAssertTrue(shown(delete))
+            delete.tap()
+        }
+        let rows = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", title))
+        XCTAssertTrue(rows.firstMatch.waitForNonExistence(timeout: 5))
     }
 
     /// Where the element's top is once the rows around it stop moving.

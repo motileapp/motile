@@ -1,10 +1,9 @@
 #if os(iOS)
 import MapLibre
 import UIKit
-import UIKit.UIGestureRecognizerSubclass
 
-/// The iOS app's map: MapLibre Native with the bundled style. One finger scrolls the transcript;
-/// two pan and pinch the map. It never turns or tilts.
+/// The iOS app's map: MapLibre Native with the bundled style. A finger pans it and two pinch it,
+/// leaving the transcript and the drawer around it be. It never turns or tilts.
 final class MapEngineView: UIView, MapEngine, MLNMapViewDelegate, MLNMapSnapshotterDelegate, UIGestureRecognizerDelegate {
     private static let empty: [String: Any] = ["type": "FeatureCollection", "features": [[String: Any]]()]
     private static let gestures: MLNCameraChangeReason = [
@@ -48,11 +47,9 @@ final class MapEngineView: UIView, MapEngine, MLNMapViewDelegate, MLNMapSnapshot
         map.isPitchEnabled = false
         map.alpha = 0
         map.setCenter(CLLocationCoordinate2D(latitude: camera.lat, longitude: camera.lng), zoomLevel: camera.zoom, animated: false)
-        for case let pan as UIPanGestureRecognizer in map.gestureRecognizers ?? [] { pan.minimumNumberOfTouches = 2 }
         let tap = UITapGestureRecognizer(target: self, action: #selector(tapped(_:)))
         tap.delegate = self
         map.addGestureRecognizer(tap)
-        map.addGestureRecognizer(TwoFingerGate())
         addSubview(map)
     }
 
@@ -211,44 +208,6 @@ final class MapEngineView: UIView, MapEngine, MLNMapViewDelegate, MLNMapSnapshot
     private static func shape(_ object: [String: Any]) -> MLNShape? {
         guard let data = try? JSONSerialization.data(withJSONObject: object) else { return nil }
         return try? MLNShape(data: data, encoding: String.Encoding.utf8.rawValue)
-    }
-}
-
-/// Lets one finger scroll the transcript over the map: once a second finger lands on it, the
-/// scroll that the first started is called off, so the two pan and pinch the map.
-private final class TwoFingerGate: UIGestureRecognizer {
-    override init(target: Any?, action: Selector?) {
-        super.init(target: target, action: action)
-        cancelsTouchesInView = false
-        delaysTouchesBegan = false
-        delaysTouchesEnded = false
-    }
-
-    convenience init() {
-        self.init(target: nil, action: nil)
-    }
-
-    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent) {
-        guard let view, let scroll = enclosingScroll else { return }
-        let fingers = event.allTouches?.filter { $0.view?.isDescendant(of: view) == true && $0.phase != .ended } ?? []
-        guard fingers.count > 1 else { return }
-        scroll.panGestureRecognizer.isEnabled = false
-        scroll.panGestureRecognizer.isEnabled = true
-    }
-
-    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent) {
-        guard event.allTouches?.allSatisfy({ $0.phase == .ended || $0.phase == .cancelled }) == true else { return }
-        state = .failed
-    }
-
-    override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent) {
-        state = .failed
-    }
-
-    override func canPrevent(_ other: UIGestureRecognizer) -> Bool { false }
-
-    private var enclosingScroll: UIScrollView? {
-        sequence(first: view?.superview, next: { $0?.superview }).lazy.compactMap { $0 as? UIScrollView }.first
     }
 }
 

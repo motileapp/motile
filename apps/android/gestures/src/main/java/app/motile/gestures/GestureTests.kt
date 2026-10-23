@@ -305,6 +305,67 @@ class GestureTests {
         assertTrue(waitForKeyboard(true))
     }
 
+    /** A finger dragged on a map pans it: the transcript stays where it is and the sidebar doesn't come in. */
+    @Test
+    fun aFingerDraggedOnAMapPansItAndLeavesTheTranscript() {
+        try {
+            openSidebar()
+            device.findObject(newThread).click()
+            assertTrue(gone(newThread))
+            send("show the ui map")
+            send("show the ui map")
+            val map = lastShown(By.desc("Map")) ?: return fail("no map")
+            val title = lastShown(By.text("San Francisco, your way")) ?: return fail("no title")
+            val top = title.visibleBounds.top
+            val before = lastShown(By.desc("Coit Tower"))?.visibleBounds?.centerY() ?: return fail("no pin")
+            val bounds = map.visibleBounds
+            val x = bounds.centerX()
+            val y = bounds.top + bounds.height() * 2 / 5
+            device.swipe(x, y, x, y + bounds.height() / 4, 40)
+            Thread.sleep(2_000)
+            assertEquals(top, title.visibleBounds.top)
+            val after = lastShown(By.desc("Coit Tower"))?.visibleBounds?.centerY() ?: return fail("no pin")
+            assertTrue(after > before + bounds.height() / 8)
+            device.swipe(bounds.left + bounds.width() / 10, y, bounds.right - bounds.width() / 10, y, 40)
+            assertFalse(shown(newThread, 1_000))
+        } finally {
+            deleteThread("San Francisco, Your Way")
+        }
+    }
+
+    /** Sends a message and waits for its reply. */
+    private fun send(message: String) {
+        val composer = device.wait(Until.findObject(By.clazz("android.widget.EditText")), 10_000) ?: return fail("no composer")
+        composer.click()
+        type(message.replace(" ", "%s"))
+        device.findObject(By.desc("Send")).click()
+        shown(By.desc("Stop"), 5_000)
+        assertTrue(gone(By.desc("Stop"), 30_000))
+        device.pressBack()
+        waitForKeyboard(false)
+        Thread.sleep(2_000)
+    }
+
+    /** The last of the views on the screen, once one is. */
+    private fun lastShown(selector: BySelector): UiObject2? {
+        repeat(30) {
+            device.findObjects(selector).lastOrNull { it.visibleBounds.height() > 0 }?.let { return it }
+            Thread.sleep(1_000)
+        }
+        return null
+    }
+
+    private fun deleteThread(title: String) {
+        openSidebar()
+        val thread = row(title) ?: return
+        thread.longClick()
+        repeat(2) {
+            val delete = device.wait(Until.findObject(By.text("Delete")), 3_000) ?: return
+            delete.click()
+        }
+        assertTrue(gone(By.textContains(title), 5_000))
+    }
+
     private fun searchField(): UiObject2 =
         device.wait(Until.findObject(By.desc("Search")), 3_000) ?: device.wait(Until.findObject(By.text("Search")), 3_000)
 
