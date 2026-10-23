@@ -23,9 +23,15 @@ const YOUTUBE_CSP: &str = "default-src 'none'; style-src 'unsafe-inline'; frame-
 /// The address the player's page is loaded at: YouTube's player wants to know the page it plays in.
 pub const YOUTUBE_BASE: &str = "https://motile.app/";
 
-/// The name of the one channel a page has to the client, which only carries its height.
+/// The name of the one channel a page has to the client: its height, and whose a touch or a wheel is.
 pub const HANDLER: &str = "motile";
 pub const HEIGHT_MESSAGE: &str = "iui-html-view-height";
+/// The page takes the finger on it (`hold`), as `touch-action` or `preventDefault()` say, so the
+/// transcript doesn't scroll under it, until the last finger lifts (`hold: false`).
+pub const HOLD_MESSAGE: &str = "iui-html-view-hold";
+/// Whether the page took a wheel event (`taken`): prevented it, or scrolled with it. The Mac app
+/// hands the rest of the gesture to the transcript when it didn't.
+pub const WHEEL_MESSAGE: &str = "iui-html-view-wheel";
 /// Esc in the page, for the GPUI app, whose overlay can't hear the keys the web view takes.
 pub const CLOSE_MESSAGE: &str = "iui-html-view-close";
 
@@ -34,6 +40,16 @@ pub const MIN_HEIGHT: f32 = 80.;
 pub const MAX_HEIGHT: f32 = 2400.;
 /// Until the page has reported.
 pub const START_HEIGHT: f32 = 360.;
+/// What a page leaves of the window above and below it, so that the transcript can always be
+/// scrolled past it: a share of the window's height, at least the least.
+pub const WINDOW_MARGIN: f32 = 0.2;
+pub const LEAST_MARGIN: f32 = 120.;
+
+/// The tallest a page's view is in a window `window` tall; a taller page scrolls inside it.
+pub fn max_height(window: f32) -> f32 {
+    let margin = (window * WINDOW_MARGIN).max(LEAST_MARGIN);
+    (window - 2. * margin).clamp(MIN_HEIGHT, MAX_HEIGHT)
+}
 
 /// How a page reaches its client.
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
@@ -120,12 +136,13 @@ pub fn html_page(html: &str, style: &PageStyle, bridge: Bridge) -> String {
     format!(
         "<!doctype html><meta charset=\"utf-8\"><meta http-equiv=\"Content-Security-Policy\" content=\"{CSP}\">\
          <meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">\
-         <style>:root{{color-scheme:{scheme}}}html,body{{margin:0}}{background}body{{font:{font}{color}}}</style>\
+         <style>:root{{color-scheme:{scheme}}}html,body{{margin:0}}html{{overscroll-behavior:none}}{background}body{{font:{font}{color}}}</style>\
          {reporter}{html}"
     )
 }
 
-/// The script that reports the page's height whenever it changes, by `bridge`.
+/// The script that reports the page's height whenever it changes, by `bridge`, and where there are
+/// fingers or a wheel, whose they are.
 pub fn reporter(bridge: Bridge) -> String {
     let post = match bridge {
         Bridge::WebKit => format!("window.webkit.messageHandlers.{HANDLER}.postMessage(JSON.stringify(m))"),
@@ -139,13 +156,41 @@ pub fn reporter(bridge: Bridge) -> String {
         ),
         _ => String::new(),
     };
+    let touch = match bridge {
+        Bridge::WebKit | Bridge::Android => TOUCH.replace("HOLD", HOLD_MESSAGE),
+        _ => String::new(),
+    };
+    let wheel = match bridge {
+        Bridge::WebKit => WHEEL.replace("WHEEL", WHEEL_MESSAGE),
+        _ => String::new(),
+    };
     format!(
-        "(function(){{var last=0;function post(m){{try{{{post}}}catch(e){{}}}}\
+        "(function(){{var last=0,quiet={{capture:true,passive:true}};function post(m){{try{{{post}}}catch(e){{}}}}\
          function send(){{var h=Math.ceil(document.documentElement.getBoundingClientRect().height);\
          if(Math.abs(h-last)>1){{last=h;post({{type:\"{HEIGHT_MESSAGE}\",height:h}})}}}}\
-         {close}addEventListener(\"load\",send);new ResizeObserver(send).observe(document.documentElement);send()}})()"
+         {close}{touch}{wheel}addEventListener(\"load\",send);new ResizeObserver(send).observe(document.documentElement);send()}})()"
     )
 }
+
+/// A finger on an element whose `touch-action` keeps the page from panning up and down, or one
+/// the page prevented, is the page's.
+const TOUCH: &str = "var held=false;function hold(h){if(h!==held){held=h;post({type:\"HOLD\",hold:h})}}\
+    function pinned(t){for(var e=t;e&&e.nodeType===1;e=e.parentElement){var a=getComputedStyle(e).touchAction;\
+    if(a!==\"auto\"&&a!==\"manipulation\"&&!/pan-y|pan-up|pan-down/.test(a))return true}return false}\
+    function prevented(e){setTimeout(function(){if(e.defaultPrevented)hold(true)},0)}\
+    function lifted(e){if(!e.touches.length)hold(false)}\
+    addEventListener(\"touchstart\",function(e){if(pinned(e.target))hold(true);prevented(e)},quiet);\
+    addEventListener(\"touchmove\",prevented,quiet);addEventListener(\"touchend\",lifted,quiet);\
+    addEventListener(\"touchcancel\",lifted,quiet);";
+
+/// A wheel the page prevented, or that scrolls something in it that way, is the page's.
+const WHEEL: &str = "function scrolls(t,x,y){var up=Math.abs(y)>=Math.abs(x),d=up?y:x,root=document.scrollingElement;\
+    for(var e=t;e&&e.nodeType===1;e=e.parentElement){var s=getComputedStyle(e);\
+    if(e!==root&&!/auto|scroll|overlay/.test(up?s.overflowY:s.overflowX))continue;\
+    var at=up?e.scrollTop:e.scrollLeft,room=up?e.scrollHeight-e.clientHeight:e.scrollWidth-e.clientWidth;\
+    if(room>1&&(d>0?at<room-1:d<0&&at>0))return true}return false}\
+    addEventListener(\"wheel\",function(e){var s=scrolls(e.target,e.deltaX,e.deltaY);\
+    setTimeout(function(){post({type:\"WHEEL\",taken:s||e.defaultPrevented})},0)},quiet);";
 
 /// The player of an embed address core resolved, filling its page.
 pub fn youtube_page(url: &str, title: &str, autoplay: bool) -> String {
@@ -280,15 +325,29 @@ mod tests {
         let android = html_page("", &style(), Bridge::Android);
         assert!(android.contains("motile.postMessage(JSON.stringify(m))"));
         assert!(!android.contains(CLOSE_MESSAGE));
+        assert!(android.contains(HOLD_MESSAGE));
+        assert!(!android.contains(WHEEL_MESSAGE));
         let wry = html_page("", &style(), Bridge::Wry);
         assert!(wry.contains("window.ipc.postMessage"));
         assert!(wry.contains(CLOSE_MESSAGE));
+        assert!(!wry.contains(HOLD_MESSAGE));
+        let webkit = reporter(Bridge::WebKit);
+        assert!(webkit.contains(HOLD_MESSAGE) && webkit.contains(WHEEL_MESSAGE));
         let webkit = html_page("", &style(), Bridge::WebKit);
         assert!(!webkit.contains("<script>"), "WebKit's reporter runs in its own world");
         assert!(!html_page("", &style(), Bridge::Browser).contains("<script>"));
         let page = page(&PageRequest::Html { html: String::new(), bridge: Bridge::WebKit, style: style() });
         assert!(page.script.unwrap().contains("window.webkit.messageHandlers.motile.postMessage"));
         assert_eq!(page.base, None);
+    }
+
+    #[test]
+    fn a_page_leaves_room_to_scroll_past_it() {
+        assert_eq!(max_height(956.), 956. - 2. * 956. * 0.2);
+        assert_eq!(max_height(800.), 480.);
+        assert_eq!(max_height(440.), 200.);
+        assert_eq!(max_height(200.), MIN_HEIGHT);
+        assert_eq!(max_height(10_000.), MAX_HEIGHT);
     }
 
     #[test]

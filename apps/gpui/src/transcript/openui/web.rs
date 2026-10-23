@@ -28,7 +28,8 @@ fn reported(key: &str, app: &App) -> Option<f32> {
     app.try_global::<Heights>().and_then(|heights| heights.0.get(key).copied())
 }
 
-/// The program's page: its `height`, else what the page reported, 360 until it does.
+/// The program's page: its `height`, else what the page reported, 360 until it does, leaving room
+/// above and below it in the window to scroll the transcript past it.
 #[allow(clippy::too_many_arguments)]
 pub fn html_view(
     element: Stateful<Div>,
@@ -44,7 +45,8 @@ pub fn html_view(
 ) -> Stateful<Div> {
     let c = colors(app);
     let key = format!("{}/{id}", cx.row);
-    let height = height.or_else(|| reported(&key, app)).unwrap_or(web::START_HEIGHT);
+    let height =
+        height.or_else(|| reported(&key, app)).unwrap_or(web::START_HEIGHT).min(web::max_height(cx.window_height));
     let card = element
         .relative()
         .w_full()

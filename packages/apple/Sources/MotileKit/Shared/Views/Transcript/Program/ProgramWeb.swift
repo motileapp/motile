@@ -12,14 +12,22 @@ enum ProgramWeb {
     static let spinnerGap: CGFloat = 8
     static let waiting = "Preparing the interactive view"
 
+    /// The tallest a page is in a window `window` tall (`web::max_height`).
+    static func maxHeight(window: CGFloat) -> CGFloat {
+        let margin = max(120, window * 0.2)
+        return min(max(window - 2 * margin, 80), 2400)
+    }
+
     static func youTube(_ node: UiNode, _ video: UiKind.YouTube, width: CGFloat, env: ProgramEnv) -> ProgramBox {
         let height = video.url == nil ? 0 : (width * 9 / 16).rounded()
         return ProgramBox(node, size: CGSize(width: width, height: height), surface: env.surface)
     }
 
-    /// Its own height, else the one its page reported in this row, else the start.
+    /// Its own height, else the one its page reported in this row, else the start, leaving room
+    /// above and below it in the window to scroll the transcript past it.
     static func htmlView(_ node: UiNode, _ view: UiKind.HtmlView, width: CGFloat, env: ProgramEnv) -> ProgramBox {
-        let height = view.height.map { CGFloat($0) } ?? WebHeights.height(row: env.row, node: node.id) ?? startHeight
+        let wanted = view.height.map { CGFloat($0) } ?? WebHeights.height(row: env.row, node: node.id) ?? startHeight
+        let height = min(wanted, maxHeight(window: env.window.height))
         let size = CGSize(width: width, height: height)
         guard view.streaming else { return ProgramBox(node, size: size, surface: env.surface) }
         let look = ProgramStyle.look(.small, narrow: env.narrow)

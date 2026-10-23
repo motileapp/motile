@@ -205,4 +205,5 @@ struct ProgramCacheKey: Hashable {
     let surface: Surface
     let align: Int
     let sized: Bool
+    let window: CGSize
 }

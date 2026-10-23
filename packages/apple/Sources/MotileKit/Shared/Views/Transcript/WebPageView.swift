@@ -24,7 +24,14 @@ struct WebPage: Decodable {
     let handler: String
     let height: Heights
 
-    static let heightMessage = "iui-html-view-height"
+    /// What the page's reporter says.
+    enum Message {
+        case height(CGFloat)
+        /// The page takes the fingers on it, until it lets go.
+        case hold(Bool)
+        /// The page took the last wheel event, or didn't.
+        case wheel(taken: Bool)
+    }
 
     /// A program's page in the text style around it: `color` its text, `background` behind it, as
     /// they are in the dark or the light.
@@ -54,12 +61,21 @@ struct WebPage: Decodable {
         return try? JSONDecoder().decode(WebPage.self, from: Data(String(cString: answer).utf8))
     }
 
-    /// The height a message of the reporter gives, within the page's bounds.
-    func height(from body: Any) -> CGFloat? {
+    /// A message of the reporter, with a height within the page's bounds.
+    func message(from body: Any) -> Message? {
         guard let text = body as? String, let data = text.data(using: .utf8) else { return nil }
         guard let message = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
-        guard message["type"] as? String == Self.heightMessage, let value = message["height"] as? Double, value.isFinite else { return nil }
-        return Swift.min(Swift.max(CGFloat(value), height.min), height.max)
+        switch message["type"] as? String {
+        case "iui-html-view-height":
+            guard let value = message["height"] as? Double, value.isFinite else { return nil }
+            return .height(Swift.min(Swift.max(CGFloat(value), height.min), height.max))
+        case "iui-html-view-hold":
+            return (message["hold"] as? Bool).map(Message.hold)
+        case "iui-html-view-wheel":
+            return (message["taken"] as? Bool).map { .wheel(taken: $0) }
+        default:
+            return nil
+        }
     }
 }
 
@@ -80,7 +96,8 @@ enum WebHeights {
 
 /// A page in a sandboxed web view: loaded once, from an origin of its own (or the player's https
 /// address), with no navigation, no other windows, a data store that keeps nothing, and one
-/// channel, in a world of its own, for its height. YouTube's links open in the browser.
+/// channel, in a world of its own, for its height and the gestures it takes. YouTube's links open
+/// in the browser.
 final class WebPageView: FlippedView, WKNavigationDelegate, WKUIDelegate {
     /// Called on the main thread with each height the page reports.
     var onHeight: ((CGFloat) -> Void)?
@@ -132,8 +149,12 @@ final class WebPageView: FlippedView, WKNavigationDelegate, WKUIDelegate {
     override func layoutSubviews() {
         super.layoutSubviews()
         webView.frame = bounds
+        webView.scrollView.isScrollEnabled = reported > bounds.height + 1
     }
     #endif
+
+    /// The height the page last reported, which a taller page than its view scrolls inside.
+    private var reported: CGFloat = 0
 
     private func load() {
         if player {
@@ -144,7 +165,13 @@ final class WebPageView: FlippedView, WKNavigationDelegate, WKUIDelegate {
     }
 
     fileprivate func report(_ body: Any) {
-        guard let height = page.height(from: body) else { return }
+        guard let message = page.message(from: body) else { return }
+        webView.heard(message)
+        guard case .height(let height) = message else { return }
+        reported = height
+        #if os(iOS)
+        setNeedsLayout()
+        #endif
         onHeight?(height)
     }
 

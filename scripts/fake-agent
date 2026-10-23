@@ -398,6 +398,8 @@ def title_answer():
         title = "Watch the Deploy"
     if "show the screenshot" in message:
         title = "Screenshot of the Landing Page"
+    if "show the ui html" in message:
+        title = "Catch the Dot"
     if "send the report" in message:
         title = "Weekly Signups Report"
     if "show the recording" in message:
