@@ -305,13 +305,14 @@ final class DrawerController: UIViewController, UIGestureRecognizerDelegate {
     }
 
     /// Whether what the finger is on has a swipe that way of its own: code or a table that
-    /// still scrolls that way, text whose selection is being dragged, or a control dragged
-    /// sideways, like a slider.
+    /// still scrolls that way, text whose selection is being dragged, a control dragged
+    /// sideways, like a slider, or a program's page that holds the finger.
     private func scrollsSideways(under point: CGPoint, rightwards: Bool) -> Bool {
         var view = self.view.hitTest(point, with: nil)
         while let current = view, current !== self.view {
             if let text = current as? UITextView, text.selectedRange.length > 0 { return true }
             if (current as? FlippedView)?.onDrag != nil { return true }
+            if (current as? PageWebView)?.holdsTouch == true { return true }
             if let scroll = current as? UIScrollView, scroll.isScrollEnabled, scroll.contentSize.width > scroll.bounds.width + 1 {
                 let start = -scroll.adjustedContentInset.left
                 let end = scroll.contentSize.width - scroll.bounds.width + scroll.adjustedContentInset.right

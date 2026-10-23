@@ -96,7 +96,7 @@ enum ProgramLayout {
         let width = max(0, width)
         let key = ProgramCacheKey(
             id: node.id, width: width, fill: fill, height: height ?? -1, narrow: env.narrow, surface: env.surface, align: env.align.rawValue,
-            sized: env.sized)
+            sized: env.sized, window: env.window)
         if let cached = env.cache?.box(key, generation: env.generation) { return cached }
         let box = make(node, width: width, fill: fill, height: height, env: env)
         env.cache?.keep(box, for: key, generation: env.generation)
@@ -106,7 +106,8 @@ enum ProgramLayout {
     /// How wide the node is with nothing wrapped; `infinity` for what takes every width it is given.
     static func natural(_ node: UiNode, env: ProgramEnv) -> CGFloat {
         let key = ProgramCacheKey(
-            id: node.id, width: -1, fill: false, height: -1, narrow: env.narrow, surface: env.surface, align: 0, sized: env.sized)
+            id: node.id, width: -1, fill: false, height: -1, narrow: env.narrow, surface: env.surface, align: 0, sized: env.sized,
+            window: env.window)
         if let cached = env.cache?.width(key, generation: env.generation) { return cached }
         let width = measureNatural(node, env: env)
         env.cache?.keep(width: width, for: key, generation: env.generation)

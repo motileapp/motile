@@ -2,15 +2,28 @@
 import UIKit
 import WebKit
 
-/// A web view that leaves dragging to the transcript around it, since its page is as tall as it is
-/// shown.
+/// A web view whose page scrolls inside it only when it is taller than it is shown, and which
+/// takes the fingers its page holds from the transcript and the drawer around it.
 final class PageWebView: WKWebView {
+    /// The page holds the fingers on it.
+    private(set) var holdsTouch = false
+
     override init(frame: CGRect, configuration: WKWebViewConfiguration) {
         super.init(frame: frame, configuration: configuration)
         scrollView.isScrollEnabled = false
     }
 
     required init?(coder: NSCoder) { fatalError("not used") }
+
+    func heard(_ message: WebPage.Message) {
+        guard case .hold(let holds) = message, holds != holdsTouch else { return }
+        holdsTouch = holds
+        guard holds else { return }
+        for scroll in sequence(first: superview, next: { $0?.superview }).compactMap({ $0 as? UIScrollView }) {
+            scroll.panGestureRecognizer.isEnabled = false
+            scroll.panGestureRecognizer.isEnabled = true
+        }
+    }
 }
 
 extension WKWebView {

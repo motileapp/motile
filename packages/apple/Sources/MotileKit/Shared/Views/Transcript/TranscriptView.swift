@@ -323,25 +323,32 @@ final class TranscriptView: FlippedView, RowOwner {
         scroller.frame = bounds
         layoutFade()
         jumpButton.frame.origin = CGPoint(x: ((bounds.width - Self.jumpButtonSide) / 2).rounded(), y: jumpButtonY)
-        guard bounds.width != layoutWidth else {
+        let windowSize = self.windowSize
+        let windowChanged = measuresAhead && windowSize.map { $0 != TranscriptColumn.window } == true
+        guard bounds.width != layoutWidth || windowChanged else {
             updateVisible()
             return
         }
         layoutWidth = bounds.width
         if measuresAhead {
             TranscriptColumn.width = columnWidth
-            #if os(macOS)
-            if let size = window?.contentLayoutRect.size { TranscriptColumn.window = size }
-            #else
-            if let size = window?.bounds.size { TranscriptColumn.window = size }
-            #endif
+            if let windowSize { TranscriptColumn.window = windowSize }
         }
-        // Wrapping changes with the width, so every height is an estimate again.
+        // Wrapping changes with the width, and what a program takes of the window with its size,
+        // so every height is an estimate again.
         let anchor = currentAnchor()
         for index in measured.indices { measured[index] = false }
         stale.formUnion(views.keys)
         updateVisible(anchor: anchor)
         measureRows()
+    }
+
+    private var windowSize: CGSize? {
+        #if os(macOS)
+        window?.contentLayoutRect.size
+        #else
+        window?.bounds.size
+        #endif
     }
 
     private func recomputeOffsets(from start: Int) {

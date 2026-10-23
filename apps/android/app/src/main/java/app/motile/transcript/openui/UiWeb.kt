@@ -18,6 +18,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -43,6 +45,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -65,11 +71,13 @@ import app.motile.theme.Palette
 import app.motile.theme.Theme
 import app.motile.ui.ActionButton
 import app.motile.ui.Spinner
+import kotlin.math.abs
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.floatOrNull
@@ -81,14 +89,28 @@ import kotlinx.serialization.json.put
 class UiPage(val html: String, val base: String?, val handler: String, val start: Float, val min: Float, val max: Float) {
     /** The height in a message the page sent, within the page's bounds; none for any other message. */
     fun height(message: String): Float? {
-        val json = runCatching { Json.parseToJsonElement(message).jsonObject }.getOrNull() ?: return null
-        if (json["type"]?.jsonPrimitive?.content != HEIGHT_MESSAGE) return null
+        val json = message(message, HEIGHT_MESSAGE) ?: return null
         val height = json["height"]?.jsonPrimitive?.doubleOrNull?.takeIf { it.isFinite() } ?: return null
         return height.toFloat().coerceIn(min, max)
     }
 
+    /** Whether the page takes the fingers on it, in a message that says so. */
+    fun holds(message: String): Boolean? = message(message, HOLD_MESSAGE)?.get("hold")?.jsonPrimitive?.booleanOrNull
+
+    private fun message(message: String, type: String): JsonObject? {
+        val json = runCatching { Json.parseToJsonElement(message).jsonObject }.getOrNull() ?: return null
+        return json.takeIf { it["type"]?.jsonPrimitive?.content == type }
+    }
+
     companion object {
         const val HEIGHT_MESSAGE = "iui-html-view-height"
+        const val HOLD_MESSAGE = "iui-html-view-hold"
+
+        /** The tallest a page is in a window `window` tall (`web::max_height`): a taller one scrolls inside. */
+        fun maxHeight(window: Float): Float {
+            val margin = maxOf(120f, window * 0.2f)
+            return (window - 2 * margin).coerceIn(80f, 2400f)
+        }
 
         /** Asks core for the page of a `web::PageRequest`. */
         fun build(request: JsonObject): UiPage? {
@@ -123,7 +145,8 @@ private object UiWebHeights {
 
 /**
  * The program's page in a sandboxed web view: its height `height`, else what the page reports, 360
- * until it does. While the program streams, the spinner in its place.
+ * until it does, leaving room above and below it in the window to scroll the transcript past it.
+ * While the program streams, the spinner in its place.
  */
 @Composable
 fun UiHtmlView(node: UiNode, kind: UiKind.HtmlView) {
@@ -152,7 +175,8 @@ fun UiHtmlView(node: UiNode, kind: UiKind.HtmlView) {
     }
     var reported by remember(key) { mutableFloatStateOf(UiWebHeights.get(key) ?: 0f) }
     var gone by remember(key) { mutableStateOf(false) }
-    val height = kind.height ?: reported.takeIf { it > 0f } ?: page?.start ?: START_HEIGHT
+    val window = with(LocalDensity.current) { LocalWindowInfo.current.containerSize.height.toDp().value }
+    val height = minOf(kind.height ?: reported.takeIf { it > 0f } ?: page?.start ?: START_HEIGHT, UiPage.maxHeight(window))
     Box(
         Modifier.uiNode(node).fillMaxWidth().height(height.dp).clip(shape).background(background, shape).border(1.dp, surface.border, shape),
         contentAlignment = Alignment.Center,
@@ -213,22 +237,26 @@ private fun Still(title: String, kind: String, reload: () -> Unit) {
 
 /**
  * A web view that loads the page once and goes nowhere else: no files, no storage, no other
- * windows, and one channel, for its height. YouTube's links open in the browser.
+ * windows, and one channel, for its height and the fingers it holds, which the transcript and the
+ * drawer then leave to it. YouTube's links open in the browser.
  */
 @Composable
 private fun PageView(page: UiPage, modifier: Modifier, opensYouTube: Boolean, onGone: () -> Unit, onHeight: ((Float) -> Unit)? = null) {
     val gone by rememberUpdatedState(onGone)
+    val shown = remember { Shown() }
     AndroidView(
-        factory = { context -> sandboxed(context, opensYouTube) { gone() } },
-        modifier = modifier,
+        factory = { context -> sandboxed(context, opensYouTube) { gone() }.also { shown.view = it } },
+        modifier = if (onHeight == null) modifier else modifier.scrollsInside(shown),
         update = { view ->
             if (view.tag == page || view.tag === Gone) return@AndroidView
             view.tag = page
             if (onHeight != null && WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) {
                 WebViewCompat.removeWebMessageListener(view, page.handler)
                 WebViewCompat.addWebMessageListener(view, page.handler, setOf("*")) { _, message, _, isMainFrame, _ ->
-                    if (!isMainFrame) return@addWebMessageListener
-                    message.data?.let(page::height)?.let(onHeight)
+                    val data = message.data
+                    if (!isMainFrame || data == null) return@addWebMessageListener
+                    page.height(data)?.let(onHeight)
+                    if (page.holds(data) == true) view.requestDisallowInterceptTouchEvent(true)
                 }
             }
             view.loadDataWithBaseURL(page.base, page.html, "text/html", "utf-8", null)
@@ -239,6 +267,30 @@ private fun PageView(page: UiPage, modifier: Modifier, opensYouTube: Boolean, on
             view.destroy()
         },
     )
+}
+
+/** The web view a page is shown in, once made. */
+private class Shown {
+    var view: WebView? = null
+}
+
+/**
+ * A drag up or down that a page taller than its view can still scroll that way is the page's, not
+ * the transcript's: decided before the transcript's touch slop, so that it never starts.
+ */
+private fun Modifier.scrollsInside(shown: Shown): Modifier = pointerInput(shown) {
+    awaitEachGesture {
+        val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+        while (true) {
+            val change = awaitPointerEvent(PointerEventPass.Initial).changes.firstOrNull { it.id == down.id } ?: return@awaitEachGesture
+            if (!change.pressed) return@awaitEachGesture
+            val move = change.position - down.position
+            if (move.getDistance() < viewConfiguration.touchSlop / 2) continue
+            val view = shown.view ?: return@awaitEachGesture
+            if (abs(move.y) > abs(move.x) && view.canScrollVertically(if (move.y < 0) 1 else -1)) view.requestDisallowInterceptTouchEvent(true)
+            return@awaitEachGesture
+        }
+    }
 }
 
 @SuppressLint("SetJavaScriptEnabled")

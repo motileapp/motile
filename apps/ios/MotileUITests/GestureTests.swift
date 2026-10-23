@@ -242,6 +242,75 @@ final class GestureTests: XCTestCase {
         XCTAssertEqual(app.textFields["Search"].value as? String ?? "", "")
     }
 
+    /// A drag on what a program's page takes, its canvas here, is the page's: the transcript stays
+    /// where it is and the sidebar doesn't come in. One beside the page scrolls the transcript. In a
+    /// thread of its own, deleted after, so that the others don't find a canvas where they swipe.
+    func testADragOnAProgramsCanvasIsThePagesAndOneBesideItScrollsTheTranscript() {
+        addTeardownBlock { [self] in
+            app.buttons["Threads"].tap()
+            guard let thread = row("Catch the Dot") else { return }
+            thread.press(forDuration: 1.2)
+            for _ in 0..<2 {
+                let delete = app.buttons["Delete"].firstMatch
+                XCTAssertTrue(shown(delete))
+                delete.tap()
+            }
+            let rows = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "Catch the Dot"))
+            XCTAssertTrue(rows.firstMatch.waitForNonExistence(timeout: 5))
+        }
+        app.buttons["Threads"].tap()
+        XCTAssertTrue(shown(newThread))
+        newThread.tap()
+        send("show the ui html")
+        send("show the ui html")
+        guard let page = lastShown(app.webViews),
+            let title = lastShown(app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "Take a little break")))
+        else { return XCTFail("no program") }
+        let top = settled(title)
+        let canvas = page.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: page.frame.width / 2, dy: 150))
+        canvas.press(forDuration: 0.1, thenDragTo: canvas.withOffset(CGVector(dx: 0, dy: 160)), withVelocity: .slow, thenHoldForDuration: 0)
+        XCTAssertEqual(title.frame.minY, top, accuracy: 1)
+        canvas.press(forDuration: 0.1, thenDragTo: canvas.withOffset(CGVector(dx: 160, dy: 0)), withVelocity: .slow, thenHoldForDuration: 0)
+        XCTAssertFalse(newThread.exists && newThread.isHittable)
+        let beside = page.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 1)).withOffset(CGVector(dx: 0, dy: 40))
+        beside.press(forDuration: 0.1, thenDragTo: beside.withOffset(CGVector(dx: 0, dy: 160)), withVelocity: .slow, thenHoldForDuration: 0)
+        XCTAssertGreaterThan(title.frame.minY, top + 50)
+    }
+
+    /// Where the element's top is once the rows around it stop moving.
+    private func settled(_ element: XCUIElement) -> CGFloat {
+        var top = element.frame.minY
+        for _ in 0..<10 {
+            sleep(1)
+            guard element.frame.minY != top else { break }
+            top = element.frame.minY
+        }
+        return top
+    }
+
+    /// Sends a message and waits for its reply, with the keyboard put away.
+    private func send(_ message: String) {
+        let text = app.textViews.firstMatch
+        XCTAssertTrue(text.waitForExistence(timeout: 10))
+        text.tap()
+        text.typeText(message)
+        app.buttons["Send"].tap()
+        _ = app.buttons["Stop"].waitForExistence(timeout: 5)
+        XCTAssertTrue(app.buttons["Stop"].waitForNonExistence(timeout: 30))
+        text.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0)).withOffset(CGVector(dx: 0, dy: -30)).tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 3))
+        sleep(2)
+    }
+
+    /// The last of the elements that is on the screen, once one is.
+    private func lastShown(_ query: XCUIElementQuery) -> XCUIElement? {
+        for _ in 0..<30 {
+            if let shown = query.allElementsBoundByIndex.last(where: { $0.isHittable }) { return shown }
+            sleep(1)
+        }
+        return nil
+    }
+
     func testATapBesideTheComposersTextBringsTheKeyboard() {
         let text = app.textViews.firstMatch
         XCTAssertTrue(text.waitForExistence(timeout: 10))

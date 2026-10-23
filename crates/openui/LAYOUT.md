@@ -557,7 +557,15 @@ control, the pair a column.
 **HtmlView**
 
 - The column's width; height `height` (80–2400), else what the page reports (80–2400), 360 until it
-  does. 1 in the surface's border, `Radius.lg`, clipped, the surface's colour behind.
+  does, at most the window's height less max(120, 0.2 × the window's height) above and below
+  (`web::max_height`), so that the transcript can always be scrolled past it. A taller page scrolls
+  inside it. 1 in the surface's border, `Radius.lg`, clipped, the surface's colour behind.
+- A gesture is the page's when it starts on it and the page takes it, until it ends; otherwise it
+  is the transcript's, which also keeps one that started elsewhere when the page slides under it.
+  A finger is the page's on an element whose `touch-action` keeps the page from panning up and
+  down, or once the page prevents its touch (`hold`): the transcript doesn't scroll and the drawer
+  doesn't open under it. A wheel (Mac) is the page's when the page prevents it or scrolls with it
+  (`wheel`); until the page says, it is held, then handed to the transcript if it isn't.
 - While the program streams: Motile's `Spinner` and "Preparing the interactive view" (`small`,
   `muted-foreground`), centred. Then the sandboxed web view of PLAN decision 19, in the appearance's
   colour scheme.
