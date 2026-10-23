@@ -132,7 +132,7 @@ class LiveMap(context: Context, style: String, camera: MapCamera?, water: Int, p
     }
 
     /** The label of the pin drawn at the point, in pixels from the map's top left. */
-    fun pinAt(x: Float, y: Float): String? {
+    private fun pinAt(x: Float, y: Float): String? {
         val map = map ?: return null
         if (loaded == null) return null
         return map.queryRenderedFeatures(PointF(x, y), "pin", "pin-mark").firstNotNullOfOrNull { feature ->

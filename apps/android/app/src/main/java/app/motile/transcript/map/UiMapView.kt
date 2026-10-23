@@ -1,12 +1,7 @@
 package app.motile.transcript.map
 
-import android.os.SystemClock
-import android.view.MotionEvent
-import android.view.View
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -34,12 +29,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.input.pointer.PointerEvent
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.onVisibilityChanged
@@ -91,7 +83,7 @@ import kotlin.math.roundToInt
 
 /**
  * A program's `Map`: MapLibre over OpenFreeMap's tiles, live while on screen and a snapshot
- * otherwise. One finger scrolls the transcript and two move the map. A pressed pin calls
+ * otherwise. A finger pans it and two pinch it, leaving the transcript and the drawer be. A pressed pin calls
  * `onSelect` with its label, a filter's choice `onFilter` with its category, or none for every
  * place, and the full-screen cover `onExpand`. Without `engine` it is only laid out: no MapLibre.
  */
@@ -155,7 +147,6 @@ fun UiMapView(
         if (live != null) {
             key(live) { AndroidView({ live.view }, Modifier.fillMaxSize()) }
             PinButtons(live.spots, select)
-            Box(Modifier.matchParentSize().cooperative(live.view) { at -> live.pinAt(at.x, at.y)?.let(select) })
         } else {
             if (engine) MapSnapshot(director, node, dark, width, height, select)
         }
@@ -312,92 +303,4 @@ private fun Attribution(modifier: Modifier) {
         }
     }
     Text(text, modifier, style = Theme.ui(9f).lined(12f), color = LocalPalette.current.mutedForeground, maxLines = 1)
-}
-
-/**
- * Lets one finger scroll the transcript and hands two to the map, as MapLibre GL's cooperative
- * gestures do. A press that doesn't move asks for the pin under it.
- */
-private fun Modifier.cooperative(map: View, onTap: (Offset) -> Unit): Modifier = pointerInput(map) {
-    awaitEachGesture {
-        val down = awaitFirstDown(requireUnconsumed = false)
-        val forwarding = Forwarding(map)
-        var scrolled = false
-        try {
-            while (true) {
-                val event = awaitPointerEvent()
-                when {
-                    forwarding.active -> forwarding.pass(event)
-                    scrolled -> Unit
-                    event.changes.count { it.pressed } > 1 -> forwarding.begin(event)
-                    event.changes.any { (it.position - down.position).getDistance() > viewConfiguration.touchSlop } -> scrolled = true
-                }
-                if (forwarding.active) event.changes.forEach { it.consume() }
-                if (event.changes.none { it.pressed }) break
-            }
-        } finally {
-            forwarding.end()
-        }
-        if (!forwarding.used && !scrolled) onTap(down.position)
-    }
-}
-
-/** Hands a gesture's touches to the map's view, from where its second finger came down. */
-private class Forwarding(private val view: View) {
-    var used = false
-        private set
-    var active = false
-        private set
-
-    fun begin(event: PointerEvent) {
-        val motion = event.motionEvent ?: return
-        active = true
-        used = true
-        val local = local(motion)
-        dispatch(only(local, 1, MotionEvent.ACTION_DOWN))
-        for (count in 2..local.pointerCount) {
-            dispatch(only(local, count, MotionEvent.ACTION_POINTER_DOWN or ((count - 1) shl MotionEvent.ACTION_POINTER_INDEX_SHIFT)))
-        }
-        if (local.actionMasked == MotionEvent.ACTION_MOVE) view.dispatchTouchEvent(local)
-        local.recycle()
-    }
-
-    fun pass(event: PointerEvent) {
-        val motion = event.motionEvent ?: return
-        val local = local(motion)
-        val action = local.actionMasked
-        view.dispatchTouchEvent(local)
-        local.recycle()
-        if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) active = false
-    }
-
-    /** Cancels what the map still holds when the gesture ends without its last finger up. */
-    fun end() {
-        if (!active) return
-        active = false
-        val now = SystemClock.uptimeMillis()
-        dispatch(MotionEvent.obtain(now, now, MotionEvent.ACTION_CANCEL, 0f, 0f, 0))
-    }
-
-    private fun dispatch(event: MotionEvent) {
-        view.dispatchTouchEvent(event)
-        event.recycle()
-    }
-
-    /** The event in the view's own coordinates. */
-    private fun local(motion: MotionEvent): MotionEvent {
-        val at = IntArray(2)
-        view.getLocationOnScreen(at)
-        return MotionEvent.obtain(motion).apply { offsetLocation(motion.rawX - motion.x - at[0], motion.rawY - motion.y - at[1]) }
-    }
-
-    /** The event's first `count` pointers, as `action`. */
-    private fun only(motion: MotionEvent, count: Int, action: Int): MotionEvent {
-        val properties = Array(count) { index -> MotionEvent.PointerProperties().also { motion.getPointerProperties(index, it) } }
-        val coordinates = Array(count) { index -> MotionEvent.PointerCoords().also { motion.getPointerCoords(index, it) } }
-        return MotionEvent.obtain(
-            motion.downTime, motion.eventTime, action, count, properties, coordinates,
-            motion.metaState, motion.buttonState, motion.xPrecision, motion.yPrecision, motion.deviceId, 0, motion.source, motion.flags,
-        )
-    }
 }

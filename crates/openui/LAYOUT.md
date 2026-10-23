@@ -513,7 +513,8 @@ control, the pair a column.
 - Attribution: the style's, at the bottom left, 9 / 12 in `muted-foreground` on the surface's colour
   at `lit`, links opening in the browser.
 - Gestures: a drag pans; the wheel and the trackpad scroll the transcript, never zoom; no rotation
-  or pitch. On touch, one finger scrolls the transcript and two pan and pinch the map. A pin press
+  or pitch. On touch, a finger pans the map, as a drag does, and two pinch it; the transcript doesn't
+  scroll and the drawer doesn't open under them, as with HtmlView's held finger. A pin press
   selects it (`select` event); while expanded it also collapses.
 - Camera (core's targets, `render/openui/map.rs`: `frame`, `fly`, `reveal`, in MapLibre's zoom
   levels): the first marker at zoom 10.5 while the program streams; once it ends, fit every visible
