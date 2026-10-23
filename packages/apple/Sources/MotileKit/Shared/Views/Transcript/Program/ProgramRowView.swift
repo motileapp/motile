@@ -10,6 +10,9 @@ import UIKit
 /// and its source while it has no tree.
 final class ProgramRowView: RowView, ProgramHost {
     private static let errorGap: CGFloat = 8
+    /// The room over the program and under it, as a code box has.
+    private static let above: CGFloat = 4
+    private static let below: CGFloat = 10
     private var content: UiContent?
     private var root: ProgramNodeView?
     private let source = ProgramCodeBox()
@@ -33,8 +36,12 @@ final class ProgramRowView: RowView, ProgramHost {
     /// How tall the row is in a column `width` wide; it lays the tree out, off the main thread.
     static func height(_ content: UiContent, width: CGFloat) -> CGFloat {
         let program = content.box(width: width)?.size.height ?? sourceHeight(content, width: width)
-        guard let message = errorMessage(content) else { return program }
-        return program + (program > 0 ? errorGap : 0) + ErrorBox.height(message, width: width)
+        guard let message = errorMessage(content) else { return margins(program) }
+        return margins(program + (program > 0 ? errorGap : 0) + ErrorBox.height(message, width: width))
+    }
+
+    private static func margins(_ height: CGFloat) -> CGFloat {
+        height > 0 ? above + height + below : 0
     }
 
     private static func sourceHeight(_ content: UiContent, width: CGFloat) -> CGFloat {
@@ -48,7 +55,7 @@ final class ProgramRowView: RowView, ProgramHost {
 
     override func layout(width: CGFloat) -> CGFloat {
         guard let content else { return 0 }
-        var y: CGFloat = 0
+        var y = Self.above
         if let box = content.box(width: width) {
             let view = root.flatMap { ProgramViews.fits($0, box.node) ? $0 : nil } ?? {
                 root?.removeFromSuperview()
@@ -57,9 +64,9 @@ final class ProgramRowView: RowView, ProgramHost {
                 return view
             }()
             root = view
-            view.frame = CGRect(origin: .zero, size: box.size)
+            view.frame = CGRect(origin: CGPoint(x: 0, y: y), size: box.size)
             view.show(box, host: self)
-            y = box.size.height
+            y += box.size.height
             source.isHidden = true
         } else {
             root?.removeFromSuperview()
@@ -67,17 +74,17 @@ final class ProgramRowView: RowView, ProgramHost {
             let height = Self.sourceHeight(content, width: width)
             source.isHidden = height == 0
             if height > 0 { source.show(content.code, surface: .background) }
-            source.frame = CGRect(x: 0, y: 0, width: width, height: height)
-            y = height
+            source.frame = CGRect(x: 0, y: y, width: width, height: height)
+            y += height
         }
         guard let message = Self.errorMessage(content) else {
             errors.isHidden = true
-            return y
+            return y > Self.above ? y + Self.below : 0
         }
-        if y > 0 { y += Self.errorGap }
+        if y > Self.above { y += Self.errorGap }
         errors.text.content = message
         errors.isHidden = false
-        return y + errors.layout(y: y, width: width)
+        return y + errors.layout(y: y, width: width) + Self.below
     }
 
     // MARK: ProgramHost

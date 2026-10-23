@@ -100,7 +100,7 @@ fun UiRow(row: RowModel, content: UiContent) {
     val host = remember(threadID, row.id, content.limited) { UiHost(store, threadID, row.id, content.limited) }
     val tree = content.tree
     val errors = content.errors
-    BoxWithConstraints(Modifier.fillMaxWidth().padding(top = 6.dp)) {
+    BoxWithConstraints(Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 10.dp)) {
         val width = maxWidth.value
         Column(Modifier.fillMaxWidth()) {
             if (tree != null) {
