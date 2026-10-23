@@ -35,8 +35,9 @@ use crate::theme::Surface;
 
 /// Under this column width the narrow rules apply.
 const NARROW: f32 = 640.;
-/// The row keeps this much from the row above it, as a table in prose does from its paragraph.
-const ABOVE: f32 = 10.;
+/// The room over the program and under it, as a code box has.
+const ABOVE: f32 = 4.;
+const BELOW: f32 = 10.;
 /// How far a program's errors are under it.
 const ERROR_GAP: f32 = 8.;
 
@@ -130,6 +131,7 @@ pub fn ui_row(model: &RowModel, ctx: &RowContext, window: &mut Window, cx: &mut 
     });
     div()
         .pt(px(ABOVE))
+        .pb(px(BELOW))
         .flex()
         .flex_col()
         .gap(px(ERROR_GAP))
