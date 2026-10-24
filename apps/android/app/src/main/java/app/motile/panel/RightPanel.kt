@@ -17,6 +17,7 @@ import app.motile.core.obj
 import app.motile.core.objects
 import app.motile.core.optionalBool
 import app.motile.core.optionalInt
+import app.motile.core.optionalString
 import app.motile.core.pageChanged
 import app.motile.core.parseJSON
 import app.motile.core.string
@@ -182,12 +183,17 @@ data class PanelTabs(
     val scope: DiffScope? = null,
     /** The panel covers the thread. */
     val maximized: Boolean? = null,
+    /** The agent opened last from the agents tab, for as long as the tab is open. */
+    val visitedAgent: String? = null,
 ) {
     /** All there is is a blank tab, as before one was opened. */
     val isBlank: Boolean get() = tabs.size == 1 && tabs[0].blankNumber != null
 
     val json: Map<String, Any?>
-        get() = mapOf("tabs" to tabs.map { it.json }, "active" to active?.json, "scope" to scope?.request, "maximized" to maximized)
+        get() = mapOf(
+            "tabs" to tabs.map { it.json }, "active" to active?.json, "scope" to scope?.request, "maximized" to maximized,
+            "visited_agent" to visitedAgent,
+        )
 
     companion object {
         fun of(json: JSON) = PanelTabs(
@@ -195,6 +201,7 @@ data class PanelTabs(
             active = PanelTab.of(json.obj("active")),
             scope = DiffScope.of(json.obj("scope")),
             maximized = json.optionalBool("maximized"),
+            visitedAgent = json.optionalString("visited_agent"),
         )
     }
 }
@@ -303,7 +310,7 @@ class RightPanel {
 
     private fun change(change: (PanelTabs) -> PanelTabs) {
         val key = key ?: return
-        val tabs = change(this.tabs)
+        val tabs = change(this.tabs).let { if (PanelTab.Agents in it.tabs) it else it.copy(visitedAgent = null) }
         val untouched = tabs.isBlank && tabs.scope == null && tabs.maximized == null
         tabsByKey = if (untouched) tabsByKey - key else tabsByKey + (key to tabs)
         Preferences.set("panel.tabs", jsonOf(tabsByKey.mapValues { it.value.json }).toString())
@@ -429,6 +436,14 @@ class RightPanel {
         agentsChanged()
         store.core.send("open_agent", json("thread_id" to threadID, "agent_id" to id))
         if (Platform.panelCoversThread) isOpen = false
+    }
+
+    /** The agent opened last from the agents tab. */
+    val visitedAgent: String? get() = tabs.visitedAgent
+
+    /** Marks the agent as the one opened last, before it is opened and the tabs may be another thread's. */
+    fun visit(agentID: String) {
+        change { it.copy(visitedAgent = agentID) }
     }
 
     /** Goes back from the agent shown to the thread. */

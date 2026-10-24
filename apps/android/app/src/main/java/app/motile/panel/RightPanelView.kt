@@ -60,6 +60,8 @@ import kotlin.math.max
 @Composable
 fun PanelTabContent(active: PanelTab?) {
     val store = LocalStore.current
+    // The agents are the thread's own, kept with it, so they show while the server is away too.
+    if (active == PanelTab.Agents && store.panelTarget != null) return AgentsSurface()
     store.panelUnavailable?.let { return PanelMessage(it) }
     val target = store.panelTarget ?: return
     when (active) {

@@ -137,6 +137,7 @@ private struct AgentRow: View {
     @Environment(AppStore.self) private var store
     let agent: AgentInfo
     @State private var hovered = false
+    @Environment(\.surface) private var surface
 
     private var stoppable: Bool { agent.working && agent.threadID != nil }
 
@@ -190,6 +191,13 @@ private struct AgentRow: View {
             .padding(panelRowMargin)
         }
         .buttonStyle(.highlight(selected: store.rightPanel.shownAgent == agent.id, inset: panelRowMargin))
+        .overlay {
+            if store.rightPanel.visitedAgent == agent.id {
+                RoundedRectangle(cornerRadius: Radius.md, style: .continuous)
+                    .strokeBorder(surface.color(.controlLit), style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
+                    .padding(panelRowMargin)
+            }
+        }
         .overlay(alignment: .topTrailing) {
             if hovered && stoppable {
                 ActionButton(icon: .circleStop, help: "Stop \(agent.title)", size: .small) { stop() }
@@ -211,6 +219,7 @@ private struct AgentRow: View {
     }
 
     private func open() {
+        store.rightPanel.visit(agent: agent.id)
         if let thread = agent.threadID { return store.openStartedThread(thread) }
         store.rightPanel.showAgent(agent.id)
     }

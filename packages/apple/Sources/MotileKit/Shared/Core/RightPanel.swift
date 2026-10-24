@@ -123,6 +123,8 @@ struct PanelTabs: Equatable, Codable {
     var scope: DiffScope?
     /// The panel covers the thread.
     var maximized: Bool?
+    /// The agent opened last from the agents tab, for as long as the tab is open.
+    var visitedAgent: String?
 
     /// All there is is a blank tab, as before one was opened.
     var isBlank: Bool { tabs.count == 1 && tabs[0].blankNumber != nil }
@@ -292,6 +294,7 @@ final class RightPanel {
         guard let key else { return }
         var tabs = self.tabs
         change(&tabs)
+        if !tabs.tabs.contains(.agents) { tabs.visitedAgent = nil }
         let untouched = tabs.isBlank && tabs.scope == nil && tabs.maximized == nil
         tabsByKey[key] = untouched ? nil : tabs
         defaults.set(try? JSONEncoder().encode(tabsByKey), forKey: "panel.tabs")
@@ -420,6 +423,14 @@ final class RightPanel {
         agentsChanged()
         store.core.send("open_agent", ["thread_id": threadID, "agent_id": id])
         if Platform.panelCoversThread { isOpen = false }
+    }
+
+    /// The agent opened last from the agents tab.
+    var visitedAgent: String? { tabs.visitedAgent }
+
+    /// Marks the agent as the one opened last, before it is opened and the tabs may be another thread's.
+    func visit(agent id: String) {
+        change { $0.visitedAgent = id }
     }
 
     /// Goes back from the agent shown to the thread.

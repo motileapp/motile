@@ -194,8 +194,9 @@ pub fn progress_ring(fraction: f32, track: Hsla, arc: Hsla) -> impl IntoElement 
     .size_full()
 }
 
-/// A dotted line around the element's bounds, with round corners: dashes of 2 with gaps of 3.
-pub fn dotted_outline(radius: f32, color: Hsla) -> impl IntoElement {
+/// A dashed line around the element's bounds, with round corners: `dash` is a dash's length and
+/// the gap's.
+pub fn dashed_outline(radius: f32, dash: [f32; 2], color: Hsla) -> impl IntoElement {
     canvas(
         |_, _, _| {},
         move |bounds, _, window, _| {
@@ -204,7 +205,7 @@ pub fn dotted_outline(radius: f32, color: Hsla) -> impl IntoElement {
             let (right, bottom) = (bounds.right() - inset, bounds.bottom() - inset);
             let corner = px(radius - 0.5).min((right - left) / 2.).min((bottom - top) / 2.).max(px(0.));
             let radii = point(corner, corner);
-            let mut outline = PathBuilder::stroke(px(1.)).dash_array(&[px(2.), px(3.)]);
+            let mut outline = PathBuilder::stroke(px(1.)).dash_array(&dash.map(px));
             outline.move_to(point(left + corner, top));
             outline.line_to(point(right - corner, top));
             outline.arc_to(radii, px(0.), false, true, point(right, top + corner));

@@ -14,7 +14,7 @@ use motile_core::render::openui::sent::SentValues;
 use motile_core::render::rows::{AgentRow, CardPlace, ChangeEntry, HandoffLabel, RowKind, StateCount, Tool};
 use motile_protocol::wire::{Agent, Ask, ToolStatus};
 
-use super::kit::{GrowthFade, RowButton, Shimmer, Sideways, TailLine, dotted_outline};
+use super::kit::{GrowthFade, RowButton, Shimmer, Sideways, TailLine, dashed_outline};
 use super::model::RowModel;
 use super::prose::{self, CodeBox, ParaStyle, ProseBlock, TableCell, TextPara};
 use super::view::TranscriptView;
@@ -951,7 +951,7 @@ fn queued_row(
                 .rounded(px(QUEUED_RADIUS))
                 .flex()
                 .flex_col()
-                .child(dotted_outline(QUEUED_RADIUS, c.border))
+                .child(dashed_outline(QUEUED_RADIUS, [2., 3.], c.border))
                 .child(bubble_content(model, shown, attachments, c.muted_foreground, ctx, window, cx))
                 .child(foot),
         )
