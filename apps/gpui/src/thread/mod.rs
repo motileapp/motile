@@ -159,6 +159,7 @@ impl ThreadPane {
             .gap(px(8.))
             .child(
                 div()
+                    .flex_1()
                     .min_w_0()
                     .flex()
                     .items_center()
@@ -166,6 +167,7 @@ impl ThreadPane {
                     .children(self.back_button(cx))
                     .child(
                         div()
+                            .flex_1()
                             .flex()
                             .flex_col()
                             .gap(px(2.))
@@ -182,7 +184,6 @@ impl ThreadPane {
                             ),
                     ),
             )
-            .child(div().flex_1())
             .children(control)
     }
 

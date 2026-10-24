@@ -279,6 +279,8 @@ class RightPanel {
         private set
     /** The turns of the open thread that changed files, the first one first. */
     var turns by mutableStateOf(emptyList<TurnChange>())
+    /** The row each thread's agents tab was scrolled to and how far into it, by the key of its tabs. */
+    val agentsTop = mutableMapOf<String, Pair<String, Int>>()
     /** The agent whose transcript shows in the thread's place, read only. */
     private var shownAgentState by mutableStateOf<String?>(null)
     var shownAgent: String?
@@ -423,6 +425,7 @@ class RightPanel {
 
     fun forget(key: String) {
         tabsByKey = tabsByKey - key
+        agentsTop.remove(key)
     }
 
     // Agents
