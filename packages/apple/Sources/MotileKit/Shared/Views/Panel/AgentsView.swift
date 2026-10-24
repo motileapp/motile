@@ -196,6 +196,7 @@ private struct AgentRow: View {
                 RoundedRectangle(cornerRadius: Radius.md, style: .continuous)
                     .strokeBorder(surface.color(.controlLit), style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
                     .padding(panelRowMargin)
+                    .allowsHitTesting(false)
             }
         }
         .overlay(alignment: .topTrailing) {
