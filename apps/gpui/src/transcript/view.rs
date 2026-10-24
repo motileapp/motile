@@ -28,6 +28,9 @@ const JUMP_BUTTON_GAP: f32 = 10.;
 const JUMP_BUTTON_SIDE: f32 = 32.;
 /// How close to the end the viewport has to be to go to the end when the room under the rows grows.
 const NEAR_END: f32 = 80.;
+/// How long the rows still glide after the user's scroll last moved them: its events come every
+/// frame while they do.
+const GLIDE_FRAMES: Duration = Duration::from_millis(100);
 
 pub struct TranscriptView {
     store: Entity<Store>,
@@ -60,6 +63,8 @@ pub struct TranscriptView {
     measures_after_layout: bool,
     /// Moves the viewport to the end with every frame while a reply streams.
     glide: Option<Task<()>>,
+    /// Where the user's last scroll left the viewport's top, and when it last moved it.
+    scrolled: (f32, Option<Instant>),
     _ticks: Task<()>,
     _subscriptions: Vec<Subscription>,
 }
@@ -108,6 +113,7 @@ impl TranscriptView {
             wanted_bottom_inset: 0.,
             measures_after_layout: false,
             glide: None,
+            scrolled: (0., None),
             _ticks: ticks,
             _subscriptions: subscriptions,
         };
@@ -130,11 +136,20 @@ impl TranscriptView {
                         cx.notify();
                     }
                     view.glide = None;
+                    let top = view.scroll_offsets(cx).0;
+                    if top != view.scrolled.0 {
+                        view.scrolled = (top, Some(Instant::now()));
+                    }
                     view.load_earlier_if_near(cx);
                     view.trim_earlier_if_far(cx);
                 });
             });
         });
+    }
+
+    /// Whether the user's scroll still moves the rows, so that a press on them catches it.
+    pub fn glides(&self) -> bool {
+        self.scrolled.1.is_some_and(|at| at.elapsed() < GLIDE_FRAMES)
     }
 
     fn list(&self, cx: &App) -> ListState {

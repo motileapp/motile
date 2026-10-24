@@ -3,7 +3,8 @@ import UIKit
 import WebKit
 
 /// A web view whose page scrolls inside it only when it is taller than it is shown, and which
-/// takes the fingers its page holds from the transcript and the drawer around it.
+/// takes the fingers its page holds from the transcript and the drawer around it, but for one that
+/// lands while the transcript still moves.
 final class PageWebView: WKWebView {
     /// The page holds the fingers on it.
     private(set) var holdsTouch = false
@@ -14,6 +15,20 @@ final class PageWebView: WKWebView {
     }
 
     required init?(coder: NSCoder) { fatalError("not used") }
+
+    /// A finger that lands while a scroll view around the page is dragged or glides is that scroll
+    /// view's, which it stops there, as it does on any other row.
+    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        guard !scrollsAround else { return nil }
+        return super.hitTest(point, with: event)
+    }
+
+    private var scrollsAround: Bool {
+        sequence(first: superview, next: { $0?.superview }).contains { view in
+            guard let scroll = view as? UIScrollView else { return false }
+            return scroll.isDragging || scroll.isDecelerating
+        }
+    }
 
     func heard(_ message: WebPage.Message) {
         guard case .hold(let holds) = message, holds != holdsTouch else { return }
