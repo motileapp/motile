@@ -288,12 +288,12 @@ private struct PanelLauncher: View {
                 .font(.ui(size: 13, weight: .semibold))
                 .foregroundStyle(Color.themeForeground)
             VStack(spacing: 2) {
+                row(.bot, "Agents", count: store.agents.filter(\.working).count, command: "rightPanel.agents", reason: nil) {
+                    store.rightPanel.open(.agents)
+                }
                 row(.folder, "Files", command: "rightPanel.files", reason: nil) { store.rightPanel.open(.files) }
                 row(.diff, "Diff", command: "rightPanel.diff", reason: target.repository ? nil : "Available in git repositories.") {
                     store.rightPanel.showDiff()
-                }
-                row(.bot, "Agents", count: store.agents.filter(\.working).count, command: "rightPanel.agents", reason: nil) {
-                    store.rightPanel.open(.agents)
                 }
                 row(.gitPullRequest, "Pull Request", command: "rightPanel.pullRequest", reason: store.pullRequestsUnavailable) {
                     store.rightPanel.open(.pullRequest)

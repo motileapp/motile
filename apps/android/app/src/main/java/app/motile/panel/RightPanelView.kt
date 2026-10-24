@@ -254,9 +254,9 @@ private fun PanelLauncher(target: PanelTarget) {
     ) {
         Text("Open", size = 13f, weight = FontWeight.SemiBold, color = LocalPalette.current.foreground)
         Column(Modifier.width(250.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            LauncherRow(Symbol.Bot, "Agents", null, count = store.agents.count { it.working }) { panel.open(PanelTab.Agents) }
             LauncherRow(Symbol.Folder, "Files", null) { panel.open(PanelTab.Files) }
             LauncherRow(Symbol.Diff, "Diff", if (target.repository) null else "Available in git repositories.") { panel.showDiff() }
-            LauncherRow(Symbol.Bot, "Agents", null, count = store.agents.count { it.working }) { panel.open(PanelTab.Agents) }
             LauncherRow(Symbol.GitPullRequest, "Pull Request", store.pullRequestsUnavailable) { panel.open(PanelTab.PullRequest) }
             if (store.pullRequestsExtended) {
                 LauncherRow(Symbol.List, "All Pull Requests", store.pullRequestsUnavailable) { panel.open(PanelTab.PullRequests) }

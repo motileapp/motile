@@ -508,6 +508,15 @@ impl RightPanelView {
                     .flex_col()
                     .gap(px(2.))
                     .child(row(
+                        "launch-agents",
+                        "bot",
+                        "Agents",
+                        working,
+                        Some("rightPanel.agents"),
+                        None,
+                        Box::new(|store| store.open_tab(PanelTab::Agents)),
+                    ))
+                    .child(row(
                         "launch-files",
                         "folder",
                         "Files",
@@ -524,15 +533,6 @@ impl RightPanelView {
                         Some("rightPanel.diff"),
                         (!target.repository).then(|| "Available in git repositories.".to_string()),
                         Box::new(|store| store.show_diff(None, None)),
-                    ))
-                    .child(row(
-                        "launch-agents",
-                        "bot",
-                        "Agents",
-                        working,
-                        Some("rightPanel.agents"),
-                        None,
-                        Box::new(|store| store.open_tab(PanelTab::Agents)),
                     ))
                     .child(row(
                         "launch-pull-request",
