@@ -83,7 +83,7 @@ pub fn html_view(
     if let Some(view) = live.view(app) {
         return card.child(view);
     }
-    let still = card
+    let still = catches_glide(card, cx)
         .child(style::type_of(TextStyle::CardTitle, false).text_box().text_color(c.foreground).child(title.to_string()))
         .child(SMALL.text_box().text_color(c.muted_foreground).child("Interactive view"));
     let button = ActionButton::new(cx.id(id, "open"), live::OPEN).symbol("play.fill");
@@ -131,9 +131,20 @@ pub fn youtube(
     )
     .absolute()
     .inset_0();
-    frame.cursor_pointer().children(thumbnail).child(symbol).on_click({
+    catches_glide(frame, cx).cursor_pointer().children(thumbnail).child(symbol).on_click({
         let transcript = cx.transcript.clone();
         move |_, window, app| live.open(page.clone(), gpui_kit::black(), transcript.clone(), window, app)
+    })
+}
+
+/// A press on a page while the user's scroll still moves the transcript is the transcript's: the
+/// page doesn't open.
+fn catches_glide(element: Stateful<Div>, cx: &UiCx) -> Stateful<Div> {
+    let transcript = cx.transcript.clone();
+    element.capture_any_mouse_down(move |_, _, app| {
+        if transcript.as_ref().and_then(WeakEntity::upgrade).is_some_and(|transcript| transcript.read(app).glides()) {
+            app.stop_propagation();
+        }
     })
 }
 

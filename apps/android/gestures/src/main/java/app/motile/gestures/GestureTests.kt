@@ -1,6 +1,9 @@
 package app.motile.gestures
 
 import android.content.Intent
+import android.os.SystemClock
+import android.view.InputDevice
+import android.view.MotionEvent
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
@@ -331,6 +334,75 @@ class GestureTests {
         } finally {
             deleteThread("San Francisco, Your Way")
         }
+    }
+
+    /**
+     * A finger that lands on a program's canvas while the transcript still flings is the
+     * transcript's: it stops the transcript there and drags it, and the page never sees it.
+     */
+    @Test
+    fun aDragOnAProgramsCanvasWhileTheTranscriptFlingsScrollsTheTranscript() {
+        try {
+            openSidebar()
+            device.findObject(newThread).click()
+            assertTrue(gone(newThread))
+            send("show the ui html")
+            send("show the ui html")
+            val page = lastShown(By.clazz("android.webkit.WebView"))?.visibleBounds ?: return fail("no page")
+            val title = lastShown(By.text("Take a little break")) ?: return fail("no title")
+            val dp = instrumentation.context.resources.displayMetrics.density
+            val top = settled(title)
+            val x = page.centerX()
+            val start = title.visibleBounds.centerY()
+            val fling = (0..10).map { Touch(x, start + (it * 6 * dp).toInt(), it * 15L) }
+            drag(fling)
+            assertTrue(settled(title) > top + 60 * dp)
+            val besideX = page.left - (8 * dp).toInt()
+            val besideY = page.bottom + (40 * dp).toInt()
+            drag((0..50).map { Touch(besideX, besideY - (it * 10 * dp).toInt(), it * 20L) } + Touch(besideX, besideY - (500 * dp).toInt(), 1_200))
+            assertEquals(top, settled(title))
+            val canvasY = page.top + (250 * dp).toInt()
+            drag(fling)
+            drag(listOf(Touch(x, canvasY, 50)) + (1..30).map { Touch(x, canvasY - (it * 13 * dp).toInt(), 50 + it * 20L) } + Touch(x, canvasY - (390 * dp).toInt(), 850))
+            assertEquals(top, settled(title))
+        } finally {
+            deleteThread("Catch the Dot")
+        }
+    }
+
+    private data class Touch(val x: Int, val y: Int, val at: Long)
+
+    /**
+     * Moves a finger along the touches, each where it is and when in milliseconds, lifting it at the
+     * last, as the screen reports a finger: UiDevice waits for the client to settle between gestures,
+     * so a finger couldn't land while the transcript still flings.
+     */
+    private fun drag(touches: List<Touch>) {
+        val down = SystemClock.uptimeMillis()
+        touches.forEachIndexed { index, touch ->
+            val action = when (index) {
+                0 -> MotionEvent.ACTION_DOWN
+                touches.lastIndex -> MotionEvent.ACTION_UP
+                else -> MotionEvent.ACTION_MOVE
+            }
+            SystemClock.sleep((down + touch.at - SystemClock.uptimeMillis()).coerceAtLeast(0))
+            val event = MotionEvent.obtain(down + touches.first().at, down + touch.at, action, touch.x.toFloat(), touch.y.toFloat(), 0)
+            event.source = InputDevice.SOURCE_TOUCHSCREEN
+            instrumentation.uiAutomation.injectInputEvent(event, false)
+            event.recycle()
+        }
+    }
+
+    /** Where the view's top is once the rows around it stop moving. */
+    private fun settled(view: UiObject2): Int {
+        var top = view.visibleBounds.top
+        repeat(10) {
+            Thread.sleep(1_000)
+            val now = view.visibleBounds.top
+            if (now == top) return top
+            top = now
+        }
+        return top
     }
 
     /** Sends a message and waits for its reply. */

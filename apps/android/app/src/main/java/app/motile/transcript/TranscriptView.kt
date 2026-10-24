@@ -89,6 +89,9 @@ import kotlinx.coroutines.launch
 /** What a row needs from the transcript around it. */
 val LocalTranscript = staticCompositionLocalOf<TranscriptActions> { error("No transcript") }
 
+/** Whether the user's finger, or the fling it gave, still moves the transcript around a row. */
+val LocalTranscriptMoves = staticCompositionLocalOf<() -> Boolean> { { false } }
+
 /** What the rows of one transcript do: open and close, copy, and open what they stand for. */
 class TranscriptActions(val store: AppStore, val model: TranscriptModel, val ofAgent: Boolean) {
     private val expanded = mutableStateMapOf<String, Unit>()
@@ -336,6 +339,8 @@ fun TranscriptView(model: TranscriptModel, modifier: Modifier = Modifier, conten
         onDispose { if (DemoHooks.scrollTranscriptToTop === hook) DemoHooks.scrollTranscriptToTop = null }
     }
 
+    val moves = remember(follower, state) { { follower.userScrolling && state.isScrollInProgress } }
+
     val userScroll = remember(follower, state) {
         object : NestedScrollConnection {
             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
@@ -377,7 +382,7 @@ fun TranscriptView(model: TranscriptModel, modifier: Modifier = Modifier, conten
     ) {
         val side = max(Theme.contentPadding.value, ((maxWidth - Theme.contentWidth) / 2).value).dp
         val bottomFade = max(0f, ((bottom - TranscriptView.composerGap) / 2).value).dp
-        CompositionLocalProvider(LocalTranscript provides actions) {
+        CompositionLocalProvider(LocalTranscript provides actions, LocalTranscriptMoves provides moves) {
             LazyColumn(
                 Modifier
                     .fillMaxSize()

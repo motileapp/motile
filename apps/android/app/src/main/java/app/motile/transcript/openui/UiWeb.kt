@@ -69,6 +69,7 @@ import app.motile.theme.LocalPalette
 import app.motile.theme.LocalSurface
 import app.motile.theme.Palette
 import app.motile.theme.Theme
+import app.motile.transcript.LocalTranscriptMoves
 import app.motile.ui.ActionButton
 import app.motile.ui.Spinner
 import kotlin.math.abs
@@ -244,9 +245,10 @@ private fun Still(title: String, kind: String, reload: () -> Unit) {
 private fun PageView(page: UiPage, modifier: Modifier, opensYouTube: Boolean, onGone: () -> Unit, onHeight: ((Float) -> Unit)? = null) {
     val gone by rememberUpdatedState(onGone)
     val shown = remember { Shown() }
+    val caught = modifier.catchesFling(LocalTranscriptMoves.current)
     AndroidView(
         factory = { context -> sandboxed(context, opensYouTube) { gone() }.also { shown.view = it } },
-        modifier = if (onHeight == null) modifier else modifier.scrollsInside(shown),
+        modifier = if (onHeight == null) caught else caught.scrollsInside(shown),
         update = { view ->
             if (view.tag == page || view.tag === Gone) return@AndroidView
             view.tag = page
@@ -272,6 +274,17 @@ private fun PageView(page: UiPage, modifier: Modifier, opensYouTube: Boolean, on
 /** The web view a page is shown in, once made. */
 private class Shown {
     var view: WebView? = null
+}
+
+/**
+ * A finger that lands while the user's scroll still moves the transcript is the transcript's, which
+ * it stops there, as it does on any other row: the page never sees it.
+ */
+private fun Modifier.catchesFling(moves: () -> Boolean): Modifier = pointerInput(moves) {
+    awaitEachGesture {
+        val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+        if (moves()) down.consume()
+    }
 }
 
 /**

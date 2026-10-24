@@ -27,6 +27,12 @@ final class PageWebView: WKWebView {
 
     required init?(coder: NSCoder) { fatalError("not used") }
 
+    /// A click while the transcript still glides is the transcript's, as a finger is on iOS.
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        guard WheelGesture.owner === self || !WheelGesture.glides(at: ProcessInfo.processInfo.systemUptime) else { return nil }
+        return super.hitTest(point)
+    }
+
     override func scrollWheel(with event: NSEvent) {
         guard WheelGesture.owner === self else { return toTranscript(event) }
         switch wheel {
@@ -71,22 +77,42 @@ final class PageWebView: WKWebView {
 
 /// Whose the wheel's gesture is: the page's it started over, or the transcript's, which keeps it
 /// when a page slides under the pointer. A gesture starts with the fingers on the trackpad, or with
-/// a mouse wheel's first tick after a pause.
+/// a mouse wheel's first tick after a pause. One that starts while the last still glides stops it
+/// and stays its owner's, as a finger on iOS does.
 @MainActor
 private enum WheelGesture {
     static weak var owner: PageWebView?
     private static var lastTick: TimeInterval = 0
+    /// When the last momentum event came, which comes every frame while a scroll glides.
+    private static var lastGlide: TimeInterval = -.infinity
+    /// The fingers touched the trackpad while a scroll glided.
+    private static var caught = false
     private static var monitor: Any?
     private static let pause: TimeInterval = 0.3
+    /// How long after a momentum event a scroll still glides: a few frames.
+    private static let glideFrames: TimeInterval = 0.1
 
     static func watch() {
         guard monitor == nil else { return }
         monitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { event in
-            guard starts(event) else { return event }
-            owner = page(under: event)
-            owner?.ask()
+            follow(event)
             return event
         }
+    }
+
+    private static func follow(_ event: NSEvent) {
+        if !event.momentumPhase.isEmpty { lastGlide = event.timestamp }
+        if event.phase.contains(.mayBegin) { caught = glides(at: event.timestamp) }
+        if event.phase.contains(.cancelled) { caught = false }
+        guard starts(event) else { return }
+        defer { caught = false }
+        guard !caught, !glides(at: event.timestamp) else { return }
+        owner = page(under: event)
+        owner?.ask()
+    }
+
+    static func glides(at time: TimeInterval) -> Bool {
+        time - lastGlide < glideFrames
     }
 
     private static func starts(_ event: NSEvent) -> Bool {

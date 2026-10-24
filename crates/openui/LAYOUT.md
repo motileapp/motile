@@ -562,7 +562,10 @@ control, the pair a column.
   (`web::max_height`), so that the transcript can always be scrolled past it. A taller page scrolls
   inside it. 1 in the surface's border, `Radius.lg`, clipped, the surface's colour behind.
 - A gesture is the page's when it starts on it and the page takes it, until it ends; otherwise it
-  is the transcript's, which also keeps one that started elsewhere when the page slides under it.
+  is the transcript's, which also keeps one that started elsewhere when the page slides under it,
+  and one that starts on the page while the transcript is still dragged or glides (a fling, a
+  trackpad's momentum): that stops the transcript there, as it does on any other row, and the page
+  never sees it.
   A finger is the page's on an element whose `touch-action` keeps the page from panning up and
   down, or once the page prevents its touch (`hold`): the transcript doesn't scroll and the drawer
   doesn't open under it. A wheel (Mac) is the page's when the page prevents it or scrolls with it
