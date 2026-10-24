@@ -38,8 +38,12 @@ import app.motile.core.ToolStatus
 import app.motile.platform.Symbol
 import app.motile.theme.ControlSize
 import app.motile.theme.LocalPalette
+import app.motile.theme.LocalSurface
 import app.motile.theme.Palette
+import app.motile.theme.Radius
+import app.motile.theme.Surface
 import app.motile.theme.Theme
+import app.motile.transcript.dashedBorder
 import app.motile.ui.AgentAvatar
 import app.motile.ui.HighlightButton
 import app.motile.ui.Icon
@@ -165,6 +169,7 @@ private fun AgentRow(agent: AgentInfo) {
     val menu = rememberMenuState()
     val threadID = agent.threadID
     val open = {
+        store.rightPanel.visit(agent.id)
         if (threadID != null) store.openStartedThread(threadID) else store.rightPanel.showAgent(agent.id)
     }
     // "6.1-Sol · work · 3 tools · 21k tokens", as far as each is known.
@@ -204,6 +209,10 @@ private fun AgentRow(agent: AgentInfo) {
                     facts?.let { Text(it, size = 11f, color = palette.mutedStrongerForeground, maxLines = 1) }
                 }
             }
+        }
+        if (store.rightPanel.visitedAgent == agent.id) {
+            val color = LocalSurface.current.color(Surface.Layer.ControlLit)
+            Box(Modifier.matchParentSize().padding(panelRowMargin).dashedBorder(color, Radius.md, dash = 4.dp, gap = 3.dp))
         }
         MenuPopup(menu) {
             item(if (threadID == null) "Show What It Did" else "Open Thread", Symbol.ArrowRight, run = open)

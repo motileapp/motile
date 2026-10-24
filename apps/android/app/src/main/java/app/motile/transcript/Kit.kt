@@ -161,8 +161,8 @@ object CodeHeader {
     val height: Dp = ControlSize.Regular.height + buttonInset * 2
 }
 
-/** A rounded line of dots around the view, as a message that waits is drawn. */
-fun Modifier.dottedBorder(color: Color, radius: Dp): Modifier = drawBehind {
+/** A rounded dashed line around the view, `dash` long with `gap` between, as a message that waits is drawn. */
+fun Modifier.dashedBorder(color: Color, radius: Dp, dash: Dp = 2.dp, gap: Dp = 3.dp): Modifier = drawBehind {
     val inset = 0.5.dp.toPx()
     val corner = max(0f, radius.toPx() - inset)
     drawRoundRect(
@@ -170,7 +170,7 @@ fun Modifier.dottedBorder(color: Color, radius: Dp): Modifier = drawBehind {
         topLeft = Offset(inset, inset),
         size = Size(size.width - inset * 2, size.height - inset * 2),
         cornerRadius = CornerRadius(corner),
-        style = Stroke(1.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(2.dp.toPx(), 3.dp.toPx()))),
+        style = Stroke(1.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(dash.toPx(), gap.toPx()))),
     )
 }
 

@@ -36,7 +36,10 @@ struct PanelContent: View {
     let active: PanelTab?
 
     var body: some View {
-        if let reason = store.panelUnavailable {
+        // The agents are the thread's own, kept with it, so they show while the server is away too.
+        if active == .agents, store.panelTarget != nil {
+            AgentsSurface()
+        } else if let reason = store.panelUnavailable {
             PanelMessage(text: reason)
         } else if let target = store.panelTarget {
             switch active {

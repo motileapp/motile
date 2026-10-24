@@ -172,7 +172,7 @@ private fun QueuedRow(row: RowModel, queued: QueuedContent) {
     val hasFiles = queued.attachments.isNotEmpty()
     val waiting = row.id == RowModel.pendingID
     Box(Modifier.fillMaxWidth().padding(vertical = 14.dp), contentAlignment = Alignment.TopEnd) {
-        Column(Modifier.bubbleWidth().dottedBorder(palette.border, Radius.xl)) {
+        Column(Modifier.bubbleWidth().dashedBorder(palette.border, Radius.xl)) {
             if (hasText || hasFiles) {
                 Column(
                     Modifier.padding(start = Bubble.PADDING.dp, end = Bubble.PADDING.dp, top = if (hasFiles) Bubble.PADDING.dp else 10.dp),

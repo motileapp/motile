@@ -24,7 +24,8 @@ use crate::panel::pull_request_list::PullRequestListView;
 use crate::panel::ricrac::RicracView;
 use crate::store::Store;
 use crate::store::integrations::Integration;
-use crate::theme::{self, Colors, ControlSize, Layer, Radius, colors};
+use crate::theme::{self, Colors, ControlSize, Layer, Radius, Surface, colors};
+use crate::transcript::kit::dashed_outline;
 use crate::ui::agent_avatar::{AgentAvatar, state_color};
 use crate::ui::menu::Menu;
 use crate::ui::{ActionButton, ActionMenu, Highlight, KeyCaps, Spinner, TOOLBAR_WIDTH, Variant, edges, icons};
@@ -1192,6 +1193,7 @@ impl RightPanelView {
         let agents = store.agents.clone();
         let parent = store.parent_thread().map(|thread| thread.id.clone());
         let shown_agent = store.right_panel.shown_agent.clone();
+        let visited_agent = store.panel_tabs().visited_agent;
         if agents.is_empty() && parent.is_none() {
             return Self::message("The agents this thread starts show up here.", false, cx);
         }
@@ -1234,7 +1236,10 @@ impl RightPanelView {
                 AgentEntry::Agent(agent) => {
                     let selected = shown_agent.as_ref() == Some(&agent.id);
                     let hovered = hovered.as_ref() == Some(&agent.id);
-                    agent_row(agent, selected, hovered, &store, &view, cx).into_any_element()
+                    let visited = visited_agent.as_ref() == Some(&agent.id);
+                    agent_row(agent, selected, hovered, &store, &view, cx)
+                        .when(visited, |row| row.child(visited_outline(cx)))
+                        .into_any_element()
                 }
             }
         })
@@ -1687,6 +1692,16 @@ fn ended_header(count: usize, failed: usize, shown: bool, cx: &App) -> Stateful<
         )
 }
 
+/// Around the agent opened last, inset as the row's light is.
+fn visited_outline(cx: &App) -> Div {
+    let color = Surface::Background.layer(Layer::ControlLit, colors(cx));
+    div().absolute().top(px(super::ROW_MARGIN)).bottom(px(super::ROW_MARGIN)).left_0().right_0().child(dashed_outline(
+        Radius::MD,
+        [4., 3.],
+        color,
+    ))
+}
+
 /// An agent the thread's agent started: how it is doing, what it is doing or said last, and what
 /// it runs on and has spent. A click opens its thread, or what it did in the thread's place. One
 /// that works in a thread of its own can be stopped from here.
@@ -1703,9 +1718,12 @@ fn agent_row(
     let stoppable = agent.working() && agent.thread_id.is_some();
     let open = {
         let (id, thread) = (agent.id.clone(), agent.thread_id.clone());
-        move |store: &mut Store, cx: &mut Context<Store>| match &thread {
-            Some(thread) => store.open_started_thread(thread, cx),
-            None => store.show_agent(id.clone(), cx),
+        move |store: &mut Store, cx: &mut Context<Store>| {
+            store.visit_agent(id.clone());
+            match &thread {
+                Some(thread) => store.open_started_thread(thread, cx),
+                None => store.show_agent(id.clone(), cx),
+            }
         }
     };
     let stop = {
@@ -1911,7 +1929,10 @@ impl Render for RightPanelView {
         let unavailable = store.panel_unavailable();
         let target = store.panel_target();
         let active = store.panel_tabs().active;
-        let content: AnyElement = if let Some(reason) = unavailable {
+        // The agents are the thread's own, kept with it, so they show while the server is away too.
+        let content: AnyElement = if active == Some(PanelTab::Agents) && target.is_some() {
+            self.agents_surface(cx)
+        } else if let Some(reason) = unavailable {
             Self::message(reason, false, cx)
         } else if let Some(target) = target {
             match active {

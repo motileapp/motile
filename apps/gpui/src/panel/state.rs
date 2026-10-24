@@ -135,6 +135,8 @@ pub struct PanelTabs {
     pub scope: Option<DiffScope>,
     /// The panel covers the thread.
     pub maximized: Option<bool>,
+    /// The agent opened last from the agents tab, for as long as the tab is open.
+    pub visited_agent: Option<String>,
 }
 
 impl PanelTabs {
@@ -596,6 +598,9 @@ impl Store {
         let Some(key) = self.panel_key() else { return };
         let mut tabs = self.panel_tabs();
         change(&mut tabs);
+        if !tabs.tabs.contains(&PanelTab::Agents) {
+            tabs.visited_agent = None;
+        }
         let untouched = tabs.is_blank() && tabs.scope.is_none() && tabs.maximized.is_none();
         if untouched {
             self.right_panel.tabs_by_key.remove(&key);
@@ -807,6 +812,11 @@ impl Store {
         self.agent_transcript.update(cx, |transcript, _| transcript.begin(Some(thread_id.clone()), live, false));
         self.agents_changed(cx);
         self.send(Command::OpenAgent { thread_id, agent_id: id });
+    }
+
+    /// Marks the agent as the one opened last, before it is opened and the tabs may be another thread's.
+    pub fn visit_agent(&mut self, id: String) {
+        self.change_tabs(|tabs| tabs.visited_agent = Some(id));
     }
 
     /// The agent the open thread's agent started that shows in the thread's place.
