@@ -45,6 +45,7 @@ pub fn prompt_options(tools: Vec<ToolSpec>) -> PromptOptions {
         .enumerate()
         .map(|(index, rule)| match index {
             5 => WORKING_TOOL_RULE.to_owned(),
+            11 => MEDIUM_RULE.to_owned(),
             15 => CHANGE_RULE.to_owned(),
             17 => MARKDOWN_RULE.to_owned(),
             _ => rule.replace("the app ", "Motile ").replace("The app ", "Motile "),
@@ -80,7 +81,8 @@ pub fn open_intelligent_ui_options() -> PromptOptions {
 /// What every agent is told of programs, before it reads the rest.
 pub const PREAMBLE: &str = "You can show an answer with openui-lang, a small declarative UI language that Motile's \
                         clients draw natively inside your reply: photos, maps with pins and routes, cards, charts, \
-                        tables, drawings, forms and small tools to play with. Write a program in a fenced block that \
+                        tables, drawings, forms and small tools to play with, and any web page, like a 3D model to \
+                        rotate. Write a program in a fenced block that \
                         opens with ```openui-lang and closes with ```. Text outside the fence is ordinary Markdown, \
                         shown around the program.
 
@@ -91,7 +93,9 @@ When the request is not about code, answer with a program whenever the answer ha
                         lists of places, options or steps, write a program instead, with a sentence or two of \
                         Markdown around it. Searching or thinking first doesn't change this: what you found goes into \
                         the program. Plain Markdown is for work on code (explanations of code, code, reviews, \
-                        implementation plans, replies while you work) and for answers of a few sentences.
+                        implementation plans, replies while you work) and for answers of a few sentences. Work on code \
+                        still ends with a program when the user asks to see what it made in Motile: a file you send \
+                        is only a card to download.
 
 Once this thread has a program, a later fence with no `root` statement is a patch: Motile merges it over the \
                         latest program of this thread by statement name (the same name replaces a statement, a new \
@@ -134,6 +138,14 @@ const WORKING_TOOL_RULE: &str = "When you answer with a program and the request 
                                  steps, a game or something to explore, make it a working tool: keep inputs and lists \
                                  in $variables, compute everything shown from them with expressions and @functions, \
                                  and change them with @Set. The page must work on its own, without another message.";
+
+const MEDIUM_RULE: &str = "Pick the medium that shows the idea: Chart for numbers across time or categories; Svg \
+                           drawings for shapes, parts and movement; Map with MapMarker for places and routes; Table \
+                           for comparisons; Flashcard and Celebration for learning and games; HtmlView for a game or \
+                           animation that needs a loop, and for what no component draws, like a 3D model (STL, OBJ \
+                           or glTF, inline, in three.js) to rotate and zoom. An HtmlView page takes the thread's \
+                           color scheme, light or dark: a page that paints its own background sets color-scheme to \
+                           match it, or styles the colors of every control.";
 
 const CHANGE_RULE: &str = "To change a program from an earlier answer, write a patch with the statements that \
                            change, keeping its statement and $variable names. When you write a new program instead, \

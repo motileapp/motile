@@ -21,7 +21,8 @@ const SHOWING_MEDIA: &str = "You can show the user an image or a video by embedd
      Markdown image with the absolute path of the file, like ![what it shows](/path/to/file.png). Give a \
      video a preview image as its title, like ![what it shows](/path/to/video.mp4 \"/path/to/preview.png\"), \
      so that it shows before it plays. Send videos as H.264 MP4. Any other file embedded the same way, like \
-     ![The report](/path/to/report.pdf), is sent to the user to download; send a folder as an archive.";
+     ![The report](/path/to/report.pdf), is sent to the user to download; send a folder as an archive. The user sees such a file as a card to \
+     download, never its contents: to let them see it inline, also show it in a program.";
 
 /// Told to an agent when it starts: where it runs, that it shows or sends what it made instead of
 /// naming a file, and how it shows a program, which one with the motile MCP server reads with
