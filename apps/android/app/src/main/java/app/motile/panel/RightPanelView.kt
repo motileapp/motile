@@ -255,7 +255,7 @@ private fun PanelLauncher(target: PanelTarget) {
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text("Open", size = 13f, weight = FontWeight.SemiBold, color = LocalPalette.current.foreground)
-        Column(Modifier.width(250.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Column(Modifier.width(250.dp)) {
             LauncherRow(Symbol.Bot, "Agents", null, count = store.agents.count { it.working }) { panel.open(PanelTab.Agents) }
             LauncherRow(Symbol.Folder, "Files", null) { panel.open(PanelTab.Files) }
             LauncherRow(Symbol.Diff, "Diff", if (target.repository) null else "Available in git repositories.") { panel.showDiff() }
@@ -273,14 +273,21 @@ private fun PanelLauncher(target: PanelTarget) {
     }
 }
 
+/** The space between two launcher rows' lights, which is the rows' own, so that it takes a tap. */
+private val LAUNCHER_GAP = 2.dp
+
 @Composable
 private fun LauncherRow(symbol: Symbol, title: String, reason: String?, count: Int = 0, action: () -> Unit) {
     val palette = LocalPalette.current
     val foreground = palette.foreground
     Disabled(reason != null) {
-        HighlightButton(onClick = action, modifier = Modifier.fillMaxWidth().opacity(Opacity.Disabled, on = reason != null)) {
+        HighlightButton(
+            onClick = action,
+            modifier = Modifier.fillMaxWidth().opacity(Opacity.Disabled, on = reason != null),
+            inset = PaddingValues(vertical = LAUNCHER_GAP / 2),
+        ) {
             Row(
-                Modifier.fillMaxWidth().height(pressable(34f)).padding(horizontal = 10.dp),
+                Modifier.fillMaxWidth().height(pressable(34f) + LAUNCHER_GAP).padding(horizontal = 10.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
