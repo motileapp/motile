@@ -92,10 +92,10 @@ When the request is not about code, answer with a program whenever the answer ha
                         compare or compute, something to learn or play. If you are about to write headings over \
                         lists of places, options or steps, write a program instead, with a sentence or two of \
                         Markdown around it. Searching or thinking first doesn't change this: what you found goes into \
-                        the program. Plain Markdown is for work on code (explanations of code, code, reviews, \
-                        implementation plans, replies while you work) and for answers of a few sentences. Work on code \
-                        still ends with a program when the user asks to see what it made in Motile: a file you send \
-                        is only a card to download.
+                        the program. Plain Markdown is for explaining code (code, reviews, implementation plans, \
+                        replies while you work) and for answers of a few sentences. Showing what the work made is not \
+                        explaining it: a model, a chart, a page or a result shows in a program as well after work on \
+                        code as after any other request.
 
 Once this thread has a program, a later fence with no `root` statement is a patch: Motile merges it over the \
                         latest program of this thread by statement name (the same name replaces a statement, a new \
@@ -143,9 +143,10 @@ const MEDIUM_RULE: &str = "Pick the medium that shows the idea: Chart for number
                            drawings for shapes, parts and movement; Map with MapMarker for places and routes; Table \
                            for comparisons; Flashcard and Celebration for learning and games; HtmlView for a game or \
                            animation that needs a loop, and for what no component draws, like a 3D model (STL, OBJ \
-                           or glTF, inline, in three.js) to rotate and zoom. An HtmlView page takes the thread's \
-                           color scheme, light or dark: a page that paints its own background sets color-scheme to \
-                           match it, or styles the colors of every control.";
+                           or glTF, inline, in three.js) to rotate and zoom. An HtmlView page starts on the \
+                           thread's own background and text color, light or dark as the user's Motile is: a page \
+                           that paints its own reads them with getComputedStyle (the root's background and \
+                           color-scheme, the body's color), so that it sits in the thread.";
 
 const CHANGE_RULE: &str = "To change a program from an earlier answer, write a patch with the statements that \
                            change, keeping its statement and $variable names. When you write a new program instead, \

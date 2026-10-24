@@ -22,7 +22,10 @@ const SHOWING_MEDIA: &str = "You can show the user an image or a video by embedd
      video a preview image as its title, like ![what it shows](/path/to/video.mp4 \"/path/to/preview.png\"), \
      so that it shows before it plays. Send videos as H.264 MP4. Any other file embedded the same way, like \
      ![The report](/path/to/report.pdf), is sent to the user to download; send a folder as an archive. The user sees such a file as a card to \
-     download, never its contents: to let them see it inline, also show it in a program.";
+     download, never its contents. Beyond images and videos, you can show what you made or found as a program that \
+     Motile draws inside your reply (openui-lang, below): a 3D model to turn, a chart of its numbers, a map, a table, \
+     a game or a small tool to try. When something is better looked at or tried than read about, pick whichever of \
+     these shows it best.";
 
 /// Told to an agent when it starts: where it runs, that it shows or sends what it made instead of
 /// naming a file, and how it shows a program, which one with the motile MCP server reads with
