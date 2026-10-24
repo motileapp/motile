@@ -35,6 +35,8 @@ const TAB_EDGE: f32 = 8.;
 /// The room on each side of a tab that looks empty but is the tab's, so no click falls between
 /// tabs.
 const TAB_MARGIN: f32 = 1.;
+/// The space between two launcher rows' lights, which is the rows' own, so that it takes a click.
+const LAUNCHER_GAP: f32 = 2.;
 
 /// What makes a tab ask its server again: another folder or scope, a turn that ended there, or
 /// the button that asks.
@@ -458,12 +460,14 @@ impl RightPanelView {
                 .group(group.clone())
                 .relative()
                 .w_full()
-                .h(px(34.))
+                .h(px(34. + LAUNCHER_GAP))
                 .px(px(10.))
                 .flex()
                 .items_center()
                 .gap(px(10.))
-                .when(enabled, |row| row.child(light(group, Radius::MD, edges(0., 0., 0., 0.), false, cx)))
+                .when(enabled, |row| {
+                    row.child(light(group, Radius::MD, edges(LAUNCHER_GAP / 2., 0., LAUNCHER_GAP / 2., 0.), false, cx))
+                })
                 .when(!enabled, |row| row.opacity(c.opacity(theme::Opacity::Disabled)))
                 .child(
                     div()
@@ -507,7 +511,6 @@ impl RightPanelView {
                     .w(px(250.))
                     .flex()
                     .flex_col()
-                    .gap(px(2.))
                     .child(row(
                         "launch-agents",
                         "bot",

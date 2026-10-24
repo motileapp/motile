@@ -282,6 +282,8 @@ struct PanelTabChip: View {
 
 /// What a blank tab shows: the tabs there are to open.
 private struct PanelLauncher: View {
+    /// The space between two rows' lights, which is the rows' own, so that it takes a click.
+    private static let gap: CGFloat = 2
     @Environment(AppStore.self) private var store
     let target: PanelTarget
 
@@ -290,7 +292,7 @@ private struct PanelLauncher: View {
             Text("Open")
                 .font(.ui(size: 13, weight: .semibold))
                 .foregroundStyle(Color.themeForeground)
-            VStack(spacing: 2) {
+            VStack(spacing: 0) {
                 row(.bot, "Agents", count: store.agents.filter(\.working).count, command: "rightPanel.agents", reason: nil) {
                     store.rightPanel.open(.agents)
                 }
@@ -351,9 +353,9 @@ private struct PanelLauncher: View {
             }
             .foregroundStyle(Color.themeForeground)
             .padding(.horizontal, 10)
-            .frame(height: pressable(34))
+            .frame(height: pressable(34) + Self.gap)
         }
-        .buttonStyle(.highlight())
+        .buttonStyle(.highlight(inset: EdgeInsets(top: Self.gap / 2, leading: 0, bottom: Self.gap / 2, trailing: 0)))
         .disabled(reason != nil)
         .opacity(.disabled, when: reason != nil)
         .help(reason ?? "")
