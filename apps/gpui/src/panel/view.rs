@@ -91,6 +91,13 @@ pub struct RightPanelView {
     marks: Option<(MarksMadeOf, CodeMarks)>,
     agents: ListState,
     listed_agents: Vec<String>,
+    /// The rows the agents list has, by `AgentEntry::id`.
+    agent_rows: Vec<String>,
+    /// The thread whose agents the list has, by the key of its tabs, and whether its scroll was restored.
+    agents_of: Option<String>,
+    agents_restored: bool,
+    /// The row each thread's agents tab was scrolled to, and how far into it, by the key of its tabs.
+    agents_top: HashMap<String, (String, Pixels)>,
     /// Whether the agents that ended are shown, once the user has said. Until then they are
     /// while none works.
     shows_ended: Option<bool>,
@@ -188,6 +195,10 @@ impl RightPanelView {
             marks: None,
             agents: ListState::new(0, ListAlignment::Top, px(400.)),
             listed_agents: Vec::new(),
+            agent_rows: Vec::new(),
+            agents_of: None,
+            agents_restored: false,
+            agents_top: HashMap::new(),
             shows_ended: None,
             hovered_agent: None,
             _ticks: ticks,
@@ -1197,6 +1208,15 @@ impl RightPanelView {
         let parent = store.parent_thread().map(|thread| thread.id.clone());
         let shown_agent = store.right_panel.shown_agent.clone();
         let visited_agent = store.panel_tabs().visited_agent;
+        let key = store.panel_target().map(|target| target.key);
+        if self.agents_of != key {
+            self.keep_agents_top();
+            self.agents.reset(0);
+            self.listed_agents.clear();
+            self.agents_of = key;
+            self.agents_restored = false;
+        }
+        let ready = !agents.is_empty();
         if agents.is_empty() && parent.is_none() {
             return Self::message("The agents this thread starts show up here.", false, cx);
         }
@@ -1219,6 +1239,10 @@ impl RightPanelView {
             }
         }
         crate::ui::relist(&self.agents, &mut self.listed_agents, entries.iter().map(AgentEntry::key).collect());
+        self.agent_rows = entries.iter().map(|entry| entry.id().to_string()).collect();
+        if ready && !self.agents_restored {
+            self.restore_agents_top();
+        }
         let (entries, store, view) = (Rc::new(entries), self.store.clone(), cx.entity().downgrade());
         let hovered = self.hovered_agent.clone();
         let list = list(self.agents.clone(), move |index, _, cx| {
@@ -1251,6 +1275,26 @@ impl RightPanelView {
         .pt(px(8. - super::ROW_MARGIN))
         .pb(px(super::END_ROOM - super::ROW_MARGIN));
         Self::surface(bar, list.into_any_element())
+    }
+
+    /// Keeps where the agents list of the thread it was last drawn for is scrolled to, once that
+    /// was restored.
+    fn keep_agents_top(&mut self) {
+        let Some(key) = self.agents_of.clone() else { return };
+        if !self.agents_restored {
+            return;
+        }
+        let top = self.agents.logical_scroll_top();
+        let Some(row) = self.agent_rows.get(top.item_ix) else { return };
+        self.agents_top.insert(key, (row.clone(), top.offset_in_item));
+    }
+
+    /// Scrolls the agents list to where it was when the thread last showed it.
+    fn restore_agents_top(&mut self) {
+        self.agents_restored = true;
+        let Some((row, offset)) = self.agents_of.as_ref().and_then(|key| self.agents_top.get(key)) else { return };
+        let Some(item_ix) = self.agent_rows.iter().position(|id| id == row) else { return };
+        self.agents.scroll_to(ListOffset { item_ix, offset_in_item: *offset });
     }
 
     /// The issues of a Linear workspace the server is connected to, or one issue of it.
@@ -1602,6 +1646,15 @@ enum AgentEntry {
 }
 
 impl AgentEntry {
+    /// The row, whatever it shows.
+    fn id(&self) -> &str {
+        match self {
+            Self::Parent(_) => "parent",
+            Self::Ended { .. } => "ended",
+            Self::Agent(agent) => &agent.id,
+        }
+    }
+
     fn key(&self) -> String {
         match self {
             Self::Parent(id) => format!("parent:{id}"),
