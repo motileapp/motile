@@ -56,7 +56,9 @@ struct AgentAccountSheet: View {
 
     /// Claude Code signs in here; Codex, and a server too old for it, with a command.
     private var signsInHere: Bool { account.agent == .claude && server.signsInAccounts }
-    private var canStartSignIn: Bool { account.isDefault || !account.folder.trimmingCharacters(in: .whitespaces).isEmpty }
+    private var folderCaption: String {
+        "Where its sign-in is kept, as \(account.folderVariable). Empty for \(account.usualFolder)."
+    }
     private var signingIn: Bool {
         if case .waiting = signIn.step { return true }
         return false
@@ -71,7 +73,6 @@ struct AgentAccountSheet: View {
 
     private var signInCaption: String {
         if signingIn { return "Sign in on the page, then paste the code it shows." }
-        if !canStartSignIn { return "Give the account a folder to sign it in." }
         if savedAsIs { return "Signing in saved the account." }
         return "Opens Claude's sign-in page. Signing in saves the account on \(server.name)."
     }
@@ -157,25 +158,23 @@ struct AgentAccountSheet: View {
         Section("Name") {
             TextField("Personal", text: $account.name)
         }
-        if !account.isDefault {
+        Section {
+            TextField(account.usualFolder, text: $account.folder)
+                .font(.system(.body, design: .monospaced))
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+        } header: {
+            Text("Folder")
+        } footer: {
+            Text(folderCaption)
+                .foregroundStyle(Color.themeMutedForeground)
+        }
+        if account.agent == .codex {
             Section {
-                TextField(account.agent == .claude ? "~/.claude-personal" : "~/.codex-personal", text: $account.folder)
-                    .font(.system(.body, design: .monospaced))
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-            } header: {
-                Text("Folder")
+                Toggle("Share sessions with \(account.usualFolder)", isOn: $account.sharesSessions)
             } footer: {
-                Text("Where its sign-in is kept, as \(account.folderVariable)")
+                Text("The folder keeps only the sign-in. Threads move between the two and go on where they were.")
                     .foregroundStyle(Color.themeMutedForeground)
-            }
-            if account.agent == .codex {
-                Section {
-                    Toggle("Share sessions with the default account", isOn: $account.sharesSessions)
-                } footer: {
-                    Text("The folder keeps only the sign-in. Threads move between the two and go on where they were.")
-                        .foregroundStyle(Color.themeMutedForeground)
-                }
             }
         }
         Section {
@@ -250,7 +249,7 @@ struct AgentAccountSheet: View {
                         if signIn.step == .starting { Spinner(size: 17) }
                     }
                 }
-                .disabled(!canStartSignIn || signIn.step == .starting)
+                .disabled(signIn.step == .starting)
             }
         } header: {
             Text("Sign In")
@@ -328,24 +327,22 @@ struct AgentAccountSheet: View {
             field("Name") {
                 InputField("Personal", text: $account.name)
             }
-            if !account.isDefault {
-                field("Folder", caption: "Where its sign-in is kept, as \(account.folderVariable)") {
-                    InputField(account.agent == .claude ? "~/.claude-personal" : "~/.codex-personal", text: $account.folder, monospaced: true)
-                }
-                if account.agent == .codex {
-                    HStack(spacing: 10) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Share sessions with the default account")
-                                .font(.ui(size: 13, weight: .medium))
-                            Text("The folder keeps only the sign-in. Threads move between the two and go on where they were.")
-                                .font(.ui(size: 11.5))
-                                .foregroundStyle(Color.themeMutedForeground)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                        .padding(.horizontal, 4)
-                        Spacer(minLength: 12)
-                        Switch(isOn: $account.sharesSessions)
+            field("Folder", caption: folderCaption) {
+                InputField(account.usualFolder, text: $account.folder, monospaced: true)
+            }
+            if account.agent == .codex {
+                HStack(spacing: 10) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Share sessions with \(account.usualFolder)")
+                            .font(.ui(size: 13, weight: .medium))
+                        Text("The folder keeps only the sign-in. Threads move between the two and go on where they were.")
+                            .font(.ui(size: 11.5))
+                            .foregroundStyle(Color.themeMutedForeground)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
+                    .padding(.horizontal, 4)
+                    Spacer(minLength: 12)
+                    Switch(isOn: $account.sharesSessions)
                 }
             }
             field("Variables", caption: "Given to its agent: an API key or a router. A sensitive value stays on \(server.name) and is never shown again.") {
@@ -397,7 +394,6 @@ struct AgentAccountSheet: View {
                     .padding(.horizontal, 4)
                 Spacer(minLength: 12)
                 ActionButton(signedInAs == nil ? "Sign In" : "Sign In Again", pending: signIn.step == .starting, action: startSignIn)
-                    .disabled(!canStartSignIn)
             }
         }
     }

@@ -44,10 +44,11 @@ extension ServerSync {
 }
 
 extension AgentAccount {
-    var settingsDescription: String {
+    func settingsDescription(isDefault: Bool) -> String {
         let signedIn = email.map { [$0, plan].compactMap { $0 }.joined(separator: " · ") }
         let who = signedIn ?? (variables.isEmpty ? "Not signed in" : "Signs in with its variables")
-        return folder.isEmpty ? who : "\(who) · \(folder)"
+        let parts = [isDefault ? "Default" : nil, who, folder.isEmpty ? nil : folder]
+        return parts.compactMap { $0 }.joined(separator: " · ")
     }
 }
 

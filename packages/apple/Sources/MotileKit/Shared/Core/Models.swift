@@ -111,9 +111,6 @@ struct AgentAccount: Equatable, Identifiable {
     let email: String?
     let plan: String?
 
-    /// The account every agent has, which uses the agent's usual folder.
-    var isDefault: Bool { id == agent.rawValue }
-
     init(json: JSON) {
         id = json.string("id")
         agent = Agent(rawValue: json.string("agent")) ?? .claude
@@ -148,6 +145,7 @@ struct AgentAccount: Equatable, Identifiable {
 
     /// The variable the account's folder is given to its agent as.
     var folderVariable: String { agent == .claude ? "CLAUDE_CONFIG_DIR" : "CODEX_HOME" }
+    var usualFolder: String { agent == .claude ? "~/.claude" : "~/.codex" }
 
     /// The folder the name suggests, as `~/.claude-personal`, with a number when another account
     /// keeps that one.
@@ -314,7 +312,12 @@ struct Server: Equatable, Identifiable {
     /// The account with that id, or the agent's default one.
     func account(_ id: String?, of agent: Agent) -> AgentAccount? {
         let accounts = accounts(of: agent)
-        return accounts.first { $0.id == id } ?? accounts.first { $0.isDefault } ?? accounts.first
+        return accounts.first { $0.id == id } ?? accounts.first
+    }
+
+    /// An agent's first account is its default.
+    func isDefault(_ account: AgentAccount) -> Bool {
+        accounts(of: account.agent).first?.id == account.id
     }
 
     /// The model with that id as the account lists it, or else the first one offered.

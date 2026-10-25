@@ -334,14 +334,15 @@ struct SettingsPage: View {
             ForEach(server.agentAccounts.filter { installed.contains($0.agent) }) { account in
                 SettingsRow {
                     AgentIcon(agent: account.agent, size: 16)
-                    SettingsLabel("\(account.agent.name) · \(account.name)", description: account.settingsDescription)
+                    SettingsLabel("\(account.agent.name) · \(account.name)", description: account.settingsDescription(isDefault: server.isDefault(account)))
                 } trailing: {
                     more("What to do with the account") {
                         item("Edit", symbol: .pencil) { editedAccount = EditedAccount(server: server, account: account) }
-                        if !account.isDefault {
-                            Divider()
-                            item("Remove Account", symbol: .trash2, role: .destructive) { removal = .account(account, on: server) }
+                        if !server.isDefault(account) {
+                            item("Make Default", symbol: .circleCheck) { store.makeAgentAccountDefault(account, on: server) }
                         }
+                        Divider()
+                        item("Remove Account", symbol: .trash2, role: .destructive) { removal = .account(account, on: server) }
                     }
                 }
                 ThemeDivider()

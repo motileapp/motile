@@ -1,6 +1,6 @@
 //! The agents' accounts on this server. An agent's CLI keeps its sign-in in a folder, so each
-//! account is a folder: `CLAUDE_CONFIG_DIR` for Claude Code, `CODEX_HOME` for Codex. Every agent
-//! has a default account, which uses the CLI's usual folder.
+//! account is a folder: `CLAUDE_CONFIG_DIR` for Claude Code, `CODEX_HOME` for Codex, or none for
+//! the CLI's usual one. An agent's first account is its default.
 
 use std::path::{Path, PathBuf};
 
@@ -19,21 +19,18 @@ const LOCAL: [&str; 3] = ["log", "memories", "tmp"];
 const SHARED: [&str; 9] =
     ["sessions", "archived_sessions", "sqlite", "shell_snapshots", "worktrees", "skills", "plugins", "cache", "logs"];
 
-pub fn default_id(agent: Agent) -> &'static str {
+/// The id of the account a server starts with, in the CLI's usual folder.
+pub fn usual_id(agent: Agent) -> &'static str {
     match agent {
         Agent::Claude => "claude",
         Agent::Codex => "codex",
     }
 }
 
-pub fn is_default(account: &AgentAccount) -> bool {
-    account.id == default_id(account.agent)
-}
-
-/// The account the agent has before any was added.
-pub fn default_account(agent: Agent) -> AgentAccount {
+/// The account an agent has before any was added.
+pub fn usual_account(agent: Agent) -> AgentAccount {
     AgentAccount {
-        id: default_id(agent).to_string(),
+        id: usual_id(agent).to_string(),
         agent,
         name: "Default".to_string(),
         folder: String::new(),
@@ -44,14 +41,32 @@ pub fn default_account(agent: Agent) -> AgentAccount {
     }
 }
 
-/// The accounts kept in the settings, with the default ones first whatever was kept.
-pub fn with_defaults(kept: Vec<AgentAccount>) -> Vec<AgentAccount> {
-    let defaults = [Agent::Claude, Agent::Codex].map(|agent| {
-        let kept = kept.iter().find(|account| account.id == default_id(agent) && account.agent == agent);
-        kept.cloned().unwrap_or_else(|| default_account(agent))
-    });
-    let others = kept.into_iter().filter(|account| account.id != default_id(account.agent));
-    defaults.into_iter().chain(others).collect()
+/// The accounts kept in the settings, with the usual one for an agent that has none.
+pub fn with_every_agent(mut kept: Vec<AgentAccount>) -> Vec<AgentAccount> {
+    for agent in [Agent::Claude, Agent::Codex] {
+        if !kept.iter().any(|account| account.agent == agent) {
+            kept.push(usual_account(agent));
+        }
+    }
+    kept
+}
+
+/// The agent's default account: its first.
+pub fn default_of(accounts: &[AgentAccount], agent: Agent) -> AgentAccount {
+    let found = accounts.iter().find(|account| account.agent == agent);
+    found.cloned().unwrap_or_else(|| usual_account(agent))
+}
+
+/// The accounts with `id` first of its agent's, which makes it the agent's default.
+pub fn made_default(mut accounts: Vec<AgentAccount>, id: &str) -> anyhow::Result<Vec<AgentAccount>> {
+    let Some(index) = accounts.iter().position(|account| account.id == id) else {
+        bail!("That account is no longer on your server.");
+    };
+    let agent = accounts[index].agent;
+    let first = accounts.iter().position(|account| account.agent == agent).unwrap_or(index);
+    let account = accounts.remove(index);
+    accounts.insert(first, account);
+    Ok(accounts)
 }
 
 /// The account as it is to be kept: checked against the others, with a new one given its id.
@@ -81,23 +96,18 @@ pub fn checked(mut account: AgentAccount, accounts: &[AgentAccount]) -> anyhow::
     if others.iter().any(|other| other.name.eq_ignore_ascii_case(&account.name)) {
         bail!("Another {} account is called {}.", agent_name(account.agent), account.name);
     }
-    if is_default(&account) {
-        if !account.folder.is_empty() || account.shares_sessions {
-            bail!("The default account keeps the agent's usual folder.");
-        }
-    } else {
-        if account.folder.is_empty() {
-            bail!("An account needs a folder for its sign-in.");
-        }
-        if !account.folder.starts_with('/') && !account.folder.starts_with("~/") {
-            bail!("The folder has to be a full path, like ~/.claude-personal.");
-        }
-        if others.iter().any(|other| other.folder == account.folder) {
-            bail!("Another {} account keeps its sign-in in {}.", agent_name(account.agent), account.folder);
-        }
+    if !account.folder.is_empty() && !account.folder.starts_with('/') && !account.folder.starts_with("~/") {
+        bail!("The folder has to be a full path, like ~/.claude-personal.");
+    }
+    if others.iter().any(|other| other.folder == account.folder) {
+        let folder = if account.folder.is_empty() { "the usual folder" } else { &account.folder };
+        bail!("Another {} account keeps its sign-in in {folder}.", agent_name(account.agent));
     }
     if account.shares_sessions && account.agent != Agent::Codex {
         bail!("Only Codex accounts can share sessions.");
+    }
+    if account.shares_sessions && account.folder.is_empty() {
+        bail!("An account that shares sessions needs a folder of its own.");
     }
     for variable in &account.variables {
         let mut characters = variable.name.chars();
@@ -137,15 +147,13 @@ pub fn signing_in(mut account: AgentAccount, accounts: &[AgentAccount]) -> anyho
     }
     let existing = accounts.iter().find(|kept| kept.id == account.id && !account.id.is_empty());
     keep_sensitive_values(&mut account, existing)?;
-    if is_default(&account) {
-        account.folder.clear();
-    } else if !account.folder.starts_with('/') && !account.folder.starts_with("~/") {
+    if !account.folder.is_empty() && !account.folder.starts_with('/') && !account.folder.starts_with("~/") {
         bail!("Give the account a full folder first, like ~/.claude-personal.");
     }
     Ok(account)
 }
 
-fn agent_name(agent: Agent) -> &'static str {
+pub fn agent_name(agent: Agent) -> &'static str {
     match agent {
         Agent::Claude => "Claude Code",
         Agent::Codex => "Codex",
@@ -205,7 +213,7 @@ fn expanded(folder: &str, base: &Environment) -> PathBuf {
 }
 
 /// Readies the account's folder before its agent runs: a Codex account that shares sessions
-/// gets links to everything in the default account's folder but what is its own.
+/// gets links to everything in the agent's usual folder but what is its own.
 pub fn prepare(account: &AgentAccount, base: &Environment) -> anyhow::Result<()> {
     if !account.shares_sessions {
         return Ok(());
@@ -278,17 +286,36 @@ mod tests {
         Environment::fixed(variables, HashMap::new())
     }
 
+    fn ids(accounts: &[AgentAccount]) -> Vec<&str> {
+        accounts.iter().map(|account| account.id.as_str()).collect()
+    }
+
     #[test]
-    fn every_agent_keeps_a_default_account_first() {
+    fn an_agent_without_an_account_gets_the_usual_one() {
         let personal = account("claude-personal", Agent::Claude, "Personal", "~/.claude-personal");
-        let accounts = with_defaults(vec![personal.clone()]);
-        let ids: Vec<&str> = accounts.iter().map(|account| account.id.as_str()).collect();
-        assert_eq!(ids, ["claude", "codex", "claude-personal"]);
+        assert_eq!(ids(&with_every_agent(vec![personal.clone()])), ["claude-personal", "codex"]);
+        assert_eq!(default_of(&with_every_agent(vec![personal]), Agent::Claude).id, "claude-personal");
+        assert_eq!(ids(&with_every_agent(vec![])), ["claude", "codex"]);
+    }
+
+    #[test]
+    fn any_account_can_be_made_its_agents_default() {
+        let accounts = vec![
+            account("claude", Agent::Claude, "Default", ""),
+            account("codex", Agent::Codex, "Default", ""),
+            account("work", Agent::Claude, "Work", "~/.claude-work"),
+        ];
+        let accounts = made_default(accounts, "work").unwrap();
+        assert_eq!(ids(&accounts), ["work", "claude", "codex"]);
+        assert_eq!(default_of(&accounts, Agent::Claude).id, "work");
+        assert_eq!(default_of(&accounts, Agent::Codex).id, "codex");
+        assert_eq!(ids(&made_default(accounts.clone(), "codex").unwrap()), ["work", "claude", "codex"]);
+        assert!(made_default(accounts, "gone").is_err());
     }
 
     #[test]
     fn a_new_account_gets_an_id_of_its_own_and_a_kept_one_keeps_it() {
-        let accounts = with_defaults(vec![account("claude-personal", Agent::Claude, "Personal", "~/.a")]);
+        let accounts = with_every_agent(vec![account("claude-personal", Agent::Claude, "Personal", "~/.a")]);
         let new = checked(account("", Agent::Claude, "  Work Plan ", "~/.claude-work/"), &accounts).unwrap();
         assert_eq!((new.name.as_str(), new.folder.as_str()), ("Work Plan", "~/.claude-work"));
         assert!(uuid::Uuid::parse_str(&new.id).is_ok(), "{}", new.id);
@@ -300,16 +327,21 @@ mod tests {
 
     #[test]
     fn an_account_needs_a_full_folder_no_other_account_has() {
-        let accounts = with_defaults(vec![account("claude-personal", Agent::Claude, "Personal", "~/.claude-personal")]);
+        let personal = account("claude-personal", Agent::Claude, "Personal", "~/.claude-personal");
+        let accounts = vec![personal, account("claude", Agent::Claude, "Default", "")];
         let refused = |new: AgentAccount| checked(new, &accounts).unwrap_err().to_string();
-        assert!(refused(account("", Agent::Claude, "Work", "")).contains("needs a folder"));
+        assert!(refused(account("", Agent::Claude, "Work", "")).contains("the usual folder"));
         assert!(refused(account("", Agent::Claude, "Work", "claude-work")).contains("full path"));
         assert!(refused(account("", Agent::Claude, "Work", "~/.claude-personal")).contains("keeps its sign-in"));
         assert!(refused(account("", Agent::Claude, "personal", "~/.claude-work")).contains("is called"));
-        assert!(refused(account("claude", Agent::Claude, "Default", "~/.elsewhere")).contains("usual folder"));
+        let moved = checked(account("claude", Agent::Claude, "Default", "~/.elsewhere"), &accounts).unwrap();
+        assert_eq!(moved.folder, "~/.elsewhere");
         let mut sharing = account("", Agent::Claude, "Work", "~/.claude-work");
         sharing.shares_sessions = true;
         assert!(refused(sharing).contains("Only Codex"));
+        let mut sharing = account("", Agent::Codex, "Work", "");
+        sharing.shares_sessions = true;
+        assert!(refused(sharing).contains("folder of its own"));
     }
 
     #[test]
@@ -317,7 +349,7 @@ mod tests {
         let key = |value: &str| Variable { name: "ANTHROPIC_API_KEY".into(), value: value.into(), sensitive: true };
         let mut router = account("claude-router", Agent::Claude, "Router", "~/.claude-router");
         router.variables = vec![key("sk-secret")];
-        let accounts = with_defaults(vec![router.clone()]);
+        let accounts = with_every_agent(vec![router.clone()]);
 
         let sent = redacted(router.clone());
         assert_eq!(sent.variables, [key("")]);
@@ -341,19 +373,19 @@ mod tests {
         assert_eq!(environment.variables["CLAUDE_CONFIG_DIR"], "/home/me/.claude-personal");
         assert_eq!(environment.variables["ANTHROPIC_BASE_URL"], "https://router");
         assert_eq!(environment.variables["HOME"], "/home/me");
-        let default = with_defaults(vec![]).remove(0);
-        assert!(!super::environment(&base("/home/me"), &default).variables.contains_key("CLAUDE_CONFIG_DIR"));
+        let usual = usual_account(Agent::Claude);
+        assert!(!super::environment(&base("/home/me"), &usual).variables.contains_key("CLAUDE_CONFIG_DIR"));
     }
 
     #[test]
-    fn a_codex_account_that_shares_sessions_resumes_the_default_accounts_threads() {
+    fn a_codex_account_that_shares_sessions_resumes_the_usual_folders_threads() {
         let base = base("/home/me");
         let mut work = account("codex-work", Agent::Codex, "Work", "~/.codex-work");
-        let default = with_defaults(vec![]).remove(1);
-        assert_ne!(sessions_folder(&work, &base), sessions_folder(&default, &base));
+        let usual = usual_account(Agent::Codex);
+        assert_ne!(sessions_folder(&work, &base), sessions_folder(&usual, &base));
         work.shares_sessions = true;
         assert_eq!(sessions_folder(&work, &base), PathBuf::from("/home/me/.codex"));
-        assert_eq!(sessions_folder(&work, &base), sessions_folder(&default, &base));
+        assert_eq!(sessions_folder(&work, &base), sessions_folder(&usual, &base));
     }
 
     #[test]
