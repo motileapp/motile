@@ -137,6 +137,10 @@ impl Connection {
         }
     }
 
+    pub fn is_closed(&self) -> bool {
+        self.inner.close_reason().is_some()
+    }
+
     pub fn close(&self) {
         self.inner.close(0u32.into(), b"bye");
     }

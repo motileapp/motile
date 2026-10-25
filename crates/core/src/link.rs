@@ -15,7 +15,7 @@ use serde::Serialize;
 use tokio::sync::{Notify, mpsc};
 use tokio::task::AbortHandle;
 
-use crate::connection::{Closed, Connection, NOT_CONNECTED, PathKind, ServerAddr};
+use crate::connection::{Closed, Connection, NOT_CONNECTED, PathKind, ServerAddr, offline};
 
 const RETRY_DELAYS: [Duration; 4] =
     [Duration::from_millis(300), Duration::from_secs(1), Duration::from_secs(2), Duration::from_secs(5)];
@@ -24,6 +24,10 @@ const RTT_REFRESH: Duration = Duration::from_secs(5);
 const REFUSED_RETRY: Duration = Duration::from_secs(10);
 /// A dial that takes longer than this is given up and started again.
 const DIAL_TIMEOUT: Duration = Duration::from_secs(30);
+/// How long a request made while the link dials again waits for the connection.
+const RECONNECT_WAIT: Duration = Duration::from_secs(15);
+/// How many times a file is sent from its start when the connection is lost on the way.
+const UPLOAD_TRIES: u32 = 3;
 
 #[derive(Clone, Debug)]
 pub enum LinkEvent {
@@ -66,6 +70,8 @@ pub struct Link {
     wake: Notify,
     /// Ends the dial or the connection there is, to dial again at once.
     restart: Notify,
+    /// Tells the requests that wait for a connection that there is one.
+    attached: Notify,
 }
 
 #[derive(Default)]
@@ -98,6 +104,7 @@ impl Link {
             inner: Mutex::default(),
             wake: Notify::new(),
             restart: Notify::new(),
+            attached: Notify::new(),
         });
         let dialer = tokio::spawn(link.clone().dial_forever(server));
         link.lock().dialer = Some(dialer.abort_handle());
@@ -230,6 +237,7 @@ impl Link {
                 open.follower = Some(follower.abort_handle());
             }
         }
+        self.attached.notify_waiters();
     }
 
     async fn follow_list(self: Arc<Self>, connection: Connection) {
@@ -334,13 +342,23 @@ impl Link {
         }
     }
 
-    fn connection(&self) -> anyhow::Result<Connection> {
-        let connection = self.lock().connection.clone();
-        connection.ok_or_else(|| anyhow::anyhow!(NOT_CONNECTED))
+    /// The connection there is, or the next one while the link dials again.
+    async fn connection(&self) -> anyhow::Result<Connection> {
+        let next = async {
+            loop {
+                let attached = self.attached.notified();
+                let connection = self.lock().connection.clone();
+                if let Some(connection) = connection.filter(|connection| !connection.is_closed()) {
+                    return connection;
+                }
+                attached.await;
+            }
+        };
+        tokio::time::timeout(RECONNECT_WAIT, next).await.map_err(|_| anyhow::anyhow!(NOT_CONNECTED))
     }
 
     pub async fn request(&self, request: &Request) -> anyhow::Result<Message> {
-        match self.connection()?.request(request).await? {
+        match self.connection().await?.request(request).await? {
             Message::Error { message } => Err(anyhow::anyhow!(message)),
             message => Ok(message),
         }
@@ -354,7 +372,7 @@ impl Link {
         mut progress: impl FnMut(u64, Option<u64>),
         mut waiting: impl FnMut(),
     ) -> anyhow::Result<()> {
-        let mut follow = self.connection()?.follow(&Request::UpdateServer { when }).await?;
+        let mut follow = self.connection().await?.follow(&Request::UpdateServer { when }).await?;
         loop {
             // A server from before it could update itself closes the stream without an answer.
             let Some(message) = follow.next().await? else {
@@ -374,7 +392,7 @@ impl Link {
 
     /// Sends a `GitRun`, telling `started` each stage, and answers with the server's `GitDone`.
     pub async fn git_run(&self, request: &Request, mut started: impl FnMut(GitStage)) -> anyhow::Result<Message> {
-        let mut follow = self.connection()?.follow(request).await?;
+        let mut follow = self.connection().await?.follow(request).await?;
         loop {
             let Some(message) = follow.next().await? else {
                 anyhow::bail!("Your server didn't answer. Try again.");
@@ -391,19 +409,26 @@ impl Link {
         &self,
         path: &Path,
         poster_of: Option<String>,
-        progress: impl FnMut(u64, u64),
+        mut progress: impl FnMut(u64, u64),
     ) -> anyhow::Result<(String, Option<String>)> {
-        self.connection()?.upload(path, poster_of, progress).await
+        let mut tries = 1;
+        loop {
+            let sent = self.connection().await?.upload(path, poster_of.clone(), &mut progress).await;
+            match sent {
+                Err(error) if tries < UPLOAD_TRIES && offline(&error.to_string()) => tries += 1,
+                sent => return sent,
+            }
+        }
     }
 
     pub async fn file(&self, request: &Request, shown: &Path) -> anyhow::Result<(FileKind, u64, Vec<u8>)> {
-        self.connection()?.file(request, shown).await
+        self.connection().await?.file(request, shown).await
     }
 
     /// The transcript of a removed server's thread, from this server's copy of it.
     pub async fn open_copy(&self, origin: &str, thread_id: &str) -> anyhow::Result<Vec<Item>> {
         let request = Request::OpenCopy { origin: origin.to_string(), thread_id: thread_id.to_string() };
-        let mut follow = self.connection()?.follow(&request).await?;
+        let mut follow = self.connection().await?.follow(&request).await?;
         let mut items = Vec::new();
         while let Some(message) = follow.next().await? {
             match message {
@@ -416,6 +441,6 @@ impl Link {
     }
 
     pub async fn media(&self, id: &str, file: &Path, progress: impl FnMut(u64, u64)) -> anyhow::Result<()> {
-        self.connection()?.media(id, file, progress).await
+        self.connection().await?.media(id, file, progress).await
     }
 }

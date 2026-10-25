@@ -68,8 +68,10 @@ pub enum Command {
     },
     SignOut,
     RefreshAccount,
+    /// The client went to the background.
+    Background,
     /// The client is in front again: what waits to dial again dials now, and if the system had
-    /// the client paused in the background, every server is dialed again.
+    /// the client paused, or it was in the background for a while, every server is dialed again.
     Foreground,
     /// The device changed networks: what waits to dial again dials now.
     NetworkChanged,

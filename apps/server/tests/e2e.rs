@@ -705,6 +705,44 @@ async fn a_link_given_a_new_endpoint_leaves_the_old_one_and_connects_again() {
 }
 
 #[tokio::test]
+async fn a_request_made_while_the_link_dials_waits_for_the_connection() {
+    let harness = Harness::start("fixtures/read-and-bash.jsonl", "0").await;
+    let (events, _received) = mpsc::unbounded_channel();
+    let link = Link::connect(bind(&harness.app_key, true).await.unwrap(), harness.address.clone(), events);
+
+    let add = Request::AddProject { path: harness.folder("project") };
+    assert_eq!(link.request(&add).await.unwrap(), Message::Ok);
+    link.shutdown();
+}
+
+#[tokio::test]
+async fn an_upload_the_connection_dropped_on_the_way_is_sent_again() {
+    let harness = Harness::start("fixtures/read-and-bash.jsonl", "0").await;
+    let (events, mut received) = mpsc::unbounded_channel();
+    let link = Link::connect(bind(&harness.app_key, true).await.unwrap(), harness.address.clone(), events);
+    assert_eq!(states_until_connected(&mut received).await, [State::Connected]);
+    let file = harness.dir.path().join("archive.zip");
+    let bytes: Vec<u8> = (0..4_000_000u32).map(|index| (index % 251) as u8).collect();
+    std::fs::write(&file, &bytes).unwrap();
+
+    let mut next = Some(bind(&harness.app_key, true).await.unwrap());
+    let (path, _) = link
+        .upload(&file, None, |sent, size| {
+            if sent > size / 2
+                && let Some(endpoint) = next.take()
+            {
+                link.redial_on(endpoint);
+            }
+        })
+        .await
+        .unwrap();
+
+    assert!(next.is_none(), "the connection was dropped during the upload");
+    assert_eq!(std::fs::read(path).unwrap(), bytes);
+    link.shutdown();
+}
+
+#[tokio::test]
 async fn the_thread_list_follows_new_retitled_and_deleted_threads() {
     let harness = Harness::start("fixtures/read-and-bash.jsonl", "0").await;
     let connection = harness.connect().await;
