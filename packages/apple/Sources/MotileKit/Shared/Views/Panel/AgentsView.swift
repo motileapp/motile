@@ -28,6 +28,8 @@ struct AgentsSurface: View {
             let working = agents.filter { !$0.previous }
             let ended = agents.filter(\.previous)
             let shown = showsEnded ?? working.isEmpty
+            // The list keeps its place once the thread's agents have arrived, and starts over when they do.
+            let key = agents.isEmpty ? nil : store.panelTarget?.key
             VStack(spacing: 0) {
                 PanelBar {
                     Self.summary(of: agents)
@@ -44,12 +46,13 @@ struct AgentsSurface: View {
                             if shown { ForEach(ended) { AgentRow(agent: $0).agentsRow($0.id) } }
                         }
                     }
+                    .scrollTargetLayout()
                     .padding(.horizontal, 8)
                     .padding(.top, 8 - panelRowMargin.top)
                     .padding(.bottom, panelEndRoom - panelRowMargin.bottom)
                 }
-                .keepsAgentsScroll(key: store.panelTarget?.key, ready: !agents.isEmpty)
-                .id(store.panelTarget?.key)
+                .keepsAgentsScroll(key: key, from: key.flatMap { store.rightPanel.agentsTop[$0] })
+                .id(key)
             }
         }
     }
@@ -70,11 +73,10 @@ struct AgentsSurface: View {
 }
 
 extension View {
-    /// Keeps the row at the top of a thread's agents and how far the list is scrolled past it, to
-    /// scroll back to when the thread shows them again.
-    @ViewBuilder fileprivate func keepsAgentsScroll(key: String?, ready: Bool) -> some View {
+    /// Starts the list where it was when the thread last showed it, and keeps where it is.
+    @ViewBuilder fileprivate func keepsAgentsScroll(key: String?, from top: AgentsTop?) -> some View {
         if #available(macOS 15, *) {
-            modifier(KeepsAgentsScroll(key: key, ready: ready))
+            modifier(KeepsAgentsScroll(key: key, top: top))
         } else {
             self
         }
@@ -86,11 +88,18 @@ extension View {
     }
 }
 
-/// The row at the top of an agents list, how far the list is scrolled past its top, and how tall it is.
+/// The row at the top of an agents list, how far the list is scrolled past its top, how tall the row
+/// is and how much of the list shows.
 struct AgentsTop: Equatable {
     let row: String
     let past: CGFloat
     let height: CGFloat
+    let shown: CGFloat
+
+    /// Puts the row's top `past` above the list's: an anchor at `y` of the row meets the same of the list.
+    var anchor: UnitPoint {
+        UnitPoint(x: 0, y: -past / max(1, shown - height))
+    }
 }
 
 extension EnvironmentValues {
@@ -98,43 +107,30 @@ extension EnvironmentValues {
     @Entry fileprivate var keepAgentsTop: ((AgentsTop) -> Void)?
 }
 
-/// Scrolls to the row that was at the top, by its id, so that it lands there however tall the rows
-/// above are guessed to be.
+/// The list goes to the row that was at the top as it appears, by its id, so that it lands there
+/// however tall the rows above are guessed to be.
 @available(macOS 15, *)
 private struct KeepsAgentsScroll: ViewModifier {
     @Environment(AppStore.self) private var store
     let key: String?
-    /// The thread's agents have arrived.
-    let ready: Bool
+    let top: AgentsTop?
     @State private var position = ScrollPosition()
-    @State private var restored = false
-    /// How tall the part of the list it shows is.
-    @State private var height: CGFloat = 0
 
     func body(content: Content) -> some View {
         content
+            .scrollPosition($position)
+            .onAppear {
+                guard let top else { return }
+                position.scrollTo(id: top.row, anchor: top.anchor)
+            }
             .environment(\.keepAgentsTop) { top in
-                guard restored, let key else { return }
+                guard let key else { return }
                 store.rightPanel.agentsTop[key] = top
             }
-            .scrollPosition($position)
             .onScrollGeometryChange(for: CGFloat.self) { $0.contentOffset.y } action: { _, offset in
-                guard restored, offset <= 0, let key else { return }
+                guard offset <= 0, let key else { return }
                 store.rightPanel.agentsTop[key] = nil
             }
-            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
-                self.height = height
-                restore()
-            }
-            .onChange(of: ready, initial: true) { restore() }
-    }
-
-    private func restore() {
-        guard ready, !restored, height > 0 else { return }
-        restored = true
-        guard let key, let top = store.rightPanel.agentsTop[key] else { return }
-        // The anchor puts the row's top `past` above the list's: an anchor at `y` of the row meets the same of the list.
-        position.scrollTo(id: top.row, anchor: UnitPoint(x: 0, y: -top.past / max(1, height - top.height)))
     }
 }
 
@@ -147,7 +143,8 @@ private struct AgentsListRow: ViewModifier {
             .id(id)
             .onGeometryChange(for: AgentsTop?.self) { geometry in
                 let frame = geometry.frame(in: .scrollView)
-                return frame.minY <= 0 && frame.maxY > 0 ? AgentsTop(row: id, past: -frame.minY, height: frame.height) : nil
+                guard frame.minY <= 0, frame.maxY > 0, let list = geometry.bounds(of: .scrollView) else { return nil }
+                return AgentsTop(row: id, past: -frame.minY, height: frame.height, shown: list.height)
             } action: { top in
                 guard let top else { return }
                 keep?(top)
