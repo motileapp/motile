@@ -226,8 +226,6 @@ final class RightPanel {
     private(set) var tabsByKey: [String: PanelTabs]
     /// The turns of the open thread that changed files, the first one first.
     var turns: [TurnChange] = []
-    /// Where each thread's agents tab was scrolled to, by the key of its tabs.
-    @ObservationIgnored var agentsTop: [String: AgentsTop] = [:]
     /// The agent whose transcript shows in the thread's place, read only.
     private(set) var shownAgent: String? {
         didSet { store?.pageChanged() }
@@ -412,7 +410,6 @@ final class RightPanel {
 
     func forget(_ key: String) {
         tabsByKey[key] = nil
-        agentsTop[key] = nil
     }
 
     // MARK: Agents

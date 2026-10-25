@@ -331,17 +331,23 @@ struct MainScreen: View {
                 .frame(width: Self.sidebarWidth)
                 .background(Color.themeBackground.ignoresSafeArea())
             Self.line
-            if covers {
+            // The panel stays built while it is closed, as the sidebar does, so that it keeps its place.
+            ZStack(alignment: .trailing) {
+                if !covers {
+                    HStack(spacing: 0) {
+                        NavigationStack {
+                            ThreadScreen(overSidebar: false)
+                        }
+                        if open {
+                            Self.line
+                            Spacer().frame(width: Self.panelWidth)
+                        }
+                    }
+                }
                 PanelScreen(beside: true)
-            } else {
-                NavigationStack {
-                    ThreadScreen(overSidebar: false)
-                }
-                if open {
-                    Self.line
-                    PanelScreen(beside: true)
-                        .frame(width: Self.panelWidth)
-                }
+                    .frame(width: covers ? rest : Self.panelWidth)
+                    .environment(\.panelInView, open)
+                    .putAway(!open)
             }
         }
         .onAppear { drawer.isOpen = false }

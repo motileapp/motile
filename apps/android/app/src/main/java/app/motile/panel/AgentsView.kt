@@ -21,7 +21,6 @@ import androidx.compose.runtime.mutableDoubleStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -70,7 +69,8 @@ val panelEndRoom = 48.dp
 @Composable
 fun AgentsSurface() {
     val store = LocalStore.current
-    val agents = store.agents
+    val key = store.panelTarget?.key
+    val agents = key?.let(store::agentsOf) ?: store.agents
     val parent = store.parentThread
     if (agents.isEmpty() && parent == null) return PanelMessage("The agents this thread starts show up here.")
     val palette = LocalPalette.current
@@ -79,11 +79,8 @@ fun AgentsSurface() {
     val working = agents.filter { !it.previous }
     val ended = agents.filter { it.previous }
     val shown = showsEnded ?: working.isEmpty()
-    val key = store.panelTarget?.key
-    val list = remember(key) { LazyListState() }
-    val rows = listOfNotNull(parent?.let { "parent" }) + working.map { it.id } +
-        (if (ended.isEmpty()) emptyList() else listOf("ended") + if (shown) ended.map { it.id } else emptyList())
-    if (key != null) KeepsAgentsScroll(list, key, rows, ready = agents.isNotEmpty())
+    // Each thread's list is kept, so that it is where it was left when the thread shows it again.
+    val list = remember(key) { key?.let(store.rightPanel::agentList) ?: LazyListState() }
     Column(Modifier.fillMaxSize()) {
         PanelBar {
             Text(AgentsSummary.styled(agents, palette), Modifier.weight(1f), size = 12f, weight = FontWeight.Medium, color = palette.mutedForeground, maxLines = 1)
@@ -104,22 +101,6 @@ fun AgentsSurface() {
                 if (shown) items(ended, key = { it.id }) { AgentRow(it) }
             }
         }
-    }
-}
-
-/** Keeps the row at the top of a thread's agents, to scroll back to when the thread shows them again, once they have arrived. */
-@Composable
-private fun KeepsAgentsScroll(list: LazyListState, key: String, rows: List<String>, ready: Boolean) {
-    val store = LocalStore.current
-    val top = store.rightPanel.agentsTop
-    LaunchedEffect(list, ready) {
-        if (!ready) return@LaunchedEffect
-        top[key]?.let { (row, offset) ->
-            val index = rows.indexOf(row)
-            if (index >= 0) list.scrollToItem(index, offset)
-        }
-        snapshotFlow { list.layoutInfo.visibleItemsInfo.firstOrNull { it.index == list.firstVisibleItemIndex }?.key to list.firstVisibleItemScrollOffset }
-            .collect { (row, offset) -> if (row is String) top[key] = row to offset }
     }
 }
 

@@ -271,6 +271,10 @@ class AppStore(private val context: Context) {
     /** A thread by its id, a listed one or one an agent started. */
     fun anyThread(id: String): ThreadInfo? = threads[id] ?: startedThreads[id]
 
+    /** The agents the thread's agent has started: the open thread's as they come, another's as it showed them last, and the open one's too until they come again. */
+    fun agentsOf(threadID: String): List<AgentInfo> =
+        if (threadID == transcript.threadID && agents.isNotEmpty()) agents else lastAgents[threadID] ?: emptyList()
+
     private val everyThread: Map<String, ThreadInfo> get() = startedThreads + threads
     /** The threads as the sidebar lists them, kept in order as they change so that it never sorts them. */
     var activeThreads by mutableStateOf(emptyList<ThreadInfo>())
@@ -302,6 +306,8 @@ class AppStore(private val context: Context) {
     /** The agents the open thread's agent has started, in the order it started them. */
     var agents by mutableStateOf(emptyList<AgentInfo>())
         private set
+    /** The agents each thread showed last, for the list of a thread that isn't open or whose agents haven't come again yet. */
+    private val lastAgents = mutableMapOf<String, List<AgentInfo>>()
     /** The drafts whose first message is on its way to the server, by draft. */
     var sendingDrafts by mutableStateOf(mapOf<String, SendingDraft>())
         private set
@@ -562,6 +568,7 @@ class AppStore(private val context: Context) {
                 val agents = event.objects("agents").map(::AgentInfo)
                 return {
                     if (transcript.threadID == threadID) {
+                        lastAgents[threadID] = agents
                         if (this.agents != agents) this.agents = agents
                         rightPanel.agentsChanged()
                     }
@@ -745,6 +752,7 @@ class AppStore(private val context: Context) {
     private fun removeThread(id: String) {
         setThread(null, id)
         rightPanel.forget(id)
+        lastAgents.remove(id)
         if (selection == Selection.Thread(id)) openEmptyDraft()
     }
 

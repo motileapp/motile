@@ -10,50 +10,30 @@ let panelEndRoom: CGFloat = 64
 let panelEndRoom: CGFloat = 48
 #endif
 
-/// The agents the thread's agent has started, the ones at work first and the ones that ended
-/// folded under them, and the thread whose agent started this one. An agent opens in the thread's
-/// place: one started through your server in its own thread, any other read only.
+/// The agents the thread's agent has started. The lists of the threads shown last stay built under
+/// the open one's, as the sidebar does, so that going back to one finds it where it was left.
 struct AgentsSurface: View {
     @Environment(AppStore.self) private var store
-    /// Whether the agents that ended are shown, once the user has said. Until then they are
-    /// while none works.
-    @State private var showsEnded: Bool?
+    /// The threads whose lists stay built, the one shown last at the end.
+    @State private var kept: [String] = []
+
+    /// How many lists stay built besides the open thread's.
+    private static let keeps = 4
 
     var body: some View {
-        let agents = store.agents
-        let parent = store.parentThread
-        if agents.isEmpty && parent == nil {
-            PanelMessage(text: "The agents this thread starts show up here.")
-        } else {
-            let working = agents.filter { !$0.previous }
-            let ended = agents.filter(\.previous)
-            let shown = showsEnded ?? working.isEmpty
-            // The list keeps its place once the thread's agents have arrived, and starts over when they do.
-            let key = agents.isEmpty ? nil : store.panelTarget?.key
-            VStack(spacing: 0) {
-                PanelBar {
-                    Self.summary(of: agents)
-                        .font(.ui(size: 12, weight: .medium))
-                        .foregroundStyle(Color.themeMutedForeground)
-                    Spacer()
-                }
-                ScrollView {
-                    LazyVStack(spacing: 0) {
-                        if let parent { ParentRow(thread: parent).agentsRow("parent") }
-                        ForEach(working) { AgentRow(agent: $0).agentsRow($0.id) }
-                        if !ended.isEmpty {
-                            EndedHeader(agents: ended, shown: shown) { showsEnded = !shown }.agentsRow("ended")
-                            if shown { ForEach(ended) { AgentRow(agent: $0).agentsRow($0.id) } }
-                        }
-                    }
-                    .scrollTargetLayout()
-                    .padding(.horizontal, 8)
-                    .padding(.top, 8 - panelRowMargin.top)
-                    .padding(.bottom, panelEndRoom - panelRowMargin.bottom)
-                }
-                .keepsAgentsScroll(key: key, from: key.flatMap { store.rightPanel.agentsTop[$0] })
-                .id(key)
+        let open = store.selectedThread?.id
+        ZStack {
+            ForEach(kept + (open.map { kept.contains($0) ? [] : [$0] } ?? []), id: \.self) { thread in
+                AgentsList(threadID: thread)
+                    .putAway(thread != open)
             }
+            if open == nil {
+                PanelMessage(text: "The agents this thread starts show up here.")
+            }
+        }
+        .onChange(of: open, initial: true) { _, open in
+            guard let open else { return }
+            kept = Array((kept.filter { $0 != open } + [open]).suffix(Self.keeps + 1))
         }
     }
 
@@ -72,83 +52,47 @@ struct AgentsSurface: View {
     }
 }
 
-extension View {
-    /// Starts the list where it was when the thread last showed it, and keeps where it is.
-    @ViewBuilder fileprivate func keepsAgentsScroll(key: String?, from top: AgentsTop?) -> some View {
-        if #available(macOS 15, *) {
-            modifier(KeepsAgentsScroll(key: key, top: top))
-        } else {
-            self
-        }
-    }
-
-    /// A row of the agents list, which says when it is the one at the top.
-    fileprivate func agentsRow(_ id: String) -> some View {
-        modifier(AgentsListRow(id: id))
-    }
-}
-
-/// The row at the top of an agents list, how far the list is scrolled past its top, how tall the row
-/// is and how much of the list shows.
-struct AgentsTop: Equatable {
-    let row: String
-    let past: CGFloat
-    let height: CGFloat
-    let shown: CGFloat
-
-    /// Puts the row's top `past` above the list's: an anchor at `y` of the row meets the same of the list.
-    var anchor: UnitPoint {
-        UnitPoint(x: 0, y: -past / max(1, shown - height))
-    }
-}
-
-extension EnvironmentValues {
-    /// Takes the row at the top of the agents list.
-    @Entry fileprivate var keepAgentsTop: ((AgentsTop) -> Void)?
-}
-
-/// The list goes to the row that was at the top as it appears, by its id, so that it lands there
-/// however tall the rows above are guessed to be.
-@available(macOS 15, *)
-private struct KeepsAgentsScroll: ViewModifier {
+/// One thread's agents, the ones at work first and the ones that ended folded under them, and the
+/// thread whose agent started it. An agent opens in the thread's place: one started through your
+/// server in its own thread, any other read only.
+private struct AgentsList: View {
     @Environment(AppStore.self) private var store
-    let key: String?
-    let top: AgentsTop?
-    @State private var position = ScrollPosition()
+    let threadID: String
+    /// Whether the agents that ended are shown, once the user has said. Until then they are
+    /// while none works.
+    @State private var showsEnded: Bool?
 
-    func body(content: Content) -> some View {
-        content
-            .scrollPosition($position)
-            .onAppear {
-                guard let top else { return }
-                position.scrollTo(id: top.row, anchor: top.anchor)
+    var body: some View {
+        let agents = store.agents(of: threadID)
+        let parent = store.anyThread(threadID)?.parentID.flatMap { store.anyThread($0) }
+        if agents.isEmpty && parent == nil {
+            PanelMessage(text: "The agents this thread starts show up here.")
+        } else {
+            let working = agents.filter { !$0.previous }
+            let ended = agents.filter(\.previous)
+            let shown = showsEnded ?? working.isEmpty
+            VStack(spacing: 0) {
+                PanelBar {
+                    AgentsSurface.summary(of: agents)
+                        .font(.ui(size: 12, weight: .medium))
+                        .foregroundStyle(Color.themeMutedForeground)
+                    Spacer()
+                }
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        if let parent { ParentRow(thread: parent) }
+                        ForEach(working) { AgentRow(agent: $0) }
+                        if !ended.isEmpty {
+                            EndedHeader(agents: ended, shown: shown) { showsEnded = !shown }
+                            if shown { ForEach(ended) { AgentRow(agent: $0) } }
+                        }
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.top, 8 - panelRowMargin.top)
+                    .padding(.bottom, panelEndRoom - panelRowMargin.bottom)
+                }
             }
-            .environment(\.keepAgentsTop) { top in
-                guard let key else { return }
-                store.rightPanel.agentsTop[key] = top
-            }
-            .onScrollGeometryChange(for: CGFloat.self) { $0.contentOffset.y } action: { _, offset in
-                guard offset <= 0, let key else { return }
-                store.rightPanel.agentsTop[key] = nil
-            }
-    }
-}
-
-private struct AgentsListRow: ViewModifier {
-    @Environment(\.keepAgentsTop) private var keep
-    let id: String
-
-    func body(content: Content) -> some View {
-        content
-            .id(id)
-            .onGeometryChange(for: AgentsTop?.self) { geometry in
-                let frame = geometry.frame(in: .scrollView)
-                guard frame.minY <= 0, frame.maxY > 0, let list = geometry.bounds(of: .scrollView) else { return nil }
-                return AgentsTop(row: id, past: -frame.minY, height: frame.height, shown: list.height)
-            } action: { top in
-                guard let top else { return }
-                keep?(top)
-            }
+        }
     }
 }
 

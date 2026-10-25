@@ -51,7 +51,8 @@ final class DrawerController: UIViewController, UIGestureRecognizerDelegate {
 
     let sidebar: UIViewController
     let content: UIViewController
-    /// The right panel is only built while it is in view, since it loads what it shows.
+    /// The right panel stays built out of view, as the sidebar does, so that it keeps its place. Out
+    /// of view it asks its server for nothing, like the Mac's hidden one.
     var panelContent = AnyView(EmptyView()) {
         didSet { showPanelContent() }
     }
@@ -175,7 +176,7 @@ final class DrawerController: UIViewController, UIGestureRecognizerDelegate {
     }
 
     private func showPanelContent() {
-        panel.rootView = panelShown ? panelContent : AnyView(EmptyView())
+        panel.rootView = AnyView(panelContent.environment(\.panelInView, panelShown))
     }
 
     /// The shadow goes as the card leaves the screen, so it doesn't fall on the side that opened.

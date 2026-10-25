@@ -1,5 +1,6 @@
 package app.motile.panel
 
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -279,8 +280,8 @@ class RightPanel {
         private set
     /** The turns of the open thread that changed files, the first one first. */
     var turns by mutableStateOf(emptyList<TurnChange>())
-    /** The row each thread's agents tab was scrolled to and how far into it, by the key of its tabs. */
-    val agentsTop = mutableMapOf<String, Pair<String, Int>>()
+    /** Each thread's agents list, kept so that it is where it was left when the thread shows it again, by the key of its tabs. */
+    private val agentLists = mutableMapOf<String, LazyListState>()
     /** The agent whose transcript shows in the thread's place, read only. */
     private var shownAgentState by mutableStateOf<String?>(null)
     var shownAgent: String?
@@ -423,9 +424,11 @@ class RightPanel {
     /** What else follows a draft's tabs to its thread. */
     var onMoved: ((String) -> Unit)? = null
 
+    fun agentList(key: String): LazyListState = agentLists.getOrPut(key) { LazyListState() }
+
     fun forget(key: String) {
         tabsByKey = tabsByKey - key
-        agentsTop.remove(key)
+        agentLists.remove(key)
     }
 
     // Agents

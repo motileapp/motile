@@ -252,6 +252,13 @@ final class AppStore {
     /// A thread by its id, a listed one or one an agent started.
     func anyThread(_ id: String) -> ThreadInfo? { threads[id] ?? startedThreads[id] }
 
+    /// The agents the thread's agent has started: the open thread's as they come, another's as it
+    /// showed them last, and the open one's too until they come again.
+    func agents(of threadID: String) -> [AgentInfo] {
+        guard threadID != transcript.threadID || agents.isEmpty else { return agents }
+        return lastAgents[threadID] ?? []
+    }
+
     private var everyThread: [String: ThreadInfo] { threads.merging(startedThreads) { listed, _ in listed } }
     /// The threads as the sidebar lists them, kept in order as they change so that it never sorts them.
     private(set) var activeThreads: [ThreadInfo] = []
@@ -274,6 +281,8 @@ final class AppStore {
     private(set) var transcriptIsEmpty = true
     /// The agents the open thread's agent has started, in the order it started them.
     private(set) var agents: [AgentInfo] = []
+    /// The agents each thread showed last, for the lists kept of threads that aren't open.
+    @ObservationIgnored private var lastAgents: [String: [AgentInfo]] = [:]
     /// The drafts whose first message is on its way to the server, by draft.
     private(set) var sendingDrafts: [String: SendingDraft] = [:]
     var errorMessage: String?
@@ -520,6 +529,7 @@ final class AppStore {
             let agents = event.objects("agents").map { AgentInfo(json: $0) }
             return { [weak self] in
                 guard let self, self.transcript.threadID == threadID else { return }
+                self.lastAgents[threadID] = agents
                 if self.agents != agents { self.agents = agents }
                 self.rightPanel.agentsChanged()
             }
@@ -669,6 +679,7 @@ final class AppStore {
     private func removeThread(_ id: String) {
         setThread(nil, id: id)
         rightPanel.forget(id)
+        lastAgents[id] = nil
         if selection == .thread(id) { openEmptyDraft() }
     }
 
