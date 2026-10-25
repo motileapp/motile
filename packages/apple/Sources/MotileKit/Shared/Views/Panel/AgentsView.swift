@@ -118,20 +118,15 @@ private struct KeepsAgentsScroll: ViewModifier {
                 store.rightPanel.agentsTop[key] = top
             }
             .scrollPosition($position)
-            .onScrollGeometryChange(for: Spot.self) { Spot(offset: $0.contentOffset.y, height: $0.containerSize.height) } action: { _, spot in
-                height = spot.height
-                if !restored {
-                    restore()
-                } else if spot.offset <= 0, let key {
-                    store.rightPanel.agentsTop[key] = nil
-                }
+            .onScrollGeometryChange(for: CGFloat.self) { $0.contentOffset.y } action: { _, offset in
+                guard restored, offset <= 0, let key else { return }
+                store.rightPanel.agentsTop[key] = nil
+            }
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
+                self.height = height
+                restore()
             }
             .onChange(of: ready, initial: true) { restore() }
-    }
-
-    private struct Spot: Equatable {
-        let offset: CGFloat
-        let height: CGFloat
     }
 
     private func restore() {
