@@ -308,6 +308,8 @@ struct Core {
     endpoint: Option<Endpoint>,
     /// When the core last ran. A gap says the system had the client paused: asleep or suspended.
     ran_at: SystemTime,
+    /// When the client went to the background, where Android may cut its network without pausing it.
+    backgrounded_at: Option<SystemTime>,
     /// When the endpoint last had a server answer it, or was opened.
     reached_at: Instant,
     me: Me,
@@ -428,6 +430,7 @@ pub fn start(config: Config, sink: EventSink) -> anyhow::Result<Handle> {
         key: Arc::new(key),
         endpoint: None,
         ran_at: SystemTime::now(),
+        backgrounded_at: None,
         reached_at: Instant::now(),
         account_error: None,
         servers: Vec::new(),
@@ -666,7 +669,7 @@ impl Core {
             Input::Stop => {}
             Input::Tick => {
                 self.ticks += 1;
-                self.replace_stale_endpoint();
+                self.replace_stale_endpoint(Duration::ZERO);
                 self.replace_wedged_endpoint();
                 self.forget_unconfirmed_updates();
                 for (thread_id, followed) in &mut self.followed {
@@ -889,12 +892,12 @@ impl Core {
         }
     }
 
-    /// Opens a new endpoint for the links once the client ran again after a pause. The system
-    /// cuts what a paused endpoint had open without a word, and the endpoint can go on dialing
-    /// through it for long.
-    fn replace_stale_endpoint(&mut self) {
+    /// Opens a new endpoint for the links once the client ran again after a pause, or was `away`
+    /// in the background as long. The system cuts what a paused endpoint had open without a
+    /// word, and the endpoint can go on dialing through it for long.
+    fn replace_stale_endpoint(&mut self, away: Duration) {
         let now = SystemTime::now();
-        let paused = now.duration_since(self.ran_at).unwrap_or_default();
+        let paused = now.duration_since(self.ran_at).unwrap_or_default().max(away);
         self.ran_at = now;
         if paused < STALE_AFTER || self.endpoint.is_none() {
             return;
@@ -2156,8 +2159,14 @@ impl Core {
                 self.check_account();
                 self.reply(id, Ok(json!({})));
             }
+            Command::Background => {
+                self.backgrounded_at = Some(SystemTime::now());
+                self.reply(id, Ok(json!({})));
+            }
             Command::Foreground => {
-                self.replace_stale_endpoint();
+                let backgrounded_at = self.backgrounded_at.take();
+                let away = backgrounded_at.and_then(|at| SystemTime::now().duration_since(at).ok());
+                self.replace_stale_endpoint(away.unwrap_or_default());
                 self.network_changed();
                 self.check_account();
                 self.reply(id, Ok(json!({})));
