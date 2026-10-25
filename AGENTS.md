@@ -126,9 +126,10 @@ shadcn's own colours, opacities and radii are gone from the theme.
 ### apps/server
 
 - `agent_accounts.rs`: the agents' accounts. Each is the folder its CLI keeps the sign-in in
-  (`CLAUDE_CONFIG_DIR`, `CODEX_HOME`) and the variables its agent is given; every agent has a
-  default one. A Codex account can share the default one's folder but for its sign-in. A thread
-  works with one account and can move to another.
+  (`CLAUDE_CONFIG_DIR`, `CODEX_HOME`, or none for the CLI's usual one) and the variables its agent
+  is given. Every account is alike: an agent's first is its default, which any can be made, and
+  any but an agent's last can be removed. A Codex account can share the usual folder but for its
+  sign-in. A thread works with one account and can move to another.
 - `sign_in.rs`: signs a Claude Code account in for a client: it runs `claude auth login` with the
   account's folder, the client opens the page it links to, and the code that page shows comes
   back to it.

@@ -958,7 +958,7 @@ fn migrate(connection: &Connection) -> anyhow::Result<()> {
 }
 
 /// Accounts were once named after their names. Each gets a UUID, and its threads, usage and
-/// models go with it. The default accounts keep their agents' names.
+/// models go with it. The usual accounts keep their agents' names.
 fn renumber_agent_accounts(connection: &Connection) -> anyhow::Result<()> {
     let setting = |name: &str| -> rusqlite::Result<Option<String>> {
         connection.query_row("SELECT value FROM settings WHERE name = ?1", [name], |row| row.get(0)).optional()
@@ -969,7 +969,7 @@ fn renumber_agent_accounts(connection: &Connection) -> anyhow::Result<()> {
     for account in &mut accounts {
         let Some(id) = account["id"].as_str().map(str::to_string) else { continue };
         let agent: Agent = serde_json::from_value(account["agent"].clone())?;
-        if id == crate::agent_accounts::default_id(agent) || uuid::Uuid::parse_str(&id).is_ok() {
+        if id == crate::agent_accounts::usual_id(agent) || uuid::Uuid::parse_str(&id).is_ok() {
             continue;
         }
         let new = uuid::Uuid::new_v4().to_string();

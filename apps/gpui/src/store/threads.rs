@@ -300,12 +300,11 @@ impl Store {
             } else {
                 None
             };
-            let account =
-                self.composer_account().map_or_else(|| default_account_id(model.agent).into(), |account| account.id);
+            let account = self.composer_account().map(|account| account.id);
             let new_thread = NewThread {
                 project_id: project.id.clone(),
                 agent: model.agent,
-                agent_account: Some(account),
+                agent_account: account,
                 model: Some(model.id.clone()),
                 effort: self.composer_effort(),
                 access: draft.access,

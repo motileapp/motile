@@ -84,13 +84,11 @@ fun AgentAccountSheet(server: Server, initial: AgentAccount) {
     val savedAsIs = savedBySignIn == edited
     // Claude Code signs in here; Codex, and a server too old for it, with a command.
     val signsInHere = account.agent == Agent.Claude && server.signsInAccounts
-    val canStartSignIn = account.isDefault || account.folder.isNotBlank()
     val step = signIn.step
     val signedInAs = (step as? AccountSignIn.Step.SignedIn)?.who
         ?: initial.email?.takeIf { account.folder == initial.folder }?.let { listOfNotNull(it, initial.plan).joinToString(" · ") }
     val signInCaption = when {
         step is AccountSignIn.Step.Waiting -> "Sign in on the page, then paste the code it shows."
-        !canStartSignIn -> "Give the account a folder to sign it in."
         savedAsIs -> "Signing in saved the account."
         else -> "Opens Claude's sign-in page. Signing in saves the account on ${server.name}."
     }
@@ -149,18 +147,13 @@ fun AgentAccountSheet(server: Server, initial: AgentAccount) {
             group(header = "Name") {
                 row { SettingsField("Personal", account.name, { account = account.copy(name = it) }) }
             }
-            if (!account.isDefault) {
-                group(header = "Folder", footer = "Where its sign-in is kept, as ${account.folderVariable}") {
+            group(header = "Folder", footer = "Where its sign-in is kept, as ${account.folderVariable}. Empty for ${account.usualFolder}.") {
+                row { SettingsField(account.usualFolder, account.folder, { account = account.copy(folder = it) }, monospaced = true) }
+            }
+            if (account.agent == Agent.Codex) {
+                group(footer = "The folder keeps only the sign-in. Threads move between the two and go on where they were.") {
                     row {
-                        val placeholder = if (account.agent == Agent.Claude) "~/.claude-personal" else "~/.codex-personal"
-                        SettingsField(placeholder, account.folder, { account = account.copy(folder = it) }, monospaced = true)
-                    }
-                }
-                if (account.agent == Agent.Codex) {
-                    group(footer = "The folder keeps only the sign-in. Threads move between the two and go on where they were.") {
-                        row {
-                            SettingsToggle("Share sessions with the default account", account.sharesSessions) { account = account.copy(sharesSessions = it) }
-                        }
+                        SettingsToggle("Share sessions with ${account.usualFolder}", account.sharesSessions) { account = account.copy(sharesSessions = it) }
                     }
                 }
             }
@@ -211,7 +204,7 @@ fun AgentAccountSheet(server: Server, initial: AgentAccount) {
                     } else {
                         signedInAs?.let { who -> row { SettingsRow { RowText("Signed in as $who", color = LocalPalette.current.foreground) } } }
                         row {
-                            SettingsPressRow(::startSignIn, enabled = canStartSignIn && step != AccountSignIn.Step.Starting) {
+                            SettingsPressRow(::startSignIn, enabled = step != AccountSignIn.Step.Starting) {
                                 SettingsActionLabel(if (signedInAs == null) "Sign In" else "Sign In Again", Symbol.CircleUser)
                                 Spacer(Modifier.weight(1f))
                                 if (step == AccountSignIn.Step.Starting) Spinner(17f)

@@ -116,6 +116,23 @@ class ModelsTest {
     }
 
     @Test
+    fun anAgentsDefaultAccountIsItsFirstWhateverItsId() {
+        val info = mapOf(
+            "protocol" to 31,
+            "agent_accounts" to listOf(
+                mapOf("id" to "work", "agent" to "claude", "name" to "Work"),
+                mapOf("id" to "claude", "agent" to "claude", "name" to "Yekta"),
+                mapOf("id" to "home", "agent" to "codex", "name" to "Home"),
+            ),
+        )
+        val server = Server(json("id" to "s", "name" to "studio", "state" to "connected", "info" to info))
+        assertEquals(listOf(true, false, true), server.agentAccounts.map(server::isDefault))
+        assertEquals("work", server.account(null, Agent.Claude)?.id)
+        assertEquals("work", server.account("gone", Agent.Claude)?.id)
+        assertEquals("claude", server.account("claude", Agent.Claude)?.id)
+    }
+
+    @Test
     fun aRemovedServerKeepsItsLastNameWithoutInfo() {
         val server = Server(json("id" to "s", "name" to "build-box", "short_name" to "build-box", "removed" to true, "state" to "disconnected", "info" to null))
         assertTrue(server.removed)

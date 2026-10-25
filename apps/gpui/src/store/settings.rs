@@ -240,6 +240,11 @@ impl Store {
         self.request(&server.id, Request::RemoveAgentAccount { id: account.id.clone() });
     }
 
+    /// Makes an account its agent's default, the one new threads start with.
+    pub fn make_agent_account_default(&mut self, account: &AgentAccount, server: &Server) {
+        self.request(&server.id, Request::MakeAgentAccountDefault { id: account.id.clone() });
+    }
+
     /// Has the server start signing a Claude Code account in. `done` hears the sign-in's id and
     /// the page to sign in on, or why it couldn't start.
     pub fn start_agent_sign_in(

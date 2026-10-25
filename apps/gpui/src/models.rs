@@ -120,18 +120,10 @@ impl From<ServerView> for Server {
 /// Every agent, in the order they are offered.
 pub const AGENTS: [Agent; 2] = [Agent::Claude, Agent::Codex];
 
-/// The agent's own name for its default account, which every server has.
-pub fn default_account_id(agent: Agent) -> &'static str {
-    match agent {
-        Agent::Claude => "claude",
-        Agent::Codex => "codex",
-    }
-}
-
 /// The account a server from before accounts has for each agent.
 fn default_account(agent: Agent) -> AgentAccount {
     AgentAccount {
-        id: default_account_id(agent).into(),
+        id: if agent == Agent::Claude { "claude" } else { "codex" }.into(),
         agent,
         name: "Default".into(),
         folder: String::new(),
@@ -158,12 +150,12 @@ pub fn new_account(agent: Agent) -> AgentAccount {
 
 /// What the app asks of an agent's account.
 pub trait AgentAccountExt {
-    /// The account every agent has, which uses the agent's usual folder.
-    fn is_default(&self) -> bool;
     /// Who is signed in, or how it signs in, and its folder: what the settings say of it.
     fn settings_description(&self) -> String;
     /// The variable the account's folder is given to its agent as.
     fn folder_variable(&self) -> &'static str;
+    /// The folder the agent's CLI keeps its sign-in in when the account has none.
+    fn usual_folder(&self) -> &'static str;
     /// The folder the name suggests, as `~/.claude-personal`, with a number when another account
     /// keeps that one.
     fn suggested_folder(&self, besides: &[AgentAccount]) -> String;
@@ -172,10 +164,6 @@ pub trait AgentAccountExt {
 }
 
 impl AgentAccountExt for AgentAccount {
-    fn is_default(&self) -> bool {
-        self.id == default_account_id(self.agent)
-    }
-
     fn settings_description(&self) -> String {
         let signed_in = self.email.as_ref().map(|email| match &self.plan {
             Some(plan) => format!("{email} · {plan}"),
@@ -189,6 +177,10 @@ impl AgentAccountExt for AgentAccount {
 
     fn folder_variable(&self) -> &'static str {
         if self.agent == Agent::Claude { "CLAUDE_CONFIG_DIR" } else { "CODEX_HOME" }
+    }
+
+    fn usual_folder(&self) -> &'static str {
+        if self.agent == Agent::Claude { "~/.claude" } else { "~/.codex" }
     }
 
     fn suggested_folder(&self, besides: &[AgentAccount]) -> String {
@@ -301,7 +293,12 @@ impl Server {
     pub fn account(&self, id: Option<&str>, agent: Agent) -> Option<&AgentAccount> {
         let accounts = self.accounts(agent);
         let named = accounts.iter().find(|account| Some(account.id.as_str()) == id);
-        named.or_else(|| accounts.iter().find(|account| account.is_default())).or(accounts.first()).copied()
+        named.or(accounts.first()).copied()
+    }
+
+    /// Whether the account is its agent's default, the first of the agent's accounts.
+    pub fn is_default_account(&self, account: &AgentAccount) -> bool {
+        self.accounts(account.agent).first().is_some_and(|first| first.id == account.id)
     }
 
     /// The model with that id as the account lists it, or else the first one offered.

@@ -1684,10 +1684,22 @@ async fn a_thread_works_with_the_account_it_was_started_with_and_moves_to_anothe
     assert_eq!(moved.len(), 1, "{moved:?}");
     assert!(!moved[0].contains("--resume"), "a new session starts where the old one isn't: {moved:?}");
 
+    let made = connection.request(&Request::MakeAgentAccountDefault { id: personal_id.clone() }).await.unwrap();
+    assert_eq!(made, Message::Ok);
     let removed = connection.request(&Request::RemoveAgentAccount { id: "claude".into() }).await.unwrap();
-    assert!(matches!(removed, Message::Error { .. }), "the default account stays");
-    let removed = connection.request(&Request::RemoveAgentAccount { id: personal_id }).await.unwrap();
     assert_eq!(removed, Message::Ok);
+    let (mut listed, mut moved) = (Vec::new(), false);
+    while listed != [personal_id.clone(), "codex".to_string()] || !moved {
+        match next(&mut list).await {
+            Message::Server { server } => {
+                listed = server.agent_accounts.into_iter().map(|account| account.id).collect()
+            }
+            Message::ThreadUpsert { thread } if thread.id == thread_id => moved = thread.agent_account == personal_id,
+            _ => {}
+        }
+    }
+    let removed = connection.request(&Request::RemoveAgentAccount { id: personal_id }).await.unwrap();
+    assert!(matches!(removed, Message::Error { .. }), "an agent's only account stays");
 }
 
 #[tokio::test]

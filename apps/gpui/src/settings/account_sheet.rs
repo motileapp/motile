@@ -239,10 +239,6 @@ impl AccountSheet {
         account.agent == Agent::Claude && self.server.signs_in_accounts()
     }
 
-    fn can_start_sign_in(account: &AgentAccount) -> bool {
-        account.is_default() || !account.folder.trim().is_empty()
-    }
-
     fn can_finish_sign_in(&self, cx: &App) -> bool {
         !self.sign_in.finishing
             && !self.code.read(cx).value().trim().is_empty()
@@ -262,12 +258,9 @@ impl AccountSheet {
         })
     }
 
-    fn sign_in_caption(&self, account: &AgentAccount, cx: &App) -> String {
+    fn sign_in_caption(&self, cx: &App) -> String {
         if matches!(self.sign_in.step, SignInStep::Waiting { .. }) {
             return "Sign in on the page, then paste the code it shows.".into();
-        }
-        if !Self::can_start_sign_in(account) {
-            return "Give the account a folder to sign it in.".into();
         }
         if self.saved_as_is(cx) {
             return "Signing in saved the account.".into();
@@ -383,7 +376,6 @@ impl AccountSheet {
         let who = self.signed_in_as(account);
         let start = ActionButton::new("start-sign-in", if who.is_none() { "Sign In" } else { "Sign In Again" })
             .pending(self.sign_in.step == SignInStep::Starting)
-            .disabled(!Self::can_start_sign_in(account))
             .on_click(cx.listener(|this, _, _, cx| this.start_sign_in(cx)));
         div()
             .flex()
@@ -473,7 +465,7 @@ impl AccountSheet {
 }
 
 fn folder_placeholder(agent: Agent) -> &'static str {
-    if agent == Agent::Claude { "~/.claude-personal" } else { "~/.codex-personal" }
+    if agent == Agent::Claude { "~/.claude" } else { "~/.codex" }
 }
 
 /// A field's title over it, and its caption under it.
@@ -531,11 +523,13 @@ impl Render for AccountSheet {
                     let _ = sheet.update(cx, |sheet, cx| sheet.choose_agent(agent, window, cx));
                 })
         });
-        let folder = (!account.is_default()).then(|| {
-            let caption = format!("Where its sign-in is kept, as {}", account.folder_variable());
-            field("Folder", Some(caption), InputField::new(&self.folder).monospaced(true), cx)
-        });
-        let shares = (!account.is_default() && account.agent == Agent::Codex).then(|| {
+        let caption = format!(
+            "Where its sign-in is kept, as {}. Empty for {}.",
+            account.folder_variable(),
+            account.usual_folder()
+        );
+        let folder = field("Folder", Some(caption), InputField::new(&self.folder).monospaced(true), cx);
+        let shares = (account.agent == Agent::Codex).then(|| {
             div()
                 .flex()
                 .items_center()
@@ -552,7 +546,7 @@ impl Render for AccountSheet {
                             div()
                                 .text_size(px(13.))
                                 .font_weight(FontWeight::MEDIUM)
-                                .child("Share sessions with the default account"),
+                                .child(format!("Share sessions with {}", account.usual_folder())),
                         )
                         .child(div().text_size(px(11.5)).text_color(c.muted_foreground).child(
                             "The folder keeps only the sign-in. Threads move between the two and go on where they were.",
@@ -582,7 +576,7 @@ impl Render for AccountSheet {
             "Given to its agent: an API key or a router. A sensitive value stays on {server} and is never shown again."
         );
         let sign_in = if self.signs_in_here(&account) {
-            let caption = self.sign_in_caption(&account, cx);
+            let caption = self.sign_in_caption(cx);
             let steps = self.sign_in_steps(&account, cx);
             failing_field("Sign In", Some(caption), self.sign_in.error.clone(), steps, cx)
         } else {
@@ -614,7 +608,7 @@ impl Render for AccountSheet {
             .child(div().text_size(px(15.)).font_weight(FontWeight::SEMIBOLD).child(title))
             .children(picker.map(|picker| div().flex().child(picker)))
             .child(field("Name", None, InputField::new(&self.name), cx))
-            .children(folder)
+            .child(folder)
             .children(shares)
             .child(field("Variables", Some(variables_caption), variables.w_full(), cx))
             .child(sign_in)

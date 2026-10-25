@@ -207,6 +207,7 @@ impl Server {
             }
             Request::SaveAgentAccount { account } => hub.save_agent_account(account).await.map(|_| Message::Ok),
             Request::RemoveAgentAccount { id } => hub.remove_agent_account(&id).await.map(|_| Message::Ok),
+            Request::MakeAgentAccountDefault { id } => hub.make_agent_account_default(&id).map(|_| Message::Ok),
             Request::StartSignIn { account } => hub.start_sign_in(account).await,
             Request::FinishSignIn { id, code, account } => hub.finish_sign_in(&id, &code, account).await,
             Request::CancelSignIn { id } => {

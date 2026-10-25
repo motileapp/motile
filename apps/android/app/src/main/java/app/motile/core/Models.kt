@@ -83,9 +83,9 @@ data class AgentAccount(
     val id: String,
     val agent: Agent,
     val name: String,
-    /** `CLAUDE_CONFIG_DIR` or `CODEX_HOME`. Empty for the default account, which uses the agent's usual folder. */
+    /** `CLAUDE_CONFIG_DIR` or `CODEX_HOME`. Empty for the agent's usual folder, which one account of each agent can use. */
     val folder: String,
-    /** A Codex account that keeps only its sign-in in `folder` and shares the rest, its sessions too, with the default account. */
+    /** A Codex account that keeps only its sign-in in `folder` and shares the rest, its sessions too, with `~/.codex`. */
     val sharesSessions: Boolean,
     val variables: List<Variable>,
     /** Who is signed in, as the agent's CLI last said. */
@@ -110,9 +110,6 @@ data class AgentAccount(
         plan = json.optionalString("plan"),
     )
 
-    /** The account every agent has, which uses the agent's usual folder. */
-    val isDefault: Boolean get() = id == agent.raw
-
     val json: Map<String, Any?>
         get() = mapOf(
             "id" to id, "agent" to agent.raw, "name" to name, "folder" to folder, "shares_sessions" to sharesSessions,
@@ -121,6 +118,9 @@ data class AgentAccount(
 
     /** The variable the account's folder is given to its agent as. */
     val folderVariable: String get() = if (agent == Agent.Claude) "CLAUDE_CONFIG_DIR" else "CODEX_HOME"
+
+    /** The folder the agent's CLI uses when the account gives it none. */
+    val usualFolder: String get() = if (agent == Agent.Claude) "~/.claude" else "~/.codex"
 
     /** The folder the name suggests, as `~/.claude-personal`, with a number when another account keeps that one. */
     fun suggestedFolder(besides: List<AgentAccount>): String {
@@ -210,6 +210,9 @@ data class Server(
 
     fun accounts(of: Agent): List<AgentAccount> = agentAccounts.filter { it.agent == of }
 
+    /** Whether the account is its agent's default: the first of its agent's accounts. */
+    fun isDefault(account: AgentAccount): Boolean = accounts(account.agent).firstOrNull()?.id == account.id
+
     /** Each model once, however many accounts run it, for picking one by its id. */
     val distinctModels: List<ModelInfo>
         get() {
@@ -220,7 +223,7 @@ data class Server(
     /** The account with that id, or the agent's default one. */
     fun account(id: String?, of: Agent): AgentAccount? {
         val accounts = accounts(of)
-        return accounts.firstOrNull { it.id == id } ?: accounts.firstOrNull { it.isDefault } ?: accounts.firstOrNull()
+        return accounts.firstOrNull { it.id == id } ?: accounts.firstOrNull()
     }
 
     /** The account and model a new thread starts on, when another account of its agent runs the model and has used clearly less of its limits. */

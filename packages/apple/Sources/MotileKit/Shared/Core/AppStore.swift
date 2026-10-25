@@ -2385,6 +2385,11 @@ final class AppStore {
         request(server.id, ["type": "remove_agent_account", "id": account.id])
     }
 
+    /// Makes the account the one its agent's new threads start with.
+    func makeAgentAccountDefault(_ account: AgentAccount, on server: Server) {
+        request(server.id, ["type": "make_agent_account_default", "id": account.id])
+    }
+
     func setEffort(_ effort: String) {
         guard let thread = selectedThread else {
             updateDraft { $0.effort = effort }

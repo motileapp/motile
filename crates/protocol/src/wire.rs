@@ -927,8 +927,13 @@ pub enum Request {
     SaveAgentAccount {
         account: AgentAccount,
     },
-    /// Removes an account of an agent. Its threads go on with the agent's default account.
+    /// Removes an account of an agent. Its threads go on with the agent's default account. An
+    /// agent's only account stays.
     RemoveAgentAccount {
+        id: String,
+    },
+    /// Makes an account its agent's default by moving it first among the agent's accounts.
+    MakeAgentAccountDefault {
         id: String,
     },
     /// Starts signing an account of Claude Code in, with its folder and variables as the form has
@@ -1101,15 +1106,14 @@ pub struct ThreadMatch {
 /// One of an agent's accounts on a server: the folder its CLI keeps the sign-in in.
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct AgentAccount {
-    /// The agent's own name for its default account, which every server has.
+    /// The agent's own name for the account a server starts with.
     pub id: String,
     pub agent: Agent,
     pub name: String,
-    /// `CLAUDE_CONFIG_DIR` or `CODEX_HOME`. Empty for the default account, which uses the
-    /// agent's usual folder.
+    /// `CLAUDE_CONFIG_DIR` or `CODEX_HOME`. Empty for the agent's usual folder.
     pub folder: String,
-    /// A Codex account that keeps only its sign-in in `folder` and shares the rest of the default
-    /// account's folder, its sessions too, so that a thread can move between them.
+    /// A Codex account that keeps only its sign-in in `folder` and shares the rest of the agent's
+    /// usual folder, its sessions too, so that a thread can move between them.
     #[serde(default)]
     pub shares_sessions: bool,
     /// Set for the agent besides the server's environment, for an API key or a router.
@@ -2116,7 +2120,7 @@ pub struct ServerInfo {
     pub agents: Vec<AgentInfo>,
     /// The models of the installed agents, in the order to offer them.
     pub models: Vec<ModelInfo>,
-    /// The agents' accounts, the default ones first.
+    /// The agents' accounts. An agent's first is its default.
     #[serde(default)]
     pub agent_accounts: Vec<AgentAccount>,
     /// The model that writes titles, commit messages and pull requests, when one was picked.

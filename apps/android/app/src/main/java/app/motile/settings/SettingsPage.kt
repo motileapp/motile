@@ -182,7 +182,10 @@ private fun SettingsGroups.agentAccounts(store: AppStore, edit: (Server, AgentAc
             }
             val installed = Agent.entries.filter { server.agents[it] != null }
             for (account in server.agentAccounts.filter { it.agent in installed }) row {
-                AccountRow(account, edit = { edit(server, account) }, remove = if (account.isDefault) null else ({ remove(Removal.OfAccount(account, server)) }))
+                AccountRow(
+                    account, isDefault = server.isDefault(account), edit = { edit(server, account) },
+                    makeDefault = { store.makeAgentAccountDefault(account, server) }, remove = { remove(Removal.OfAccount(account, server)) },
+                )
             }
             row {
                 SettingsPressRow({ edit(server, AgentAccount.new(installed.firstOrNull() ?: Agent.Claude)) }, enabled = installed.isNotEmpty()) {
@@ -193,19 +196,21 @@ private fun SettingsGroups.agentAccounts(store: AppStore, edit: (Server, AgentAc
     }
 }
 
-/** An account: pressed it opens to change, held it offers the same and, but for the default one, its removal. */
+/** An account: pressed it opens to change, held it offers the same, making it its agent's default and its removal. */
 @Composable
-private fun AccountRow(account: AgentAccount, edit: () -> Unit, remove: (() -> Unit)?) {
+private fun AccountRow(account: AgentAccount, isDefault: Boolean, edit: () -> Unit, makeDefault: () -> Unit, remove: () -> Unit) {
     val menu = rememberMenuState()
+    val description = if (isDefault) "Default · ${account.settingsDescription}" else account.settingsDescription
     Box(Modifier.pressPosition(menu)) {
         SettingsPressRow(edit, onLongClick = { menu.openAtPress() }) {
-            SettingsItem("${account.agent.title} · ${account.name}", account.settingsDescription) {
+            SettingsItem("${account.agent.title} · ${account.name}", description) {
                 Box(Modifier.size(SettingsTile.size.dp), contentAlignment = Alignment.Center) { AgentIcon(account.agent, size = 22f) }
             }
         }
         MenuPopup(menu) {
             item("Edit", Symbol.Pencil, run = edit)
-            if (remove != null) item("Remove Account", Symbol.Trash2, destructive = true, run = remove)
+            if (!isDefault) item("Make Default", Symbol.CircleCheck, run = makeDefault)
+            item("Remove Account", Symbol.Trash2, destructive = true, run = remove)
         }
     }
 }

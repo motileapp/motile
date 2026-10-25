@@ -2321,6 +2321,10 @@ class AppStore(private val context: Context) {
     /** Removes an account. Its threads go on with the agent's default account. */
     fun removeAgentAccount(account: AgentAccount, server: Server) = request(server.id, mapOf("type" to "remove_agent_account", "id" to account.id))
 
+    /** Makes an account its agent's default, the first of its accounts. */
+    fun makeAgentAccountDefault(account: AgentAccount, server: Server) =
+        request(server.id, mapOf("type" to "make_agent_account_default", "id" to account.id))
+
     fun setEffort(effort: String) {
         val thread = selectedThread ?: return updateDraft { it.copy(effort = effort) }
         update(thread, mapOf("effort" to effort)) { it.copy(effort = effort) }

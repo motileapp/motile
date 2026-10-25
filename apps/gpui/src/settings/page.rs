@@ -493,23 +493,25 @@ impl SettingsPage {
         let accounts = server.agent_accounts.iter().filter(|account| installed.contains(&account.agent));
         for (place, account) in accounts.enumerate() {
             let edit = self.edit_account(server, account.clone(), cx);
-            let remove = (!account.is_default())
-                .then(|| Self::ask_removal(&page, Removal::Account(Box::new((account.clone(), server.clone())))));
+            let is_default = server.is_default_account(account);
+            let make_default = (!is_default).then(|| self.make_default(server, account));
+            let remove = Self::ask_removal(&page, Removal::Account(Box::new((account.clone(), server.clone()))));
             let menu = more(("account-menu", index * 1000 + place), "What to do with the account", move |_, _| {
-                let edit = edit.clone();
-                let remove = remove.clone();
-                Menu::new().symbol_item("Edit", "pencil", move |window, cx| edit(window, cx)).when_some(
-                    remove,
-                    |menu, remove| {
-                        menu.separator()
-                            .danger_symbol_item("Remove Account", "trash-2", move |window, cx| remove(window, cx))
-                    },
-                )
+                let (edit, remove) = (edit.clone(), remove.clone());
+                Menu::new()
+                    .symbol_item("Edit", "pencil", move |window, cx| edit(window, cx))
+                    .when_some(make_default.clone(), |menu, make_default| {
+                        menu.symbol_item("Make Default", "circle-check", move |window, cx| make_default(window, cx))
+                    })
+                    .separator()
+                    .danger_symbol_item("Remove Account", "trash-2", move |window, cx| remove(window, cx))
             });
             let title = format!("{} · {}", agent_name(account.agent), account.name);
+            let description = account.settings_description();
+            let description = if is_default { format!("Default · {description}") } else { description };
             let leading = vec![
                 logos::agent_icon(account.agent, 16., cx).into_any_element(),
-                label(title, Some(account.settings_description()), None, Cut::Wraps, cx),
+                label(title, Some(description), None, Cut::Wraps, cx),
             ];
             rows.push(row(leading, vec![menu.into_any_element()]).into_any_element());
             rows.push(divider_on(Surface::Card, cx).into_any_element());
@@ -524,6 +526,11 @@ impl SettingsPage {
             row(vec![div().ml(px(-large_outset())).child(button).into_any_element()], Vec::new()).into_any_element(),
         );
         rows
+    }
+
+    fn make_default(&self, server: &Server, account: &AgentAccount) -> Run {
+        let (store, server, account) = (self.store.clone(), server.clone(), account.clone());
+        Rc::new(move |_, cx| store.update(cx, |store, _| store.make_agent_account_default(&account, &server)))
     }
 
     /// Opens the sheet that adds or changes the account on the server.

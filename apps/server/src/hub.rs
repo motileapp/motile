@@ -313,7 +313,7 @@ impl Hub {
         let worktrees = threads.iter().filter_map(thread_worktree).collect();
         let mut queued = store.load_queued()?;
         let kept_accounts = store.setting(AGENT_ACCOUNTS).and_then(|kept| serde_json::from_str(&kept).ok());
-        let accounts = agent_accounts::with_defaults(kept_accounts.unwrap_or_default());
+        let accounts = agent_accounts::with_every_agent(kept_accounts.unwrap_or_default());
         let continue_settings = ContinueSettings {
             after_limits: store.setting(CONTINUE_AFTER_LIMITS).is_none_or(|value| value == "true"),
             after_restarts: store.setting(CONTINUE_AFTER_RESTARTS).is_some_and(|value| value == "true"),
@@ -471,7 +471,7 @@ impl Hub {
     }
 
     fn default_account(&self, agent: Agent) -> AgentAccount {
-        default_account_in(&self.agent_accounts(), agent)
+        agent_accounts::default_of(&self.agent_accounts(), agent)
     }
 
     /// The account the thread works with, or its agent's default one when that has gone.
@@ -655,21 +655,32 @@ impl Hub {
         self.sign_ins.cancel(id).await;
     }
 
-    /// Removes an account. Its threads go on with the agent's default account.
+    /// Removes an account. Its threads go on with the agent's default account, which is the next
+    /// one when it was the default.
     pub async fn remove_agent_account(self: &Arc<Self>, id: &str) -> anyhow::Result<()> {
         let mut threads = self.threads.lock().await;
         let mut accounts = self.agent_accounts();
         let account =
             accounts.iter().find(|account| account.id == id).context("That account is no longer on your server.")?;
-        if agent_accounts::is_default(account) {
-            bail!("The default account stays. Sign it in to another account instead.");
+        let agent = account.agent;
+        if !accounts.iter().any(|other| other.agent == agent && other.id != id) {
+            bail!(
+                "This is your server's only {} account. Add another before removing it.",
+                agent_accounts::agent_name(agent)
+            );
         }
-        let default = self.default_account(account.agent);
         ensure_idle(&threads, id)?;
         let_go_of_account(&mut threads, id);
         accounts.retain(|account| account.id != id);
+        let default = agent_accounts::default_of(&accounts, agent);
         self.keep_agent_accounts(accounts)?;
         self.reload_sessions(&mut threads, id, Some(&default))
+    }
+
+    /// Makes the account its agent's default, which new threads start with.
+    pub fn make_agent_account_default(self: &Arc<Self>, id: &str) -> anyhow::Result<()> {
+        let accounts = agent_accounts::made_default(self.agent_accounts(), id)?;
+        self.keep_agent_accounts(accounts)
     }
 
     /// Has the account's threads, or with `moving` the threads it had, which go to that account,
@@ -4218,14 +4229,9 @@ impl Live {
     }
 }
 
-fn default_account_in(accounts: &[AgentAccount], agent: Agent) -> AgentAccount {
-    let found = accounts.iter().find(|account| account.id == agent_accounts::default_id(agent));
-    found.cloned().unwrap_or_else(|| agent_accounts::default_account(agent))
-}
-
 fn account_in(accounts: &[AgentAccount], thread: &Thread) -> AgentAccount {
     let found = accounts.iter().find(|account| account.id == thread.agent_account && account.agent == thread.agent);
-    found.cloned().unwrap_or_else(|| default_account_in(accounts, thread.agent))
+    found.cloned().unwrap_or_else(|| agent_accounts::default_of(accounts, thread.agent))
 }
 
 /// The agent of the thread's account and the folder it keeps its sessions in.

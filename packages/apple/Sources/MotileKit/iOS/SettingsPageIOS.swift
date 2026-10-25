@@ -260,21 +260,22 @@ struct SettingsPage: View {
                 Button {
                     editedAccount = EditedAccount(server: server, account: account)
                 } label: {
-                    SettingsItem("\(account.agent.name) · \(account.name)", description: account.settingsDescription) {
+                    SettingsItem("\(account.agent.name) · \(account.name)", description: account.settingsDescription(isDefault: server.isDefault(account))) {
                         AgentIcon(agent: account.agent, size: 22)
                             .frame(width: SettingsTile.size, height: SettingsTile.size)
                     }
                 }
                 .swipeActions {
-                    if !account.isDefault {
-                        Button("Remove", role: .destructive) { removal = .account(account, on: server) }
-                            .tint(Color.themeDestructive)
-                    }
+                    Button("Remove", role: .destructive) { removal = .account(account, on: server) }
+                        .tint(Color.themeDestructive)
                 }
                 .contextMenu {
                     Button { editedAccount = EditedAccount(server: server, account: account) } label: { Label("Edit", symbol: .pencil) }
-                    if !account.isDefault {
-                        Button(role: .destructive) { removal = .account(account, on: server) } label: { Label("Remove Account", symbol: .trash2) }
+                    if !server.isDefault(account) {
+                        Button { store.makeAgentAccountDefault(account, on: server) } label: { Label("Make Default", symbol: .circleCheck) }
+                    }
+                    Button(role: .destructive) { removal = .account(account, on: server) } label: {
+                        Label("Remove Account", symbol: .trash2, color: Theme.destructive)
                     }
                 }
             }
