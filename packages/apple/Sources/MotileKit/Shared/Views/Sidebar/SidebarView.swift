@@ -282,8 +282,11 @@ struct ProjectButtons: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            ActionButton(icon: .folderPlus, help: "Add a project") { store.addProject() }
-            ActionButton(icon: .squarePen, help: "\(store.shortcuts.help("New thread", "chat.new")). ⇧-click starts one in this project") {
+            ActionButton(icon: .folderPlus, help: "Add a project", symbolSize: ToolbarButton.symbol) { store.addProject() }
+            ActionButton(
+                icon: .squarePen, help: "\(store.shortcuts.help("New thread", "chat.new")). ⇧-click starts one in this project",
+                symbolSize: ToolbarButton.symbol
+            ) {
                 guard NSApp.currentEvent?.modifierFlags.contains(.shift) == true else { return store.newThread() }
                 store.startNewThread(in: store.composerProject)
             }
@@ -1178,7 +1181,10 @@ struct SidebarFooter: View {
     private static let reach = EdgeInsets(top: 4, leading: ToolbarButton.margin, bottom: 4, trailing: ToolbarButton.margin)
     /// How far a button's symbol draws from the button's sides: Lucide leaves a twelfth of its
     /// square empty around it.
-    private static let symbolInset = ((ControlSize.regular.height - ControlSize.regular.symbolSide) / 2 + ControlSize.regular.symbolSide / 12).rounded()
+    private static let symbolInset: CGFloat = {
+        let side = PlatformImage.symbolSide(ToolbarButton.symbol)
+        return ((ControlSize.regular.height - side) / 2 + side / 12).rounded()
+    }()
 
     @Environment(AppStore.self) private var store
 
@@ -1197,8 +1203,10 @@ struct SidebarFooter: View {
                         store.closeRoute()
                     }
                 } else {
-                    ActionButton(icon: .settings, help: store.shortcuts.help("Settings", "settings.open"), margin: Self.reach) { store.openSettings() }
-                    ActionButton(icon: .chartColumn, help: "Usage: what the agents spent and what is left of their plans", margin: Self.reach) {
+                    ActionButton(icon: .settings, help: store.shortcuts.help("Settings", "settings.open"), symbolSize: ToolbarButton.symbol, margin: Self.reach) { store.openSettings() }
+                    ActionButton(icon: .chartColumn, help: "Usage: what the agents spent and what is left of their plans", symbolSize: ToolbarButton.symbol,
+                        margin: Self.reach
+                    ) {
                         store.openUsage()
                     }
                 }
@@ -1207,7 +1215,9 @@ struct SidebarFooter: View {
                     UpdateLabel.upToDate
                         .padding(.trailing, 2)
                 }
-                ActionButton(icon: .refreshCw, help: "Check for Updates", pending: store.updater.state == .checking, margin: Self.reach) {
+                ActionButton(icon: .refreshCw, help: "Check for Updates", symbolSize: ToolbarButton.symbol, pending: store.updater.state == .checking,
+                    margin: Self.reach
+                ) {
                     store.updater.check(asked: true)
                 }
             }

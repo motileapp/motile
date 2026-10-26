@@ -4,6 +4,8 @@ import SwiftUI
 struct ToolbarButton: View {
     static let margin: CGFloat = 2
     static let width = ControlSize.regular.height + 2 * margin
+    /// Larger than a regular button's, which matches text this has none of.
+    static let symbol = IconSize.md
 
     let symbol: Symbol
     let help: String
@@ -11,7 +13,7 @@ struct ToolbarButton: View {
 
     var body: some View {
         ActionButton(
-            icon: symbol, help: help, margin: EdgeInsets(top: Self.margin, leading: Self.margin, bottom: Self.margin, trailing: Self.margin),
+            icon: symbol, help: help, symbolSize: Self.symbol, margin: EdgeInsets(top: Self.margin, leading: Self.margin, bottom: Self.margin, trailing: Self.margin),
             action: action)
     }
 }

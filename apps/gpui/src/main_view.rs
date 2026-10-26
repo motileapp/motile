@@ -11,7 +11,7 @@ use crate::sidebar::Sidebar;
 use crate::store::Store;
 use crate::theme::{self, colors};
 use crate::thread::ThreadPane;
-use crate::ui::{ActionButton, TOOLBAR_MARGIN, TOOLBAR_WIDTH, even};
+use crate::ui::{ActionButton, TOOLBAR_MARGIN, TOOLBAR_SYMBOL, TOOLBAR_WIDTH, even};
 use crate::usage::UsageRoute;
 
 const SIDEBAR_WIDTHS: (f32, f32) = (240., 420.);
@@ -64,7 +64,7 @@ pub struct MainView {
 
 /// A button in the window's top bar. The buttons touch: the space seen between them is theirs.
 fn toolbar_button(id: &'static str, symbol: &'static str, help: impl Into<SharedString>) -> ActionButton {
-    ActionButton::icon(id, symbol, help).margin(even(TOOLBAR_MARGIN))
+    ActionButton::icon(id, symbol, help).symbol_size(TOOLBAR_SYMBOL).margin(even(TOOLBAR_MARGIN))
 }
 
 impl MainView {

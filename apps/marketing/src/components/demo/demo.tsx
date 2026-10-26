@@ -249,7 +249,7 @@ function WindowButton({
         !inline && "m-0.5"
       )}
     >
-      <Icon className="size-3.5" />
+      <Icon className="size-4" />
     </button>
   )
 }

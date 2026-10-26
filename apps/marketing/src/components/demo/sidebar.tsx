@@ -450,7 +450,7 @@ function FooterButton({
       title={label}
       className="flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-background-accent hover:text-foreground"
     >
-      <Icon className="size-3.5" />
+      <Icon className="size-4" />
     </button>
   )
 }
