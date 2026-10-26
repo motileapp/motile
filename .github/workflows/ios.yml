@@ -19,8 +19,12 @@ concurrency:
 
 jobs:
   build:
-    runs-on: macos-26
+    # The iOS 27 SDK: iOS 27 leaves the transcript sharp under the top bar of an app built with an
+    # older one.
+    runs-on: xcode-27
     timeout-minutes: 60
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_27.1.app/Contents/Developer
     steps:
       - uses: actions/checkout@v4
 
