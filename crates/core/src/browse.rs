@@ -1,8 +1,14 @@
 //! Browsing a server's folders by typing a path, the way a shell completes one: the folders of
-//! the directory typed so far, narrowed by what follows its last slash, and the images that can
-//! be a project's icon when one is being chosen. Every client shows the same.
+//! the directory typed so far, narrowed by what follows its last slash. And searching the images
+//! in a project's folder for its icon. Every client shows the same.
 
 use serde::Serialize;
+
+use crate::skills::fit;
+
+const MAX_FOUND: usize = 200;
+/// What an image that is meant as an icon is usually called.
+const ICON_WORDS: [&str; 3] = ["icon", "logo", "favicon"];
 
 /// The path typed so far: the directory to list and the start of a folder's name in it.
 #[derive(Debug, PartialEq)]
@@ -19,7 +25,6 @@ pub struct Listing {
     /// What to type for the directory above. Missing at the root.
     pub parent: Option<String>,
     pub folders: Vec<Folder>,
-    pub images: Vec<Image>,
 }
 
 #[derive(Serialize, Debug, PartialEq)]
@@ -33,6 +38,8 @@ pub struct Folder {
 #[derive(Serialize, Debug, PartialEq)]
 pub struct Image {
     pub name: String,
+    /// The folder it is in, inside the project's. Empty at its top.
+    pub folder: String,
     pub path: String,
 }
 
@@ -62,8 +69,8 @@ fn as_typed(path: &str, home: &str) -> String {
     }
 }
 
-/// The folders and images of `directory` whose names start with `leaf`, whatever the case.
-pub fn listing(directory: &str, leaf: &str, folders: &[String], images: &[String], home: &str) -> Listing {
+/// The folders of `directory` whose names start with `leaf`, whatever the case.
+pub fn listing(directory: &str, leaf: &str, folders: &[String], home: &str) -> Listing {
     let leaf = leaf.to_lowercase();
     let base = directory.trim_end_matches('/');
     let named = |name: &&String| name.to_lowercase().starts_with(&leaf);
@@ -71,15 +78,37 @@ pub fn listing(directory: &str, leaf: &str, folders: &[String], images: &[String
         let path = format!("{base}/{name}");
         Folder { name: name.clone(), typed: as_typed(&path, home), path }
     };
-    let image = |name: &String| Image { name: name.clone(), path: format!("{base}/{name}") };
     let parent = (directory != "/").then(|| as_typed(base.rsplit_once('/').map_or("", |(parent, _)| parent), home));
     Listing {
         path: directory.to_string(),
         typed: as_typed(directory, home),
         parent,
         folders: folders.iter().filter(named).map(folder).collect(),
-        images: images.iter().filter(named).map(image).collect(),
     }
+}
+
+/// The images at `paths` inside the project's `folder` that fit `query`, the best first: by their
+/// name, then by their path. With nothing typed, those named like an icon come first. The least
+/// deep come first among equals.
+pub fn images(folder: &str, paths: &[String], query: &str) -> Vec<Image> {
+    let query = query.trim().to_lowercase();
+    let score = |path: &String| {
+        let path = path.to_lowercase();
+        let name = path.rsplit('/').next().unwrap_or_default();
+        if query.is_empty() {
+            return Some(if ICON_WORDS.iter().any(|word| name.contains(word)) { 0 } else { 1 });
+        }
+        fit(name, &query).or_else(|| fit(&path, &query).map(|score| score + 10))
+    };
+    let mut ranked: Vec<(u32, usize, &String)> =
+        paths.iter().filter_map(|path| Some((score(path)?, path.matches('/').count(), path))).collect();
+    ranked.sort();
+    let base = folder.trim_end_matches('/');
+    let image = |path: &String| {
+        let (inside, name) = path.rsplit_once('/').unwrap_or(("", path));
+        Image { name: name.to_string(), folder: inside.to_string(), path: format!("{base}/{path}") }
+    };
+    ranked.into_iter().take(MAX_FOUND).map(|(_, _, path)| image(path)).collect()
 }
 
 #[cfg(test)]
@@ -107,7 +136,7 @@ mod tests {
     #[test]
     fn folders_are_narrowed_by_the_name_and_say_what_to_type() {
         let folders = ["Motile".to_string(), "notes".to_string(), "more".to_string()];
-        let listed = listing("/home/ada/code", "mo", &folders, &[], HOME);
+        let listed = listing("/home/ada/code", "mo", &folders, HOME);
 
         assert_eq!(listed.typed, "~/code/");
         assert_eq!(listed.parent.as_deref(), Some("~/"));
@@ -115,20 +144,36 @@ mod tests {
         assert_eq!(found, vec![("/home/ada/code/Motile", "~/code/Motile/"), ("/home/ada/code/more", "~/code/more/")]);
     }
 
-    #[test]
-    fn images_are_narrowed_by_the_name_too() {
-        let images = ["Logo.png".to_string(), "icon.svg".to_string()];
-        let listed = listing("/home/ada/code/", "lo", &[], &images, HOME);
+    fn found(query: &str) -> Vec<String> {
+        let paths = ["docs/shots/home.png", "apps/web/public/favicon.svg", "Logo.png", "src/assets/hero.webp"];
+        let paths: Vec<String> = paths.map(str::to_string).to_vec();
+        images("/home/ada/code/", &paths, query).into_iter().map(|image| image.path).collect()
+    }
 
-        assert_eq!(listed.images, vec![Image { name: "Logo.png".into(), path: "/home/ada/code/Logo.png".into() }]);
+    #[test]
+    fn images_named_like_an_icon_come_first() {
+        let found = found("");
+        assert_eq!(found[..2], ["/home/ada/code/Logo.png", "/home/ada/code/apps/web/public/favicon.svg"]);
+    }
+
+    #[test]
+    fn images_are_found_by_their_name_then_by_their_path() {
+        assert_eq!(found("logo"), ["/home/ada/code/Logo.png"]);
+        assert_eq!(found("ho"), ["/home/ada/code/docs/shots/home.png", "/home/ada/code/src/assets/hero.webp"]);
+        assert_eq!(found("public"), ["/home/ada/code/apps/web/public/favicon.svg"]);
+        assert!(found("nothing like it").is_empty());
+
+        let paths = ["apps/web/favicon.svg".to_string()];
+        let image = &images("/home/ada/code", &paths, "fav")[0];
+        assert_eq!((image.name.as_str(), image.folder.as_str()), ("favicon.svg", "apps/web"));
     }
 
     #[test]
     fn the_folders_above_home_are_typed_from_the_root() {
-        assert_eq!(listing(HOME, "", &[], &[], HOME).parent.as_deref(), Some("/home/"));
-        assert_eq!(listing("/home", "", &[], &[], HOME).parent.as_deref(), Some("/"));
-        assert_eq!(listing("/", "", &["etc".to_string()], &[], HOME).parent, None);
-        assert_eq!(listing("/", "", &["etc".to_string()], &[], HOME).folders[0].typed, "/etc/");
-        assert_eq!(listing("/home/adam", "", &[], &[], HOME).typed, "/home/adam/");
+        assert_eq!(listing(HOME, "", &[], HOME).parent.as_deref(), Some("/home/"));
+        assert_eq!(listing("/home", "", &[], HOME).parent.as_deref(), Some("/"));
+        assert_eq!(listing("/", "", &["etc".to_string()], HOME).parent, None);
+        assert_eq!(listing("/", "", &["etc".to_string()], HOME).folders[0].typed, "/etc/");
+        assert_eq!(listing("/home/adam", "", &[], HOME).typed, "/home/adam/");
     }
 }

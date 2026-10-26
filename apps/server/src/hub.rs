@@ -1672,6 +1672,12 @@ impl Hub {
         Ok(())
     }
 
+    pub async fn project_images(&self, project_id: &str) -> anyhow::Result<Message> {
+        let folder = self.project_path(project_id).await?;
+        let paths = icons::all(&folder, &self.environment).await;
+        Ok(Message::ProjectImages { folder, paths })
+    }
+
     /// Sets the shell script that runs in every new worktree of the project, or takes it away.
     pub async fn set_project_setup(&self, project_id: &str, script: Option<String>) -> anyhow::Result<()> {
         let script = script.map(|script| script.trim().to_string()).filter(|script| !script.is_empty());

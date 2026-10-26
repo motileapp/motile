@@ -1494,9 +1494,16 @@ class AppStore(private val context: Context) {
     fun startsProjects(server: Server?): Boolean = (server?.protocolVersion ?: 0) >= 5
 
     /** With `icons`, the images that can be a project's icon are listed too. */
-    fun browse(serverID: String, query: String, icons: Boolean, done: (Result<FolderListing>) -> Unit) {
-        core.send("browse", json("server_id" to serverID, "query" to query, "icons" to icons)) { result ->
+    fun browse(serverID: String, query: String, done: (Result<FolderListing>) -> Unit) {
+        core.send("browse", json("server_id" to serverID, "query" to query)) { result ->
             done(result.map(::FolderListing))
+        }
+    }
+
+    /** The images in the project's folder that fit [query], the best first. */
+    fun images(project: Project, query: String, done: (Result<List<ProjectImage>>) -> Unit) {
+        core.send("project_images", json("server_id" to project.serverID, "project_id" to project.id, "query" to query)) { result ->
+            done(result.map { answer -> answer.objects("images").map(::ProjectImage) })
         }
     }
 

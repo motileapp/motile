@@ -19,6 +19,8 @@ struct CommandPanel: View {
     @State private var keys: Any?
     /// The folders under the path typed on the folder page. Missing while they are asked for.
     @State private var listing: FolderListing?
+    /// The images that fit the search on the icon page. Missing while they are asked for.
+    @State private var images: [ProjectImage]?
     @State private var browseError: String?
     @State private var browsesAsked = 0
     @State private var browsesAnswered = 0
@@ -47,7 +49,7 @@ struct CommandPanel: View {
             .onChange(of: store.projectsAdded) { close() }
             .onAppear {
                 if inStack, leavePushedPanel == nil { store.readGitHubOfServers() }
-                guard browsed(page) != nil else { return }
+                guard lists(page) else { return }
                 arrive()
             }
     }
@@ -233,7 +235,7 @@ struct CommandPanel: View {
         case .github: "Search your repositories"
         case .githubSetup: "Set up GitHub"
         case .folder(let id): "Path on \(serverName(id))"
-        case .icon(let id): "Path to an image on \(serverName(store.project(id)?.serverID ?? ""))"
+        case .icon(let id): "Search the images in \(store.project(id)?.name ?? "the project")"
         }
     }
 
@@ -314,7 +316,7 @@ struct CommandPanel: View {
     private func emptyText(_ page: PanelPage) -> String {
         switch page {
         case .folder: browseError ?? "No folders found"
-        case .icon: browseError ?? "No folders or images found"
+        case .icon: browseError ?? "No images found"
         case .github(let id): store.repoErrors[id] ?? "No repository found"
         default: "Nothing found"
         }
@@ -327,8 +329,6 @@ struct CommandPanel: View {
             if case .folder = page {
                 hint(["↩"], "Open")
                 hint(["⌘", "↩"], "Add")
-            } else if case .icon = page {
-                hint(["↩"], "Open")
             } else {
                 hint(["↩"], "Select")
             }
@@ -599,31 +599,21 @@ struct CommandPanel: View {
         return items
     }
 
-    /// The icon in the project's folder, the folder above the typed one, and the folders and
-    /// images in it.
+    /// The icon found in the project's folder, then the images in it that fit the search.
     private func iconItems(_ id: String) -> [PanelItem] {
         guard let project = store.project(id) else { return [] }
-        guard let listing else {
-            return browseError == nil ? (0..<8).map { .placeholder($0, lines: 1) } : []
+        guard let images else {
+            return browseError == nil ? (0..<8).map { .placeholder($0, lines: 2) } : []
         }
         var items: [PanelItem] = []
-        if query.hasSuffix("/") || query == "~" {
+        if query.isEmpty {
             items.append(PanelItem(id: "folder-icon", title: "Use the icon in its folder", detail: project.path, icon: .symbol(.undo2)) {
                 store.setIcon(of: project, to: nil)
             })
-            if let parent = listing.parent {
-                items.append(PanelItem(id: "parent", title: "..", detail: "", icon: .symbol(.cornerLeftUp), keepsOpen: true) {
-                    query = parent
-                })
-            }
         }
-        items += listing.folders.map { folder in
-            PanelItem(id: folder.path, title: folder.name, detail: "", icon: .symbol(.folder), keepsOpen: true) {
-                query = folder.typed
-            }
-        }
-        items += listing.images.map { image in
-            PanelItem(id: image.path, title: image.name, detail: "", icon: .symbol(.image)) {
+        items += images.map { image in
+            let folder = image.folder.isEmpty ? project.name : "\(project.name)/\(image.folder)"
+            return PanelItem(id: image.path, title: image.name, detail: folder, icon: .symbol(.image)) {
                 store.setIcon(of: project, to: image.path)
             }
         }
@@ -769,48 +759,63 @@ struct CommandPanel: View {
         store.panelNotice = nil
         copied = false
         listing = nil
+        images = nil
         browseError = nil
         query = ""
         switch page {
         case .folder: query = "~/"
-        case .icon(let id): query = (store.project(id)?.path ?? "~") + "/"
+        case .icon: browse()
         case .github(let id): store.loadRepos(id)
         case .sources(let id) where store.github[id] == .ready: store.loadRepos(id)
         default: break
         }
     }
 
-    /// Asks for the folders under the typed path. Placeholders take the place of the folders
-    /// that are shown when the answer takes a while.
+    /// Asks for the folders under the typed path, or the images that fit the search. Placeholders
+    /// take the place of what is shown when the answer takes a while.
     private func browse() {
-        guard let (id, icons) = browsed(page) else { return }
+        guard lists(page) else { return }
         browsesAsked += 1
         let asked = browsesAsked
-        store.browse(serverID: id, query: query, icons: icons) { result in
-            guard asked == browsesAsked else { return }
-            browsesAnswered = asked
-            switch result {
-            case .success(let found):
-                listing = found
-                browseError = nil
-            case .failure(let error):
-                listing = nil
-                browseError = error.message
+        switch page {
+        case .folder(let id):
+            store.browse(serverID: id, query: query) { result in
+                answered(asked, result) { listing = $0 }
             }
+        case .icon(let id):
+            guard let project = store.project(id) else { return }
+            store.images(of: project, query: query) { result in
+                answered(asked, result) { images = $0 }
+            }
+        default: return
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
             guard asked == browsesAsked, browsesAnswered < asked else { return }
             listing = nil
+            images = nil
             browseError = nil
         }
     }
 
-    /// The server whose folders the page lists, and whether with the images that can be an icon.
-    private func browsed(_ page: PanelPage) -> (String, Bool)? {
+    /// Keeps what the server answered, unless something was asked for since.
+    private func answered<Found>(_ asked: Int, _ result: Result<Found, CoreBridge.CoreError>, keep: (Found?) -> Void) {
+        guard asked == browsesAsked else { return }
+        browsesAnswered = asked
+        switch result {
+        case .success(let found):
+            keep(found)
+            browseError = nil
+        case .failure(let error):
+            keep(nil)
+            browseError = error.message
+        }
+    }
+
+    /// Whether the page lists what a server answers as the search changes.
+    private func lists(_ page: PanelPage) -> Bool {
         switch page {
-        case .folder(let id): (id, false)
-        case .icon(let id): store.project(id).map { ($0.serverID, true) }
-        default: nil
+        case .folder, .icon: true
+        default: false
         }
     }
 
@@ -866,7 +871,7 @@ private extension PanelPage {
     /// It asks for something to be typed rather than searched.
     var isTyped: Bool {
         switch self {
-        case .newProject, .folder, .icon: true
+        case .newProject, .folder: true
         default: false
         }
     }

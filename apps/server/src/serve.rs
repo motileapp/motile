@@ -176,6 +176,7 @@ impl Server {
             Request::SetProjectIcon { project_id, path } => {
                 hub.set_project_icon(&project_id, path).await.map(|_| Message::Ok)
             }
+            Request::ProjectImages { project_id } => hub.project_images(&project_id).await,
             Request::Branches { project_id } => hub.branches(&project_id).await,
             Request::SwitchBranch { project_id, branch, create } => {
                 hub.switch_branch(&project_id, &branch, create).await.map(|_| Message::Ok)

@@ -91,7 +91,7 @@ fun CommandPanel(start: PanelPage, inStack: Boolean = false, onLeave: (() -> Uni
     }
     LaunchedEffect(Unit) {
         if (inStack) store.readGitHubOfServers()
-        if (state.browsed(state.page) != null) state.arrive()
+        if (state.lists(state.page)) state.arrive()
     }
     LaunchedEffect(Unit) { snapshotFlow { store.github }.drop(1).collect { state.followGitHub() } }
     LaunchedEffect(Unit) { snapshotFlow { store.projectsAdded }.drop(1).collect { state.close() } }
