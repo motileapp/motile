@@ -24,6 +24,7 @@ fun CopyButton(
     size: ControlSize = ControlSize.Regular,
     symbolSize: Float? = null,
     round: Boolean = false,
+    quiet: Boolean = false,
     copies: Int = 0,
     copy: () -> Unit,
 ) {
@@ -43,7 +44,7 @@ fun CopyButton(
     }
     ActionButton(
         icon = if (copied) Symbol.Check else Symbol.Copy, help = help, modifier = modifier, variant = variant, size = size,
-        symbolSize = symbolSize, round = round,
+        symbolSize = symbolSize, round = round, quiet = quiet,
     ) {
         copy()
         copied = true

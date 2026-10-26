@@ -423,6 +423,8 @@ final class IconButton: NSButton {
 
     /// The layer it lies on.
     var surface = Surface.background
+    /// Until it is lit, as muted as the time beside it.
+    var quiet = false { didSet { light() } }
     private var symbolSize = IconButton.metrics.symbol
     private var action_: (() -> Void)?
     private var tracking: NSTrackingArea?
@@ -480,7 +482,7 @@ final class IconButton: NSButton {
 
     private func light() {
         let lit = hovering || pressing
-        contentTintColor = lit ? Theme.foreground : Theme.mutedForeground
+        contentTintColor = lit ? Theme.foreground : quiet ? Theme.mutedStrongerForeground : Theme.mutedForeground
         effectiveAppearance.performAsCurrentDrawingAppearance {
             layer?.backgroundColor = lit ? surface.platform(.control).cgColor : nil
         }

@@ -268,10 +268,11 @@ private fun ToolRow(row: RowModel) {
     val group = (kind as? RowModel.Kind.Group)?.content
     val fold = (kind as? RowModel.Kind.Fold)?.content
     val thought = (kind as? RowModel.Kind.Thinking)?.text
+    /** None for a fold, which heads its turn, so its words start where the icons of the turn's work do. */
     val symbol = when {
         tool != null -> tool.symbol
         group != null -> ToolContent.symbol(group.icon)
-        fold != null -> Symbol.Clock
+        fold != null -> null
         else -> Symbol.Brain
     }
     val running = tool?.status == ToolContent.Status.Running || group?.running == true
@@ -312,8 +313,10 @@ private fun ToolRow(row: RowModel) {
                 contentAlignment = Alignment.CenterStart,
             ) {
                 Row(Modifier.padding(horizontal = bleed).height(line), verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.size(16.dp), contentAlignment = Alignment.Center) { Icon(symbol, 12f, color = palette.mutedStrongerForeground) }
-                    Spacer(Modifier.width(8.dp))
+                    if (symbol != null) {
+                        Box(Modifier.size(16.dp), contentAlignment = Alignment.Center) { Icon(symbol, 12f, color = palette.mutedStrongerForeground) }
+                        Spacer(Modifier.width(8.dp))
+                    }
                     ShimmerText(
                         title, Theme.ui(13f), palette.mutedStrongerForeground, palette.foreground, running,
                         Modifier.weight(1f, fill = false),
@@ -353,7 +356,7 @@ private fun ToolRow(row: RowModel) {
 
 object ToolRow {
     val height = 36.dp
-    /** The room between a fold's line and the rule under it, which sets the turn's work apart from its reply. */
+    /** The room between a fold's line and the rule under it. */
     val ruleGap = 4.dp
 }
 
@@ -608,9 +611,9 @@ fun MessageMeta(stamp: String, trailing: Boolean, help: String, modifier: Modifi
         horizontalArrangement = if (trailing) Arrangement.End else Arrangement.Start,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (!trailing) CopyButton(help, symbolSize = 12f, copy = copy)
+        if (!trailing) CopyButton(help, symbolSize = 12f, quiet = true, copy = copy)
         Text(stamp, Modifier.weight(1f, fill = false), style = Theme.smallFont, color = palette.mutedStrongerForeground, maxLines = 1)
-        if (trailing) CopyButton(help, symbolSize = 12f, copy = copy)
+        if (trailing) CopyButton(help, symbolSize = 12f, quiet = true, copy = copy)
     }
 }
 

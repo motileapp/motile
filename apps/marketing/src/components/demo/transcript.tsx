@@ -2,7 +2,6 @@ import {
   ArrowRightIcon,
   ChevronDownIcon,
   ChevronRightIcon,
-  ClockIcon,
   CopyIcon,
   FileTextIcon,
   GlobeIcon,
@@ -217,7 +216,7 @@ function folds(items: Item[]): Fold[] {
   return found
 }
 
-/** How long a finished turn worked, which opens what it did, over a rule that sets it apart from its answer. */
+/** How long a finished turn worked, which opens what it did: it heads the turn, over a rule. */
 function FoldRow({
   worked,
   open,
@@ -235,7 +234,6 @@ function FoldRow({
         onClick={onToggle}
         className="-mx-2 flex h-7 items-center gap-2 self-start rounded-md px-2 text-[13px] text-muted-stronger-foreground hover:bg-background-accent-larger"
       >
-        <ClockIcon className="size-3.5 shrink-0" />
         {worked}
         <Chevron className="-ml-1 size-3 shrink-0" />
       </button>

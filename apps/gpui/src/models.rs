@@ -243,6 +243,12 @@ impl Server {
         }
     }
 
+    /// The colour of the server's state while it can't be reached, which a connecting server
+    /// doesn't take.
+    pub fn down_tint(&self, c: &crate::theme::Colors) -> Option<gpui_kit::Hsla> {
+        self.state_tint(c).filter(|_| self.state != State::Connecting)
+    }
+
     /// Whether the server can wait for its agents before it restarts, or stop them and go on with
     /// them after.
     pub fn can_choose_restart(&self) -> bool {

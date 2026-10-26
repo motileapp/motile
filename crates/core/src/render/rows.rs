@@ -137,6 +137,8 @@ pub enum RowKind {
         duration_ms: Option<u64>,
         stopped: bool,
         open: bool,
+        /// When the turn started.
+        at: f64,
     },
     Error {
         message: String,
@@ -899,7 +901,7 @@ fn present_turn<'a>(
     if let Some((duration_ms, stopped, shown_from)) = fold {
         let id = format!("{}/fold", items[work_start].id);
         let open = opened.contains(&id);
-        let kind = RowKind::Fold { duration_ms, stopped, open };
+        let kind = RowKind::Fold { duration_ms, stopped, open, at: items[0].created_at };
         shown.push(Cow::Owned(Row { id, item: items[work_start].id.clone(), nested: false, kind, after: None }));
         // The agents it started stay in view, which the user goes on to.
         if !open {

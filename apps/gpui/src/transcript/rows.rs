@@ -29,7 +29,7 @@ pub const PROSE_GAP: f32 = 9.;
 pub const TOOL_ROW_HEIGHT: f32 = 28.;
 /// What a tool row keeps from a paragraph above it, so that the two are a paragraph apart.
 pub const AFTER_PROSE: f32 = 8.;
-/// The room between a fold's line and the rule under it, which sets the turn's work apart from its reply.
+/// The room between a fold's line and the rule under it.
 const FOLD_RULE_GAP: f32 = 4.;
 /// The line under a message or a reply with its time and the button that copies it: as tall as
 /// the button.
@@ -699,10 +699,15 @@ fn message_meta(
     let shown = ctx.meta_shown(row_id) || copied;
     let time =
         div().px(px(2.)).text_size(px(12.)).text_color(c.muted_stronger_foreground).whitespace_nowrap().child(stamp);
-    let button = copy_button(row_id.to_string(), help, copied, Surface::Background, ctx, copy);
+    let button = copy_button(row_id.to_string(), help, copied, Surface::Background, ctx, copy).quiet();
     let meta = div().h(px(META_HEIGHT)).w_full().flex().items_center();
     let meta = if trailing { meta.justify_end().child(time).child(button) } else { meta.child(button).child(time) };
-    let fade = ctx.meta_fades.get(row_id).copied().filter(|_| !copied);
+    fade_meta(row_id, shown, copied, meta, ctx)
+}
+
+/// What the pointer reveals of a row, shown or not, fading in and out unless it is `held`.
+fn fade_meta(row_id: &str, shown: bool, held: bool, meta: Div, ctx: &RowContext) -> AnyElement {
+    let fade = ctx.meta_fades.get(row_id).copied().filter(|_| !held);
     let Some((showing, at)) = fade else { return meta.opacity(if shown { 1. } else { 0. }).into_any_element() };
     let left = META_FADE.saturating_sub(at.elapsed());
     let start = 1. - left.as_secs_f32() / META_FADE.as_secs_f32();
@@ -989,7 +994,8 @@ fn code_row(model: &RowModel, language: &str, code: &str, ctx: &RowContext, cx: 
 
 /// What a row of a tool call, a group of them, thinking, or a turn's fold shows on its line.
 struct ToolLine {
-    symbol: &'static str,
+    /// None for a fold, which heads its turn, so its words start where the icons of the turn's work do.
+    symbol: Option<&'static str>,
     verb: String,
     target: String,
     failed: bool,
@@ -1077,7 +1083,7 @@ fn tool_row(model: &RowModel, ctx: &RowContext, cx: &App) -> AnyElement {
                 detail = Some(detail_box(inset, tool_detail_text(&row_id, parts, row_key(&row_id)), cx));
             }
             ToolLine {
-                symbol: icons::tool_symbol(tool.icon),
+                symbol: Some(icons::tool_symbol(tool.icon)),
                 verb: tool.verb.clone(),
                 target: tool.target.clone(),
                 failed: tool.status == ToolStatus::Failed,
@@ -1094,7 +1100,7 @@ fn tool_row(model: &RowModel, ctx: &RowContext, cx: &App) -> AnyElement {
                 detail = Some(detail_box(inset, text_box(13., 20.5).text_color(c.muted_foreground).child(thought), cx));
             }
             ToolLine {
-                symbol: "brain",
+                symbol: Some("brain"),
                 verb: "Thought".into(),
                 target: String::new(),
                 failed: false,
@@ -1105,7 +1111,7 @@ fn tool_row(model: &RowModel, ctx: &RowContext, cx: &App) -> AnyElement {
             }
         }
         RowKind::Group { title, target, icon, running, failed, open, started_at } => ToolLine {
-            symbol: icons::tool_symbol(icon),
+            symbol: Some(icons::tool_symbol(icon)),
             verb: title.clone(),
             target: target.clone(),
             failed: *failed,
@@ -1114,8 +1120,8 @@ fn tool_row(model: &RowModel, ctx: &RowContext, cx: &App) -> AnyElement {
             opens: true,
             open: *open,
         },
-        RowKind::Fold { duration_ms, stopped, open } => ToolLine {
-            symbol: "clock",
+        RowKind::Fold { duration_ms, stopped, open, .. } => ToolLine {
+            symbol: None,
             verb: turn_label(*stopped, *duration_ms),
             target: String::new(),
             failed: false,
@@ -1127,7 +1133,10 @@ fn tool_row(model: &RowModel, ctx: &RowContext, cx: &App) -> AnyElement {
         _ => return div().into_any_element(),
     };
     let toggles_in_core = matches!(model.row.kind, RowKind::Group { .. } | RowKind::Fold { .. });
-    let ruled = matches!(model.row.kind, RowKind::Fold { .. });
+    let started = match model.row.kind {
+        RowKind::Fold { at, .. } => Some(at),
+        _ => None,
+    };
     let chevron_open = if toggles_in_core { line.open } else { expanded_here };
     let above = model.above();
 
@@ -1181,16 +1190,18 @@ fn tool_row(model: &RowModel, ctx: &RowContext, cx: &App) -> AnyElement {
         .when(line.opens, |header| header.hover(|header| header.bg(c.background_accent_larger)))
         .flex()
         .items_center()
-        .child(
-            div()
-                .size(px(16.))
-                .flex_none()
-                .flex()
-                .items_center()
-                .justify_center()
-                .child(icons::symbol(line.symbol, 12.).text_color(c.muted_stronger_foreground)),
-        )
-        .child(div().ml(px(8.)).flex().items_center().min_w_0().child(title))
+        .when_some(line.symbol, |header, symbol| {
+            header.child(
+                div()
+                    .size(px(16.))
+                    .flex_none()
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .child(icons::symbol(symbol, 12.).text_color(c.muted_stronger_foreground)),
+            )
+        })
+        .child(div().when(line.symbol.is_some(), |title| title.ml(px(8.))).flex().items_center().min_w_0().child(title))
         .when(line.opens || elapsed_shown, |header| {
             header.child(div().ml(px(2.)).w(px(14.)).flex_none().flex().justify_center().when(line.opens, |chevron| {
                 chevron.child(
@@ -1224,12 +1235,33 @@ fn tool_row(model: &RowModel, ctx: &RowContext, cx: &App) -> AnyElement {
             })
         });
 
+    let Some(started) = started else {
+        return div().flex().flex_col().child(header.self_start()).children(detail).into_any_element();
+    };
+    // A fold heads its turn: when the turn started is at its right while the pointer is over it,
+    // and a rule under it sets it off what it stands for.
+    let time = div()
+        .mt(px(1. + above))
+        .h(px(TOOL_ROW_HEIGHT - 2.))
+        .flex()
+        .items_center()
+        .text_size(px(12.))
+        .text_color(c.muted_stronger_foreground)
+        .whitespace_nowrap()
+        .child(stamp(started));
+    let shown = ctx.meta_shown(&row_id);
     div()
         .flex()
         .flex_col()
-        .child(header.self_start())
-        .when(ruled, |row| row.child(div().mt(px(FOLD_RULE_GAP)).h(px(1.)).bg(c.border_muted)))
-        .children(detail)
+        .child(
+            div()
+                .flex()
+                .items_start()
+                .child(header)
+                .child(div().flex_1())
+                .child(fade_meta(&row_id, shown, false, time, ctx)),
+        )
+        .child(div().mt(px(FOLD_RULE_GAP)).h(px(1.)).bg(c.border_muted))
         .into_any_element()
 }
 
