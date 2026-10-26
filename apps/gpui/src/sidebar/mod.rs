@@ -31,7 +31,7 @@ use crate::store::{ListedDraft, SearchResult, Store, UndoNotice};
 use crate::theme::{self, ControlSize, Layer, colors};
 use crate::ui::menu::Menu;
 use crate::ui::modal::{Answer, Confirmation, confirmation, modal, presented};
-use crate::ui::{ActionButton, InputField, InputVariant, divider, edges};
+use crate::ui::{ActionButton, InputField, InputVariant, TOOLBAR_SYMBOL, divider, edges};
 
 /// The space between the rows' highlights, and around each one: it looks empty but is the row's.
 const ROW_GAP: f32 = 2.;
@@ -425,26 +425,30 @@ impl Sidebar {
             .child(
                 div()
                     .flex()
-                    .child(ActionButton::icon("add-project", "folder-plus", "Add a project").on_click(
-                        move |_, _, cx| {
-                            add_project.update(cx, |store, cx| {
-                                store.add_project();
+                    .child(
+                        ActionButton::icon("add-project", "folder-plus", "Add a project")
+                            .symbol_size(TOOLBAR_SYMBOL)
+                            .on_click(move |_, _, cx| {
+                                add_project.update(cx, |store, cx| {
+                                    store.add_project();
+                                    cx.notify();
+                                })
+                            }),
+                    )
+                    .child(ActionButton::icon("new-thread", "square-pen", help).symbol_size(TOOLBAR_SYMBOL).on_click(
+                        move |event, _, cx| {
+                            let shift = event.modifiers().shift;
+                            new_thread.update(cx, |store, cx| {
+                                if shift {
+                                    let project = store.composer_project().map(|project| project.id);
+                                    store.start_new_thread(project, cx);
+                                } else {
+                                    store.new_thread(cx);
+                                }
                                 cx.notify();
                             })
                         },
-                    ))
-                    .child(ActionButton::icon("new-thread", "square-pen", help).on_click(move |event, _, cx| {
-                        let shift = event.modifiers().shift;
-                        new_thread.update(cx, |store, cx| {
-                            if shift {
-                                let project = store.composer_project().map(|project| project.id);
-                                store.start_new_thread(project, cx);
-                            } else {
-                                store.new_thread(cx);
-                            }
-                            cx.notify();
-                        })
-                    })),
+                    )),
             )
     }
 

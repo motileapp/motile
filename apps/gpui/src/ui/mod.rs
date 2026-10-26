@@ -543,6 +543,8 @@ impl Element for InertScope {
 /// A button in the window's top bar. The buttons touch: the space seen between them is theirs.
 pub const TOOLBAR_MARGIN: f32 = 2.;
 pub const TOOLBAR_WIDTH: f32 = 28. + 2. * TOOLBAR_MARGIN;
+/// Larger than a regular button's, which matches text these have none of.
+pub const TOOLBAR_SYMBOL: IconSize = IconSize::Md;
 
 /// A line across the background, in its border.
 pub fn divider(cx: &App) -> Div {

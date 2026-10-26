@@ -10,7 +10,7 @@ use crate::store::Store;
 use crate::theme::{ControlSize, IconSize, colors};
 use crate::ui::control::Alignment;
 use crate::ui::menu::Menu;
-use crate::ui::{ActionButton, ActionMenu, TOOLBAR_MARGIN, edges};
+use crate::ui::{ActionButton, ActionMenu, TOOLBAR_MARGIN, TOOLBAR_SYMBOL, edges};
 use crate::updater::UpdateState;
 
 /// The room around each button that is its own, so the buttons touch.
@@ -21,7 +21,7 @@ fn reach() -> Edges<f32> {
 /// How far a button's symbol draws from the button's sides: Lucide leaves a twelfth of its square
 /// empty around it.
 fn symbol_inset() -> f32 {
-    let side = ControlSize::Regular.symbol().side();
+    let side = TOOLBAR_SYMBOL.side();
     ((ControlSize::Regular.height() - side) / 2. + side / 12.).round()
 }
 
@@ -136,20 +136,24 @@ impl Render for SidebarFooter {
             })
             .when(!route_open, |row| {
                 let (settings, usage) = (handle.clone(), handle.clone());
-                row.child(ActionButton::icon("settings", "settings", settings_help).margin(reach()).on_click(
-                    move |_, _, cx| {
-                        settings.update(cx, |store, cx| {
-                            store.open_settings(Default::default(), None);
-                            cx.notify();
-                        })
-                    },
-                ))
+                row.child(
+                    ActionButton::icon("settings", "settings", settings_help)
+                        .symbol_size(TOOLBAR_SYMBOL)
+                        .margin(reach())
+                        .on_click(move |_, _, cx| {
+                            settings.update(cx, |store, cx| {
+                                store.open_settings(Default::default(), None);
+                                cx.notify();
+                            })
+                        }),
+                )
                 .child(
                     ActionButton::icon(
                         "usage",
                         "chart-column",
                         "Usage: what the agents spent and what is left of their plans",
                     )
+                    .symbol_size(TOOLBAR_SYMBOL)
                     .margin(reach())
                     .on_click(move |_, _, cx| {
                         usage.update(cx, |store, cx| {
@@ -164,6 +168,7 @@ impl Render for SidebarFooter {
             .child({
                 let store = handle.clone();
                 ActionButton::icon("check-updates", "refresh-cw", "Check for Updates")
+                    .symbol_size(TOOLBAR_SYMBOL)
                     .pending(state == UpdateState::Checking)
                     .margin(reach())
                     .on_click(move |_, _, cx| {
