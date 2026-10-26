@@ -108,7 +108,7 @@ class RowView: FlippedView {
         case .ui(let content):
             return ProgramRowView.height(content, width: width)
         case .tool, .thinking, .group, .fold:
-            return ToolRowView.rowHeight + row.above
+            return ToolRowView.height(row)
         case .agent(let content):
             return AgentRowView.height(content)
         case .agents:
@@ -593,7 +593,15 @@ final class ToolRowView: RowView {
     static let rowHeight: CGFloat = Platform.scale > 1 ? 36 : 28
     /// What the row keeps from a paragraph above it, so that the two are a paragraph apart.
     static let afterProse: CGFloat = 8
+    /// The room between a fold's line and the rule under it, which sets the turn's work apart from its reply.
+    private static let ruleGap: CGFloat = 4
     private var above: CGFloat = 0
+    private let rule = SurfaceView()
+
+    static func height(_ row: RowModel) -> CGFloat {
+        guard case .fold = row.kind else { return rowHeight + row.above }
+        return rowHeight + row.above + ruleGap + 1
+    }
 
     /// The header reaches past the row's sides by as much room as its icon has above it, so
     /// that what it lights up stands out while the icon lines up with the text.
@@ -623,6 +631,8 @@ final class ToolRowView: RowView {
     override init(frame: CGRect) {
         super.init(frame: frame)
         highlight.radius = 6
+        rule.fill = Theme.borderMuted
+        addSubview(rule)
         addSubview(header)
         header.addSubview(highlight)
         header.addSubview(icon)
@@ -664,6 +674,7 @@ final class ToolRowView: RowView {
         highlight.fill = .clear
         open = nil
         startedAt = nil
+        rule.isHidden = true
         switch row.kind {
         case .tool(let tool):
             icon.show(tool.symbol)
@@ -693,6 +704,7 @@ final class ToolRowView: RowView {
             hasDetail = true
             detailText = nil
             open = fold.open
+            rule.isHidden = false
         default:
             break
         }
@@ -757,7 +769,8 @@ final class ToolRowView: RowView {
         fitHeader()
 
         detailSurface.isHidden = !expanded
-        guard expanded else { return Self.rowHeight + above }
+        rule.frame = CGRect(x: 0, y: Self.rowHeight + above + Self.ruleGap, width: width, height: 1)
+        guard expanded else { return Self.rowHeight + above + (rule.isHidden ? 0 : Self.ruleGap + 1) }
         if !loadedDetail {
             detail.content = detailText?() ?? NSAttributedString()
             loadedDetail = true

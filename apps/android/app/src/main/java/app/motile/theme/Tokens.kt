@@ -41,6 +41,7 @@ class Palette(
     val pink: Color,
     val skill: Color,
     val border: Color,
+    val borderMuted: Color,
     val borderCard: Color,
     val borderInput: Color,
     val borderPopover: Color,
@@ -122,6 +123,7 @@ class Palette(
             pink = Color(0xFFB7377C),
             skill = Color(0xFF47730D),
             border = Color(0xFFE2E3E5),
+            borderMuted = Color(0xFFE8E9EB),
             borderCard = Color(0xFFE9EBF0),
             borderInput = Color(0xFFEAECF0),
             borderPopover = Color(0xFFE6E8EB),
@@ -203,6 +205,7 @@ class Palette(
             pink = Color(0xFFF28CC0),
             skill = Color(0xFFA3E635),
             border = Color(0xFF191A1E),
+            borderMuted = Color(0xFF15161A),
             borderCard = Color(0xFF1E1F25),
             borderInput = Color(0xFF1A1B21),
             borderPopover = Color(0xFF222228),
@@ -286,6 +289,7 @@ class Palette(
         "pink" -> pink
         "skill" -> skill
         "border" -> border
+        "border-muted" -> borderMuted
         "border-card" -> borderCard
         "border-input" -> borderInput
         "border-popover" -> borderPopover

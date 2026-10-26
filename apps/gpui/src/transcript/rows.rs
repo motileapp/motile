@@ -29,6 +29,8 @@ pub const PROSE_GAP: f32 = 9.;
 pub const TOOL_ROW_HEIGHT: f32 = 28.;
 /// What a tool row keeps from a paragraph above it, so that the two are a paragraph apart.
 pub const AFTER_PROSE: f32 = 8.;
+/// The room between a fold's line and the rule under it, which sets the turn's work apart from its reply.
+const FOLD_RULE_GAP: f32 = 4.;
 /// The line under a message or a reply with its time and the button that copies it: as tall as
 /// the button.
 const META_HEIGHT: f32 = 28.;
@@ -1125,6 +1127,7 @@ fn tool_row(model: &RowModel, ctx: &RowContext, cx: &App) -> AnyElement {
         _ => return div().into_any_element(),
     };
     let toggles_in_core = matches!(model.row.kind, RowKind::Group { .. } | RowKind::Fold { .. });
+    let ruled = matches!(model.row.kind, RowKind::Fold { .. });
     let chevron_open = if toggles_in_core { line.open } else { expanded_here };
     let above = model.above();
 
@@ -1221,7 +1224,13 @@ fn tool_row(model: &RowModel, ctx: &RowContext, cx: &App) -> AnyElement {
             })
         });
 
-    div().flex().flex_col().child(header.self_start()).children(detail).into_any_element()
+    div()
+        .flex()
+        .flex_col()
+        .child(header.self_start())
+        .when(ruled, |row| row.child(div().mt(px(FOLD_RULE_GAP)).h(px(1.)).bg(c.border_muted)))
+        .children(detail)
+        .into_any_element()
 }
 
 const AGENT_ROW_HEIGHT: f32 = 50.;

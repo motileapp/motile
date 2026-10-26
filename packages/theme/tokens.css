@@ -37,6 +37,7 @@
   --pink: #b7377c;
   --skill: #47730d;
   --border: #e2e3e5;
+  --border-muted: #e8e9eb;
   --border-card: #e9ebf0;
   --border-input: #eaecf0;
   --border-popover: #e6e8eb;
@@ -135,6 +136,7 @@
   --pink: #f28cc0;
   --skill: #a3e635;
   --border: #191a1e;
+  --border-muted: #15161a;
   --border-card: #1e1f25;
   --border-input: #1a1b21;
   --border-popover: #222228;

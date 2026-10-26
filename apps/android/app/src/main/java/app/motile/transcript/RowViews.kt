@@ -330,6 +330,9 @@ private fun ToolRow(row: RowModel) {
                 }
             }
         }
+        if (fold != null) {
+            Box(Modifier.padding(top = ToolRow.ruleGap).fillMaxWidth().height(1.dp).background(palette.borderMuted))
+        }
         if (expanded) {
             val detail = remember(row, palette) { tool?.detail?.get(palette) ?: AnnotatedString(thought.orEmpty(), SpanStyle(color = palette.mutedForeground)) }
             val shape = RoundedCornerShape(Radius.md)
@@ -350,6 +353,8 @@ private fun ToolRow(row: RowModel) {
 
 object ToolRow {
     val height = 36.dp
+    /** The room between a fold's line and the rule under it, which sets the turn's work apart from its reply. */
+    val ruleGap = 4.dp
 }
 
 /** A running call's title is all muted, so the band shows on every part of it. */
