@@ -42,7 +42,7 @@ struct UsageSheet: View {
                     Button {
                         model.refresh()
                     } label: {
-                        TurningSymbol(symbol: .refreshCw, size: 16, turning: model.refreshing)
+                        TurningSymbol(symbol: .refreshCw, size: .lg, turning: model.refreshing)
                     }
                     .disabled(model.refreshing)
                     .accessibilityLabel("Refresh")

@@ -131,7 +131,7 @@ struct AgentAccountSheet: View {
                     ToolbarItem(placement: .cancellationAction) { SheetCloseButton() }
                     ToolbarItem(placement: .confirmationAction) {
                         if saving {
-                            Spinner(size: 17)
+                            Spinner(size: .xl)
                         } else if savedAsIs {
                             Button("Done") { close() }
                         } else {
@@ -231,7 +231,7 @@ struct AgentAccountSheet: View {
                         .submitLabel(.done)
                         .onSubmit(finishSignIn)
                     if signIn.finishing {
-                        Spinner(size: 17)
+                        Spinner(size: .xl)
                     } else {
                         Button("Sign In", action: finishSignIn)
                             .disabled(!signIn.canFinish || !canSave)
@@ -246,7 +246,7 @@ struct AgentAccountSheet: View {
                     HStack {
                         SettingsActionLabel(signedInAs == nil ? "Sign In" : "Sign In Again", symbol: .circleUser)
                         Spacer()
-                        if signIn.step == .starting { Spinner(size: 17) }
+                        if signIn.step == .starting { Spinner(size: .xl) }
                     }
                 }
                 .disabled(signIn.step == .starting)

@@ -152,7 +152,7 @@ fun CodeHeader(language: String, code: String, modifier: Modifier = Modifier) {
             language.ifEmpty { "text" }, Modifier.padding(start = 14.dp).weight(1f), style = Theme.smallMono,
             color = palette.mutedForeground, maxLines = 1,
         )
-        CopyButton("Copy code", Modifier.padding(CodeHeader.buttonInset), symbolSize = 12f) { Platform.copy(code) }
+        CopyButton("Copy code", Modifier.padding(CodeHeader.buttonInset)) { Platform.copy(code) }
     }
 }
 

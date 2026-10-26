@@ -42,7 +42,7 @@ struct PullRequestSurface: View {
     @ViewBuilder
     private func bar(_ page: PullRequestPage?) -> some View {
         if let page {
-            Image(page.state.symbol, size: 12)
+            Image(page.state.symbol, size: .sm)
                 .foregroundStyle(page.state.color)
             Text(verbatim: "#\(page.number)")
                 .font(.ui(size: 12.5, weight: .medium))
@@ -50,7 +50,7 @@ struct PullRequestSurface: View {
                 .monospacedDigit()
                 .padding(.leading, 2)
             if page.number == target.pullRequest, store.selectedThread?.watching == true {
-                Image(.eye, size: 12)
+                Image(.eye, size: .sm)
                     .foregroundStyle(Color.themePrimary)
                     .padding(.leading, 4)
                     .help("The agent hears when its checks finish, someone comments or it conflicts")
@@ -91,7 +91,7 @@ private struct NoPullRequest: View {
 
     var body: some View {
         VStack(spacing: 14) {
-            Image(.gitPullRequest, size: 22)
+            Image(.gitPullRequest, size: .xxl)
                 .foregroundStyle(Color.themeMutedStrongerForeground)
             Text("This branch has no pull request yet.")
                 .font(.ui(size: 13))
@@ -253,7 +253,7 @@ private struct PullRequestPageView: View {
             }
             HStack(spacing: 6) {
                 BranchName(name: page.base)
-                Image(.arrowLeft, size: 10)
+                Image(.arrowLeft, size: .sm)
                     .foregroundStyle(Color.themeMutedStrongerForeground)
                 BranchName(name: page.head)
                 Spacer(minLength: 8)
@@ -261,7 +261,7 @@ private struct PullRequestPageView: View {
                     panel.showDiff(.pullRequest(page.number))
                 } label: {
                     HStack(spacing: 6) {
-                        Image(.diff, size: 11)
+                        Image(.diff, size: .sm)
                             .foregroundStyle(Color.themeMutedForeground)
                         Text(page.files == 1 ? "1 file" : "\(page.files) files")
                             .foregroundStyle(Color.themeForeground)
@@ -281,7 +281,7 @@ private struct PullRequestPageView: View {
                     panel.showPullRequest(below.number, of: target)
                 } label: {
                     HStack(spacing: 6) {
-                        Image(.layers, size: 11)
+                        Image(.layers, size: .sm)
                             .foregroundStyle(Color.themeMutedForeground)
                         (Text("Stacked on ").foregroundStyle(Color.themeMutedForeground)
                             + Text(verbatim: "#\(below.number) ").foregroundStyle(below.state.color)
@@ -598,7 +598,7 @@ private struct StackCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 6) {
-                Image(.layers, size: 12)
+                Image(.layers, size: .md)
                     .foregroundStyle(Color.themeMutedForeground)
                 Text("Stack")
                     .font(.ui(size: 13, weight: .medium))
@@ -622,9 +622,8 @@ private struct StackCard: View {
                     open(layer.number)
                 } label: {
                     HStack(spacing: 8) {
-                        Image(layer.state.symbol, size: 11)
+                        Image(layer.state.symbol, size: .sm)
                             .foregroundStyle(layer.state.color)
-                            .frame(width: 16)
                         Text(verbatim: "#\(layer.number)")
                             .font(.ui(size: 12, weight: .medium))
                             .foregroundStyle(Color.themeMutedForeground)
@@ -742,9 +741,9 @@ private struct StatusRow: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
-            Image(symbol, size: 13)
+            Image(symbol, size: .md)
                 .foregroundStyle(status.tone.color)
-                .frame(width: 18, height: scaled(17))
+                .frame(height: scaled(17))
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
                     Text(status.title)

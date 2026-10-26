@@ -24,6 +24,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import app.motile.platform.Symbol
+import app.motile.theme.iconSize
 import app.motile.theme.ControlSize
 import app.motile.theme.LocalForeground
 import app.motile.theme.LocalPalette
@@ -66,7 +67,7 @@ private fun CheckRow(check: Check) {
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(Symbol.Check, 13f, Modifier.alpha(if (check.checked) 1f else 0f))
+                Icon(Symbol.Check, iconSize(text = 13f), Modifier.alpha(if (check.checked) 1f else 0f))
                 Text(check.title, Modifier.weight(1f).padding(end = 12.dp), size = 13f, maxLines = 1)
             }
         }

@@ -3,8 +3,8 @@ import SwiftUI
 /// The account as its picture, which opens a menu with who is signed in, the settings, the usage
 /// and the way to sign out. On iOS it floats on glass beside the search, as the sidebar's buttons do.
 struct AccountMenu: View {
-    /// The picture's side on the Mac, which fills its button but for a margin.
-    static let side = ControlSize.regular.height - 8
+    /// The picture on the Mac, which fills its button but for a margin.
+    static let picture = IconSize.xl
 
     var margin = EdgeInsets()
     @Environment(AppStore.self) private var store
@@ -13,7 +13,7 @@ struct AccountMenu: View {
         #if os(macOS)
         ActionMenu(
             picture: AnyView(AccountPicture(account: store.account)), help: store.account.email,
-            symbolSize: Self.side, margin: margin
+            symbolSize: Self.picture, margin: margin
         ) { items }
         #else
         Menu { items } label: {

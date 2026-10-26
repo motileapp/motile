@@ -23,7 +23,7 @@ use super::state::{
     tab_columns,
 };
 use crate::media::pictures::{Picture, Pictures, Shown};
-use crate::theme::{self, colors};
+use crate::theme::{self, IconSize, colors};
 use crate::transcript::rows::font;
 
 pub const HEADING_HEIGHT: f32 = 34.;
@@ -1197,12 +1197,12 @@ fn paint_media(
     let corners = Corners::all(px(theme::Radius::SM));
     let _ = window.paint_image(frame, frame, corners, picture.image.clone(), 0, false);
     if video {
-        paint_symbol("circle-play", 40., frame.center(), c.foreground_over_picture, window, cx);
+        paint_symbol("circle-play", IconSize::Hero, frame.center(), c.foreground_over_picture, window, cx);
     }
 }
 
-fn paint_symbol(name: &str, size: f32, center: Point<Pixels>, color: Hsla, window: &mut Window, cx: &mut App) {
-    let side = px(theme::symbol_side(size));
+fn paint_symbol(name: &str, size: IconSize, center: Point<Pixels>, color: Hsla, window: &mut Window, cx: &mut App) {
+    let side = px(size.side());
     let bounds = Bounds::new(point(center.x - side / 2., center.y - side / 2.), gpui_kit::size(side, side));
     let _ = window.paint_svg(bounds, crate::ui::icons::path(name), None, TransformationMatrix::unit(), color, cx);
 }
@@ -1212,7 +1212,7 @@ fn paint_comment_badge(top_right: Point<Pixels>, c: &theme::Colors, window: &mut
     let side = px(16.);
     let badge = Bounds::new(point(top_right.x - side, top_right.y + (px(LINE_HEIGHT) - side) / 2.), size(side, side));
     window.paint_quad(fill(badge, c.primary).corner_radii(Corners::all(px(theme::Radius::XS))));
-    paint_symbol("plus", 10., badge.center(), c.primary_foreground, window, cx);
+    paint_symbol("plus", IconSize::Xs, badge.center(), c.primary_foreground, window, cx);
 }
 
 /// Where a file's box to mark it viewed is in its heading, from the heading's left, when it has one.
@@ -1242,7 +1242,7 @@ fn paint_viewed(viewed: bool, left: f32, bounds: Bounds<Pixels>, c: &theme::Colo
         Bounds::new(point(bounds.origin.x + px(left + 6.), bounds.center().y - px(7.)), size(px(14.), px(14.)));
     if viewed {
         window.paint_quad(fill(box_bounds, c.primary).corner_radii(Corners::all(px(theme::Radius::XS))));
-        paint_symbol("check", 9., box_bounds.center(), c.primary_foreground, window, cx);
+        paint_symbol("check", IconSize::Xs, box_bounds.center(), c.primary_foreground, window, cx);
     } else {
         window.paint_quad(
             outline(box_bounds, c.border, BorderStyle::Solid).corner_radii(Corners::all(px(theme::Radius::XS))),
@@ -1293,7 +1293,7 @@ fn paint_heading(
     let middle = bounds.center().y;
     paint_symbol(
         if closed { "chevron-right" } else { "chevron-down" },
-        9.,
+        IconSize::Xs,
         point(bounds.origin.x + px(16.), middle),
         c.muted_stronger_foreground,
         window,
@@ -1301,7 +1301,7 @@ fn paint_heading(
     );
     paint_symbol(
         file_symbol(&file.path),
-        11.,
+        IconSize::Sm,
         point(bounds.origin.x + px(37.), middle),
         c.muted_foreground,
         window,
@@ -1317,7 +1317,7 @@ fn paint_heading(
         window.paint_quad(fill(button, surface.layer(theme::Layer::ControlLit, c)).corner_radii(radius));
     }
     let open_color = if open_lit { c.foreground } else { c.muted_foreground };
-    paint_symbol("square-arrow-out-up-right", 12., open_center, open_color, window, cx);
+    paint_symbol("square-arrow-out-up-right", theme::ControlSize::Small.symbol(), open_center, open_color, window, cx);
 
     let mut counts_x = open_x - px(4.);
     if file.added + file.removed > 0 {

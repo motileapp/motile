@@ -367,6 +367,18 @@ object Radius {
     val xxl = 24.dp
 }
 
+/** How large an icon is, of any kind: the side of its square, as on the Mac. Every icon is one of these. */
+enum class IconSize(val side: Float) {
+    Xs(12f),
+    Sm(14f),
+    Md(16f),
+    Lg(18f),
+    Xl(20f),
+    Xxl(24f),
+    Display(32f),
+    Hero(48f),
+}
+
 /** A shadow's size: how far down it falls and its blur, as CSS gives them. */
 enum class ShadowSize(val down: Float, val blur: Float) {
     Sm(2.5f, 8f),

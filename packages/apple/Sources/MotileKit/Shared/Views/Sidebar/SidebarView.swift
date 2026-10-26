@@ -392,7 +392,7 @@ struct ThreadRow: View, Equatable {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 6) {
-                ProjectIcon(project: project, size: 14)
+                ProjectIcon(project: project, size: .sm)
                 Text(project?.name ?? URL(fileURLWithPath: thread.cwd).lastPathComponent)
                     .font(.ui(size: 11, weight: .medium))
                     .lineLimit(1)
@@ -431,11 +431,13 @@ struct ThreadRow: View, Equatable {
                     ThreadFolderLabel(serverID: thread.serverID, folder: thread.cwd)
                 }
                 Spacer(minLength: 6)
-                if !store.onRemovedServer(thread), let pullRequest = project?.pullRequest(of: thread) {
-                    ThreadPullRequestLabel(thread: thread, pullRequest: pullRequest, open: open)
+                HStack(spacing: ThreadStatus.gap) {
+                    if !store.onRemovedServer(thread), let pullRequest = project?.pullRequest(of: thread) {
+                        ThreadPullRequestLabel(thread: thread, pullRequest: pullRequest, open: open)
+                    }
+                    ThreadServerLabel(serverID: thread.serverID)
+                    AgentIcon(agent: thread.agent, size: .sm)
                 }
-                ThreadServerLabel(serverID: thread.serverID)
-                AgentIcon(agent: thread.agent, size: 12)
             }
             .foregroundStyle(Color.themeMutedStrongerForeground)
             .frame(height: scaled(16))
@@ -505,7 +507,7 @@ private struct CheckoutLabel: View {
 
     var body: some View {
         HStack(spacing: 3) {
-            Image(symbol, size: 11)
+            Image(symbol, size: .sm)
             Text(text)
                 .font(.ui(size: 11))
                 .lineLimit(1)
@@ -530,7 +532,6 @@ private struct ThreadServerLabel: View {
     var body: some View {
         if store.servers.count + store.removedServers.count > 1, let server = store.server(serverID) {
             ServerLabel(server: server)
-                .padding(.leading, 1)
         }
     }
 }
@@ -586,7 +587,7 @@ private struct DraftRow: View {
         let selected = store.selection == .draft(listed.id)
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 6) {
-                ProjectIcon(project: project, size: 14)
+                ProjectIcon(project: project, size: .sm)
                 Text(project?.name ?? "No project")
                     .font(.ui(size: 11, weight: .medium))
                     .lineLimit(1)
@@ -594,7 +595,7 @@ private struct DraftRow: View {
                 Spacer(minLength: 6)
                 if listed.sending {
                     HStack(spacing: 3) {
-                        Spinner(size: 11)
+                        Spinner(size: .sm)
                         Text("Sending")
                             .font(.ui(size: 11, weight: .medium))
                     }
@@ -603,7 +604,7 @@ private struct DraftRow: View {
                         .padding(.trailing, ThreadRow.buttonInset - ThreadRow.sidePadding)
                 } else {
                     HStack(spacing: 3) {
-                        Image(.file, size: 11)
+                        Image(.file, size: .sm)
                         Text("Draft")
                             .font(.ui(size: 11, weight: .medium))
                     }
@@ -627,11 +628,13 @@ private struct DraftRow: View {
                     ThreadFolderLabel(serverID: project.serverID, folder: project.path)
                 }
                 Spacer(minLength: 6)
-                if let project {
-                    ThreadServerLabel(serverID: project.serverID)
-                }
-                if let agent = store.agent(of: listed.draft) {
-                    AgentIcon(agent: agent, size: 12)
+                HStack(spacing: ThreadStatus.gap) {
+                    if let project {
+                        ThreadServerLabel(serverID: project.serverID)
+                    }
+                    if let agent = store.agent(of: listed.draft) {
+                        AgentIcon(agent: agent, size: .sm)
+                    }
                 }
             }
             .foregroundStyle(Color.themeMutedStrongerForeground)
@@ -666,11 +669,11 @@ struct UndoRow: View {
                 store.performUndo()
             } label: {
                 HStack(spacing: 7) {
-                    ShelfMark(lit: false) { Image(.undo2, size: 10, trimmed: true).offset(x: -2) }
+                    ShelfMark(lit: false) { Image(.undo2, size: .xs, trimmed: true).offset(x: -2) }
                     ShelfTitle("Undo", expanded: false)
                     Spacer()
                     HStack(spacing: 4) {
-                        Image(.check, size: 10)
+                        Image(.check, size: .sm)
                         Text(notice.text)
                             .font(.ui(size: 11))
                             .lineLimit(1)
@@ -855,7 +858,7 @@ struct DoneRow: View, Equatable {
 
     var body: some View {
         HStack(spacing: 7) {
-            ProjectIcon(project: project, size: 14)
+            ProjectIcon(project: project, size: .md)
             Text(thread.title)
                 .font(.ui(size: 13))
                 .lineLimit(1)
@@ -896,8 +899,7 @@ struct NewThreadRow: View {
 
     var body: some View {
         HStack(spacing: 7) {
-            Image(.plus, size: 14)
-                .frame(width: 14)
+            Image(.plus, size: .md)
             Text("Create a thread")
                 .font(.ui(size: 13))
                 .lineLimit(1)
@@ -947,6 +949,9 @@ extension ThreadInfo {
 /// What a thread is up to, or how long ago it last was. A thread of an unlinked server is only
 /// ever read only.
 struct ThreadStatus: View {
+    /// The room between the parts of a row's status, and of its last line.
+    static let gap: CGFloat = 9
+
     let thread: ThreadInfo
     var readOnly = false
 
@@ -963,20 +968,20 @@ struct ThreadStatus: View {
             .help(thread.asking == nil ? thread.children?.waitingText ?? "" : "")
         } else if thread.waitsOnAgents {
             let agents = thread.children?.running ?? 0
-            HStack(spacing: 9) {
+            HStack(spacing: Self.gap) {
                 label("\(agents)", Color.themePending) {
                     symbol(.bot)
                 }
                 TimelineView(.periodic(from: .now, by: 1)) { context in
                     label(Time.elapsed(since: thread.monitoringSince, now: context.date.timeIntervalSince1970), Color.themeProcess) {
-                        Image(.circleDotDashed, size: 10)
+                        symbol(.circleDotDashed)
                     }
                 }
             }
             .help(thread.children?.runningText ?? "")
         } else if thread.working {
             let agents = max(thread.agents, thread.children?.running ?? 0)
-            HStack(spacing: 9) {
+            HStack(spacing: Self.gap) {
                 if agents > 0 {
                     label("\(agents)", Color.themePending) {
                         symbol(.bot)
@@ -985,13 +990,13 @@ struct ThreadStatus: View {
                 }
                 TimelineView(.periodic(from: .now, by: 1)) { context in
                     label(Time.elapsed(since: thread.updatedAt, now: context.date.timeIntervalSince1970), Color.themeProcess) {
-                        Image(.circleDashed, size: 10)
+                        symbol(.circleDashed)
                     }
                 }
             }
         } else if let stage = thread.gitStage {
             label(stage.label, Color.themeProcess) {
-                Spinner(size: 11)
+                Spinner(size: .sm)
             }
         } else if thread.monitoring {
             TimelineView(.periodic(from: .now, by: 1)) { context in
@@ -1026,7 +1031,7 @@ struct ThreadStatus: View {
     }
 
     private func symbol(_ name: Symbol) -> some View {
-        Image(name, size: 11)
+        Image(name, size: .sm)
     }
 }
 
@@ -1061,7 +1066,7 @@ struct SidebarChevron: View {
 
     var body: some View {
         ShelfMark(lit: expanded) {
-            Image(.chevronRight, size: 10, trimmed: true)
+            Image(.chevronRight, size: .xs, trimmed: true)
                 .rotationEffect(.degrees(expanded ? 90 : 0))
         }
     }
@@ -1171,8 +1176,9 @@ struct ServerLine: View {
 /// The ways to the settings and the usage (or back from them) and a new version of the client.
 struct SidebarFooter: View {
     private static let reach = EdgeInsets(top: 4, leading: ToolbarButton.margin, bottom: 4, trailing: ToolbarButton.margin)
-    /// How far a button's symbol is from the button's sides.
-    private static let symbolInset = (ControlSize.regular.height - ControlSize.regular.symbol) / 2
+    /// How far a button's symbol draws from the button's sides: Lucide leaves a twelfth of its
+    /// square empty around it.
+    private static let symbolInset = ((ControlSize.regular.height - ControlSize.regular.symbolSide) / 2 + ControlSize.regular.symbolSide / 12).rounded()
 
     @Environment(AppStore.self) private var store
 

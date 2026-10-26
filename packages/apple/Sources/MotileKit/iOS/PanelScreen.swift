@@ -35,7 +35,7 @@ struct PanelScreen: View {
                     Button {
                         store.rightPanel.isOpen = false
                     } label: {
-                        Image(.chevronLeft, size: 16)
+                        Image(.chevronLeft, size: .lg)
                     }
                     .accessibilityLabel("Back")
                 }

@@ -8,7 +8,7 @@ use gpui_kit::*;
 use crate::sidebar::SidebarFooter;
 use crate::store::Store;
 use crate::store::settings::{SettingsEntry, SettingsSection};
-use crate::theme::{self, Radius, colors};
+use crate::theme::{self, IconSize, Radius, colors};
 use crate::ui::{Highlight, InputField, InputVariant, edges, hover_state, icons, track_hover};
 
 const ROW_INSET: f32 = 10.;
@@ -82,7 +82,7 @@ impl SettingsSidebar {
                     .flex()
                     .items_center()
                     .gap(px(8.))
-                    .child(icons::symbol(section.symbol(), 14.))
+                    .child(icons::symbol(section.symbol(), IconSize::Md))
                     .child(div().text_size(px(13.)).child(section.title()));
                 self.row(
                     ElementId::NamedInteger("settings-section".into(), index as u64),
@@ -122,7 +122,7 @@ impl SettingsSidebar {
                     .flex()
                     .items_center()
                     .gap(px(8.))
-                    .child(icons::symbol(entry.section.symbol(), 14.))
+                    .child(icons::symbol(entry.section.symbol(), IconSize::Md))
                     .child(
                         div()
                             .min_w_0()

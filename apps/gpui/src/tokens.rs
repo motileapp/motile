@@ -424,6 +424,35 @@ impl Radius {
     pub const XXL: f32 = 24.;
 }
 
+/// How large an icon is, of any kind: the side of its square, as on the Mac. Every icon is one
+/// of these.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum IconSize {
+    Xs,
+    Sm,
+    Md,
+    Lg,
+    Xl,
+    Xxl,
+    Display,
+    Hero,
+}
+
+impl IconSize {
+    pub const fn side(self) -> f32 {
+        match self {
+            IconSize::Xs => 12.,
+            IconSize::Sm => 14.,
+            IconSize::Md => 16.,
+            IconSize::Lg => 18.,
+            IconSize::Xl => 20.,
+            IconSize::Xxl => 24.,
+            IconSize::Display => 32.,
+            IconSize::Hero => 48.,
+        }
+    }
+}
+
 /// A shadow's size: how far down it falls and its blur, as CSS gives them.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum ShadowSize {

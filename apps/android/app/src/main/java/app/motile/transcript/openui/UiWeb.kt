@@ -65,6 +65,7 @@ import app.motile.platform.Platform
 import app.motile.platform.Symbol
 import app.motile.platform.scaled
 import app.motile.theme.LocalDark
+import app.motile.theme.ControlSize
 import app.motile.theme.LocalPalette
 import app.motile.theme.LocalSurface
 import app.motile.theme.Palette
@@ -185,7 +186,7 @@ fun UiHtmlView(node: UiNode, kind: UiKind.HtmlView) {
         val loaded = page
         when {
             kind.streaming -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Spinner(13f, color = palette.mutedForeground)
+                Spinner(ControlSize.Small.symbol, color = palette.mutedForeground)
                 Text("Preparing the interactive view", style = UiStyle.text(UiTextStyle.Small, false), color = palette.mutedForeground)
             }
             gone -> Still(kind.title, "Interactive view") { gone = false }

@@ -10,7 +10,7 @@ struct InterruptionStrip: View {
         TimelineView(.periodic(from: .now, by: 30)) { context in
             let now = context.date.timeIntervalSince1970
             HStack(spacing: 0) {
-                Image(interruption.symbol, size: 13)
+                Image(interruption.symbol, size: .sm)
                     .foregroundStyle(Color.themeWarning)
                     .padding(.leading, 14)
                     .padding(.trailing, 7)

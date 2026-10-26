@@ -7,7 +7,7 @@ use motile_protocol::wire::RestartWhen;
 
 use crate::models::{Server, ServerUpdate};
 use crate::store::Store;
-use crate::theme::{ControlSize, Radius, Surface, colors};
+use crate::theme::{ControlSize, IconSize, Radius, Surface, colors};
 use crate::ui::control::turning_symbol;
 use crate::ui::menu::Menu;
 use crate::ui::{ActionButton, ActionMenu, Spinner, Variant, tabular_numbers, tooltip};
@@ -50,7 +50,11 @@ impl RenderOnce for UpdateLabel {
             .flex()
             .items_center()
             .gap(px(5.))
-            .child(div().flex_shrink_0().text_color(tint).child(turning_symbol(self.symbol.into(), 12., self.turning)))
+            .child(div().flex_shrink_0().text_color(tint).child(turning_symbol(
+                self.symbol.into(),
+                IconSize::Sm,
+                self.turning,
+            )))
             .child(div().min_w_0().text_size(px(12.)).font_weight(FontWeight::MEDIUM).truncate().child(self.text))
     }
 }

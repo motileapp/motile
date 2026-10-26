@@ -7,7 +7,7 @@ use std::rc::Rc;
 use gpui_kit::prelude::*;
 use gpui_kit::*;
 
-use crate::theme::{self, Opacity, Radius, Surface, colors};
+use crate::theme::{self, IconSize, Opacity, Radius, Surface, colors};
 use crate::ui::icons;
 
 type Run = Rc<dyn Fn(&mut Window, &mut App)>;
@@ -541,12 +541,12 @@ fn card(menu: &Menu, level: Level, highlighted: Option<usize>, open_submenu: Opt
     let any_checked = menu.entries.iter().any(|entry| matches!(entry, Entry::Item { checked: true, .. }));
     let check_column = |checked: bool| {
         div()
-            .size(px(14.))
+            .size(px(IconSize::Sm.side()))
             .flex_shrink_0()
             .flex()
             .items_center()
             .justify_center()
-            .when(checked, |mark| mark.child(icons::symbol("check", 12.)))
+            .when(checked, |mark| mark.child(icons::symbol("check", IconSize::Sm)))
     };
     let row = |index: usize, lit: bool| {
         div()
@@ -589,7 +589,7 @@ fn card(menu: &Menu, level: Level, highlighted: Option<usize>, open_submenu: Opt
             .child(anchor.track())
             .when(any_checked, |row| row.child(check_column(false)))
             .child(div().flex_1().min_w_0().whitespace_nowrap().overflow_hidden().text_ellipsis().child(label.clone()))
-            .child(icons::symbol("chevron-right", 11.).text_color(c.muted_foreground))
+            .child(icons::symbol("chevron-right", IconSize::Sm).text_color(c.muted_foreground))
             .on_hover(move |inside, window, cx| hover(level, index, *inside, true, window, cx))
             .on_click(move |_, window, cx| {
                 cx.stop_propagation();
@@ -609,13 +609,10 @@ fn card(menu: &Menu, level: Level, highlighted: Option<usize>, open_submenu: Opt
                             .items_center()
                             .text_color(if *danger { c.destructive } else { c.muted_foreground })
                             .child(match icon {
-                                MenuIcon::Symbol(name) => icons::symbol(*name, 13.).into_any_element(),
-                                MenuIcon::File(path) => img(std::path::PathBuf::from(path.as_ref()))
-                                    .size(px(16.))
-                                    .rounded(px(3.))
-                                    .into_any_element(),
+                                MenuIcon::Symbol(name) => icons::symbol(*name, IconSize::Sm).into_any_element(),
+                                MenuIcon::File(path) => crate::ui::logos::icon_file(path.to_string(), IconSize::Sm, cx),
                                 MenuIcon::Logo(agent) => {
-                                    crate::ui::logos::agent_icon(*agent, 16., cx).into_any_element()
+                                    crate::ui::logos::agent_icon(*agent, IconSize::Sm, cx).into_any_element()
                                 }
                             }),
                     )

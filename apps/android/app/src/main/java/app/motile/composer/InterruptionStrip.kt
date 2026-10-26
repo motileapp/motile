@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import app.motile.LocalStore
 import app.motile.core.Interruption
 import app.motile.core.Time
+import app.motile.theme.iconSize
 import app.motile.theme.Theme
 import app.motile.ui.ActionButton
 import app.motile.ui.ButtonVariant
@@ -47,7 +48,7 @@ fun InterruptionStrip(interruption: Interruption) {
     }
     val detail = interruption.detail(now)
     Row(Modifier.fillMaxWidth().composerStrip(ComposerStrip.Edge.Top), verticalAlignment = Alignment.CenterVertically) {
-        Icon(interruption.symbol, 13f, Modifier.padding(start = 14.dp, end = 7.dp), color = palette.warning)
+        Icon(interruption.symbol, iconSize(text = 12.5f), Modifier.padding(start = 14.dp, end = 7.dp), color = palette.warning)
         // A narrow composer keeps what happens next and leaves out the title.
         FirstThatFits(
             Modifier.weight(1f).padding(end = 8.dp).semantics { contentDescription = "${interruption.title}. $detail." },

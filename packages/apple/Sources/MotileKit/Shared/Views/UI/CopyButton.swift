@@ -6,7 +6,7 @@ struct CopyButton: View {
     let help: String
     var variant: ButtonVariant = .ghost
     var size: ControlSize = .regular
-    var symbolSize: CGFloat?
+    var symbolSize: IconSize?
     var round = false
     var copies = 0
     let copy: () -> Void

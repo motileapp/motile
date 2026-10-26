@@ -56,6 +56,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
+import kotlin.math.roundToInt
 import app.motile.core.UiItemMarker
 import app.motile.core.UiKind
 import app.motile.core.UiListMarker
@@ -266,7 +267,7 @@ fun UiLink(node: UiNode, kind: UiKind.Link) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(kind.text, Modifier.weight(1f, fill = false), style = style, color = palette.primary)
-        Icon(Symbol.ArrowUpRight, 14f * 0.85f, Modifier.padding(start = 2.dp), color = palette.primary)
+        Icon(Symbol.ArrowUpRight, (style.fontSize.value * 0.85f).roundToInt().dp, Modifier.padding(start = 2.dp), color = palette.primary)
     }
 }
 

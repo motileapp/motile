@@ -140,7 +140,7 @@ class ControlView: FlippedView {
         self.action = action
         super.init(frame: .zero)
         words.oneLine = true
-        chevron.image = .symbol(.chevronDown, size: size.textSize, trimmed: true)
+        chevron.image = .symbol(.chevronDown, size: size.chevron, trimmed: true)
         chevron.tint = Theme.mutedStrongerForeground
         chevron.isHidden = true
         for view in [face, mark, words, chevron] as [PlatformView] { addSubview(view) }
@@ -176,7 +176,7 @@ class ControlView: FlippedView {
         guard words > 0 || opens else { return size.height }
         var width = size.padding - (symbol ? size.symbolOutset : 0) + words + size.padding
         if symbol { width += size.symbolSide + size.gap }
-        if opens { width += size.gap + PlatformImage.symbol(.chevronDown, size: size.textSize, trimmed: true).size.width - size.chevronOutset }
+        if opens { width += size.gap + PlatformImage.symbol(.chevronDown, size: size.chevron, trimmed: true).size.width - size.chevronOutset }
         return max(size.height, ceil(width))
     }
 
@@ -425,7 +425,7 @@ final class PickMarkView: LayerView {
     let multiple: Bool
     var picked = false { didSet { repaint() } }
     private let dot = CALayer()
-    private let check = SymbolView(.check, size: 10, tint: Theme.primaryForeground)
+    private let check = SymbolView(.check, size: .xs, tint: Theme.primaryForeground)
 
     init(multiple: Bool) {
         self.multiple = multiple
@@ -912,7 +912,7 @@ final class GlassButtonView: FlippedView {
     private let chevron = SymbolView()
 
     init(
-        _ title: String? = nil, symbol: Symbol? = nil, symbolSide: CGFloat = GlassButtonView.size.symbolSide, help: String? = nil,
+        _ title: String? = nil, symbol: Symbol? = nil, symbolSide: CGFloat = GlassButtonView.size.symbol.rawValue, help: String? = nil,
         height: CGFloat = GlassButtonView.size.height, action: @escaping () -> Void
     ) {
         self.title = title
@@ -927,7 +927,7 @@ final class GlassButtonView: FlippedView {
         light.fill = Surface.background.platform(.row)
         light.opacity = 0
         mark.tint = Theme.foreground
-        chevron.image = .symbol(.chevronDown, size: Self.size.textSize, trimmed: true)
+        chevron.image = .symbol(.chevronDown, size: Self.size.chevron, trimmed: true)
         chevron.tint = Theme.foreground
         chevron.isHidden = true
         for view in [glass, light, mark, words, chevron] as [PlatformView] { addSubview(view) }
@@ -943,7 +943,7 @@ final class GlassButtonView: FlippedView {
     required init?(coder: NSCoder) { fatalError("not used") }
 
     private var wordless: Bool { (title ?? "").isEmpty }
-    private var side: CGFloat { PlatformImage.symbolSide(PlatformImage.symbolSize(side: symbolSide)) }
+    private var side: CGFloat { (symbolSide * Platform.scale).rounded() }
 
     /// How wide it is: as tall as it is when it shows a symbol alone.
     var naturalWidth: CGFloat {
@@ -986,7 +986,7 @@ final class GlassButtonView: FlippedView {
     private func showSymbol() {
         mark.isHidden = symbol == nil
         guard let symbol else { return }
-        mark.show(symbol, size: PlatformImage.symbolSize(side: symbolSide))
+        mark.image = .symbol(symbol, side: side)
     }
 
     private func paint() {

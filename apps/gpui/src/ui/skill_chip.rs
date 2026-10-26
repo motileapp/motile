@@ -4,11 +4,11 @@
 use gpui_kit::prelude::*;
 use gpui_kit::*;
 
-use crate::theme::{self, Opacity, Radius, colors};
+use crate::theme::{IconSize, Opacity, Radius, colors};
 use crate::ui::icons;
 
 pub const SYMBOL: &str = "box";
-const SYMBOL_SIZE: f32 = 11.;
+const SYMBOL_SIZE: IconSize = IconSize::Sm;
 const PADDING: f32 = 5.;
 const GAP: f32 = 4.;
 /// The room between the chip and the text on either side.
@@ -19,7 +19,7 @@ const HEIGHT: f32 = 20.;
 
 /// The room before the name: the padding, the symbol and the gap after it.
 fn lead() -> f32 {
-    PADDING + theme::symbol_side(SYMBOL_SIZE) + GAP
+    PADDING + SYMBOL_SIZE.side() + GAP
 }
 
 /// The room a message leaves before and after a chip's name.
@@ -61,7 +61,7 @@ pub fn paint_box(start: Point<Pixels>, end: Point<Pixels>, line_height: Pixels, 
     let bounds = Bounds::from_corners(point(start.x - px(lead()), top), point(end.x + px(PADDING), top + height));
     let edge = c.at(c.skill, Opacity::ColorTintChart);
     window.paint_quad(quad(bounds, px(Radius::XS), c.wash(c.skill, false), px(1.), edge, BorderStyle::Solid));
-    let side = px(theme::symbol_side(SYMBOL_SIZE));
+    let side = px(SYMBOL_SIZE.side());
     let symbol = Bounds::new(point(bounds.left() + px(PADDING), top + (height - side) / 2.), size(side, side));
     let _ = window.paint_svg(symbol, icons::path(SYMBOL), None, TransformationMatrix::unit(), c.skill, cx);
 }

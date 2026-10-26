@@ -36,6 +36,8 @@ import androidx.compose.ui.unit.dp
 import app.motile.layout.KeyboardFocus
 import app.motile.platform.Symbol
 import app.motile.platform.scaled
+import app.motile.theme.iconSize
+import app.motile.theme.IconSize
 import app.motile.theme.ControlSize
 import app.motile.theme.LocalForeground
 import app.motile.theme.LocalPalette
@@ -217,7 +219,7 @@ fun SettingsPressRow(onClick: () -> Unit, modifier: Modifier = Modifier, enabled
 fun SettingsLink(onClick: () -> Unit, enabled: Boolean = true, content: @Composable RowScope.() -> Unit) {
     SettingsPressRow(onClick, enabled = enabled) {
         Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically, content = content)
-        Icon(Symbol.ChevronRight, 13f, color = LocalPalette.current.mutedStrongerForeground)
+        Icon(Symbol.ChevronRight, iconSize(text = ROW_TEXT), color = LocalPalette.current.mutedStrongerForeground)
     }
 }
 
@@ -234,7 +236,7 @@ fun SettingsButton(title: String, destructive: Boolean = false, enabled: Boolean
 @Composable
 fun SettingsActionLabel(title: String, symbol: Symbol) {
     val color = LocalPalette.current.primary
-    Box(Modifier.size(SettingsTile.size.dp), contentAlignment = Alignment.Center) { Icon(symbol, 17f, color = color) }
+    Box(Modifier.size(SettingsTile.size.dp), contentAlignment = Alignment.Center) { Icon(symbol, IconSize.Xl, color = color) }
     RowText(title, color = color)
 }
 
@@ -244,14 +246,15 @@ fun RowText(text: String, modifier: Modifier = Modifier, color: Color = LocalFor
     Text(text, modifier, size = ROW_TEXT, color = color, maxLines = maxLines)
 }
 
-/** A row's picture: its symbol, as wide as the agents' and projects' icons beside it. */
+/** A row's picture: its symbol, as large as the agents' and projects' icons beside it, before a title and what it is under it. */
 object SettingsTile {
     const val size = 30f
+    val symbolSize = IconSize.Lg
 }
 
 @Composable
 fun SettingsTile(symbol: Symbol) {
-    Box(Modifier.size(SettingsTile.size.dp), contentAlignment = Alignment.Center) { Icon(symbol, 16f, color = LocalPalette.current.foreground) }
+    Box(Modifier.size(SettingsTile.size.dp), contentAlignment = Alignment.Center) { Icon(symbol, SettingsTile.symbolSize, color = LocalPalette.current.foreground) }
 }
 
 /** What names something, with what it is under it, in as many lines as `lines`, and its picture before it. */

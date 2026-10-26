@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.motile.platform.Symbol
 import app.motile.theme.ControlSize
+import app.motile.theme.IconSize
 import app.motile.theme.LocalForeground
 import app.motile.theme.LocalPalette
 import app.motile.theme.LocalRow
@@ -108,7 +109,7 @@ fun GlassButton(
     help: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    symbolSize: Float = 15f,
+    symbolSize: IconSize = IconSize.Lg,
     bare: Boolean = false,
     pending: Boolean = false,
     size: GlassSize = GlassSize.Regular,
@@ -148,7 +149,7 @@ fun GlassCapsule(title: String, symbol: Symbol, onClick: () -> Unit, modifier: M
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(title, Modifier.widthIn(max = 180.dp), style = ControlSize.Regular.font, maxLines = 1)
-                    Icon(symbol, 12f, trimmed = symbol == Symbol.ChevronDown)
+                    if (symbol == Symbol.ChevronDown) Icon(symbol, ControlSize.Regular.chevron, trimmed = true) else Icon(symbol, ControlSize.Regular.symbol)
                 }
             }
         }
@@ -159,5 +160,5 @@ fun GlassCapsule(title: String, symbol: Symbol, onClick: () -> Unit, modifier: M
 @Composable
 fun SheetCloseButton(modifier: Modifier = Modifier, onClose: (() -> Unit)? = null) {
     val close = LocalCloseModal.current
-    GlassButton(Symbol.X, "Close", onClick = { onClose?.invoke() ?: close() }, modifier = modifier, symbolSize = 16f)
+    GlassButton(Symbol.X, "Close", onClick = { onClose?.invoke() ?: close() }, modifier = modifier, symbolSize = IconSize.Lg)
 }

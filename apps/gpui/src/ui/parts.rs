@@ -10,7 +10,7 @@ use std::time::{Duration, Instant};
 use gpui_kit::prelude::*;
 use gpui_kit::*;
 
-use crate::theme::{ControlSize, Layer, Opacity, Radius, ShadowSize, Surface, colors};
+use crate::theme::{ControlSize, IconSize, Layer, Opacity, Radius, ShadowSize, Surface, colors};
 use crate::ui::control::{ActionButton, Variant};
 use crate::ui::menu::Anchor;
 use crate::ui::{icons, motion};
@@ -86,7 +86,7 @@ pub struct CopyButton {
     help: SharedString,
     variant: Variant,
     size: ControlSize,
-    symbol_size: Option<f32>,
+    symbol_size: Option<IconSize>,
     round: bool,
     copies: usize,
     surface: Surface,
@@ -126,7 +126,7 @@ impl CopyButton {
         self
     }
 
-    pub fn symbol_size(mut self, size: f32) -> Self {
+    pub fn symbol_size(mut self, size: IconSize) -> Self {
         self.symbol_size = Some(size);
         self
     }
@@ -289,7 +289,6 @@ impl RenderOnce for CommandBox {
             ActionButton::new(SharedString::from(format!("open-{:?}", self.id)), "Open")
                 .symbol("square-arrow-out-up-right")
                 .ghost()
-                .symbol_size(12.)
                 .surface(inside)
                 .on_click(move |_, _, cx| cx.open_url(&link))
         });
@@ -327,7 +326,6 @@ impl RenderOnce for CommandBox {
                             cx.write_to_clipboard(ClipboardItem::new_string(command.to_string()));
                         },
                     )
-                    .symbol_size(12.)
                     .surface(inside)
                     .disabled(self.command.is_none()),
                 ),
@@ -369,7 +367,9 @@ impl RenderOnce for PickMark {
             .when(self.multiple, |mark| mark.rounded(px(Radius::XS)))
             .when(!self.multiple, |mark| mark.rounded_full())
             .when(filled > 0. && self.multiple, |mark| {
-                mark.child(div().opacity(filled).child(icons::symbol("check", 10.).text_color(c.primary_foreground)))
+                mark.child(
+                    div().opacity(filled).child(icons::symbol("check", IconSize::Xs).text_color(c.primary_foreground)),
+                )
             })
             .when(filled > 0. && !self.multiple, |mark| {
                 mark.child(div().size(px(Self::SIZE * 0.375)).rounded_full().bg(c.primary_foreground).opacity(filled))
@@ -714,7 +714,7 @@ impl RenderOnce for CheckMenu {
                         div()
                             .relative()
                             .when(!check.checked, |mark| mark.opacity(0.))
-                            .child(icons::symbol("check", 13.)),
+                            .child(icons::symbol("check", IconSize::Md)),
                     )
                     .child(div().relative().flex_1().whitespace_nowrap().pr(px(12.)).child(check.title))
                     .when(open, |row| {
@@ -777,7 +777,7 @@ pub struct GlassButton {
 
 impl GlassButton {
     pub const SIDE: f32 = 34.;
-    const SYMBOL: f32 = 18.;
+    const SYMBOL: IconSize = IconSize::Lg;
 
     pub fn new(id: impl Into<ElementId>, symbol: impl Into<SharedString>, help: impl Into<SharedString>) -> Self {
         Self { id: id.into(), symbol: symbol.into(), help: help.into(), surface: Surface::Background, on_click: None }
@@ -817,7 +817,7 @@ impl RenderOnce for GlassButton {
             .role(Role::Button)
             .aria_label(self.help.clone())
             .tooltip(crate::ui::tooltip(self.help))
-            .child(icons::symbol(self.symbol, Self::SYMBOL / crate::theme::SYMBOL_SCALE))
+            .child(icons::symbol(self.symbol, Self::SYMBOL))
             .when_some(on_click, |button, on_click| {
                 button.on_click(move |event, window, cx| {
                     cx.stop_propagation();

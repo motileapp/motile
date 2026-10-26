@@ -18,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.unit.dp
 import app.motile.platform.Symbol
+import app.motile.theme.iconSize
 import app.motile.theme.LocalForeground
 import app.motile.theme.LocalPalette
 import app.motile.theme.symbolSide
@@ -27,6 +28,9 @@ import app.motile.theme.symbolSide
  * it is open: a sheet from the bottom, as iOS's action sheet.
  */
 data class Choice(val title: String, val symbol: Symbol? = null, val chosen: Boolean = false, val run: () -> Unit)
+
+private const val choiceText = 15f
+private val choiceSymbol = iconSize(text = choiceText)
 
 /** Shows `offered` while it isn't empty; picking one, or closing the sheet, calls `onDismiss`. */
 @Composable
@@ -50,12 +54,12 @@ fun Choices(offered: List<Choice>, onDismiss: () -> Unit) {
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             if (symbols) {
-                                Box(Modifier.size(symbolSide(15f)), contentAlignment = Alignment.Center) {
-                                    if (choice.symbol != null) Icon(choice.symbol, 15f)
+                                Box(Modifier.size(symbolSide(choiceSymbol)), contentAlignment = Alignment.Center) {
+                                    if (choice.symbol != null) Icon(choice.symbol, choiceSymbol)
                                 }
                             }
-                            Text(choice.title, Modifier.weight(1f), size = 15f, maxLines = 2)
-                            Icon(Symbol.Check, 14f, Modifier.alpha(if (choice.chosen) 1f else 0f), color = LocalPalette.current.primary)
+                            Text(choice.title, Modifier.weight(1f), size = choiceText, maxLines = 2)
+                            Icon(Symbol.Check, choiceSymbol, Modifier.alpha(if (choice.chosen) 1f else 0f), color = LocalPalette.current.primary)
                         }
                     }
                 }

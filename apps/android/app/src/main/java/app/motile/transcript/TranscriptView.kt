@@ -516,7 +516,7 @@ private fun JumpButton(modifier: Modifier, onClick: () -> Unit) {
             .clickable(interaction, null, role = Role.Button, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(Symbol.ArrowDown, 12f, color = palette.foreground)
+        Icon(Symbol.ArrowDown, ControlSize.Regular.symbol, color = palette.foreground)
     }
 }
 

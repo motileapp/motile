@@ -48,6 +48,7 @@ import app.motile.core.LinearUser
 import app.motile.platform.Platform
 import app.motile.platform.Symbol
 import app.motile.platform.scaled
+import app.motile.theme.IconSize
 import app.motile.theme.ControlSize
 import app.motile.theme.LocalPalette
 import app.motile.ui.ActionButton
@@ -81,7 +82,7 @@ private fun LinearConnect(target: PanelTarget) {
     val palette = LocalPalette.current
     Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
         Column(Modifier.widthIn(max = 320.dp), verticalArrangement = Arrangement.spacedBy(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(Symbol.Linear, 28f, color = palette.foreground)
+            Icon(Symbol.Linear, IconSize.Display, color = palette.foreground)
             Column(verticalArrangement = Arrangement.spacedBy(6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 Text("Connect Linear", size = 15f, weight = FontWeight.SemiBold, color = palette.foreground)
                 Text(

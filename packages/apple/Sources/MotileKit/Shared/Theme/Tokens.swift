@@ -310,6 +310,19 @@ enum Radius {
     static let xxl: CGFloat = 24
 }
 
+/// How large an icon is, of any kind: the side of its square, as on the Mac. Every icon is one
+/// of these.
+enum IconSize: CGFloat, CaseIterable {
+    case xs = 12
+    case sm = 14
+    case md = 16
+    case lg = 18
+    case xl = 20
+    case xxl = 24
+    case display = 32
+    case hero = 48
+}
+
 /// A shadow's size: how far down it falls and its blur, as CSS gives them.
 enum ShadowSize {
     case sm, md, lg, xl

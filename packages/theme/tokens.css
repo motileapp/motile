@@ -199,6 +199,17 @@
   --opacity-glow-bright: 50%;
 }
 
+:root {
+  --icon-xs: 12px;
+  --icon-sm: 14px;
+  --icon-md: 16px;
+  --icon-lg: 18px;
+  --icon-xl: 20px;
+  --icon-xxl: 24px;
+  --icon-display: 32px;
+  --icon-hero: 48px;
+}
+
 :root,
 .dark {
   /* A shadow's colour where nothing else is said: shadow at opacity shadow. */

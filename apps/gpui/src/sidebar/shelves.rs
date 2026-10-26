@@ -13,7 +13,7 @@ use super::updates::ServerUpdateStatus;
 use super::{DONE_ROW_HEIGHT, ROW_GAP, SIDEBAR_EDGE, Shelf, Sidebar, row_margin};
 use crate::models::Server;
 use crate::store::UndoNotice;
-use crate::theme::{self, colors};
+use crate::theme::{self, IconSize, colors};
 use crate::ui::{Highlight, divider, ease_out, icons, tabular_numbers, tooltip};
 
 /// How tall a shelf's list can get at least, when there is room, and before it is resized.
@@ -163,7 +163,7 @@ impl Sidebar {
                                 |color| {
                                     div()
                                         .ml(px(-2.))
-                                        .child(icons::trimmed("undo-2", 10.).text_color(color))
+                                        .child(icons::trimmed("undo-2", IconSize::Xs).text_color(color))
                                         .into_any_element()
                                 },
                                 cx,
@@ -177,7 +177,7 @@ impl Sidebar {
                                     .items_center()
                                     .gap(px(4.))
                                     .text_color(c.muted_stronger_foreground)
-                                    .child(icons::symbol("check", 10.))
+                                    .child(icons::symbol("check", IconSize::Sm))
                                     .child(div().min_w_0().text_size(px(11.)).truncate().child(notice.text.clone())),
                             ),
                     )
@@ -234,7 +234,7 @@ impl Sidebar {
                     .child(shelf_mark(
                         expanded || lit,
                         |color| {
-                            icons::trimmed("chevron-right", 10.)
+                            icons::trimmed("chevron-right", IconSize::Xs)
                                 .text_color(color)
                                 .rotate(if expanded { 90. } else { 0. })
                                 .into_any_element()

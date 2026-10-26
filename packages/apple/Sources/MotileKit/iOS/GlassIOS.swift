@@ -99,7 +99,7 @@ struct SheetCloseButton: View {
             Button(role: .close) {
                 dismiss()
             } label: {
-                Image(.x, size: 16)
+                Image(.x, size: .lg)
                     .foregroundStyle(Color.themeForeground)
             }
             .accessibilityLabel("Close")

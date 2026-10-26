@@ -20,7 +20,7 @@ struct SheetButton: View {
                 Text(title)
                     .opacity(pending ? 0 : 1)
                 if pending {
-                    Spinner(size: 17)
+                    Spinner(size: .lg)
                 }
             }
             .font(.ui(size: 15, weight: .semibold))

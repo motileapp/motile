@@ -18,7 +18,7 @@ struct ConnectServerView: View {
     var body: some View {
         VStack(spacing: 0) {
             if centred { Spacer() }
-            Image(.server, size: 24)
+            Image(.server, size: .display)
                 .foregroundStyle(Color.themePrimary)
                 .frame(width: 56, height: 56)
                 .background(Color.themePrimary.wash(), in: RoundedRectangle(cornerRadius: Radius.lg, style: .continuous))
@@ -92,7 +92,7 @@ struct ConnectServerView: View {
         } else {
             VStack(spacing: 14) {
                 HStack(spacing: 8) {
-                    Spinner()
+                    Spinner(size: .md)
                         .foregroundStyle(Color.themeMutedForeground)
                     Text("Waiting for your server")
                         .font(.ui(size: 13))

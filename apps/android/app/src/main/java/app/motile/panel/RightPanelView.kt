@@ -37,6 +37,7 @@ import app.motile.LocalStore
 import app.motile.core.Integration
 import app.motile.platform.Platform
 import app.motile.platform.Symbol
+import app.motile.theme.iconSize
 import app.motile.theme.ControlSize
 import app.motile.theme.LocalPalette
 import app.motile.theme.LocalRow
@@ -215,7 +216,7 @@ fun PanelTabChip(tab: PanelTab, active: Boolean) {
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Box(Modifier.width(14.dp), contentAlignment = Alignment.Center) { Icon(tab.symbol, 11f) }
+                Icon(tab.symbol, iconSize(text = 12f))
                 Text(tab.title, Modifier.weight(1f, fill = false), size = 12f, weight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
                 Spacer(Modifier.size(closeSize))
             }
@@ -232,7 +233,7 @@ fun PanelTabChip(tab: PanelTab, active: Boolean) {
         if (active) {
             CompositionLocalProvider(LocalRow provides Surface.Layer.ControlLit) {
                 ActionButton(
-                    icon = Symbol.X, help = store.shortcuts.help("Close", "rightPanel.close"), size = ControlSize.Small, symbolSize = 11f,
+                    icon = Symbol.X, help = store.shortcuts.help("Close", "rightPanel.close"), size = ControlSize.Small, symbolSize = ControlSize.Small.smallSymbol,
                     modifier = Modifier.padding(end = closeMargin + PanelTabChip.margin),
                 ) { panel.close(tab) }
             }
@@ -291,7 +292,7 @@ private fun LauncherRow(symbol: Symbol, title: String, reason: String?, count: I
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Box(Modifier.width(18.dp), contentAlignment = Alignment.Center) { Icon(symbol, 13f, color = foreground) }
+                Icon(symbol, iconSize(text = 13f), color = foreground)
                 // How many of its things work, in the working colour.
                 val words = buildAnnotatedString {
                     append(title)

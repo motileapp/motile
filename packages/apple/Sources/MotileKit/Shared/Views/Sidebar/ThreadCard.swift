@@ -4,6 +4,7 @@ import SwiftUI
 /// the composer shows them, and its pull request.
 struct ThreadCard: View {
     static let maxWidth: CGFloat = 320
+    private static let iconSize = IconSize.sm
     @Environment(AppStore.self) private var store
     let threadID: String
 
@@ -21,17 +22,17 @@ struct ThreadCard: View {
                 .lineLimit(1)
             VStack(alignment: .leading, spacing: 10) {
                 CardLine(text: project?.name ?? URL(fileURLWithPath: thread.cwd).lastPathComponent) {
-                    ProjectIcon(project: project, size: 14)
+                    ProjectIcon(project: project, size: Self.iconSize)
                 }
                 if let project, let branch = project.branch {
-                    CardLine(text: branch, middle: true) { Image(project.checkoutSymbol, size: 13) }
+                    CardLine(text: branch, middle: true) { Image(project.checkoutSymbol, size: Self.iconSize) }
                 } else {
                     let home = store.server(thread.serverID)?.home ?? ""
-                    CardLine(text: ThreadFolderLabel.shortened(thread.cwd, home: home), middle: true) { Image(.folder, size: 13) }
+                    CardLine(text: ThreadFolderLabel.shortened(thread.cwd, home: home), middle: true) { Image(.folder, size: Self.iconSize) }
                 }
-                CardLine(text: store.modelLabel(of: thread)) { AgentIcon(agent: thread.agent, size: 13) }
+                CardLine(text: store.modelLabel(of: thread)) { AgentIcon(agent: thread.agent, size: Self.iconSize) }
                 if let server = store.server(thread.serverID) {
-                    CardLine(text: server.name) { Image(.server, size: 12) }
+                    CardLine(text: server.name) { Image(.server, size: Self.iconSize) }
                 }
             }
             .padding(.top, 10)
@@ -39,9 +40,8 @@ struct ThreadCard: View {
                 ThemeDivider()
                     .padding(.vertical, 10)
                 HStack(spacing: 8) {
-                    Image(pullRequest.state.symbol, size: 13)
+                    Image(pullRequest.state.symbol, size: Self.iconSize)
                         .foregroundStyle(pullRequest.state.color)
-                        .frame(width: 14)
                     Text(verbatim: "#\(pullRequest.number)")
                         .font(.ui(size: 12, weight: .medium))
                         .monospacedDigit()
@@ -67,7 +67,6 @@ private struct CardLine<Icon: View>: View {
     var body: some View {
         HStack(spacing: 8) {
             icon()
-                .frame(width: 14, height: 14)
             Text(dotted: text)
                 .font(.ui(size: 12))
                 .lineLimit(1)

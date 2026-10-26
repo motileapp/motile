@@ -90,7 +90,7 @@ struct ContextStrip: View {
                 serverPart(server)
                 ComposerDivider()
             }
-            label(project.name, icon: .picture(AnyView(ProjectIcon(project: project, size: 13))))
+            label(project.name, icon: .picture(AnyView(ProjectIcon(project: project))))
                 .padding(server == nil ? ComposerStrip.firstMargin : ComposerStrip.middleMargin)
                 .help(project.path)
             Spacer(minLength: 8)
@@ -297,7 +297,7 @@ struct BranchPicker: View {
         VStack(spacing: 0) {
             #if os(macOS)
             HStack(spacing: 8) {
-                Image(.search, size: 12)
+                Image(.search, size: .md)
                     .foregroundStyle(Color.themeMutedStrongerForeground)
                 TextField("", text: $query)
                     .placeholder(prompt, shown: query.isEmpty)
@@ -412,9 +412,8 @@ struct BranchPicker: View {
             switch choice {
             case .branch(let branch):
                 let chosen = base.map { $0 == branch.name } ?? branch.current
-                Image(chosen ? .check : .gitBranch, size: 11)
+                Image(chosen ? .check : .gitBranch, size: .sm)
                     .foregroundStyle(chosen ? Color.themeForeground : Color.themeMutedStrongerForeground)
-                    .frame(width: 14)
                 Text(branch.name)
                     .lineLimit(1)
                     .truncationMode(.middle)
@@ -427,9 +426,8 @@ struct BranchPicker: View {
                         .foregroundStyle(Color.themeMutedStrongerForeground)
                 }
             case .create(let name):
-                Image(.plus, size: 11)
+                Image(.plus, size: .sm)
                     .foregroundStyle(Color.themeMutedStrongerForeground)
-                    .frame(width: 14)
                 Text("Create branch “\(name)”")
                     .lineLimit(1)
                     .truncationMode(.middle)

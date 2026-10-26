@@ -38,7 +38,7 @@ struct SettingsSidebar: View {
 
     private func row(_ section: SettingsSection) -> some View {
         HStack(spacing: 8) {
-            Image(section.symbol, size: 14)
+            Image(section.symbol, size: .md)
             Text(section.title)
                 .font(.ui(size: 13))
             Spacer(minLength: 0)
@@ -54,7 +54,7 @@ struct SettingsSidebar: View {
         let found = SettingsEntry.matching(store.settingsQuery, shortcuts: store.shortcuts)
         ForEach(found) { entry in
             HStack(spacing: 8) {
-                Image(entry.section.symbol, size: 14)
+                Image(entry.section.symbol, size: .md)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(entry.title)
                         .font(.ui(size: 13, weight: .medium))

@@ -24,7 +24,7 @@ use self::questions::Questions;
 use self::strips::{BranchPicker, agents_strip, context_strip, interruption_strip, monitoring_strip, waiting_strip};
 use crate::models::{ACCESSES, ModelInfoExt, ThreadInfo, access_detail, access_label};
 use crate::store::Store;
-use crate::theme::{self, ControlSize, Surface, colors};
+use crate::theme::{self, ControlSize, IconSize, Surface, colors};
 use crate::ui::menu::{Anchor, Menu, MenuIcon};
 use crate::ui::{ActionButton, ActionMenu, Variant, edges, icons, logos, text_width};
 
@@ -364,7 +364,7 @@ impl Composer {
             .items_center()
             .gap(px(8.))
             .text_size(px(12.5))
-            .child(icons::symbol("circle-check", 13.).text_color(c.success))
+            .child(icons::symbol("circle-check", IconSize::Sm).text_color(c.success))
             .child(div().font_weight(FontWeight::MEDIUM).child("Done"))
             .child(div().flex_1())
             .child(div().my(px(-4.)).child(
@@ -482,7 +482,6 @@ impl Composer {
             .button(move |button| {
                 button
                     .symbol(effort_symbol(&current))
-                    .symbol_size(ControlSize::Small.symbol())
                     .gap(MENU_GAP)
                     .help(effort_help)
                     .surface(Surface::Composer)
@@ -511,13 +510,7 @@ impl Composer {
                 menu
             })
             .button(move |button| {
-                button
-                    .symbol(symbol)
-                    .symbol_size(ControlSize::Small.symbol())
-                    .gap(MENU_GAP)
-                    .help(access_help)
-                    .surface(Surface::Composer)
-                    .margin(margin(4., 1.))
+                button.symbol(symbol).gap(MENU_GAP).help(access_help).surface(Surface::Composer).margin(margin(4., 1.))
             })
             .shortcut("composer.access")
         };

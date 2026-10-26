@@ -147,7 +147,7 @@ struct ComposerView: View {
 
     private var monitoringStrip: some View {
         HStack(spacing: 0) {
-            Image(.eye, size: ControlSize.small.symbol)
+            Image(.eye, size: ControlSize.regular.symbol)
                 .foregroundStyle(Color.themeForeground)
                 .padding(.leading, ComposerStrip.inset + Self.agentsButtonLead)
                 .padding(.trailing, Self.symbolGap)
@@ -195,7 +195,7 @@ struct ComposerView: View {
     private func agentsButton(_ text: String, children: ThreadChildren) -> some View {
         let button = { (words: String) in
             ActionButton(
-                words, icon: .bot, help: text, variant: .ghost, symbolSize: ControlSize.small.symbol, gap: Self.symbolGap,
+                words, icon: .bot, help: text, variant: .ghost, gap: Self.symbolGap,
                 tint: .themeProcess,
                 margin: EdgeInsets(top: ComposerStrip.inset, leading: 0, bottom: ComposerStrip.inset, trailing: 0)
             ) { store.rightPanel.open(.agents) }
@@ -225,7 +225,7 @@ struct ComposerView: View {
 
     private func doneBanner(_ thread: ThreadInfo) -> some View {
         HStack(spacing: 8) {
-            Image(.circleCheck, size: 13)
+            Image(.circleCheck, size: .sm)
                 .foregroundStyle(Color.themeSuccess)
             Text("Done")
                 .fontWeight(.medium)
@@ -322,7 +322,7 @@ struct ComposerView: View {
         let logo = current.map { AnyView(AgentIcon(agent: $0.agent, size: ControlSize.regular.symbol)) }
         ActionMenu(
             labeled || current == nil ? name : nil, picture: logo, help: store.shortcuts.help(current?.name ?? name, "modelPicker.toggle"),
-            symbolSize: ControlSize.regular.symbol, gap: 5, margin: margin
+            gap: 5, margin: margin
         ) {
             ForEach(store.composerChoices, id: \.account.id) { choices in
                 Section(choices.title) {
@@ -344,10 +344,10 @@ struct ComposerView: View {
             let current = store.composerEffort ?? ""
             ActionMenu(
                 labeled ? Self.effortLabel(current) : nil, icon: Self.effortSymbol(current), help: store.shortcuts.help("Reasoning effort", "composer.effort"),
-                symbolSize: ControlSize.small.symbol, gap: 5, margin: Self.margin(leading: 4, trailing: 4)
+                gap: 5, margin: Self.margin(leading: 4, trailing: 4)
             ) {
                 ForEach(model.effortChoices, id: \.self) { effort in
-                    let image = PlatformImage.symbol(Self.effortSymbol(effort), size: 13)
+                    let image = PlatformImage.symbol(Self.effortSymbol(effort), size: .md)
                     choice(Self.effortLabel(effort), image: image, chosen: effort == store.composerEffort) {
                         store.setEffort(effort)
                     }
@@ -362,10 +362,10 @@ struct ComposerView: View {
         ActionMenu(
             labeled ? store.composerAccess.label : nil, icon: store.composerAccess.symbol,
             help: store.shortcuts.help(store.composerAccess.detail, "composer.access"),
-            symbolSize: ControlSize.small.symbol, gap: 5, margin: Self.margin(leading: 4)
+            gap: 5, margin: Self.margin(leading: 4)
         ) {
             ForEach(Access.allCases) { access in
-                choice(access.label, image: PlatformImage.symbol(access.symbol, size: 13), chosen: access == store.composerAccess) {
+                choice(access.label, image: PlatformImage.symbol(access.symbol, size: .md), chosen: access == store.composerAccess) {
                     store.setAccess(access)
                 }
                 .help(access.detail)

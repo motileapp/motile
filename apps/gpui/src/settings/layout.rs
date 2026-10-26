@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use gpui_kit::prelude::*;
 use gpui_kit::*;
 
-use crate::theme::{ControlSize, Surface, colors};
+use crate::theme::{ControlSize, IconSize, Surface, colors};
 use crate::ui::menu::Menu;
 use crate::ui::{ActionMenu, Switch, card_default, icons};
 
@@ -185,7 +185,7 @@ pub fn footed_label(
         .items_center()
         .gap(px(8.))
         .when_some(icon, |label, icon| {
-            label.child(div().flex_shrink_0().text_color(c.muted_foreground).child(icons::symbol(icon, 13.)))
+            label.child(div().flex_shrink_0().text_color(c.muted_foreground).child(icons::symbol(icon, IconSize::Md)))
         })
         .child(
             div()

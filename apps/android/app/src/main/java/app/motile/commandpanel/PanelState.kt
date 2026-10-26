@@ -18,7 +18,6 @@ import app.motile.core.Time
 import app.motile.core.coreError
 import app.motile.platform.Platform
 import app.motile.platform.Symbol
-import app.motile.ui.AgentLogo
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -351,7 +350,7 @@ internal class PanelState(start: PanelPage, private val store: AppStore, private
             open(PanelPage.NewProject(id))
         }
         val state = store.github[id] ?: return listOf(new, PanelItem.placeholder(0, lines = 2), folder)
-        val github = PanelItem("source-github", "Your GitHub", "Clone one of your repositories", PanelIcon.Logo(AgentLogo.github), keepsOpen = true) {
+        val github = PanelItem("source-github", "Your GitHub", "Clone one of your repositories", PanelIcon.Glyph(Symbol.GitHub), keepsOpen = true) {
             open(if (state == GitHubState.Ready) PanelPage.GitHub(id) else PanelPage.GitHubSetup(id))
         }
         if (state == GitHubState.Ready) return listOf(new, github, folder)

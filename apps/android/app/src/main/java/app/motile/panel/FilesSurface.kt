@@ -6,7 +6,6 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -52,6 +51,8 @@ import app.motile.LocalStore
 import app.motile.core.Loaded
 import app.motile.platform.Platform
 import app.motile.platform.Symbol
+import app.motile.theme.iconSize
+import app.motile.theme.IconSize
 import app.motile.theme.LocalPalette
 import app.motile.theme.Radius
 import app.motile.ui.ActionButton
@@ -75,7 +76,7 @@ fun FilesSurface(target: PanelTarget) {
     var asked by remember { mutableIntStateOf(0) }
     Column(Modifier.fillMaxSize()) {
         PanelBar {
-            Icon(Symbol.Folder, 11f, color = palette.mutedForeground)
+            Icon(Symbol.Folder, iconSize(text = 12.5f), color = palette.mutedForeground)
             Text(
                 target.name, Modifier.padding(start = 3.dp).weight(1f), size = 12.5f, weight = FontWeight.Medium, color = palette.foreground,
                 maxLines = 1,
@@ -114,15 +115,14 @@ private fun FileRow(node: FileNode) {
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box(Modifier.width(10.dp).alpha(if (node.folder) 1f else 0f), contentAlignment = Alignment.Center) {
-                Icon(if (node.open) Symbol.ChevronDown else Symbol.ChevronRight, 8f, color = palette.mutedStrongerForeground)
-            }
-            Box(Modifier.width(16.dp), contentAlignment = Alignment.Center) {
-                Icon(
-                    if (node.folder) Symbol.Folder else FileSymbol.symbol(node.path), 11f,
-                    color = if (node.ignored) palette.mutedStrongestForeground else palette.mutedForeground,
-                )
-            }
+            Icon(
+                if (node.open) Symbol.ChevronDown else Symbol.ChevronRight, IconSize.Xs, Modifier.alpha(if (node.folder) 1f else 0f),
+                color = palette.mutedStrongerForeground,
+            )
+            Icon(
+                if (node.folder) Symbol.Folder else FileSymbol.symbol(node.path), iconSize(text = 12.5f),
+                color = if (node.ignored) palette.mutedStrongestForeground else palette.mutedForeground,
+            )
             Text(
                 node.name, size = 12.5f, color = if (node.ignored) palette.mutedStrongestForeground else palette.foreground, maxLines = 1,
                 overflow = TextOverflow.MiddleEllipsis,

@@ -20,9 +20,9 @@ struct NoticeView: View {
         HStack(alignment: .top, spacing: 10) {
             Group {
                 if notice.pending {
-                    Spinner(size: 15)
+                    Spinner(size: .md)
                 } else {
-                    Image(notice.failed ? .circleAlert : .circleCheck, size: 15)
+                    Image(notice.failed ? .circleAlert : .circleCheck, size: .md)
                         .foregroundStyle(notice.failed ? Color.themeDestructive : Color.themeSuccess)
                 }
             }

@@ -12,12 +12,7 @@ import {
   SquareTerminalIcon,
 } from "lucide-react"
 import { Fragment, useRef, useState, type ReactNode } from "react"
-import {
-  AgentIcon,
-  EffortHighIcon,
-  MenuChevron,
-  ProjectIcon,
-} from "./icons"
+import { AgentIcon, EffortHighIcon, MenuChevron, ProjectIcon } from "./icons"
 import type { Thread } from "./threads"
 import { cn } from "@/lib/utils"
 
@@ -50,7 +45,7 @@ export function Composer({
     <div className="mx-auto w-full max-w-[796px]">
       {status.kind === "monitoring" && (
         <Strip edge="top">
-          <EyeIcon className="mr-1 ml-[10.5px] size-[13px] shrink-0 text-foreground" />
+          <EyeIcon className="mr-1 ml-[10.5px] size-3.5 shrink-0 text-foreground" />
           <span className="text-[12.5px] font-medium text-foreground tabular-nums">
             Monitoring: {elapsed(status.since)}
           </span>
@@ -70,7 +65,7 @@ export function Composer({
               type="button"
               className="ml-[3px] flex h-7 min-w-0 items-center gap-1 rounded-md pr-[11px] pl-[7.5px] text-[12px] font-medium text-process hover:bg-border-composer"
             >
-              <BotIcon className="size-[13px] shrink-0" />
+              <BotIcon className="size-3.5 shrink-0" />
               <span className="truncate">{working.length} working</span>
             </button>
             {status.kind === "agents" && (
@@ -86,7 +81,7 @@ export function Composer({
       {status.kind === "approval" && thread.approval && (
         <Strip edge="top" tall>
           <div className="flex items-center gap-2">
-            <SquareTerminalIcon className="size-[13px] text-warning" />
+            <SquareTerminalIcon className="size-3.5 text-warning" />
             <span className="text-[12px] font-semibold text-warning">
               {thread.approval.verb}
             </span>
@@ -142,9 +137,9 @@ export function Composer({
           <Control
             icon={
               thread.approval ? (
-                <ShieldIcon className="size-[13px]" />
+                <ShieldIcon className="size-3.5" />
               ) : (
-                <LockOpenIcon className="size-[13px]" />
+                <LockOpenIcon className="size-3.5" />
               )
             }
           >
@@ -170,19 +165,19 @@ export function Composer({
       </div>
       <Strip edge="bottom">
         <span className="ml-3.5 flex items-center gap-1.5 font-medium">
-          <ServerIcon className="size-[11px]" />
+          <ServerIcon className="size-3.5" />
           {thread.server.name}
         </span>
         <span className="mx-2.5 h-3 w-px bg-border-composer" />
         <span className="flex items-center gap-1.5 font-medium">
-          <ProjectIcon project={thread.project} size={13} />
+          <ProjectIcon project={thread.project} />
           {thread.project.name}
         </span>
         <span className="ml-auto flex items-center gap-1.5 font-medium">
           {thread.worktree ? (
-            <FolderGit2Icon className="size-[11px]" />
+            <FolderGit2Icon className="size-3.5" />
           ) : (
-            <FolderIcon className="size-[11px]" />
+            <FolderIcon className="size-3.5" />
           )}
           {thread.worktree ? "Worktree" : "Local checkout"}
         </span>

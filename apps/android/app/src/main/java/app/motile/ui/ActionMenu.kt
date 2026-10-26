@@ -44,6 +44,8 @@ import app.motile.theme.LocalPalette
 import app.motile.theme.Opacity
 import app.motile.theme.Radius
 import app.motile.theme.opacity
+import app.motile.theme.IconSize
+import app.motile.theme.iconSize
 import app.motile.theme.symbolSide
 
 /** What a menu lists: built when it opens, from the lambda a menu is given. */
@@ -170,6 +172,8 @@ fun MenuPopup(state: MenuState, items: MenuBuilder.() -> Unit) {
 
 private val menuPadding = 4.dp
 private const val menuText = 14f
+/** The size of a menu's symbols and of the pictures its items show. */
+val menuIconSize = iconSize(text = menuText)
 
 @Composable
 private fun MenuPage(title: String?, entries: List<MenuEntry>, back: () -> Unit, open: (MenuEntry.Submenu) -> Unit, close: () -> Unit) {
@@ -180,7 +184,7 @@ private fun MenuPage(title: String?, entries: List<MenuEntry>, back: () -> Unit,
         Column(Modifier.verticalScroll(rememberScrollState()).padding(menuPadding)) {
             if (title != null) {
                 MenuRow(onClick = back) {
-                    Icon(Symbol.ChevronLeft, 13f, color = palette.mutedForeground)
+                    Icon(Symbol.ChevronLeft, menuIconSize, color = palette.mutedForeground)
                     Text(title, Modifier.weight(1f), size = menuText, weight = FontWeight.SemiBold, maxLines = 1)
                 }
                 ThemeDivider(Modifier.padding(vertical = menuPadding))
@@ -189,10 +193,10 @@ private fun MenuPage(title: String?, entries: List<MenuEntry>, back: () -> Unit,
                 when (row) {
                     is MenuEntry.Item -> ItemRow(row, checks, close)
                     is MenuEntry.Submenu -> MenuRow(onClick = { open(row) }) {
-                        if (checks) Box(Modifier.size(symbolSide(13f)))
+                        if (checks) Box(Modifier.size(symbolSide(menuIconSize)))
                         Mark(row.symbol, null)
                         Text(row.title, Modifier.weight(1f), size = menuText, maxLines = 2)
-                        Icon(Symbol.ChevronRight, 13f, color = palette.mutedForeground)
+                        Icon(Symbol.ChevronRight, menuIconSize, color = palette.mutedForeground)
                     }
                     is MenuEntry.Divider -> ThemeDivider(Modifier.padding(vertical = menuPadding))
                     is MenuEntry.Section -> Text(
@@ -240,7 +244,7 @@ private fun ItemRow(item: MenuEntry.Item, checks: Boolean, close: () -> Unit) {
         disabled = item.disabled,
         color = color,
     ) {
-        if (checks) Icon(Symbol.Check, 13f, Modifier.alpha(if (item.checked == true) 1f else 0f))
+        if (checks) Icon(Symbol.Check, menuIconSize, Modifier.alpha(if (item.checked == true) 1f else 0f))
         Mark(item.symbol, item.picture)
         Column(Modifier.weight(1f)) {
             Text(item.title, size = menuText, maxLines = 2)
@@ -252,11 +256,11 @@ private fun ItemRow(item: MenuEntry.Item, checks: Boolean, close: () -> Unit) {
 @Composable
 private fun Mark(symbol: Symbol?, picture: (@Composable () -> Unit)?) {
     if (symbol != null) {
-        Icon(symbol, menuText)
+        Icon(symbol, menuIconSize)
         return
     }
     if (picture == null) return
-    Box(Modifier.size(symbolSide(menuText)), contentAlignment = Alignment.Center) { picture() }
+    Box(Modifier.size(symbolSide(menuIconSize)), contentAlignment = Alignment.Center) { picture() }
 }
 
 @Composable
@@ -292,7 +296,7 @@ fun ActionMenu(
     help: String? = null,
     variant: ButtonVariant = ButtonVariant.Ghost,
     size: ControlSize = ControlSize.Regular,
-    symbolSize: Float? = null,
+    symbolSize: IconSize? = null,
     gap: Dp? = null,
     padding: Dp? = null,
     pending: Boolean = false,

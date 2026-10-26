@@ -86,7 +86,7 @@ struct GitButton: View {
         let running = store.gitStage(in: project) != nil
         for item in control.menu {
             let entry = ActionMenuItem(title: item.label) { store.chooseGit(item, in: project) }
-            entry.image = .symbol(GitSymbol.symbol(for: item.action), size: 13)
+            entry.image = .symbol(GitSymbol.symbol(for: item.action), size: .md)
             entry.isEnabled = item.reason == nil && !running
             entry.toolTip = item.reason
             menu.addItem(entry)
@@ -120,7 +120,7 @@ struct GitButton: View {
                 Button {
                     store.chooseGit(item, in: project)
                 } label: {
-                    Label(item.label, symbol: GitSymbol.symbol(for: item.action), size: 15)
+                    Label(item.label, symbol: GitSymbol.symbol(for: item.action), size: .lg)
                     if let reason = item.reason { Text(reason) }
                 }
                 .disabled(item.reason != nil || running)
@@ -130,13 +130,13 @@ struct GitButton: View {
             }
         } label: {
             if running {
-                Spinner(size: 15)
+                Spinner(size: .lg)
             } else if let color = pullRequestColor(of: quick) {
-                Image(symbol(of: quick), size: 15).foregroundStyle(Color(platform: color))
+                Image(symbol(of: quick), size: .lg).foregroundStyle(Color(platform: color))
             } else if quick.action != nil || quick.url != nil {
-                Image(symbol(of: quick), size: 15)
+                Image(symbol(of: quick), size: .lg)
             } else {
-                Image(.gitBranch, size: 15)
+                Image(.gitBranch, size: .lg)
             }
         }
         .accessibilityLabel("Git")
@@ -152,15 +152,15 @@ struct GitButton: View {
     @ViewBuilder
     private func quickLabel(_ quick: GitQuick, at stage: GitStage?) -> some View {
         if let stage {
-            Label(stage.label, symbol: .hourglass, size: 15)
+            Label(stage.label, symbol: .hourglass, size: .lg)
         } else if let color = pullRequestColor(of: quick) {
             Label {
                 Text(quick.title)
             } icon: {
-                Image(uiImage: TintedSymbol.image(symbol(of: quick), size: 15, color: color))
+                Image(uiImage: TintedSymbol.image(symbol(of: quick), size: .lg, color: color))
             }
         } else {
-            Label(quick.title, symbol: symbol(of: quick), size: 15)
+            Label(quick.title, symbol: symbol(of: quick), size: .lg)
         }
     }
 
@@ -228,14 +228,14 @@ struct InitializeGitButton: View {
             Button {
                 store.initializeGit(in: project)
             } label: {
-                Label("Initialize git", symbol: .gitBranch, size: 15)
+                Label("Initialize git", symbol: .gitBranch, size: .lg)
             }
             .disabled(pending)
         } label: {
             if pending {
-                Spinner(size: 15)
+                Spinner(size: .lg)
             } else {
-                Image(.gitBranch, size: 15)
+                Image(.gitBranch, size: .lg)
             }
         }
         .accessibilityLabel("Git")
@@ -265,14 +265,14 @@ struct PullBaseButton: View {
             Button {
                 store.pullDraftBase()
             } label: {
-                Label("Pull \(base)", symbol: symbol, size: 15)
+                Label("Pull \(base)", symbol: symbol, size: .lg)
             }
             .disabled(pending)
         } label: {
             if pending {
-                Spinner(size: 15)
+                Spinner(size: .lg)
             } else {
-                Image(symbol, size: 15)
+                Image(symbol, size: .lg)
             }
         }
         .accessibilityLabel("Git")

@@ -28,6 +28,7 @@ import app.motile.core.RicracUser
 import app.motile.core.Time
 import app.motile.platform.Platform
 import app.motile.platform.Symbol
+import app.motile.theme.iconSize
 import app.motile.theme.ControlSize
 import app.motile.theme.LocalPalette
 import app.motile.theme.Radius
@@ -99,15 +100,13 @@ private fun HeaderRow(entry: RicracListEntry.Header, fold: () -> Unit) {
             fill = palette.backgroundSecondaryAccent,
         ) {
             Row(Modifier.height(pressable(30f)).padding(horizontal = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.width(16.dp), contentAlignment = Alignment.Center) { Icon(entry.state.symbol, 12f, color = entry.state.color) }
+                Icon(entry.state.symbol, iconSize(text = 12f), color = entry.state.color)
                 Spacer(Modifier.width(8.dp))
                 Text(entry.state.name, size = 12f, weight = FontWeight.SemiBold, color = palette.foreground, maxLines = 1)
                 Spacer(Modifier.width(8.dp))
                 Text("${entry.count}", size = 12f, color = palette.mutedStrongerForeground, maxLines = 1)
                 Spacer(Modifier.weight(1f))
-                Box(Modifier.width(16.dp), contentAlignment = Alignment.Center) {
-                    Icon(if (entry.folded) Symbol.ChevronRight else Symbol.ChevronDown, 10f, color = palette.mutedStrongerForeground)
-                }
+                Icon(if (entry.folded) Symbol.ChevronRight else Symbol.ChevronDown, iconSize(text = 12f), color = palette.mutedStrongerForeground)
             }
         }
     }

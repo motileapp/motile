@@ -71,7 +71,7 @@ struct CheckMenu: View {
 
     private func row(_ check: Check) -> some View {
         HStack(spacing: 8) {
-            Image(.check, size: 13)
+            Image(.check, size: .md)
                 .opacity(check.checked ? 1 : 0)
             Text(check.title)
                 .lineLimit(1)

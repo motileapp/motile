@@ -25,6 +25,7 @@ import app.motile.core.Notice
 import app.motile.platform.Platform
 import app.motile.platform.Symbol
 import app.motile.platform.scaled
+import app.motile.theme.iconSize
 import app.motile.theme.ControlSize
 import app.motile.theme.LocalForeground
 import app.motile.theme.LocalRow
@@ -85,10 +86,11 @@ fun NoticeView(notice: Notice, modifier: Modifier = Modifier) {
                 verticalAlignment = Alignment.Top,
             ) {
                 Box(Modifier.height(NoticeView.titleHeight), contentAlignment = Alignment.Center) {
+                    val symbolSize = iconSize(text = 13f)
                     when {
-                        notice.pending -> Spinner(15f)
-                        notice.failed -> Icon(Symbol.CircleAlert, 15f, color = palette.destructive)
-                        else -> Icon(Symbol.CircleCheck, 15f, color = palette.success)
+                        notice.pending -> Spinner(symbolSize)
+                        notice.failed -> Icon(Symbol.CircleAlert, symbolSize, color = palette.destructive)
+                        else -> Icon(Symbol.CircleCheck, symbolSize, color = palette.success)
                     }
                 }
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {

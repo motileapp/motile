@@ -44,6 +44,7 @@ import app.motile.layout.KeyboardFocus
 import app.motile.panel.PanelTab
 import app.motile.platform.Symbol
 import app.motile.platform.scaled
+import app.motile.theme.iconSize
 import app.motile.theme.ControlSize
 import app.motile.theme.LocalForeground
 import app.motile.theme.LocalSurface
@@ -178,7 +179,7 @@ private fun MonitoringStrip(thread: ThreadInfo) {
     val children = thread.children
     val agentsText = children?.runningText
     Row(Modifier.fillMaxWidth().composerStrip(ComposerStrip.Edge.Top), verticalAlignment = Alignment.CenterVertically) {
-        Icon(Symbol.Eye, ControlSize.Small.symbol, Modifier.padding(start = ComposerStrip.inset + AgentsButton.lead, end = AgentsButton.symbolGap), color = Theme.colors.foreground)
+        Icon(Symbol.Eye, ControlSize.Regular.symbol, Modifier.padding(start = ComposerStrip.inset + AgentsButton.lead, end = AgentsButton.symbolGap), color = Theme.colors.foreground)
         Text("Monitoring: ${Time.elapsed(thread.monitoringSince, now)}", style = ControlSize.Regular.font.copy(fontFeatureSettings = "tnum"), color = Theme.colors.foreground, maxLines = 1)
         if (children != null && agentsText != null) {
             // The button's own room before its symbol is the dot's on its other side.
@@ -220,8 +221,7 @@ private fun AgentsButton(text: String, children: ThreadChildren, modifier: Modif
     val store = LocalStore.current
     val button = @Composable { words: String ->
         ActionButton(
-            words, icon = Symbol.Bot, help = text, variant = ButtonVariant.Ghost, symbolSize = ControlSize.Small.symbol,
-            gap = AgentsButton.symbolGap,
+            words, icon = Symbol.Bot, help = text, variant = ButtonVariant.Ghost, gap = AgentsButton.symbolGap,
             tint = Theme.colors.process, margin = PaddingValues(vertical = ComposerStrip.inset),
         ) { store.rightPanel.open(PanelTab.Agents) }
     }
@@ -237,7 +237,7 @@ private fun DoneBanner(thread: ThreadInfo) {
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(Symbol.CircleCheck, 13f, color = Theme.colors.success)
+        Icon(Symbol.CircleCheck, iconSize(text = 12.5f), color = Theme.colors.success)
         Text("Done", size = 12.5f, weight = FontWeight.Medium)
         Spacer(Modifier.weight(1f))
         ActionButton("Mark Undone", modifier = Modifier.overhang(vertical = 4.dp), variant = ButtonVariant.Link, size = ControlSize.Small) {

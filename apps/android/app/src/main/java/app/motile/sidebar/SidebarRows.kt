@@ -58,6 +58,8 @@ import app.motile.core.UndoNotice
 import app.motile.core.isSearchingThreads
 import app.motile.platform.Symbol
 import app.motile.platform.scaled
+import app.motile.theme.iconSize
+import app.motile.theme.IconSize
 import app.motile.theme.ControlSize
 import app.motile.theme.LocalPalette
 import app.motile.theme.LocalRow
@@ -90,6 +92,9 @@ val sidebarRowInset = 10.dp
 
 /** The space between the rows' highlights, and around each one: it looks empty but is the row's. */
 private val rowGap = 2.dp
+
+/** The room between the parts of a row's status, and of its last line. */
+private val statusGap = 9.dp
 val rowMargin = PaddingValues(start = sidebarRowInset, top = rowGap / 2, end = sidebarRowInset, bottom = rowGap / 2)
 
 /** How far everything the sidebar shows stays from its sides, a row's content as well as a line's. */
@@ -232,7 +237,7 @@ fun ThreadRow(
                 .padding(start = ThreadRow.sidePadding, end = ThreadRow.sidePadding, top = ThreadRow.topPadding, bottom = ThreadRow.bottomPadding),
         ) {
             Row(Modifier.height(scaled(22f).dp), verticalAlignment = Alignment.CenterVertically) {
-                ProjectIcon(project, size = 14f)
+                ProjectIcon(project, size = iconSize(text = 11f))
                 Text(
                     project?.name ?: lastComponent(thread.cwd), Modifier.weight(1f).padding(start = 6.dp, end = 6.dp),
                     size = 11f, weight = FontWeight.Medium, color = palette.mutedForeground, maxLines = 1,
@@ -258,10 +263,10 @@ fun ThreadRow(
                             ThreadFolderLabel(thread.serverID, thread.cwd)
                         }
                     }
-                    Row(Modifier.padding(start = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Row(Modifier.padding(start = 6.dp), horizontalArrangement = Arrangement.spacedBy(statusGap), verticalAlignment = Alignment.CenterVertically) {
                         if (!readOnly) project?.pullRequest(thread)?.let { ThreadPullRequestLabel(thread, it, open = open) }
                         ThreadServerLabel(thread.serverID)
-                        AgentIcon(thread.agent, size = 12f)
+                        AgentIcon(thread.agent, size = iconSize(text = 11f))
                     }
                 }
             }
@@ -290,7 +295,7 @@ fun ThreadFolderLabel(serverID: String, folder: String) {
 @Composable
 private fun CheckoutLabel(symbol: Symbol, text: String) {
     Row(horizontalArrangement = Arrangement.spacedBy(3.dp), verticalAlignment = Alignment.CenterVertically) {
-        Icon(symbol, 11f)
+        Icon(symbol, iconSize(text = 11f))
         Text(text, size = 11f, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
     }
 }
@@ -301,7 +306,7 @@ private fun ThreadServerLabel(serverID: String) {
     val store = LocalStore.current
     if (store.servers.size + store.removedServers.size <= 1) return
     val server = store.server(serverID) ?: return
-    ServerLabel(server, Modifier.padding(start = 1.dp))
+    ServerLabel(server)
 }
 
 /** The threads that haven't been sent yet, above the others, and a line under them. */
@@ -367,16 +372,16 @@ private fun DraftRow(listed: ListedDraft, modifier: Modifier = Modifier, onLongC
         ) {
             CompositionLocalProvider(LocalForeground provides palette.mutedForeground) {
                 Row(Modifier.height(scaled(22f).dp), verticalAlignment = Alignment.CenterVertically) {
-                    ProjectIcon(project, size = 14f)
+                    ProjectIcon(project, size = iconSize(text = 11f))
                     Text(project?.name ?: "No project", Modifier.weight(1f).padding(horizontal = 6.dp), size = 11f, weight = FontWeight.Medium, maxLines = 1)
                     when {
                         listed.sending -> Row(horizontalArrangement = Arrangement.spacedBy(3.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Spinner(11f)
+                            Spinner(iconSize(text = 11f))
                             Text("Sending", size = 11f, weight = FontWeight.Medium)
                         }
                         hovering -> ActionButton(icon = Symbol.X, help = "Discard draft", size = ControlSize.Small) { store.discard(listed.draft) }
                         else -> Row(horizontalArrangement = Arrangement.spacedBy(3.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Symbol.File, 11f)
+                            Icon(Symbol.File, iconSize(text = 11f))
                             Text("Draft", size = 11f, weight = FontWeight.Medium)
                         }
                     }
@@ -398,9 +403,9 @@ private fun DraftRow(listed: ListedDraft, modifier: Modifier = Modifier, onLongC
                             project != null -> ThreadFolderLabel(project.serverID, project.path)
                         }
                     }
-                    Row(Modifier.padding(start = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Row(Modifier.padding(start = 6.dp), horizontalArrangement = Arrangement.spacedBy(statusGap), verticalAlignment = Alignment.CenterVertically) {
                         project?.let { ThreadServerLabel(it.serverID) }
-                        store.agentOf(listed.draft)?.let { AgentIcon(it, size = 12f) }
+                        store.agentOf(listed.draft)?.let { AgentIcon(it, size = iconSize(text = 11f)) }
                     }
                 }
             }
@@ -438,7 +443,7 @@ fun DoneRow(
             Modifier.fillMaxWidth().padding(rowMargin).padding(horizontal = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            ProjectIcon(project, size = 14f)
+            ProjectIcon(project, size = iconSize(text = 13f))
             Text(thread.title, Modifier.weight(1f).padding(start = 7.dp, end = 6.dp), size = 13f, maxLines = 1, color = palette.mutedForeground)
             Row(horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically) {
                 project?.pullRequest(thread)?.let { ThreadPullRequestLabel(thread, it, colored = false, open = open) }
@@ -470,7 +475,7 @@ fun NewThreadRow(modifier: Modifier = Modifier) {
     val store = LocalStore.current
     HighlightButton(onClick = { store.newThread() }, modifier = modifier, radius = Radius.md, inset = rowMargin, faded = true, opaque = true, contentAlignment = Alignment.CenterStart) {
         Row(Modifier.fillMaxWidth().padding(rowMargin).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.width(14.dp), contentAlignment = Alignment.Center) { Icon(Symbol.Plus, 14f) }
+            Icon(Symbol.Plus, iconSize(text = 13f))
             Text("Create a thread", Modifier.padding(start = 7.dp), size = 13f, maxLines = 1)
         }
     }
@@ -484,34 +489,34 @@ fun ThreadStatus(thread: ThreadInfo, readOnly: Boolean = false) {
     val stage = thread.gitStage
     val interruption = thread.interruption
     when {
-        readOnly -> StatusLabel("Read-only", palette.warning, Modifier.semantics { contentDescription = readOnlyHelp }) { Icon(Symbol.Unlink, 11f) }
+        readOnly -> StatusLabel("Read-only", palette.warning, Modifier.semantics { contentDescription = readOnlyHelp }) { Icon(Symbol.Unlink, statusSymbol) }
         asking != null -> {
             val help = thread.children?.waitingText?.takeIf { thread.asking == null }
             val described = if (help == null) Modifier else Modifier.semantics { contentDescription = help }
-            StatusLabel(asking.word, palette.warning, described) { Icon(asking.symbol, 11f) }
+            StatusLabel(asking.word, palette.warning, described) { Icon(asking.symbol, statusSymbol) }
         }
         thread.waitsOnAgents -> Row(
             Modifier.semantics { contentDescription = thread.children?.runningText.orEmpty() },
-            horizontalArrangement = Arrangement.spacedBy(9.dp),
+            horizontalArrangement = Arrangement.spacedBy(statusGap),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            StatusLabel("${thread.children?.running ?: 0}", palette.pending) { Icon(Symbol.Bot, 11f) }
-            StatusLabel(Time.elapsed(thread.monitoringSince, everySecond()), palette.process) { Icon(Symbol.CircleDotDashed, 10f) }
+            StatusLabel("${thread.children?.running ?: 0}", palette.pending) { Icon(Symbol.Bot, statusSymbol) }
+            StatusLabel(Time.elapsed(thread.monitoringSince, everySecond()), palette.process) { Icon(Symbol.CircleDotDashed, statusSymbol) }
         }
-        thread.working -> Row(horizontalArrangement = Arrangement.spacedBy(9.dp), verticalAlignment = Alignment.CenterVertically) {
+        thread.working -> Row(horizontalArrangement = Arrangement.spacedBy(statusGap), verticalAlignment = Alignment.CenterVertically) {
             val agents = maxOf(thread.agents, thread.children?.running ?: 0)
             if (agents > 0) {
                 val working = if (agents == 1) "1 agent is working" else "$agents agents are working"
-                StatusLabel("$agents", palette.pending, Modifier.semantics { contentDescription = working }) { Icon(Symbol.Bot, 11f) }
+                StatusLabel("$agents", palette.pending, Modifier.semantics { contentDescription = working }) { Icon(Symbol.Bot, statusSymbol) }
             }
-            StatusLabel(Time.elapsed(thread.updatedAt, everySecond()), palette.process) { Icon(Symbol.CircleDashed, 10f) }
+            StatusLabel(Time.elapsed(thread.updatedAt, everySecond()), palette.process) { Icon(Symbol.CircleDashed, statusSymbol) }
         }
-        stage != null -> StatusLabel(stage.label, palette.process) { Spinner(11f) }
-        thread.monitoring -> StatusLabel(Time.elapsed(thread.monitoringSince, everySecond()), palette.foreground) { Icon(Symbol.Eye, 11f) }
+        stage != null -> StatusLabel(stage.label, palette.process) { Spinner(statusSymbol) }
+        thread.monitoring -> StatusLabel(Time.elapsed(thread.monitoringSince, everySecond()), palette.foreground) { Icon(Symbol.Eye, statusSymbol) }
         interruption != null -> StatusLabel(capitalized(interruption.word), palette.warning, Modifier.semantics { contentDescription = interruption.detail() }) {
-            Icon(interruption.symbol, 11f)
+            Icon(interruption.symbol, statusSymbol)
         }
-        thread.unread -> StatusLabel("Finished", palette.success) { Icon(Symbol.Flag, 11f) }
+        thread.unread -> StatusLabel("Finished", palette.success) { Icon(Symbol.Flag, statusSymbol) }
         else -> Text(Time.ago(thread.updatedAt, AgoClock.now), size = 11f, color = palette.mutedStrongerForeground)
     }
 }
@@ -519,6 +524,9 @@ fun ThreadStatus(thread: ThreadInfo, readOnly: Boolean = false) {
 private const val readOnlyHelp = "Its server is unlinked, so this thread can only be read or continued on another server."
 
 private fun capitalized(text: String): String = text.split(" ").joinToString(" ") { word -> word.replaceFirstChar { it.uppercase() } }
+
+/** A status's symbol, beside its words. */
+private val statusSymbol = iconSize(text = 11f)
 
 @Composable
 private fun StatusLabel(text: String, color: Color, modifier: Modifier = Modifier, icon: @Composable () -> Unit) {
@@ -548,7 +556,7 @@ fun ShelfMark(lit: Boolean, content: @Composable () -> Unit) {
 @Composable
 fun SidebarChevron(expanded: Boolean) {
     val angle by animateFloatAsState(if (expanded) 90f else 0f, label = "chevron")
-    ShelfMark(lit = expanded) { Icon(Symbol.ChevronRight, 10f, Modifier.rotate(angle), trimmed = true) }
+    ShelfMark(lit = expanded) { Icon(Symbol.ChevronRight, IconSize.Xs, Modifier.rotate(angle), trimmed = true) }
 }
 
 /** The name of a sidebar line like Done's: muted while it is closed and not lit. */
@@ -573,12 +581,12 @@ fun UndoRow(notice: UndoNotice, modifier: Modifier = Modifier) {
                 horizontalArrangement = Arrangement.spacedBy(7.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                ShelfMark(lit = false) { Icon(Symbol.Undo2, 10f, Modifier.offset(x = (-2).dp), trimmed = true) }
+                ShelfMark(lit = false) { Icon(Symbol.Undo2, IconSize.Xs, Modifier.offset(x = (-2).dp), trimmed = true) }
                 ShelfTitle("Undo", expanded = false)
                 Spacer(Modifier.weight(1f))
                 CompositionLocalProvider(LocalForeground provides palette.mutedStrongerForeground) {
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Symbol.Check, 10f)
+                        Icon(Symbol.Check, iconSize(text = 11f))
                         Text(notice.text, size = 11f, maxLines = 1)
                     }
                 }

@@ -26,6 +26,10 @@ enum class Symbol(val character: String?) {
     ChevronLeft("\uE06E"),
     ChevronRight("\uE06F"),
     ChevronUp("\uE070"),
+    /** Claude's, OpenAI's and GitHub's logos, which Lucide doesn't have. */
+    Claude(null),
+    OpenAI(null),
+    GitHub(null),
     Circle("\uE076"),
     CircleAlert("\uE077"),
     CircleArrowDown("\uE078"),

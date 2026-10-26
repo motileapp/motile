@@ -24,7 +24,7 @@ use crate::panel::pull_request_list::PullRequestListView;
 use crate::panel::ricrac::RicracView;
 use crate::store::Store;
 use crate::store::integrations::Integration;
-use crate::theme::{self, Colors, ControlSize, Layer, Radius, Surface, colors};
+use crate::theme::{self, Colors, ControlSize, IconSize, Layer, Radius, Surface, colors};
 use crate::transcript::kit::dashed_outline;
 use crate::ui::agent_avatar::{AgentAvatar, state_color};
 use crate::ui::menu::Menu;
@@ -301,8 +301,12 @@ impl RightPanelView {
                     .inset(edges(0., TAB_MARGIN, 0., TAB_MARGIN))
                     .render(group, cx),
             )
-            .child(div().relative().w(px(14.)).flex().justify_center().child(
-                icons::symbol(tab.symbol(), 11.).text_color(if lit { c.foreground } else { c.muted_foreground }),
+            .child(div().relative().w(px(IconSize::Sm.side())).flex().justify_center().child(
+                icons::symbol(tab.symbol(), IconSize::Sm).text_color(if lit {
+                    c.foreground
+                } else {
+                    c.muted_foreground
+                }),
             ))
             .child(
                 crate::ui::middle_truncated(tab.title())
@@ -483,10 +487,10 @@ impl RightPanelView {
                 .child(
                     div()
                         .relative()
-                        .w(px(18.))
+                        .w(px(IconSize::Md.side()))
                         .flex()
                         .justify_center()
-                        .child(icons::symbol(symbol, 13.).text_color(c.foreground)),
+                        .child(icons::symbol(symbol, IconSize::Md).text_color(c.foreground)),
                 )
                 .child(
                     div()
@@ -881,7 +885,7 @@ impl RightPanelView {
                 .items_center()
                 .w_full()
                 .gap(px(4.))
-                .child(icons::symbol("folder", 11.).text_color(c.muted_foreground))
+                .child(icons::symbol("folder", IconSize::Sm).text_color(c.muted_foreground))
                 .child(
                     div()
                         .pl(px(3.))
@@ -1432,7 +1436,7 @@ impl RightPanelView {
                     .flex_col()
                     .items_center()
                     .gap(px(16.))
-                    .child(icons::symbol("linear", 28.).text_color(c.foreground))
+                    .child(icons::symbol("linear", IconSize::Display).text_color(c.foreground))
                     .child(
                         div()
                             .flex()
@@ -1494,7 +1498,7 @@ impl RightPanelView {
                     .flex_col()
                     .items_center()
                     .gap(px(16.))
-                    .child(icons::symbol("ricrac", 28.).text_color(c.foreground))
+                    .child(icons::symbol("ricrac", IconSize::Display).text_color(c.foreground))
                     .child(
                         div()
                             .flex()
@@ -1545,15 +1549,15 @@ fn file_row(node: &FileNode, store: &Entity<Store>, cx: &App) -> Stateful<Div> {
         .items_center()
         .gap(px(6.))
         .child(light(group, Radius::SM, edges(0., 6., 0., 6.), false, cx))
-        .child(div().relative().w(px(10.)).flex().justify_center().when(node.folder, |chevron| {
+        .child(div().relative().w(px(IconSize::Xs.side())).flex().justify_center().when(node.folder, |chevron| {
             chevron.child(
-                icons::symbol(if node.open { "chevron-down" } else { "chevron-right" }, 8.)
+                icons::symbol(if node.open { "chevron-down" } else { "chevron-right" }, IconSize::Xs)
                     .text_color(c.muted_stronger_foreground),
             )
         }))
         .child(
-            div().relative().w(px(16.)).flex().justify_center().child(
-                icons::symbol(if node.folder { "folder" } else { file_symbol(&node.path) }, 11.)
+            div().relative().w(px(IconSize::Sm.side())).flex().justify_center().child(
+                icons::symbol(if node.folder { "folder" } else { file_symbol(&node.path) }, IconSize::Sm)
                     .text_color(if node.ignored { c.muted_strongest_foreground } else { c.muted_foreground }),
             ),
         )
@@ -1697,10 +1701,10 @@ fn parent_row(id: &str, store: &Entity<Store>, cx: &App) -> Div {
                     .gap(px(6.))
                     .child(
                         div()
-                            .w(px(16.))
+                            .w(px(IconSize::Md.side()))
                             .flex()
                             .justify_center()
-                            .child(icons::symbol("corner-left-up", 12.).text_color(c.foreground)),
+                            .child(icons::symbol("corner-left-up", IconSize::Md).text_color(c.foreground)),
                     )
                     .child(
                         div()
@@ -1742,7 +1746,7 @@ fn ended_header(count: usize, failed: usize, shown: bool, cx: &App) -> Stateful<
                 .when(failed > 0, |line| line.child(div().text_color(c.destructive).child(format!("{failed} failed"))))
                 .child(div().flex_1().min_w(px(6.)))
                 .child(
-                    icons::symbol(if shown { "chevron-down" } else { "chevron-right" }, 10.)
+                    icons::symbol(if shown { "chevron-down" } else { "chevron-right" }, IconSize::Xs)
                         .text_color(c.muted_stronger_foreground),
                 ),
         )

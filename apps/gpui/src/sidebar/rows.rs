@@ -15,7 +15,7 @@ use crate::models::{
     shortened,
 };
 use crate::store::{ListedDraft, Selection, stage_label};
-use crate::theme::{ControlSize, Opacity, Radius, Surface, colors};
+use crate::theme::{ControlSize, IconSize, Opacity, Radius, Surface, colors};
 use crate::ui::logos::{self, PullRequestLabel};
 use crate::ui::menu::Menu;
 use crate::ui::{ActionButton, Highlight, KeyCaps, Spinner, divider, icons, tabular_numbers, tooltip};
@@ -23,6 +23,8 @@ use crate::ui::{ActionButton, Highlight, KeyCaps, Spinner, divider, icons, tabul
 /// How tall the line under the drafts is, with the room around it.
 pub const DRAFTS_DIVIDER: f32 = 1. + 2. * (4. + ROW_GAP / 2.);
 pub const EMPTY_LINE_HEIGHT: f32 = 15.;
+/// The room between the parts of a row's status, and of its last line.
+const STATUS_GAP: f32 = 9.;
 
 /// The light under a row: the row layer when the pointer is over it, the selected one when it is
 /// selected, drawn inside the row's margin.
@@ -43,7 +45,7 @@ fn checkout_label(symbol: &'static str, text: String) -> Div {
         .flex()
         .items_center()
         .gap(px(3.))
-        .child(icons::symbol(symbol, 11.))
+        .child(icons::symbol(symbol, IconSize::Sm))
         .child(crate::ui::middle_truncated(text).text_size(px(11.)))
 }
 
@@ -66,7 +68,7 @@ impl Sidebar {
             return None;
         }
         let server = store.server(Some(server_id))?;
-        Some(div().pl(px(1.)).min_w_0().child(logos::server_label(server, 11., false, cx)).into_any_element())
+        Some(div().min_w_0().child(logos::server_label(server, 11., false, cx)).into_any_element())
     }
 
     /// A thread's pull request in its row. A click opens the thread and then the pull request's
@@ -143,7 +145,7 @@ impl Sidebar {
                     .items_center()
                     .gap(px(6.))
                     .text_color(c.muted_foreground)
-                    .child(logos::project_icon(project.as_ref(), 14., cx))
+                    .child(logos::project_icon(project.as_ref(), IconSize::Sm, cx))
                     .child(
                         div()
                             .min_w_0()
@@ -176,11 +178,18 @@ impl Sidebar {
                     .text_color(c.muted_stronger_foreground)
                     .children(self.where_label(project.as_ref(), &thread.server_id, &thread.cwd, cx))
                     .child(div().flex_1().min_w(px(6.)))
-                    .when_some(pull_request, |line, pull_request| {
-                        line.child(self.pull_request_label(&thread.id, &pull_request, true))
-                    })
-                    .children(self.server_label(&thread.server_id, cx))
-                    .child(logos::agent_icon(thread.agent, 12., cx)),
+                    .child(
+                        div()
+                            .min_w_0()
+                            .flex()
+                            .items_center()
+                            .gap(px(STATUS_GAP))
+                            .when_some(pull_request, |line, pull_request| {
+                                line.child(self.pull_request_label(&thread.id, &pull_request, true))
+                            })
+                            .children(self.server_label(&thread.server_id, cx))
+                            .child(logos::agent_icon(thread.agent, IconSize::Sm, cx)),
+                    ),
             )
     }
 
@@ -269,7 +278,7 @@ impl Sidebar {
                 .flex()
                 .items_center()
                 .gap(px(3.))
-                .child(Spinner::new(11.).render(cx))
+                .child(Spinner::new(IconSize::Sm).render(cx))
                 .child(div().text_size(px(11.)).font_weight(FontWeight::MEDIUM).child("Sending"))
                 .into_any_element()
         } else if hovering {
@@ -289,7 +298,7 @@ impl Sidebar {
                 .flex()
                 .items_center()
                 .gap(px(3.))
-                .child(icons::symbol("file", 11.))
+                .child(icons::symbol("file", IconSize::Sm))
                 .child(div().text_size(px(11.)).font_weight(FontWeight::MEDIUM).child("Draft"))
                 .into_any_element()
         };
@@ -322,7 +331,7 @@ impl Sidebar {
                             .items_center()
                             .gap(px(6.))
                             .text_color(c.muted_foreground)
-                            .child(logos::project_icon(project.as_ref(), 14., cx))
+                            .child(logos::project_icon(project.as_ref(), IconSize::Sm, cx))
                             .child(div().min_w_0().text_size(px(11.)).font_weight(FontWeight::MEDIUM).truncate().child(
                                 project.as_ref().map_or("No project".to_string(), |project| project.name.clone()),
                             ))
@@ -352,10 +361,19 @@ impl Sidebar {
                                 line.children(self.where_label(Some(&project), &project.server_id, &project.path, cx))
                             })
                             .child(div().flex_1().min_w(px(6.)))
-                            .when_some(project.as_ref(), |line, project| {
-                                line.children(self.server_label(&project.server_id, cx))
-                            })
-                            .when_some(agent, |line, agent| line.child(logos::agent_icon(agent, 12., cx))),
+                            .child(
+                                div()
+                                    .min_w_0()
+                                    .flex()
+                                    .items_center()
+                                    .gap(px(STATUS_GAP))
+                                    .when_some(project.as_ref(), |line, project| {
+                                        line.children(self.server_label(&project.server_id, cx))
+                                    })
+                                    .when_some(agent, |line, agent| {
+                                        line.child(logos::agent_icon(agent, IconSize::Sm, cx))
+                                    }),
+                            ),
                     ),
             )
             .on_hover(self.row_hover(key, None, cx))
@@ -424,7 +442,7 @@ impl Sidebar {
                     .flex()
                     .items_center()
                     .gap(px(7.))
-                    .child(logos::project_icon(project.as_ref(), 14., cx))
+                    .child(logos::project_icon(project.as_ref(), IconSize::Md, cx))
                     .child(
                         div()
                             .min_w_0()
@@ -502,7 +520,13 @@ impl Sidebar {
                         .flex()
                         .items_center()
                         .gap(px(7.))
-                        .child(div().w(px(14.)).flex().justify_center().child(icons::symbol("plus", 14.)))
+                        .child(
+                            div()
+                                .w(px(IconSize::Md.side()))
+                                .flex()
+                                .justify_center()
+                                .child(icons::symbol("plus", IconSize::Md)),
+                        )
                         .child(div().min_w_0().text_size(px(13.)).truncate().child("Create a thread")),
                     cx,
                 ),
@@ -535,7 +559,7 @@ impl Sidebar {
             return line.child(text).into_any_element();
         }
         if store.sidebar.message_search.searching {
-            return line.child(Spinner::new(12.).render(cx)).child("Searching messages").into_any_element();
+            return line.child(Spinner::new(IconSize::Sm).render(cx)).child("Searching messages").into_any_element();
         }
         line.child("No threads found").into_any_element()
     }
@@ -558,7 +582,7 @@ pub fn thread_status(thread: &ThreadInfo, read_only: bool, cx: &App) -> AnyEleme
                 .child(text),
         )
     };
-    let symbol = |name: &'static str| icons::symbol(name, 11.).into_any_element();
+    let symbol = |name: &'static str| icons::symbol(name, IconSize::Sm).into_any_element();
     if read_only {
         return label("Read-only".into(), c.warning, symbol("unlink"))
             .id(SharedString::from(format!("read-only-{}", thread.id)))
@@ -583,13 +607,9 @@ pub fn thread_status(thread: &ThreadInfo, read_only: bool, cx: &App) -> AnyEleme
             .id(SharedString::from(format!("waits-on-agents-{}", thread.id)))
             .flex()
             .items_center()
-            .gap(px(9.))
+            .gap(px(STATUS_GAP))
             .child(label(agents.to_string(), c.pending, symbol("bot")))
-            .child(label(
-                elapsed(thread.monitoring_since()),
-                c.process,
-                icons::symbol("circle-dot-dashed", 10.).into_any_element(),
-            ))
+            .child(label(elapsed(thread.monitoring_since()), c.process, symbol("circle-dot-dashed")))
             .tooltip(tooltip(help))
             .into_any_element();
     }
@@ -598,7 +618,7 @@ pub fn thread_status(thread: &ThreadInfo, read_only: bool, cx: &App) -> AnyEleme
         return div()
             .flex()
             .items_center()
-            .gap(px(9.))
+            .gap(px(STATUS_GAP))
             .when(agents > 0, |status| {
                 let help =
                     if agents == 1 { "1 agent is working".to_string() } else { format!("{agents} agents are working") };
@@ -608,11 +628,11 @@ pub fn thread_status(thread: &ThreadInfo, read_only: bool, cx: &App) -> AnyEleme
                         .tooltip(tooltip(help)),
                 )
             })
-            .child(label(elapsed(thread.updated_at), c.process, icons::symbol("circle-dashed", 10.).into_any_element()))
+            .child(label(elapsed(thread.updated_at), c.process, symbol("circle-dashed")))
             .into_any_element();
     }
     if let Some(stage) = thread.git_stage {
-        return label(stage_label(stage).into(), c.process, Spinner::new(11.).render(cx).into_any_element())
+        return label(stage_label(stage).into(), c.process, Spinner::new(IconSize::Sm).render(cx).into_any_element())
             .into_any_element();
     }
     if thread.monitoring {

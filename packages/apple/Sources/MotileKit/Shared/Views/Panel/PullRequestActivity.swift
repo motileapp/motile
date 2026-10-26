@@ -10,9 +10,9 @@ struct ActivityRow: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
-            Image(symbol, size: 12)
+            Image(symbol, size: .sm)
                 .foregroundStyle(entry.tone == .neutral ? Color.themeMutedForeground : entry.tone.color)
-                .frame(width: 18, height: Self.lineHeight)
+                .frame(height: Self.lineHeight)
             VStack(alignment: .leading, spacing: 6) {
                 byline
                 if !entry.commits.isEmpty {
@@ -138,10 +138,9 @@ struct ConversationCard: View {
             open = !isOpen
         } label: {
             HStack(spacing: 6) {
-                Image(isOpen ? .chevronDown : .chevronRight, size: 8)
+                Image(isOpen ? .chevronDown : .chevronRight, size: .xs)
                     .foregroundStyle(Color.themeMutedStrongerForeground)
-                    .frame(width: 10)
-                Image(FileSymbol.symbol(for: thread.path), size: 11)
+                Image(FileSymbol.symbol(for: thread.path), size: .sm)
                     .foregroundStyle(Color.themeMutedForeground)
                 Text(thread.path)
                     .font(.ui(size: 12, weight: .medium))

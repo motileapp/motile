@@ -6,7 +6,7 @@ use gpui_kit::*;
 
 use crate::models::agent_name;
 use crate::store::usage::{LimitWindow, LimitsReport, LimitsSection, Pace, Tone};
-use crate::theme::{Layer, Opacity, Radius, Surface, colors};
+use crate::theme::{IconSize, Layer, Opacity, Radius, Surface, colors};
 use crate::ui::{Chip, card_default, divider_on, icons, logos, tabular_numbers, tooltip};
 
 /// Narrower than this, a window puts its bar under its numbers.
@@ -68,7 +68,7 @@ fn header(section: &LimitsSection, cx: &App) -> Div {
         .flex()
         .items_center()
         .gap(px(8.))
-        .child(logos::agent_icon(section.agent, 16., cx))
+        .child(logos::agent_icon(section.agent, IconSize::Md, cx))
         .child(
             div()
                 .flex_shrink_0()
@@ -144,7 +144,7 @@ fn limit_row(id: (usize, usize), window: &LimitWindow, beside: bool, cx: &App) -
                     .gap(px(5.))
                     .text_size(px(12.))
                     .text_color(c.muted_stronger_foreground)
-                    .child(icons::symbol(symbol, 12.))
+                    .child(icons::symbol(symbol, IconSize::Sm))
                     .child(label)
                     .tooltip(tooltip(help)),
             )
@@ -188,7 +188,7 @@ fn limit_bar(id: (usize, usize), window: &LimitWindow, tone: Hsla, cx: &App) -> 
                     .flex()
                     .items_center()
                     .gap(px(3.))
-                    .child(icons::symbol("ticket", 11.))
+                    .child(icons::symbol("ticket", IconSize::Sm))
                     .child(credits.to_string())
                     .tooltip(tooltip(help)),
             )

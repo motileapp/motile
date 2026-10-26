@@ -25,7 +25,7 @@ impl Appearance {
     }
 }
 
-pub use crate::tokens::{Opacity, Radius, ShadowSize, Tokens};
+pub use crate::tokens::{IconSize, Opacity, Radius, ShadowSize, Tokens};
 
 /// The design tokens of one appearance, with the colours made from them. Every colour the app
 /// shows is one of these; a view never makes a colour of its own.
@@ -211,6 +211,20 @@ impl Surface {
     }
 }
 
+impl IconSize {
+    /// The icon that goes with text of `size`: about a fifth larger, as on the web.
+    pub fn text(size: f32) -> IconSize {
+        match size {
+            size if size < 11. => IconSize::Xs,
+            size if size < 13. => IconSize::Sm,
+            size if size < 15. => IconSize::Md,
+            size if size < 17. => IconSize::Lg,
+            size if size < 20. => IconSize::Xl,
+            _ => IconSize::Xxl,
+        }
+    }
+}
+
 /// How large a control is. Its height, symbol, text, padding and corners go together, so that
 /// no view picks them one by one.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
@@ -233,17 +247,25 @@ impl ControlSize {
         }
     }
 
-    pub fn symbol(self) -> f32 {
-        match self {
-            ControlSize::Small => 13.,
-            ControlSize::Regular => 14.,
-            ControlSize::Large => 16.,
-        }
+    /// Its symbol, as large as an icon beside its text is.
+    pub fn symbol(self) -> IconSize {
+        IconSize::text(self.text_size())
     }
 
     /// A symbol that should weigh less than the others, like the x that closes a tab.
-    pub fn small_symbol(self) -> f32 {
-        self.symbol() - 2.
+    pub fn small_symbol(self) -> IconSize {
+        match self {
+            ControlSize::Small | ControlSize::Regular => IconSize::Xs,
+            ControlSize::Large => IconSize::Sm,
+        }
+    }
+
+    /// The chevron that opens a menu, trimmed to what it draws.
+    pub fn chevron(self) -> IconSize {
+        match self {
+            ControlSize::Small | ControlSize::Regular => IconSize::Sm,
+            ControlSize::Large => IconSize::Md,
+        }
     }
 
     pub fn text_size(self) -> f32 {
@@ -284,23 +306,10 @@ impl ControlSize {
         }
     }
 
-    /// The side of the square its symbol is drawn in.
-    pub fn symbol_side(self) -> f32 {
-        symbol_side(self.symbol())
-    }
-
     /// How much nearer its side a symbol stands than words do, so that both look as far from it.
     pub fn symbol_outset(self) -> f32 {
-        (self.symbol_side() / 5. * 2.).round() / 2.
+        (self.symbol().side() / 5. * 2.).round() / 2.
     }
-}
-
-/// How much larger than the text beside it an icon's square is.
-pub const SYMBOL_SCALE: f32 = 1.2;
-
-/// The side of the square a symbol for text of `size` is drawn in.
-pub fn symbol_side(size: f32) -> f32 {
-    (size * SYMBOL_SCALE).round()
 }
 
 /// Whether the app is drawn dark now: the setting, or the system's appearance under "System".

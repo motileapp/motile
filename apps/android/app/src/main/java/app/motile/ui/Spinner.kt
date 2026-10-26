@@ -21,6 +21,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import app.motile.platform.Symbol
 import app.motile.theme.ControlSize
+import app.motile.theme.IconSize
 import app.motile.theme.LocalForeground
 import app.motile.theme.symbolSide
 import kotlin.math.ceil
@@ -34,24 +35,25 @@ object Spinner {
 }
 
 @Composable
-fun Spinner(size: Float = ControlSize.Regular.symbol, modifier: Modifier = Modifier, color: Color = LocalForeground.current) {
+fun Spinner(size: IconSize = ControlSize.Regular.symbol, modifier: Modifier = Modifier, color: Color = LocalForeground.current) {
     val angle by rememberInfiniteTransition(label = "spinner").animateFloat(
         initialValue = 0f,
         targetValue = 360f,
         animationSpec = infiniteRepeatable(tween((Spinner.turn * 1000).toInt(), easing = LinearEasing), RepeatMode.Restart),
         label = "turn",
     )
+    val side = symbolSide(size)
     Box(
-        modifier.size(symbolSide(size)).semantics { contentDescription = "Working" },
+        modifier.size(side).semantics { contentDescription = "Working" },
         contentAlignment = Alignment.Center,
     ) {
-        Icon(Symbol.Loader, size * Spinner.fill, Modifier.graphicsLayer { rotationZ = angle }, color)
+        Icon(Symbol.Loader, side * Spinner.fill, Modifier.graphicsLayer { rotationZ = angle }, color)
     }
 }
 
 /** A symbol that turns while `turning`, and finishes the turn it is on once that ends. */
 @Composable
-fun TurningSymbol(symbol: Symbol, turning: Boolean, size: Float = ControlSize.Regular.symbol, modifier: Modifier = Modifier, color: Color = LocalForeground.current) {
+fun TurningSymbol(symbol: Symbol, turning: Boolean, size: IconSize = ControlSize.Regular.symbol, modifier: Modifier = Modifier, color: Color = LocalForeground.current) {
     val angle = remember { Animatable(0f) }
     val turnMillis = Spinner.turn * 1000
     LaunchedEffect(turning) {

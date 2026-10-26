@@ -13,8 +13,10 @@ pub const SIDE: f32 = 24.;
 /// The dot is as large on every system as the composer strips' are, and cut out of what it lies on.
 const DOT: f32 = 6.;
 const CUT: f32 = 2.;
+/// The square of the agent's logo, or the bot when it has none, as a share of its circle.
+const MARK: f32 = 0.6;
 /// The ellipsis that stands for the agents there is no room for, as a share of its circle.
-const ELLIPSIS: f32 = 0.6;
+const ELLIPSIS: f32 = 0.72;
 
 /// The colour of how an agent is doing.
 pub fn state_color(state: AgentState, c: &Colors) -> Hsla {
@@ -70,12 +72,12 @@ impl RenderOnce for AgentAvatar {
         let side = self.side;
         let circle = if self.state.is_some() { side - CUT } else { side };
         let mark = match (self.more, self.agent) {
-            (true, _) => {
-                icons::symbol("ellipsis", (circle * ELLIPSIS).round()).text_color(c.muted_foreground).into_any_element()
-            }
-            (false, Some(agent)) => logos::agent_icon(agent, (circle * 0.56).round(), cx).into_any_element(),
+            (true, _) => icons::symbol_side("ellipsis", (circle * ELLIPSIS).round())
+                .text_color(c.muted_foreground)
+                .into_any_element(),
+            (false, Some(agent)) => logos::agent_icon_side(agent, (circle * MARK).round(), cx).into_any_element(),
             (false, None) => {
-                icons::symbol("bot", (circle * 0.48).round()).text_color(c.muted_foreground).into_any_element()
+                icons::symbol_side("bot", (circle * MARK).round()).text_color(c.muted_foreground).into_any_element()
             }
         };
         let disc = div().absolute().size(px(circle)).rounded_full();

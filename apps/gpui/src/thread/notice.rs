@@ -4,7 +4,7 @@ use gpui_kit::prelude::*;
 use gpui_kit::*;
 
 use crate::store::{Notice, Store};
-use crate::theme::{ControlSize, Layer, Opacity, Radius, ShadowSize, Surface, colors};
+use crate::theme::{ControlSize, IconSize, Layer, Opacity, Radius, ShadowSize, Surface, colors};
 use crate::ui::rich_text::RichText;
 use crate::ui::{ActionButton, FadingScroll, Spinner, Variant, icons};
 
@@ -76,10 +76,10 @@ pub fn notice_view(store: &Entity<Store>, notice: &Notice, cx: &App) -> impl Int
         .gap(px(10.))
         .child(div().h(px(TITLE_HEIGHT)).flex_shrink_0().flex().items_center().map(|icon| {
             if notice.pending {
-                return icon.child(Spinner::new(15.).render(cx));
+                return icon.child(Spinner::new(IconSize::Md).render(cx));
             }
             icon.child(
-                icons::symbol(if notice.failed { "circle-alert" } else { "circle-check" }, 15.)
+                icons::symbol(if notice.failed { "circle-alert" } else { "circle-check" }, IconSize::Md)
                     .text_color(if notice.failed { c.destructive } else { c.success }),
             )
         }))

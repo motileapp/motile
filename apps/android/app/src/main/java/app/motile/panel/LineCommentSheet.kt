@@ -23,6 +23,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.motile.LocalStore
 import app.motile.core.string
+import app.motile.theme.iconSize
 import app.motile.theme.ControlSize
 import app.motile.theme.LocalPalette
 import app.motile.theme.Radius
@@ -70,7 +71,7 @@ fun LineCommentSheet(target: PanelTarget, page: PullRequestPage, commented: Comm
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(FileSymbol.symbol(commented.path), 12f, color = palette.mutedForeground)
+                Icon(FileSymbol.symbol(commented.path), iconSize(text = 13f), color = palette.mutedForeground)
                 Text(
                     commented.path, Modifier.weight(1f, fill = false), size = 13f, weight = FontWeight.SemiBold,
                     maxLines = 1, overflow = TextOverflow.StartEllipsis,

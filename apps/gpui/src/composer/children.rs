@@ -10,7 +10,7 @@ use super::strips::{HEIGHT, margin, strip};
 use crate::models::{ask_label, ask_phrase};
 use crate::panel::view::agent_time;
 use crate::store::Store;
-use crate::theme::{self, ControlSize, Surface, colors};
+use crate::theme::{self, ControlSize, IconSize, Surface, colors};
 use crate::ui::{ActionButton, AgentAvatar, icons, text_width};
 
 const TEXT_SIZE: f32 = 12.5;
@@ -30,7 +30,13 @@ pub fn children_strip(
     let short = if count == 1 { format!("Agent {}", ask_phrase(first.ask)) } else { text.clone() };
     let (store, thread_id) = (store.clone(), first.thread_id.clone());
     strip(true, Some(HEIGHT), cx)
-        .child(div().ml(px(14.)).mr(px(7.)).flex_shrink_0().child(icons::symbol(symbol, 13.).text_color(c.warning)))
+        .child(
+            div()
+                .ml(px(14.))
+                .mr(px(7.))
+                .flex_shrink_0()
+                .child(icons::symbol(symbol, IconSize::text(TEXT_SIZE)).text_color(c.warning)),
+        )
         .child(
             div()
                 .id("children-waiting")

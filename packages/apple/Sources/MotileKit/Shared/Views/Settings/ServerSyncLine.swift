@@ -5,12 +5,12 @@ import SwiftUI
 struct ServerSyncLine: View {
     let sync: ServerSync
     var size: CGFloat = 11.5
+    private var symbolSize: IconSize { IconSize(text: size) }
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 30)) { context in
             HStack(spacing: 5) {
                 symbol
-                    .frame(width: size, height: size)
                 Text(sync.line(now: context.date.timeIntervalSince1970))
                     .font(.ui(size: size))
                     .monospacedDigit()
@@ -25,16 +25,16 @@ struct ServerSyncLine: View {
     @ViewBuilder private var symbol: some View {
         switch sync.state {
         case .synced:
-            Image(.check, size: size)
+            Image(.check, size: symbolSize)
                 .foregroundStyle(Color.themeSuccess)
         case .copying:
-            Spinner(size: size)
+            Spinner(size: symbolSize)
                 .foregroundStyle(Color.themeMutedForeground)
         case .failed:
-            Image(.triangleAlert, size: size - 1)
+            Image(.triangleAlert, size: symbolSize)
                 .foregroundStyle(Color.themeWarning)
         case .waiting, .off:
-            Image(.circleDashed, size: size - 1)
+            Image(.circleDashed, size: symbolSize)
                 .foregroundStyle(Color.themeMutedForeground)
         }
     }

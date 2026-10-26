@@ -40,6 +40,9 @@ import app.motile.core.Time
 import app.motile.platform.Platform
 import app.motile.platform.Symbol
 import app.motile.platform.scaled
+import app.motile.theme.IconSize
+import app.motile.theme.symbolSide
+import app.motile.theme.iconSize
 import app.motile.theme.LocalPalette
 import app.motile.ui.ActionButton
 import app.motile.ui.ActionMenu
@@ -151,8 +154,9 @@ private fun PullRequestListRow(row: PullRequestRow, target: PanelTarget, linked:
                 Modifier.padding(panelRowMargin).padding(horizontal = 10.dp, vertical = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                Box(Modifier.size(width = 16.dp, height = scaled(18f).dp), contentAlignment = Alignment.Center) {
-                    Icon(row.state.symbol, 13f, color = row.state.color(palette))
+                val stateSize = iconSize(text = 13f)
+                Box(Modifier.size(width = symbolSide(stateSize), height = scaled(18f).dp), contentAlignment = Alignment.Center) {
+                    Icon(row.state.symbol, stateSize, color = row.state.color(palette))
                 }
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.Top) {
@@ -188,7 +192,7 @@ private fun Signals(row: PullRequestRow) {
                 Tone.Danger -> Symbol.CircleAlert
                 else -> Symbol.Eye
             }
-            Icon(symbol, 11f, Modifier.semantics { contentDescription = label }, color = tone.color)
+            Icon(symbol, IconSize.Sm, Modifier.semantics { contentDescription = label }, color = tone.color)
         }
         row.checks?.let { checks ->
             Box(Modifier.size(7.dp).background(checks.color, CircleShape).semantics { contentDescription = row.checksLabel ?: "" })

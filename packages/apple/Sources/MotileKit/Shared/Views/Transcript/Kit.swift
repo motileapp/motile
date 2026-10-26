@@ -229,10 +229,10 @@ final class SpinnerView: LayerView {
     private let side: CGFloat
     var tint: PlatformColor = Theme.mutedForeground { didSet { repaint() } }
 
-    init(size: CGFloat) {
-        side = PlatformImage.symbolSide(size * Self.fill)
+    init(size: IconSize) {
+        side = (PlatformImage.symbolSide(size) * Self.fill).rounded()
         super.init(frame: .zero)
-        loader.path = PlatformImage.symbolPath(.loader, size: size * Self.fill)
+        loader.path = PlatformImage.symbolPath(.loader, side: side)
     }
 
     required init?(coder: NSCoder) { fatalError("not used") }
@@ -327,10 +327,14 @@ final class ProgressRingView: LayerView {
 enum TintedSymbol {
     private static var cache: [String: PlatformImage] = [:]
 
-    static func image(_ name: Symbol, size: CGFloat, color: PlatformColor) -> PlatformImage {
-        let key = "\(name.rawValue)/\(size)/\(ObjectIdentifier(color).hashValue)"
+    static func image(_ name: Symbol, size: IconSize, color: PlatformColor) -> PlatformImage {
+        image(name, side: PlatformImage.symbolSide(size), color: color)
+    }
+
+    static func image(_ name: Symbol, side: CGFloat, color: PlatformColor) -> PlatformImage {
+        let key = "\(name.rawValue)/\(side)/\(ObjectIdentifier(color).hashValue)"
         if let cached = cache[key] { return cached }
-        let symbol = PlatformImage.symbol(name, size: size)
+        let symbol = PlatformImage.symbol(name, side: side)
         #if os(macOS)
         let tinted = NSImage(size: symbol.size, flipped: false) { rect in
             symbol.draw(in: rect)
@@ -346,8 +350,12 @@ enum TintedSymbol {
     }
 
     /// Draws the symbol in the middle of `rect`.
-    static func draw(_ name: Symbol, size: CGFloat, color: PlatformColor, in rect: CGRect) {
-        let image = image(name, size: size, color: color)
+    static func draw(_ name: Symbol, size: IconSize, color: PlatformColor, in rect: CGRect) {
+        draw(name, side: PlatformImage.symbolSide(size), color: color, in: rect)
+    }
+
+    static func draw(_ name: Symbol, side: CGFloat, color: PlatformColor, in rect: CGRect) {
+        let image = image(name, side: side, color: color)
         let origin = CGPoint(x: (rect.midX - image.size.width / 2).rounded(), y: (rect.midY - image.size.height / 2).rounded())
         image.drawUpright(in: CGRect(origin: origin, size: image.size))
     }

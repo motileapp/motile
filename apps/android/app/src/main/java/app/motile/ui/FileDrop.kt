@@ -35,6 +35,7 @@ import app.motile.composer.PickedFile
 import app.motile.core.AppStore
 import app.motile.platform.Platform
 import app.motile.platform.Symbol
+import app.motile.theme.IconSize
 import app.motile.theme.Radius
 import app.motile.theme.Theme
 import kotlin.concurrent.thread
@@ -112,7 +113,7 @@ private fun DropCover() {
         verticalArrangement = Arrangement.spacedBy((12 * Platform.scale).dp, Alignment.CenterVertically),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Icon(Symbol.Paperclip, 28f)
+        Icon(Symbol.Paperclip, IconSize.Display)
         Text("Drop files here", size = 17f, weight = FontWeight.SemiBold)
     }
 }

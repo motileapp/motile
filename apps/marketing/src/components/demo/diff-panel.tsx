@@ -48,7 +48,7 @@ export function DiffPanel({
         )}
       >
         <span className="flex h-7 items-center gap-1.5 rounded-md bg-background-accent-stronger pr-0.5 pl-[9px] text-[12px] font-medium">
-          <DiffIcon className="size-[11px]" />
+          <DiffIcon className="size-3.5" />
           Diff
           <button
             type="button"
@@ -56,7 +56,7 @@ export function DiffPanel({
             aria-label="Close"
             className="flex size-6 items-center justify-center rounded-sm text-muted-foreground hover:bg-background-accent-strongest hover:text-foreground"
           >
-            <XIcon className="size-[13px]" />
+            <XIcon className="size-3" />
           </button>
         </span>
         <span className="flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-background-accent hover:text-foreground">
@@ -149,17 +149,19 @@ function File({
       >
         <span className="flex w-7 justify-center text-muted-stronger-foreground">
           {closed ? (
-            <ChevronRightIcon className="size-[9px]" />
+            <ChevronRightIcon className="size-3" />
           ) : (
-            <ChevronDownIcon className="size-[9px]" />
+            <ChevronDownIcon className="size-3" />
           )}
         </span>
-        <FileTextIcon className="mr-2 size-[11px] shrink-0 text-muted-foreground" />
+        <FileTextIcon className="mr-2 size-3.5 shrink-0 text-muted-foreground" />
         <span className="truncate">
           <span className="text-muted-foreground">{folderOf(file.path)}</span>
           <span className="font-medium">{nameOf(file.path)}</span>
           {file.isNew && (
-            <span className="ml-3 text-[11.5px] text-muted-stronger-foreground">new</span>
+            <span className="ml-3 text-[11.5px] text-muted-stronger-foreground">
+              new
+            </span>
           )}
         </span>
         <span className="mr-1 ml-auto pl-2.5">

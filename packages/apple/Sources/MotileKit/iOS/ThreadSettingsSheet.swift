@@ -62,7 +62,7 @@ struct ThreadSettingsSheet: View {
                                     .foregroundStyle(Color.themeForeground)
                                 Spacer()
                                 if model.id == current?.id && id == account?.id {
-                                    Image(.check, size: 13)
+                                    Image(.check, size: .md)
                                         .foregroundStyle(Color.themeForeground)
                                 }
                             }
@@ -73,10 +73,10 @@ struct ThreadSettingsSheet: View {
                         withAnimation { _ = listed.remove(id) ?? listed.insert(id).memberAfterInsert }
                     } label: {
                         HStack(spacing: 6) {
-                            AgentIcon(agent: choices.account.agent, size: 14)
+                            AgentIcon(agent: choices.account.agent, size: .sm)
                             Text(choices.title)
                             Spacer()
-                            Image(.chevronDown, size: 10.5)
+                            Image(.chevronDown, size: .sm)
                                 .rotationEffect(.degrees(listed.contains(id) ? 180 : 0))
                         }
                         .frame(minHeight: 32)
@@ -154,7 +154,7 @@ struct ThreadSettingsSheet: View {
                     } label: {
                         HStack(spacing: 8) {
                             LabeledContent(title, value: value)
-                            Image(.chevronRight, size: 11)
+                            Image(.chevronRight, size: .sm)
                                 .foregroundStyle(Color.themeMutedStrongerForeground)
                         }
                         .foregroundStyle(Color.themeForeground)
@@ -188,7 +188,7 @@ private struct SymbolValue: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Image(symbol, size: 13)
+            Image(symbol, size: .md)
             Text(title)
         }
     }
@@ -217,7 +217,7 @@ private struct ChoiceList<Option: Hashable>: View {
                                 .foregroundStyle(Color.themeForeground)
                             Spacer()
                             if option == chosen {
-                                Image(.check, size: 13)
+                                Image(.check, size: .md)
                                     .foregroundStyle(Color.themeForeground)
                             }
                         }

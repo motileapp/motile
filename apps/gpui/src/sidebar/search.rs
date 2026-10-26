@@ -11,7 +11,7 @@ use super::rows::{quieted, thread_status};
 use super::{BOTTOM_PADDING, FIRST_LINE_HEIGHT, SIDE_PADDING, Sidebar, TOP_PADDING, row_margin};
 use crate::models::{ago, last_component};
 use crate::store::SearchResult;
-use crate::theme::{Radius, colors};
+use crate::theme::{IconSize, Radius, colors};
 use crate::ui::logos::{self, PullRequestLabel};
 use crate::ui::{Highlight, KeyCaps, icons};
 
@@ -74,7 +74,7 @@ impl Sidebar {
                 .items_center()
                 .gap(px(3.))
                 .text_color(c.muted_foreground)
-                .child(icons::symbol("file", 11.))
+                .child(icons::symbol("file", IconSize::Sm))
                 .child(div().text_size(px(11.)).font_weight(FontWeight::MEDIUM).child("Draft")),
             SearchResult::Thread(thread, _) => {
                 let read_only = store.on_removed_server(thread);
@@ -150,7 +150,11 @@ impl Sidebar {
                             .flex()
                             .items_center()
                             .gap(px(6.))
-                            .child(quieted(logos::project_icon(project.as_ref(), 14., cx), done && !highlighted, cx))
+                            .child(quieted(
+                                logos::project_icon(project.as_ref(), IconSize::Md, cx),
+                                done && !highlighted,
+                                cx,
+                            ))
                             .child(
                                 div()
                                     .min_w_0()

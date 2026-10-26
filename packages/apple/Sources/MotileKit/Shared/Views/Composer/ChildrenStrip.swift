@@ -11,7 +11,7 @@ struct ChildrenStrip: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            Image(first.ask.symbol, size: 13)
+            Image(first.ask.symbol, size: .sm)
                 .foregroundStyle(Color.themeWarning)
                 .padding(.leading, 14)
                 .padding(.trailing, 7)

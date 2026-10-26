@@ -10,7 +10,7 @@ use std::rc::Rc;
 use gpui_kit::prelude::*;
 use gpui_kit::*;
 
-use crate::theme::{Colors, ControlSize, Layer, Opacity, Radius, ShadowSize, Surface, colors};
+use crate::theme::{Colors, ControlSize, IconSize, Layer, Opacity, Radius, ShadowSize, Surface, colors};
 use crate::ui::menu::{Anchor, Menu};
 use crate::ui::{OnClick, tooltip};
 use crate::ui::{icons, motion};
@@ -250,8 +250,8 @@ pub struct ControlLabel {
     pub fills: bool,
     /// Where its words sit when it fills.
     pub alignment: Alignment,
-    /// The symbol's or the picture's size where it isn't the one that goes with `size`.
-    pub symbol_size: Option<f32>,
+    /// The side of the symbol's or the picture's square where it isn't the one that goes with `size`.
+    pub symbol_size: Option<IconSize>,
     /// The room between its symbol and its words where it isn't the one that goes with `size`.
     pub gap: Option<f32>,
     /// The room between its words and its sides where it isn't the one that goes with `size`.
@@ -300,7 +300,7 @@ impl ControlLabel {
         self.title.is_none() && !self.chevron
     }
 
-    fn mark_size(&self) -> f32 {
+    fn mark_size(&self) -> IconSize {
         self.symbol_size.unwrap_or(self.size.symbol())
     }
 
@@ -312,9 +312,8 @@ impl ControlLabel {
         let (leading, trailing) = self.outsets();
         let (leading, trailing) = if wordless { (0., 0.) } else { (padding - leading, padding - trailing) };
         let mark = self.icon.as_ref().map(|icon| match icon {
-            ControlIcon::Picture(_) => self.symbol_size.unwrap_or(size.symbol_side()),
+            ControlIcon::Picture(_) | ControlIcon::Symbol(_) => self.mark_size().side(),
             ControlIcon::Pictures(_, width) => *width,
-            ControlIcon::Symbol(_) => crate::theme::symbol_side(self.mark_size()),
         });
         let words = self.title.as_ref().map(|title| {
             let text = match &self.tinted {
@@ -330,7 +329,7 @@ impl ControlLabel {
         };
         let has_stack = mark.is_some() || words.is_some();
         let chevron = match self.chevron {
-            true => crate::theme::symbol_side(size.text_size()) * 14. / 24. + if has_stack { size.gap() } else { 0. },
+            true => size.chevron().side() * 14. / 24. + if has_stack { size.gap() } else { 0. },
             false => 0.,
         };
         (leading + self.picture_inset() + stack + chevron + trailing).max(size.height())
@@ -346,7 +345,7 @@ impl ControlLabel {
     /// A picture smaller than the square stays centred where the square would be.
     fn picture_inset(&self) -> f32 {
         match (&self.icon, self.symbol_size) {
-            (Some(ControlIcon::Picture(_)), Some(size)) => (self.size.symbol_side() - size) / 2.,
+            (Some(ControlIcon::Picture(_)), Some(size)) => (self.size.symbol().side() - size.side()) / 2.,
             _ => 0.,
         }
     }
@@ -359,7 +358,6 @@ impl ControlLabel {
         let mark_size = self.mark_size();
         let side_padding = self.padding.unwrap_or(size.padding());
         let picture_inset = self.picture_inset();
-        let picture_side = self.symbol_size.unwrap_or(size.symbol_side());
         let gap = self.gap.unwrap_or(size.gap());
         let waiting_title = if self.pending { self.pending_title.clone() } else { None };
         let spins = self.pending && has_icon;
@@ -387,7 +385,7 @@ impl ControlLabel {
                         ControlIcon::Symbol(name) => row.child(icons::symbol(name, mark_size)),
                         ControlIcon::Picture(picture) => row.child(
                             div()
-                                .size(px(picture_side))
+                                .size(px(mark_size.side()))
                                 .flex_shrink_0()
                                 .flex()
                                 .items_center()
@@ -457,7 +455,7 @@ impl ControlLabel {
                 label.child(stack)
             })
             .when(self.chevron, |label| {
-                label.child(icons::trimmed_chevron(size.text_size()).text_color(c.muted_stronger_foreground))
+                label.child(icons::trimmed_chevron(size.chevron()).text_color(c.muted_stronger_foreground))
             })
             .when(overlay_spinner, |label| {
                 label.child(
@@ -475,14 +473,14 @@ impl ControlLabel {
 
 /// A symbol that turns while `turning`, as an arrow that goes round does in place of the spinner,
 /// and finishes the turn it is on once that ends.
-pub fn turning_symbol(name: SharedString, size: f32, turning: bool) -> TurningSymbol {
+pub fn turning_symbol(name: SharedString, size: IconSize, turning: bool) -> TurningSymbol {
     TurningSymbol { name, size, turning }
 }
 
 #[derive(IntoElement)]
 pub struct TurningSymbol {
     name: SharedString,
-    size: f32,
+    size: IconSize,
     turning: bool,
 }
 
@@ -658,7 +656,7 @@ impl ActionButton {
     }
 
     /// The symbol in another size in a button of the same size.
-    pub fn symbol_size(mut self, size: f32) -> Self {
+    pub fn symbol_size(mut self, size: IconSize) -> Self {
         self.label.symbol_size = Some(size);
         self
     }
@@ -784,7 +782,7 @@ impl ActionButton {
         let line = window.text_style().line_height.to_pixels(px(size.text_size()).into(), window.rem_size());
         let vertical = (size.height() - f32::from(line)) / 2.;
         let leading = match self.label.wordless() {
-            true => (size.height() - size.symbol_side()) / 2.,
+            true => (size.height() - size.symbol().side()) / 2.,
             false => {
                 self.label.padding.unwrap_or(size.padding())
                     - if self.label.icon.is_some() { size.symbol_outset() } else { 0. }
@@ -1063,7 +1061,7 @@ impl RenderOnce for Select {
 
 /// What is under way: Lucide's loader, turning, in the colour of the text around it.
 pub struct Spinner {
-    size: f32,
+    size: IconSize,
 }
 
 impl Spinner {
@@ -1073,7 +1071,7 @@ impl Spinner {
     /// How long a turn takes, in seconds.
     pub const TURN: f32 = 1.2;
 
-    pub fn new(size: f32) -> Self {
+    pub fn new(size: IconSize) -> Self {
         Self { size }
     }
 
@@ -1082,9 +1080,9 @@ impl Spinner {
     }
 
     pub fn render(self, _: &App) -> impl IntoElement {
-        let side = crate::theme::symbol_side(self.size);
+        let side = self.size.side();
         div().size(px(side)).flex_shrink_0().flex().items_center().justify_center().child(
-            icons::symbol("loader", self.size * Self::FILL).with_animation(
+            icons::symbol_side("loader", side * Self::FILL).with_animation(
                 "spinner",
                 Animation::new(std::time::Duration::from_secs_f32(Self::TURN)).repeat(),
                 |icon, delta| icon.rotate(delta * 360.),
@@ -1114,6 +1112,7 @@ pub struct Chip {
 
 impl Chip {
     pub const HEIGHT: f32 = 20.;
+    pub const SYMBOL: IconSize = IconSize::Sm;
 
     pub fn new(title: impl Into<SharedString>) -> Self {
         Self {
@@ -1202,7 +1201,7 @@ impl RenderOnce for Chip {
             .gap(px(5.))
             .text_color(foreground)
             .when_some(self.dot, |chip, dot| chip.child(div().size(px(7.)).rounded_full().bg(dot).flex_shrink_0()))
-            .when_some(self.icon, |chip, icon| chip.child(icons::symbol(icon, 11.)))
+            .when_some(self.icon, |chip, icon| chip.child(icons::symbol(icon, Self::SYMBOL)))
             .child(
                 div()
                     .text_size(px(11.5))

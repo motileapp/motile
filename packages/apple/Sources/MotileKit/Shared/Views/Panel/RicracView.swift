@@ -28,7 +28,7 @@ private struct RicracConnect: View {
     var body: some View {
         let ricrac = store.ricrac
         VStack(spacing: 16) {
-            Image(.ricrac, size: 28)
+            Image(.ricrac, size: .display)
                 .foregroundStyle(Color.themeForeground)
             VStack(spacing: 6) {
                 Text("Connect Ricrac")

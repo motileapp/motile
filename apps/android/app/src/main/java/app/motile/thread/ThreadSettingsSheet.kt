@@ -39,6 +39,8 @@ import app.motile.core.AppStore
 import app.motile.core.Preferences
 import app.motile.core.Project
 import app.motile.platform.Symbol
+import app.motile.theme.IconSize
+import app.motile.theme.iconSize
 import app.motile.theme.LocalForeground
 import app.motile.theme.Radius
 import app.motile.theme.SurfaceBox
@@ -56,6 +58,10 @@ import app.motile.ui.pressable
 
 private const val rowText = 15f
 private const val noteText = 12f
+/** A row's symbol and check, and the lighter chevron that opens what it chooses, as the iOS app's list draws them. */
+private val rowSymbol = IconSize.Md
+private val rowChevron = IconSize.Sm
+private val noteSymbol = iconSize(text = noteText)
 private val rowPadding = 16.dp
 
 /** A page of the sheet other than its first, which goes back to it. */
@@ -119,7 +125,7 @@ fun ThreadSettingsSheet() {
 private fun PageBar(title: String, back: (() -> Unit)? = null, close: (() -> Unit)? = null) {
     Box(Modifier.fillMaxWidth().height(GlassButton.side + 20.dp).padding(horizontal = 12.dp), contentAlignment = Alignment.Center) {
         if (back != null) {
-            GlassButton(Symbol.ChevronLeft, "Back", onClick = back, modifier = Modifier.align(Alignment.CenterStart), symbolSize = 16f)
+            GlassButton(Symbol.ChevronLeft, "Back", onClick = back, modifier = Modifier.align(Alignment.CenterStart))
         } else if (close != null) {
             SheetCloseButton(Modifier.align(Alignment.CenterStart), onClose = close)
         }
@@ -147,9 +153,9 @@ private fun Models() {
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    AgentIcon(choices.account.agent, size = 14f)
+                    AgentIcon(choices.account.agent, size = noteSymbol)
                     Text(choices.title, Modifier.weight(1f), size = noteText, color = palette.mutedForeground, maxLines = 1)
-                    Icon(Symbol.ChevronDown, 10.5f, Modifier.rotate(turn), color = palette.mutedForeground)
+                    Icon(Symbol.ChevronDown, noteSymbol, Modifier.rotate(turn), color = palette.mutedForeground)
                 }
             }
             AnimatedVisibility(open) {
@@ -157,7 +163,7 @@ private fun Models() {
                     {
                         ListRow({ store.setModel(model, choices.account) }) {
                             Text(model.name, Modifier.weight(1f), size = rowText)
-                            if (model.id == current?.id && id == account?.id) Icon(Symbol.Check, 13f)
+                            if (model.id == current?.id && id == account?.id) Icon(Symbol.Check, rowSymbol)
                         }
                     }
                 })
@@ -236,7 +242,7 @@ private fun ServerPicker(project: Project) {
         ) {
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(store.server(project.serverID)?.name ?: "", size = rowText, color = palette.primary)
-                Icon(Symbol.ChevronDown, 11f, color = palette.primary)
+                Icon(Symbol.ChevronDown, rowChevron, color = palette.primary)
             }
         }
     }
@@ -258,7 +264,7 @@ private fun WorksIn() {
         ) {
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(if (worktree) "New worktree" else "Current checkout", size = rowText, color = palette.primary)
-                Icon(Symbol.ChevronDown, 11f, color = palette.primary)
+                Icon(Symbol.ChevronDown, rowChevron, color = palette.primary)
             }
         }
     }
@@ -272,7 +278,7 @@ private fun <T> ChoiceList(options: List<T>, chosen: T, label: (T) -> String, sy
             {
                 ListRow({ choose(option) }) {
                     Box(Modifier.weight(1f)) { SymbolValue(label(option), symbol(option)) }
-                    if (option == chosen) Icon(Symbol.Check, 13f)
+                    if (option == chosen) Icon(Symbol.Check, rowSymbol)
                 }
             }
         })
@@ -340,7 +346,7 @@ private fun Labeled(title: String, onClick: () -> Unit, value: @Composable () ->
         Text(title, size = rowText)
         Spacer(Modifier.weight(1f))
         CompositionLocalProvider(LocalForeground provides palette.mutedForeground) { value() }
-        Icon(Symbol.ChevronRight, 11f, color = palette.mutedStrongerForeground)
+        Icon(Symbol.ChevronRight, rowChevron, color = palette.mutedStrongerForeground)
     }
 }
 
@@ -348,7 +354,7 @@ private fun Labeled(title: String, onClick: () -> Unit, value: @Composable () ->
 @Composable
 private fun SymbolValue(title: String, symbol: Symbol) {
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-        Icon(symbol, 13f)
+        Icon(symbol, rowSymbol)
         Text(title, size = rowText, maxLines = 1)
     }
 }

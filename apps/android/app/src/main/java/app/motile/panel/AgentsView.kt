@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
@@ -37,6 +36,7 @@ import app.motile.core.ThreadInfo
 import app.motile.core.Time
 import app.motile.core.ToolStatus
 import app.motile.platform.Symbol
+import app.motile.theme.iconSize
 import app.motile.theme.ControlSize
 import app.motile.theme.LocalPalette
 import app.motile.theme.LocalSurface
@@ -137,7 +137,7 @@ private fun ParentRow(thread: ThreadInfo) {
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box(Modifier.width(16.dp), contentAlignment = Alignment.Center) { Icon(Symbol.CornerLeftUp, 12f, color = palette.foreground) }
+            Icon(Symbol.CornerLeftUp, iconSize(text = 13f), color = palette.foreground)
             Text("Go back to parent thread", Modifier.weight(1f), size = 13f, weight = FontWeight.Medium, color = palette.foreground, maxLines = 1)
         }
     }
@@ -158,7 +158,7 @@ private fun EndedHeader(agents: List<AgentInfo>, shown: Boolean, toggle: () -> U
             Text("${agents.size}", size = 12f, color = palette.mutedStrongerForeground, maxLines = 1)
             if (failed > 0) Text("$failed failed", size = 12f, color = palette.destructive, maxLines = 1)
             Spacer(Modifier.weight(1f))
-            Icon(if (shown) Symbol.ChevronDown else Symbol.ChevronRight, 10f, color = palette.mutedStrongerForeground)
+            Icon(if (shown) Symbol.ChevronDown else Symbol.ChevronRight, iconSize(text = 12f), color = palette.mutedStrongerForeground)
         }
     }
 }

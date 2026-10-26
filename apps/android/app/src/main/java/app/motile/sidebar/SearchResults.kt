@@ -32,6 +32,7 @@ import app.motile.core.searchResults
 import app.motile.platform.Platform
 import app.motile.platform.Symbol
 import app.motile.platform.scaled
+import app.motile.theme.iconSize
 import app.motile.theme.ControlSize
 import app.motile.theme.LocalForeground
 import app.motile.theme.Opacity
@@ -99,7 +100,7 @@ fun SearchEmptyLine(size: Float) {
     CompositionLocalProvider(LocalForeground provides color) {
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
             if (store.messageSearch.searching) {
-                Spinner(size)
+                Spinner(iconSize(text = size))
                 Text("Searching messages", size = size)
             } else {
                 Text("No threads found", size = size)
@@ -142,7 +143,7 @@ fun SearchResultRow(
                 .padding(start = ThreadRow.sidePadding, end = ThreadRow.sidePadding, top = ThreadRow.topPadding, bottom = ThreadRow.bottomPadding),
         ) {
             Row(Modifier.height(scaled(22f).dp), verticalAlignment = Alignment.CenterVertically) {
-                ProjectIcon(project, Modifier.opacity(Opacity.Disabled, on = isDone && !highlighted), size = 14f)
+                ProjectIcon(project, Modifier.opacity(Opacity.Disabled, on = isDone && !highlighted), size = iconSize(text = 13f))
                 Text(
                     title, Modifier.weight(1f).padding(start = 6.dp, end = 6.dp), size = 13f, weight = FontWeight.Medium, maxLines = 1,
                     color = when {
@@ -174,7 +175,7 @@ private fun ResultStatus(result: SearchResult, jump: String?) {
     when (result) {
         is SearchResult.Draft -> CompositionLocalProvider(LocalForeground provides palette.mutedForeground) {
             Row(horizontalArrangement = Arrangement.spacedBy(3.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(Symbol.File, 11f)
+                Icon(Symbol.File, iconSize(text = 11f))
                 Text("Draft", size = 11f, weight = FontWeight.Medium)
             }
         }

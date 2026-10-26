@@ -8,7 +8,7 @@ use gpui_kit::*;
 use crate::media::pictures::{Picture, Pictures};
 use crate::models::{Attachment, UploadState};
 use crate::store::Store;
-use crate::theme::{Layer, Opacity, Radius, ShadowSize, Surface, colors};
+use crate::theme::{IconSize, Layer, Opacity, Radius, ShadowSize, Surface, colors};
 use crate::ui::{ActionButton, Variant, icons};
 
 pub const TILE: f32 = 64.;
@@ -93,7 +93,7 @@ fn tile(attachment: &Attachment, store: Entity<Store>, cx: &mut App) -> Stateful
                     div()
                         .rounded_full()
                         .shadow(c.shadow(ShadowSize::Sm, Opacity::ShadowStrongest))
-                        .child(icons::symbol("play", 16.).text_color(c.foreground_over_picture)),
+                        .child(icons::symbol("play", IconSize::Lg).text_color(c.foreground_over_picture)),
                 ),
             )
         })
@@ -135,7 +135,7 @@ fn chip(attachment: &Attachment, store: &Entity<Store>, cx: &App) -> impl IntoEl
         .border_1()
         .border_color(c.border_accent)
         .text_size(px(12.))
-        .child(icons::symbol("file", 12.))
+        .child(icons::symbol("file", IconSize::Sm))
         .child(div().whitespace_nowrap().child(attachment.name.clone()))
         .when_some(attachment.bytes, |chip, bytes| {
             chip.child(div().text_color(c.muted_foreground).child(file_size(bytes)))
@@ -174,7 +174,7 @@ fn continues_chip(title: &str, store: &Entity<Store>, cx: &App) -> impl IntoElem
         .border_1()
         .border_color(c.border_accent)
         .text_size(px(12.))
-        .child(icons::symbol("history", 12.))
+        .child(icons::symbol("history", IconSize::Sm))
         .child(div().max_w(px(CONTINUES_WIDTH)).truncate().child(format!("Continues “{title}”")))
         .child(
             ActionButton::icon("drop-continuation", "x", "Start without it")
@@ -252,7 +252,7 @@ fn progress(attachment: &Attachment, store: &Entity<Store>, on_picture: bool, cx
                 .font_weight(FontWeight::MEDIUM)
                 .text_color(c.destructive_foreground);
             crate::ui::dims(strip, cx)
-                .child(icons::symbol("rotate-cw", 10.))
+                .child(icons::symbol("rotate-cw", IconSize::Xs))
                 .child("Retry")
                 .tooltip(crate::ui::tooltip(help))
                 .on_click(move |_, _, cx| {

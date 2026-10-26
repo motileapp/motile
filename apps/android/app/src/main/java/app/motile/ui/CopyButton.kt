@@ -9,6 +9,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import app.motile.platform.Symbol
+import app.motile.theme.IconSize
 import app.motile.theme.ControlSize
 import kotlinx.coroutines.delay
 
@@ -22,7 +23,7 @@ fun CopyButton(
     modifier: Modifier = Modifier,
     variant: ButtonVariant = ButtonVariant.Ghost,
     size: ControlSize = ControlSize.Regular,
-    symbolSize: Float? = null,
+    symbolSize: IconSize? = null,
     round: Boolean = false,
     quiet: Boolean = false,
     copies: Int = 0,

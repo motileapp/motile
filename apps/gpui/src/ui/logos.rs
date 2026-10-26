@@ -6,7 +6,7 @@ use gpui_kit::*;
 use motile_protocol::wire::{Agent, PullRequest};
 
 use crate::models::{Project, Server};
-use crate::theme::{Colors, colors};
+use crate::theme::{Colors, IconSize, colors};
 use crate::ui::{OnClick, dims, icons, tooltip};
 
 /// The colour an agent's logo and its series in a chart are drawn in.
@@ -17,22 +17,30 @@ pub fn agent_color(agent: Agent, c: &Colors) -> Hsla {
     }
 }
 
-/// An agent's logo, in its colour.
-pub fn agent_icon(agent: Agent, size: f32, cx: &App) -> Svg {
+/// An agent's logo, in its colour. Each logo's asset draws it as large as Lucide's icons look, a
+/// share of its square.
+pub fn agent_icon(agent: Agent, size: IconSize, cx: &App) -> Svg {
+    agent_icon_side(agent, size.side(), cx)
+}
+
+/// The same in a square exactly `side` points wide, for one sized from what is around it.
+pub fn agent_icon_side(agent: Agent, side: f32, cx: &App) -> Svg {
     let path = match agent {
         Agent::Claude => "icons/claude.svg",
         Agent::Codex => "icons/openai.svg",
     };
-    svg().path(path).size(px(size)).flex_shrink_0().text_color(agent_color(agent, colors(cx)))
+    svg().path(path).size(px(side)).flex_shrink_0().text_color(agent_color(agent, colors(cx)))
 }
 
-pub fn github_mark(size: f32, cx: &App) -> Svg {
-    svg().path("icons/github-mark.svg").size(px(size)).flex_shrink_0().text_color(colors(cx).foreground)
+pub fn github_mark(size: IconSize, cx: &App) -> Svg {
+    svg().path("icons/github-mark.svg").size(px(size.side())).flex_shrink_0().text_color(colors(cx).foreground)
 }
 
-/// Google's "G" in its four colours, from Google's own mark on its 48-point grid.
-pub fn google_mark(size: f32, cx: &App) -> Div {
+/// Google's "G" in its four colours, from Google's own mark on its 48-point grid, drawn 20 of 24
+/// of its square across as the other logos are.
+pub fn google_mark(size: IconSize, cx: &App) -> Div {
     let c = colors(cx);
+    let size = size.side();
     let part = |name: &str, color: Hsla| {
         svg().path(SharedString::from(format!("icons/google-{name}.svg"))).absolute().size(px(size)).text_color(color)
     };
@@ -47,28 +55,30 @@ pub fn google_mark(size: f32, cx: &App) -> Div {
 }
 
 /// Motile's mark, as the app icon draws it.
-pub fn motile_mark(size: f32, cx: &App) -> Svg {
-    svg().path("icons/motile-mark.svg").size(px(size)).flex_shrink_0().text_color(colors(cx).emphasized_foreground)
+pub fn motile_mark(size: IconSize, cx: &App) -> Svg {
+    svg()
+        .path("icons/motile-mark.svg")
+        .size(px(size.side()))
+        .flex_shrink_0()
+        .text_color(colors(cx).emphasized_foreground)
 }
 
 /// A project's icon, or a folder when it has none; a server's "No project" shows a dashed
 /// message.
-pub fn project_icon(project: Option<&Project>, size: f32, cx: &App) -> AnyElement {
+pub fn project_icon(project: Option<&Project>, size: IconSize, cx: &App) -> AnyElement {
     let path = project.and_then(|project| project.icon_path.clone());
     let Some(path) = path else {
         let symbol = project.map_or("folder", Project::symbol);
-        return div()
-            .size(px(size))
-            .flex_shrink_0()
-            .flex()
-            .items_center()
-            .justify_center()
-            .text_color(colors(cx).muted_foreground)
-            .child(icons::symbol(symbol, size * 0.78))
-            .into_any_element();
+        return icons::symbol(symbol, size).text_color(colors(cx).muted_foreground).into_any_element();
     };
+    icon_file(path, size, cx)
+}
+
+/// A project's icon from its file.
+pub fn icon_file(path: impl Into<std::path::PathBuf>, size: IconSize, cx: &App) -> AnyElement {
     let folder = colors(cx).muted_foreground;
-    let file = std::path::PathBuf::from(path);
+    let side = size.side();
+    let file = path.into();
     let filled = file.clone();
     let source = ImageSource::Custom(std::sync::Arc::new(move |window, cx| {
         window.use_asset::<FilledIcon>(&filled, cx).map(|filled| filled.map_err(ImageCacheError::Asset))
@@ -76,27 +86,16 @@ pub fn project_icon(project: Option<&Project>, size: f32, cx: &App) -> AnyElemen
     // The folder stands in while the icon is read, as the Mac app's does; a picture it can't
     // trim is drawn as it is.
     img(source)
-        .size(px(size))
+        .size(px(side))
         .flex_shrink_0()
-        .rounded(px(size * 0.22))
         .object_fit(ObjectFit::Contain)
-        .with_loading(move || {
-            div()
-                .size(px(size))
-                .flex()
-                .items_center()
-                .justify_center()
-                .text_color(folder)
-                .child(icons::symbol("folder", size * 0.78))
-                .into_any_element()
-        })
-        .with_fallback(move || img(file.clone()).size(px(size)).object_fit(ObjectFit::Contain).into_any_element())
+        .with_loading(move || icons::symbol("folder", size).text_color(folder).into_any_element())
+        .with_fallback(move || img(file.clone()).size(px(side)).object_fit(ObjectFit::Contain).into_any_element())
         .into_any_element()
 }
 
-/// A project's icon as a square its picture fills: drawn at one size and without the empty
-/// margin some icons come with, so that every icon is as large as the next. Read once, off the
-/// main thread.
+/// A project's icon as a square with its picture in the middle, trimmed of the empty margin some
+/// icons come with and as wide as Lucide's icons draw, 22 of 24. Read once, off the main thread.
 enum FilledIcon {}
 
 impl Asset for FilledIcon {
@@ -139,29 +138,49 @@ fn filled_icon(file: &std::path::Path, svg: &SvgRenderer) -> Option<std::sync::A
     Some(std::sync::Arc::new(RenderImage::new(vec![image::Frame::new(filled(&source)?)])))
 }
 
-/// The picture without its empty margin, scaled to fill a square.
+/// The picture without its empty margin, in the middle of a square at 22 of its 24, its corners
+/// rounded.
 fn filled(picture: &image::RgbaImage) -> Option<image::RgbaImage> {
-    let canvas = fitted(picture, DRAWN)?;
+    let (canvas, _) = fitted(picture, DRAWN, DRAWN as f32)?;
     let (left, top, right, bottom) = opaque_bounds(&canvas)?;
     let cropped = image::imageops::crop_imm(&canvas, left, top, right - left + 1, bottom - top + 1).to_image();
-    fitted(&cropped, FILLED)
+    let (mut square, placed) = fitted(&cropped, FILLED, FILLED as f32 * 22. / 24.)?;
+    round_corners(&mut square, placed);
+    Some(square)
 }
 
-/// The picture scaled to fit a transparent square of `side`, in its middle.
-fn fitted(picture: &image::RgbaImage, side: u32) -> Option<image::RgbaImage> {
+/// The picture scaled to fit a box of `fit` in the middle of a transparent square of `side`, and
+/// where it lies in it: its left, top, width and height.
+fn fitted(picture: &image::RgbaImage, side: u32, fit: f32) -> Option<(image::RgbaImage, [u32; 4])> {
     use image::imageops::{FilterType, overlay, resize};
 
     let (width, height) = picture.dimensions();
     if width == 0 || height == 0 {
         return None;
     }
-    let fit = (side as f32 / width as f32).min(side as f32 / height as f32);
-    let (to_width, to_height) =
-        (((width as f32 * fit).round() as u32).max(1), ((height as f32 * fit).round() as u32).max(1));
+    let scale = (fit / width as f32).min(fit / height as f32);
+    let (to_width, to_height) = (
+        ((width as f32 * scale).round() as u32).clamp(1, side),
+        ((height as f32 * scale).round() as u32).clamp(1, side),
+    );
     let scaled = resize(picture, to_width, to_height, FilterType::Lanczos3);
+    let (left, top) = ((side - to_width) / 2, (side - to_height) / 2);
     let mut square = image::RgbaImage::new(side, side);
-    overlay(&mut square, &scaled, i64::from((side - to_width) / 2), i64::from((side - to_height) / 2));
-    Some(square)
+    overlay(&mut square, &scaled, i64::from(left), i64::from(top));
+    Some((square, [left, top, to_width, to_height]))
+}
+
+/// Rounds the corners of the picture placed in the square at 0.22 of its shorter side.
+fn round_corners(square: &mut image::RgbaImage, [left, top, width, height]: [u32; 4]) {
+    let (left, top, right, bottom) = (left as f32, top as f32, (left + width) as f32, (top + height) as f32);
+    let radius = width.min(height) as f32 * 0.22;
+    for (x, y, pixel) in square.enumerate_pixels_mut() {
+        let (x, y) = (x as f32 + 0.5, y as f32 + 0.5);
+        let dx = (left + radius - x).max(x - (right - radius)).max(0.);
+        let dy = (top + radius - y).max(y - (bottom - radius)).max(0.);
+        let inside = (radius - (dx * dx + dy * dy).sqrt() + 0.5).clamp(0., 1.);
+        pixel[3] = (f32::from(pixel[3]) * inside).round() as u8;
+    }
 }
 
 /// The left, top, right and bottom of what isn't transparent, as the Mac app finds them.
@@ -197,8 +216,7 @@ pub fn server_label(server: &Server, size: f32, shows_state: bool, cx: &App) -> 
         .items_center()
         .gap(px(3.))
         .text_color(muted)
-        // Lucide's server fills more of its square than the icons beside it.
-        .child(icons::symbol("server", size - 1.).text_color(tint))
+        .child(icons::symbol("server", IconSize::text(size)).text_color(tint))
         .child(div().text_size(px(size)).truncate().child(server.short_name.clone()))
         .tooltip(tooltip(format!("On {}", server.name)))
 }
@@ -264,9 +282,9 @@ impl RenderOnce for PullRequestLabel {
             .flex_shrink_0()
             .flex()
             .items_center()
-            .gap(px(2.))
+            .gap(px(3.))
             .text_color(color)
-            .child(icons::symbol(pull_request_symbol(&self.pull_request), 11.))
+            .child(icons::symbol(pull_request_symbol(&self.pull_request), IconSize::Sm))
             .child(
                 div()
                     .text_size(px(11.))
@@ -288,19 +306,41 @@ impl RenderOnce for PullRequestLabel {
 mod tests {
     use super::{FILLED, filled};
 
-    #[test]
-    fn an_icon_with_a_margin_fills_its_square() {
-        let mut padded = image::RgbaImage::new(100, 100);
-        for (x, y, pixel) in padded.enumerate_pixels_mut() {
-            if (20..80).contains(&x) && (30..70).contains(&y) {
+    fn drawn(inked: impl Fn(u32, u32) -> bool) -> image::RgbaImage {
+        let mut picture = image::RgbaImage::new(100, 100);
+        for (x, y, pixel) in picture.enumerate_pixels_mut() {
+            if inked(x, y) {
                 *pixel = image::Rgba([255, 0, 0, 255]);
             }
         }
-        let square = filled(&padded).unwrap();
-        assert_eq!(square.dimensions(), (FILLED, FILLED));
-        assert_eq!(square.get_pixel(2, FILLED / 2)[3], 255);
-        assert_eq!(square.get_pixel(FILLED - 3, FILLED / 2)[3], 255);
-        assert_eq!(square.get_pixel(FILLED / 2, 2)[3], 0);
+        picture
+    }
+
+    /// How far what is opaque reaches along the middle row.
+    fn opaque_width(square: &image::RgbaImage) -> u32 {
+        let opaque: Vec<u32> = (0..FILLED).filter(|&x| square.get_pixel(x, FILLED / 2)[3] > 127).collect();
+        opaque.last().map_or(0, |last| last - opaque[0] + 1)
+    }
+
+    #[test]
+    fn an_icon_loses_its_margin_and_spans_as_much_as_lucide() {
+        let outline = filled(&drawn(|x, y| {
+            (10..90).contains(&x) && (10..90).contains(&y) && !((14..86).contains(&x) && (14..86).contains(&y))
+        }))
+        .unwrap();
+        let solid = filled(&drawn(|x, y| (20..80).contains(&x) && (30..70).contains(&y))).unwrap();
+        assert_eq!(outline.dimensions(), (FILLED, FILLED));
+        assert!(opaque_width(&outline).abs_diff(FILLED * 22 / 24) <= 2, "{}", opaque_width(&outline));
+        assert!(opaque_width(&solid).abs_diff(FILLED * 22 / 24) <= 2, "{}", opaque_width(&solid));
         assert!(filled(&image::RgbaImage::new(10, 10)).is_none());
+    }
+
+    #[test]
+    fn a_picture_has_round_corners() {
+        let solid = filled(&drawn(|x, y| (10..90).contains(&x) && (10..90).contains(&y))).unwrap();
+        let first = (0..FILLED).find(|&x| solid.get_pixel(x, FILLED / 2)[3] > 127).unwrap();
+        assert!(solid.get_pixel(first + 1, FILLED / 2)[3] > 250);
+        assert!(solid.get_pixel(FILLED / 2, first + 1)[3] > 250);
+        assert!(solid.get_pixel(first + 1, first + 1)[3] < 10);
     }
 }

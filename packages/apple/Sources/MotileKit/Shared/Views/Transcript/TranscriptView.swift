@@ -235,8 +235,9 @@ final class TranscriptView: FlippedView, RowOwner {
         jumpButton.isHidden = true
         jumpButton.tip = "Scroll to end"
         jumpButton.describe("Scroll to end", button: true)
-        let arrow = SymbolView(.arrowDown, size: 12)
-        arrow.frame = CGRect(x: (side - 16) / 2, y: (side - 16) / 2, width: 16, height: 16)
+        let arrow = SymbolView(.arrowDown, size: ControlSize.regular.symbol)
+        let arrowSide = ControlSize.regular.symbolSide
+        arrow.frame = CGRect(x: (side - arrowSide) / 2, y: (side - arrowSide) / 2, width: arrowSide, height: arrowSide)
         jumpButton.addSubview(arrow)
         jumpButton.onClick = { [weak self] in self?.scrollToEnd() }
         jumpButton.onHover = { [weak self] point in self?.jumpButton.fill = point == nil ? Theme.popover : Theme.borderPopover }

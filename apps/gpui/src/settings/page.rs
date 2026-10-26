@@ -21,7 +21,7 @@ use crate::sidebar::{AppUpdateRow, ServerUpdateStatus};
 use crate::store::integrations::Integration;
 use crate::store::settings::{PULL_DEFAULT_BRANCH_CAPTION, SettingsSection};
 use crate::store::{PanelPage, Store};
-use crate::theme::{self, Appearance, ControlSize, Layer, Radius, Surface, colors};
+use crate::theme::{self, Appearance, ControlSize, IconSize, Layer, Radius, Surface, colors};
 use crate::ui::menu::Menu;
 use crate::ui::modal::{Answer, Confirmation, confirmation, modal, present_sheet, presented};
 use crate::ui::motion::{SPRING, Tween, spring};
@@ -476,7 +476,7 @@ impl SettingsPage {
             .items_center()
             .gap(px(8.))
             .text_color(c.foreground)
-            .child(icons::symbol("server", 13.))
+            .child(icons::symbol("server", IconSize::Md))
             .child(div().text_size(px(13.)).font_weight(FontWeight::MEDIUM).child(server.name.clone()))
             .into_any_element();
         let reason = unavailable
@@ -510,7 +510,7 @@ impl SettingsPage {
             let description = account.settings_description();
             let description = if is_default { format!("Default · {description}") } else { description };
             let leading = vec![
-                logos::agent_icon(account.agent, 16., cx).into_any_element(),
+                logos::agent_icon(account.agent, IconSize::Md, cx).into_any_element(),
                 label(title, Some(description), None, Cut::Wraps, cx),
             ];
             rows.push(row(leading, vec![menu.into_any_element()]).into_any_element());
@@ -583,7 +583,7 @@ impl SettingsPage {
                     .danger_symbol_item("Remove Project", "trash-2", move |window, cx| remove(window, cx))
             });
             let leading = vec![
-                logos::project_icon(Some(project), 26., cx),
+                logos::project_icon(Some(project), IconSize::Md, cx),
                 label(project.name.clone(), Some(project.path.clone()), None, Cut::Start, cx),
             ];
             rows.push(row(leading, vec![menu.into_any_element()]).into_any_element());
@@ -904,7 +904,7 @@ fn integration_logo(integration: Integration, cx: &App) -> AnyElement {
         .border_1()
         .border_color(Surface::Card.border(c))
         .text_color(c.foreground)
-        .child(icons::symbol(integration.symbol(), 18.))
+        .child(icons::symbol(integration.symbol(), IconSize::Xl))
         .into_any_element()
 }
 
@@ -939,14 +939,15 @@ fn state_label(server: &Server) -> String {
 /// so the rows around it never move.
 fn sync_line(sync: &SyncView, cx: &App) -> AnyElement {
     const SIZE: f32 = 11.5;
+    let symbol_size = IconSize::text(SIZE);
     let c = colors(cx);
     let symbol = match sync.state {
-        SyncState::Synced => div().text_color(c.success).child(icons::symbol("check", SIZE)).into_any_element(),
-        SyncState::Copying => Spinner::new(SIZE).render(cx).into_any_element(),
+        SyncState::Synced => div().text_color(c.success).child(icons::symbol("check", symbol_size)).into_any_element(),
+        SyncState::Copying => Spinner::new(symbol_size).render(cx).into_any_element(),
         SyncState::Failed => {
-            div().text_color(c.warning).child(icons::symbol("triangle-alert", SIZE - 1.)).into_any_element()
+            div().text_color(c.warning).child(icons::symbol("triangle-alert", symbol_size)).into_any_element()
         }
-        SyncState::Waiting | SyncState::Off => icons::symbol("circle-dashed", SIZE - 1.).into_any_element(),
+        SyncState::Waiting | SyncState::Off => icons::symbol("circle-dashed", symbol_size).into_any_element(),
     };
     let line = div()
         .flex()
@@ -954,7 +955,7 @@ fn sync_line(sync: &SyncView, cx: &App) -> AnyElement {
         .gap(px(5.))
         .text_size(px(SIZE))
         .text_color(c.muted_foreground)
-        .child(div().flex_shrink_0().size(px(SIZE)).flex().items_center().justify_center().child(symbol))
+        .child(div().flex_shrink_0().flex().child(symbol))
         .child(div().min_w_0().whitespace_nowrap().overflow_hidden().text_ellipsis().child(models::sync_line(sync)));
     match &sync.error {
         Some(error) => line.id("sync-line").tooltip(tooltip(error.clone())).into_any_element(),

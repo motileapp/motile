@@ -29,7 +29,7 @@ export function EffortHighIcon() {
   return (
     <svg
       viewBox="0 0 24 24"
-      className="size-[13px] shrink-0"
+      className="size-3.5 shrink-0"
       fill="currentColor"
       aria-hidden="true"
     >
@@ -46,6 +46,9 @@ export function EffortHighIcon() {
   )
 }
 
+/** As large as Lucide's icons look, as the clients draw a logo. */
+const LOGO_SHARE = 22 / 24
+
 export function AgentIcon({
   agent,
   size = 12,
@@ -61,11 +64,11 @@ export function AgentIcon({
       className={agent === "claude" ? "text-claude" : "text-openai"}
       aria-hidden="true"
     >
-      {agent === "claude" ? (
-        <path fill="currentColor" d={CLAUDE} />
-      ) : (
-        <path fill="currentColor" d={OPENAI} />
-      )}
+      <path
+        fill="currentColor"
+        d={agent === "claude" ? CLAUDE : OPENAI}
+        transform={`translate(${12 - 12 * LOGO_SHARE} ${12 - 12 * LOGO_SHARE}) scale(${LOGO_SHARE})`}
+      />
     </svg>
   )
 }
@@ -116,7 +119,7 @@ export function AgentAvatar({
             : undefined,
         }}
       >
-        <AgentIcon agent={agent} size={Math.round((side * 13) / 24)} />
+        <AgentIcon agent={agent} size={Math.round(side * 0.6)} />
       </span>
       {state && (
         <span
@@ -137,19 +140,26 @@ export function ProjectIcon({
   project: Project
   size?: number
 }) {
+  // As wide as Lucide's icons draw, 22 of 24, as the clients draw a project's picture.
+  const tile = Math.round((size * 22) / 24)
   return (
     <span
-      className="inline-flex shrink-0 items-center justify-center font-semibold text-primary-foreground"
-      style={{
-        width: size,
-        height: size,
-        borderRadius: size * 0.28,
-        background: project.color,
-        fontSize: size * 0.62,
-      }}
+      className="inline-flex shrink-0 items-center justify-center"
+      style={{ width: size, height: size }}
       aria-hidden="true"
     >
-      {project.name[0].toUpperCase()}
+      <span
+        className="inline-flex items-center justify-center font-semibold text-primary-foreground"
+        style={{
+          width: tile,
+          height: tile,
+          borderRadius: tile * 0.22,
+          background: project.color,
+          fontSize: tile * 0.62,
+        }}
+      >
+        {project.name[0].toUpperCase()}
+      </span>
     </span>
   )
 }

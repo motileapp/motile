@@ -165,6 +165,16 @@ object OverPicture {
     val controlLit get() = Palette.dark.backgroundAccentStronger
 }
 
+/** The icon that goes with text of `size`: about a fifth larger, as on the web. */
+fun iconSize(text: Float): IconSize = when {
+    text < 11 -> IconSize.Xs
+    text < 13 -> IconSize.Sm
+    text < 15 -> IconSize.Md
+    text < 17 -> IconSize.Lg
+    text < 20 -> IconSize.Xl
+    else -> IconSize.Xxl
+}
+
 /**
  * How large a control is. Its height, symbol, text, padding and corners go together, so that no
  * view picks them one by one. Sizes are as on the Mac, enlarged.
@@ -184,16 +194,22 @@ enum class ControlSize {
             Large -> scaled(36f).dp
         }
 
-    /** The size of text its symbol is drawn for. */
-    val symbol: Float
-        get() = when (this) {
-            Small -> 13f
-            Regular -> 14f
-            Large -> 16f
-        }
+    /** Its symbol, as large as an icon beside its text is. */
+    val symbol: IconSize get() = iconSize(text = textSize)
 
     /** A symbol that should weigh less than the others, like the x that closes a tab. */
-    val smallSymbol: Float get() = symbol - 2
+    val smallSymbol: IconSize
+        get() = when (this) {
+            Small, Regular -> IconSize.Xs
+            Large -> IconSize.Sm
+        }
+
+    /** The chevron that opens a menu, trimmed to what it draws. */
+    val chevron: IconSize
+        get() = when (this) {
+            Small, Regular -> IconSize.Sm
+            Large -> IconSize.Md
+        }
 
     val textSize: Float
         get() = when (this) {
@@ -236,8 +252,8 @@ enum class ControlSize {
     val symbolOutset: Dp get() = ((symbolSide.value / 5 * 2).roundToInt() / 2f).dp
 }
 
-/** The side of the square a symbol for text of `size` is drawn in. */
-fun symbolSide(size: Float): Dp = (size * Platform.scale * 1.2f).roundToInt().dp
+/** The side of an icon's square, given as on the Mac and enlarged. */
+fun symbolSide(size: IconSize): Dp = (size.side * Platform.scale).roundToInt().dp
 
 /** What a view lies on: the page, a box on it, a card or a popover. What is drawn on a surface takes the surface's accent. */
 enum class Surface {

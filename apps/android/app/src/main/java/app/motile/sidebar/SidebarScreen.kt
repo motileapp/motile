@@ -73,6 +73,7 @@ import app.motile.layout.KeyboardFocus
 import app.motile.layout.LocalDrawer
 import app.motile.platform.Platform
 import app.motile.platform.Symbol
+import app.motile.theme.IconSize
 import app.motile.theme.ControlSize
 import app.motile.theme.Opacity
 import app.motile.theme.Radius
@@ -557,7 +558,7 @@ private fun Footer(
             Appearing(searching, enter = appear, exit = leave) { GlassButton(Symbol.X, "Close search", onClick = closeSearch) }
             Appearing(!searching, enter = appear, exit = leave) {
                 GlassButton("New thread", onClick = { store.newThread() }, modifier = Modifier.opacity(Opacity.Disabled, on = !canStart), enabled = canStart) {
-                    Icon(Symbol.SquarePen, 15f)
+                    Icon(Symbol.SquarePen, IconSize.Lg)
                 }
             }
         }

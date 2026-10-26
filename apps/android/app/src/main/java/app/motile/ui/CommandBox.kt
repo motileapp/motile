@@ -54,8 +54,8 @@ fun CommandBox(
             )
             Disabled(command == null) {
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    ActionButton(icon = Symbol.Share, help = "Share the command", symbolSize = 12f) { command?.let(::shareText) }
-                    CopyButton(help = "Copy the command", symbolSize = 12f) { command?.let(Platform::copy) }
+                    ActionButton(icon = Symbol.Share, help = "Share the command") { command?.let(::shareText) }
+                    CopyButton(help = "Copy the command") { command?.let(Platform::copy) }
                 }
             }
         }

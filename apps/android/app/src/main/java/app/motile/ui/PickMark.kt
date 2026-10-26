@@ -16,6 +16,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import app.motile.platform.Symbol
 import app.motile.platform.scaled
+import app.motile.theme.IconSize
 import app.motile.theme.LocalPalette
 import app.motile.theme.Radius
 
@@ -32,7 +33,7 @@ fun PickMark(picked: Boolean, multiple: Boolean, modifier: Modifier = Modifier) 
     val edge by animateColorAsState(if (picked) palette.primary else palette.mutedStrongestForeground, tween(120), label = "edge")
     Box(modifier.size(side).background(fill, shape).border(1.5.dp, edge, shape), contentAlignment = Alignment.Center) {
         if (picked && multiple) {
-            Icon(Symbol.Check, 10f, color = palette.primaryForeground)
+            Icon(Symbol.Check, IconSize.Xs, color = palette.primaryForeground)
         } else if (picked) {
             Box(Modifier.size(side * 0.375f).background(palette.primaryForeground, CircleShape))
         }

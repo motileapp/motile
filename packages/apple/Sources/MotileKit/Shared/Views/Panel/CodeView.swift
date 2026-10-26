@@ -434,7 +434,7 @@ final class CodeSheet {
         context.draw(picture, in: frame)
         context.restoreGState()
         if media.video {
-            TintedSymbol.draw(.circlePlay, size: 40, color: Theme.foregroundOverPicture, in: frame)
+            TintedSymbol.draw(.circlePlay, size: .hero, color: Theme.foregroundOverPicture, in: frame)
         }
     }
 
@@ -444,7 +444,7 @@ final class CodeSheet {
         let badge = CGRect(x: topRight.x - size, y: topRight.y + (Self.lineHeight - size) / 2, width: size, height: size)
         Theme.primary.setFill()
         RoundedBox.fill(badge, radius: Radius.xs)
-        TintedSymbol.draw(.plus, size: 10, color: Theme.primaryForeground, in: badge)
+        TintedSymbol.draw(.plus, size: .xs, color: Theme.primaryForeground, in: badge)
     }
 
     /// Whether a click at `x` from the view's left edge is on the numbers of the lines.
@@ -517,9 +517,9 @@ final class CodeSheet {
 
         let closed = collapsed.contains(file.path)
         let chevron = CGRect(x: rect.minX + 8, y: rect.minY, width: 16, height: rect.height)
-        TintedSymbol.draw(closed ? .chevronRight : .chevronDown, size: 9, color: Theme.mutedStrongerForeground, in: chevron)
+        TintedSymbol.draw(closed ? .chevronRight : .chevronDown, size: .xs, color: Theme.mutedStrongerForeground, in: chevron)
         let icon = CGRect(x: rect.minX + 28, y: rect.minY, width: 18, height: rect.height)
-        TintedSymbol.draw(FileSymbol.symbol(for: file.path), size: 11, color: Theme.mutedForeground, in: icon)
+        TintedSymbol.draw(FileSymbol.symbol(for: file.path), size: .sm, color: Theme.mutedForeground, in: icon)
 
         let open = CGRect(x: rect.maxX - 34, y: rect.minY, width: 28, height: rect.height)
         let openLit = lit?.press == .open
@@ -528,7 +528,7 @@ final class CodeSheet {
             Surface.secondary.platform(.controlLit).setFill()
             RoundedBox.fill(CGRect(x: open.midX - side / 2, y: open.midY - side / 2, width: side, height: side), radius: ControlSize.small.radius)
         }
-        TintedSymbol.draw(.squareArrowOutUpRight, size: 12, color: openLit ? Theme.foreground : Theme.mutedForeground, in: open)
+        TintedSymbol.draw(.squareArrowOutUpRight, size: ControlSize.small.symbol, color: openLit ? Theme.foreground : Theme.mutedForeground, in: open)
         let counts = LineCountText.text(added: file.added, removed: file.removed)
         let countsSize = counts.size()
         let countsX = open.minX - 4 - countsSize.width
@@ -586,7 +586,7 @@ final class CodeSheet {
         if viewed {
             Theme.primary.setFill()
             RoundedBox.fill(box, radius: Radius.xs)
-            TintedSymbol.draw(.check, size: 9, color: Theme.primaryForeground, in: box)
+            TintedSymbol.draw(.check, size: .xs, color: Theme.primaryForeground, in: box)
         } else {
             Theme.border.setStroke()
             RoundedBox.stroke(box.insetBy(dx: 0.5, dy: 0.5), radius: Radius.xs)

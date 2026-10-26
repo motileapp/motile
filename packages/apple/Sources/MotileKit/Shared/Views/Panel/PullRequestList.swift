@@ -104,9 +104,9 @@ private struct PullRequestListRow: View {
             store.rightPanel.showPullRequest(row.number, of: target)
         } label: {
             HStack(alignment: .top, spacing: 10) {
-                Image(row.state.symbol, size: 13)
+                Image(row.state.symbol, size: .md)
                     .foregroundStyle(row.state.color)
-                    .frame(width: 16, height: scaled(18))
+                    .frame(height: scaled(18))
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(alignment: .firstTextBaseline, spacing: 6) {
                         Text(row.title)
@@ -149,7 +149,7 @@ private struct PullRequestListRow: View {
     private var signals: some View {
         HStack(spacing: 7) {
             if let review = row.review {
-                Image(review.tone == .success ? .circleCheck : review.tone == .danger ? .circleAlert : .eye, size: 11)
+                Image(review.tone == .success ? .circleCheck : review.tone == .danger ? .circleAlert : .eye, size: .sm)
                     .foregroundStyle(review.tone.color)
                     .help(review.label)
             }

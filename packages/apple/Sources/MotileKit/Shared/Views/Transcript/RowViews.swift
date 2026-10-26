@@ -309,7 +309,7 @@ final class QueuedRowView: RowView {
     private let bubble = SurfaceView()
     private let text = RowTextView.make()
     private let attachments = AttachedFilesView()
-    private let clock = SymbolView(.clock, size: 11)
+    private let clock = SymbolView(.clock, size: .sm)
     private let status = TextLabel(font: Theme.smallFont, color: Theme.mutedForeground)
     private var sendButton: RowButton!
     private var cancelButton: RowButton!
@@ -395,8 +395,10 @@ final class QueuedRowView: RowView {
         // In the middle of the buttons.
         let lineHeight = scaled(16)
         let lineY = footY + Self.buttonGap + ((RowButton.metrics.height - lineHeight) / 2).rounded()
-        clock.frame = CGRect(x: padding, y: lineY, width: 14, height: lineHeight)
-        status.frame = CGRect(x: padding + 18, y: lineY, width: max(0, statusEnd - padding - 18), height: lineHeight)
+        let clockSide = PlatformImage.symbolSide(.sm)
+        clock.frame = CGRect(x: padding, y: lineY, width: clockSide, height: lineHeight)
+        let statusX = clock.frame.maxX + 4
+        status.frame = CGRect(x: statusX, y: lineY, width: max(0, statusEnd - statusX), height: lineHeight)
         return bubbleSize.height + 14 + 14
     }
 
@@ -479,7 +481,7 @@ final class CodeHeader: FlippedView {
     override init(frame: CGRect) {
         super.init(frame: frame)
         addSubview(language)
-        copyButton = IconButton(symbol: .copy, symbolSize: 12, tooltip: "Copy code") { [weak self] in self?.copy() }
+        copyButton = IconButton(symbol: .copy, tooltip: "Copy code") { [weak self] in self?.copy() }
         copyButton.surface = .secondary
         addSubview(copyButton)
     }
@@ -609,7 +611,10 @@ final class ToolRowView: RowView {
     /// The header reaches past the row's sides by as much room as its icon has above it, so
     /// that what it lights up stands out while the icon lines up with the text.
     private static let line = rowHeight - 2
-    private static let bleed = (line - 16) / 2
+    private static let bleed = (line - iconSide) / 2
+    private static let iconSize = IconSize.md
+    private static let iconSide = PlatformImage.symbolSide(iconSize)
+    private static let chevronSide = PlatformImage.symbolSide(.xs)
     private let header = FlippedView()
     private let highlight = SurfaceView()
     private static let titleFont = PlatformFont.ui(13)
@@ -689,20 +694,20 @@ final class ToolRowView: RowView {
         folds = false
         switch row.kind {
         case .tool(let tool):
-            icon.show(tool.symbol)
+            icon.show(tool.symbol, size: Self.iconSize)
             running = tool.status == .running
             startedAt = tool.startedAt
             setTitle(tool.verb, target: tool.target, failed: tool.status == .failed)
             hasDetail = tool.hasDetail
             detailText = { tool.detail() }
         case .thinking(let thought):
-            icon.show(.brain)
+            icon.show(.brain, size: Self.iconSize)
             running = false
             setTitle("Thought")
             hasDetail = thought.length > 0
             detailText = { thought }
         case .group(let group):
-            icon.show(ToolContent.symbol(for: group.icon))
+            icon.show(ToolContent.symbol(for: group.icon), size: Self.iconSize)
             running = group.running
             startedAt = group.startedAt
             setTitle(group.title, target: group.target, failed: group.failed)
@@ -773,15 +778,15 @@ final class ToolRowView: RowView {
         let bleed = Self.bleed
         let middle = { (height: CGFloat) in (1 + (Self.line - height) / 2).rounded() }
         header.frame = CGRect(x: inset - bleed, y: above, width: header.frame.width, height: Self.rowHeight)
-        icon.frame = CGRect(x: bleed, y: middle(16), width: 16, height: 16)
+        icon.frame = CGRect(x: bleed, y: middle(Self.iconSide), width: Self.iconSide, height: Self.iconSide)
         let timeWidth: CGFloat = startedAt == nil ? 0 : scaled(58)
         let titleWidth = min(title.naturalWidth + 4, width - 60 - timeWidth)
         // A fold heads its turn, so its words start where the icons of the turn's work do.
-        title.frame = CGRect(x: folds ? bleed : bleed + 24, y: middle(scaled(18)), width: titleWidth, height: scaled(18))
+        title.frame = CGRect(x: folds ? bleed : bleed + Self.iconSide + 8, y: middle(scaled(18)), width: titleWidth, height: scaled(18))
         shine.frame = title.frame
         chevron.isHidden = !hasDetail
-        chevron.show(open ?? expanded ? .chevronDown : .chevronRight, size: 9)
-        chevron.frame = CGRect(x: title.frame.maxX + 2, y: middle(16), width: 14, height: 16)
+        chevron.show(open ?? expanded ? .chevronDown : .chevronRight, size: .xs)
+        chevron.frame = CGRect(x: title.frame.maxX + 2, y: middle(Self.chevronSide), width: Self.chevronSide, height: Self.chevronSide)
         elapsed.frame = CGRect(x: chevron.frame.maxX + 6, y: middle(scaled(16)), width: 0, height: scaled(16))
         fitHeader()
 
@@ -822,7 +827,7 @@ final class ErrorBox {
 
     let text = RowTextView.make()
     private let surface = SurfaceView()
-    private let icon = SymbolView(.circleAlert, size: 13, tint: Theme.destructive)
+    private let icon = SymbolView(.circleAlert, size: .md, tint: Theme.destructive)
 
     init(in view: PlatformView) {
         surface.fill = Theme.destructiveTint
@@ -850,7 +855,7 @@ final class ErrorBox {
         let inner = width - Self.textInset
         let height = text.height(forWidth: inner)
         surface.frame = CGRect(x: 0, y: y, width: width, height: height + Self.padding)
-        icon.frame = CGRect(x: 12, y: 10, width: 16, height: 18)
+        icon.frame = CGRect(x: 12, y: 10, width: PlatformImage.symbolSide(.md), height: 18)
         text.frame = CGRect(x: 36, y: 10, width: inner, height: height)
         return height + Self.padding
     }
@@ -1000,11 +1005,11 @@ final class ChangesRowView: RowView {
                 }
                 if entry.folder {
                     let chevron = CGRect(x: x, y: row.minY, width: 12, height: row.height)
-                    TintedSymbol.draw(entry.open ? .chevronDown : .chevronRight, size: 8, color: Theme.mutedStrongerForeground, in: chevron)
+                    TintedSymbol.draw(entry.open ? .chevronDown : .chevronRight, size: .xs, color: Theme.mutedStrongerForeground, in: chevron)
                 }
                 x += 16
                 let symbol: Symbol = entry.folder ? .folder : FileSymbol.symbol(for: entry.path)
-                TintedSymbol.draw(symbol, size: 11, color: Theme.mutedForeground, in: CGRect(x: x, y: row.minY, width: 16, height: row.height))
+                TintedSymbol.draw(symbol, size: .sm, color: Theme.mutedForeground, in: CGRect(x: x, y: row.minY, width: 16, height: row.height))
                 x += 24
                 let counts = entry.counts.size()
                 let countsX = bounds.width - 14 - counts.width
@@ -1150,7 +1155,7 @@ final class AgentRowView: RowView {
         label.isHidden = !content.flagged
         line.string = content.line
         line.color = content.state == .failed ? Theme.destructive : Theme.mutedForeground
-        chevron.show(.chevronRight, size: 9)
+        chevron.show(.chevronRight, size: .xs)
         keepTime()
     }
 
@@ -1201,7 +1206,8 @@ final class AgentRowView: RowView {
         avatar.frame = CGRect(x: inset, y: y + ((height - side) / 2).rounded(), width: side, height: side)
         let textX = inset + side + Self.avatarGap
         let right = width - inset
-        chevron.frame = CGRect(x: right - 14, y: y + ((height - 16) / 2).rounded(), width: 14, height: 16)
+        let chevronSide = PlatformImage.symbolSide(.xs)
+        chevron.frame = CGRect(x: right - chevronSide, y: y + ((height - chevronSide) / 2).rounded(), width: chevronSide, height: chevronSide)
         let timeWidth = time.string.isEmpty ? 0 : time.naturalWidth + 4
         let timeY = y + ((height - scaled(16)) / 2).rounded()
         time.frame = CGRect(x: chevron.frame.minX - 6 - timeWidth, y: timeY, width: timeWidth, height: scaled(16))
@@ -1276,7 +1282,7 @@ final class AgentsRowView: RowView {
         avatars.reversed().forEach { addSubview($0) }
         title.string = content.title
         summary.attributed = Self.summary(content.summary)
-        chevron.show(content.open ? .chevronDown : .chevronRight, size: 9)
+        chevron.show(content.open ? .chevronDown : .chevronRight, size: .xs)
         keepTime()
     }
 
@@ -1324,7 +1330,8 @@ final class AgentsRowView: RowView {
         }
         let end = avatars.last.map { $0.frame.maxX } ?? 0
         let textX = end + scaled(10)
-        chevron.frame = CGRect(x: width - 14, y: ((height - 16) / 2).rounded(), width: 14, height: 16)
+        let chevronSide = PlatformImage.symbolSide(.xs)
+        chevron.frame = CGRect(x: width - chevronSide, y: ((height - chevronSide) / 2).rounded(), width: chevronSide, height: chevronSide)
         let timeWidth = time.string.isEmpty ? 0 : time.naturalWidth + 4
         time.frame = CGRect(x: chevron.frame.minX - 6 - timeWidth, y: ((height - scaled(16)) / 2).rounded(), width: timeWidth, height: scaled(16))
         let room = max(0, time.frame.minX - 12 - textX)
@@ -1415,13 +1422,13 @@ final class LineageView: FlippedView {
 final class HandoffRowView: RowView {
     static let height = ControlSize.large.height
 
-    private static let logoSide = ControlSize.regular.symbol
+    private static let logoSide = PlatformImage.symbolSide(ControlSize.regular.symbol)
     private static let arrowSize = ControlSize.regular.smallSymbol
     private static let labelGap = ControlSize.regular.gap
     private static let arrowGap = ControlSize.small.padding
     private static let lineGap = ControlSize.regular.padding
-    private static let logos: [Agent: PlatformImage] = Dictionary(uniqueKeysWithValues: Agent.allCases.compactMap { agent in
-        agent.logo.map { (agent, ImageFiles.tinted(ImageFiles.sized($0, logoSide), agent.platformColor)) }
+    private static let logos: [Agent: PlatformImage] = Dictionary(uniqueKeysWithValues: Agent.allCases.map {
+        ($0, $0.logo(size: ControlSize.regular.symbol))
     })
 
     private var content: HandoffContent?
@@ -1508,7 +1515,7 @@ final class RemovedRowView: RowView {
     private static let halvesBelow = scaled(420)
 
     private let surface = SurfaceView()
-    private let icon = SymbolView(.unlink, size: 13, tint: Theme.mutedForeground)
+    private let icon = SymbolView(.unlink, size: .md, tint: Theme.mutedForeground)
     private let title = TextLabel(font: .ui(scaled(13), weight: .semibold), color: Theme.foreground)
     private let text = RowTextView.make()
     private var continueButton: RowButton!
@@ -1607,7 +1614,7 @@ final class MessageMeta: FlippedView {
         self.trailing = trailing
         super.init(frame: .zero)
         addSubview(time)
-        let button = IconButton(symbol: .copy, symbolSize: 12, tooltip: tooltip) { [weak self] in self?.copy() }
+        let button = IconButton(symbol: .copy, tooltip: tooltip) { [weak self] in self?.copy() }
         button.quiet = true
         self.button = button
         addSubview(button)

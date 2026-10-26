@@ -33,7 +33,7 @@ fun UsageSheet() {
         SheetBar(
             "Usage",
             leading = { SheetCloseButton(onClose = close) },
-            trailing = { GlassButton(Symbol.RefreshCw, "Refresh", onClick = { model.refresh() }, symbolSize = 16f, pending = model.refreshing) },
+            trailing = { GlassButton(Symbol.RefreshCw, "Refresh", onClick = { model.refresh() }, pending = model.refreshing) },
         )
         Column(Modifier.fillMaxWidth().padding(horizontal = margin, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             UsageTabs(model, fills = true)

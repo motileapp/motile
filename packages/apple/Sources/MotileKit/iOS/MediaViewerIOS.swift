@@ -87,7 +87,7 @@ struct MediaViewer: View {
         ZStack {
             title(item)
                 .padding(.horizontal, GlassButtonStyle.side + 8)
-            Button { store.closeViewer() } label: { Image(.x, size: 17) }
+            Button { store.closeViewer() } label: { Image(.x, size: .xl) }
                 .buttonStyle(.glassSymbol)
                 .glassButton(in: Circle())
                 .accessibilityLabel("Close")
@@ -105,10 +105,10 @@ struct MediaViewer: View {
                     MediaFiles.copy(shared, video: item.video, named: item.name)
                     copied = true
                 } label: {
-                    Image(copied ? .check : .copy, size: 17)
+                    Image(copied ? .check : .copy, size: .xl)
                 }
                 .accessibilityLabel(item.video ? "Copy Video" : "Copy Image")
-                ShareLink(item: shared) { Image(.share, size: 17) }
+                ShareLink(item: shared) { Image(.share, size: .xl) }
                     .accessibilityLabel("Share")
             }
             .buttonStyle(.glassSymbol)
