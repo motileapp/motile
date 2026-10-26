@@ -2,9 +2,12 @@
 //! an icon in the project's folder.
 
 use std::path::{Path, PathBuf};
-use std::time::UNIX_EPOCH;
+use std::time::{Duration, UNIX_EPOCH};
 
 use anyhow::{Context, bail};
+
+use crate::agents::environment::Environment;
+use crate::git;
 
 const MAX_ICON: u64 = 1024 * 1024;
 const EXTENSIONS: [&str; 7] = ["svg", "png", "ico", "jpg", "jpeg", "webp", "gif"];
@@ -26,11 +29,72 @@ const FOLDERS: [&str; 10] =
 /// Folders whose children are projects of their own, each with those folders.
 const WORKSPACES: [&str; 2] = ["apps", "packages"];
 const MAX_WORKSPACE_MEMBERS: usize = 24;
+const MAX_LISTED: usize = 5000;
+/// How many entries a folder that isn't a repository is walked through at most.
+const MAX_WALKED: usize = 50_000;
+/// Folders a walk skips, which git would mostly ignore.
+const SKIPPED: [&str; 4] = ["node_modules", "target", "build", "dist"];
+const LISTING: Duration = Duration::from_secs(10);
+
+fn named_like_image(path: &Path) -> bool {
+    let extension = path.extension().and_then(|extension| extension.to_str()).unwrap_or_default().to_lowercase();
+    EXTENSIONS.contains(&extension.as_str())
+}
 
 pub fn is_icon(path: &Path) -> bool {
-    let extension = path.extension().and_then(|extension| extension.to_str()).unwrap_or_default().to_lowercase();
     let Ok(metadata) = path.metadata() else { return false };
-    EXTENSIONS.contains(&extension.as_str()) && metadata.is_file() && metadata.len() > 0 && metadata.len() <= MAX_ICON
+    named_like_image(path) && metadata.is_file() && metadata.len() > 0 && metadata.len() <= MAX_ICON
+}
+
+/// Every image in the project's folder that can be its icon, by its path inside the folder: of
+/// what git tracks or doesn't ignore, or in a folder that isn't a repository, what isn't hidden.
+pub async fn all(project: &str, environment: &Environment) -> Vec<String> {
+    let arguments = ["ls-files", "-z", "--cached", "--others", "--exclude-standard"];
+    let listed = git::run(git::command("git", project, environment, &arguments), None, LISTING).await;
+    let project = PathBuf::from(project);
+    let images = tokio::task::spawn_blocking(move || {
+        let paths = match listed {
+            Ok(listed) => listed.split('\0').filter(|path| !path.is_empty()).map(str::to_string).collect(),
+            Err(_) => walk(&project),
+        };
+        let mut images: Vec<String> = paths
+            .into_iter()
+            .filter(|path| named_like_image(Path::new(path)) && is_icon(&project.join(path)))
+            .take(MAX_LISTED)
+            .collect();
+        images.sort();
+        images.dedup();
+        images
+    });
+    images.await.unwrap_or_default()
+}
+
+/// The files under `root`, by their paths inside it, but for hidden ones and those in `SKIPPED`.
+fn walk(root: &Path) -> Vec<String> {
+    let mut files = Vec::new();
+    let mut folders = vec![PathBuf::new()];
+    let mut walked = 0;
+    while let Some(folder) = folders.pop() {
+        let Ok(entries) = std::fs::read_dir(root.join(&folder)) else { continue };
+        for entry in entries.flatten() {
+            walked += 1;
+            if walked > MAX_WALKED {
+                return files;
+            }
+            let Ok(name) = entry.file_name().into_string() else { continue };
+            if name.starts_with('.') {
+                continue;
+            }
+            let Ok(kind) = entry.file_type() else { continue };
+            let path = folder.join(&name);
+            if kind.is_dir() && !SKIPPED.contains(&name.as_str()) {
+                folders.push(path);
+            } else if kind.is_file() {
+                files.push(path.to_string_lossy().into_owned());
+            }
+        }
+    }
+    files
 }
 
 fn workspace_members(project: &Path) -> Vec<PathBuf> {
@@ -112,6 +176,25 @@ mod tests {
         assert_eq!(find(project.path()), None);
         assert_eq!(version(&project.path().join("notes.txt").to_string_lossy()), None);
         assert!(read(&project.path().join("icon.png").to_string_lossy()).is_err());
+    }
+
+    #[tokio::test]
+    async fn every_image_in_the_folder_is_listed_but_hidden_and_skipped_ones() {
+        let project = tempfile::tempdir().unwrap();
+        write(project.path(), "logo.svg");
+        write(project.path(), "docs/art/banner.png");
+        write(project.path(), "notes.txt");
+        write(project.path(), ".cache/icon.png");
+        write(project.path(), "node_modules/thing/icon.png");
+
+        let variables = std::env::vars().filter(|(name, _)| name == "PATH").collect();
+        let environment = Environment::fixed(variables, Default::default());
+        let root = project.path().to_string_lossy();
+        assert_eq!(all(&root, &environment).await, vec!["docs/art/banner.png", "logo.svg"]);
+
+        std::process::Command::new("git").arg("init").arg("-q").current_dir(project.path()).status().unwrap();
+        std::fs::write(project.path().join(".gitignore"), "docs/\n.cache/\nnode_modules/\n").unwrap();
+        assert_eq!(all(&root, &environment).await, vec!["logo.svg"]);
     }
 
     #[test]

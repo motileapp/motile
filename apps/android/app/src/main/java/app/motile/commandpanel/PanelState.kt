@@ -10,6 +10,7 @@ import app.motile.core.FolderListing
 import app.motile.core.GitHubState
 import app.motile.core.PanelPage
 import app.motile.core.Project
+import app.motile.core.ProjectImage
 import app.motile.core.Repo
 import app.motile.core.RestartWhen
 import app.motile.core.Server
@@ -36,6 +37,9 @@ internal class PanelState(start: PanelPage, private val store: AppStore, private
         private set
     /** The folders under the path typed on the folder page. Missing while they are asked for. */
     var listing by mutableStateOf<FolderListing?>(null)
+        private set
+    /** The images that fit the search on the icon page. Missing while they are asked for. */
+    var images by mutableStateOf<List<ProjectImage>?>(null)
         private set
     var browseError by mutableStateOf<String?>(null)
         private set
@@ -104,19 +108,15 @@ internal class PanelState(start: PanelPage, private val store: AppStore, private
         store.panelNotice = null
         copied = false
         listing = null
+        images = null
         browseError = null
         val page = page
-        val start = when (page) {
-            is PanelPage.Folder -> "~/"
-            is PanelPage.Icon -> (store.project(page.projectID)?.path ?: "~") + "/"
-            else -> ""
-        }
+        val start = if (page is PanelPage.Folder) "~/" else ""
         when (page) {
             is PanelPage.GitHub -> store.loadRepos(page.serverID)
             is PanelPage.Sources -> if (store.github[page.serverID] == GitHubState.Ready) store.loadRepos(page.serverID)
             else -> Unit
         }
-        if (start == query) return
         query = start
         browse()
     }
@@ -142,37 +142,44 @@ internal class PanelState(start: PanelPage, private val store: AppStore, private
         item.action()
     }
 
-    /** Asks for the folders under the typed path. Placeholders take the place of the folders that are shown when the answer takes a while. */
+    /** Asks for the folders under the typed path, or the images that fit the search. Placeholders take the place of what is shown when the answer takes a while. */
     private fun browse() {
-        val (id, icons) = browsed(page) ?: return
+        if (!lists(page)) return
         browsesAsked += 1
         val asked = browsesAsked
-        store.browse(id, query, icons) { result ->
-            if (asked != browsesAsked) return@browse
-            browsesAnswered = asked
-            result.onSuccess {
-                listing = it
-                browseError = null
+        when (val page = page) {
+            is PanelPage.Folder -> store.browse(page.serverID, query) { result -> answered(asked, result) { listing = it } }
+            is PanelPage.Icon -> {
+                val project = store.project(page.projectID) ?: return
+                store.images(project, query) { result -> answered(asked, result) { images = it } }
             }
-            result.onFailure {
-                listing = null
-                browseError = result.coreError?.message ?: it.message
-            }
+            else -> return
         }
         scope.launch {
             delay(150)
             if (asked != browsesAsked || browsesAnswered >= asked) return@launch
             listing = null
+            images = null
             browseError = null
         }
     }
 
-    /** The server whose folders the page lists, and whether with the images that can be an icon. */
-    fun browsed(page: PanelPage): Pair<String, Boolean>? = when (page) {
-        is PanelPage.Folder -> page.serverID to false
-        is PanelPage.Icon -> store.project(page.projectID)?.let { it.serverID to true }
-        else -> null
+    /** Keeps what the server answered, unless something was asked for since. */
+    private fun <Found> answered(asked: Int, result: Result<Found>, keep: (Found?) -> Unit) {
+        if (asked != browsesAsked) return
+        browsesAnswered = asked
+        result.onSuccess {
+            keep(it)
+            browseError = null
+        }
+        result.onFailure {
+            keep(null)
+            browseError = result.coreError?.message ?: it.message
+        }
     }
+
+    /** Whether the page lists what a server answers as the search changes. */
+    fun lists(page: PanelPage): Boolean = page is PanelPage.Folder || page is PanelPage.Icon
 
     // What is shown
 
@@ -200,7 +207,7 @@ internal class PanelState(start: PanelPage, private val store: AppStore, private
         is PanelPage.GitHub -> "Search your repositories"
         is PanelPage.GitHubSetup -> "Set up GitHub"
         is PanelPage.Folder -> "Path on ${serverName(page.serverID)}"
-        is PanelPage.Icon -> "Path to an image on ${serverName(store.project(page.projectID)?.serverID ?: "")}"
+        is PanelPage.Icon -> "Search the images in ${store.project(page.projectID)?.name ?: "the project"}"
     }
 
     /** What a server refused, or why it couldn't list the repositories again. */
@@ -211,7 +218,7 @@ internal class PanelState(start: PanelPage, private val store: AppStore, private
 
     fun emptyText(page: PanelPage): String = when (page) {
         is PanelPage.Folder -> browseError ?: "No folders found"
-        is PanelPage.Icon -> browseError ?: "No folders or images found"
+        is PanelPage.Icon -> browseError ?: "No images found"
         is PanelPage.GitHub -> store.repoErrors[page.serverID] ?: "No repository found"
         else -> "Nothing found"
     }
@@ -432,20 +439,17 @@ internal class PanelState(start: PanelPage, private val store: AppStore, private
         return items
     }
 
-    /** The icon in the project's folder, the folder above the typed one, and the folders and images in it. */
+    /** The icon found in the project's folder, then the images in it that fit the search. */
     private fun iconItems(projectID: String): List<PanelItem> {
         val project = store.project(projectID) ?: return emptyList()
-        val listing = listing ?: return if (browseError == null) (0 until 8).map { PanelItem.placeholder(it, lines = 1) } else emptyList()
+        val images = images ?: return if (browseError == null) (0 until 8).map { PanelItem.placeholder(it, lines = 2) } else emptyList()
         val items = mutableListOf<PanelItem>()
-        if (query.endsWith("/") || query == "~") {
+        if (query.isEmpty()) {
             items.add(PanelItem("folder-icon", "Use the icon in its folder", project.path, PanelIcon.Glyph(Symbol.Undo2)) { store.setIcon(project, null) })
-            listing.parent?.let { parent -> items.add(PanelItem("parent", "..", "", PanelIcon.Glyph(Symbol.CornerLeftUp), keepsOpen = true) { type(parent) }) }
         }
-        items += listing.folders.map { folder ->
-            PanelItem(folder.path, folder.name, "", PanelIcon.Glyph(Symbol.Folder), keepsOpen = true) { type(folder.typed) }
-        }
-        items += listing.images.map { (name, path) ->
-            PanelItem(path, name, "", PanelIcon.Glyph(Symbol.Image)) { store.setIcon(project, path) }
+        items += images.map { image ->
+            val folder = if (image.folder.isEmpty()) project.name else "${project.name}/${image.folder}"
+            PanelItem(image.path, image.name, folder, PanelIcon.Glyph(Symbol.Image)) { store.setIcon(project, image.path) }
         }
         return items
     }
@@ -524,4 +528,4 @@ internal val PanelPage.githubID: String? get() = (this as? PanelPage.GitHub)?.se
 
 /** It asks for something to be typed rather than searched. */
 internal val PanelPage.isTyped: Boolean
-    get() = this is PanelPage.NewProject || this is PanelPage.Folder || this is PanelPage.Icon
+    get() = this is PanelPage.NewProject || this is PanelPage.Folder

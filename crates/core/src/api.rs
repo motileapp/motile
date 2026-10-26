@@ -113,13 +113,18 @@ pub enum Command {
         request: Request,
     },
     /// The folders on the server under the path typed in `query`, which starts at `/` or `~/`:
-    /// those of its directory whose names start with what follows the last slash, and with
-    /// `icons` the images there that can be a project's icon. Answers with a `browse::Listing`.
+    /// those of its directory whose names start with what follows the last slash. Answers with a
+    /// `browse::Listing`.
     Browse {
         server_id: String,
         query: String,
-        #[serde(default)]
-        icons: bool,
+    },
+    /// The images in the project's folder that can be its icon and fit `query`, the best first.
+    /// Answers with `images`, each a `browse::Image`.
+    ProjectImages {
+        server_id: String,
+        project_id: String,
+        query: String,
     },
     /// The skills of the agent's `account` in the project that fit the word that ends
     /// `before_cursor`, the composer's text up to its cursor, when it starts with `$` or `/`.

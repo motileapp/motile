@@ -336,9 +336,12 @@ struct Core {
     /// The files on their way to a server, by the key the client gave: the command that waits for
     /// each, and what stops it.
     uploads: HashMap<String, (u64, AbortHandle)>,
-    /// The folders and images last listed for `browse`: of which server and directory, and
-    /// whether with the hidden ones and the images.
+    /// The folders last listed for `browse`: of which server and directory, and whether with the
+    /// hidden ones.
     browsed: Browsed,
+    /// The images last listed for `project_images`: of which server and project, and the
+    /// project's folder with the paths inside it.
+    searched_images: SearchedImages,
     /// The skills each server's projects have, by server and project, and when they were listed.
     /// Held while they are asked for, so that what is typed meanwhile waits for the answer.
     skills: Skills,
@@ -380,7 +383,8 @@ struct Search {
     asking: Option<AbortHandle>,
 }
 
-type Browsed = Arc<std::sync::Mutex<Option<((String, String, bool, bool), (Vec<String>, Vec<String>))>>>;
+type Browsed = Arc<std::sync::Mutex<Option<((String, String, bool), Vec<String>)>>>;
+type SearchedImages = Arc<std::sync::Mutex<Option<((String, String), (String, Vec<String>))>>>;
 
 /// Starts the core on the current tokio runtime.
 pub fn start(config: Config, sink: EventSink) -> anyhow::Result<Handle> {
@@ -420,6 +424,7 @@ pub fn start(config: Config, sink: EventSink) -> anyhow::Result<Handle> {
         photos: HashMap::new(),
         uploads: HashMap::new(),
         browsed: Browsed::default(),
+        searched_images: SearchedImages::default(),
         skills: Skills::default(),
         keybindings: Keybindings::load(&config.data_dir, &config.platform),
         config,
@@ -2251,7 +2256,7 @@ impl Core {
                     reply(&sink, id, answer.map(|message| serde_json::to_value(message).unwrap_or_default()));
                 });
             }
-            Command::Browse { server_id, query, icons } => {
+            Command::Browse { server_id, query } => {
                 let link = match self.link(&server_id) {
                     Ok(link) => link,
                     Err(error) => return self.reply(id, Err(error)),
@@ -2265,29 +2270,53 @@ impl Core {
                 tokio::spawn(async move {
                     let home = home.unwrap_or_default();
                     // Typing a name narrows the folders that are here already.
-                    let key = (server_id, typed.directory.clone(), typed.leaf.starts_with('.'), icons);
+                    let key = (server_id, typed.directory.clone(), typed.leaf.starts_with('.'));
                     let known =
                         browsed.lock().unwrap().clone().filter(|(known, _)| *known == key && !typed.leaf.is_empty());
-                    let entries = match known {
-                        Some((_, entries)) => Ok(entries),
+                    let folders = match known {
+                        Some((_, folders)) => Ok(folders),
                         None => {
-                            let list = Request::ListDir { path: Some(key.1.clone()), icons, hidden: key.2 };
+                            let list = Request::ListDir { path: Some(key.1.clone()), icons: false, hidden: key.2 };
                             match link.request(&list).await {
-                                Ok(Message::Dir { folders, files, .. }) => {
-                                    *browsed.lock().unwrap() = Some((key, (folders.clone(), files.clone())));
-                                    Ok((folders, files))
+                                Ok(Message::Dir { folders, .. }) => {
+                                    *browsed.lock().unwrap() = Some((key, folders.clone()));
+                                    Ok(folders)
                                 }
-                                Ok(other) => Err(format!(
-                                    "Your server gave an unexpected answer. Update it and try again. It said: {other:?}"
-                                )),
+                                Ok(other) => Err(unexpected(&other)),
                                 Err(error) => Err(error_text(error)),
                             }
                         }
                     };
-                    let listing = entries.map(|(folders, images)| {
-                        browse::listing(&typed.directory, &typed.leaf, &folders, &images, &home)
-                    });
+                    let listing =
+                        folders.map(|folders| browse::listing(&typed.directory, &typed.leaf, &folders, &home));
                     reply(&sink, id, listing.map(|listing| serde_json::to_value(listing).unwrap_or_default()));
+                });
+            }
+            Command::ProjectImages { server_id, project_id, query } => {
+                let link = match self.link(&server_id) {
+                    Ok(link) => link,
+                    Err(error) => return self.reply(id, Err(error)),
+                };
+                let (sink, searched) = (self.sink.clone(), self.searched_images.clone());
+                tokio::spawn(async move {
+                    // Typing narrows the images listed when the search started.
+                    let key = (server_id, project_id);
+                    let known =
+                        searched.lock().unwrap().clone().filter(|(known, _)| *known == key && !query.is_empty());
+                    let listed = match known {
+                        Some((_, listed)) => Ok(listed),
+                        None => match link.request(&Request::ProjectImages { project_id: key.1.clone() }).await {
+                            Ok(Message::ProjectImages { folder, paths }) => {
+                                *searched.lock().unwrap() = Some((key, (folder.clone(), paths.clone())));
+                                Ok((folder, paths))
+                            }
+                            Ok(other) => Err(unexpected(&other)),
+                            Err(error) => Err(error_text(error)),
+                        },
+                    };
+                    let images =
+                        listed.map(|(folder, paths)| json!({ "images": browse::images(&folder, &paths, &query) }));
+                    reply(&sink, id, images);
                 });
             }
             Command::SkillMenu { server_id, project_id, account, before_cursor } => {

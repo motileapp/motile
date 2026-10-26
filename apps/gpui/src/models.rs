@@ -913,14 +913,14 @@ pub struct FolderListing {
     pub typed: String,
     pub parent: Option<String>,
     pub folders: Vec<ListedFolder>,
-    /// The images that can be a project's icon, when one is being chosen.
-    #[serde(default)]
-    pub images: Vec<ListedImage>,
 }
 
+/// An image in a project's folder that can be its icon.
 #[derive(Deserialize, Clone, Debug)]
-pub struct ListedImage {
+pub struct ProjectImage {
     pub name: String,
+    /// The folder it is in, inside the project's. Empty at its top.
+    pub folder: String,
     pub path: String,
 }
 

@@ -1357,15 +1357,26 @@ struct FolderListing {
     let typed: String
     let parent: String?
     let folders: [Folder]
-    /// The images that can be a project's icon, when one is being chosen.
-    let images: [(name: String, path: String)]
 
     init(json: JSON) {
         path = json.string("path")
         typed = json.string("typed")
         parent = json.optionalString("parent")
         folders = json.objects("folders").map { Folder(name: $0.string("name"), path: $0.string("path"), typed: $0.string("typed")) }
-        images = json.objects("images").map { ($0.string("name"), $0.string("path")) }
+    }
+}
+
+/// An image in a project's folder that can be its icon.
+struct ProjectImage {
+    let name: String
+    /// The folder it is in, inside the project's. Empty at its top.
+    let folder: String
+    let path: String
+
+    init(json: JSON) {
+        name = json.string("name")
+        folder = json.string("folder")
+        path = json.string("path")
     }
 }
 

@@ -67,7 +67,7 @@ fn score(skill: &Skill, query: &str) -> Option<u32> {
     named.or_else(described)
 }
 
-fn fit(field: &str, query: &str) -> Option<u32> {
+pub(crate) fn fit(field: &str, query: &str) -> Option<u32> {
     let starts_word =
         || field.split(|character: char| !character.is_alphanumeric()).any(|word| word.starts_with(query));
     let in_order = || {

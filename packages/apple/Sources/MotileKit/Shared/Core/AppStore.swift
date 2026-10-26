@@ -1500,9 +1500,16 @@ final class AppStore {
     }
 
     /// With `icons`, the images that can be a project's icon are listed too.
-    func browse(serverID: String, query: String, icons: Bool, done: @escaping (Result<FolderListing, CoreBridge.CoreError>) -> Void) {
-        core.send("browse", ["server_id": serverID, "query": query, "icons": icons]) { result in
+    func browse(serverID: String, query: String, done: @escaping (Result<FolderListing, CoreBridge.CoreError>) -> Void) {
+        core.send("browse", ["server_id": serverID, "query": query]) { result in
             done(result.map { FolderListing(json: $0) })
+        }
+    }
+
+    /// The images in the project's folder that fit `query`, the best first.
+    func images(of project: Project, query: String, done: @escaping (Result<[ProjectImage], CoreBridge.CoreError>) -> Void) {
+        core.send("project_images", ["server_id": project.serverID, "project_id": project.id, "query": query]) { result in
+            done(result.map { $0.objects("images").map(ProjectImage.init) })
         }
     }
 

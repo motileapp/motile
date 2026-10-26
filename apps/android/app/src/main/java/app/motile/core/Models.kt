@@ -1281,8 +1281,6 @@ data class FolderListing(
     val typed: String,
     val parent: String?,
     val folders: List<Folder>,
-    /** The images that can be a project's icon, when one is being chosen. */
-    val images: List<Pair<String, String>>,
 ) {
     data class Folder(
         val name: String,
@@ -1296,8 +1294,17 @@ data class FolderListing(
         typed = json.string("typed"),
         parent = json.optionalString("parent"),
         folders = json.objects("folders").map { Folder(it.string("name"), it.string("path"), it.string("typed")) },
-        images = json.objects("images").map { it.string("name") to it.string("path") },
     )
+}
+
+/** An image in a project's folder that can be its icon. */
+data class ProjectImage(
+    val name: String,
+    /** The folder it is in, inside the project's. Empty at its top. */
+    val folder: String,
+    val path: String,
+) {
+    constructor(json: JSON) : this(json.string("name"), json.string("folder"), json.string("path"))
 }
 
 /** "820", "1.5K", "45.7M", "123B", "1.2T": at most three significant digits. */

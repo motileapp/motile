@@ -11,7 +11,9 @@ use gpui_kit::prelude::*;
 use gpui_kit::*;
 use motile_protocol::wire::{GitHubState, Repo, RestartWhen};
 
-use crate::models::{FolderListing, Project, Server, ThreadInfo, ago, ask_phrase, interruption_label, last_component};
+use crate::models::{
+    FolderListing, Project, ProjectImage, Server, ThreadInfo, ago, ask_phrase, interruption_label, last_component,
+};
 use crate::store::settings::SettingsSection;
 use crate::store::{AddingProject, PanelPage, Selection, Store};
 use crate::theme::{Colors, ControlSize, IconSize, Layer, Opacity, Radius, ShadowSize, Surface, colors};
@@ -154,6 +156,8 @@ pub struct CommandPanel {
     highlighted: usize,
     /// The folders under the path typed on the folder page. Missing while they are asked for.
     listing: Option<FolderListing>,
+    /// The images that fit the search on the icon page. Missing while they are asked for.
+    images: Option<Vec<ProjectImage>>,
     browse_error: Option<String>,
     browses_asked: u64,
     browses_answered: u64,
@@ -197,6 +201,7 @@ impl CommandPanel {
             query,
             highlighted: 0,
             listing: None,
+            images: None,
             browse_error: None,
             browses_asked: 0,
             browses_answered: 0,
@@ -689,15 +694,14 @@ impl CommandPanel {
         items
     }
 
-    /// The icon in the project's folder, the folder above the typed one, and the folders and
-    /// images in it.
+    /// The icon found in the project's folder, then the images in it that fit the search.
     fn icon_items(&self, id: &str, cx: &App) -> Vec<Item> {
         let Some(project) = self.store.read(cx).project(Some(id)).cloned() else { return Vec::new() };
-        let Some(listing) = &self.listing else {
+        let Some(images) = &self.images else {
             if self.browse_error.is_some() {
                 return Vec::new();
             }
-            return (0..8).map(|position| Item::placeholder(position, 1)).collect();
+            return (0..8).map(|position| Item::placeholder(position, 2)).collect();
         };
         let set_icon = |path: Option<String>| {
             let project = project.clone();
@@ -706,9 +710,8 @@ impl CommandPanel {
                 this.store.update(cx, |store, _| store.set_icon(&project, path));
             }
         };
-        let query = self.query_text(cx);
         let mut items = Vec::new();
-        if query.ends_with('/') || query == "~" {
+        if self.query_text(cx).is_empty() {
             items.push(Item::new(
                 "folder-icon",
                 "Use the icon in its folder",
@@ -716,33 +719,17 @@ impl CommandPanel {
                 ItemIcon::Symbol("undo-2"),
                 set_icon(None),
             ));
-            if let Some(parent) = listing.parent.clone() {
-                items.push(
-                    Item::new("parent", "..", "", ItemIcon::Symbol("corner-left-up"), move |this, window, cx| {
-                        this.set_query(parent.clone(), window, cx)
-                    })
-                    .keeps_open(),
-                );
-            }
         }
-        for folder in &listing.folders {
-            let typed = folder.typed.clone();
-            items.push(
-                Item::new(
-                    folder.path.clone(),
-                    folder.name.clone(),
-                    "",
-                    ItemIcon::Symbol("folder"),
-                    move |this, window, cx| this.set_query(typed.clone(), window, cx),
-                )
-                .keeps_open(),
-            );
-        }
-        for image in &listing.images {
+        for image in images {
+            let folder = if image.folder.is_empty() {
+                project.name.clone()
+            } else {
+                format!("{}/{}", project.name, image.folder)
+            };
             items.push(Item::new(
                 image.path.clone(),
                 image.name.clone(),
-                "",
+                folder,
                 ItemIcon::Symbol("image"),
                 set_icon(Some(image.path.clone())),
             ));
@@ -973,13 +960,10 @@ impl CommandPanel {
     fn arrive(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.copied = false;
         self.listing = None;
+        self.images = None;
         self.browse_error = None;
         let query = match self.page() {
             PanelPage::Folder(_) => "~/".into(),
-            PanelPage::Icon(id) => {
-                let path = self.store.read(cx).project(Some(&id)).map_or("~".into(), |project| project.path.clone());
-                format!("{path}/")
-            }
             _ => String::new(),
         };
         self.set_query(query, window, cx);
@@ -996,40 +980,41 @@ impl CommandPanel {
         self.refresh(cx);
     }
 
-    /// Asks for the folders under the typed path. Placeholders take the place of the folders that
-    /// are shown when the answer takes a while.
+    /// Asks for the folders under the typed path, or the images that fit the search. Placeholders
+    /// take the place of what is shown when the answer takes a while.
     fn browse(&mut self, _: &mut Window, cx: &mut Context<Self>) {
-        let Some((id, icons)) = self.browsed(cx) else { return };
+        let page = self.page();
+        if !matches!(page, PanelPage::Folder(_) | PanelPage::Icon(_)) {
+            return;
+        }
         self.browses_asked += 1;
         let asked = self.browses_asked;
         let query = self.query_text(cx);
         let panel = cx.entity().downgrade();
-        self.store.update(cx, |store, _| {
-            store.browse(&id, query, icons, move |_, result, cx| {
-                let _ = panel.update(cx, |this, cx| {
-                    if asked != this.browses_asked {
-                        return;
-                    }
-                    this.browses_answered = asked;
-                    match result {
-                        Ok(found) => {
-                            this.listing = Some(found);
-                            this.browse_error = None;
-                        }
-                        Err(error) => {
-                            this.listing = None;
-                            this.browse_error = Some(error);
-                        }
-                    }
-                    this.refresh(cx);
+        match page {
+            PanelPage::Folder(id) => self.store.update(cx, |store, _| {
+                store.browse(&id, query, move |_, result, cx| {
+                    let _ = panel
+                        .update(cx, |this, cx| this.answered(asked, result, |this, found| this.listing = found, cx));
                 });
-            });
-        });
+            }),
+            PanelPage::Icon(id) => {
+                let Some(project) = self.store.read(cx).project(Some(&id)).cloned() else { return };
+                self.store.update(cx, |store, _| {
+                    store.project_images(&project, query, move |_, result, cx| {
+                        let _ = panel
+                            .update(cx, |this, cx| this.answered(asked, result, |this, found| this.images = found, cx));
+                    });
+                });
+            }
+            _ => return,
+        }
         cx.spawn(async move |this, cx| {
             cx.background_executor().timer(Duration::from_millis(150)).await;
             let _ = this.update(cx, |this, cx| {
                 if asked == this.browses_asked && this.browses_answered < asked {
                     this.listing = None;
+                    this.images = None;
                     this.browse_error = None;
                     this.refresh(cx);
                 }
@@ -1038,13 +1023,29 @@ impl CommandPanel {
         .detach();
     }
 
-    /// The server whose folders the page lists, and whether with the images that can be an icon.
-    fn browsed(&self, cx: &App) -> Option<(String, bool)> {
-        match self.page() {
-            PanelPage::Folder(id) => Some((id, false)),
-            PanelPage::Icon(id) => Some((self.store.read(cx).project(Some(&id))?.server_id.clone(), true)),
-            _ => None,
+    /// Keeps what the server answered, unless something was asked for since.
+    fn answered<Found>(
+        &mut self,
+        asked: u64,
+        result: Result<Found, String>,
+        keep: impl FnOnce(&mut Self, Option<Found>),
+        cx: &mut Context<Self>,
+    ) {
+        if asked != self.browses_asked {
+            return;
         }
+        self.browses_answered = asked;
+        match result {
+            Ok(found) => {
+                keep(self, Some(found));
+                self.browse_error = None;
+            }
+            Err(error) => {
+                keep(self, None);
+                self.browse_error = Some(error);
+            }
+        }
+        self.refresh(cx);
     }
 
     fn run(&mut self, item: &Item, window: &mut Window, cx: &mut Context<Self>) {
@@ -1163,8 +1164,8 @@ impl CommandPanel {
             PanelPage::GithubSetup(_) => "Set up GitHub".into(),
             PanelPage::Folder(id) => format!("Path on {}", self.server_name(&id, cx)),
             PanelPage::Icon(id) => {
-                let server = self.store.read(cx).project(Some(&id)).map(|project| project.server_id.clone());
-                format!("Path to an image on {}", self.server_name(&server.unwrap_or_default(), cx))
+                let name = self.store.read(cx).project(Some(&id)).map(|project| project.name.clone());
+                format!("Search the images in {}", name.unwrap_or("the project".into()))
             }
         }
     }
@@ -1172,7 +1173,7 @@ impl CommandPanel {
     fn empty_text(&self, cx: &App) -> String {
         match self.page() {
             PanelPage::Folder(_) => self.browse_error.clone().unwrap_or("No folders found".into()),
-            PanelPage::Icon(_) => self.browse_error.clone().unwrap_or("No folders or images found".into()),
+            PanelPage::Icon(_) => self.browse_error.clone().unwrap_or("No images found".into()),
             PanelPage::Github(id) => {
                 self.store.read(cx).repo_errors.get(&id).cloned().unwrap_or("No repository found".into())
             }
@@ -1433,7 +1434,6 @@ impl CommandPanel {
                 .child(div().text_size(px(12.)).child(text.to_string()))
         };
         let folder = matches!(self.page(), PanelPage::Folder(_));
-        let icon = matches!(self.page(), PanelPage::Icon(_));
         let github = matches!(self.page(), PanelPage::Github(_));
         div()
             .h(px(40.))
@@ -1443,8 +1443,7 @@ impl CommandPanel {
             .gap(px(14.))
             .child(hint(&["up", "down"], "Navigate"))
             .when(folder, |hints| hints.child(hint(&["enter"], "Open")).child(hint(&["mod+enter"], "Add")))
-            .when(icon, |hints| hints.child(hint(&["enter"], "Open")))
-            .when(!folder && !icon, |hints| hints.child(hint(&["enter"], "Select")))
+            .when(!folder, |hints| hints.child(hint(&["enter"], "Select")))
             .when(github, |hints| hints.child(hint(&["mod+r"], "Refresh")))
             .when(self.pages.len() > 1, |hints| hints.child(hint(&["backspace"], "Back")))
             .child(hint(&["escape"], "Close"))

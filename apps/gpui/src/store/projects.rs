@@ -10,7 +10,7 @@ use motile_protocol::wire::{GitHubState, Repo, Request};
 
 use super::{AddingProject, Notice, PanelPage, Selection, Store};
 use crate::bridge::CoreError;
-use crate::models::{FolderListing, Project, Server};
+use crate::models::{FolderListing, Project, ProjectImage, Server};
 
 /// Which servers are listing their GitHub repositories now, and when each last did.
 #[derive(Default)]
@@ -128,20 +128,36 @@ impl Store {
         server.map_or(0, |server| server.protocol_version) >= 5
     }
 
-    /// Lists the folders under the typed path, with the images that can be an icon when `icons`.
+    /// Lists the folders under the typed path.
     pub fn browse(
         &mut self,
         server_id: &str,
         query: String,
-        icons: bool,
         done: impl FnOnce(&mut Store, Result<FolderListing, String>, &mut Context<Store>) + 'static,
     ) {
-        let command = Command::Browse { server_id: server_id.to_string(), query, icons };
+        let command = Command::Browse { server_id: server_id.to_string(), query };
         self.ask(command, move |store, result, cx| {
             let listing = result
                 .map_err(String::from)
                 .map(|value| serde_json::from_value::<FolderListing>(value).unwrap_or_default());
             done(store, listing, cx);
+        });
+    }
+
+    /// The images in the project's folder that fit `query`, the best first.
+    pub fn project_images(
+        &mut self,
+        project: &Project,
+        query: String,
+        done: impl FnOnce(&mut Store, Result<Vec<ProjectImage>, String>, &mut Context<Store>) + 'static,
+    ) {
+        let command =
+            Command::ProjectImages { server_id: project.server_id.clone(), project_id: project.id.clone(), query };
+        self.ask(command, move |store, result, cx| {
+            let images = result
+                .map_err(String::from)
+                .map(|value| serde_json::from_value::<Vec<ProjectImage>>(value["images"].clone()).unwrap_or_default());
+            done(store, images, cx);
         });
     }
 

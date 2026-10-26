@@ -702,6 +702,10 @@ pub enum Request {
         project_id: String,
         path: Option<String>,
     },
+    /// The images in the project's folder that can be its icon. `ProjectImages` answers.
+    ProjectImages {
+        project_id: String,
+    },
     /// Folders inside `path`, or inside the home folder. With `icons`, also the files there that
     /// can be a project's icon, and with `hidden` the folders whose names start with a dot.
     ListDir {
@@ -2259,6 +2263,11 @@ pub enum Message {
     Ok,
     Sent {
         thread_id: String,
+    },
+    /// The project's folder, and the images' paths inside it.
+    ProjectImages {
+        folder: String,
+        paths: Vec<String>,
     },
     Dir {
         path: String,
