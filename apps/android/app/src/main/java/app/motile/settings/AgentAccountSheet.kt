@@ -30,6 +30,7 @@ import app.motile.core.Server
 import app.motile.layout.KeyboardFocus
 import app.motile.platform.Platform
 import app.motile.platform.Symbol
+import app.motile.theme.IconSize
 import app.motile.theme.ControlSize
 import app.motile.theme.LocalPalette
 import app.motile.theme.Theme
@@ -131,7 +132,7 @@ fun AgentAccountSheet(server: Server, initial: AgentAccount) {
 
     val trailing: @Composable () -> Unit = {
         when {
-            saving -> Spinner(17f)
+            saving -> Spinner(IconSize.Xl)
             savedAsIs -> ActionButton("Done", variant = ButtonVariant.Primary) { close() }
             else -> ActionButton("Save", variant = ButtonVariant.Primary, disabled = !canSave) { save() }
         }
@@ -195,7 +196,7 @@ fun AgentAccountSheet(server: Server, initial: AgentAccount) {
                                     )
                                 }
                                 if (signIn.finishing) {
-                                    Spinner(17f)
+                                    Spinner(IconSize.Xl)
                                 } else {
                                     ActionButton("Sign In", variant = ButtonVariant.Link, disabled = !signIn.canFinish || !canSave, onClick = ::finishSignIn)
                                 }
@@ -207,7 +208,7 @@ fun AgentAccountSheet(server: Server, initial: AgentAccount) {
                             SettingsPressRow(::startSignIn, enabled = step != AccountSignIn.Step.Starting) {
                                 SettingsActionLabel(if (signedInAs == null) "Sign In" else "Sign In Again", Symbol.CircleUser)
                                 Spacer(Modifier.weight(1f))
-                                if (step == AccountSignIn.Step.Starting) Spinner(17f)
+                                if (step == AccountSignIn.Step.Starting) Spinner(IconSize.Xl)
                             }
                         }
                     }

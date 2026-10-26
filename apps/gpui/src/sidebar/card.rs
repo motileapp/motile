@@ -10,12 +10,14 @@ use gpui_kit::*;
 
 use super::{ROW_INSET, Sidebar, row_margin};
 use crate::models::{ThreadInfo, last_component, shortened};
-use crate::theme::{Surface, colors};
+use crate::theme::{IconSize, Surface, colors};
 use crate::ui::control::dotted;
 use crate::ui::logos::{self, pull_request_color, pull_request_symbol};
 use crate::ui::{divider_on, dropdown_card, icons, tabular_numbers};
 
 const MAX_WIDTH: f32 = 320.;
+/// Every line's icon, beside its 12-point text.
+const ICON: IconSize = IconSize::Sm;
 /// How long the pointer rests on a row before the first card comes up.
 const REST: Duration = Duration::from_millis(300);
 /// How soon after a card went the next one comes up at once.
@@ -127,7 +129,7 @@ impl Sidebar {
                 .items_center()
                 .gap(px(8.))
                 .text_color(c.muted_foreground)
-                .child(div().size(px(14.)).flex_shrink_0().flex().items_center().justify_center().child(icon))
+                .child(icon)
                 .child(shown.child(dotted(text, c)))
                 .into_any_element()
         };
@@ -135,11 +137,11 @@ impl Sidebar {
         let checkout = match project.as_ref().and_then(|project| project.branch.clone().map(|branch| (project, branch)))
         {
             Some((project, branch)) => {
-                line(branch, true, icons::symbol(project.checkout_symbol(), 13.).into_any_element())
+                line(branch, true, icons::symbol(project.checkout_symbol(), ICON).into_any_element())
             }
             None => {
                 let home = server.map(|server| server.home.as_str()).unwrap_or_default();
-                line(shortened(&thread.cwd, home), true, icons::symbol("folder", 13.).into_any_element())
+                line(shortened(&thread.cwd, home), true, icons::symbol("folder", ICON).into_any_element())
             }
         };
         let pull_request = project.as_ref().and_then(|project| project.pull_request(thread));
@@ -162,15 +164,15 @@ impl Sidebar {
                     .flex()
                     .flex_col()
                     .gap(px(10.))
-                    .child(line(name, false, logos::project_icon(project.as_ref(), 14., cx)))
+                    .child(line(name, false, logos::project_icon(project.as_ref(), ICON, cx)))
                     .child(checkout)
                     .child(line(
                         store.model_label(thread),
                         false,
-                        logos::agent_icon(thread.agent, 13., cx).into_any_element(),
+                        logos::agent_icon(thread.agent, ICON, cx).into_any_element(),
                     ))
                     .when_some(server, |lines, server| {
-                        lines.child(line(server.name.clone(), false, icons::symbol("server", 12.).into_any_element()))
+                        lines.child(line(server.name.clone(), false, icons::symbol("server", ICON).into_any_element()))
                     }),
             )
             .when_some(pull_request, |card, pull_request| {
@@ -181,13 +183,8 @@ impl Sidebar {
                         .items_center()
                         .gap(px(8.))
                         .child(
-                            div()
-                                .w(px(14.))
-                                .flex_shrink_0()
-                                .flex()
-                                .justify_center()
-                                .text_color(pull_request_color(&pull_request, c))
-                                .child(icons::symbol(pull_request_symbol(&pull_request), 13.)),
+                            icons::symbol(pull_request_symbol(&pull_request), ICON)
+                                .text_color(pull_request_color(&pull_request, c)),
                         )
                         .child(
                             div()

@@ -136,7 +136,7 @@ export function Demo() {
             >
               <div className="min-w-0">
                 <p className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                  <ProjectIcon project={thread.project} size={12} />
+                  <ProjectIcon project={thread.project} size={14} />
                   <span>
                     {thread.project.name}{" "}
                     <span className="text-muted-stronger-foreground">·</span>{" "}

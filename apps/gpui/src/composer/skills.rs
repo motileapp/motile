@@ -13,7 +13,7 @@ use gpui_kit::*;
 
 use super::{Composer, strips};
 use crate::store::skills::{SkillPick, SkillRow, SkillSpan, skill_word};
-use crate::theme::{self, Layer, Radius, Surface, colors};
+use crate::theme::{self, IconSize, Layer, Radius, Surface, colors};
 use crate::ui::{Chip, Spinner, icons, skill_chip};
 
 const ROW_HEIGHT: f32 = 32.;
@@ -209,7 +209,7 @@ impl Composer {
                     .rounded(px(Radius::MD))
                     .when(lit, |row| row.bg(Surface::Composer.layer(Layer::Row, c)))
                     .text_size(px(skill_chip::TEXT_SIZE))
-                    .child(icons::symbol(skill_chip::SYMBOL, skill_chip::TEXT_SIZE).text_color(c.skill))
+                    .child(icons::symbol(skill_chip::SYMBOL, IconSize::text(skill_chip::TEXT_SIZE)).text_color(c.skill))
                     .child(
                         div()
                             .flex_none()
@@ -249,7 +249,7 @@ fn loading_row(cx: &App) -> AnyElement {
         .gap(px(8.))
         .text_size(px(skill_chip::TEXT_SIZE))
         .text_color(c.muted_foreground)
-        .child(Spinner::new(skill_chip::TEXT_SIZE).render(cx))
+        .child(Spinner::new(IconSize::text(skill_chip::TEXT_SIZE)).render(cx))
         .child("Loading skills")
         .into_any_element()
 }

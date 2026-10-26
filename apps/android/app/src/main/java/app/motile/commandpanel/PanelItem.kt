@@ -1,6 +1,5 @@
 package app.motile.commandpanel
 
-import androidx.compose.ui.graphics.Path
 import app.motile.platform.Symbol
 import app.motile.core.Project as ProjectInfo
 
@@ -9,8 +8,6 @@ internal class PanelSection(val title: String, val items: List<PanelItem>)
 /** What a row shows before its text. */
 internal sealed interface PanelIcon {
     data class Glyph(val symbol: Symbol) : PanelIcon
-    /** A logo, drawn in the colour of the symbols. */
-    class Logo(val path: Path) : PanelIcon
     data class Project(val project: ProjectInfo?) : PanelIcon
 }
 

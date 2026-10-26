@@ -7,12 +7,12 @@ struct Spinner: View {
     static let fill: CGFloat = 0.85
     static let turn = 1.2
 
-    var size: CGFloat = ControlSize.regular.symbol
+    var size: IconSize = ControlSize.regular.symbol
     @State private var turned = false
 
     var body: some View {
         let side = PlatformImage.symbolSide(size)
-        Image(.loader, size: size * Self.fill)
+        Image(.loader, side: side * Self.fill)
             .frame(width: side, height: side)
             .animation(.linear(duration: Self.turn).repeatForever(autoreverses: false)) { loader in
                 loader.rotationEffect(.degrees(turned ? 360 : 0))
@@ -25,7 +25,7 @@ struct Spinner: View {
 /// A symbol that turns while `turning`, and finishes the turn it is on once that ends.
 struct TurningSymbol: View {
     let symbol: Symbol
-    var size: CGFloat = ControlSize.regular.symbol
+    var size: IconSize = ControlSize.regular.symbol
     let turning: Bool
     @State private var shown = Shown()
     @State private var changes = 0

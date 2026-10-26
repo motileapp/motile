@@ -16,7 +16,7 @@ use super::{END_ROOM, ROW_MARGIN};
 use crate::models::ago;
 use crate::store::Store;
 use crate::store::pull_requests::{Row, Tone};
-use crate::theme::{Radius, colors};
+use crate::theme::{IconSize, Radius, colors};
 use crate::ui::menu::Menu;
 use crate::ui::{ActionButton, ActionMenu, Chip, InputField, edges, highlight, icons, middle_truncated};
 
@@ -265,7 +265,7 @@ fn list_row(row: &Row, place: &RowPlace, cx: &App) -> Stateful<Div> {
             row_signals.child(
                 div()
                     .id(("pr-row-review", row.number as usize))
-                    .child(icons::symbol(symbol, 11.).text_color(tone.color(c)))
+                    .child(icons::symbol(symbol, IconSize::Sm).text_color(tone.color(c)))
                     .tooltip(crate::ui::tooltip(text.clone())),
             )
         })
@@ -295,13 +295,13 @@ fn list_row(row: &Row, place: &RowPlace, cx: &App) -> Stateful<Div> {
         .child(
             div()
                 .relative()
-                .w(px(16.))
+                .w(px(IconSize::Md.side()))
                 .h(px(18.))
                 .flex_shrink_0()
                 .flex()
                 .items_center()
                 .justify_center()
-                .child(icons::symbol(row.state.symbol(), 13.).text_color(row.state.color(c))),
+                .child(icons::symbol(row.state.symbol(), IconSize::Md).text_color(row.state.color(c))),
         )
         .child(
             div()

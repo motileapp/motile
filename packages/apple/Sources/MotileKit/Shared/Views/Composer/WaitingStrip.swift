@@ -66,7 +66,7 @@ struct WaitingTitle: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            Image(symbol, size: 13)
+            Image(symbol, size: .sm)
             Text(title)
                 .font(.ui(size: 12, weight: .semibold))
                 .lineLimit(1)

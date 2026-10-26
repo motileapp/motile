@@ -19,8 +19,8 @@ use crate::store::Store;
 use crate::store::ricrac::{
     Group, KINDS, PRIORITIES, Page, RicracChoice, RicracFilter, Row, priority_name, priority_symbol, state_symbol,
 };
-use crate::theme::{ControlSize, Layer, Radius, Surface, colors};
-use crate::ui::control::turning_symbol;
+use crate::theme::{ControlSize, IconSize, Layer, Radius, Surface, colors};
+use crate::ui::control::Spinner;
 use crate::ui::menu::{Menu, MenuIcon};
 use crate::ui::modal::{modal, present_sheet};
 use crate::ui::{
@@ -500,7 +500,7 @@ impl RicracView {
                     .flex_col()
                     .items_center()
                     .gap(px(16.))
-                    .child(div().text_color(c.foreground).child(icons::symbol("ricrac", 28.)))
+                    .child(div().text_color(c.foreground).child(icons::symbol("ricrac", IconSize::Display)))
                     .child(
                         div()
                             .flex()
@@ -1165,10 +1165,10 @@ fn header(state: &RicracState, count: usize, folded: bool, place: &ListPlace, cx
         .gap(px(8.))
         .child(
             div()
-                .w(px(16.))
+                .w(px(IconSize::Sm.side()))
                 .flex()
                 .justify_center()
-                .child(icons::symbol(state_symbol(state.kind), 12.).text_color(hex_color(&state.color, c))),
+                .child(icons::symbol(state_symbol(state.kind), IconSize::Sm).text_color(hex_color(&state.color, c))),
         )
         .child(
             div()
@@ -1181,11 +1181,11 @@ fn header(state: &RicracState, count: usize, folded: bool, place: &ListPlace, cx
         .child(div().flex_1())
         .child(
             div()
-                .w(px(16.))
+                .w(px(IconSize::Sm.side()))
                 .flex()
                 .justify_center()
                 .text_color(c.muted_stronger_foreground)
-                .child(icons::symbol(if folded { "chevron-right" } else { "chevron-down" }, 10.)),
+                .child(icons::symbol(if folded { "chevron-right" } else { "chevron-down" }, IconSize::Xs)),
         )
         .on_click(move |_, _, cx| {
             let id = id.clone();
@@ -1341,10 +1341,7 @@ fn row_button(
     let group: SharedString = format!("{id}-button").into();
     let lit = Surface::Background.layer(Layer::RowSelected, c);
     let mark: AnyElement = if spinning {
-        div()
-            .text_color(tint.unwrap_or(c.muted_foreground))
-            .child(turning_symbol("loader".into(), size * 0.85, true))
-            .into_any_element()
+        div().text_color(tint.unwrap_or(c.muted_foreground)).child(Spinner::new(size).render(cx)).into_any_element()
     } else {
         let icon = icons::symbol(symbol, size);
         match tint {

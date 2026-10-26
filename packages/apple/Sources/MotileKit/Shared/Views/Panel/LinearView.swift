@@ -28,7 +28,7 @@ private struct LinearConnect: View {
     var body: some View {
         let linear = store.linear
         VStack(spacing: 16) {
-            Image(.linear, size: 28)
+            Image(.linear, size: .display)
                 .foregroundStyle(Color.themeForeground)
             VStack(spacing: 6) {
                 Text("Connect Linear")

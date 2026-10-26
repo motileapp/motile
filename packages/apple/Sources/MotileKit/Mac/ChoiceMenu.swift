@@ -31,7 +31,7 @@ private final class ChoiceItem: NSMenuItem {
         target = self
         state = choice.chosen ? .on : .off
         guard let symbol = choice.symbol else { return }
-        image = .symbol(symbol, size: 13)
+        image = .symbol(symbol, size: .md)
     }
 
     required init(coder: NSCoder) { fatalError("not used") }

@@ -23,7 +23,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import app.motile.core.Agent
 import app.motile.core.AgentState
-import app.motile.platform.Platform
 import app.motile.platform.Symbol
 import app.motile.platform.scaled
 import app.motile.theme.LocalPalette
@@ -48,8 +47,10 @@ object AgentAvatar {
     /** The dot is as large on every system as the composer strips' are, and cut out of what it lies on. */
     val dot = 6.dp
     val cut = 2.dp
+    /** The square of the agent's logo, or the bot when it has none, as a share of its circle. */
+    const val MARK = 0.6f
     /** The ellipsis that stands for the agents there is no room for, as a share of its circle. */
-    const val ELLIPSIS = 0.6f
+    const val ELLIPSIS = 0.72f
 
     /** How far each avatar side by side stands from the one before it: they overlap by a quarter. */
     fun step(side: Dp): Dp = side * 3 / 4
@@ -64,7 +65,6 @@ fun AgentAvatar(agent: Agent?, state: AgentState?, modifier: Modifier = Modifier
     val palette = LocalPalette.current
     // The circle leaves the box's corner to the dot, which sits on its edge.
     val circle = if (state == null) side else side - AgentAvatar.cut
-    val mark = (circle.value * 0.56f).roundToInt().toFloat()
     val dotted = if (state == null) Modifier else Modifier.cutting {
         val dot = AgentAvatar.dot.toPx()
         val cut = AgentAvatar.cut.toPx()
@@ -74,8 +74,7 @@ fun AgentAvatar(agent: Agent?, state: AgentState?, modifier: Modifier = Modifier
     }
     Box(modifier.size(side).then(dotted)) {
         AvatarCircle(circle) {
-            if (agent != null) AgentIcon(agent, size = mark)
-            else Icon(Symbol.Bot, mark * 0.85f / Platform.scale / 1.2f, color = palette.mutedForeground)
+            Icon(agent?.symbol ?: Symbol.Bot, (circle * AgentAvatar.MARK).rounded(), color = agent?.color(palette) ?: palette.mutedForeground)
         }
     }
 }
@@ -103,7 +102,7 @@ fun AgentAvatars(avatars: List<Pair<Agent?, AgentState?>>, more: Int, modifier: 
         if (more > 0) {
             val after = avatars.isNotEmpty()
             AvatarCircle(side, Modifier.overlapping(if (after) overlap else 0.dp).cutUnder(after, side)) {
-                Icon(Symbol.Ellipsis, (side.value * AgentAvatar.ELLIPSIS).roundToInt().toFloat(), color = palette.mutedForeground)
+                Icon(Symbol.Ellipsis, (side * AgentAvatar.ELLIPSIS).rounded(), color = palette.mutedForeground)
             }
         }
     }
@@ -135,6 +134,8 @@ private fun Modifier.cutUnder(cut: Boolean, side: Dp): Modifier {
         drawCircle(Color.Black, radius = radius + AgentAvatar.ring(side).toPx(), center = center, blendMode = BlendMode.Clear)
     }
 }
+
+private fun Dp.rounded(): Dp = value.roundToInt().dp
 
 /** Lies `overlap` over what is before it, which takes that much less room. */
 private fun Modifier.overlapping(overlap: Dp): Modifier = layout { measurable, constraints ->

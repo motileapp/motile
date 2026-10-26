@@ -21,7 +21,7 @@ use super::view::TranscriptView;
 use crate::models::{AttachedFile, duration, elapsed};
 use crate::store::Store;
 use crate::store::settings::SettingsSection;
-use crate::theme::{self, Colors, ControlSize, Radius, Surface, colors};
+use crate::theme::{self, Colors, ControlSize, IconSize, Radius, Surface, colors};
 use crate::ui::{ActionButton, Highlight, edges, icons};
 
 /// The room a prose row has around its text, which is what keeps two rows apart.
@@ -42,8 +42,6 @@ const VALUES_GAP: f32 = 8.;
 const QUEUED_RADIUS: f32 = Radius::XL;
 const CODE_HEADER: f32 = META_HEIGHT + 8.;
 const CODE_BOTTOM: f32 = 12.;
-/// The copy icons of the transcript are smaller than their buttons' size says.
-const COPY_SYMBOL: f32 = 12.;
 
 /// What drawing a row needs from the transcript around it.
 #[derive(Clone)]
@@ -435,7 +433,6 @@ fn copy_button(
     let view = ctx.view.clone();
     let key = id.clone();
     ActionButton::icon(SharedString::from(format!("copy-{id}")), if copied { "check" } else { "copy" }, help)
-        .symbol_size(COPY_SYMBOL)
         .surface(surface)
         .on_click(move |_, _, cx| {
             copy(cx);
@@ -900,10 +897,10 @@ fn queued_row(
                 .items_center()
                 .child(
                     div()
-                        .w(px(14.))
+                        .w(px(IconSize::Sm.side()))
                         .flex_none()
                         .flex()
-                        .child(icons::symbol("clock", 11.).text_color(c.muted_foreground)),
+                        .child(icons::symbol("clock", IconSize::Sm).text_color(c.muted_foreground)),
                 )
                 .child(
                     div()
@@ -1193,22 +1190,25 @@ fn tool_row(model: &RowModel, ctx: &RowContext, cx: &App) -> AnyElement {
         .when_some(line.symbol, |header, symbol| {
             header.child(
                 div()
-                    .size(px(16.))
+                    .size(px(IconSize::Md.side()))
                     .flex_none()
                     .flex()
                     .items_center()
                     .justify_center()
-                    .child(icons::symbol(symbol, 12.).text_color(c.muted_stronger_foreground)),
+                    .child(icons::symbol(symbol, IconSize::Md).text_color(c.muted_stronger_foreground)),
             )
         })
         .child(div().when(line.symbol.is_some(), |title| title.ml(px(8.))).flex().items_center().min_w_0().child(title))
         .when(line.opens || elapsed_shown, |header| {
-            header.child(div().ml(px(2.)).w(px(14.)).flex_none().flex().justify_center().when(line.opens, |chevron| {
-                chevron.child(
-                    icons::symbol(if chevron_open { "chevron-down" } else { "chevron-right" }, 9.)
-                        .text_color(c.muted_stronger_foreground),
-                )
-            }))
+            header.child(div().ml(px(2.)).w(px(IconSize::Xs.side())).flex_none().flex().justify_center().when(
+                line.opens,
+                |chevron| {
+                    chevron.child(
+                        icons::symbol(if chevron_open { "chevron-down" } else { "chevron-right" }, IconSize::Xs)
+                            .text_color(c.muted_stronger_foreground),
+                    )
+                },
+            ))
         })
         .when_some(line.started_at, |header, started| {
             header.child(
@@ -1324,8 +1324,8 @@ fn agent_line_box(avatar: impl IntoElement, title: Div, line: Div, time: String,
         )
         .child(div().ml(px(12.)).flex_none().children(time))
         .child(
-            div().ml(px(6.)).w(px(14.)).h(px(16.)).flex_none().flex().items_center().justify_center().child(
-                icons::symbol(if open { "chevron-down" } else { "chevron-right" }, 9.)
+            div().ml(px(6.)).size(px(IconSize::Xs.side())).flex_none().flex().items_center().justify_center().child(
+                icons::symbol(if open { "chevron-down" } else { "chevron-right" }, IconSize::Xs)
                     .text_color(c.muted_stronger_foreground),
             ),
         )
@@ -1497,12 +1497,12 @@ pub fn error_box(id: &str, message: &str, key: u64, cx: &App) -> Div {
         .gap(px(8.))
         .child(
             div()
-                .w(px(16.))
+                .w(px(IconSize::Md.side()))
                 .h(px(18.))
                 .flex()
                 .items_center()
                 .justify_center()
-                .child(icons::symbol("circle-alert", 13.).text_color(c.destructive)),
+                .child(icons::symbol("circle-alert", IconSize::Md).text_color(c.destructive)),
         )
         .child(text_box(13., 20.5).flex_1().min_w_0().text_color(c.destructive).child(plain(
             id,
@@ -1632,11 +1632,11 @@ fn change_entry(entry: &ChangeEntry, item: &str, ctx: &RowContext, cx: &App) -> 
                 .items_center()
                 .child(div().w(px(16.)).flex_none().child(if entry.folder {
                     div()
-                        .w(px(12.))
+                        .w(px(IconSize::Xs.side()))
                         .flex()
                         .justify_center()
                         .child(
-                            icons::symbol(if entry.open { "chevron-down" } else { "chevron-right" }, 8.)
+                            icons::symbol(if entry.open { "chevron-down" } else { "chevron-right" }, IconSize::Xs)
                                 .text_color(c.muted_stronger_foreground),
                         )
                         .into_any_element()
@@ -1649,7 +1649,7 @@ fn change_entry(entry: &ChangeEntry, item: &str, ctx: &RowContext, cx: &App) -> 
                             .w(px(16.))
                             .flex()
                             .justify_center()
-                            .child(icons::symbol(symbol, 11.).text_color(c.muted_foreground)),
+                            .child(icons::symbol(symbol, IconSize::Sm).text_color(c.muted_foreground)),
                     ),
                 )
                 .child(
@@ -1731,7 +1731,7 @@ pub fn started_by(end: bool, parent: &str, ctx: &RowContext, cx: &App) -> AnyEle
         .min_w_0()
         .h(px(size.height()))
         // Lucide leaves an eighth of the arrow's square empty on each side; its ink starts at the padding.
-        .pl(px(size.padding() - theme::symbol_side(size.symbol()) / 8.))
+        .pl(px(size.padding() - size.symbol().side() / 8.))
         .pr(px(size.padding()))
         .flex()
         .items_center()
@@ -1835,7 +1835,7 @@ fn handoff_row(from: &HandoffLabel, to: &HandoffLabel, ctx: &RowContext, window:
     };
     let (from_text, to_text) = (text(from), text(to));
     let (from_width, to_width) = (width(&from_text, window), width(&to_text, window));
-    let fixed = (logo + label_gap) * 2. + arrow_gap * 2. + theme::symbol_side(arrow);
+    let fixed = (logo.side() + label_gap) * 2. + arrow_gap * 2. + arrow.side();
     let room = (ctx.width - line_gap * 4. - fixed).max(0.);
     let (from_width, to_width) = fitted(from_width, to_width, room);
     let end = |agent: Agent, (text, runs): (SharedString, Vec<TextRun>), width: f32| {
@@ -1903,7 +1903,7 @@ fn removed_row(model: &RowModel, title: &str, message: &str, ctx: &RowContext, c
                         .flex()
                         .items_center()
                         .gap(px(8.))
-                        .child(icons::symbol("unlink", 13.).text_color(c.muted_foreground))
+                        .child(icons::symbol("unlink", IconSize::Md).text_color(c.muted_foreground))
                         .child(
                             div()
                                 .min_w_0()

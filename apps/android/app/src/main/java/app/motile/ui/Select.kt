@@ -50,7 +50,7 @@ fun Select(
             ) {
                 val color = if (chosen == null) palette.mutedStrongerForeground else LocalForeground.current
                 Text(title, Modifier.weight(1f), style = size.font, color = color, maxLines = 1)
-                Icon(Symbol.ChevronDown, size.textSize, color = palette.mutedStrongerForeground, trimmed = true)
+                Icon(Symbol.ChevronDown, size.chevron, color = palette.mutedStrongerForeground, trimmed = true)
             }
         }
         MenuPopup(menu) {

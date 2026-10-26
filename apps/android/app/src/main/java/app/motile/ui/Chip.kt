@@ -18,6 +18,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.motile.platform.Symbol
 import app.motile.platform.scaled
+import app.motile.theme.IconSize
 import app.motile.theme.LocalForeground
 import app.motile.theme.LocalPalette
 import app.motile.theme.LocalSurface
@@ -57,8 +58,8 @@ fun Chip(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (dot != null) Box(Modifier.size(7.dp).background(dot, CircleShape))
-            if (icon != null) Icon(icon, 11f)
-            if (glyph != null) Glyph(glyph, symbolSide(11f))
+            if (icon != null) Icon(icon, IconSize.Sm)
+            if (glyph != null) Glyph(glyph, symbolSide(IconSize.Sm))
             Text(title, style = if (monospaced) Theme.uiMono(11.5f, FontWeight.Medium) else Theme.ui(11.5f, FontWeight.Medium), maxLines = 1)
         }
     }

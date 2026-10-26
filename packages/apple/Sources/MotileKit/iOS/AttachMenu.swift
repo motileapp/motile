@@ -16,24 +16,24 @@ struct AttachMenu: View {
 
     var body: some View {
         ActionMenu(
-            icon: .plus, help: "Attach files", symbolSize: 17, round: true, tint: .themeForeground, margin: ComposerView.margin(leading: 8)
+            icon: .plus, help: "Attach files", round: true, tint: .themeForeground, margin: ComposerView.margin(leading: 8)
         ) {
             Button {
                 picksPhotos = true
             } label: {
-                Label("Photo Library", symbol: .images, size: 15)
+                Label("Photo Library", symbol: .images, size: .lg)
             }
             if UIImagePickerController.isSourceTypeAvailable(.camera) {
                 Button {
                     takesPhoto = true
                 } label: {
-                    Label("Take Photo", symbol: .camera, size: 15)
+                    Label("Take Photo", symbol: .camera, size: .lg)
                 }
             }
             Button {
                 picksFiles = true
             } label: {
-                Label("Choose Files", symbol: .folder, size: 15)
+                Label("Choose Files", symbol: .folder, size: .lg)
             }
         }
         .photosPicker(isPresented: $picksPhotos, selection: $photos, maxSelectionCount: 10, matching: .any(of: [.images, .videos]))

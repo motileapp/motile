@@ -6,7 +6,7 @@ import { readFileSync, writeFileSync } from "node:fs"
 
 const here = (path) => new URL(path, import.meta.url)
 const tokens = JSON.parse(readFileSync(here("tokens.json"), "utf8"))
-const { radius, colors, opacity, shadow } = tokens
+const { radius, icon, colors, opacity, shadow } = tokens
 const names = Object.keys(colors.light)
 const opacities = Object.keys(opacity.light)
 
@@ -36,6 +36,12 @@ ${theme("light")}
 
 .dark {
 ${theme("dark")}
+}
+
+:root {
+${Object.entries(icon)
+  .map(([name, value]) => `  --icon-${name}: ${value}px;`)
+  .join("\n")}
 }
 
 :root,
@@ -144,6 +150,14 @@ ${Object.entries(radius)
   .join("\n")}
 }
 
+/// How large an icon is, of any kind: the side of its square, as on the Mac. Every icon is one
+/// of these.
+enum IconSize: CGFloat, CaseIterable {
+${Object.entries(icon)
+  .map(([name, value]) => `    case ${swiftName(name)} = ${value}`)
+  .join("\n")}
+}
+
 /// A shadow's size: how far down it falls and its blur, as CSS gives them.
 enum ShadowSize {
     case ${shadows.map(([name]) => name).join(", ")}
@@ -233,6 +247,23 @@ ${Object.entries(radius)
   .join("\n")}
 }
 
+/// How large an icon is, of any kind: the side of its square, as on the Mac. Every icon is one
+/// of these.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum IconSize {
+${Object.keys(icon).map((name) => `    ${pascal(name)},`).join("\n")}
+}
+
+impl IconSize {
+    pub const fn side(self) -> f32 {
+        match self {
+${Object.entries(icon)
+  .map(([name, value]) => `            IconSize::${pascal(name)} => ${float(value)},`)
+  .join("\n")}
+        }
+    }
+}
+
 /// A shadow's size: how far down it falls and its blur, as CSS gives them.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum ShadowSize {
@@ -296,6 +327,13 @@ ${opacities.map((name) => `    ${pascal(name)}(${opacity.light[name]}f, ${opacit
 object Radius {
 ${Object.entries(radius)
   .map(([name, value]) => `    val ${kotlinName(name)} = ${value}.dp`)
+  .join("\n")}
+}
+
+/** How large an icon is, of any kind: the side of its square, as on the Mac. Every icon is one of these. */
+enum class IconSize(val side: Float) {
+${Object.entries(icon)
+  .map(([name, value]) => `    ${pascal(name)}(${value}f),`)
   .join("\n")}
 }
 

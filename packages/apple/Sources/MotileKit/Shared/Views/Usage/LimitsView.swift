@@ -50,7 +50,7 @@ struct LimitsView: View {
 
     private func header(_ section: LimitsReport.Section) -> some View {
         HStack(spacing: 8) {
-            AgentIcon(agent: section.agent, size: 16)
+            AgentIcon(agent: section.agent, size: .md)
             Text(section.agent.name)
                 .font(.ui(size: 14, weight: .medium))
                 .foregroundStyle(Color.themeForeground)
@@ -133,7 +133,7 @@ private struct LimitRow: View {
             }
             if let pace = window.pace {
                 HStack(spacing: 5) {
-                    Image(Self.symbol(of: pace), size: 12)
+                    Image(Self.symbol(of: pace), size: .sm)
                     Text(Self.label(of: pace))
                         .font(.ui(size: 12))
                 }
@@ -217,7 +217,7 @@ private struct LimitBar: View {
             }
             if window.resetCredits > 0 {
                 HStack(spacing: 3) {
-                    Image(.ticket, size: 11)
+                    Image(.ticket, size: .sm)
                     Text("\(window.resetCredits)")
                 }
                 .help(window.resetCredits == 1 ? "1 reset to use" : "\(window.resetCredits) resets to use")

@@ -20,7 +20,7 @@ use std::rc::Rc;
 use gpui_kit::prelude::*;
 use gpui_kit::*;
 
-use crate::theme::{Layer, Opacity, Radius, Surface, colors};
+use crate::theme::{IconSize, Layer, Opacity, Radius, Surface, colors};
 pub use agent_avatar::{AgentAvatar, AgentAvatars};
 pub use control::{
     ActionButton, ActionMenu, Chip, InputField, InputVariant, Segmented, Select, Spinner, Switch, TextArea, Variant,
@@ -555,7 +555,7 @@ pub fn divider_on(surface: Surface, cx: &App) -> Div {
 }
 
 /// The spinner of a small control.
-pub fn spinner(size: f32, cx: &App) -> impl IntoElement {
+pub fn spinner(size: IconSize, cx: &App) -> impl IntoElement {
     Spinner::new(size).render(cx)
 }
 

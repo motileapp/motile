@@ -18,7 +18,6 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.lerp
 import app.motile.LocalStore
-import app.motile.theme.ControlSize
 import app.motile.thread.effortSymbol
 import app.motile.ui.ActionButton
 import app.motile.ui.AgentIcon
@@ -77,11 +76,11 @@ private fun SettingsButton() {
     val store = LocalStore.current
     val model = store.composerModel
     val effort = store.composerEffort?.takeIf { it.isNotEmpty() }?.let(::effortSymbol)
-    val logo: (@Composable () -> Unit)? = model?.let { { AgentIcon(it.agent, size = ControlSize.Regular.symbol) } }
+    val logo: (@Composable () -> Unit)? = model?.let { { AgentIcon(it.agent) } }
     Box(Modifier.semantics { contentDescription = "Thread settings" }) {
         ActionButton(
             store.composerModelLabel, picture = logo, detail = effort, place = store.composerServer?.shortName, variant = ButtonVariant.Ghost,
-            symbolSize = ControlSize.Regular.symbol, gap = 5.dp, opens = true,
+            gap = 5.dp, opens = true,
         ) { store.showsThreadSettings = true }
     }
 }

@@ -110,7 +110,7 @@ struct ThreadPane: View {
     private var title: some View {
         VStack(alignment: .leading, spacing: 2) {
             if let parts = store.composerProjectLine {
-                ProjectLine(project: store.composerProject, parts: parts, size: 11, iconSize: 12)
+                ProjectLine(project: store.composerProject, parts: parts, size: 11)
             }
             Text(store.shownAgent?.title ?? store.selectedThread?.title ?? "New thread")
                 .font(.ui(size: 13, weight: .semibold))
@@ -169,7 +169,7 @@ struct ThreadPane: View {
                         Label {
                             Text(project.name)
                         } icon: {
-                            Image(platform: project.menuIcon ?? .symbol(project.menuSymbol, size: 13))
+                            Image(platform: project.menuIcon ?? .symbol(project.menuSymbol, size: .md))
                         }
                     }
                 }
@@ -177,9 +177,9 @@ struct ThreadPane: View {
                 Button("Add Project") { store.addProject() }
             } label: {
                 HStack(spacing: 8) {
-                    ProjectIcon(project: selected, size: 22)
+                    ProjectIcon(project: selected, size: Self.headlineIcon)
                     Text(headline.name)
-                    Image(.chevronDown, size: 13)
+                    Image(.chevronDown, size: .md)
                         .foregroundStyle(Color.themeMutedStrongerForeground)
                 }
                 .padding(.leading, 9)
@@ -200,6 +200,7 @@ struct ThreadPane: View {
     }
 
     private static let headlineSize: CGFloat = 28
+    private static let headlineIcon = IconSize(text: headlineSize)
     private static let headlineWordSpace = (" " as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: headlineSize)]).width
 }
 #endif

@@ -21,7 +21,7 @@ use crate::store::pull_requests::{
     Button, Check, Choice, Entry, EntryKind, Notice, Page, PendingLineComment, REACTIONS, Stack, Status, StatusKind,
     Style, Text, Thread, Toggle, Tone, emoji, read_blocks,
 };
-use crate::theme::{self, ControlSize, Radius, Surface, colors};
+use crate::theme::{self, ControlSize, IconSize, Radius, Surface, colors};
 use crate::ui::menu::Menu;
 use crate::ui::modal::{Answer, Confirmation, confirmation, modal, present_sheet, presented};
 use crate::ui::{
@@ -199,7 +199,7 @@ pub fn notice_bar(notice: &Notice, store: &Entity<Store>, cx: &App) -> Div {
                 .gap(px(8.))
                 .child(
                     div().h(px(LINE)).flex().items_center().child(
-                        icons::symbol(if notice.failed { "circle-alert" } else { "circle-check" }, 13.)
+                        icons::symbol(if notice.failed { "circle-alert" } else { "circle-check" }, IconSize::Sm)
                             .text_color(if notice.failed { c.destructive } else { c.success }),
                     ),
                 )
@@ -610,7 +610,7 @@ impl PullRequestView {
             .w_full()
             .gap(px(4.))
             .when_some(page, |bar, page| {
-                bar.child(icons::symbol(page.state.symbol(), 12.).text_color(page.state.color(c)))
+                bar.child(icons::symbol(page.state.symbol(), IconSize::Sm).text_color(page.state.color(c)))
                     .child(
                         label(format!("#{}", page.number), 12.5, c.foreground)
                             .pl(px(2.))
@@ -622,7 +622,7 @@ impl PullRequestView {
                             div()
                                 .id("pr-watching")
                                 .pl(px(4.))
-                                .child(icons::symbol("eye", 12.).text_color(c.primary))
+                                .child(icons::symbol("eye", IconSize::Sm).text_color(c.primary))
                                 .tooltip(crate::ui::tooltip(
                                     "The agent hears when its checks finish, someone comments or it conflicts",
                                 )),
@@ -676,7 +676,7 @@ impl PullRequestView {
             .items_center()
             .justify_center()
             .gap(px(14.))
-            .child(icons::symbol("git-pull-request", 22.).text_color(c.muted_stronger_foreground))
+            .child(icons::symbol("git-pull-request", IconSize::Xxl).text_color(c.muted_stronger_foreground))
             .child(label("This branch has no pull request yet.", 13., c.muted_foreground))
             .child(
                 div()
@@ -815,7 +815,7 @@ impl PullRequestView {
             .items_center()
             .gap(px(6.))
             .child(highlight("pr-files", Radius::SM, edges(0., 0., 0., 0.), false, cx))
-            .child(div().relative().child(icons::symbol("diff", 11.).text_color(c.muted_foreground)))
+            .child(div().relative().child(icons::symbol("diff", IconSize::Sm).text_color(c.muted_foreground)))
             .child(div().relative().child(label(
                 if page.files == 1 { "1 file".to_string() } else { format!("{} files", page.files) },
                 12.,
@@ -862,7 +862,7 @@ impl PullRequestView {
                 .items_center()
                 .gap(px(6.))
                 .child(highlight("pr-stacked-on", Radius::SM, edges(0., 0., 0., 0.), false, cx))
-                .child(div().relative().child(icons::symbol("layers", 11.).text_color(c.muted_foreground)))
+                .child(div().relative().child(icons::symbol("layers", IconSize::Sm).text_color(c.muted_foreground)))
                 .child(div().relative().min_w_0().text_size(px(12.)).truncate().child(styled_line(vec![
                     ("Stacked on ".into(), c.muted_foreground, FontWeight::NORMAL),
                     (format!("#{} ", below.number), below.state.color(c), FontWeight::NORMAL),
@@ -906,7 +906,7 @@ impl PullRequestView {
                     .child(
                         div()
                             .flex_shrink_0()
-                            .child(icons::symbol("arrow-left", 10.).text_color(c.muted_stronger_foreground)),
+                            .child(icons::symbol("arrow-left", IconSize::Sm).text_color(c.muted_stronger_foreground)),
                     )
                     .child(Chip::branch("pr-head", page.head.clone()))
                     .child(div().flex_1().min_w(px(8.)))
@@ -1168,7 +1168,7 @@ impl PullRequestView {
                     .flex()
                     .items_center()
                     .gap(px(6.))
-                    .child(icons::symbol("layers", 12.).text_color(c.muted_foreground))
+                    .child(icons::symbol("layers", IconSize::Md).text_color(c.muted_foreground))
                     .child(label("Stack", 13., c.foreground).font_weight(FontWeight::MEDIUM))
                     .child(label(
                         format!("{} pull requests onto {}", stack.layers.len(), stack.base),
@@ -1212,10 +1212,10 @@ impl PullRequestView {
                     .child(
                         div()
                             .relative()
-                            .w(px(16.))
+                            .w(px(IconSize::Sm.side()))
                             .flex()
                             .justify_center()
-                            .child(icons::symbol(layer.state.symbol(), 11.).text_color(layer.state.color(c))),
+                            .child(icons::symbol(layer.state.symbol(), IconSize::Sm).text_color(layer.state.color(c))),
                     )
                     .child(
                         div().relative().child(
@@ -1300,13 +1300,13 @@ impl PullRequestView {
             .gap(px(10.))
             .child(
                 div()
-                    .w(px(18.))
+                    .w(px(IconSize::Md.side()))
                     .h(px(LINE))
                     .flex_shrink_0()
                     .flex()
                     .items_center()
                     .justify_center()
-                    .child(icons::symbol(symbol, 13.).text_color(status.tone.color(c))),
+                    .child(icons::symbol(symbol, IconSize::Md).text_color(status.tone.color(c))),
             )
             .child(
                 div()
@@ -1535,13 +1535,13 @@ impl PullRequestView {
             .gap(px(10.))
             .child(
                 div()
-                    .w(px(18.))
+                    .w(px(IconSize::Md.side()))
                     .h(px(LINE))
                     .flex_shrink_0()
                     .flex()
                     .items_center()
                     .justify_center()
-                    .child(icons::symbol(symbol, 12.).text_color(color)),
+                    .child(icons::symbol(symbol, IconSize::Sm).text_color(color)),
             )
             .child(
                 div()
@@ -1701,12 +1701,16 @@ impl PullRequestView {
                     .render(SharedString::from(format!("pr-thread-{}", thread.id)), cx),
             )
             .child(
-                div().relative().w(px(10.)).flex().justify_center().child(
-                    icons::symbol(if open { "chevron-down" } else { "chevron-right" }, 8.)
+                div().relative().w(px(IconSize::Xs.side())).flex().justify_center().child(
+                    icons::symbol(if open { "chevron-down" } else { "chevron-right" }, IconSize::Xs)
                         .text_color(c.muted_stronger_foreground),
                 ),
             )
-            .child(div().relative().child(icons::symbol(file_symbol(&thread.path), 11.).text_color(c.muted_foreground)))
+            .child(
+                div()
+                    .relative()
+                    .child(icons::symbol(file_symbol(&thread.path), IconSize::Sm).text_color(c.muted_foreground)),
+            )
             .child(
                 div()
                     .relative()

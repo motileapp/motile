@@ -79,14 +79,14 @@ struct ThreadScreen: View {
                 Button {
                     store.rightPanel.showAgents()
                 } label: {
-                    Image(.cornerLeftUp, size: 16)
+                    Image(.cornerLeftUp, size: .lg)
                 }
                 .accessibilityLabel("Back to the thread")
             } else if let parent = store.parentThread {
                 Button {
                     store.openStartedThread(parent.id)
                 } label: {
-                    Image(.cornerLeftUp, size: 16)
+                    Image(.cornerLeftUp, size: .lg)
                 }
                 .accessibilityLabel("Open \(parent.title)")
             }
@@ -103,7 +103,7 @@ struct ThreadScreen: View {
             Button {
                 store.rightPanel.isOpen.toggle()
             } label: {
-                Image(.panelRight, size: 16)
+                Image(.panelRight, size: .lg)
             }
             .accessibilityLabel("Files and changes")
         }
@@ -123,10 +123,10 @@ struct ThreadScreen: View {
     /// The menu icon, with a dot on its top right corner, cut out of the icon, when another
     /// thread needs attention, works or monitors, in the colour of its status.
     @ViewBuilder private var menuIcon: some View {
-        let side = PlatformImage.symbolSide(16)
+        let side = PlatformImage.symbolSide(.lg)
         let dot = CGPoint(x: side * 20 / 24, y: side * 5 / 24)
         if let attention {
-            Image(.menu, size: 16)
+            Image(.menu, size: .lg)
                 .mask {
                     Rectangle()
                         .overlay { Circle().frame(width: 12, height: 12).position(dot).blendMode(.destinationOut) }
@@ -134,7 +134,7 @@ struct ThreadScreen: View {
                 }
                 .overlay { Circle().fill(attention).frame(width: 8, height: 8).position(dot) }
         } else {
-            Image(.menu, size: 16)
+            Image(.menu, size: .lg)
         }
     }
 
@@ -142,7 +142,7 @@ struct ThreadScreen: View {
     private var title: some View {
         VStack(alignment: .leading, spacing: 1) {
             if let parts = store.composerProjectLine {
-                ProjectLine(project: store.composerProject, parts: parts, size: 12, iconSize: 12)
+                ProjectLine(project: store.composerProject, parts: parts, size: 12)
             }
             Text(store.shownAgent?.title ?? store.selectedThread?.title ?? "New thread")
                 .font(.system(size: 15, weight: .semibold))
@@ -186,11 +186,11 @@ struct ThreadScreen: View {
                 store.openPanel(.draftProject)
             } label: {
                 HStack(spacing: 9) {
-                    ProjectIcon(project: selected, size: 24)
+                    ProjectIcon(project: selected, size: .xxl)
                     Text(headline.name)
                         .foregroundStyle(Color.themeForeground)
                         .lineLimit(1)
-                    Image(.chevronDown, size: 11)
+                    Image(.chevronDown, size: .md)
                         .foregroundStyle(Color.themeMutedStrongerForeground)
                 }
                 .padding(.leading, 12)

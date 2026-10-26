@@ -7,7 +7,7 @@ use gpui_kit::*;
 use super::SIDEBAR_EDGE;
 use super::updates::{AppUpdateRow, UpdateLabel};
 use crate::store::Store;
-use crate::theme::{ControlSize, colors};
+use crate::theme::{ControlSize, IconSize, colors};
 use crate::ui::control::Alignment;
 use crate::ui::menu::Menu;
 use crate::ui::{ActionButton, ActionMenu, TOOLBAR_MARGIN, edges};
@@ -18,9 +18,11 @@ fn reach() -> Edges<f32> {
     edges(4., TOOLBAR_MARGIN, 4., TOOLBAR_MARGIN)
 }
 
-/// How far a button's symbol is from the button's sides.
+/// How far a button's symbol draws from the button's sides: Lucide leaves a twelfth of its square
+/// empty around it.
 fn symbol_inset() -> f32 {
-    (ControlSize::Regular.height() - ControlSize::Regular.symbol()) / 2.
+    let side = ControlSize::Regular.symbol().side();
+    ((ControlSize::Regular.height() - side) / 2. + side / 12.).round()
 }
 
 pub struct SidebarFooter {
@@ -68,12 +70,13 @@ impl SidebarFooter {
                     })
                 })
         })
-        .button(|button| button.picture(picture).symbol_size(PICTURE_SIDE).margin(reach()))
+        .button(|button| button.picture(picture).symbol_size(PICTURE).margin(reach()))
     }
 }
 
-/// The picture's side, which fills its button but for a margin.
-const PICTURE_SIDE: f32 = 20.;
+/// The picture, which fills its button but for a margin.
+const PICTURE: IconSize = IconSize::Xl;
+const PICTURE_SIDE: f32 = PICTURE.side();
 
 /// The account's picture, or the first letter of its name on a disc until there is one.
 fn account_picture(file: Option<std::path::PathBuf>, initial: String, cx: &App) -> AnyElement {

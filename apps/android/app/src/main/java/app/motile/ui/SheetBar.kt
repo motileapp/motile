@@ -39,5 +39,5 @@ fun SheetBar(
 /** The way back from a pushed page of a sheet. */
 @Composable
 fun SheetBackButton(onClick: () -> Unit) {
-    GlassButton(Symbol.ChevronLeft, "Back", onClick = onClick, symbolSize = 16f)
+    GlassButton(Symbol.ChevronLeft, "Back", onClick = onClick)
 }

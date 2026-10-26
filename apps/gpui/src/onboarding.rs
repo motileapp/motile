@@ -6,7 +6,7 @@ use gpui_kit::*;
 
 use crate::models::now;
 use crate::store::Store;
-use crate::theme::{ControlSize, Radius, colors};
+use crate::theme::{ControlSize, IconSize, Radius, colors};
 use crate::ui::{ActionButton, CommandBox, Spinner, Variant, icons, logos};
 
 pub struct SignIn {
@@ -33,7 +33,7 @@ impl Render for SignIn {
             .flex_col()
             .items_center()
             .child(div().flex_1())
-            .child(logos::motile_mark(48., cx))
+            .child(logos::motile_mark(IconSize::Hero, cx))
             .child(div().mt(px(14.)).text_size(px(30.)).font_weight(FontWeight::SEMIBOLD).child("Motile"))
             .child(
                 div()
@@ -45,7 +45,7 @@ impl Render for SignIn {
             .child(
                 div().mt(px(34.)).w(px(250.)).child(
                     ActionButton::new("google", "Continue with Google")
-                        .picture(logos::google_mark(ControlSize::Large.symbol_side(), cx))
+                        .picture(logos::google_mark(ControlSize::Large.symbol(), cx))
                         .large()
                         .pending(signing_in)
                         .fills(true)
@@ -218,7 +218,7 @@ impl Render for ConnectServer {
                     .flex()
                     .items_center()
                     .justify_center()
-                    .child(icons::symbol("server", 24.)),
+                    .child(icons::symbol("server", IconSize::Display)),
             )
             .child(
                 div()

@@ -13,10 +13,10 @@ use motile_core::render::openui::web::{self, Bridge, PageStyle};
 use super::UiCx;
 use super::style::{self, SMALL};
 use crate::media::pictures::{Picture, Pictures, Shown};
-use crate::theme::{self, colors};
+use crate::theme::{self, IconSize, colors};
 use crate::ui::{ActionButton, Spinner};
 
-const PLAY_SYMBOL: f32 = 40.;
+const PLAY_SYMBOL: f32 = IconSize::Hero.side();
 
 /// The heights pages reported, by row and node, so that a still keeps the height of its page.
 #[derive(Default)]
@@ -121,7 +121,7 @@ pub fn youtube(
     let symbol = canvas(
         |_, _, _| {},
         move |bounds, _, window, app| {
-            let side = px(theme::symbol_side(PLAY_SYMBOL));
+            let side = px(PLAY_SYMBOL);
             let center = bounds.center();
             let bounds = Bounds::new(point(center.x - side / 2., center.y - side / 2.), size(side, side));
             let color = colors(app).foreground_over_picture;

@@ -53,6 +53,8 @@ import app.motile.platform.Platform
 import app.motile.platform.Symbol
 import app.motile.platform.scaled
 import app.motile.panel.FileSymbol
+import app.motile.theme.iconSize
+import app.motile.theme.IconSize
 import app.motile.theme.ControlSize
 import app.motile.theme.LocalPalette
 import app.motile.theme.LocalSurface
@@ -183,7 +185,7 @@ private fun QueuedRow(row: RowModel, queued: QueuedContent) {
                 }
             }
             Row(Modifier.padding(start = Bubble.PADDING.dp, top = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(Symbol.Clock, 11f, Modifier.padding(end = 4.dp), color = palette.mutedForeground)
+                Icon(Symbol.Clock, iconSize(text = 12f), Modifier.padding(end = 4.dp), color = palette.mutedForeground)
                 Text(queued.status, Modifier.weight(1f, fill = false).padding(end = 6.dp), style = Theme.smallFont, color = palette.mutedForeground, maxLines = 1)
                 RowButton("Steer", "Send as a steer instead", bordered = true, margin = PaddingValues(start = 3.dp, end = 3.dp, top = 4.dp, bottom = 10.dp)) {
                     if (!waiting) actions.store.sendNow(row.itemID)
@@ -314,7 +316,7 @@ private fun ToolRow(row: RowModel) {
             ) {
                 Row(Modifier.padding(horizontal = bleed).height(line), verticalAlignment = Alignment.CenterVertically) {
                     if (symbol != null) {
-                        Box(Modifier.size(16.dp), contentAlignment = Alignment.Center) { Icon(symbol, 12f, color = palette.mutedStrongerForeground) }
+                        Icon(symbol, iconSize(text = 13f), color = palette.mutedStrongerForeground)
                         Spacer(Modifier.width(8.dp))
                     }
                     ShimmerText(
@@ -322,9 +324,7 @@ private fun ToolRow(row: RowModel) {
                         Modifier.weight(1f, fill = false),
                     )
                     if (hasDetail) {
-                        Box(Modifier.padding(start = 2.dp).width(14.dp), contentAlignment = Alignment.Center) {
-                            Icon(if (open ?: expanded) Symbol.ChevronDown else Symbol.ChevronRight, 9f, color = palette.mutedStrongerForeground)
-                        }
+                        Icon(if (open ?: expanded) Symbol.ChevronDown else Symbol.ChevronRight, IconSize.Xs, Modifier.padding(start = 2.dp), color = palette.mutedStrongerForeground)
                     }
                     if (startedAt != null) {
                         val now = ticking(true)
@@ -447,9 +447,7 @@ private fun agentTime(content: AgentContent): String {
 
 @Composable
 private fun AgentRowChevron(open: Boolean) {
-    Box(Modifier.padding(start = 6.dp).width(14.dp), contentAlignment = Alignment.Center) {
-        Icon(if (open) Symbol.ChevronDown else Symbol.ChevronRight, 9f, color = LocalPalette.current.mutedStrongerForeground)
-    }
+    Icon(if (open) Symbol.ChevronDown else Symbol.ChevronRight, IconSize.Xs, Modifier.padding(start = 6.dp), color = LocalPalette.current.mutedStrongerForeground)
 }
 
 /** Agents started one after the other: their avatars side by side, how many and how they are doing, and how long they have worked. A tap opens it into a card of their rows. */
@@ -523,7 +521,7 @@ fun ErrorRow(message: String, modifier: Modifier = Modifier.padding(top = 4.dp, 
             .padding(start = 12.dp, end = 14.dp, top = 10.dp, bottom = 10.dp),
     ) {
         Box(Modifier.width(24.dp).height(scaled(18f).dp), contentAlignment = Alignment.CenterStart) {
-            Icon(Symbol.CircleAlert, 13f, color = palette.destructive)
+            Icon(Symbol.CircleAlert, iconSize(text = 13f), color = palette.destructive)
         }
         SelectionContainer {
             Text(message, style = Theme.ui(13f).copy(lineHeight = (13f * Platform.scale * 1.2f + 5).sp), color = palette.destructive)
@@ -576,10 +574,10 @@ private fun ChangeEntryRow(row: RowModel, entry: ChangesContent.Entry) {
     ) {
         Row(Modifier.padding(start = x.dp, end = 14.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.width(16.dp)) {
-                if (entry.folder) Icon(if (entry.open) Symbol.ChevronDown else Symbol.ChevronRight, 8f, color = palette.mutedStrongerForeground)
+                if (entry.folder) Icon(if (entry.open) Symbol.ChevronDown else Symbol.ChevronRight, IconSize.Xs, color = palette.mutedStrongerForeground)
             }
             Box(Modifier.width(24.dp)) {
-                Icon(if (entry.folder) Symbol.Folder else FileSymbol.symbol(entry.path), 11f, color = palette.mutedForeground)
+                Icon(if (entry.folder) Symbol.Folder else FileSymbol.symbol(entry.path), iconSize(text = 12f), color = palette.mutedForeground)
             }
             Text(
                 entry.name, Modifier.weight(1f).padding(end = 12.dp), style = Theme.smallMono,
@@ -611,9 +609,9 @@ fun MessageMeta(stamp: String, trailing: Boolean, help: String, modifier: Modifi
         horizontalArrangement = if (trailing) Arrangement.End else Arrangement.Start,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (!trailing) CopyButton(help, symbolSize = 12f, quiet = true, copy = copy)
+        if (!trailing) CopyButton(help, quiet = true, copy = copy)
         Text(stamp, Modifier.weight(1f, fill = false), style = Theme.smallFont, color = palette.mutedStrongerForeground, maxLines = 1)
-        if (trailing) CopyButton(help, symbolSize = 12f, quiet = true, copy = copy)
+        if (trailing) CopyButton(help, quiet = true, copy = copy)
     }
 }
 
@@ -663,7 +661,7 @@ private fun RemovedRow(removed: RemovedContent) {
             val halves = maxWidth < RemovedRow.halvesBelow
             Column {
                 Row(Modifier.height(RemovedRow.titleHeight), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Symbol.Unlink, 13f, color = palette.mutedForeground)
+                    Icon(Symbol.Unlink, iconSize(text = 13f), color = palette.mutedForeground)
                     Text(removed.title, Modifier.padding(start = RemovedRow.iconGap), style = Theme.ui(13f, FontWeight.SemiBold), color = palette.foreground, maxLines = 1)
                 }
                 SelectionContainer(Modifier.padding(top = RemovedRow.textGap)) {

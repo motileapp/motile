@@ -116,7 +116,7 @@ struct SidebarScreen: View {
             Button {
                 store.openPanel(.commands)
             } label: {
-                Image(.command, size: 15)
+                Image(.command, size: .lg)
                     .foregroundStyle(Color.themeForeground)
                     .frame(width: 42, height: 42)
                     .contentShape(Circle())
@@ -315,7 +315,7 @@ struct SidebarScreen: View {
 
     private func circleButton(_ symbol: Symbol, label: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Image(symbol, size: 15)
+            Image(symbol, size: .lg)
                 .foregroundStyle(Color.themeForeground)
                 .frame(width: 46, height: 46)
                 .contentShape(Circle())

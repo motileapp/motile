@@ -316,7 +316,7 @@ struct SettingsPage: View {
     @ViewBuilder private func agentAccounts(of server: Server) -> some View {
         SettingsRow {
             HStack(spacing: 8) {
-                Image(.server, size: 13)
+                Image(.server, size: .md)
                 Text(server.name)
                     .font(.ui(size: 13, weight: .medium))
             }
@@ -333,7 +333,7 @@ struct SettingsPage: View {
             ThemeDivider()
             ForEach(server.agentAccounts.filter { installed.contains($0.agent) }) { account in
                 SettingsRow {
-                    AgentIcon(agent: account.agent, size: 16)
+                    AgentIcon(agent: account.agent, size: .md)
                     SettingsLabel("\(account.agent.name) · \(account.name)", description: account.settingsDescription(isDefault: server.isDefault(account)))
                 } trailing: {
                     more("What to do with the account") {
@@ -367,7 +367,7 @@ struct SettingsPage: View {
         SettingsGroup("projects", "Projects") {
             ForEach(store.projects) { project in
                 SettingsRow {
-                    ProjectIcon(project: project, size: 26)
+                    ProjectIcon(project: project, size: .md)
                     SettingsLabel(project.name, description: project.path, truncates: .head)
                 } trailing: {
                     more("What to do with \(project.name)") {
@@ -404,7 +404,7 @@ struct SettingsPage: View {
             Label {
                 Text(title)
             } icon: {
-                Image(platform: .symbol(symbol, size: 13))
+                Image(platform: .symbol(symbol, size: .md))
             }
         }
     }
@@ -565,7 +565,7 @@ struct SettingsLabel<Footer: View>: View {
     var body: some View {
         HStack(spacing: 8) {
             if let icon {
-                Image(icon, size: 13)
+                Image(icon, size: .md)
                     .foregroundStyle(Color.themeMutedForeground)
             }
             VStack(alignment: .leading, spacing: 2) {

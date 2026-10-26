@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import app.motile.LocalStore
 import app.motile.core.Approval
 import app.motile.platform.Symbol
+import app.motile.theme.iconSize
 import app.motile.theme.ControlSize
 import app.motile.theme.LocalForeground
 import app.motile.theme.Palette
@@ -114,7 +115,7 @@ private fun typesetTarget(approval: Approval, palette: Palette): AnnotatedString
 @Composable
 fun WaitingTitle(title: String, symbol: Symbol, place: String?, modifier: Modifier = Modifier) {
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-        Icon(symbol, 13f)
+        Icon(symbol, iconSize(text = 12f))
         Text(title, Modifier.weight(1f, fill = false), size = 12f, weight = FontWeight.SemiBold, maxLines = 1)
         if (place != null) Text(place, style = Theme.uiDigits(12f), color = Theme.colors.mutedForeground, maxLines = 1)
     }

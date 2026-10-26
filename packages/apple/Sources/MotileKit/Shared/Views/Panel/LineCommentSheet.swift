@@ -32,7 +32,7 @@ struct LineCommentSheet: View {
         VStack(alignment: .leading, spacing: 12) {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 6) {
-                    Image(FileSymbol.symbol(for: commented.path), size: 12)
+                    Image(FileSymbol.symbol(for: commented.path), size: .md)
                         .foregroundStyle(Color.themeMutedForeground)
                     Text(commented.path)
                         .font(.ui(size: 13, weight: .semibold))

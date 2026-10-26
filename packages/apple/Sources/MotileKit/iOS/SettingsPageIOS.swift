@@ -240,7 +240,7 @@ struct SettingsPage: View {
                 Section {
                     agentAccounts(of: server)
                 } header: {
-                    Label(server.name, symbol: .server, size: 12)
+                    Label(server.name, symbol: .server, size: .sm)
                 } footer: {
                     Text("Each account keeps its sign-in in a folder of its own. A thread works with one and can move to another.")
                         .foregroundStyle(Color.themeMutedForeground)
@@ -261,7 +261,7 @@ struct SettingsPage: View {
                     editedAccount = EditedAccount(server: server, account: account)
                 } label: {
                     SettingsItem("\(account.agent.name) · \(account.name)", description: account.settingsDescription(isDefault: server.isDefault(account))) {
-                        AgentIcon(agent: account.agent, size: 22)
+                        AgentIcon(agent: account.agent, size: SettingsTile.symbolSize)
                             .frame(width: SettingsTile.size, height: SettingsTile.size)
                     }
                 }
@@ -294,7 +294,8 @@ struct SettingsPage: View {
                     ProjectSettingsPage(projectID: project.id)
                 } label: {
                     SettingsItem(project.name, description: project.path, truncates: .head) {
-                        ProjectIcon(project: project, size: SettingsTile.size)
+                        ProjectIcon(project: project, size: SettingsTile.symbolSize)
+                            .frame(width: SettingsTile.size, height: SettingsTile.size)
                     }
                 }
             }
@@ -505,7 +506,7 @@ private struct ProjectSettingsPage: View {
             if let project = store.projects.first(where: { $0.id == projectID }) {
                 Section {
                     VStack(spacing: 4) {
-                        ProjectIcon(project: project, size: 56)
+                        ProjectIcon(project: project, size: .hero)
                             .padding(.bottom, 8)
                         Text(project.name)
                             .font(.title3.weight(.semibold))
@@ -653,13 +654,14 @@ struct SettingsList<Content: View>: View {
     }
 }
 
-/// A row's picture: its symbol, as wide as the agents' and projects' icons beside it.
+/// A row's picture: its symbol, as large as the agents' and projects' icons beside it.
 struct SettingsTile: View {
     static let size: CGFloat = 30
+    static let symbolSize = IconSize.lg
     let symbol: Symbol
 
     var body: some View {
-        Image(symbol, size: 16)
+        Image(symbol, size: Self.symbolSize)
             .foregroundStyle(Color.themeForeground)
             .frame(width: Self.size, height: Self.size)
     }
@@ -679,7 +681,7 @@ struct SettingsActionLabel: View {
         Label {
             Text(title)
         } icon: {
-            Image(symbol, size: 17)
+            Image(symbol, size: .xl)
         }
         .foregroundStyle(Color.themePrimary)
     }

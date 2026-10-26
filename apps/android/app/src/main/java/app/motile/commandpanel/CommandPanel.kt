@@ -146,7 +146,7 @@ fun CommandPanel(start: PanelPage, inStack: Boolean = false, onLeave: (() -> Uni
             },
             trailing = page.githubID?.let { id ->
                 {
-                    GlassButton(Symbol.RotateCw, "Refresh", onClick = { store.loadRepos(id, fresh = true) }, symbolSize = 16f, pending = id in store.listingRepos)
+                    GlassButton(Symbol.RotateCw, "Refresh", onClick = { store.loadRepos(id, fresh = true) }, pending = id in store.listingRepos)
                 }
             },
         )

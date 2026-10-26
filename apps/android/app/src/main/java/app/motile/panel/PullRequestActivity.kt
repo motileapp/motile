@@ -33,6 +33,9 @@ import app.motile.core.Time
 import app.motile.platform.Platform
 import app.motile.platform.Symbol
 import app.motile.platform.scaled
+import app.motile.theme.symbolSide
+import app.motile.theme.iconSize
+import app.motile.theme.IconSize
 import app.motile.theme.ControlSize
 import app.motile.theme.LocalPalette
 import app.motile.theme.Radius
@@ -78,8 +81,9 @@ fun ActivityRow(entry: PullRequestPage.Entry, actions: PullRequestActions, modif
         else -> Symbol.MessageSquareText
     }
     Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        Box(Modifier.size(width = 18.dp, height = lineHeight), contentAlignment = Alignment.Center) {
-            Icon(symbol, 12f, color = if (entry.tone == Tone.Neutral) palette.mutedForeground else entry.tone.color)
+        val symbolSize = iconSize(text = 12.5f)
+        Box(Modifier.size(width = symbolSide(symbolSize), height = lineHeight), contentAlignment = Alignment.Center) {
+            Icon(symbol, symbolSize, color = if (entry.tone == Tone.Neutral) palette.mutedForeground else entry.tone.color)
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Byline(entry, actions)
@@ -174,10 +178,8 @@ private fun ConversationHeader(thread: PullRequestPage.Thread, isOpen: Boolean, 
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box(Modifier.width(10.dp), contentAlignment = Alignment.Center) {
-                Icon(if (isOpen) Symbol.ChevronDown else Symbol.ChevronRight, 8f, color = palette.mutedStrongerForeground)
-            }
-            Icon(FileSymbol.symbol(thread.path), 11f, color = palette.mutedForeground)
+            Icon(if (isOpen) Symbol.ChevronDown else Symbol.ChevronRight, IconSize.Xs, color = palette.mutedStrongerForeground)
+            Icon(FileSymbol.symbol(thread.path), iconSize(text = 12f), color = palette.mutedForeground)
             Text(
                 thread.path, Modifier.weight(1f, fill = false), size = 12f, weight = FontWeight.Medium, color = palette.foreground,
                 maxLines = 1, overflow = TextOverflow.StartEllipsis,

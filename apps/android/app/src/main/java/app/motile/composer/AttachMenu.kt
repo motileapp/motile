@@ -57,7 +57,7 @@ fun AttachMenu() {
     val hasCamera = remember { Platform.context.packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY) }
 
     ActionMenu(
-        icon = Symbol.Plus, help = "Attach files", symbolSize = 17f, round = true, tint = Theme.colors.foreground,
+        icon = Symbol.Plus, help = "Attach files", round = true, tint = Theme.colors.foreground,
         margin = ComposerView.margin(leading = 8.dp),
     ) {
         item("Photo Library", Symbol.Images) {

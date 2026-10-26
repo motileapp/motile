@@ -240,7 +240,7 @@ class FlippedView: UIView, UIContextMenuInteractionDelegate, UIGestureRecognizer
         guard takesPress(at: location), let actions = menuActions?(), !actions.isEmpty else { return nil }
         return UIContextMenuConfiguration(actionProvider: { _ in
             UIMenu(children: actions.map { action in
-                UIAction(title: action.title, image: .symbol(action.symbol, size: 15)) { _ in action.run() }
+                UIAction(title: action.title, image: .symbol(action.symbol, size: .lg)) { _ in action.run() }
             })
         })
     }
@@ -413,13 +413,13 @@ final class SymbolView: UIImageView {
 
     required init?(coder: NSCoder) { fatalError("not used") }
 
-    convenience init(_ symbol: Symbol? = nil, size: CGFloat = 12, tint: UIColor = Theme.mutedForeground) {
+    convenience init(_ symbol: Symbol? = nil, size: IconSize = .sm, tint: UIColor = Theme.mutedForeground) {
         self.init(frame: .zero)
         tintColor = tint
         if let symbol { show(symbol, size: size) }
     }
 
-    func show(_ symbol: Symbol, size: CGFloat = 12) {
+    func show(_ symbol: Symbol, size: IconSize = .sm) {
         image = .symbol(symbol, size: size)
     }
 
@@ -456,7 +456,7 @@ final class IconButton: UIButton {
     var quiet = false { didSet { light() } }
     private var symbolSize = IconButton.metrics.symbol
 
-    convenience init(symbol: Symbol, title: String = "", symbolSize: CGFloat? = nil, tooltip: String, action: @escaping () -> Void) {
+    convenience init(symbol: Symbol, title: String = "", symbolSize: IconSize? = nil, tooltip: String, action: @escaping () -> Void) {
         self.init(type: .custom)
         self.symbolSize = symbolSize ?? Self.metrics.symbol
         layer.cornerRadius = Self.metrics.radius

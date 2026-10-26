@@ -48,6 +48,9 @@ import app.motile.core.Time
 import app.motile.platform.Platform
 import app.motile.platform.Symbol
 import app.motile.platform.scaled
+import app.motile.theme.symbolSide
+import app.motile.theme.iconSize
+import app.motile.theme.IconSize
 import app.motile.theme.ControlSize
 import app.motile.theme.LocalPalette
 import app.motile.theme.Radius
@@ -114,11 +117,11 @@ private fun androidx.compose.foundation.layout.RowScope.PullRequestBar(page: Pul
     val store = LocalStore.current
     val palette = LocalPalette.current
     if (page != null) {
-        Icon(page.state.symbol, 12f, color = page.state.color(palette))
+        Icon(page.state.symbol, iconSize(text = 12.5f), color = page.state.color(palette))
         Text("#${page.number}", Modifier.padding(start = 2.dp), style = Theme.uiDigits(12.5f, FontWeight.Medium), color = palette.foreground)
         if (page.number == target.pullRequest && store.selectedThread?.watching == true) {
             Icon(
-                Symbol.Eye, 12f,
+                Symbol.Eye, iconSize(text = 12.5f),
                 Modifier.padding(start = 4.dp).semantics { contentDescription = "The agent hears when its checks finish, someone comments or it conflicts" },
                 color = palette.primary,
             )
@@ -149,7 +152,7 @@ private fun NoPullRequest(target: PanelTarget) {
         verticalArrangement = Arrangement.spacedBy(14.dp, Alignment.CenterVertically),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Icon(Symbol.GitPullRequest, 22f, color = palette.mutedStrongerForeground)
+        Icon(Symbol.GitPullRequest, IconSize.Xxl, color = palette.mutedStrongerForeground)
         Text("This branch has no pull request yet.", size = 13f, color = palette.mutedForeground)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             val project = store.gitProject
@@ -311,7 +314,7 @@ private fun Header(
         }
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
             BranchName(page.base, Modifier.weight(1f, fill = false))
-            Icon(Symbol.ArrowLeft, 10f, color = palette.mutedStrongerForeground)
+            Icon(Symbol.ArrowLeft, iconSize(text = 11.5f), color = palette.mutedStrongerForeground)
             BranchName(page.head, Modifier.weight(1f, fill = false))
             Spacer(Modifier.width(2.dp))
             HighlightButton(
@@ -324,7 +327,7 @@ private fun Header(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Icon(Symbol.Diff, 11f, color = palette.mutedForeground)
+                    Icon(Symbol.Diff, iconSize(text = 12f), color = palette.mutedForeground)
                     Text(if (page.files == 1) "1 file" else "${page.files} files", size = 12f, color = palette.foreground, maxLines = 1)
                     if (page.additions + page.deletions > 0) Text(LineCountText.text(page.additions, page.deletions), style = LineCountText.style, maxLines = 1)
                 }
@@ -342,7 +345,7 @@ private fun Header(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Icon(Symbol.Layers, 11f, color = palette.mutedForeground)
+                    Icon(Symbol.Layers, iconSize(text = 12f), color = palette.mutedForeground)
                     val words = buildAnnotatedString {
                         withStyle(SpanStyle(color = palette.mutedForeground)) { append("Stacked on ") }
                         withStyle(SpanStyle(color = below.state.color(palette))) { append("#${below.number} ") }
@@ -584,7 +587,7 @@ private fun StackCard(stack: PullRequestPage.Stack, modifier: Modifier, open: (I
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(Symbol.Layers, 12f, color = palette.mutedForeground)
+                Icon(Symbol.Layers, iconSize(text = 13f), color = palette.mutedForeground)
                 Text("Stack", size = 13f, weight = FontWeight.Medium, color = palette.foreground)
                 Text("${stack.layers.size} pull requests onto ${stack.base}", Modifier.weight(1f), size = 12f, color = palette.mutedStrongerForeground, maxLines = 1)
                 stack.url?.let { url ->
@@ -603,7 +606,7 @@ private fun StackCard(stack: PullRequestPage.Stack, modifier: Modifier, open: (I
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Box(Modifier.width(16.dp), contentAlignment = Alignment.Center) { Icon(layer.state.symbol, 11f, color = layer.state.color(palette)) }
+                        Icon(layer.state.symbol, iconSize(text = 12.5f), color = layer.state.color(palette))
                         Text("#${layer.number}", style = Theme.uiDigits(12f, FontWeight.Medium), color = palette.mutedForeground)
                         Text(layer.title, Modifier.weight(1f), size = 12.5f, color = palette.foreground, maxLines = 1)
                         if (layer.current) Text("This one", size = 11.5f, color = palette.mutedStrongerForeground)
@@ -689,7 +692,8 @@ private fun StatusRow(status: PullRequestPage.Status, working: PullRequestWork?,
         else -> Symbol.CircleAlert
     }
     Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        Box(Modifier.size(width = 18.dp, height = scaled(17f).dp), contentAlignment = Alignment.Center) { Icon(symbol, 13f, color = status.tone.color) }
+        val symbolSize = iconSize(text = 13f)
+        Box(Modifier.size(width = symbolSide(symbolSize), height = scaled(17f).dp), contentAlignment = Alignment.Center) { Icon(symbol, symbolSize, color = status.tone.color) }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(status.title, size = 13f, weight = FontWeight.Medium, color = palette.foreground)

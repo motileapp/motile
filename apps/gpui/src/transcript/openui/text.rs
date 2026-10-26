@@ -8,7 +8,7 @@ use motile_core::render::openui::tree::{Glyph, ItemMarker, ListMarker, MarkdownB
 
 use super::style::{self, BODY, LABEL, Look, SMALL, Type};
 use super::{UiCx, framed, node};
-use crate::theme::{self, Colors, Layer, colors};
+use crate::theme::{Colors, Layer, colors};
 use crate::transcript::prose::{self, CodeBox};
 use crate::transcript::rows::{self, code_box, open_link};
 use crate::ui::rich_text::RichText;
@@ -126,7 +126,6 @@ fn copy(key: &str, code: &SharedString, cx: &UiCx) -> AnyElement {
     CopyButton::new(SharedString::from(format!("copy-{key}")), "Copy code", move |_, cx| {
         cx.write_to_clipboard(ClipboardItem::new_string(code.clone()))
     })
-    .symbol_size(12.)
     .surface(cx.surface.in_box())
     .into_any_element()
 }
@@ -143,7 +142,7 @@ fn badge(text: &str, tone: Option<&str>, icon: Option<&Glyph>, cx: &UiCx, app: &
 /// How wide a badge is: Chip's padding, symbol and words, and its edge when it has no tone.
 pub(super) fn badge_width(text: &str, tone: bool, icon: bool, window: &Window) -> f32 {
     let words = Type { size: 11.5, line: Chip::HEIGHT, weight: FontWeight::MEDIUM, digits: false, mono: false };
-    let symbol = if icon { 11. * theme::SYMBOL_SCALE + 5. } else { 0. };
+    let symbol = if icon { Chip::SYMBOL.side() + 5. } else { 0. };
     let edge = if tone { 0. } else { 2. };
     7. * 2. + edge + symbol + words.width(text, window)
 }

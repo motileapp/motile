@@ -20,7 +20,7 @@ use crate::models::{
 };
 use crate::panel::state::PanelTab;
 use crate::store::Store;
-use crate::theme::{self, ControlSize, Radius, Surface, colors};
+use crate::theme::{self, ControlSize, IconSize, Radius, Surface, colors};
 use crate::ui::control::{ControlIcon, ControlLabel};
 use crate::ui::menu::{Anchor, MenuIcon};
 use crate::ui::rich_text::RichText;
@@ -150,7 +150,7 @@ const SYMBOL_GAP: f32 = 4.;
 
 /// The eye before "Monitoring:" and the room either side of it.
 fn monitoring_eye_room() -> f32 {
-    INSET + agents_button_lead() + ControlSize::Small.symbol_side() + SYMBOL_GAP
+    INSET + agents_button_lead() + ControlSize::Small.symbol().side() + SYMBOL_GAP
 }
 
 /// What a strip's sides take from the composer's width: its distance from the composer's
@@ -180,7 +180,6 @@ fn agents_button(store: &Entity<Store>, children: &Children, room: f32, window: 
         let store = store.clone();
         ActionButton::new("composer-agents", words)
             .symbol("bot")
-            .symbol_size(ControlSize::Small.symbol())
             .gap(SYMBOL_GAP)
             .help(text.clone())
             .ghost()
@@ -237,7 +236,13 @@ pub fn interruption_strip(store: &Entity<Store>, interruption: Interruption, cx:
     };
     let help = format!("{title}. {detail}.");
     strip(true, Some(HEIGHT), cx)
-        .child(div().ml(px(14.)).mr(px(7.)).flex_shrink_0().child(icons::symbol(symbol, 13.).text_color(c.warning)))
+        .child(
+            div()
+                .ml(px(14.))
+                .mr(px(7.))
+                .flex_shrink_0()
+                .child(icons::symbol(symbol, IconSize::Sm).text_color(c.warning)),
+        )
         .child(
             div()
                 .id("interruption")
@@ -317,7 +322,7 @@ pub fn waiting_title(title: String, symbol: &'static str, place: Option<String>,
         .flex()
         .items_center()
         .gap(px(6.))
-        .child(icons::symbol(symbol, 13.))
+        .child(icons::symbol(symbol, IconSize::Sm))
         .child(div().min_w_0().text_size(px(12.)).font_weight(FontWeight::SEMIBOLD).truncate().child(title))
         .when_some(place, |title, place| {
             title.child(
@@ -631,8 +636,8 @@ pub fn context_strip(
         };
         state.shortcuts.help(&help, "composer.branch")
     });
-    // The symbols of the parts that only say where the thread works.
-    let mark = theme::symbol_side(11.);
+    // The icons of the parts that only say where the thread works.
+    let mark = ControlSize::Regular.symbol();
     let copies: Vec<(String, String, bool)> = state
         .draft_project_copies()
         .into_iter()
@@ -752,17 +757,19 @@ pub fn context_strip(
 
     let server_words = server.map(|server| {
         if copies.is_empty() {
-            return Words::new(&server.short_name, FontWeight::MEDIUM, 14. + mark + 5.);
+            return Words::new(&server.short_name, FontWeight::MEDIUM, 14. + mark.side() + 5.);
         }
         let natural = SERVER_MENU_LEAD + server_menu(server, server.short_name.clone()).natural_width(window, cx);
         Words::of_control(&server.short_name, natural, window).fixed()
     });
     let project_words =
-        Words::new(&project.name, FontWeight::MEDIUM, if server.is_none() { 14. } else { 0. } + 13. + 5.);
+        Words::new(&project.name, FontWeight::MEDIUM, if server.is_none() { 14. } else { 0. } + mark.side() + 5.);
     let words_of_workspace = |labeled: bool, window: &mut Window, cx: &mut App| {
         workspace.as_ref().map(|workspace| match workspace {
-            Workspace::Told(working) if labeled => Words::new(working.title, FontWeight::MEDIUM, 26. + mark + 5.),
-            Workspace::Told(_) => Words::new("", FontWeight::MEDIUM, 26. + mark),
+            Workspace::Told(working) if labeled => {
+                Words::new(working.title, FontWeight::MEDIUM, 26. + mark.side() + 5.)
+            }
+            Workspace::Told(_) => Words::new("", FontWeight::MEDIUM, 26. + mark.side()),
             Workspace::Chosen => {
                 let title = match (labeled, in_worktree) {
                     (false, _) => "",
@@ -824,7 +831,7 @@ pub fn context_strip(
             .flex_shrink_0()
             .pl(px(14.))
             .tooltip(crate::ui::tooltip(format!("On {}", server.name)))
-            .child(part(title, icons::symbol("server", 11.).text_color(tint).into_any_element(), cx))
+            .child(part(title, icons::symbol("server", mark).text_color(tint).into_any_element(), cx))
             .into_any_element()
     });
     let project_part = div()
@@ -832,14 +839,14 @@ pub fn context_strip(
         .flex_shrink_0()
         .when(server.is_none(), |part| part.pl(px(14.)))
         .tooltip(crate::ui::tooltip(project.path.clone()))
-        .child(part(project_title, logos::project_icon(Some(project), 13., cx), cx));
+        .child(part(project_title, logos::project_icon(Some(project), mark, cx), cx));
     let workspace_part = workspace.zip(workspace_title).map(|(workspace, title)| match workspace {
         Workspace::Told(working) => div()
             .id(working.id)
             .flex_shrink_0()
             .px(px(13.))
             .tooltip(crate::ui::tooltip(working.help))
-            .child(part(title, icons::symbol(working.symbol, 11.).into_any_element(), cx))
+            .child(part(title, icons::symbol(working.symbol, mark).into_any_element(), cx))
             .into_any_element(),
         Workspace::Chosen => workspace_menu(title).into_any_element(),
     });
@@ -1126,7 +1133,12 @@ impl BranchPicker {
             }))
             .on_click(cx.listener(move |this, _, _, cx| this.choose(index, cx)));
         let mark = |symbol: &'static str, color: Hsla| {
-            div().w(px(14.)).flex_shrink_0().flex().justify_center().child(icons::symbol(symbol, 11.).text_color(color))
+            div()
+                .w(px(IconSize::Sm.side()))
+                .flex_shrink_0()
+                .flex()
+                .justify_center()
+                .child(icons::symbol(symbol, IconSize::Sm).text_color(color))
         };
         match choice {
             Choice::Branch(branch) => {
@@ -1279,7 +1291,7 @@ impl Render for BranchPicker {
                     .flex()
                     .items_center()
                     .gap(px(8.))
-                    .child(icons::symbol("search", 12.).text_color(c.muted_stronger_foreground))
+                    .child(icons::symbol("search", IconSize::Md).text_color(c.muted_stronger_foreground))
                     .child(
                         div()
                             .flex_1()

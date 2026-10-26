@@ -16,6 +16,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import app.motile.core.AppUpdater
 import app.motile.platform.Symbol
+import app.motile.theme.iconSize
 import app.motile.theme.Radius
 import app.motile.theme.Surface
 import app.motile.ui.TurningSymbol
@@ -152,7 +153,7 @@ private fun UpdateLine(
 @Composable
 fun UpdateLabel(text: String, symbol: Symbol, tint: Color = Theme.colors.mutedForeground, turning: Boolean = false, modifier: Modifier = Modifier) {
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) {
-        TurningSymbol(symbol, turning, 12f, color = tint)
+        TurningSymbol(symbol, turning, iconSize(text = 12f), color = tint)
         Text(text, size = 12f, weight = FontWeight.Medium, maxLines = 1)
     }
 }

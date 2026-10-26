@@ -39,6 +39,8 @@ import app.motile.onboarding.ConnectServerView
 import app.motile.platform.Platform
 import app.motile.platform.scaled
 import app.motile.sidebar.ServerUpdateStatus
+import app.motile.theme.iconSize
+import app.motile.theme.IconSize
 import app.motile.theme.ControlSize
 import app.motile.platform.Symbol
 import app.motile.theme.LocalPalette
@@ -169,7 +171,7 @@ private fun SettingsGroups.agentAccounts(store: AppStore, edit: (Server, AgentAc
             id = if (index == 0) "agent-accounts" else "agent-accounts/${server.id}",
             headerContent = {
                 Row(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Symbol.Server, 12f, color = LocalPalette.current.mutedForeground)
+                    Icon(Symbol.Server, iconSize(text = NOTE_TEXT), color = LocalPalette.current.mutedForeground)
                     Text(server.name, size = NOTE_TEXT, weight = FontWeight.Medium, color = LocalPalette.current.mutedForeground, maxLines = 1)
                 }
             },
@@ -204,7 +206,7 @@ private fun AccountRow(account: AgentAccount, isDefault: Boolean, edit: () -> Un
     Box(Modifier.pressPosition(menu)) {
         SettingsPressRow(edit, onLongClick = { menu.openAtPress() }) {
             SettingsItem("${account.agent.title} · ${account.name}", description) {
-                Box(Modifier.size(SettingsTile.size.dp), contentAlignment = Alignment.Center) { AgentIcon(account.agent, size = 22f) }
+                Box(Modifier.size(SettingsTile.size.dp), contentAlignment = Alignment.Center) { AgentIcon(account.agent, size = SettingsTile.symbolSize) }
             }
         }
         MenuPopup(menu) {
@@ -220,7 +222,9 @@ private fun SettingsGroups.projects(store: AppStore, navigator: SettingsNavigato
     group("projects") {
         for (project in store.projects) row {
             SettingsLink({ navigator.push(SettingsRoute.ProjectPage(project.id)) }) {
-                SettingsItem(project.name, project.path, TextOverflow.StartEllipsis) { ProjectIcon(project, size = SettingsTile.size) }
+                SettingsItem(project.name, project.path, TextOverflow.StartEllipsis) {
+                    Box(Modifier.size(SettingsTile.size.dp), contentAlignment = Alignment.Center) { ProjectIcon(project, size = SettingsTile.symbolSize) }
+                }
             }
         }
         row {
@@ -302,7 +306,7 @@ private fun SettingsGroups.integrations(store: AppStore) {
 @Composable
 private fun IntegrationLogo(integration: Integration) {
     SurfaceBox(RoundedCornerShape(Radius.md), Modifier.size(scaled(32f).dp), bordered = true) {
-        Icon(integration.symbol, 18f, Modifier.align(Alignment.Center), color = LocalPalette.current.foreground)
+        Icon(integration.symbol, IconSize.Xl, Modifier.align(Alignment.Center), color = LocalPalette.current.foreground)
     }
 }
 
@@ -393,7 +397,7 @@ internal fun ProjectSettingsPage(projectID: String) {
             group(bare = true) {
                 row {
                     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        ProjectIcon(project, Modifier.padding(bottom = 8.dp), size = 56f)
+                        ProjectIcon(project, Modifier.padding(bottom = 8.dp), size = IconSize.Hero)
                         Text(project.name, size = 17f, weight = FontWeight.SemiBold, color = LocalPalette.current.foreground, align = TextAlign.Center)
                         Text(
                             project.path, size = NOTE_TEXT, color = LocalPalette.current.mutedForeground, maxLines = 2,

@@ -13,7 +13,7 @@ use crate::models::ago;
 use crate::store::Store;
 pub use crate::store::pull_requests::CommentedLine;
 use crate::store::pull_requests::Thread;
-use crate::theme::{self, Layer, Radius, Surface, colors};
+use crate::theme::{self, IconSize, Layer, Radius, Surface, colors};
 use crate::ui::icons;
 use crate::ui::modal::{modal, present_sheet};
 use crate::ui::{ActionButton, TextArea, text_area_state};
@@ -190,7 +190,10 @@ impl Render for LineCommentSheet {
                             .flex()
                             .items_center()
                             .gap(px(6.))
-                            .child(icons::symbol(file_symbol(&self.commented.path), 12.).text_color(c.muted_foreground))
+                            .child(
+                                icons::symbol(file_symbol(&self.commented.path), IconSize::Md)
+                                    .text_color(c.muted_foreground),
+                            )
                             .child(
                                 div()
                                     .min_w_0()

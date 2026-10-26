@@ -5,6 +5,8 @@
 use gpui_kit::prelude::*;
 use gpui_kit::*;
 
+use crate::theme::IconSize;
+
 /// The Lucide icon's path for the SF Symbol named.
 pub fn path(symbol: &str) -> SharedString {
     if symbol.starts_with("icons/") {
@@ -110,12 +112,14 @@ pub fn path(symbol: &str) -> SharedString {
     SharedString::from(format!("icons/{lucide}.svg"))
 }
 
-/// A symbol for text of a size is drawn in a square this much larger, as the Mac app draws it.
-const SCALE: f32 = crate::theme::SYMBOL_SCALE;
+/// The symbol in the colour of the text around it unless it is given one.
+pub fn symbol(name: impl AsRef<str>, size: IconSize) -> Symbol {
+    symbol_side(name, size.side())
+}
 
-/// The symbol at `size`, in the colour of the text around it unless it is given one.
-pub fn symbol(name: impl AsRef<str>, size: f32) -> Symbol {
-    Symbol { path: path(name.as_ref()), size: size * SCALE, color: None, rotation: 0., trimmed: None }
+/// The same in a square exactly `side` points wide, for one sized from what is around it.
+pub fn symbol_side(name: impl AsRef<str>, side: f32) -> Symbol {
+    Symbol { path: path(name.as_ref()), size: side, color: None, rotation: 0., trimmed: None }
 }
 
 /// An arrow that goes round, which turns in place of the spinner while it waits.
@@ -123,22 +127,21 @@ pub fn turns(name: &str) -> bool {
     matches!(path(name).as_ref(), "icons/refresh-cw.svg" | "icons/rotate-cw.svg")
 }
 
-/// The chevron that opens a menu for text of `size`, without the empty room Lucide draws around
-/// it, in the colour of the text around it unless it is given one.
-pub fn trimmed_chevron(size: f32) -> Symbol {
+/// The chevron that opens a menu, in its square less the empty room Lucide draws around it, in
+/// the colour of the text around it unless it is given one.
+pub fn trimmed_chevron(size: IconSize) -> Symbol {
     Symbol {
         path: "icons/chevron-down-trimmed.svg".into(),
-        size: size * SCALE,
+        size: size.side(),
         color: None,
         rotation: 0.,
         trimmed: Some((14., 8.)),
     }
 }
 
-/// The symbol for text of `size` without the empty room Lucide draws around it, for one like a
-/// chevron that fills little of its square. Only the symbols with a trimmed copy in `assets` have
-/// one.
-pub fn trimmed(name: &str, size: f32) -> Symbol {
+/// The symbol without the empty room Lucide draws around it, for one like a chevron that fills
+/// little of its square. Only the symbols with a trimmed copy in `assets` have one.
+pub fn trimmed(name: &str, size: IconSize) -> Symbol {
     let kept = match name {
         "chevron-right" => (8., 14.),
         "chevron-down" => (14., 8.),
@@ -147,7 +150,7 @@ pub fn trimmed(name: &str, size: f32) -> Symbol {
     };
     Symbol {
         path: format!("icons/{name}-trimmed.svg").into(),
-        size: size * SCALE,
+        size: size.side(),
         color: None,
         rotation: 0.,
         trimmed: Some(kept),

@@ -63,7 +63,7 @@ private struct RowSwipe: ViewModifier {
         let stretch = max(0, offset - openWidth)
         let entry = min(1, max(0, (offset - 8) / (openWidth * 0.72 - 8)))
         return Button(action: commit) {
-            Image(symbol, size: size * 0.37)
+            Image(symbol, side: size * 0.44)
                 .foregroundStyle(Color.themeBackground)
                 .offset(x: armed ? stretch / 2 : 0)
                 .animation(.easeOut(duration: 0.15), value: armed)

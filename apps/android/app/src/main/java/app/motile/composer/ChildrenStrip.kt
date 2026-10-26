@@ -20,6 +20,7 @@ import app.motile.core.AgentInfo
 import app.motile.core.ThreadChildren
 import app.motile.panel.AgentTime
 import app.motile.platform.Symbol
+import app.motile.theme.iconSize
 import app.motile.theme.ControlSize
 import app.motile.theme.ShadowSize
 import app.motile.theme.Theme
@@ -35,7 +36,7 @@ fun ChildrenStrip(text: String, first: ThreadChildren.Waiting, count: Int) {
     val store = LocalStore.current
     val palette = Theme.colors
     Row(Modifier.fillMaxWidth().composerStrip(ComposerStrip.Edge.Top), verticalAlignment = Alignment.CenterVertically) {
-        Icon(first.ask.symbol, 13f, Modifier.padding(start = 14.dp, end = 7.dp), color = palette.warning)
+        Icon(first.ask.symbol, iconSize(text = 12.5f), Modifier.padding(start = 14.dp, end = 7.dp), color = palette.warning)
         // A narrow composer says what is asked without naming the agent.
         val said = @Composable { words: String -> Text(words, size = 12.5f, weight = FontWeight.Medium, color = palette.warning, maxLines = 1) }
         FirstThatFits(

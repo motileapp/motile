@@ -29,6 +29,8 @@ import app.motile.LocalCloseSheet
 import app.motile.LocalStore
 import app.motile.core.Time
 import app.motile.platform.Symbol
+import app.motile.theme.iconSize
+import app.motile.theme.IconSize
 import app.motile.theme.ControlSize
 import app.motile.theme.LocalPalette
 import app.motile.theme.Radius
@@ -69,7 +71,7 @@ fun ConnectServerView(isFirst: Boolean, titled: Boolean = !isFirst) {
                     Modifier.size(56.dp).background(palette.primary.wash(), RoundedCornerShape(Radius.lg)),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(Symbol.Server, 24f, color = palette.primary)
+                    Icon(Symbol.Server, IconSize.Display, color = palette.primary)
                 }
                 Text(
                     if (isFirst) "Connect your first server" else "Run this on your server",
@@ -128,7 +130,7 @@ private fun Status(modifier: Modifier) {
             return@Column
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Spinner(color = palette.mutedForeground)
+            Spinner(iconSize(text = 13f), color = palette.mutedForeground)
             Text("Waiting for your server", size = 13f, color = palette.mutedForeground)
         }
         Text(token?.timeLeft(now) ?: "15:00", style = Theme.uiDigits(12f), color = palette.mutedStrongerForeground)

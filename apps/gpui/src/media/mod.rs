@@ -384,7 +384,7 @@ pub fn media_row(model: &RowModel, ctx: &RowContext, window: &mut Window, cx: &m
             states
                 .child(
                     div()
-                        .size(px(ControlSize::Large.symbol() + 4.))
+                        .size(px(ControlSize::Large.symbol().side()))
                         .flex()
                         .items_center()
                         .justify_center()

@@ -14,7 +14,7 @@ use motile_protocol::wire::{GitHubState, Repo, RestartWhen};
 use crate::models::{FolderListing, Project, Server, ThreadInfo, ago, ask_phrase, interruption_label, last_component};
 use crate::store::settings::SettingsSection;
 use crate::store::{AddingProject, PanelPage, Selection, Store};
-use crate::theme::{Colors, ControlSize, Layer, Opacity, Radius, ShadowSize, Surface, colors};
+use crate::theme::{Colors, ControlSize, IconSize, Layer, Opacity, Radius, ShadowSize, Surface, colors};
 use crate::ui::{ActionButton, InputField, InputVariant, KeyCaps, Spinner, icons, logos};
 
 const WIDTH: f32 = 620.;
@@ -26,6 +26,8 @@ const SIDE_MARGIN: f32 = 8.;
 const TITLE_HEIGHT: f32 = 17.;
 const DETAIL_HEIGHT: f32 = 15.;
 const DOT_GAP: f32 = 6.;
+/// A row's icon, beside a title and a detail under it.
+const ROW_ICON: IconSize = IconSize::Lg;
 const NOTICE_HEIGHT: f32 = 36.;
 const MAX_HEIGHT: f32 = 420.;
 /// The layer the card is, which its rows, bars and key caps lie on.
@@ -1212,7 +1214,7 @@ impl CommandPanel {
                 .flex()
                 .items_center()
                 .justify_center()
-                .child(icons::symbol("search", 15.).text_color(c.muted_stronger_foreground))
+                .child(icons::symbol("search", IconSize::Lg).text_color(c.muted_stronger_foreground))
                 .into_any_element()
         };
         let field_size = ControlSize::Large;
@@ -1324,11 +1326,11 @@ impl CommandPanel {
         let placeholder = item.placeholder_lines > 0;
         let icon: AnyElement = match &item.icon {
             ItemIcon::Symbol(_) if placeholder => {
-                div().size(px(20.)).rounded(px(Radius::XS)).bg(light).into_any_element()
+                div().size(px(ROW_ICON.side())).rounded(px(Radius::XS)).bg(light).into_any_element()
             }
-            ItemIcon::Symbol(name) => icons::symbol(name, 15.).text_color(c.muted_foreground).into_any_element(),
-            ItemIcon::GitHub => logos::github_mark(16., cx).text_color(c.muted_foreground).into_any_element(),
-            ItemIcon::Project(project) => logos::project_icon(project.as_ref().as_ref(), 20., cx),
+            ItemIcon::Symbol(name) => icons::symbol(name, ROW_ICON).text_color(c.muted_foreground).into_any_element(),
+            ItemIcon::GitHub => logos::github_mark(ROW_ICON, cx).text_color(c.muted_foreground).into_any_element(),
+            ItemIcon::Project(project) => logos::project_icon(project.as_ref().as_ref(), ROW_ICON, cx),
         };
         let text = if placeholder { placeholder_lines(item, light) } else { lines(item, c) };
         let trailing: Option<AnyElement> = if item.busy {
@@ -1375,7 +1377,15 @@ impl CommandPanel {
                     .when(lit, |row| row.bg(row_light))
                     .when(!lit, |row| row.group_hover("panel-row", move |row| row.bg(row_light)))
                     .when(item.off, |row| row.opacity(c.opacity(Opacity::Disabled)))
-                    .child(div().size(px(22.)).flex_shrink_0().flex().items_center().justify_center().child(icon))
+                    .child(
+                        div()
+                            .size(px(ROW_ICON.side()))
+                            .flex_shrink_0()
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .child(icon),
+                    )
                     .child(div().flex_1().min_w_0().child(text))
                     .children(trailing.map(|trailing| div().ml(px(8.)).flex_shrink_0().child(trailing))),
             )
@@ -1485,8 +1495,6 @@ fn detail_parts(parts: &[(&'static str, String)], c: &Colors) -> Div {
         if position > 0 {
             row = row.child(div().text_color(c.muted_stronger_foreground).child("·"));
         }
-        // Lucide's server fills more of its square than the icons beside it.
-        let size = if *symbol == "server" { 11. } else { 12. };
         row = row.child(
             div()
                 .flex()
@@ -1494,7 +1502,7 @@ fn detail_parts(parts: &[(&'static str, String)], c: &Colors) -> Div {
                 .gap(px(3.))
                 .min_w_0()
                 .when(position == 0, |part| part.flex_shrink_0())
-                .child(icons::symbol(symbol, size))
+                .child(icons::symbol(symbol, IconSize::Sm))
                 .child(crate::ui::middle_truncated(text.clone())),
         );
     }

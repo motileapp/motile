@@ -14,7 +14,7 @@ use super::layout::{
 };
 use crate::store::Store;
 use crate::store::shortcuts::ShortcutCheck;
-use crate::theme::{ControlSize, Opacity, ShadowSize, Surface, colors};
+use crate::theme::{ControlSize, IconSize, Opacity, ShadowSize, Surface, colors};
 use crate::ui::control::Look;
 use crate::ui::menu::{Anchor, Menu};
 use crate::ui::motion;
@@ -275,7 +275,7 @@ impl KeybindingsPage {
                     .flex()
                     .items_center()
                     .gap(px(8.))
-                    .child(icons::symbol("triangle-alert", 13.).text_color(c.warning))
+                    .child(icons::symbol("triangle-alert", IconSize::Md).text_color(c.warning))
                     .child(
                         div()
                             .flex_1()
@@ -659,7 +659,7 @@ fn conflict_mark(conflicts: &[String], cx: &App) -> Option<AnyElement> {
         div()
             .id(SharedString::from(format!("conflict-{}", conflicts.join(","))))
             .text_color(colors(cx).warning)
-            .child(icons::symbol("triangle-alert", 13.))
+            .child(icons::symbol("triangle-alert", IconSize::Md))
             .tooltip(tooltip(help))
             .into_any_element(),
     )
@@ -853,7 +853,7 @@ impl Render for ConditionEditor {
                 .gap(px(6.))
                 .text_size(px(11.5))
                 .text_color(color)
-                .child(div().pt(px(1.)).child(icons::symbol(symbol, 12.)))
+                .child(div().pt(px(1.)).child(icons::symbol(symbol, IconSize::Sm)))
                 .child(div().flex_1().min_w_0().child(text))
         };
         let note = if let Some(error) = &self.check.when_error {

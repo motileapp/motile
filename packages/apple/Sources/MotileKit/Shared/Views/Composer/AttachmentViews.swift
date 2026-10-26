@@ -20,7 +20,7 @@ struct AttachmentTile: View {
                     .frame(width: Self.side, height: Self.side)
             }
             if attachment.video {
-                Image(.play, size: 16)
+                Image(.play, size: .lg)
                     .foregroundStyle(Color.themeForegroundOverPicture)
                     .shadow(.sm, .shadowStrongest)
             }
@@ -69,7 +69,7 @@ struct AttachmentChip: View {
 
     var body: some View {
         HStack(spacing: 5) {
-            Image(.file, size: 12)
+            Image(.file, size: .sm)
             Text(attachment.name)
                 .lineLimit(1)
             if let bytes = attachment.bytes {
@@ -92,7 +92,7 @@ struct ContinuedThreadChip: View {
 
     var body: some View {
         HStack(spacing: 5) {
-            Image(.messageSquareText, size: 12)
+            Image(.messageSquareText, size: .sm)
             Text("Continues “\(from.title)”")
                 .lineLimit(1)
             ActionButton(icon: .x, help: "Start without it", size: .small, round: true) { store.dropContinuation() }
@@ -143,7 +143,7 @@ private struct AttachmentProgress: View {
             }
         case .failed(let reason):
             if onPicture {
-                Label("Retry", symbol: .rotateCw, size: 10)
+                Label("Retry", symbol: .rotateCw, size: .xs)
                     .font(.ui(size: 10, weight: .medium))
                     .foregroundStyle(Color.themeDestructiveForeground)
                     .frame(maxWidth: .infinity)

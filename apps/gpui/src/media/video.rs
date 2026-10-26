@@ -20,7 +20,7 @@ use objc2_core_media::{CMTime, kCMTimeZero};
 use objc2_core_video::CVPixelBuffer;
 use objc2_foundation::{NSDictionary, NSNumber, NSString, NSURL};
 
-use crate::theme::{Radius, colors};
+use crate::theme::{IconSize, Radius, colors};
 use crate::ui::icons;
 
 /// How long the controls stay once the pointer rests on a playing video.
@@ -318,14 +318,14 @@ fn slider_bar(
 fn control(
     id: &'static str,
     symbol: &'static str,
-    size: f32,
+    size: IconSize,
     help: &'static str,
     color: Hsla,
     on_click: impl Fn(&mut Window, &mut App) + 'static,
 ) -> Stateful<Div> {
     div()
         .id(id)
-        .size(px(size + 12.))
+        .size(px(size.side() + 9.))
         .flex()
         .items_center()
         .justify_center()
@@ -394,7 +394,7 @@ impl Render for VideoPlayer {
                             .child(control(
                                 "mute",
                                 volume_symbol,
-                                14.,
+                                IconSize::Md,
                                 "Mute",
                                 bright,
                                 act(|player, _, cx| player.toggle_mute(cx)),
@@ -414,7 +414,7 @@ impl Render for VideoPlayer {
                     .child(control(
                         "back",
                         "rotate-ccw",
-                        14.,
+                        IconSize::Md,
                         "Skip Back 10 Seconds",
                         bright,
                         act(|player, _, cx| player.skip(-SKIP, cx)),
@@ -422,7 +422,7 @@ impl Render for VideoPlayer {
                     .child(control(
                         "play-pause",
                         if self.playing { "pause" } else { "play" },
-                        18.,
+                        IconSize::Xl,
                         if self.playing { "Pause" } else { "Play" },
                         bright,
                         act(|player, _, cx| player.toggle(cx)),
@@ -430,7 +430,7 @@ impl Render for VideoPlayer {
                     .child(control(
                         "forward",
                         "rotate-cw",
-                        14.,
+                        IconSize::Md,
                         "Skip Forward 10 Seconds",
                         bright,
                         act(|player, _, cx| player.skip(SKIP, cx)),
@@ -438,7 +438,7 @@ impl Render for VideoPlayer {
                     .child(div().flex_1().flex().justify_end().child(control(
                         "full-screen",
                         if self.full_screen { "minimize-2" } else { "maximize-2" },
-                        13.,
+                        IconSize::Md,
                         if self.full_screen { "Exit Full Screen" } else { "Enter Full Screen" },
                         bright,
                         act(|player, window, cx| player.set_full_screen(!player.full_screen, window, cx)),

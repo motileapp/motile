@@ -38,6 +38,7 @@ import app.motile.core.UsageModel
 import app.motile.core.UsageReport
 import app.motile.core.abbreviated
 import app.motile.platform.scaled
+import app.motile.theme.iconSize
 import app.motile.theme.LocalPalette
 import app.motile.theme.LocalSurface
 import app.motile.theme.Surface
@@ -162,7 +163,7 @@ private fun AgentLine(report: UsageReport, series: UsageReport.Series, measure: 
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically) {
             Dot(series.agent.color(palette))
-            AgentIcon(series.agent, size = 14f)
+            AgentIcon(series.agent, size = iconSize(text = 12f))
             Text(series.agent.title, Modifier.weight(1f).padding(end = 8.dp), size = 12f, color = palette.foreground, maxLines = 1)
             Text(amount(part, measure), style = Theme.uiDigits(12f), color = palette.foreground)
         }

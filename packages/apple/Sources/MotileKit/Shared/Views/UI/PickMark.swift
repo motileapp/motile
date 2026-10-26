@@ -16,7 +16,7 @@ struct PickMark: View {
                 mark(Circle())
             }
             if picked, multiple {
-                Image(.check, size: 10)
+                Image(.check, size: .xs)
                     .foregroundStyle(Color.themePrimaryForeground)
             } else if picked {
                 Circle()

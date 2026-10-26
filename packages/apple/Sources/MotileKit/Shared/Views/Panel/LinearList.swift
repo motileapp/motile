@@ -225,10 +225,10 @@ private final class LinearHeaderCell: LinearCell {
     static let height = pressable(30) + 6 + rowGap
 
     private let light = SurfaceView()
-    private let symbol = SymbolView(size: 12)
+    private let symbol = SymbolView(size: .sm)
     private let name = TextLabel(font: .ui(12, weight: .semibold), color: Theme.foreground)
     private let count = TextLabel(font: .ui(12), color: Theme.mutedStrongerForeground)
-    private let chevron = SymbolView(.chevronDown, size: 10, tint: Theme.mutedStrongerForeground)
+    private let chevron = SymbolView(.chevronDown, size: .sm, tint: Theme.mutedStrongerForeground)
     private var stateID = ""
 
     override init(list: LinearListView) {
@@ -249,11 +249,11 @@ private final class LinearHeaderCell: LinearCell {
     override func show(_ entry: LinearListEntry, pending: Set<String>, narrow: Bool) {
         guard case .header(let state, let count, let folded) = entry else { return }
         stateID = state.id
-        symbol.show(state.symbol, size: 12)
+        symbol.show(state.symbol, size: .sm)
         symbol.tint = PlatformColor(state.color)
         name.string = state.name
         self.count.string = "\(count)"
-        chevron.show(folded ? .chevronRight : .chevronDown, size: 10)
+        chevron.show(folded ? .chevronRight : .chevronDown, size: .sm)
         describe("\(state.name), \(count)", button: true)
     }
 
@@ -417,6 +417,7 @@ private final class LinearIssueCell: LinearCell {
 private final class LinearRowButton: LayerView {
     static let side = ControlSize.small.height
     private static let symbolSize = ControlSize.small.symbol
+    private static let loaderSide = (PlatformImage.symbolSide(symbolSize) * Spinner.fill).rounded()
 
     private let highlight = SurfaceView()
     private let symbol = SymbolView(size: LinearRowButton.symbolSize)
@@ -451,7 +452,7 @@ private final class LinearRowButton: LayerView {
         highlight.radius = Radius.sm
         addSubview(highlight)
         addSubview(symbol)
-        loader.path = PlatformImage.symbolPath(.loader, size: Self.symbolSize * 0.85)
+        loader.path = PlatformImage.symbolPath(.loader, side: Self.loaderSide)
         loader.isHidden = true
     }
 
@@ -472,7 +473,7 @@ private final class LinearRowButton: LayerView {
     override func layoutNow() {
         highlight.frame = bounds
         symbol.frame = bounds
-        let side = PlatformImage.symbolSide(Self.symbolSize * 0.85)
+        let side = Self.loaderSide
         loader.bounds = CGRect(x: 0, y: 0, width: side, height: side)
         loader.position = CGPoint(x: bounds.midX, y: bounds.midY)
     }

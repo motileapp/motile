@@ -123,7 +123,7 @@ struct SpendingView: View {
                 Circle()
                     .fill(series.agent.color)
                     .frame(width: 8, height: 8)
-                AgentIcon(agent: series.agent, size: 14)
+                AgentIcon(agent: series.agent, size: .sm)
                 Text(series.agent.name)
                     .foregroundStyle(Color.themeForeground)
                 Spacer(minLength: 8)

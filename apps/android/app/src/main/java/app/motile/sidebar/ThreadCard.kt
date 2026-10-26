@@ -8,8 +8,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -43,6 +41,7 @@ import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
 import app.motile.LocalStore
 import app.motile.platform.Symbol
+import app.motile.theme.iconSize
 import app.motile.theme.LocalForeground
 import app.motile.theme.Theme
 import app.motile.ui.AgentIcon
@@ -63,6 +62,8 @@ import kotlin.math.min
 /** What a thread is, beside its row in the sidebar: where it works, the model and the account as the composer shows them, and its pull request. */
 object ThreadCard {
     val maxWidth = 320.dp
+    /** The icon of each line, beside its words. */
+    val iconSize = iconSize(text = 12f)
 }
 
 @Composable
@@ -75,21 +76,21 @@ fun ThreadCard(threadID: String, modifier: Modifier = Modifier) {
         Column(Modifier.padding(12.dp)) {
             Text(thread.title, size = 13f, weight = FontWeight.Medium, color = palette.foreground, maxLines = 1)
             Column(Modifier.padding(top = 10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                CardLine(project?.name ?: lastComponent(thread.cwd)) { ProjectIcon(project, size = 14f) }
+                CardLine(project?.name ?: lastComponent(thread.cwd)) { ProjectIcon(project, size = ThreadCard.iconSize) }
                 val branch = project?.branch
                 if (project != null && branch != null) {
-                    CardLine(branch, middle = true) { Icon(project.checkoutSymbol, 13f) }
+                    CardLine(branch, middle = true) { Icon(project.checkoutSymbol, ThreadCard.iconSize) }
                 } else {
                     val home = store.server(thread.serverID)?.home ?: ""
-                    CardLine(shortenedFolder(thread.cwd, home), middle = true) { Icon(Symbol.Folder, 13f) }
+                    CardLine(shortenedFolder(thread.cwd, home), middle = true) { Icon(Symbol.Folder, ThreadCard.iconSize) }
                 }
-                CardLine(store.modelLabel(thread)) { AgentIcon(thread.agent, size = 13f) }
-                store.server(thread.serverID)?.let { server -> CardLine(server.name) { Icon(Symbol.Server, 12f) } }
+                CardLine(store.modelLabel(thread)) { AgentIcon(thread.agent, size = ThreadCard.iconSize) }
+                store.server(thread.serverID)?.let { server -> CardLine(server.name) { Icon(Symbol.Server, ThreadCard.iconSize) } }
             }
             val pullRequest = project?.pullRequest(thread) ?: return@Column
             ThemeDivider(Modifier.padding(vertical = 10.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.width(14.dp), contentAlignment = Alignment.Center) { Icon(pullRequest.state.symbol, 13f, color = pullRequest.state.color) }
+                Icon(pullRequest.state.symbol, ThreadCard.iconSize, color = pullRequest.state.color)
                 Text("#${pullRequest.number}", style = Theme.uiDigits(12f, FontWeight.Medium), color = palette.mutedStrongerForeground)
                 Text(pullRequest.title, size = 12f, color = palette.mutedForeground, maxLines = 1)
             }
@@ -102,7 +103,7 @@ private fun CardLine(text: String, middle: Boolean = false, icon: @Composable ()
     val palette = Theme.colors
     CompositionLocalProvider(LocalForeground provides palette.mutedForeground) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(14.dp), contentAlignment = Alignment.Center) { icon() }
+            icon()
             Text(
                 dotted(text, palette.mutedStrongerForeground), size = 12f, maxLines = 1,
                 overflow = if (middle) TextOverflow.MiddleEllipsis else TextOverflow.Ellipsis,

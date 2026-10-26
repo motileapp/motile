@@ -71,6 +71,8 @@ import androidx.compose.ui.unit.round
 import app.motile.platform.Platform
 import app.motile.platform.Symbol
 import app.motile.platform.scaled
+import app.motile.theme.iconSize
+import app.motile.theme.IconSize
 import app.motile.theme.ControlSize
 import app.motile.theme.LocalPalette
 import app.motile.theme.LocalSurface
@@ -358,12 +360,8 @@ private fun CodeHeading(file: CodeFile, closed: Boolean, marks: CodeMarks, onTog
         Column(Modifier.fillMaxWidth().background(palette.backgroundSecondary)) {
             HighlightButton(onClick = onToggle, modifier = Modifier.fillMaxWidth().height(CodeSheet.headingHeight - 1.dp), radius = 0.dp) {
                 Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.padding(start = 8.dp).width(16.dp), contentAlignment = Alignment.Center) {
-                        Icon(if (closed) Symbol.ChevronRight else Symbol.ChevronDown, 9f, color = palette.mutedStrongerForeground)
-                    }
-                    Box(Modifier.padding(start = 4.dp).width(18.dp), contentAlignment = Alignment.Center) {
-                        Icon(FileSymbol.symbol(file.path), 11f, color = palette.mutedForeground)
-                    }
+                    Icon(if (closed) Symbol.ChevronRight else Symbol.ChevronDown, IconSize.Xs, Modifier.padding(start = 9.dp), color = palette.mutedStrongerForeground)
+                    Icon(FileSymbol.symbol(file.path), iconSize(text = 12.5f), Modifier.padding(start = 6.dp), color = palette.mutedForeground)
                     Text(
                         headingTitle(file, palette), Modifier.padding(start = 4.dp).weight(1f), size = 12.5f, maxLines = 1,
                         overflow = TextOverflow.MiddleEllipsis,
@@ -374,7 +372,7 @@ private fun CodeHeading(file: CodeFile, closed: Boolean, marks: CodeMarks, onTog
                         Text(LineCountText.text(file.added, file.removed), Modifier.padding(end = 4.dp), style = LineCountText.style, maxLines = 1)
                     }
                     ActionButton(
-                        icon = Symbol.SquareArrowOutUpRight, help = "Open the file", size = ControlSize.Small, symbolSize = 12f,
+                        icon = Symbol.SquareArrowOutUpRight, help = "Open the file", size = ControlSize.Small,
                         modifier = Modifier.padding(end = 6.dp), onClick = onOpen,
                     )
                 }
@@ -412,7 +410,7 @@ private fun ViewedBox(viewed: Boolean, onViewed: () -> Unit) {
         val box = Modifier.size(14.dp)
         if (viewed) {
             Box(box.background(palette.primary, shape), contentAlignment = Alignment.Center) {
-                Icon(Symbol.Check, 9f, color = palette.primaryForeground)
+                Icon(Symbol.Check, IconSize.Xs, color = palette.primaryForeground)
             }
         } else {
             Box(box.border(1.dp, palette.border, shape))
@@ -454,7 +452,7 @@ private fun CodeMediaBlock(file: CodeFile, media: CodeMedia, onMedia: () -> Unit
             contentAlignment = Alignment.Center,
         ) {
             Image(picture, contentDescription = file.path.substringAfterLast('/'), contentScale = ContentScale.FillBounds, modifier = Modifier.fillMaxSize())
-            if (media.video) Icon(Symbol.CirclePlay, 40f, color = OverPicture.foreground)
+            if (media.video) Icon(Symbol.CirclePlay, IconSize.Hero, color = OverPicture.foreground)
         }
     }
 }

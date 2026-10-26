@@ -311,7 +311,7 @@ final class MediaRowView: RowView {
     /// Centres the spinner with its percentage, or the message with its button, in the box.
     private func placeStates() {
         let box = picture.frame
-        let spinnerSide = ControlSize.large.symbol + 4
+        let spinnerSide = ControlSize.large.symbolSide
         let spinnerStack = spinnerSide + (progress.isHidden ? 0 : Self.stackGap + Self.lineHeight)
         var y = (box.midY - spinnerStack / 2).rounded()
         spinner.frame = CGRect(x: (box.midX - spinnerSide / 2).rounded(), y: y, width: spinnerSide, height: spinnerSide)

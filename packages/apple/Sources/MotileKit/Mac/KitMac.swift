@@ -383,14 +383,14 @@ final class ShimmerLabel: TextLabel {
 
 /// A symbol in one colour, in the middle of its frame.
 final class SymbolView: NSImageView {
-    convenience init(_ symbol: Symbol? = nil, size: CGFloat = 12, tint: NSColor = Theme.mutedForeground) {
+    convenience init(_ symbol: Symbol? = nil, size: IconSize = .sm, tint: NSColor = Theme.mutedForeground) {
         self.init(frame: .zero)
         imageScaling = .scaleNone
         contentTintColor = tint
         if let symbol { show(symbol, size: size) }
     }
 
-    func show(_ symbol: Symbol, size: CGFloat = 12) {
+    func show(_ symbol: Symbol, size: IconSize = .sm) {
         image = .symbol(symbol, size: size)
     }
 
@@ -431,7 +431,7 @@ final class IconButton: NSButton {
     private var hovering = false { didSet { light() } }
     private var pressing = false { didSet { light() } }
 
-    convenience init(symbol: Symbol, title: String = "", symbolSize: CGFloat? = nil, tooltip: String, action: @escaping () -> Void) {
+    convenience init(symbol: Symbol, title: String = "", symbolSize: IconSize? = nil, tooltip: String, action: @escaping () -> Void) {
         self.init(frame: .zero)
         self.symbolSize = symbolSize ?? Self.metrics.symbol
         isBordered = false

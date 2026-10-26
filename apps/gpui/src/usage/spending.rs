@@ -11,7 +11,7 @@ use crate::format::{self, abbreviated as count, percent, usd as cost};
 use crate::models::agent_name;
 use crate::store::Store;
 use crate::store::usage::{UsageLine, UsagePeriod, UsageReport, UsageSeries, UsageTab};
-use crate::theme::{Colors, Layer, Opacity, Surface, colors};
+use crate::theme::{Colors, IconSize, Layer, Opacity, Surface, colors};
 use crate::ui::menu::Anchor;
 use crate::ui::{Segmented, card_default, divider_on, logos, tabular_numbers, text_width};
 
@@ -454,7 +454,7 @@ fn agent_line(report: &UsageReport, series: &UsageSeries, cost_shown: bool, cx: 
                 .gap(px(7.))
                 .text_size(px(12.))
                 .child(dot(logos::agent_color(series.agent, c)))
-                .child(logos::agent_icon(series.agent, 14., cx))
+                .child(logos::agent_icon(series.agent, IconSize::Sm, cx))
                 .child(div().flex_1().text_color(c.foreground).child(agent_name(series.agent)))
                 .child(div().text_color(c.foreground).font_features(tabular_numbers()).child(amount(part, cost_shown))),
         )

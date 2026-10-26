@@ -11,7 +11,8 @@ import UIKit
 enum SkillChip {
     static let font = PlatformFont.ui(13, weight: .regular)
     static let symbol = Symbol.box
-    static let symbolSize: CGFloat = 11
+    /// Smaller than the icon for its text, to keep clear of the box's edges, which hug the text.
+    static let symbolSize = IconSize.sm
     static let padding: CGFloat = 5
     static let gap: CGFloat = 4
     /// The room between the chip and the text on either side.
@@ -53,7 +54,7 @@ enum SkillChip {
         RoundedBox.fill(box, radius: radius)
         edge.drawn.setStroke()
         RoundedBox.stroke(box, radius: radius)
-        guard let context = Platform.drawing, let path = PlatformImage.symbolPath(symbol, size: symbolSize) else { return }
+        guard let context = Platform.drawing, let path = PlatformImage.symbolPath(symbol, side: symbolSide) else { return }
         let side = symbolSide
         let origin = CGPoint(x: rect.minX + padding, y: (rect.midY - side / 2).rounded())
         context.saveGState()

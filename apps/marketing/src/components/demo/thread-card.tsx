@@ -104,14 +104,14 @@ function ThreadCard({
         {thread.title}
       </p>
       <div className="flex flex-col gap-2.5 pt-2.5">
-        <Line icon={<ProjectIcon project={thread.project} />}>
+        <Line icon={<ProjectIcon project={thread.project} size={14} />}>
           {thread.project.name}
         </Line>
-        <Line icon={<Checkout className="size-[13px]" />}>{thread.branch}</Line>
-        <Line icon={<AgentIcon agent={thread.agent} size={13} />}>
+        <Line icon={<Checkout className="size-3.5" />}>{thread.branch}</Line>
+        <Line icon={<AgentIcon agent={thread.agent} size={14} />}>
           <Dotted text={thread.model} />
         </Line>
-        <Line icon={<ServerIcon className="size-3" />}>
+        <Line icon={<ServerIcon className="size-3.5" />}>
           {thread.server.name}
         </Line>
       </div>
@@ -120,7 +120,7 @@ function ThreadCard({
           <div className="my-2.5 h-px bg-border-popover" />
           <p className="flex items-center gap-2 text-[12px]">
             <span className="flex w-3.5 justify-center text-success">
-              <GitPullRequestIcon className="size-[13px]" />
+              <GitPullRequestIcon className="size-3.5" />
             </span>
             <span className="font-medium text-muted-stronger-foreground tabular-nums">
               #{thread.pullRequest.number}

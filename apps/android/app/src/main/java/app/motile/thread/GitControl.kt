@@ -12,6 +12,7 @@ import app.motile.core.AppStore
 import app.motile.core.Project
 import app.motile.core.PullRequest
 import app.motile.platform.Symbol
+import app.motile.theme.IconSize
 import app.motile.theme.Palette
 import app.motile.theme.Theme
 import app.motile.ui.Answer
@@ -23,10 +24,12 @@ import app.motile.ui.Icon
 import app.motile.ui.MenuBuilder
 import app.motile.ui.MenuPopup
 import app.motile.ui.Spinner
+import app.motile.ui.menuIconSize
 import app.motile.ui.color
 import app.motile.ui.rememberMenuState
 
-private const val SYMBOL_SIZE = 15f
+/** The size of the top bar's symbols, as its glass buttons'. */
+private val barSymbol = IconSize.Lg
 
 /**
  * The git button in a thread's top bar: one symbol that opens the menu of every action, under the
@@ -51,7 +54,7 @@ fun GitButton(project: Project, control: GitControl, modifier: Modifier = Modifi
                 section {
                     when {
                         stage != null -> item(stage.label, Symbol.Hourglass) { store.runQuick(project) }
-                        color != null -> item(quick.title, picture = { Icon(symbol(quick), SYMBOL_SIZE, color = color) }) { store.runQuick(project) }
+                        color != null -> item(quick.title, picture = { Icon(symbol(quick), menuIconSize, color = color) }) { store.runQuick(project) }
                         else -> item(quick.title, symbol(quick)) { store.runQuick(project) }
                     }
                 }
@@ -65,10 +68,10 @@ fun GitButton(project: Project, control: GitControl, modifier: Modifier = Modifi
         },
     ) {
         when {
-            running -> Spinner(SYMBOL_SIZE)
-            color != null -> Icon(symbol(quick), SYMBOL_SIZE, color = color)
-            acts -> Icon(symbol(quick), SYMBOL_SIZE)
-            else -> Icon(Symbol.GitBranch, SYMBOL_SIZE)
+            running -> Spinner(barSymbol)
+            color != null -> Icon(symbol(quick), barSymbol, color = color)
+            acts -> Icon(symbol(quick), barSymbol)
+            else -> Icon(Symbol.GitBranch, barSymbol)
         }
     }
     Asking(store.pendingGit, onDismiss = { store.pendingGit = null }) { pending ->
@@ -105,7 +108,7 @@ fun InitializeGitButton(project: Project, modifier: Modifier = Modifier) {
     val store = LocalStore.current
     val pending = project.id in store.initializingGit
     BarMenu(modifier, items = { item("Initialize git", Symbol.GitBranch, disabled = pending) { store.initializeGit(project) } }) {
-        if (pending) Spinner(SYMBOL_SIZE) else Icon(Symbol.GitBranch, SYMBOL_SIZE)
+        if (pending) Spinner(barSymbol) else Icon(Symbol.GitBranch, barSymbol)
     }
 }
 
@@ -119,7 +122,7 @@ fun PullBaseButton(base: String, modifier: Modifier = Modifier) {
     val pending = store.pullingDraftBase
     val symbol = GitSymbol.symbol("pull")
     BarMenu(modifier, items = { item("Pull $base", symbol, disabled = pending) { store.pullDraftBase() } }) {
-        if (pending) Spinner(SYMBOL_SIZE) else Icon(symbol, SYMBOL_SIZE)
+        if (pending) Spinner(barSymbol) else Icon(symbol, barSymbol)
     }
 }
 

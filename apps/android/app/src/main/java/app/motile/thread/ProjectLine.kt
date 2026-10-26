@@ -15,13 +15,14 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.motile.core.Project
+import app.motile.theme.iconSize
 import app.motile.theme.Theme
 import app.motile.ui.ProjectIcon
 import app.motile.ui.Text
 
 /** The line over a thread's title: its project's icon, then its parts with muted dots between. */
 @Composable
-fun ProjectLine(project: Project?, parts: List<String>, size: Float, iconSize: Float, modifier: Modifier = Modifier) {
+fun ProjectLine(project: Project?, parts: List<String>, size: Float, modifier: Modifier = Modifier) {
     val palette = Theme.colors
     val line = buildAnnotatedString {
         parts.forEachIndexed { index, part ->
@@ -30,7 +31,7 @@ fun ProjectLine(project: Project?, parts: List<String>, size: Float, iconSize: F
         }
     }
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-        ProjectIcon(project, size = iconSize)
+        ProjectIcon(project, size = iconSize(text = size))
         Text(line, style = system(size), color = palette.mutedForeground, maxLines = 1)
     }
 }

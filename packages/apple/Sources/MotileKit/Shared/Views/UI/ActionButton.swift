@@ -172,7 +172,7 @@ struct ControlLabel: View {
     /// Where its words sit when it fills.
     var alignment = HorizontalAlignment.center
     /// The symbol's or the picture's size where it isn't the one that goes with `size`.
-    var symbolSize: CGFloat?
+    var symbolSize: IconSize?
     /// The room between its symbol and its words where it isn't the one that goes with `size`.
     var gap: CGFloat?
     /// The room between its words and its sides where it isn't the one that goes with `size`.
@@ -186,7 +186,7 @@ struct ControlLabel: View {
     var tinted: (words: String, color: Color)?
 
     private var wordless: Bool { title == nil && !chevron }
-    private var markSize: CGFloat { symbolSize ?? size.symbol }
+    private var markSize: IconSize { symbolSize ?? size.symbol }
     private var waitingTitle: String? { pending ? pendingTitle : nil }
 
     var body: some View {
@@ -199,7 +199,7 @@ struct ControlLabel: View {
                 }
             }
             if chevron {
-                Image(.chevronDown, size: size.textSize, trimmed: true)
+                Image(.chevronDown, size: size.chevron, trimmed: true)
                     .foregroundStyle(Color.themeMutedStrongerForeground)
             }
         }
@@ -218,7 +218,7 @@ struct ControlLabel: View {
     /// A picture smaller than the square stays centred where the square would be.
     private var pictureInset: CGFloat {
         guard case .picture = icon, let symbolSize else { return 0 }
-        return (size.symbolSide - symbolSize) / 2
+        return (size.symbolSide - PlatformImage.symbolSide(symbolSize)) / 2
     }
 
     private func words(_ title: String?, tinted: (words: String, color: Color)?, spins: Bool) -> some View {
@@ -237,7 +237,7 @@ struct ControlLabel: View {
                     Group {
                         if let detail {
                             Text(verbatim: " · ")
-                            Image(detail, size: markSize - 2)
+                            Image(detail, size: size.smallSymbol)
                         }
                         if let place {
                             Text(verbatim: " · ")
@@ -263,7 +263,7 @@ struct ControlLabel: View {
         switch icon {
         case .symbol(let symbol): Image(symbol, size: markSize)
         case .picture(let picture):
-            let side = symbolSize ?? size.symbolSide
+            let side = PlatformImage.symbolSide(markSize)
             picture.frame(width: side, height: side)
         case .pictures(let pictures): pictures.fixedSize()
         }
@@ -356,7 +356,7 @@ struct ActionButton: View {
     private let pendingTitle: String?
     private let fills: Bool
     private var alignment = HorizontalAlignment.center
-    private let symbolSize: CGFloat?
+    private let symbolSize: IconSize?
     private var gap: CGFloat?
     private var padding: CGFloat?
     private let detail: Symbol?
@@ -371,7 +371,7 @@ struct ActionButton: View {
     init(
         _ title: String, tinted: String? = nil, icon: Symbol? = nil, picture: AnyView? = nil, pictures: AnyView? = nil, detail: Symbol? = nil,
         place: String? = nil, help: String? = nil,
-        variant: ButtonVariant = .secondary, size: ControlSize = .regular, symbolSize: CGFloat? = nil, gap: CGFloat? = nil,
+        variant: ButtonVariant = .secondary, size: ControlSize = .regular, symbolSize: IconSize? = nil, gap: CGFloat? = nil,
         padding: CGFloat? = nil, pending: Bool = false, pendingTitle: String? = nil,
         selected: Bool = false, round: Bool = false,
         fills: Bool = false, alignment: HorizontalAlignment = .center, opens: Bool = false, joined: HorizontalEdge.Set = [],
@@ -400,7 +400,7 @@ struct ActionButton: View {
     /// A button that is only a symbol says what it does in `help`. `symbolSize` draws the
     /// symbol in another size in a button of the same size.
     init(
-        icon: Symbol, help: String, variant: ButtonVariant = .ghost, size: ControlSize = .regular, symbolSize: CGFloat? = nil,
+        icon: Symbol, help: String, variant: ButtonVariant = .ghost, size: ControlSize = .regular, symbolSize: IconSize? = nil,
         pending: Bool = false, selected: Bool = false, round: Bool = false, joined: HorizontalEdge.Set = [], tint: Color? = nil,
         margin: EdgeInsets = EdgeInsets(), inline: Bool = false, action: @escaping () -> Void
     ) {
@@ -480,7 +480,7 @@ struct ActionMenu<Content: View>: View {
     private let look: ControlLook
     private let chevron: Bool
     private let pending: Bool
-    private let symbolSize: CGFloat?
+    private let symbolSize: IconSize?
     private var gap: CGFloat?
     private var padding: CGFloat?
     private let margin: EdgeInsets
@@ -493,7 +493,7 @@ struct ActionMenu<Content: View>: View {
     /// A menu with words shows what is chosen, and a chevron after it.
     init(
         _ title: String?, icon: Symbol? = nil, picture: AnyView? = nil, help: String? = nil, variant: ButtonVariant = .ghost,
-        size: ControlSize = .regular, symbolSize: CGFloat? = nil, gap: CGFloat? = nil, padding: CGFloat? = nil, pending: Bool = false,
+        size: ControlSize = .regular, symbolSize: IconSize? = nil, gap: CGFloat? = nil, padding: CGFloat? = nil, pending: Bool = false,
         round: Bool = false, joined: HorizontalEdge.Set = [], tint: Color? = nil, margin: EdgeInsets = EdgeInsets(), @ViewBuilder content: () -> Content
     ) {
         self.title = title
@@ -512,7 +512,7 @@ struct ActionMenu<Content: View>: View {
     /// A menu without words shows a symbol or a picture, and no chevron.
     init(
         icon: Symbol? = nil, picture: AnyView? = nil, help: String, variant: ButtonVariant = .ghost, size: ControlSize = .regular,
-        symbolSize: CGFloat? = nil, pending: Bool = false, round: Bool = false, joined: HorizontalEdge.Set = [], tint: Color? = nil,
+        symbolSize: IconSize? = nil, pending: Bool = false, round: Bool = false, joined: HorizontalEdge.Set = [], tint: Color? = nil,
         margin: EdgeInsets = EdgeInsets(), @ViewBuilder content: () -> Content
     ) {
         title = nil

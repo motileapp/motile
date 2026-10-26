@@ -36,6 +36,8 @@ import app.motile.core.ContinuedThread
 import app.motile.core.Pictures
 import app.motile.platform.Platform
 import app.motile.platform.Symbol
+import app.motile.theme.iconSize
+import app.motile.theme.IconSize
 import app.motile.theme.ControlSize
 import app.motile.theme.LocalForeground
 import app.motile.theme.LocalRow
@@ -89,7 +91,7 @@ fun AttachmentTile(attachment: Attachment, open: () -> Unit) {
             Box(Modifier.fillMaxSize().background(palette.backgroundSecondary), contentAlignment = Alignment.Center) {
                 picture?.let { Image(it, null, Modifier.fillMaxSize(), contentScale = ContentScale.Fit) }
                 if (attachment.video) {
-                    Icon(Symbol.Play, 16f, Modifier.shadow(ShadowSize.Sm, CircleShape, Opacity.ShadowStrongest), color = OverPicture.foreground)
+                    Icon(Symbol.Play, IconSize.Lg, Modifier.shadow(ShadowSize.Sm, CircleShape, Opacity.ShadowStrongest), color = OverPicture.foreground)
                 }
                 Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth()) { AttachmentProgress(attachment, onPicture = true) }
             }
@@ -107,7 +109,7 @@ fun AttachmentChip(attachment: Attachment) {
     val store = LocalStore.current
     val palette = Theme.colors
     ComposerChip {
-        Icon(Symbol.File, 12f)
+        Icon(Symbol.File, iconSize(text = 12f))
         Text(attachment.name, size = 12f, maxLines = 1)
         attachment.bytes?.let { Text(Formatter.formatShortFileSize(Platform.context, it), size = 12f, color = palette.mutedForeground, maxLines = 1) }
         AttachmentProgress(attachment, onPicture = false)
@@ -122,7 +124,7 @@ fun AttachmentChip(attachment: Attachment) {
 fun ContinuedThreadChip(from: ContinuedThread, modifier: Modifier = Modifier) {
     val store = LocalStore.current
     ComposerChip(modifier) {
-        Icon(Symbol.MessageSquareText, 12f)
+        Icon(Symbol.MessageSquareText, iconSize(text = 12f))
         Text("Continues “${from.title}”", Modifier.weight(1f, fill = false), size = 12f, maxLines = 1)
         CompositionLocalProvider(LocalRow provides Surface.Layer.Chip) {
             ActionButton(icon = Symbol.X, help = "Start without it", size = ControlSize.Small, round = true) { store.dropContinuation() }
@@ -172,7 +174,7 @@ private fun AttachmentProgress(attachment: Attachment, onPicture: Boolean) {
                             horizontalArrangement = Arrangement.spacedBy(3.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Icon(Symbol.RotateCw, 10f)
+                            Icon(Symbol.RotateCw, iconSize(text = 10f))
                             Text("Retry", size = 10f, weight = FontWeight.Medium)
                         }
                     }

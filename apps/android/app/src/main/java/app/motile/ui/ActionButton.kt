@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.offset
 import androidx.compose.ui.unit.dp
 import app.motile.platform.Symbol
 import app.motile.theme.ControlSize
+import app.motile.theme.IconSize
 import app.motile.theme.LocalDark
 import app.motile.theme.LocalPalette
 import app.motile.theme.LocalRow
@@ -54,6 +55,7 @@ import app.motile.theme.Palette
 import app.motile.theme.Surface
 import app.motile.theme.at
 import app.motile.theme.opacity
+import app.motile.theme.symbolSide
 import app.motile.theme.LocalForeground
 
 /** What a button is for, which is how it looks. */
@@ -216,8 +218,8 @@ fun ControlLabel(
     fills: Boolean = false,
     /** Where its words sit when it fills. */
     alignment: Alignment.Horizontal = Alignment.CenterHorizontally,
-    /** The symbol's size, as text, where it isn't the one that goes with `size`; a picture's side. */
-    symbolSize: Float? = null,
+    /** The side of the symbol's or the picture's square where it isn't the one that goes with `size`. */
+    symbolSize: IconSize? = null,
     /** The room between its symbol and its words where it isn't the one that goes with `size`. */
     gap: Dp? = null,
     /** The room between its words and its sides where it isn't the one that goes with `size`. */
@@ -233,11 +235,11 @@ fun ControlLabel(
     val markSize = symbolSize ?: size.symbol
     val waitingTitle = if (pending) pendingTitle else null
     val sidePadding = padding ?: size.padding
-    val pictureInset = if (icon is ControlIcon.Picture && symbolSize != null) (size.symbolSide - symbolSize.dp) / 2 else 0.dp
+    val pictureInset = if (icon is ControlIcon.Picture && symbolSize != null) (size.symbolSide - symbolSide(symbolSize)) / 2 else 0.dp
     val leading = if (wordless) 0.dp else sidePadding - (if (icon == null) 0.dp else size.symbolOutset) + pictureInset
     val trailing = if (wordless) 0.dp else sidePadding - (if (chevron) size.chevronOutset else 0.dp)
     val width = if (fills) Modifier.fillMaxWidth() else Modifier
-    val pictureSide = symbolSize?.dp ?: size.symbolSide
+    val pictureSide = symbolSide(markSize)
     Box(modifier.height(size.height).widthIn(min = size.height).then(width), contentAlignment = Alignment.Center) {
         Row(
             Modifier.then(width).padding(start = leading, end = trailing),
@@ -250,7 +252,7 @@ fun ControlLabel(
                     if (waitingTitle != null) ControlWords(waitingTitle, null, icon, size, markSize, pictureSide, gap, null, null, pending, spins = true)
                 }
             }
-            if (chevron) Icon(Symbol.ChevronDown, size.textSize, color = LocalPalette.current.mutedStrongerForeground, trimmed = true)
+            if (chevron) Icon(Symbol.ChevronDown, size.chevron, color = LocalPalette.current.mutedStrongerForeground, trimmed = true)
         }
         if (pending && icon == null && waitingTitle == null) Spinner(markSize)
     }
@@ -262,7 +264,7 @@ private fun ControlWords(
     tinted: Pair<String, Color>?,
     icon: ControlIcon?,
     size: ControlSize,
-    markSize: Float,
+    markSize: IconSize,
     pictureSide: Dp,
     gap: Dp?,
     detail: Symbol?,
@@ -290,7 +292,7 @@ private fun ControlWords(
                 Text(words(title, tinted, muted), style = size.font, maxLines = 1, modifier = Modifier.weight(1f, fill = false))
                 if (detail != null) {
                     Text(" · ", style = size.font, color = muted, maxLines = 1)
-                    Icon(detail, markSize - 2, color = muted)
+                    Icon(detail, size.smallSymbol, color = muted)
                 }
                 if (place != null) {
                     Text(" · ", style = size.font, color = muted, maxLines = 1)
@@ -388,7 +390,7 @@ fun ActionButton(
     help: String? = null,
     variant: ButtonVariant = if (title.isNullOrEmpty()) ButtonVariant.Ghost else ButtonVariant.Secondary,
     size: ControlSize = ControlSize.Regular,
-    symbolSize: Float? = null,
+    symbolSize: IconSize? = null,
     gap: Dp? = null,
     padding: Dp? = null,
     pending: Boolean = false,

@@ -99,7 +99,7 @@ struct SearchEmptyLine: View {
     var body: some View {
         HStack(spacing: 6) {
             if store.messageSearch.searching {
-                Spinner(size: size)
+                Spinner(size: IconSize(text: size))
                 Text("Searching messages")
             } else {
                 Text("No threads found")
@@ -127,7 +127,7 @@ struct SearchResultRow: View {
         let project = project
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 6) {
-                ProjectIcon(project: project, size: 14)
+                ProjectIcon(project: project, size: .md)
                     .opacity(.disabled, when: isDone && !highlighted)
                 Text(title)
                     .font(.ui(size: 13, weight: .medium))
@@ -182,7 +182,7 @@ struct SearchResultRow: View {
         switch result {
         case .draft:
             HStack(spacing: 3) {
-                Image(.file, size: 11)
+                Image(.file, size: .sm)
                 Text("Draft")
                     .font(.ui(size: 11, weight: .medium))
             }

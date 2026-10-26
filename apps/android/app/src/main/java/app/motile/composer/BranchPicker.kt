@@ -43,6 +43,7 @@ import app.motile.core.Project
 import app.motile.core.coreError
 import app.motile.platform.Platform
 import app.motile.platform.Symbol
+import app.motile.theme.iconSize
 import app.motile.theme.LocalSurface
 import app.motile.theme.Opacity
 import app.motile.theme.Radius
@@ -197,9 +198,7 @@ private fun BranchRow(choice: BranchChoice, base: String?, working: Boolean) {
             is BranchChoice.Existing -> {
                 val branch = choice.branch
                 val chosen = if (base != null) base == branch.name else branch.current
-                Box(Modifier.width(14.dp), contentAlignment = Alignment.Center) {
-                    Icon(if (chosen) Symbol.Check else Symbol.GitBranch, 11f, color = if (chosen) palette.foreground else palette.mutedStrongerForeground)
-                }
+                Icon(if (chosen) Symbol.Check else Symbol.GitBranch, iconSize(text = 12.5f), color = if (chosen) palette.foreground else palette.mutedStrongerForeground)
                 Text(branch.name, Modifier.weight(1f), size = 12.5f, color = palette.foreground, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
                 val tag = when {
                     base != null && branch.current -> "current"
@@ -210,9 +209,7 @@ private fun BranchRow(choice: BranchChoice, base: String?, working: Boolean) {
                 if (tag != null) Text(tag, size = 11f, color = palette.mutedStrongerForeground)
             }
             is BranchChoice.Create -> {
-                Box(Modifier.width(14.dp), contentAlignment = Alignment.Center) {
-                    Icon(Symbol.Plus, 11f, color = palette.mutedStrongerForeground)
-                }
+                Icon(Symbol.Plus, iconSize(text = 12.5f), color = palette.mutedStrongerForeground)
                 Text("Create branch “${choice.name}”", Modifier.weight(1f), size = 12.5f, color = palette.foreground, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
             }
         }

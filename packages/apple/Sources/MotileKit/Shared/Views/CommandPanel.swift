@@ -154,7 +154,7 @@ struct CommandPanel: View {
         return Button {
             store.loadRepos(id, fresh: true)
         } label: {
-            TurningSymbol(symbol: .rotateCw, size: 16, turning: pending)
+            TurningSymbol(symbol: .rotateCw, size: .lg, turning: pending)
         }
         .disabled(pending)
         .accessibilityLabel("Refresh")
@@ -191,7 +191,7 @@ struct CommandPanel: View {
             if pages.count > 1 {
                 ActionButton(icon: .arrowLeft, help: "Back") { back() }
             } else {
-                Image(.search, size: 15)
+                Image(.search, size: .lg)
                     .foregroundStyle(Color.themeMutedStrongerForeground)
                     .frame(width: ControlSize.regular.height, height: ControlSize.regular.height)
             }
@@ -501,7 +501,7 @@ struct CommandPanel: View {
             open(.newProject(id))
         }
         guard let state = store.github[id] else { return [new, .placeholder(0, lines: 2), folder] }
-        var github = PanelItem(id: "source-github", title: "Your GitHub", detail: "Clone one of your repositories", icon: .logo(AgentLogo.github), keepsOpen: true) {
+        var github = PanelItem(id: "source-github", title: "Your GitHub", detail: "Clone one of your repositories", icon: .symbol(.github), keepsOpen: true) {
             open(state == .ready ? .github(id) : .githubSetup(id))
         }
         guard state != .ready else { return [new, github, folder] }
@@ -881,8 +881,6 @@ private struct PanelSection: Identifiable {
 private struct PanelItem: Identifiable {
     enum Icon {
         case symbol(Symbol)
-        /// A logo, drawn in the colour of the symbols.
-        case logo(PlatformImage?)
         case project(Project?)
     }
 
@@ -945,6 +943,8 @@ private struct PanelRow: View {
     private static let titleHeight: CGFloat = scaled(17)
     private static let detailHeight: CGFloat = scaled(15)
     private static let dotGap: CGFloat = 6
+    /// Its icon, beside a title and a detail under it.
+    private static let iconSize = IconSize.lg
 
     let item: PanelItem
     @State private var faded = false
@@ -952,7 +952,7 @@ private struct PanelRow: View {
     var body: some View {
         HStack(spacing: 12) {
             icon
-                .frame(width: scaled(22), height: scaled(22))
+                .frame(width: PlatformImage.symbolSide(Self.iconSize), height: PlatformImage.symbolSide(Self.iconSize))
             VStack(alignment: .leading, spacing: 2) {
                 if item.placeholderLines > 0 {
                     placeholderLines
@@ -1012,8 +1012,7 @@ private struct PanelRow: View {
                         .foregroundStyle(Color.themeMutedStrongerForeground)
                 }
                 HStack(spacing: 3) {
-                    // Lucide's server fills more of its square than the icons beside it.
-                    Image(part.symbol, size: part.symbol == .server ? 11 : 12)
+                    Image(part.symbol, size: .sm)
                     Text(part.text)
                         .lineLimit(1)
                         .truncationMode(.middle)
@@ -1068,19 +1067,12 @@ private struct PanelRow: View {
         case .symbol where item.placeholderLines > 0:
             RoundedRectangle(cornerRadius: Radius.xs, style: .continuous)
                 .fill(surface.color(.control))
-                .frame(width: scaled(20), height: scaled(20))
+                .frame(width: PlatformImage.symbolSide(Self.iconSize), height: PlatformImage.symbolSide(Self.iconSize))
         case .symbol(let name):
-            Image(name, size: 15)
-                .foregroundStyle(Color.themeMutedForeground)
-        case .logo(let logo):
-            Image(platform: logo ?? PlatformImage())
-                .renderingMode(.template)
-                .resizable()
-                .interpolation(.high)
-                .frame(width: scaled(16), height: scaled(16))
+            Image(name, size: Self.iconSize)
                 .foregroundStyle(Color.themeMutedForeground)
         case .project(let project):
-            ProjectIcon(project: project, size: scaled(20))
+            ProjectIcon(project: project, size: Self.iconSize)
         }
     }
 }

@@ -238,8 +238,7 @@ struct PanelTabChip: View {
     var body: some View {
         let panel = store.rightPanel
         HStack(spacing: 6) {
-            Image(tab.symbol, size: 11)
-                .frame(width: 14)
+            Image(tab.symbol, size: .sm)
             Text(tab.title)
                 .font(.ui(size: 12, weight: .medium))
                 .lineLimit(1)
@@ -260,7 +259,7 @@ struct PanelTabChip: View {
                 small: true)
         ) { panel.activate(tab) }
         .overlay(alignment: .trailing) {
-            ActionButton(icon: .x, help: store.shortcuts.help("Close", "rightPanel.close"), size: .small, symbolSize: 11) { panel.close(tab) }
+            ActionButton(icon: .x, help: store.shortcuts.help("Close", "rightPanel.close"), size: .small, symbolSize: ControlSize.small.smallSymbol) { panel.close(tab) }
                 .environment(\.row, active ? .controlLit : .control)
                 .padding(.trailing, Self.closeMargin + Self.margin)
                 .opacity(hovering || active ? 1 : 0)
@@ -332,8 +331,7 @@ private struct PanelLauncher: View {
     private func row(_ symbol: Symbol, _ title: String, count: Int = 0, command: String?, reason: String?, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 10) {
-                Image(symbol, size: 13)
-                    .frame(width: 18)
+                Image(symbol, size: .md)
                 Group {
                     if count > 0 {
                         Text("\(title) ") + Text("·").foregroundStyle(Color.themeMutedForeground)
@@ -591,7 +589,7 @@ struct FilesSurface: View {
         let panel = store.rightPanel
         VStack(spacing: 0) {
             PanelBar {
-                Image(.folder, size: 11)
+                Image(.folder, size: .sm)
                     .foregroundStyle(Color.themeMutedForeground)
                 Text(target.name)
                     .font(.ui(size: 12.5, weight: .medium))
@@ -634,13 +632,11 @@ private struct FileRow: View {
     var body: some View {
         let panel = store.rightPanel
         HStack(spacing: 6) {
-            Image(node.open ? .chevronDown : .chevronRight, size: 8)
+            Image(node.open ? .chevronDown : .chevronRight, size: .xs)
                 .foregroundStyle(Color.themeMutedStrongerForeground)
-                .frame(width: 10)
                 .opacity(node.folder ? 1 : 0)
-            Image(node.folder ? .folder : FileSymbol.symbol(for: node.path), size: 11)
+            Image(node.folder ? .folder : FileSymbol.symbol(for: node.path), size: .sm)
                 .foregroundStyle(node.ignored ? Color.themeMutedStrongestForeground : Color.themeMutedForeground)
-                .frame(width: 16)
             Text(node.name)
                 .font(.ui(size: 12.5))
                 .foregroundStyle(node.ignored ? Color.themeMutedStrongestForeground : Color.themeForeground)

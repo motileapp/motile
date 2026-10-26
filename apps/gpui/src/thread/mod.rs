@@ -14,7 +14,7 @@ use crate::composer::Composer;
 use crate::composer::children::agent_bar;
 use crate::models::{AgentViewExt, Project};
 use crate::store::Store;
-use crate::theme::{self, ControlSize, Radius, colors};
+use crate::theme::{self, ControlSize, IconSize, Radius, colors};
 use crate::ui::menu::{Anchor, Menu, MenuIcon};
 use crate::ui::modal::{Answer, Confirmation, Modal, confirmation, present_sheet, presented};
 use crate::ui::{ActionButton, Highlight, TOOLBAR_WIDTH, icons, logos};
@@ -215,7 +215,7 @@ impl ThreadPane {
             )
         };
         let size = ControlSize::Large;
-        let light = (size.height() - size.symbol_side()) / 2.;
+        let light = (size.height() - size.symbol().side()) / 2.;
         Some(
             div()
                 .flex_none()
@@ -338,9 +338,9 @@ impl ThreadPane {
                             .items_center()
                             .gap(px(8.))
                             .child(anchor.track())
-                            .child(logos::project_icon(selected.as_ref(), 22., cx))
+                            .child(logos::project_icon(selected.as_ref(), IconSize::text(HEADLINE_SIZE), cx))
                             .child(name)
-                            .child(icons::symbol("chevron-down", 13.).text_color(c.muted_stronger_foreground)),
+                            .child(icons::symbol("chevron-down", IconSize::Md).text_color(c.muted_stronger_foreground)),
                     )
                     .on_click(move |_, window, cx| {
                         let mut menu = Menu::new();
@@ -430,7 +430,7 @@ impl ThreadPane {
                     .items_center()
                     .gap(px(12.))
                     .text_color(c.foreground)
-                    .child(icons::symbol("paperclip", 28.))
+                    .child(icons::symbol("paperclip", IconSize::Display))
                     .child(div().text_size(px(17.)).font_weight(FontWeight::SEMIBOLD).child("Drop files here")),
             )
     }
@@ -570,7 +570,7 @@ impl Render for ThreadPane {
 /// The line over a thread's title: its project's icon, then its parts with muted dots between.
 fn project_line(project: Option<&Project>, parts: &[String], cx: &App) -> impl IntoElement {
     let c = colors(cx);
-    div().min_w_0().flex().items_center().gap(px(4.)).child(logos::project_icon(project, 12., cx)).child(
+    div().min_w_0().flex().items_center().gap(px(4.)).child(logos::project_icon(project, IconSize::Sm, cx)).child(
         div()
             .min_w_0()
             .text_size(px(11.))

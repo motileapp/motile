@@ -40,7 +40,7 @@ struct Select: View {
                 .foregroundStyle(chosen == nil ? Color.themeMutedStrongerForeground : Color.themeForeground)
                 .lineLimit(1)
             Spacer(minLength: 0)
-            Image(.chevronDown, size: size.textSize, trimmed: true)
+            Image(.chevronDown, size: size.chevron, trimmed: true)
                 .foregroundStyle(Color.themeMutedStrongerForeground)
         }
         .padding(.leading, size.padding)

@@ -29,12 +29,8 @@ struct AgentAvatar: View {
         ZStack {
             Circle().fill(Color(platform: Theme.backgroundAccent))
             Circle().strokeBorder(Color(platform: Theme.borderAccent), lineWidth: 1)
-            if let agent {
-                AgentIcon(agent: agent, size: (circle * 0.56).rounded())
-            } else {
-                Image(.bot, size: (circle * 0.48).rounded())
-                    .foregroundStyle(Color.themeMutedForeground)
-            }
+            Image(agent?.symbol ?? .bot, side: circle * AgentAvatarDrawing.mark)
+                .foregroundStyle(agent?.color ?? .themeMutedForeground)
         }
         .frame(width: circle, height: circle)
         .frame(width: side, height: side, alignment: .topLeading)
@@ -103,7 +99,7 @@ private struct MoreAvatar: View {
         ZStack {
             Circle().fill(Color(platform: Theme.backgroundAccent))
             Circle().strokeBorder(Color(platform: Theme.borderAccent), lineWidth: 1)
-            Image(.ellipsis, size: (side * AgentAvatarDrawing.ellipsis).rounded())
+            Image(.ellipsis, side: side * AgentAvatarDrawing.ellipsis)
                 .foregroundStyle(Color.themeMutedForeground)
         }
         .frame(width: side, height: side)
@@ -144,11 +140,10 @@ enum AgentAvatarDrawing {
     /// The dot is as large on every system as the composer strips' are, and cut out of what it lies on.
     static let dot: CGFloat = 6
     static let cut: CGFloat = 2
+    /// The square of the agent's logo, or the bot when it has none, as a share of its circle.
+    static let mark: CGFloat = 0.6
     /// The ellipsis that stands for the agents there is no room for, as a share of its circle.
-    static let ellipsis: CGFloat = 0.6
-    private static let logos: [Agent: PlatformImage] = Dictionary(uniqueKeysWithValues: Agent.allCases.compactMap { agent in
-        agent.logo.map { (agent, ImageFiles.tinted(ImageFiles.sized($0, 64), agent.platformColor)) }
-    })
+    static let ellipsis: CGFloat = 0.72
 
     /// Cuts the circle in `rect` out of what is drawn.
     private static func clear(_ rect: CGRect) {
@@ -177,14 +172,10 @@ enum AgentAvatarDrawing {
         RoundedBox.fill(circle, radius: side / 2)
         Theme.borderAccent.setStroke()
         RoundedBox.stroke(circle, radius: side / 2)
-        let mark = (circle.width * 0.56).rounded()
-        let markRect = CGRect(x: circle.midX - mark / 2, y: circle.midY - mark / 2, width: mark, height: mark)
         if more {
-            TintedSymbol.draw(.ellipsis, size: (circle.width * ellipsis).rounded(), color: Theme.mutedForeground, in: circle)
-        } else if let agent, let logo = logos[agent] {
-            logo.drawUpright(in: markRect)
+            TintedSymbol.draw(.ellipsis, side: circle.width * ellipsis, color: Theme.mutedForeground, in: circle)
         } else {
-            TintedSymbol.draw(.bot, size: mark * 0.85, color: Theme.mutedForeground, in: markRect)
+            TintedSymbol.draw(agent?.symbol ?? .bot, side: circle.width * mark, color: agent?.platformColor ?? Theme.mutedForeground, in: circle)
         }
         if under {
             let ring = ring(box)

@@ -16,6 +16,7 @@ import androidx.compose.ui.unit.sp
 import app.motile.R
 import app.motile.platform.Platform
 import app.motile.platform.Symbol
+import app.motile.theme.IconSize
 import app.motile.theme.Opacity
 import app.motile.theme.Palette
 import app.motile.theme.Radius
@@ -29,7 +30,8 @@ import app.motile.theme.symbolSide
 object SkillChip {
     val symbol = Symbol.Box
     private const val textSize = 13f
-    private const val symbolSize = 11f
+    /** Smaller than the icon for its text, to keep clear of the box's edges, which hug the text. */
+    private val symbolSize = IconSize.Sm
     val radius = Radius.sm
     /** The room between the chip's box and the line's top and bottom. */
     private val lineInset = 2.dp

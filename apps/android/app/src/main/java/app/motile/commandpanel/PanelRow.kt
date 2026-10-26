@@ -32,6 +32,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.motile.platform.Symbol
 import app.motile.platform.scaled
+import app.motile.theme.symbolSide
+import app.motile.theme.IconSize
 import app.motile.theme.LocalDark
 import app.motile.theme.LocalPalette
 import app.motile.theme.LocalSurface
@@ -44,7 +46,6 @@ import app.motile.theme.value
 import app.motile.theme.wash
 import app.motile.ui.HighlightButton
 import app.motile.ui.Icon
-import app.motile.ui.LogoMark
 import app.motile.ui.ProjectIcon
 import app.motile.ui.Spinner
 import app.motile.ui.Text
@@ -57,6 +58,8 @@ internal object PanelRow {
     val titleHeight = scaled(17f).dp
     val detailHeight = scaled(15f).dp
     val dotGap = 6.dp
+    /** Its icon, beside a title and a detail under it. */
+    val iconSize = IconSize.Lg
 }
 
 @Composable
@@ -75,7 +78,7 @@ internal fun PanelRow(item: PanelItem, lit: Boolean, onClick: () -> Unit) {
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box(Modifier.size(scaled(22f).dp), contentAlignment = Alignment.Center) { RowIcon(item) }
+            Box(Modifier.size(symbolSide(PanelRow.iconSize)), contentAlignment = Alignment.Center) { RowIcon(item) }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 if (placeholder) PlaceholderLines(item) else Words(item)
             }
@@ -133,8 +136,7 @@ private fun DetailParts(parts: List<Pair<Symbol, String>>) {
             // The first part keeps its room; the ones after it are cut short first.
             val room = if (position == 0) Modifier else Modifier.weight(1f, fill = false)
             Row(room, horizontalArrangement = Arrangement.spacedBy(3.dp), verticalAlignment = Alignment.CenterVertically) {
-                // Lucide's server fills more of its square than the icons beside it.
-                Icon(symbol, if (symbol == Symbol.Server) 11f else 12f, color = palette.mutedForeground)
+                Icon(symbol, IconSize.Sm, color = palette.mutedForeground)
                 Text(text, size = 12f, color = palette.mutedForeground, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
             }
         }
@@ -186,11 +188,10 @@ private fun RowIcon(item: PanelItem) {
     val palette = LocalPalette.current
     when (val icon = item.icon) {
         is PanelIcon.Glyph -> if (item.placeholderLines > 0) {
-            Box(Modifier.size(scaled(20f).dp).background(LocalSurface.current.color(Surface.Layer.Control), RoundedCornerShape(Radius.xs)))
+            Box(Modifier.size(symbolSide(PanelRow.iconSize)).background(LocalSurface.current.color(Surface.Layer.Control), RoundedCornerShape(Radius.xs)))
         } else {
-            Icon(icon.symbol, 15f, color = palette.mutedForeground)
+            Icon(icon.symbol, PanelRow.iconSize, color = palette.mutedForeground)
         }
-        is PanelIcon.Logo -> LogoMark(icon.path, scaled(16f), palette.mutedForeground)
-        is PanelIcon.Project -> ProjectIcon(icon.project, size = scaled(20f))
+        is PanelIcon.Project -> ProjectIcon(icon.project, size = PanelRow.iconSize)
     }
 }

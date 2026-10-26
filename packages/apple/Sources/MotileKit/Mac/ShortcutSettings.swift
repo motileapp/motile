@@ -85,7 +85,7 @@ struct ShortcutSettings: View {
     private func issues(_ issues: [String]) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
-                Image(.triangleAlert, size: 13)
+                Image(.triangleAlert, size: .md)
                     .foregroundStyle(Color.themeWarning)
                 Text("Some of keybindings.json is skipped")
                     .font(.ui(size: 13, weight: .medium))
@@ -266,7 +266,7 @@ private struct ConflictMark: View {
 
     var body: some View {
         if !conflicts.isEmpty {
-            Image(.triangleAlert, size: 13)
+            Image(.triangleAlert, size: .md)
                 .foregroundStyle(Color.themeWarning)
                 .help("Also on \(conflicts.joined(separator: ", ")). Where both can run, the one added last wins.")
         }
@@ -337,7 +337,7 @@ private struct ConditionEditor: View {
 
     private func note(_ text: String, symbol: Symbol, color: Color) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
-            Image(symbol, size: 12)
+            Image(symbol, size: .sm)
             Text(text)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -358,7 +358,7 @@ private func menuItem(_ title: String, symbol: Symbol, role: ButtonRole? = nil, 
         Label {
             Text(title)
         } icon: {
-            Image(platform: .symbol(symbol, size: 13))
+            Image(platform: .symbol(symbol, size: .md))
         }
     }
 }

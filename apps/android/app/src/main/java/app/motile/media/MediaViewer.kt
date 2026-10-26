@@ -82,6 +82,7 @@ import app.motile.core.ViewedMedia
 import app.motile.core.Viewing
 import app.motile.platform.Platform
 import app.motile.platform.Symbol
+import app.motile.theme.IconSize
 import app.motile.theme.ControlSize
 import app.motile.theme.LocalDark
 import app.motile.theme.LocalForeground
@@ -200,7 +201,7 @@ private fun Viewer(viewing: Viewing) {
                         Text("${viewing.index + 1} of ${viewing.items.size}", size = 10.5f, color = OverPicture.mutedForeground)
                     }
                 }
-                GlassButton(Symbol.X, "Close", onClick = { store.closeViewer() }, symbolSize = 17f)
+                GlassButton(Symbol.X, "Close", onClick = { store.closeViewer() }, symbolSize = IconSize.Xl)
             }
         }
         val file = files[pager.currentPage]
@@ -222,8 +223,8 @@ private fun Viewer(viewing: Viewing) {
                 GlassButton(if (copied) Symbol.Check else Symbol.Copy, if (item.video) "Copy Video" else "Copy Image", onClick = {
                     MediaFiles.copy(shown, item.name)
                     copied = true
-                }, symbolSize = 17f, bare = true)
-                GlassButton(Symbol.Share, "Share", onClick = { MediaFiles.share(shown, item.name) }, symbolSize = 17f, bare = true)
+                }, symbolSize = IconSize.Xl, bare = true)
+                GlassButton(Symbol.Share, "Share", onClick = { MediaFiles.share(shown, item.name) }, symbolSize = IconSize.Xl, bare = true)
             }
         }
     }

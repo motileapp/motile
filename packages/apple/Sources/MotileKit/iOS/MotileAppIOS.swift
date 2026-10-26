@@ -43,7 +43,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
     func application(_ application: UIApplication, didFinishLaunchingWithOptions options: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         RowTextView.warmUp()
         // The system's glass bar buttons ignore the tint, so the way back is drawn in the foreground.
-        let back = PlatformImage.symbol(.chevronLeft, size: 16).withTintColor(Theme.foreground, renderingMode: .alwaysOriginal)
+        let back = PlatformImage.symbol(.chevronLeft, size: .lg).withTintColor(Theme.foreground, renderingMode: .alwaysOriginal)
         UINavigationBar.appearance().backIndicatorImage = back
         UINavigationBar.appearance().backIndicatorTransitionMaskImage = back
         return true

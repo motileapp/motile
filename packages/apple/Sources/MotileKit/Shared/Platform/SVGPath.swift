@@ -1,24 +1,7 @@
 import CoreGraphics
-#if os(iOS)
-import UIKit
-#endif
 
-/// The path of an SVG `d` attribute: the marks drawn as shapes, and on iOS, which has nothing
-/// that reads an SVG, the logos.
+/// The path of an SVG `d` attribute, for the logos and the marks drawn as shapes.
 enum SVGPath {
-    #if os(iOS)
-    static func image(_ data: String, side: CGFloat, fill: UIColor, template: Bool) -> UIImage {
-        let path = path(data)
-        let size = CGSize(width: side, height: side)
-        let image = UIGraphicsImageRenderer(size: size).image { context in
-            fill.setFill()
-            context.cgContext.addPath(path)
-            context.cgContext.fillPath()
-        }
-        return template ? image.withRenderingMode(.alwaysTemplate) : image
-    }
-    #endif
-
     static func path(_ data: String) -> CGPath {
         let path = CGMutablePath()
         var numbers = Scanner(data)

@@ -72,7 +72,7 @@ struct SkillMenuStrip: View {
 private struct SkillMenuLoading: View {
     var body: some View {
         HStack(spacing: 8) {
-            Spinner(size: 13)
+            Spinner(size: .md)
             Text("Loading skills")
                 .font(.ui(size: 13))
             Spacer(minLength: 0)
@@ -89,7 +89,7 @@ private struct SkillMenuRow: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Image(SkillChip.symbol, size: 13)
+            Image(SkillChip.symbol, size: .md)
                 .foregroundStyle(Color.themeSkill)
             #if os(iOS)
             VStack(alignment: .leading, spacing: 2) {

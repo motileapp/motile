@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import app.motile.core.LimitsReport
 import app.motile.platform.Symbol
 import app.motile.platform.scaled
+import app.motile.theme.iconSize
 import app.motile.theme.LocalPalette
 import app.motile.theme.LocalSurface
 import app.motile.theme.Opacity
@@ -84,7 +85,7 @@ private fun Header(section: LimitsReport.Section) {
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        AgentIcon(section.agent, size = 16f)
+        AgentIcon(section.agent, size = iconSize(text = 14f))
         Text(section.agent.title, size = 14f, weight = FontWeight.Medium, color = palette.foreground, maxLines = 1)
         section.plan?.let { Chip(it) }
         val login = buildAnnotatedString {
@@ -134,7 +135,7 @@ private fun Numbers(window: LimitsReport.Window) {
                 horizontalArrangement = Arrangement.spacedBy(5.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(pace.symbol, 12f, color = palette.mutedStrongerForeground)
+                Icon(pace.symbol, iconSize(text = 12f), color = palette.mutedStrongerForeground)
                 Text(pace.label, size = 12f, color = palette.mutedStrongerForeground)
             }
         }
@@ -189,7 +190,7 @@ private fun LimitBar(window: LimitsReport.Window, color: Color, modifier: Modifi
                         horizontalArrangement = Arrangement.spacedBy(3.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Icon(Symbol.Ticket, 11f, color = palette.foreground)
+                        Icon(Symbol.Ticket, iconSize(text = 11f), color = palette.foreground)
                         Text("${window.resetCredits}", style = text, color = palette.foreground)
                     }
                 }

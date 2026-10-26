@@ -28,16 +28,16 @@ struct CommandBox: View {
                 .padding([.vertical, .leading], Self.textInset)
             HStack(spacing: 4) {
                 if let link {
-                    ActionButton("Open", icon: .squareArrowOutUpRight, variant: .ghost, symbolSize: 12) { Platform.open(link) }
+                    ActionButton("Open", icon: .squareArrowOutUpRight, variant: .ghost) { Platform.open(link) }
                 }
                 #if os(iOS)
                 ShareLink(item: command ?? "") {
-                    ControlLabel(title: nil, icon: .symbol(.share), size: .regular, symbolSize: 12)
+                    ControlLabel(title: nil, icon: .symbol(.share), size: .regular)
                 }
                 .buttonStyle(.control())
                 .accessibilityLabel("Share the \(noun)")
                 #endif
-                CopyButton(help: "Copy the \(noun)", symbolSize: 12) {
+                CopyButton(help: "Copy the \(noun)") {
                     guard let command else { return }
                     Platform.copy(command)
                 }

@@ -106,9 +106,8 @@ private struct ParentRow: View {
             store.openStartedThread(thread.id)
         } label: {
             HStack(spacing: 6) {
-                Image(.cornerLeftUp, size: 12)
+                Image(.cornerLeftUp, size: .md)
                     .foregroundStyle(Color.themeForeground)
-                    .frame(width: 16)
                 Text("Go back to parent thread")
                     .font(.ui(size: 13, weight: .medium))
                     .foregroundStyle(Color.themeForeground)
@@ -147,7 +146,7 @@ private struct EndedHeader: View {
                         .foregroundStyle(Color.themeDestructive)
                 }
                 Spacer(minLength: 6)
-                Image(shown ? .chevronDown : .chevronRight, size: 10)
+                Image(shown ? .chevronDown : .chevronRight, size: .sm)
                     .foregroundStyle(Color.themeMutedStrongerForeground)
             }
             .padding(.horizontal, 10)

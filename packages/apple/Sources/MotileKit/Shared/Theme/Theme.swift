@@ -174,6 +174,20 @@ extension View {
     }
 }
 
+extension IconSize {
+    /// The icon that goes with text of `size`: about a fifth larger, as on the web.
+    init(text size: CGFloat) {
+        switch size {
+        case ..<11: self = .xs
+        case ..<13: self = .sm
+        case ..<15: self = .md
+        case ..<17: self = .lg
+        case ..<20: self = .xl
+        default: self = .xxl
+        }
+    }
+}
+
 /// How large a control is. Its height, symbol, text, padding and corners go together, so that
 /// no view picks them one by one. Sizes are as on the Mac; iOS enlarges them.
 enum ControlSize {
@@ -192,16 +206,24 @@ enum ControlSize {
         }
     }
 
-    var symbol: CGFloat {
+    /// Its symbol, as large as an icon beside its text is.
+    var symbol: IconSize { IconSize(text: textSize) }
+
+    /// A symbol that should weigh less than the others, like the x that closes a tab.
+    var smallSymbol: IconSize {
         switch self {
-        case .small: 13
-        case .regular: 14
-        case .large: 16
+        case .small, .regular: .xs
+        case .large: .sm
         }
     }
 
-    /// A symbol that should weigh less than the others, like the x that closes a tab.
-    var smallSymbol: CGFloat { symbol - 2 }
+    /// The chevron that opens a menu, trimmed to what it draws.
+    var chevron: IconSize {
+        switch self {
+        case .small, .regular: .sm
+        case .large: .md
+        }
+    }
 
     var textSize: CGFloat {
         switch self {

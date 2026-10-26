@@ -79,7 +79,7 @@ struct PullRequestNoticeBar: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(alignment: .top, spacing: 8) {
-                Image(notice.failed ? .circleAlert : .circleCheck, size: 13)
+                Image(notice.failed ? .circleAlert : .circleCheck, size: .sm)
                     .foregroundStyle(notice.failed ? Color.themeDestructive : Color.themeSuccess)
                     .frame(height: Self.lineHeight)
                 Text(notice.text)

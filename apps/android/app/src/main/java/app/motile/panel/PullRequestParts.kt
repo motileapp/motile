@@ -49,6 +49,7 @@ import app.motile.layout.KeyboardFocus
 import app.motile.platform.Platform
 import app.motile.platform.Symbol
 import app.motile.platform.scaled
+import app.motile.theme.iconSize
 import app.motile.theme.ControlSize
 import app.motile.theme.LocalPalette
 import app.motile.theme.LocalSurface
@@ -145,7 +146,7 @@ fun PullRequestNoticeBar(notice: PullRequestNotice) {
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Box(Modifier.height(line), contentAlignment = Alignment.Center) {
-                Icon(if (notice.failed) Symbol.CircleAlert else Symbol.CircleCheck, 13f, color = tint)
+                Icon(if (notice.failed) Symbol.CircleAlert else Symbol.CircleCheck, iconSize(text = 12.5f), color = tint)
             }
             SelectionContainer(Modifier.weight(1f).heightIn(min = line)) {
                 Text(notice.text, size = 12.5f, color = palette.foreground)

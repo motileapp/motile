@@ -185,7 +185,7 @@ export function Sidebar({
                     : "hover:bg-background-accent-larger"
                 )}
               >
-                <ProjectIcon project={thread.project} />
+                <ProjectIcon project={thread.project} size={14} />
                 <span className="truncate text-[13px] text-muted-foreground">
                   {thread.title}
                 </span>
@@ -393,7 +393,7 @@ function ResultRow({
         <span
           className={cn(done && !highlighted && "opacity-(--opacity-disabled)")}
         >
-          <ProjectIcon project={thread.project} />
+          <ProjectIcon project={thread.project} size={14} />
         </span>
         <span
           className={cn(
@@ -482,7 +482,7 @@ function ThreadRow({
       )}
     >
       <span className="flex h-5 w-full items-center gap-1.5 text-muted-foreground">
-        <ProjectIcon project={thread.project} />
+        <ProjectIcon project={thread.project} size={14} />
         <span className="text-[11px] font-medium">{thread.project.name}</span>
         <span className="ml-auto">
           <ThreadStatus thread={thread} elapsed={elapsed} />
@@ -498,18 +498,18 @@ function ThreadRow({
       </span>
       <span className="flex h-4 w-full items-center gap-1.5 text-muted-stronger-foreground">
         <span className="flex min-w-0 items-center gap-[3px] text-[11px]">
-          <GitBranchIcon className="size-[11px] shrink-0" />
+          <GitBranchIcon className="size-3.5 shrink-0" />
           <span className="truncate">{thread.branch}</span>
         </span>
-        <span className="ml-auto flex items-center gap-1.5">
+        <span className="ml-auto flex items-center gap-[9px]">
           {thread.pullRequest && (
             <PullRequest number={thread.pullRequest.number} />
           )}
-          <span className="ml-px flex items-center gap-[3px] text-[11px]">
-            <ServerIcon className="size-[10px]" />
+          <span className="flex items-center gap-[3px] text-[11px]">
+            <ServerIcon className="size-3.5" />
             {thread.server.name}
           </span>
-          <AgentIcon agent={thread.agent} />
+          <AgentIcon agent={thread.agent} size={14} />
         </span>
       </span>
     </button>
@@ -529,14 +529,14 @@ function ThreadStatus({
     case "approval":
       return (
         <span className={cn(label, "text-warning")}>
-          <ShieldIcon className="size-[11px]" />
+          <ShieldIcon className="size-3.5" />
           Approval
         </span>
       )
     case "working":
       return (
         <span className={cn(label, "text-process")}>
-          <CircleDashedIcon className="size-[10px]" />
+          <CircleDashedIcon className="size-3.5" />
           {elapsed(thread.status.since)}
         </span>
       )
@@ -544,11 +544,11 @@ function ThreadStatus({
       return (
         <span className="flex items-center gap-[9px]">
           <span className={cn(label, "text-pending")}>
-            <BotIcon className="size-[11px]" />
+            <BotIcon className="size-3.5" />
             {thread.status.count}
           </span>
           <span className={cn(label, "text-process")}>
-            <CircleDotDashedIcon className="size-[10px]" />
+            <CircleDotDashedIcon className="size-3.5" />
             {elapsed(thread.status.since)}
           </span>
         </span>
@@ -556,7 +556,7 @@ function ThreadStatus({
     case "monitoring":
       return (
         <span className={cn(label, "text-foreground")}>
-          <EyeIcon className="size-[11px]" />
+          <EyeIcon className="size-3.5" />
           {elapsed(thread.status.since)}
         </span>
       )
@@ -579,11 +579,11 @@ function PullRequest({
   return (
     <span
       className={cn(
-        "flex cursor-pointer items-center gap-0.5 text-[11px] font-medium tabular-nums hover:underline",
+        "flex cursor-pointer items-center gap-[3px] text-[11px] font-medium tabular-nums hover:underline",
         quiet ? "text-muted-stronger-foreground" : "text-success"
       )}
     >
-      <GitPullRequestIcon className="size-[11px]" />
+      <GitPullRequestIcon className="size-3.5" />
       {number}
     </span>
   )

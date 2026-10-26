@@ -63,6 +63,8 @@ import app.motile.layout.LocalDrawer
 import app.motile.platform.Platform
 import app.motile.platform.Symbol
 import app.motile.sidebar.attentionColor
+import app.motile.theme.iconSize
+import app.motile.theme.IconSize
 import app.motile.theme.ControlSize
 import app.motile.theme.Palette
 import app.motile.theme.Radius
@@ -174,10 +176,10 @@ private fun TopBar(overSidebar: Boolean) {
                     GlassButton(help = "Threads", onClick = { drawer.isOpen = !drawer.isOpen }, bare = true) { MenuIcon(store.attention(Theme.colors)) }
                 }
                 if (agentShown) {
-                    GlassButton(Symbol.CornerLeftUp, "Back to the thread", onClick = { store.rightPanel.showAgents() }, symbolSize = 16f, bare = true)
+                    GlassButton(Symbol.CornerLeftUp, "Back to the thread", onClick = { store.rightPanel.showAgents() }, bare = true)
                 }
                 parent?.let {
-                    GlassButton(Symbol.CornerLeftUp, "Open ${it.title}", onClick = { store.openStartedThread(it.id) }, symbolSize = 16f, bare = true)
+                    GlassButton(Symbol.CornerLeftUp, "Open ${it.title}", onClick = { store.openStartedThread(it.id) }, bare = true)
                 }
             }
         }
@@ -191,7 +193,7 @@ private fun TopBar(overSidebar: Boolean) {
                 project != null && store.canInitializeGit(project) -> InitializeGitButton(project)
                 base != null -> PullBaseButton(base)
             }
-            GlassButton(Symbol.PanelRight, "Files and changes", onClick = { store.rightPanel.isOpen = !store.rightPanel.isOpen }, symbolSize = 16f, bare = true)
+            GlassButton(Symbol.PanelRight, "Files and changes", onClick = { store.rightPanel.isOpen = !store.rightPanel.isOpen }, bare = true)
         }
     }
 }
@@ -213,12 +215,12 @@ private fun AppStore.attention(palette: Palette): Color? {
 @Composable
 private fun MenuIcon(attention: Color?) {
     if (attention == null) {
-        Icon(Symbol.Menu, 16f)
+        Icon(Symbol.Menu, IconSize.Lg)
         return
     }
-    val side = symbolSide(16f)
+    val side = symbolSide(IconSize.Lg)
     Icon(
-        Symbol.Menu, 16f,
+        Symbol.Menu, IconSize.Lg,
         Modifier
             .size(side)
             .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
@@ -236,7 +238,7 @@ private fun MenuIcon(attention: Color?) {
 private fun Title(modifier: Modifier) {
     val store = LocalStore.current
     Column(modifier, verticalArrangement = Arrangement.spacedBy(1.dp)) {
-        store.composerProjectLine?.let { parts -> ProjectLine(store.composerProject, parts, size = 12f, iconSize = 12f) }
+        store.composerProjectLine?.let { parts -> ProjectLine(store.composerProject, parts, size = 12f) }
         Text(store.shownAgent?.title ?: store.selectedThread?.title ?: "New thread", style = system(15f, FontWeight.SemiBold), maxLines = 1)
     }
 }
@@ -288,9 +290,9 @@ private fun Headline() {
                 horizontalArrangement = Arrangement.spacedBy(9.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                ProjectIcon(selected, size = 24f)
+                ProjectIcon(selected, size = iconSize(text = 26f))
                 Text(name, Modifier.weight(1f, fill = false), style = system(26f), maxLines = 1)
-                Icon(Symbol.ChevronDown, 11f, color = palette.mutedStrongerForeground)
+                Icon(Symbol.ChevronDown, IconSize.Md, color = palette.mutedStrongerForeground)
             }
         }
     }

@@ -1,19 +1,17 @@
 package app.motile.settings
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.motile.core.ServerSync
 import app.motile.core.Time
 import app.motile.platform.Symbol
+import app.motile.theme.iconSize
 import app.motile.theme.LocalPalette
 import app.motile.ui.Icon
 import app.motile.ui.Spinner
@@ -31,14 +29,13 @@ fun ServerSyncLine(sync: ServerSync, size: Float = NOTE_TEXT) {
             value = Time.now()
         }
     }
+    val symbolSize = iconSize(text = size)
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-        Box(Modifier.size(size.dp), contentAlignment = Alignment.Center) {
-            when (sync.state) {
-                ServerSync.State.Synced -> Icon(Symbol.Check, size, color = palette.success)
-                ServerSync.State.Copying -> Spinner(size, color = palette.mutedForeground)
-                ServerSync.State.Failed -> Icon(Symbol.TriangleAlert, size - 1, color = palette.warning)
-                ServerSync.State.Waiting, ServerSync.State.Off -> Icon(Symbol.CircleDashed, size - 1, color = palette.mutedForeground)
-            }
+        when (sync.state) {
+            ServerSync.State.Synced -> Icon(Symbol.Check, symbolSize, color = palette.success)
+            ServerSync.State.Copying -> Spinner(symbolSize, color = palette.mutedForeground)
+            ServerSync.State.Failed -> Icon(Symbol.TriangleAlert, symbolSize, color = palette.warning)
+            ServerSync.State.Waiting, ServerSync.State.Off -> Icon(Symbol.CircleDashed, symbolSize, color = palette.mutedForeground)
         }
         Text(sync.line(now), size = size, color = palette.mutedForeground, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }

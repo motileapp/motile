@@ -610,7 +610,10 @@ impl Render for TranscriptView {
                             .flex()
                             .items_center()
                             .justify_center()
-                            .child(icons::symbol("arrow-down", 12.).text_color(c.muted_foreground))
+                            .child(
+                                icons::symbol("arrow-down", ControlSize::Regular.symbol())
+                                    .text_color(c.muted_foreground),
+                            )
                             .tooltip(crate::ui::tooltip("Scroll to end"))
                             .on_click(cx.listener(|this, _, _, cx| this.scroll_to_end(cx))),
                     ),
