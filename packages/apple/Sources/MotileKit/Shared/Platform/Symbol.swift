@@ -294,13 +294,4 @@ extension Label where Title == Text, Icon == Image {
             Image(symbol, size: size)
         }
     }
-
-    /// The symbol drawn in `color`, for a menu item whose icon the system would tint with the accent.
-    init(_ title: String, symbol: Symbol, color: PlatformColor, size: CGFloat = 13) {
-        self.init {
-            Text(title)
-        } icon: {
-            Image(platform: ImageFiles.tinted(.symbol(symbol, size: size), color))
-        }
-    }
 }

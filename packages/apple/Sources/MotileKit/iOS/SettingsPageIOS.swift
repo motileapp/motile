@@ -270,13 +270,11 @@ struct SettingsPage: View {
                         .tint(Color.themeDestructive)
                 }
                 .contextMenu {
-                    Button { editedAccount = EditedAccount(server: server, account: account) } label: { Label("Edit", symbol: .pencil) }
+                    Button("Edit") { editedAccount = EditedAccount(server: server, account: account) }
                     if !server.isDefault(account) {
-                        Button { store.makeAgentAccountDefault(account, on: server) } label: { Label("Make Default", symbol: .circleCheck) }
+                        Button("Make Default") { store.makeAgentAccountDefault(account, on: server) }
                     }
-                    Button(role: .destructive) { removal = .account(account, on: server) } label: {
-                        Label("Remove Account", symbol: .trash2, color: Theme.destructive)
-                    }
+                    Button("Remove Account", role: .destructive) { removal = .account(account, on: server) }
                 }
             }
             Button {
