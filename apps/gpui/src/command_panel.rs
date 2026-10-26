@@ -235,7 +235,7 @@ impl CommandPanel {
         self.highlighted = self.start_index(cx);
     }
 
-    /// The highlight starts on the first project, past "No project" of each server.
+    /// The highlight starts on the first project, past "No project".
     fn start_index(&mut self, cx: &App) -> usize {
         let sections = self.current(cx);
         let first = sections.iter().flat_map(|section| &section.items).find(|item| item.selectable() && !item.one_line);
@@ -275,7 +275,7 @@ impl CommandPanel {
         let mut narrows = true;
         let section = |title: &str, items: Vec<Item>| Section { title: title.to_string(), items };
         let sections = match self.page() {
-            PanelPage::Projects | PanelPage::DraftProject => {
+            PanelPage::Projects => {
                 let mut items = self.project_items(cx);
                 items.push(self.add_project());
                 vec![section("Without a Project", self.no_project_items(cx)), section("Projects", items)]
@@ -353,53 +353,53 @@ impl CommandPanel {
             .collect()
     }
 
-    /// The projects, the one the open thread works in first, then by when a thread last started.
+    /// The projects, each once, the one the open thread works in first, then by when a thread
+    /// last started.
     fn projects(&self, cx: &App) -> Vec<Project> {
         let store = self.store.read(cx);
-        let mut projects: Vec<Project> = store.recent_projects().into_iter().cloned().collect();
-        if let Some(current) = store.composer_project().filter(|project| !project.no_project && store.is_live(project))
-        {
-            projects.retain(|project| project.id != current.id);
+        let mut projects: Vec<Project> =
+            store.pickable_projects().into_iter().filter(|project| !project.no_project).cloned().collect();
+        let current = store.composer_project().map(|project| project.key);
+        if let Some(index) = projects.iter().position(|project| Some(&project.key) == current.as_ref()) {
+            let current = projects.remove(index);
             projects.insert(0, current);
         }
         projects
     }
 
+    /// The servers that have the project, by their short names.
+    fn server_names(&self, project: &Project, cx: &App) -> String {
+        let store = self.store.read(cx);
+        let names: Vec<&str> = store
+            .copies(&project.key)
+            .into_iter()
+            .filter_map(|copy| store.server(Some(&copy.server_id)).map(|server| server.short_name.as_str()))
+            .collect();
+        names.join(", ")
+    }
+
     fn project_items(&self, cx: &App) -> Vec<Item> {
-        let page = self.page();
-        let on_projects = matches!(page, PanelPage::Projects | PanelPage::DraftProject);
-        let for_draft = page == PanelPage::DraftProject;
+        let on_projects = self.page() == PanelPage::Projects;
         self.projects(cx)
             .into_iter()
             .enumerate()
             .map(|(position, project)| {
-                let server = self
-                    .store
-                    .read(cx)
-                    .server(Some(&project.server_id))
-                    .map(|server| server.short_name.clone())
-                    .unwrap_or_default();
+                let servers = self.server_names(&project, cx);
                 let location = project.path.clone();
-                let parts = if server.is_empty() {
+                let parts = if servers.is_empty() {
                     vec![("folder", location.clone())]
                 } else {
-                    vec![("server", server.clone()), ("folder", location.clone())]
+                    vec![("server", servers.clone()), ("folder", location.clone())]
                 };
                 let id = project.id.clone();
                 let mut item = Item::new(
-                    format!("project-{}", project.id),
+                    format!("project-{}", project.key),
                     project.name.clone(),
-                    format!("{server} {location}"),
+                    format!("{servers} {location}"),
                     ItemIcon::Project(Box::new(Some(project))),
                     move |this, _, cx| {
                         let id = Some(id.clone());
-                        this.store.update(cx, |store, cx| {
-                            if for_draft {
-                                store.set_new_thread_project(id, cx);
-                            } else {
-                                store.start_new_thread(id, cx);
-                            }
-                        });
+                        this.store.update(cx, |store, cx| store.start_new_thread(id, cx));
                     },
                 );
                 item.detail_parts = parts;
@@ -409,39 +409,28 @@ impl CommandPanel {
             .collect()
     }
 
-    /// "No project" of each server, one line each.
+    /// "No project", once for every server.
     fn no_project_items(&self, cx: &App) -> Vec<Item> {
-        let for_draft = self.page() == PanelPage::DraftProject;
-        let store = self.store.read(cx);
-        store
-            .live_no_projects()
-            .map(|project| {
-                let server =
-                    store.server(Some(&project.server_id)).map(|server| server.short_name.clone()).unwrap_or_default();
-                let id = project.id.clone();
-                let mut item = Item::new(
-                    format!("project-{}", project.id),
-                    "New thread",
-                    server.clone(),
-                    ItemIcon::Project(Box::new(Some(project.clone()))),
-                    move |this, _, cx| {
-                        let id = Some(id.clone());
-                        this.store.update(cx, |store, cx| {
-                            if for_draft {
-                                store.set_new_thread_project(id, cx);
-                            } else {
-                                store.start_new_thread(id, cx);
-                            }
-                        });
-                    },
-                );
-                if !server.is_empty() {
-                    item.detail_parts = vec![("server", server)];
-                }
-                item.one_line = true;
-                item
-            })
-            .collect()
+        let Some(project) = self.store.read(cx).preferred_copy(Project::NO_PROJECT_KEY).cloned() else {
+            return Vec::new();
+        };
+        let servers = self.server_names(&project, cx);
+        let id = project.id.clone();
+        let mut item = Item::new(
+            format!("project-{}", project.key),
+            "New thread",
+            servers.clone(),
+            ItemIcon::Project(Box::new(Some(project))),
+            move |this, _, cx| {
+                let id = Some(id.clone());
+                this.store.update(cx, |store, cx| store.start_new_thread(id, cx));
+            },
+        );
+        if !servers.is_empty() {
+            item.detail_parts = vec![("server", servers)];
+        }
+        item.one_line = true;
+        vec![item]
     }
 
     fn add_project(&self) -> Item {
@@ -1163,7 +1152,6 @@ impl CommandPanel {
         match self.page() {
             PanelPage::Commands => "Search threads, projects and commands".into(),
             PanelPage::Projects => "Start a thread in".into(),
-            PanelPage::DraftProject => "Search projects".into(),
             PanelPage::Threads => "Go to thread".into(),
             PanelPage::Servers => "Add a project on".into(),
             PanelPage::Sources(_) => "Add a project".into(),

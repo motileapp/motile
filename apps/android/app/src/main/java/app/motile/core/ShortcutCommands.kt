@@ -55,10 +55,11 @@ fun AppStore.perform(command: String): Boolean {
             if (!account.signedIn || servers.isEmpty()) return false
             newThread()
         }
-        "chat.newLocal" -> startNewThread(composerProject?.takeIf(::startsThreads) ?: return false)
-        "chat.newWithoutProject" -> {
-            startNewThread(noProjectToOpen ?: return false)
+        "chat.newLocal" -> {
+            val key = composerProject?.key ?: return false
+            startNewThread(projectToOpen(key) ?: return false)
         }
+        "chat.newWithoutProject" -> startNewThread(projectToOpen(Project.NO_PROJECT_KEY) ?: return false)
         "navigation.back", "navigation.forward" -> return go(back = command == "navigation.back")
         "thread.previous" -> return showThreadOffset(-1)
         "thread.next" -> return showThreadOffset(1)
@@ -89,9 +90,11 @@ fun AppStore.perform(command: String): Boolean {
             if (selectedThread == null || !activity.running || !canSend) return false
             send(alternate = true)
         }
-        "composer.project" -> {
-            if (selectedDraft == null) return false
-            openPanel(PanelPage.DraftProject)
+        "composer.server" -> {
+            val copies = draftProjectCopies
+            val index = copies.indexOfFirst { it.id == selectedDraft?.projectID }
+            if (index < 0) return false
+            setNewThreadProject(copies[(index + 1) % copies.size].id)
         }
         "composer.branch" -> {
             val project = composerProject ?: return false

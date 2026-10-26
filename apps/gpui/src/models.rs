@@ -395,10 +395,14 @@ pub struct Project {
     pub icon_path: Option<String>,
     /// The project of its server that threads start in without one, each in a folder of its own.
     pub no_project: bool,
+    /// The same on every server that has the project, which a picker lists once.
+    pub key: String,
     pub created_at: f64,
 }
 
 impl Project {
+    pub const NO_PROJECT_KEY: &str = "no-project";
+
     pub fn new(view: ProjectView, server_id: &str) -> Self {
         let mut controls = view.worktree_controls;
         let project = view.project;
@@ -424,6 +428,7 @@ impl Project {
             setup: project.setup,
             icon_path: view.icon_path,
             no_project: project.no_project,
+            key: view.key,
             created_at: project.created_at,
         }
     }

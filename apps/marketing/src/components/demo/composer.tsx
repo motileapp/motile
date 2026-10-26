@@ -169,16 +169,16 @@ export function Composer({
         </div>
       </div>
       <Strip edge="bottom">
-        <span className="ml-3.5 flex items-center gap-1.5">
+        <span className="ml-3.5 flex items-center gap-1.5 font-medium">
           <ServerIcon className="size-[11px]" />
           {thread.server.name}
         </span>
         <span className="mx-2.5 h-3 w-px bg-border-composer" />
-        <span className="flex items-center gap-1.5">
+        <span className="flex items-center gap-1.5 font-medium">
           <ProjectIcon project={thread.project} size={13} />
           {thread.project.name}
         </span>
-        <span className="ml-auto flex items-center gap-1.5">
+        <span className="ml-auto flex items-center gap-1.5 font-medium">
           {thread.worktree ? (
             <FolderGit2Icon className="size-[11px]" />
           ) : (

@@ -1167,6 +1167,10 @@ pub struct Project {
     /// The server's "No project": each of its threads works in a folder of its own inside it.
     #[serde(default)]
     pub no_project: bool,
+    /// Where its repository was cloned from, like `github.com/owner/name`: the same project on
+    /// another server has the same.
+    #[serde(default)]
+    pub origin: Option<String>,
     pub created_at: f64,
 }
 

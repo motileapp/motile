@@ -169,10 +169,13 @@ impl Store {
     /// What the toolbar button and ⌘N do: with one project there is nothing to pick and the draft
     /// opens at once, without one it starts without a project, and with more the panel asks which.
     pub fn new_thread(&mut self, cx: &mut Context<Self>) {
-        if self.recent_projects().len() > 1 {
+        let picked: Vec<&Project> =
+            self.pickable_projects().into_iter().filter(|project| !project.no_project).collect();
+        if picked.len() > 1 {
             return self.open_panel(PanelPage::Projects);
         }
-        let first = self.first_live_project().map(|project| project.id.clone());
+        let first = picked.first().copied().or_else(|| self.preferred_copy(Project::NO_PROJECT_KEY));
+        let first = first.map(|project| project.id.clone());
         self.start_new_thread(first, cx);
     }
 

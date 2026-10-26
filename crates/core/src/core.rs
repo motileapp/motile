@@ -1145,7 +1145,8 @@ impl Core {
         let folder = self.config.data_dir.join("icons");
         let threads =
             self.servers.iter().find(|server| server.device.public_key == server_id).map(|server| &server.threads);
-        let view = |project: Project| {
+        let keys: Vec<String> = projects.iter().map(|project| project_key(server_id, project, &projects)).collect();
+        let view = |(project, key): (Project, String)| {
             let file = project.icon.as_ref().map(|icon| folder.join(format!("{}-{icon}", project.id)));
             let icon_path = file.filter(|file| file.is_file()).map(|file| file.to_string_lossy().into_owned());
             let git_control = project.git.as_ref().map(|git| git::control(git, None));
@@ -1159,9 +1160,9 @@ impl Core {
                 Some((worktree.path.clone(), git::control(worktree.git.as_ref()?, own(worktree))))
             };
             let worktree_controls = project.worktrees.iter().filter_map(controlled).collect();
-            ProjectView { project, icon_path, git_control, worktree_controls }
+            ProjectView { project, key, icon_path, git_control, worktree_controls }
         };
-        let views: Vec<ProjectView> = projects.into_iter().map(view).collect();
+        let views: Vec<ProjectView> = projects.into_iter().zip(keys).map(view).collect();
         for view in views.iter().filter(|view| view.icon_path.is_none()) {
             self.fetch_icon(server_id, &view.project);
         }
@@ -3209,6 +3210,17 @@ fn shown_file(folder: &std::path::Path, server_id: &str, path: &str, blob: Optio
     folder.join(format!("{:016x}.{extension}", hasher.finish()))
 }
 
+/// Names the project alike on every server that has it, so that a picker lists it once: by its
+/// repository's origin, and its folder's name too where its server has more than one clone.
+fn project_key(server_id: &str, project: &Project, projects: &[Project]) -> String {
+    if project.no_project {
+        return "no-project".to_string();
+    }
+    let Some(origin) = &project.origin else { return format!("{server_id}/{}", project.id) };
+    let clones = projects.iter().filter(|other| other.origin.as_ref() == Some(origin)).count();
+    if clones > 1 { format!("{origin}#{}", project.name) } else { origin.clone() }
+}
+
 fn short_name(name: &str) -> String {
     let short: String = name.chars().take(10).collect();
     short.trim_end().to_string()
@@ -3422,6 +3434,37 @@ fn runs_no_programs(info: Option<&ServerInfo>) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_project_is_keyed_by_its_origin_and_by_its_name_where_its_server_has_two_clones() {
+        let project = |id: &str, name: &str, origin: Option<&str>, no_project: bool| Project {
+            id: id.to_string(),
+            path: format!("/code/{name}"),
+            name: name.to_string(),
+            branch: None,
+            git: None,
+            icon: None,
+            worktrees: Vec::new(),
+            setup: None,
+            no_project,
+            origin: origin.map(str::to_string),
+            created_at: 0.0,
+        };
+        let projects = [
+            project("a", "motile", Some("github.com/o/motile"), false),
+            project("b", "api", Some("github.com/o/api"), false),
+            project("c", "api-2", Some("github.com/o/api"), false),
+            project("d", "notes", None, false),
+            project("e", "No project", None, true),
+        ];
+
+        let keys: Vec<String> = projects.iter().map(|project| project_key("ymac", project, &projects)).collect();
+
+        assert_eq!(
+            keys,
+            ["github.com/o/motile", "github.com/o/api#api", "github.com/o/api#api-2", "ymac/d", "no-project"]
+        );
+    }
 
     #[test]
     fn a_server_runs_programs_once_it_says_it_speaks_their_protocol() {

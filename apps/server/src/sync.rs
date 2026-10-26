@@ -76,6 +76,7 @@ fn copied_project(id: String, path: String, created_at: f64, setup: Option<Strin
         worktrees: Vec::new(),
         setup,
         no_project: false,
+        origin: None,
         created_at,
     }
 }

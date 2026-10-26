@@ -585,6 +585,8 @@ data class Project(
     val iconPath: String?,
     /** Its server's "No project": each of its threads works in a folder of its own. */
     val noProject: Boolean,
+    /** The same on every server that has the project, which a picker lists once. */
+    val key: String,
     val createdAt: Double,
 ) {
     /** Names the folder git works in for it: its worktree, or the project's folder. */
@@ -600,6 +602,8 @@ data class Project(
     }
 
     companion object {
+        const val NO_PROJECT_KEY = "no-project"
+
         operator fun invoke(json: JSON, serverID: String): Project {
             val controls = json.obj("worktree_controls")
             return Project(
@@ -618,6 +622,7 @@ data class Project(
                 setup = json.optionalString("setup"),
                 iconPath = json.optionalString("icon_path"),
                 noProject = json.bool("no_project"),
+                key = json.string("key"),
                 createdAt = json.double("created_at"),
             )
         }

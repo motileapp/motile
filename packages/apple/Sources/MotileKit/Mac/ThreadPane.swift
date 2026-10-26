@@ -12,7 +12,6 @@ struct ThreadPane: View {
     static let besideSidebarInset: CGFloat = 20
     /// The right panel is beside the pane, so the window's last button isn't over it.
     var besidePanel = false
-    @State private var removal: Removal?
 
     private static let composerBottomGap: CGFloat = 16
 
@@ -63,7 +62,6 @@ struct ThreadPane: View {
             }
         }
         .animation(.easeOut(duration: 0.15), value: store.notice)
-        .confirmsRemoval($removal)
     }
 
     /// The thread's project and name and its git button, drawn in the window's top bar over
@@ -165,13 +163,12 @@ struct ThreadPane: View {
             Text(headline.lead)
                 .foregroundStyle(Color.themeForeground)
             Menu {
-                ForEach(store.recentProjects + store.noProjects) { project in
+                ForEach(store.pickableProjects) { project in
                     Button {
                         store.setNewThreadProject(project.id)
                     } label: {
-                        let name = store.servers.count > 1 ? "\(project.name) · \(store.server(project.serverID)?.shortName ?? "")" : project.name
                         Label {
-                            Text(name)
+                            Text(project.name)
                         } icon: {
                             Image(platform: project.menuIcon ?? .symbol(project.menuSymbol, size: 13))
                         }
@@ -179,10 +176,6 @@ struct ThreadPane: View {
                 }
                 Divider()
                 Button("Add Project") { store.addProject() }
-                if let project = selected, !project.noProject {
-                    Button("Choose an Icon for “\(project.name)”") { store.openPanel(.icon(project.id)) }
-                    Button("Remove “\(project.name)” from Projects") { removal = .project(project) }
-                }
             } label: {
                 HStack(spacing: 8) {
                     ProjectIcon(project: selected, size: 22)

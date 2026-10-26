@@ -2644,6 +2644,7 @@ impl Hub {
             worktrees: worktrees_of(&stored.id),
             setup: stored.setup.clone(),
             no_project: self.is_no_project(stored),
+            origin: git::origin_of(&stored.path),
             created_at: stored.created_at,
         };
         stored.iter().map(project).collect()

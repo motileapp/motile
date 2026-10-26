@@ -194,7 +194,10 @@ private fun Workspace(project: Project) {
     val footer = if (draft && branch != null && project.git?.hasCommit == false) "A worktree can start once $branch has a commit." else null
     Section("Workspace", footer) {
         Group(buildList {
-            store.server(project.serverID)?.let { server -> add { Labeled("Server", server.name) } }
+            when {
+                store.draftProjectCopies.isNotEmpty() -> add { ServerPicker(project) }
+                else -> store.server(project.serverID)?.let { server -> add { Labeled("Server", server.name) } }
+            }
             add { Labeled("Project", project.name) }
             when {
                 project.worktree != null -> add { Labeled("Works in", "Worktree") }
@@ -215,6 +218,28 @@ private fun branchRow(store: AppStore, project: Project): (@Composable () -> Uni
     val value = if (startsInWorktree) store.draftStart ?: branch else branch
     if (project.worktree != null || !store.canSwitchBranches(project)) return { Labeled(title, value) }
     return { Labeled(title, { store.showBranches(project) }) { Text(value, size = rowText, color = Theme.colors.mutedForeground, maxLines = 1) } }
+}
+
+/** The server a new thread whose project is on more than one starts on. */
+@Composable
+private fun ServerPicker(project: Project) {
+    val store = LocalStore.current
+    val palette = Theme.colors
+    ListRow {
+        Text("Server", Modifier.weight(1f), size = rowText)
+        Menu(
+            items = {
+                store.draftProjectCopies.forEach { copy ->
+                    toggle(store.server(copy.serverID)?.name ?: "", isOn = copy.id == project.id) { store.setNewThreadProject(copy.id) }
+                }
+            },
+        ) {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(store.server(project.serverID)?.name ?: "", size = rowText, color = palette.primary)
+                Icon(Symbol.ChevronDown, 11f, color = palette.primary)
+            }
+        }
+    }
 }
 
 /** Whether a new thread works in the project's checkout or in a new worktree of its own. */

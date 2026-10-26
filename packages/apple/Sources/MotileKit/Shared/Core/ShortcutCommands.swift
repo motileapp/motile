@@ -59,10 +59,10 @@ extension AppStore {
             guard account.signedIn, !servers.isEmpty else { return false }
             newThread()
         case "chat.newLocal":
-            guard let project = composerProject else { return false }
+            guard let key = composerProject?.key, let project = projectToOpen(key) else { return false }
             startNewThread(in: project)
         case "chat.newWithoutProject":
-            guard let project = noProjectToOpen else { return false }
+            guard let project = projectToOpen(Project.noProjectKey) else { return false }
             startNewThread(in: project)
         case "navigation.back", "navigation.forward": return go(back: command == "navigation.back")
         case "thread.previous": return showThread(offset: -1)
@@ -91,9 +91,11 @@ extension AppStore {
         case "composer.sendAlternate":
             guard selectedThread != nil, activity.running, canSend else { return false }
             send(alternate: true)
-        case "composer.project":
-            guard selectedDraft != nil else { return false }
-            openPanel(.draftProject)
+        case "composer.server":
+            let copies = draftProjectCopies
+            guard let index = copies.firstIndex(where: { $0.id == selectedDraft?.projectID }) else { return false }
+            guard !performOnThisSystem(command) else { return true }
+            setNewThreadProject(copies[(index + 1) % copies.count].id)
         case "composer.branch":
             guard let project = composerProject, canSwitchBranches(of: project) else { return false }
             showBranches(of: project)

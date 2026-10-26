@@ -119,7 +119,15 @@ struct ThreadSettingsSheet: View {
     /// checked out there. A thread that starts in a new worktree picks the branch it starts from.
     private func workspace(_ project: Project) -> some View {
         Section {
-            if let server = store.server(project.serverID) {
+            let copies = store.draftProjectCopies
+            if !copies.isEmpty {
+                Picker("Server", selection: Binding(get: { project.id }, set: { store.setNewThreadProject($0) })) {
+                    ForEach(copies) { copy in
+                        Text(store.server(copy.serverID)?.name ?? "").tag(copy.id)
+                    }
+                }
+                .tint(Color.themePrimary)
+            } else if let server = store.server(project.serverID) {
                 LabeledContent("Server", value: server.name)
             }
             LabeledContent("Project", value: project.name)

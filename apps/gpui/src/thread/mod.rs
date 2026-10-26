@@ -13,7 +13,7 @@ use gpui_kit::*;
 use crate::composer::Composer;
 use crate::composer::children::agent_bar;
 use crate::models::{AgentViewExt, Project};
-use crate::store::{PanelPage, Store};
+use crate::store::Store;
 use crate::theme::{self, ControlSize, Radius, colors};
 use crate::ui::menu::{Anchor, Menu, MenuIcon};
 use crate::ui::modal::{Answer, Confirmation, Modal, confirmation, present_sheet, presented};
@@ -297,24 +297,11 @@ impl ThreadPane {
         let selected = store.project(store.selected_draft().and_then(|draft| draft.project_id.as_deref())).cloned();
         let anchor = self.project_menu.clone();
         let handle = self.store.clone();
-        let several_servers = store.live_servers().count() > 1;
         let (lead, name) = Project::headline(selected.as_ref());
         let projects: Vec<(String, String, Option<String>, &'static str)> = store
-            .recent_projects()
+            .pickable_projects()
             .into_iter()
-            .chain(store.live_no_projects())
-            .map(|project| {
-                let name = if several_servers {
-                    let server = store
-                        .server(Some(&project.server_id))
-                        .map(|server| server.short_name.clone())
-                        .unwrap_or_default();
-                    format!("{} · {server}", project.name)
-                } else {
-                    project.name.clone()
-                };
-                (project.id.clone(), name, project.icon_path.clone(), project.symbol())
-            })
+            .map(|project| (project.id.clone(), project.name.clone(), project.icon_path.clone(), project.symbol()))
             .collect();
         div()
             .flex()
@@ -368,23 +355,6 @@ impl ThreadPane {
                                 cx.notify();
                             })
                         });
-                        if let Some(project) = selected.clone().filter(|project| !project.no_project) {
-                            let (choose, remove) = (handle.clone(), handle.clone());
-                            let (chosen, removed) = (project.clone(), project.clone());
-                            menu = menu
-                                .item(format!("Choose an Icon for “{}”", project.name), move |_, cx| {
-                                    choose.update(cx, |store, cx| {
-                                        store.open_panel(PanelPage::Icon(chosen.id.clone()));
-                                        cx.notify();
-                                    })
-                                })
-                                .item(format!("Remove “{}” from Projects", project.name), move |_, cx| {
-                                    remove.update(cx, |store, cx| {
-                                        store.removing_project = Some(removed.clone());
-                                        cx.notify();
-                                    })
-                                });
-                        }
                         menu.show_under(&anchor, 4., window, cx);
                     }),
             )

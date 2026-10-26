@@ -109,9 +109,7 @@ struct MotileApp: App {
             CommandGroup(replacing: .newItem) {
                 Button("New Thread") { store.newThread() }
                     .shortcut("chat.new", in: keys)
-                Button(menu.newThreadHere ?? "New Thread in This Project") {
-                    store.startNewThread(in: store.composerProject)
-                }
+                Button(menu.newThreadHere ?? "New Thread in This Project") { _ = store.perform("chat.newLocal") }
                 .shortcut("chat.newLocal", in: keys)
                 .disabled(menu.newThreadHere == nil)
                 Button("New Thread Without a Project") { _ = store.perform("chat.newWithoutProject") }

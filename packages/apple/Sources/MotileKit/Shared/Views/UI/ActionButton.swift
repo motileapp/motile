@@ -179,6 +179,8 @@ struct ControlLabel: View {
     var padding: CGFloat?
     /// A symbol after a dot behind the words, as the reasoning effort after the model.
     var detail: Symbol?
+    /// Words after another dot, as the server after the effort.
+    var place: String?
     /// Words after the title in a colour of their own, as "working" after "2 agents", which
     /// leave the title in the foreground.
     var tinted: (words: String, color: Color)?
@@ -232,12 +234,19 @@ struct ControlLabel: View {
                 HStack(spacing: 0) {
                     text(title, tinted: tinted)
                         .lineLimit(1)
-                    if let detail {
-                        Text(verbatim: " · ")
-                            .foregroundStyle(Color.themeMutedStrongerForeground)
-                        Image(detail, size: markSize - 2)
-                            .foregroundStyle(Color.themeMutedStrongerForeground)
+                    Group {
+                        if let detail {
+                            Text(verbatim: " · ")
+                            Image(detail, size: markSize - 2)
+                        }
+                        if let place {
+                            Text(verbatim: " · ")
+                            Text(verbatim: place)
+                                .lineLimit(1)
+                                .fixedSize()
+                        }
                     }
+                    .foregroundStyle(Color.themeMutedStrongerForeground)
                 }
                 .font(size.font)
                 .opacity(pending && !spins ? 0 : 1)
@@ -351,6 +360,7 @@ struct ActionButton: View {
     private var gap: CGFloat?
     private var padding: CGFloat?
     private let detail: Symbol?
+    private var place: String?
     private var tinted: String?
     private let margin: EdgeInsets
     /// It stands in a line of text: its symbol or words start where the line does, and it is no
@@ -360,7 +370,7 @@ struct ActionButton: View {
 
     init(
         _ title: String, tinted: String? = nil, icon: Symbol? = nil, picture: AnyView? = nil, pictures: AnyView? = nil, detail: Symbol? = nil,
-        help: String? = nil,
+        place: String? = nil, help: String? = nil,
         variant: ButtonVariant = .secondary, size: ControlSize = .regular, symbolSize: CGFloat? = nil, gap: CGFloat? = nil,
         padding: CGFloat? = nil, pending: Bool = false, pendingTitle: String? = nil,
         selected: Bool = false, round: Bool = false,
@@ -372,6 +382,7 @@ struct ActionButton: View {
         self.title = title
         self.icon = icon.map(ControlIcon.symbol) ?? picture.map(ControlIcon.picture) ?? pictures.map(ControlIcon.pictures)
         self.detail = detail
+        self.place = place
         self.tinted = tinted
         self.help = help
         look = ControlLook(variant: variant, size: size, selected: selected, round: round, joined: joined, tint: tint)
@@ -429,7 +440,7 @@ struct ActionButton: View {
         return Button(action: action) {
             ControlLabel(
                 title: words, icon: icon, size: look.size, chevron: chevron, pending: pending, pendingTitle: pendingTitle, fills: fills,
-                alignment: alignment, symbolSize: symbolSize, gap: gap, padding: padding, detail: detail,
+                alignment: alignment, symbolSize: symbolSize, gap: gap, padding: padding, detail: detail, place: place,
                 tinted: look.tint.flatMap { tint in tinted.map { (words: $0, color: tint) } }
             )
             .padding(reach.around)

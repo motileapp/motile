@@ -264,6 +264,38 @@ struct ServerLabel: View {
     }
 }
 
+/// The server's symbol, in its state's colour while it isn't connected and in what is around it
+/// otherwise.
+struct ServerSymbol: View {
+    let server: Server
+    var size: CGFloat = 10
+
+    var body: some View {
+        let image = Image(.server, size: size)
+        if let tint = server.stateTint {
+            image.foregroundStyle(tint)
+        } else {
+            image
+        }
+    }
+}
+
+/// The menu that moves the open draft to another server that has its project.
+struct ServerMenuItems: View {
+    @Environment(AppStore.self) private var store
+    let copies: [Project]
+
+    var body: some View {
+        Section("Server") {
+            ForEach(copies) { copy in
+                Toggle(isOn: Binding(get: { store.selectedDraft?.projectID == copy.id }, set: { _ in store.setNewThreadProject(copy.id) })) {
+                    Text(store.server(copy.serverID)?.name ?? "")
+                }
+            }
+        }
+    }
+}
+
 extension Server {
     /// The colour of the server's state while it isn't connected.
     var stateTint: Color? {

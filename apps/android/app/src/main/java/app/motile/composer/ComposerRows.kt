@@ -6,7 +6,6 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -15,7 +14,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.lerp
@@ -26,7 +24,6 @@ import app.motile.ui.ActionButton
 import app.motile.ui.AgentIcon
 import app.motile.ui.Appearing
 import app.motile.ui.ButtonVariant
-import app.motile.ui.ServerLabel
 import kotlin.math.max
 import kotlin.math.roundToInt
 
@@ -60,7 +57,7 @@ fun ComposerRows(collapsed: Boolean, text: @Composable () -> Unit, controls: @Co
 }
 
 /**
- * The row of the composer's buttons: the one that attaches, the server's name, the model's name,
+ * The row of the composer's buttons: the one that attaches, the model's name with the effort and the server,
  * which opens the thread's settings, and the ones that stop and send. Collapsed, the text is in the
  * middle of the row instead of the names.
  */
@@ -69,10 +66,6 @@ fun ComposerTouchControls(collapsed: Boolean) {
     val store = LocalStore.current
     Row(verticalAlignment = Alignment.CenterVertically) {
         AttachMenu()
-        Appearing(!collapsed) {
-            val server = store.composerServer
-            if (server != null) ServerLabel(server, Modifier.padding(start = 4.dp), weight = FontWeight.Medium, showsState = true)
-        }
         Spacer(Modifier.weight(1f).widthIn(min = 8.dp))
         Appearing(!collapsed) { SettingsButton() }
         ComposerSendButtons()
@@ -87,7 +80,7 @@ private fun SettingsButton() {
     val logo: (@Composable () -> Unit)? = model?.let { { AgentIcon(it.agent, size = ControlSize.Regular.symbol) } }
     Box(Modifier.semantics { contentDescription = "Thread settings" }) {
         ActionButton(
-            store.composerModelLabel, picture = logo, detail = effort, variant = ButtonVariant.Ghost,
+            store.composerModelLabel, picture = logo, detail = effort, place = store.composerServer?.shortName, variant = ButtonVariant.Ghost,
             symbolSize = ControlSize.Regular.symbol, gap = 5.dp, opens = true,
         ) { store.showsThreadSettings = true }
     }

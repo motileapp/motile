@@ -84,9 +84,12 @@ struct MotileCommands: Commands {
         CommandGroup(replacing: .newItem) {
             Button("New Thread") { store.newThread() }
                 .shortcut("chat.new", in: keys)
-            Button("New Thread in This Project") { store.startNewThread(in: store.composerProject) }
+            Button("New Thread in This Project") { _ = store.perform("chat.newLocal") }
                 .shortcut("chat.newLocal", in: keys)
                 .disabled(store.composerProject == nil)
+            Button("Next Server") { _ = store.perform("composer.server") }
+                .shortcut("composer.server", in: keys)
+                .disabled(store.draftProjectCopies.isEmpty)
             Button("Go to Thread") { store.openPanel(.threads) }
                 .shortcut("threadPicker.toggle", in: keys)
             Button("Commands") { store.openPanel(.commands) }

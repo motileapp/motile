@@ -644,10 +644,15 @@ struct Project: Equatable, Identifiable {
     let iconPath: String?
     /// Its server's "No project": each of its threads works in a folder of its own.
     let noProject: Bool
+    /// The same on every server that has the project, which a picker lists once.
+    let key: String
     let createdAt: Double
+
+    static let noProjectKey = "no-project"
 
     init(json: JSON, serverID: String) {
         id = json.string("id")
+        key = json.string("key")
         self.serverID = serverID
         path = json.string("path")
         name = json.string("name")

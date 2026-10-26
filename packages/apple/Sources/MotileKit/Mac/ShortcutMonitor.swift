@@ -149,7 +149,7 @@ extension AppStore {
                 NSApp.keyWindow?.performClose(nil)
             }
             return true
-        case "modelPicker.toggle", "composer.effort", "composer.access", "composer.workspace":
+        case "modelPicker.toggle", "composer.effort", "composer.access", "composer.workspace", "composer.server":
             return ShortcutTargets.press(command)
         default:
             return false

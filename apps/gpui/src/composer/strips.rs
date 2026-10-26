@@ -461,7 +461,10 @@ fn part(title: String, icon: AnyElement, cx: &App) -> Div {
         .gap(px(5.))
         .text_color(colors(cx).muted_foreground)
         .child(div().flex_shrink_0().child(icon))
-        .when(!title.is_empty(), |part| part.child(div().whitespace_nowrap().text_size(px(12.)).child(title)))
+        .when(!title.is_empty(), |part| {
+            let words = div().whitespace_nowrap().text_size(px(ControlSize::Regular.text_size()));
+            part.child(words.font_weight(FontWeight::MEDIUM).child(title))
+        })
 }
 
 /// The label of a branch that can't be switched from here.
@@ -630,6 +633,15 @@ pub fn context_strip(
     });
     // The symbols of the parts that only say where the thread works.
     let mark = theme::symbol_side(11.);
+    let copies: Vec<(String, String, bool)> = state
+        .draft_project_copies()
+        .into_iter()
+        .map(|copy| {
+            let name = state.server(Some(&copy.server_id)).map(|server| server.name.clone()).unwrap_or_default();
+            (copy.id.clone(), name, copy.id == project.id)
+        })
+        .collect();
+    let server_help = state.shortcuts.help("The server the thread starts on", "composer.server");
 
     /// Where the thread works, which is told and can't be changed here.
     struct Working {
@@ -695,6 +707,28 @@ pub fn context_strip(
         })
         .shortcut("composer.workspace")
     };
+    // A draft whose project is on more than one server moves to another from here.
+    let server_menu = |server: &Server, title: String| {
+        let (choose, copies, help) = (store.clone(), copies.clone(), server_help.clone());
+        let tint = server.state_tint(&c);
+        let symbol = icons::symbol("server", ControlSize::Regular.symbol())
+            .when_some(tint, |symbol, tint| symbol.text_color(tint));
+        ActionMenu::new("strip-server", title, move |_, _| {
+            copies.iter().fold(crate::ui::menu::Menu::new().note("Server"), |menu, (id, name, current)| {
+                let (store, id) = (choose.clone(), id.clone());
+                menu.choice(*current, name.clone(), None, None, move |_, cx| {
+                    store.update(cx, |store, cx| {
+                        store.set_new_thread_project(Some(id.clone()), cx);
+                        cx.notify();
+                    })
+                })
+            })
+        })
+        .button(|button| {
+            button.picture(symbol).help(help).surface(Surface::Composer).margin(edges(INSET, 4., INSET, 4.))
+        })
+        .shortcut("composer.server")
+    };
     let branch_button = |title: String| {
         let (open, project) = (store.clone(), project.clone());
         ActionButton::new("branch", title)
@@ -716,13 +750,19 @@ pub fn context_strip(
             })
     };
 
-    let server_words = server.map(|server| Words::new(&server.short_name, FontWeight::NORMAL, 14. + mark + 5.));
+    let server_words = server.map(|server| {
+        if copies.is_empty() {
+            return Words::new(&server.short_name, FontWeight::MEDIUM, 14. + mark + 5.);
+        }
+        let natural = SERVER_MENU_LEAD + server_menu(server, server.short_name.clone()).natural_width(window, cx);
+        Words::of_control(&server.short_name, natural, window).fixed()
+    });
     let project_words =
-        Words::new(&project.name, FontWeight::NORMAL, if server.is_none() { 14. } else { 0. } + 13. + 5.);
+        Words::new(&project.name, FontWeight::MEDIUM, if server.is_none() { 14. } else { 0. } + 13. + 5.);
     let words_of_workspace = |labeled: bool, window: &mut Window, cx: &mut App| {
         workspace.as_ref().map(|workspace| match workspace {
-            Workspace::Told(working) if labeled => Words::new(working.title, FontWeight::NORMAL, 26. + mark + 5.),
-            Workspace::Told(_) => Words::new("", FontWeight::NORMAL, 26. + mark),
+            Workspace::Told(working) if labeled => Words::new(working.title, FontWeight::MEDIUM, 26. + mark + 5.),
+            Workspace::Told(_) => Words::new("", FontWeight::MEDIUM, 26. + mark),
             Workspace::Chosen => {
                 let title = match (labeled, in_worktree) {
                     (false, _) => "",
@@ -775,6 +815,9 @@ pub fn context_strip(
     let branch_title = branch_words.as_ref().map(|words| words.fitted(next(), window, cx));
 
     let server_part = server.zip(server_title).map(|(server, title)| {
+        if !copies.is_empty() {
+            return div().flex_shrink_0().pl(px(SERVER_MENU_LEAD)).child(server_menu(server, title)).into_any_element();
+        }
         let tint = server.state_tint(&c).unwrap_or(c.muted_foreground);
         div()
             .id("strip-server")
@@ -782,6 +825,7 @@ pub fn context_strip(
             .pl(px(14.))
             .tooltip(crate::ui::tooltip(format!("On {}", server.name)))
             .child(part(title, icons::symbol("server", 11.).text_color(tint).into_any_element(), cx))
+            .into_any_element()
     });
     let project_part = div()
         .id("strip-project")
@@ -850,6 +894,8 @@ pub fn context_strip(
         .children(branch_part.map(|part| div().flex_shrink_0().child(part)))
 }
 
+/// The room before the server's menu, which stands nearer the strip's side than its label.
+const SERVER_MENU_LEAD: f32 = 2.;
 const PICKER_WIDTH: f32 = 300.;
 /// The room between the picker and its button.
 const PICKER_GAP: f32 = 6.;
