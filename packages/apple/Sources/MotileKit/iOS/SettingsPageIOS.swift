@@ -274,6 +274,7 @@ struct SettingsPage: View {
                     if !server.isDefault(account) {
                         Button("Make Default") { store.makeAgentAccountDefault(account, on: server) }
                     }
+                    Divider()
                     Button("Remove Account", role: .destructive) { removal = .account(account, on: server) }
                 }
             }

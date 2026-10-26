@@ -210,6 +210,7 @@ private fun AccountRow(account: AgentAccount, isDefault: Boolean, edit: () -> Un
         MenuPopup(menu) {
             item("Edit", Symbol.Pencil, run = edit)
             if (!isDefault) item("Make Default", Symbol.CircleCheck, run = makeDefault)
+            divider()
             item("Remove Account", Symbol.Trash2, destructive = true, run = remove)
         }
     }
