@@ -177,12 +177,12 @@ final class ProgramSelectView: ProgramFieldHolder {
 
 /// SegmentedControl: the kit's, at its own width, moving sideways in a column narrower than it.
 final class ProgramSegmentedView: ProgramFieldHolder {
-    private let clip = SidewaysClipView()
+    private let scroll = SidewaysScrollView()
     private var segments: SegmentedView?
 
     override init(frame: CGRect) {
         super.init(frame: frame)
-        addSubview(clip)
+        addSubview(scroll)
     }
 
     required init?(coder: NSCoder) { fatalError("not used") }
@@ -192,7 +192,6 @@ final class ProgramSegmentedView: ProgramFieldHolder {
         let labels = node.options.map(\.label)
         let segments = self.segments ?? {
             let view = SegmentedView(labels, selection: node.selected ?? -1) { [weak self] index in self?.choose(index) }
-            clip.addSubview(view)
             self.segments = view
             return view
         }()
@@ -201,8 +200,8 @@ final class ProgramSegmentedView: ProgramFieldHolder {
         segments.fills = node.block
         segments.enabled = node.disabled == nil
         let own = box.extra as? CGFloat ?? box.size.width
-        clip.frame = bounds
-        clip.setContent(segments, size: CGSize(width: node.block ? box.size.width : own, height: box.size.height))
+        scroll.frame = bounds
+        scroll.setContent(segments, size: CGSize(width: node.block ? box.size.width : own, height: box.size.height))
     }
 
     private func choose(_ index: Int) {

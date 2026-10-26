@@ -237,7 +237,7 @@ final class ProgramIconView: ProgramNodeView {
 /// A Table: a card of its header and rows, which moves sideways when its columns are wider.
 final class ProgramTableView: ProgramNodeView {
     private let face = SurfaceView()
-    private let clipView = SidewaysClipView()
+    private let scroll = SidewaysScrollView()
     private let content = FlippedView()
     private let header = SurfaceView()
     private var lines: [SurfaceView] = []
@@ -248,8 +248,7 @@ final class ProgramTableView: ProgramNodeView {
         face.stroke = Theme.borderCard
         header.fill = Theme.cardAccent
         addSubview(face)
-        addSubview(clipView)
-        clipView.addSubview(content)
+        addSubview(scroll)
         content.addSubview(header)
     }
 
@@ -276,13 +275,13 @@ final class ProgramTableView: ProgramNodeView {
             guard index < edges.count else { continue }
             line.frame = CGRect(x: 0, y: edges[index] - 1, width: layout.contentWidth, height: 1)
         }
-        clipView.frame = bounds
-        clipView.setContent(content, size: CGSize(width: layout.contentWidth, height: box.size.height))
+        scroll.frame = bounds
+        scroll.setContent(content, size: CGSize(width: layout.contentWidth, height: box.size.height))
     }
 
     override func layoutNow() {
         face.frame = bounds
-        clipView.frame = bounds
+        scroll.frame = bounds
     }
 }
 

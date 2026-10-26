@@ -514,7 +514,7 @@ final class CodeRowView: RowView {
 
     private let surface = SurfaceView()
     private let header = CodeHeader()
-    private let scroll = SidewaysClipView()
+    private let scroll = SidewaysScrollView()
     private let text = RowTextView.make(wraps: false)
     private var lines = 1
     private var widestLine = 0
@@ -531,7 +531,6 @@ final class CodeRowView: RowView {
         addSubview(surface)
         surface.addSubview(header)
 
-        scroll.addSubview(text)
         surface.addSubview(scroll)
         text.onSelect = { [weak self] in
             guard let self else { return }

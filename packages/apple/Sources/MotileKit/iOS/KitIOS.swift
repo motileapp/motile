@@ -569,7 +569,7 @@ final class RowTextView: UITextView, UITextViewDelegate {
 }
 
 /// Shows code that is wider than the column and scrolls it sideways.
-final class SidewaysClipView: UIScrollView {
+final class SidewaysScrollView: UIScrollView {
     override init(frame: CGRect) {
         super.init(frame: frame)
         showsVerticalScrollIndicator = false

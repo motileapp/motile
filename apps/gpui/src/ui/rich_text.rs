@@ -48,6 +48,16 @@ pub fn press_row(row: Option<u64>, cx: &mut App) {
     cx.default_global::<PressedRow>().0 = row;
 }
 
+/// Ends the selection a press started when the button comes up, wherever it does. A control that
+/// takes the click keeps the release from the selection, which would follow the pointer on without it.
+pub fn watch_releases(window: &mut Window) {
+    window.on_mouse_event(|event: &MouseUpEvent, phase, window, cx| {
+        if phase == DispatchPhase::Capture && event.button == MouseButton::Left {
+            TextSelection::end(window, cx);
+        }
+    });
+}
+
 /// What text takes the keys with once a drag starts in it, inside the window's root, whose copy
 /// shortcut then copies the selection.
 struct SelectionFocus(FocusHandle);
@@ -667,6 +677,100 @@ mod tests {
         assert_eq!(super::search_url("café  au\nlait?"), "https://www.google.com/search?q=caf%C3%A9+au+lait%3F");
     }
 
+    fn headless_window<V: Render>(
+        build: impl FnOnce(&mut Context<V>) -> V,
+    ) -> Option<(HeadlessAppContext, WindowHandle<V>)> {
+        let Some(text) = crate::transcript::canvas::tests::platform_text() else {
+            eprintln!("skipped: GPUI has no text system here");
+            return None;
+        };
+        let mut cx = HeadlessAppContext::new(text);
+        let fonts = crate::assets::FONTS.iter().map(|bytes| std::borrow::Cow::Borrowed(*bytes)).collect();
+        cx.update(|cx| {
+            gpui_kit::init(cx);
+            cx.text_system().add_fonts(fonts)
+        })
+        .expect("the fonts");
+        crate::fonts::load();
+        let window = cx
+            .open_window(size(px(400.), px(100.)), |window, cx| {
+                crate::theme::apply(true, window, cx);
+                cx.new(build)
+            })
+            .expect("a window");
+        Some((cx, window))
+    }
+
+    fn draw<V: 'static>(cx: &mut HeadlessAppContext, window: WindowHandle<V>) {
+        cx.update_window(window.into(), |_, window, cx| {
+            window.refresh();
+            window.draw(cx).clear(cx);
+        })
+        .expect("a frame");
+    }
+
+    fn send<V: 'static>(cx: &mut HeadlessAppContext, window: WindowHandle<V>, events: Vec<PlatformInput>) {
+        cx.update_window(window.into(), |_, window, cx| {
+            for event in events {
+                window.dispatch_event(event, cx);
+            }
+        })
+        .expect("the events");
+    }
+
+    fn click_at(position: Point<Pixels>) -> Vec<PlatformInput> {
+        vec![
+            PlatformInput::MouseMove(MouseMoveEvent { position, ..Default::default() }),
+            PlatformInput::MouseDown(MouseDownEvent {
+                position,
+                button: MouseButton::Left,
+                click_count: 1,
+                ..Default::default()
+            }),
+            PlatformInput::MouseUp(MouseUpEvent {
+                position,
+                button: MouseButton::Left,
+                click_count: 1,
+                ..Default::default()
+            }),
+        ]
+    }
+
+    /// Text above a button that keeps its click to itself, as the app's buttons do, under the
+    /// window's selection as GPUI Kit's root lays it.
+    struct Buttoned;
+
+    impl Render for Buttoned {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div()
+                .size_full()
+                .font_family(crate::theme::UI_FONT)
+                .child(gpui_kit::base::TextSelectionLayer)
+                .child(RichText::new("words", "some words to select"))
+                .child(div().id("button").mt(px(40.)).size(px(40.)).on_click(|_, _, cx| cx.stop_propagation()))
+                .child(canvas(|_, _, _| {}, |_, _, window, _| watch_releases(window)).absolute().size_0())
+        }
+    }
+
+    #[test]
+    fn a_click_on_a_button_selects_nothing_as_the_pointer_moves_on() {
+        let Some((mut cx, window)) = headless_window(|_| Buttoned) else { return };
+        draw(&mut cx, window);
+        send(&mut cx, window, click_at(point(px(20.), px(70.))));
+        draw(&mut cx, window);
+        let over_words = point(px(80.), px(8.));
+        send(
+            &mut cx,
+            window,
+            vec![PlatformInput::MouseMove(MouseMoveEvent { position: over_words, ..Default::default() })],
+        );
+        draw(&mut cx, window);
+        let selected = cx
+            .update_window(window.into(), |_, window, cx| TextSelection::has_selection(window, cx))
+            .expect("the selection");
+        assert!(!selected);
+    }
+
     struct Linked {
         opened: Rc<RefCell<Vec<String>>>,
     }
@@ -685,63 +789,13 @@ mod tests {
 
     #[test]
     fn a_link_opens_when_the_window_redraws_while_it_is_pressed() {
-        let Some(text) = crate::transcript::canvas::tests::platform_text() else {
-            eprintln!("skipped: GPUI has no text system here");
-            return;
-        };
-        let mut cx = HeadlessAppContext::new(text);
-        let fonts = crate::assets::FONTS.iter().map(|bytes| std::borrow::Cow::Borrowed(*bytes)).collect();
-        cx.update(|cx| {
-            gpui_kit::init(cx);
-            cx.text_system().add_fonts(fonts)
-        })
-        .expect("the fonts");
-        crate::fonts::load();
         let opened = Rc::new(RefCell::new(Vec::new()));
-        let window = cx
-            .open_window(size(px(400.), px(100.)), |window, cx| {
-                crate::theme::apply(true, window, cx);
-                cx.new(|_| Linked { opened: opened.clone() })
-            })
-            .expect("a window");
-        let draw = |cx: &mut HeadlessAppContext| {
-            cx.update_window(window.into(), |_, window, cx| {
-                window.refresh();
-                window.draw(cx).clear(cx);
-            })
-            .expect("a frame");
-        };
-        draw(&mut cx);
-        let on_link = point(px(60.), px(8.));
-        cx.update_window(window.into(), |_, window, cx| {
-            window.dispatch_event(
-                PlatformInput::MouseMove(MouseMoveEvent { position: on_link, ..Default::default() }),
-                cx,
-            );
-            window.dispatch_event(
-                PlatformInput::MouseDown(MouseDownEvent {
-                    position: on_link,
-                    button: MouseButton::Left,
-                    click_count: 1,
-                    ..Default::default()
-                }),
-                cx,
-            );
-        })
-        .expect("a press");
-        draw(&mut cx);
-        cx.update_window(window.into(), |_, window, cx| {
-            window.dispatch_event(
-                PlatformInput::MouseUp(MouseUpEvent {
-                    position: on_link,
-                    button: MouseButton::Left,
-                    click_count: 1,
-                    ..Default::default()
-                }),
-                cx,
-            );
-        })
-        .expect("a release");
+        let Some((mut cx, window)) = headless_window(|_| Linked { opened: opened.clone() }) else { return };
+        draw(&mut cx, window);
+        let [moved, pressed, released] = click_at(point(px(60.), px(8.))).try_into().expect("a click");
+        send(&mut cx, window, vec![moved, pressed]);
+        draw(&mut cx, window);
+        send(&mut cx, window, vec![released]);
         assert_eq!(*opened.borrow(), ["https://motile.app"]);
     }
 }
