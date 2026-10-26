@@ -2,6 +2,7 @@ import {
   ArrowRightIcon,
   ChevronDownIcon,
   ChevronRightIcon,
+  ClockIcon,
   CopyIcon,
   FileTextIcon,
   GlobeIcon,
@@ -42,17 +43,49 @@ export function Transcript({
   elapsed: (since: number) => string
   onOpenDiff: () => void
 }) {
+  const [opened, setOpened] = useState<number[]>([])
+  const turnFolds = folds(thread.items)
+  const foldAt = (index: number) =>
+    turnFolds.find((fold) => fold.from <= index && index <= fold.end)
   return (
     <div className="mx-auto flex max-w-[844px] flex-col px-[38px] pt-6">
-      {thread.items.map((item, index) => (
-        <Row
-          key={index}
-          item={item}
-          thread={thread}
-          elapsed={elapsed}
-          onOpenDiff={onOpenDiff}
-        />
-      ))}
+      {thread.items.map((item, index) => {
+        const fold = foldAt(index)
+        const open = fold !== undefined && opened.includes(fold.from)
+        const hidden =
+          fold !== undefined &&
+          !open &&
+          index < fold.answer &&
+          item.kind !== "agents"
+        return (
+          <Fragment key={index}>
+            {fold?.from === index && (
+              <FoldRow
+                worked={fold.worked}
+                open={open}
+                onToggle={() =>
+                  setOpened(
+                    open
+                      ? opened.filter((from) => from !== fold.from)
+                      : [...opened, fold.from]
+                  )
+                }
+              />
+            )}
+            {!hidden &&
+              (item.kind === "end" && fold ? (
+                <TurnEnd />
+              ) : (
+                <Row
+                  item={item}
+                  thread={thread}
+                  elapsed={elapsed}
+                  onOpenDiff={onOpenDiff}
+                />
+              ))}
+          </Fragment>
+        )
+      })}
       {thread.status.kind === "working" && (
         <Shimmer className="mt-2 self-start text-[13px] tabular-nums">
           Working for {elapsed(thread.status.since)}
@@ -129,12 +162,7 @@ function Row({
     case "changes":
       return <Changes thread={thread} onOpenDiff={onOpenDiff} />
     case "end":
-      return (
-        <div className="mt-2 mb-4 flex h-7 items-center gap-2 pl-[7px] text-[12px] text-muted-stronger-foreground">
-          {item.worked}
-          <CopyIcon className="size-3" />
-        </div>
-      )
+      return <TurnEnd worked={item.worked} />
     case "agents":
       return item.agents.length === 1 ? (
         <AgentRow run={item.agents[0]} elapsed={elapsed} />
@@ -162,6 +190,68 @@ function Row({
         </div>
       )
   }
+}
+
+/**
+ * A finished turn, from its first item after the message that started it to its end: what led up
+ * to its answer folds behind one row, but for the agents it started.
+ */
+type Fold = { from: number; answer: number; end: number; worked: string }
+
+const ANSWER_KINDS: Item["kind"][] = ["text", "code", "ui"]
+
+function folds(items: Item[]): Fold[] {
+  const found: Fold[] = []
+  let from = 0
+  items.forEach((item, end) => {
+    if (["user", "notice", "handoff"].includes(item.kind)) from = end + 1
+    if (item.kind !== "end") return
+    let answer = end
+    while (answer > from && !ANSWER_KINDS.includes(items[answer - 1].kind))
+      answer -= 1
+    while (answer > from && ANSWER_KINDS.includes(items[answer - 1].kind))
+      answer -= 1
+    if (answer > from) found.push({ from, answer, end, worked: item.worked })
+    from = end + 1
+  })
+  return found
+}
+
+/** How long a finished turn worked, which opens what it did, over a rule that sets it apart from its answer. */
+function FoldRow({
+  worked,
+  open,
+  onToggle,
+}: {
+  worked: string
+  open: boolean
+  onToggle: () => void
+}) {
+  const Chevron = open ? ChevronDownIcon : ChevronRightIcon
+  return (
+    <div className="flex flex-col">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="-mx-2 flex h-7 items-center gap-2 self-start rounded-md px-2 text-[13px] text-muted-stronger-foreground hover:bg-background-accent-larger"
+      >
+        <ClockIcon className="size-3.5 shrink-0" />
+        {worked}
+        <Chevron className="-ml-1 size-3 shrink-0" />
+      </button>
+      <span className="mt-1 h-px bg-border-muted" />
+    </div>
+  )
+}
+
+/** The line under a turn's answer; how long it worked, unless its fold says so. */
+function TurnEnd({ worked }: { worked?: string }) {
+  return (
+    <div className="mt-2 mb-4 flex h-7 items-center gap-2 pl-[7px] text-[12px] text-muted-stronger-foreground">
+      {worked}
+      <CopyIcon className="size-3" />
+    </div>
+  )
 }
 
 const STATE_WORDS: Record<AgentState, string> = {
