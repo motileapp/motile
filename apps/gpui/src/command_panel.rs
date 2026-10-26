@@ -25,6 +25,7 @@ const ROW_RADIUS: f32 = Radius::MD;
 const SIDE_MARGIN: f32 = 8.;
 const TITLE_HEIGHT: f32 = 17.;
 const DETAIL_HEIGHT: f32 = 15.;
+const DOT_GAP: f32 = 6.;
 const NOTICE_HEIGHT: f32 = 36.;
 const MAX_HEIGHT: f32 = 420.;
 /// The layer the card is, which its rows, bars and key caps lie on.
@@ -1445,7 +1446,7 @@ fn lines(item: &Item, c: &Colors) -> Div {
     let title =
         div().h(px(TITLE_HEIGHT)).text_size(px(14.)).line_height(px(TITLE_HEIGHT)).truncate().child(item.title.clone());
     if item.one_line {
-        return div().flex().items_center().gap(px(4.)).min_w_0().child(title.flex_shrink_0()).when(
+        return div().flex().items_center().gap(px(DOT_GAP)).min_w_0().child(title.flex_shrink_0()).when(
             !item.detail_parts.is_empty(),
             |line| {
                 line.child(div().text_size(px(12.)).text_color(c.muted_stronger_foreground).child("·"))
@@ -1476,7 +1477,7 @@ fn detail_parts(parts: &[(&'static str, String)], c: &Colors) -> Div {
         .h(px(DETAIL_HEIGHT))
         .flex()
         .items_center()
-        .gap(px(4.))
+        .gap(px(DOT_GAP))
         .text_size(px(12.))
         .line_height(px(DETAIL_HEIGHT))
         .text_color(c.muted_foreground);
