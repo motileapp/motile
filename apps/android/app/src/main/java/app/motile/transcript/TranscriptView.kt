@@ -534,7 +534,7 @@ private fun StartedByLine(open: () -> Unit) {
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     Row(Modifier.fillMaxWidth().height(ControlSize.Large.height), verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.weight(1f).height(1.dp).background(palette.border))
+        Box(Modifier.weight(1f).height(1.dp).background(palette.borderMuted))
         Row(
             Modifier
                 .padding(horizontal = ControlSize.Regular.padding)
@@ -550,6 +550,6 @@ private fun StartedByLine(open: () -> Unit) {
             Icon(Symbol.CornerLeftUp, size.symbol, Modifier.offset(y = (-1).dp).padding(end = 4.dp), color = palette.foreground)
             Text("Go back to parent thread", style = size.font, color = palette.foreground, maxLines = 1)
         }
-        Box(Modifier.weight(1f).height(1.dp).background(palette.border))
+        Box(Modifier.weight(1f).height(1.dp).background(palette.borderMuted))
     }
 }
