@@ -576,8 +576,8 @@ impl Transcript {
         self.rows.iter().position(|model| model.row.id == row_id)
     }
 
-    /// The row whose time and copy button the pointer over the item reveals: the message under
-    /// it, or the end of the reply under it.
+    /// The row whose time and copy button the pointer over the item reveals: the message or the
+    /// fold under it, or the end of the reply under it.
     pub fn meta_row(&self, item: &Item) -> Option<String> {
         let index = match item {
             Item::Row(index) => *index,
@@ -585,7 +585,7 @@ impl Transcript {
             Item::Working | Item::Top | Item::Bottom | Item::StartedBy(_) => return None,
         };
         let under = self.rows.get(index)?;
-        if under.is_user() {
+        if under.is_user() || matches!(under.row.kind, RowKind::Fold { .. }) {
             return Some(under.row.id.clone());
         }
         for row in &self.rows[index..] {

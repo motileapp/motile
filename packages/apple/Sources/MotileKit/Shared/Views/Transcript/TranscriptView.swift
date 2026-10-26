@@ -853,6 +853,7 @@ final class TranscriptView: FlippedView, RowOwner {
         guard !rows.isEmpty, y >= 0, y < offsets[rows.count] else { return nil }
         let under = index(at: y)
         guard !rows[under].isUser else { return rows[under].id }
+        if case .fold = rows[under].kind { return rows[under].id }
         for row in rows[under...] {
             guard !row.isUser else { return nil }
             if case .turnEnd = row.kind { return row.id }

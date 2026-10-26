@@ -346,10 +346,13 @@ struct GroupContent {
 struct FoldContent {
     let label: String
     let open: Bool
+    /// When the turn started.
+    let at: Double
 
     init(json: JSON) {
         label = TurnEnd.label(stopped: json.bool("stopped"), durationMs: (json["duration_ms"] as? NSNumber)?.intValue)
         open = json.bool("open")
+        at = json.double("at")
     }
 }
 

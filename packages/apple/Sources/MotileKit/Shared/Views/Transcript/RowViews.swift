@@ -593,10 +593,13 @@ final class ToolRowView: RowView {
     static let rowHeight: CGFloat = Platform.scale > 1 ? 36 : 28
     /// What the row keeps from a paragraph above it, so that the two are a paragraph apart.
     static let afterProse: CGFloat = 8
-    /// The room between a fold's line and the rule under it, which sets the turn's work apart from its reply.
+    /// The room between a fold's line and the rule under it.
     private static let ruleGap: CGFloat = 4
     private var above: CGFloat = 0
     private let rule = SurfaceView()
+    /// When a fold's turn started, at its right, seen while the pointer is over the row.
+    private let stamp = TextLabel(font: Theme.smallFont, color: Theme.mutedStrongerForeground)
+    private var folds = false
 
     static func height(_ row: RowModel) -> CGFloat {
         guard case .fold = row.kind else { return rowHeight + row.above }
@@ -628,11 +631,19 @@ final class ToolRowView: RowView {
     /// For a group or a fold: whether it is open. Their rows are the core's, not a detail here.
     private var open: Bool?
 
+    override var showsMeta: Bool {
+        didSet {
+            guard showsMeta != oldValue else { return }
+            stamp.fade(to: showsMeta ? 1 : 0, duration: 0.12)
+        }
+    }
+
     override init(frame: CGRect) {
         super.init(frame: frame)
         highlight.radius = 6
         rule.fill = Theme.borderMuted
         addSubview(rule)
+        addSubview(stamp)
         addSubview(header)
         header.addSubview(highlight)
         header.addSubview(icon)
@@ -675,6 +686,7 @@ final class ToolRowView: RowView {
         open = nil
         startedAt = nil
         rule.isHidden = true
+        folds = false
         switch row.kind {
         case .tool(let tool):
             icon.show(tool.symbol)
@@ -698,7 +710,8 @@ final class ToolRowView: RowView {
             detailText = nil
             open = group.open
         case .fold(let fold):
-            icon.show(.clock)
+            folds = true
+            stamp.string = Time.stamp(fold.at)
             running = false
             setTitle(fold.label)
             hasDetail = true
@@ -709,6 +722,9 @@ final class ToolRowView: RowView {
             break
         }
         above = row.above
+        icon.isHidden = folds
+        stamp.isHidden = !folds || !Platform.hoverReveals
+        stamp.opacity = showsMeta ? 1 : 0
         shine.sweeps = running
         keepTime()
     }
@@ -760,7 +776,8 @@ final class ToolRowView: RowView {
         icon.frame = CGRect(x: bleed, y: middle(16), width: 16, height: 16)
         let timeWidth: CGFloat = startedAt == nil ? 0 : scaled(58)
         let titleWidth = min(title.naturalWidth + 4, width - 60 - timeWidth)
-        title.frame = CGRect(x: bleed + 24, y: middle(scaled(18)), width: titleWidth, height: scaled(18))
+        // A fold heads its turn, so its words start where the icons of the turn's work do.
+        title.frame = CGRect(x: folds ? bleed : bleed + 24, y: middle(scaled(18)), width: titleWidth, height: scaled(18))
         shine.frame = title.frame
         chevron.isHidden = !hasDetail
         chevron.show(open ?? expanded ? .chevronDown : .chevronRight, size: 9)
@@ -770,6 +787,8 @@ final class ToolRowView: RowView {
 
         detailSurface.isHidden = !expanded
         rule.frame = CGRect(x: 0, y: Self.rowHeight + above + Self.ruleGap, width: width, height: 1)
+        let stampWidth = ceil(stamp.naturalWidth)
+        stamp.frame = CGRect(x: width - stampWidth, y: above + middle(scaled(16)), width: stampWidth, height: scaled(16))
         guard expanded else { return Self.rowHeight + above + (rule.isHidden ? 0 : Self.ruleGap + 1) }
         if !loadedDetail {
             detail.content = detailText?() ?? NSAttributedString()
