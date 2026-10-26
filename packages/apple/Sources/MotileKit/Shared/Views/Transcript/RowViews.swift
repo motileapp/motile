@@ -1336,8 +1336,8 @@ final class LineageView: FlippedView {
 
     override init(frame: CGRect) {
         super.init(frame: frame)
-        leading.fill = Theme.border
-        trailing.fill = Theme.border
+        leading.fill = Theme.borderMuted
+        trailing.fill = Theme.borderMuted
         pill.radius = Self.size.height / 2
         pill.stroke = Theme.borderAccent
         [leading, trailing, pill, symbol, words].forEach { addSubview($0) }

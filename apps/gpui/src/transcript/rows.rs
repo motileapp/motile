@@ -1692,7 +1692,7 @@ pub fn started_by(end: bool, parent: &str, ctx: &RowContext, cx: &App) -> AnyEle
     let c = colors(cx);
     let id = parent.to_string();
     let size = ControlSize::Regular;
-    let line = || div().flex_1().h(px(1.)).bg(c.border);
+    let line = || div().flex_1().h(px(1.)).bg(c.border_muted);
     let store = ctx.store.clone();
     let pill = div()
         .id(("started-by", usize::from(end)))
