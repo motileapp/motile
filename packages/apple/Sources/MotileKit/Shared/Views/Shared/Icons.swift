@@ -264,15 +264,15 @@ struct ServerLabel: View {
     }
 }
 
-/// The server's symbol, in its state's colour while it isn't connected and in what is around it
-/// otherwise.
+/// The server's symbol, in its state's colour while it can't be reached and in what is around it
+/// otherwise, also while it connects.
 struct ServerSymbol: View {
     let server: Server
     var size: CGFloat = 10
 
     var body: some View {
         let image = Image(.server, size: size)
-        if let tint = server.stateTint {
+        if let tint = server.stateTint, server.state != .connecting {
             image.foregroundStyle(tint)
         } else {
             image

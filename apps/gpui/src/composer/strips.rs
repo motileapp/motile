@@ -710,7 +710,7 @@ pub fn context_strip(
     // A draft whose project is on more than one server moves to another from here.
     let server_menu = |server: &Server, title: String| {
         let (choose, copies, help) = (store.clone(), copies.clone(), server_help.clone());
-        let tint = server.state_tint(&c);
+        let tint = server.down_tint(&c);
         let symbol = icons::symbol("server", ControlSize::Regular.symbol())
             .when_some(tint, |symbol, tint| symbol.text_color(tint));
         ActionMenu::new("strip-server", title, move |_, _| {
@@ -818,7 +818,7 @@ pub fn context_strip(
         if !copies.is_empty() {
             return div().flex_shrink_0().pl(px(SERVER_MENU_LEAD)).child(server_menu(server, title)).into_any_element();
         }
-        let tint = server.state_tint(&c).unwrap_or(c.muted_foreground);
+        let tint = server.down_tint(&c).unwrap_or(c.muted_foreground);
         div()
             .id("strip-server")
             .flex_shrink_0()
