@@ -155,8 +155,6 @@ pub enum PanelPage {
     Commands,
     /// The projects, to start a thread in one.
     Projects,
-    /// The projects, to choose the one the open draft starts in.
-    DraftProject,
     /// The threads, to open one.
     Threads,
     /// The servers, to add a project on one.
@@ -923,18 +921,74 @@ impl Store {
         self.no_projects.iter().filter(|project| self.is_live(project))
     }
 
-    /// What ⌘⌥N opens: the composer's server's "No project", or the next server's while an empty
-    /// draft without a project is open, so that pressing it again goes through the servers.
-    fn no_project_to_open(&self) -> Option<&Project> {
-        let live: Vec<&Project> = self.live_no_projects().collect();
-        let open = self.selected_draft().filter(|draft| self.preview(draft).is_none());
-        if let Some(index) = open
-            .and_then(|draft| live.iter().position(|project| draft.project_id.as_deref() == Some(project.id.as_str())))
-        {
-            return Some(live[(index + 1) % live.len()]);
+    /// The projects a new thread can start in, each once however many servers have it: the one
+    /// a thread was last started in first, and "No project" last.
+    pub fn pickable_projects(&self) -> Vec<&Project> {
+        let mut seen = HashSet::new();
+        let keys: Vec<&str> = self
+            .recent_projects()
+            .into_iter()
+            .chain(self.live_no_projects())
+            .map(|project| project.key.as_str())
+            .filter(|key| seen.insert(*key))
+            .collect();
+        keys.into_iter().filter_map(|key| self.preferred_copy(key)).collect()
+    }
+
+    /// The project on each of the account's servers that has it, in the servers' order.
+    pub fn copies(&self, key: &str) -> Vec<&Project> {
+        let all: Vec<&Project> =
+            self.projects.iter().chain(&self.no_projects).filter(|project| project.key == key).collect();
+        self.live_servers()
+            .filter_map(|server| all.iter().find(|project| project.server_id == server.id).copied())
+            .collect()
+    }
+
+    /// The copy of the project a new thread starts in: the one the open thread or draft is in,
+    /// then the one last picked, on a connected server before one that isn't.
+    pub fn preferred_copy(&self, key: &str) -> Option<&Project> {
+        let copies = self.copies(key);
+        let here = self.composer_project_id();
+        if let Some(copy) = copies.iter().find(|copy| Some(copy.id.as_str()) == here) {
+            return Some(copy);
         }
-        let server_id = self.composer_server().map(|server| server.id.as_str());
-        live.iter().find(|project| Some(project.server_id.as_str()) == server_id).or(live.first()).copied()
+        let picked = self.prefs.string(&format!("new.server-{key}"));
+        let is_picked = |copy: &&&Project| picked.as_deref() == Some(copy.server_id.as_str());
+        let connected: Vec<&Project> = copies
+            .iter()
+            .copied()
+            .filter(|copy| self.server(Some(&copy.server_id)).is_some_and(Server::connected))
+            .collect();
+        connected
+            .iter()
+            .find(is_picked)
+            .or(connected.first())
+            .or_else(|| copies.iter().find(is_picked))
+            .or(copies.first())
+            .copied()
+    }
+
+    /// The servers the open draft's project is on, when it is on more than one.
+    pub fn draft_project_copies(&self) -> Vec<&Project> {
+        if self.selected_thread().is_some() {
+            return Vec::new();
+        }
+        let Some(project) = self.project(self.selected_draft().and_then(|draft| draft.project_id.as_deref())) else {
+            return Vec::new();
+        };
+        let copies = self.copies(&project.key);
+        if copies.len() > 1 { copies } else { Vec::new() }
+    }
+
+    /// What ⌘⇧N and ⌘⌥N open: the project on the server picked for it, or the next server that has
+    /// it while an empty draft is open there, so that pressing again goes through the servers.
+    fn project_to_open(&self, key: &str) -> Option<&Project> {
+        let copies = self.copies(key);
+        let open = self.selected_draft().filter(|draft| self.preview(draft).is_none());
+        let index =
+            open.and_then(|draft| copies.iter().position(|copy| draft.project_id.as_deref() == Some(copy.id.as_str())));
+        let Some(index) = index else { return self.preferred_copy(key) };
+        Some(copies[(index + 1) % copies.len()])
     }
 
     /// The first project a thread can start in: a folder, else a server's "No project".
@@ -945,6 +999,13 @@ impl Store {
     /// Whether the open thread's server was removed, so that it can only go on on another one.
     pub fn open_thread_removed(&self) -> bool {
         self.selected_thread().is_some_and(|thread| self.is_removed(&thread.server_id))
+    }
+
+    fn composer_project_id(&self) -> Option<&str> {
+        match self.selected_thread() {
+            Some(thread) => Some(&thread.project_id),
+            None => self.selected_draft()?.project_id.as_deref(),
+        }
     }
 
     /// The project the composer's thread works in, or the one the open draft would start in.
@@ -1249,6 +1310,12 @@ impl Store {
     fn remember_choices(&mut self, draft: &ThreadDraft, before: &ThreadDraft) {
         if draft.project_id != before.project_id {
             self.prefs.set("new.project", draft.project_id.clone());
+            let picked = self
+                .project(draft.project_id.as_deref())
+                .map(|project| (project.key.clone(), project.server_id.clone()));
+            if let Some((key, server)) = picked {
+                self.prefs.set(&format!("new.server-{key}"), server);
+            }
         }
         if draft.worktree != before.worktree {
             self.prefs.set("new.worktree", draft.worktree == Some(true));

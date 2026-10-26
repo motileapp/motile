@@ -128,7 +128,7 @@ internal class PanelState(start: PanelPage, private val store: AppStore, private
         steered = true
     }
 
-    /** The highlight starts on the first project, past "No project" of each server. */
+    /** The highlight starts on the first project, past "No project". */
     private val startIndex: Int
         get() = sections(page).flatMap { it.items }.firstOrNull { it.selectable && !it.oneLine }?.index ?: 0
 
@@ -287,29 +287,34 @@ internal class PanelState(start: PanelPage, private val store: AppStore, private
 
     private fun serverName(id: String): String = store.server(id)?.name ?: "your server"
 
-    /** The projects, the one the open thread works in first, then by when a thread last started. */
+    /** The projects, each once, the one the open thread works in first, then by when a thread last started. */
     private val projects: List<Project>
         get() {
-            val recent = store.recentProjects
-            val current = store.composerProject
-            if (current == null || store.projects.none { it.id == current.id }) return recent
-            return listOf(current) + recent.filter { it.id != current.id }
+            val recent = store.pickableProjects.filter { !it.noProject }
+            val current = recent.firstOrNull { it.key == store.composerProject?.key } ?: return recent
+            return listOf(current) + recent.filter { it.key != current.key }
         }
 
+    /** The servers that have the project, by their short names. */
+    private fun serverNames(project: Project): String =
+        store.copies(project.key).mapNotNull { store.server(it.serverID)?.shortName }.joinToString(", ")
+
     private fun projectItems(pick: (Project) -> Unit): List<PanelItem> = projects.map { project ->
-        val server = store.server(project.serverID)?.shortName ?: ""
-        PanelItem("project-${project.id}", project.name, "$server ${project.path}", PanelIcon.Project(project)) { pick(project) }.apply {
-            detailParts = if (server.isEmpty()) listOf(Symbol.Folder to project.path) else listOf(Symbol.Server to server, Symbol.Folder to project.path)
+        val servers = serverNames(project)
+        PanelItem("project-${project.key}", project.name, "$servers ${project.path}", PanelIcon.Project(project)) { pick(project) }.apply {
+            detailParts = if (servers.isEmpty()) listOf(Symbol.Folder to project.path) else listOf(Symbol.Server to servers, Symbol.Folder to project.path)
         }
     }
 
-    /** "No project" of each server, one line each. */
-    private fun noProjectItems(pick: (Project) -> Unit): List<PanelItem> = store.noProjects.map { project ->
-        val server = store.server(project.serverID)?.shortName ?: ""
-        PanelItem("project-${project.id}", "New thread", server, PanelIcon.Project(project)) { pick(project) }.apply {
-            detailParts = if (server.isEmpty()) emptyList() else listOf(Symbol.Server to server)
+    /** "No project", once for every server. */
+    private fun noProjectItems(pick: (Project) -> Unit): List<PanelItem> {
+        val project = store.preferredCopy(Project.NO_PROJECT_KEY) ?: return emptyList()
+        val servers = serverNames(project)
+        val item = PanelItem("project-${project.key}", "New thread", servers, PanelIcon.Project(project)) { pick(project) }.apply {
+            detailParts = if (servers.isEmpty()) emptyList() else listOf(Symbol.Server to servers)
             oneLine = true
         }
+        return listOf(item)
     }
 
     private val addProject: PanelItem

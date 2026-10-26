@@ -425,41 +425,46 @@ struct CommandPanel: View {
         store.server(id)?.name ?? "your server"
     }
 
-    /// The projects, the one the open thread works in first, then by when a thread last started.
+    /// The projects, each once, the one the open thread works in first, then by when a thread
+    /// last started.
     private var projects: [Project] {
-        let recent = store.recentProjects
-        guard let current = store.composerProject, store.projects.contains(where: { $0.id == current.id }) else { return recent }
-        return [current] + recent.filter { $0.id != current.id }
+        let recent = store.pickableProjects.filter { !$0.noProject }
+        guard let current = recent.first(where: { $0.key == store.composerProject?.key }) else { return recent }
+        return [current] + recent.filter { $0.key != current.key }
+    }
+
+    /// The servers that have the project, by their short names.
+    private func serverNames(_ project: Project) -> String {
+        store.copies(of: project.key).compactMap { store.server($0.serverID)?.shortName }.joined(separator: ", ")
     }
 
     /// `shortcuts` numbers the first nine for ⌘ and a digit.
     private func projectItems(shortcuts: Bool, pick: @escaping (Project) -> Void) -> [PanelItem] {
         projects.enumerated().map { position, project in
-            let server = store.server(project.serverID)?.shortName ?? ""
+            let servers = serverNames(project)
             var item = PanelItem(
-                id: "project-\(project.id)",
+                id: "project-\(project.key)",
                 title: project.name,
-                detail: "\(server) \(project.path)",
+                detail: "\(servers) \(project.path)",
                 icon: .project(project),
                 shortcut: shortcuts && position < 9 ? position + 1 : nil
             ) { pick(project) }
-            item.detailParts = server.isEmpty ? [(.folder, project.path)] : [(.server, server), (.folder, project.path)]
+            item.detailParts = servers.isEmpty ? [(.folder, project.path)] : [(.server, servers), (.folder, project.path)]
             return item
         }
     }
 
-    /// "No project" of each server, one line each.
+    /// "No project", once for every server.
     private func noProjectItems(pick: @escaping (Project) -> Void) -> [PanelItem] {
-        store.noProjects.map { project in
-            let server = store.server(project.serverID)?.shortName ?? ""
-            var item = PanelItem(id: "project-\(project.id)", title: "New thread", detail: server, icon: .project(project)) { pick(project) }
-            item.detailParts = server.isEmpty ? [] : [(.server, server)]
-            item.oneLine = true
-            return item
-        }
+        guard let project = store.preferredCopy(of: Project.noProjectKey) else { return [] }
+        let servers = serverNames(project)
+        var item = PanelItem(id: "project-\(project.key)", title: "New thread", detail: servers, icon: .project(project)) { pick(project) }
+        item.detailParts = servers.isEmpty ? [] : [(.server, servers)]
+        item.oneLine = true
+        return [item]
     }
 
-    /// The highlight starts on the first project, past "No project" of each server.
+    /// The highlight starts on the first project, past "No project".
     private func startIndex(_ page: PanelPage) -> Int {
         sections(page).flatMap(\.items).first { $0.selectable && !$0.oneLine }?.index ?? 0
     }

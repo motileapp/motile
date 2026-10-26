@@ -827,6 +827,47 @@ final class AppStore {
         return projects.sorted { (lastUsed[$0.id] ?? $0.createdAt, $0.id) > (lastUsed[$1.id] ?? $1.createdAt, $1.id) }
     }
 
+    /// The projects a new thread can start in, each once however many servers have it: the one
+    /// a thread was last started in first, and "No project" last.
+    var pickableProjects: [Project] {
+        var seen = Set<String>()
+        let keys = (recentProjects + noProjects).map(\.key).filter { seen.insert($0).inserted }
+        return keys.compactMap(preferredCopy(of:))
+    }
+
+    /// The project on each of the account's servers that has it, in the servers' order.
+    func copies(of key: String) -> [Project] {
+        let all = (projects + noProjects).filter { $0.key == key }
+        return servers.compactMap { server in all.first { $0.serverID == server.id } }
+    }
+
+    /// The copy of the project a new thread starts in: the one the open thread or draft is in,
+    /// then the one last picked, on a connected server before one that isn't.
+    func preferredCopy(of key: String) -> Project? {
+        let copies = copies(of: key)
+        if let here = composerProject, let copy = copies.first(where: { $0.id == here.id }) { return copy }
+        let picked = defaults.string(forKey: "new.server-\(key)")
+        let connected = copies.filter { server($0.serverID)?.state == .connected }
+        return connected.first { $0.serverID == picked } ?? connected.first ?? copies.first { $0.serverID == picked } ?? copies.first
+    }
+
+    /// The servers the open draft's project is on, when it is on more than one.
+    var draftProjectCopies: [Project] {
+        guard selectedThread == nil, let project = project(selectedDraft?.projectID) else { return [] }
+        let copies = copies(of: project.key)
+        return copies.count > 1 ? copies : []
+    }
+
+    /// What ⌘⇧N and ⌘⌥N open: the project on the server picked for it, or the next server that has
+    /// it while an empty draft is open there, so that pressing again goes through the servers.
+    func projectToOpen(_ key: String) -> Project? {
+        let copies = copies(of: key)
+        if let draft = selectedDraft, preview(of: draft) == nil, let index = copies.firstIndex(where: { $0.id == draft.projectID }) {
+            return copies[(index + 1) % copies.count]
+        }
+        return preferredCopy(of: key)
+    }
+
     func server(_ id: String?) -> Server? {
         servers.first { $0.id == id } ?? removedServers.first { $0.id == id }
     }
@@ -1137,7 +1178,10 @@ final class AppStore {
 
     /// Has the next draft start with what was just chosen, and only that.
     private func rememberChoices(of draft: ThreadDraft, changedFrom before: ThreadDraft) {
-        if draft.projectID != before.projectID { defaults.set(draft.projectID, forKey: "new.project") }
+        if draft.projectID != before.projectID, let project = project(draft.projectID) {
+            defaults.set(project.id, forKey: "new.project")
+            defaults.set(project.serverID, forKey: "new.server-\(project.key)")
+        }
         if draft.worktree != before.worktree { defaults.set(draft.worktree == true, forKey: "new.worktree") }
         if draft.access != before.access { defaults.set(draft.access.rawValue, forKey: "new.access") }
         guard let server = server(of: draft) else { return }
@@ -2073,17 +2117,9 @@ final class AppStore {
     /// What the toolbar button and ⌘N do: with one project there is nothing to pick and the draft
     /// opens at once, without one it starts without a project, and with more the panel asks which.
     func newThread() {
-        guard projects.count > 1 else { return startNewThread(in: projects.first ?? noProjects.first) }
+        let picked = pickableProjects.filter { !$0.noProject }
+        guard picked.count > 1 else { return startNewThread(in: picked.first ?? preferredCopy(of: Project.noProjectKey)) }
         openPanel(.projects)
-    }
-
-    /// What ⌘⌥N opens: the composer's server's "No project", or the next server's while an empty
-    /// draft without a project is open, so that pressing it again goes through the servers.
-    var noProjectToOpen: Project? {
-        if let draft = selectedDraft, preview(of: draft) == nil, let index = noProjects.firstIndex(where: { $0.id == draft.projectID }) {
-            return noProjects[(index + 1) % noProjects.count]
-        }
-        return noProjects.first { $0.serverID == composerServer?.id } ?? noProjects.first
     }
 
     /// Opens an empty draft. The one that was open stays in the sidebar if something was written

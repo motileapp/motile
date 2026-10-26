@@ -54,6 +54,67 @@ pub fn current_branch(path: &str) -> Option<String> {
     }
 }
 
+/// Where the folder's repository was cloned from, as `github.com/owner/name`, read from git's own
+/// files: its `origin`, or its first remote.
+pub fn origin_of(path: &str) -> Option<String> {
+    let dot_git = Path::new(path).join(".git");
+    let git_dir = match std::fs::read_to_string(&dot_git) {
+        Ok(pointer) => Path::new(path).join(pointer.trim().strip_prefix("gitdir:")?.trim()),
+        Err(_) => dot_git,
+    };
+    // A worktree's own folder points at the repository's, which holds the config.
+    let common = match std::fs::read_to_string(git_dir.join("commondir")) {
+        Ok(common) => git_dir.join(common.trim()),
+        Err(_) => git_dir,
+    };
+    let config = std::fs::read_to_string(common.join("config")).ok()?;
+    let urls = remote_urls(&config);
+    let (_, url) = urls.iter().find(|(name, _)| name == "origin").or(urls.first())?;
+    repository_key(url)
+}
+
+/// Each remote of a git config with its URL, in the order they are written.
+fn remote_urls(config: &str) -> Vec<(String, String)> {
+    let mut urls = Vec::new();
+    let mut remote: Option<String> = None;
+    for line in config.lines().map(str::trim) {
+        if line.starts_with('[') {
+            remote = line.strip_prefix("[remote \"").and_then(|rest| rest.strip_suffix("\"]")).map(str::to_string);
+            continue;
+        }
+        let Some(name) = &remote else { continue };
+        let Some((key, value)) = line.split_once('=') else { continue };
+        if key.trim() == "url" && !urls.iter().any(|(known, _)| known == name) {
+            urls.push((name.clone(), value.trim().to_string()));
+        }
+    }
+    urls
+}
+
+/// The same repository's URLs alike: `git@github.com:owner/name.git` and
+/// `https://github.com/owner/name` are both `github.com/owner/name`.
+fn repository_key(url: &str) -> Option<String> {
+    let url = url.trim().trim_end_matches('/');
+    let url = url.strip_suffix(".git").unwrap_or(url);
+    if let Some(path) = url.strip_prefix("file://").or(url.starts_with('/').then_some(url)) {
+        return Some(path.to_string());
+    }
+    let (address, has_scheme) = url.split_once("://").map_or((url, false), |(_, rest)| (rest, true));
+    let address = address.split_once('@').map_or(address, |(_, rest)| rest);
+    let split = address.find(['/', ':'])?;
+    let (host, path) = (&address[..split], &address[split + 1..]);
+    // `ssh://host:22/owner/name` has a port where `host:owner/name` has the path.
+    let path = match has_scheme && address[split..].starts_with(':') {
+        true => path.trim_start_matches(|c: char| c.is_ascii_digit()),
+        false => path,
+    };
+    let path = path.trim_matches('/');
+    if host.is_empty() || path.is_empty() {
+        return None;
+    }
+    Some(format!("{}/{path}", host.to_lowercase()))
+}
+
 /// Local branches first, then the ones only on a remote, each with the latest commit first. The
 /// branch that is checked out leads, and the default one follows it.
 pub async fn branches(folder: &str, environment: &Environment) -> anyhow::Result<Vec<Branch>> {
@@ -1048,6 +1109,35 @@ fn refusal(said: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_repository_has_one_key_however_its_remote_is_written() {
+        let urls = [
+            "git@github.com:Owner/name.git",
+            "https://github.com/Owner/name",
+            "https://user:token@GitHub.com/Owner/name.git/",
+            "ssh://git@github.com:22/Owner/name.git",
+            "git+ssh://git@github.com/Owner/name",
+        ];
+
+        for url in urls {
+            assert_eq!(repository_key(url).as_deref(), Some("github.com/Owner/name"), "{url}");
+        }
+        assert_eq!(repository_key("/srv/git/name.git").as_deref(), Some("/srv/git/name"));
+        assert_eq!(repository_key("file:///srv/git/name").as_deref(), Some("/srv/git/name"));
+        assert_eq!(repository_key(""), None);
+    }
+
+    #[test]
+    fn the_origin_is_the_remote_named_origin_or_else_the_first() {
+        let config = "[core]\n\tbare = false\n[remote \"fork\"]\n\turl = git@github.com:me/name.git\n\
+                      [remote \"origin\"]\n\turl = https://github.com/owner/name\n\tfetch = +refs/heads/*\n";
+
+        let urls = remote_urls(config);
+
+        assert_eq!(urls[0], ("fork".to_string(), "git@github.com:me/name.git".to_string()));
+        assert_eq!(urls[1], ("origin".to_string(), "https://github.com/owner/name".to_string()));
+    }
 
     fn names(branches: &[Branch]) -> Vec<&str> {
         branches.iter().map(|branch| branch.name.as_str()).collect()

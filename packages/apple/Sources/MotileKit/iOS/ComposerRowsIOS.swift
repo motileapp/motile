@@ -37,8 +37,8 @@ struct ComposerRows: Layout {
     }
 }
 
-/// The row of the composer's buttons: the one that attaches, the server's name, the model's
-/// name, which opens the thread's settings, and the ones that stop and send. Collapsed, the text
+/// The row of the composer's buttons: the one that attaches, the model's name with the effort and
+/// the server, which opens the thread's settings, and the ones that stop and send. Collapsed, the text
 /// is in the middle of the row instead of the names.
 struct ComposerTouchControls: View {
     @Environment(AppStore.self) private var store
@@ -47,14 +47,10 @@ struct ComposerTouchControls: View {
     var body: some View {
         HStack(spacing: 0) {
             AttachMenu()
-            if !collapsed, let server = store.composerServer {
-                ServerLabel(server: server, weight: .medium, showsState: true)
-                    .padding(.leading, 4)
-                    .appearing()
-            }
             Spacer(minLength: 8)
             if !collapsed {
                 settingsButton
+                    .fixedSize()
                     .appearing()
             }
             ComposerSendButtons()
@@ -66,7 +62,8 @@ struct ComposerTouchControls: View {
         let logo = model.map { AnyView(AgentIcon(agent: $0.agent, size: ControlSize.regular.symbol)) }
         let effort = store.composerEffort.flatMap { $0.isEmpty ? nil : ComposerView.effortSymbol($0) }
         return ActionButton(
-            store.composerModelLabel, picture: logo, detail: effort, variant: .ghost, symbolSize: ControlSize.regular.symbol, gap: 5, opens: true
+            store.composerModelLabel, picture: logo, detail: effort, place: store.composerServer?.shortName, variant: .ghost,
+            symbolSize: ControlSize.regular.symbol, gap: 5, opens: true
         ) {
             store.showsThreadSettings = true
         }

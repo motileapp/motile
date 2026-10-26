@@ -15,6 +15,10 @@ struct ComposerStrip: ViewModifier {
     /// The room around a control in a strip, which is the control's to click. One that ends the
     /// strip stands as far from its side as from its top and bottom.
     static let margin = EdgeInsets(top: inset, leading: 4, bottom: inset, trailing: inset)
+    /// The same for a control that starts the strip.
+    static let firstMargin = EdgeInsets(top: inset, leading: inset, bottom: inset, trailing: 4)
+    /// The same for a control between two others.
+    static let middleMargin = EdgeInsets(top: inset, leading: 4, bottom: inset, trailing: 4)
 
     let edge: Edge
     /// Nil for a strip that is as tall as what is in it.
@@ -83,26 +87,37 @@ struct ContextStrip: View {
     private func parts(workspaceLabel: Bool) -> some View {
         HStack(spacing: 0) {
             if let server {
-                part(server.shortName) {
-                    Image(.server, size: 11)
-                        .foregroundStyle(server.stateTint ?? .themeMutedForeground)
-                }
-                .padding(.leading, 14)
-                .help("On \(server.name)")
+                serverPart(server)
                 ComposerDivider()
-                    .padding(.horizontal, 10)
             }
-            part(project.name) {
-                ProjectIcon(project: project, size: 13)
-            }
-            .padding(.leading, server == nil ? 14 : 0)
-            .help(project.path)
+            label(project.name, icon: .picture(AnyView(ProjectIcon(project: project, size: 13))))
+                .padding(server == nil ? ComposerStrip.firstMargin : ComposerStrip.middleMargin)
+                .help(project.path)
             Spacer(minLength: 8)
             workspace(labeled: workspaceLabel)
             if hasWorkspace, branch != nil {
                 ComposerDivider()
             }
             branchPart
+        }
+    }
+
+    /// The server, which a draft whose project is on more than one moves to another from.
+    @ViewBuilder private func serverPart(_ server: Server) -> some View {
+        let copies = store.draftProjectCopies
+        let symbol = AnyView(ServerSymbol(server: server, size: ControlSize.regular.symbol))
+        if copies.isEmpty {
+            label(server.shortName, icon: .picture(symbol))
+                .padding(ComposerStrip.firstMargin)
+                .help("On \(server.name)")
+        } else {
+            ActionMenu(
+                server.shortName, picture: symbol, help: store.shortcuts.help("The server the thread starts on", "composer.server"),
+                margin: ComposerStrip.firstMargin
+            ) {
+                ServerMenuItems(copies: copies)
+            }
+            .shortcutTarget("composer.server")
         }
     }
 
@@ -159,14 +174,13 @@ struct ContextStrip: View {
                 .help("The thread works in the project's folder")
         } else if store.selectedThread == nil, store.canUseWorktrees(of: project) {
             let inWorktree = store.draftUsesWorktree
-            let margin = EdgeInsets(top: ComposerStrip.inset, leading: 4, bottom: ComposerStrip.inset, trailing: 4)
             let title = inWorktree ? "New worktree" : "Current checkout"
             ActionMenu(
                 labeled ? title : nil, icon: inWorktree ? .folderGit2 : .folder,
                 help: store.shortcuts.help(
                     inWorktree ? "The thread works in a folder and on a branch of its own" : "The thread works in the project's folder", "composer.workspace"
                 ),
-                margin: margin
+                margin: ComposerStrip.middleMargin
             ) {
                 Section("Workspace") {
                     Toggle(isOn: Binding(get: { !inWorktree }, set: { _ in store.setDraftWorktree(false) })) {
@@ -185,30 +199,20 @@ struct ContextStrip: View {
     }
 
     private func working(in title: String?, symbol: Symbol) -> some View {
-        part(title) {
-            Image(symbol, size: 11)
-        }
-        .padding(.horizontal, 13)
+        label(title, icon: .symbol(symbol))
+            .padding(ComposerStrip.middleMargin)
     }
 
-    private func part(_ title: String?, @ViewBuilder icon: () -> some View) -> some View {
-        HStack(spacing: 5) {
-            icon()
-            if let title {
-                Text(title)
-                    .font(.ui(size: 12))
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-            }
-        }
-        .foregroundStyle(Color.themeMutedForeground)
+    /// What can't be changed here, set as the controls beside it are.
+    private func label(_ title: String?, icon: ControlIcon) -> some View {
+        ControlLabel(title: title, icon: icon, size: .regular)
+            .truncationMode(.middle)
+            .foregroundStyle(Color.themeMutedForeground)
     }
 
     /// A branch that can't be switched from here, set as the button that switches one is.
     private func branchLabel(_ branch: String) -> some View {
-        ControlLabel(title: branch, icon: .symbol(.gitBranch), size: .regular)
-            .truncationMode(.middle)
-            .foregroundStyle(Color.themeMutedForeground)
+        label(branch, icon: .symbol(.gitBranch))
             .padding(ComposerStrip.margin)
     }
 }

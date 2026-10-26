@@ -218,6 +218,8 @@ fun ControlLabel(
     padding: Dp? = null,
     /** A symbol after a dot behind the words, as the reasoning effort after the model. */
     detail: Symbol? = null,
+    /** Words after another dot, as the server after the effort. */
+    place: String? = null,
     /** Words after the title in a colour of their own, as "working" after "2 agents", which leave the title in the foreground. */
     tinted: Pair<String, Color>? = null,
 ) {
@@ -238,8 +240,8 @@ fun ControlLabel(
         ) {
             if (icon != null || title != null) {
                 Box(Modifier.weight(1f, fill = false), contentAlignment = Alignment.Center) {
-                    ControlWords(title, tinted, icon, size, markSize, pictureSide, gap, detail, pending, spins = pending && icon != null, Modifier.alpha(if (waitingTitle == null) 1f else 0f))
-                    if (waitingTitle != null) ControlWords(waitingTitle, null, icon, size, markSize, pictureSide, gap, null, pending, spins = true)
+                    ControlWords(title, tinted, icon, size, markSize, pictureSide, gap, detail, place, pending, spins = pending && icon != null, Modifier.alpha(if (waitingTitle == null) 1f else 0f))
+                    if (waitingTitle != null) ControlWords(waitingTitle, null, icon, size, markSize, pictureSide, gap, null, null, pending, spins = true)
                 }
             }
             if (chevron) Icon(Symbol.ChevronDown, size.textSize, color = LocalPalette.current.mutedStrongerForeground, trimmed = true)
@@ -258,6 +260,7 @@ private fun ControlWords(
     pictureSide: Dp,
     gap: Dp?,
     detail: Symbol?,
+    place: String?,
     pending: Boolean,
     spins: Boolean,
     modifier: Modifier = Modifier,
@@ -282,6 +285,10 @@ private fun ControlWords(
                 if (detail != null) {
                     Text(" · ", style = size.font, color = muted, maxLines = 1)
                     Icon(detail, markSize - 2, color = muted)
+                }
+                if (place != null) {
+                    Text(" · ", style = size.font, color = muted, maxLines = 1)
+                    Text(place, style = size.font, color = muted, maxLines = 1)
                 }
             }
         }
@@ -369,6 +376,7 @@ fun ActionButton(
     picture: (@Composable () -> Unit)? = null,
     pictures: (@Composable () -> Unit)? = null,
     detail: Symbol? = null,
+    place: String? = null,
     /** Words after its title in its tint, which leave the title in the foreground. */
     tinted: String? = null,
     help: String? = null,
@@ -398,7 +406,7 @@ fun ActionButton(
     val label = @Composable {
         ControlLabel(
             words, ControlIcon.of(icon, picture, pictures), size, chevron = opens, pending = pending, pendingTitle = pendingTitle, fills = fills,
-            alignment = alignment, symbolSize = symbolSize, gap = gap, padding = padding, detail = detail,
+            alignment = alignment, symbolSize = symbolSize, gap = gap, padding = padding, detail = detail, place = place,
             tinted = tinted?.let { tail -> tint?.let { tail to it } },
         )
     }

@@ -861,6 +861,42 @@ class AppStore(private val context: Context) {
             return projects.sortedWith(compareByDescending<Project> { lastUsed[it.id] ?: it.createdAt }.thenByDescending { it.id })
         }
 
+    /** The projects a new thread can start in, each once however many servers have it: the one a thread was last started in first, and "No project" last. */
+    val pickableProjects: List<Project>
+        get() = (recentProjects + noProjects).map { it.key }.distinct().mapNotNull(::preferredCopy)
+
+    /** The project on each of the account's servers that has it, in the servers' order. */
+    fun copies(key: String): List<Project> {
+        val all = (projects + noProjects).filter { it.key == key }
+        return servers.mapNotNull { server -> all.firstOrNull { it.serverID == server.id } }
+    }
+
+    /** The copy of the project a new thread starts in: the one the open thread or draft is in, then the one last picked, on a connected server before one that isn't. */
+    fun preferredCopy(key: String): Project? {
+        val copies = copies(key)
+        composerProject?.let { here -> copies.firstOrNull { it.id == here.id }?.let { return it } }
+        val picked = Preferences.string("new.server-$key")
+        val connected = copies.filter { server(it.serverID)?.state == Server.State.Connected }
+        return connected.firstOrNull { it.serverID == picked } ?: connected.firstOrNull() ?: copies.firstOrNull { it.serverID == picked } ?: copies.firstOrNull()
+    }
+
+    /** The servers the open draft's project is on, when it is on more than one. */
+    val draftProjectCopies: List<Project>
+        get() {
+            if (selectedThread != null) return emptyList()
+            val project = project(selectedDraft?.projectID) ?: return emptyList()
+            return copies(project.key).takeIf { it.size > 1 } ?: emptyList()
+        }
+
+    /** What Ctrl+Shift+N and Ctrl+Alt+N open: the project on the server picked for it, or the next server that has it while an empty draft is open there, so that pressing again goes through the servers. */
+    fun projectToOpen(key: String): Project? {
+        val copies = copies(key)
+        val draft = selectedDraft?.takeIf { preview(it) == null }
+        val index = copies.indexOfFirst { it.id == draft?.projectID }
+        if (draft != null && index >= 0) return copies[(index + 1) % copies.size]
+        return preferredCopy(key)
+    }
+
     fun server(id: String?): Server? = servers.firstOrNull { it.id == id } ?: removedServers.firstOrNull { it.id == id }
 
     /** The servers whose agents' spending the usage counts: the removed ones' too, from the copies. */
@@ -1168,7 +1204,11 @@ class AppStore(private val context: Context) {
 
     /** Has the next draft start with what was just chosen, and only that. */
     private fun rememberChoices(draft: ThreadDraft, before: ThreadDraft) {
-        if (draft.projectID != before.projectID) Preferences.set("new.project", draft.projectID)
+        val project = project(draft.projectID)
+        if (draft.projectID != before.projectID && project != null) {
+            Preferences.set("new.project", project.id)
+            Preferences.set("new.server-${project.key}", project.serverID)
+        }
         if (draft.worktree != before.worktree) Preferences.set("new.worktree", draft.worktree == true)
         if (draft.access != before.access) Preferences.set("new.access", draft.access.raw)
         val server = serverOf(draft) ?: return
@@ -2050,18 +2090,10 @@ class AppStore(private val context: Context) {
 
     /** What the new thread button does: with one project there is nothing to pick and the draft opens at once, without one it starts without a project, and with more the panel asks which. */
     fun newThread() {
-        if (projects.size <= 1) return startNewThread(projects.firstOrNull() ?: noProjects.firstOrNull())
+        val picked = pickableProjects.filter { !it.noProject }
+        if (picked.size <= 1) return startNewThread(picked.firstOrNull() ?: preferredCopy(Project.NO_PROJECT_KEY))
         openPanel(PanelPage.Projects)
     }
-
-    /** What Ctrl+Alt+N opens: the composer's server's "No project", or the next server's while an empty draft without a project is open, so that pressing it again goes through the servers. */
-    val noProjectToOpen: Project?
-        get() {
-            val draft = selectedDraft?.takeIf { preview(it) == null }
-            val index = noProjects.indexOfFirst { it.id == draft?.projectID }
-            if (draft != null && index >= 0) return noProjects[(index + 1) % noProjects.size]
-            return noProjects.firstOrNull { it.serverID == composerServer?.id } ?: noProjects.firstOrNull()
-        }
 
     /** Opens an empty draft. The one that was open stays in the sidebar if something was written in it. */
     fun startNewThread(project: Project? = null) {

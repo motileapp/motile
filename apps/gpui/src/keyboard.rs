@@ -101,6 +101,7 @@ pub fn perform(store: &Entity<Store>, command: &str, window: &mut Window, cx: &m
         "modelPicker.toggle" | "composer.effort" | "composer.access" | "composer.workspace" => {
             !store.read(cx).composer_away() && press(command, window, cx)
         }
+        "composer.server" if !store.read(cx).composer_away() && press(command, window, cx) => true,
         _ => store.update(cx, |store, cx| {
             let done = store.perform(command, cx);
             if done {

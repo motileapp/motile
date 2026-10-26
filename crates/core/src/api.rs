@@ -697,6 +697,8 @@ pub enum SyncState {
 pub struct ProjectView {
     #[serde(flatten)]
     pub project: Project,
+    /// The same on every server that has the project: its repository's origin, or "no-project".
+    pub key: String,
     /// The project's icon as a file on this device, once it has been fetched from the server.
     pub icon_path: Option<String>,
     /// The git button for its repository: what it does and the menu behind it.

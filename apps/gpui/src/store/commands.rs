@@ -10,7 +10,7 @@ use super::integrations::Integration;
 use super::shortcuts::ShortcutContext;
 use super::usage::{UsagePeriod, UsageTab};
 use super::{PanelPage, Selection, Store};
-use crate::models::ThreadInfo;
+use crate::models::{Project, ThreadInfo};
 use crate::panel::state::PanelTab;
 use crate::theme::Appearance;
 
@@ -145,13 +145,15 @@ impl Store {
                 self.new_thread(cx);
             }
             "chat.newLocal" => {
-                let Some(project) = self.composer_project().filter(|project| self.is_live(project)) else {
-                    return false;
-                };
-                self.start_new_thread(Some(project.id), cx);
+                let Some(key) = self.composer_project().map(|project| project.key) else { return false };
+                let Some(project) = self.project_to_open(&key).map(|project| project.id.clone()) else { return false };
+                self.start_new_thread(Some(project), cx);
             }
             "chat.newWithoutProject" => {
-                let Some(project) = self.no_project_to_open().map(|project| project.id.clone()) else { return false };
+                let Some(project) = self.project_to_open(Project::NO_PROJECT_KEY).map(|project| project.id.clone())
+                else {
+                    return false;
+                };
                 self.start_new_thread(Some(project), cx);
             }
             "navigation.back" => return self.go(true, cx),
@@ -200,11 +202,14 @@ impl Store {
                 }
                 self.send_message(true, cx);
             }
-            "composer.project" => {
-                if self.selected_draft().is_none() {
+            "composer.server" => {
+                let copies = self.draft_project_copies();
+                let current = self.selected_draft().and_then(|draft| draft.project_id.as_deref());
+                let Some(index) = copies.iter().position(|copy| Some(copy.id.as_str()) == current) else {
                     return false;
-                }
-                self.open_panel(PanelPage::DraftProject);
+                };
+                let next = copies[(index + 1) % copies.len()].id.clone();
+                self.set_new_thread_project(Some(next), cx);
             }
             "composer.branch" => {
                 let Some(project) = self.composer_project().filter(|project| self.can_switch_branches(project)) else {
