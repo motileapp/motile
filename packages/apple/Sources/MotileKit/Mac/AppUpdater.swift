@@ -28,7 +28,7 @@ final class AppUpdater: NSObject, URLSessionDownloadDelegate {
     }
 
     private static let latestRelease = URL(string: "https://github.com/motileapp/motile/releases/latest")!
-    private static let checkEvery: TimeInterval = 6 * 3600
+    private static let checkEvery: TimeInterval = 5 * 60
 
     private(set) var state = State.idle
     /// The newest release's version. The servers are compared with it as well.
@@ -38,14 +38,21 @@ final class AppUpdater: NSObject, URLSessionDownloadDelegate {
     /// Called with each release found, and whether the user asked for it.
     @ObservationIgnored var onFound: ((_ asked: Bool) -> Void)?
     @ObservationIgnored private var timer: Timer?
+    @ObservationIgnored private var lastCheck: Date?
     @ObservationIgnored private var downloadingVersion = ""
     @ObservationIgnored private var download: URLSessionDownloadTask?
     @ObservationIgnored private lazy var session = URLSession(configuration: .default, delegate: self, delegateQueue: .main)
 
-    /// Looks for a new release now and every few hours.
+    /// Looks for a new release now and every few minutes.
     func start() {
         check()
         timer = Timer.scheduledTimer(withTimeInterval: Self.checkEvery, repeats: true) { [weak self] _ in self?.check() }
+    }
+
+    /// Looks again if the timer missed its turn while the client was asleep or in the back.
+    func checkIfDue() {
+        guard let lastCheck, Date().timeIntervalSince(lastCheck) >= Self.checkEvery else { return }
+        check()
     }
 
     /// `asked` is for when the user wants to know: finding nothing new is then said too.
@@ -55,6 +62,7 @@ final class AppUpdater: NSObject, URLSessionDownloadDelegate {
         default: break
         }
         if asked { state = .checking }
+        lastCheck = Date()
         var request = URLRequest(url: Self.latestRelease)
         request.httpMethod = "HEAD"
         request.cachePolicy = .reloadIgnoringLocalCacheData

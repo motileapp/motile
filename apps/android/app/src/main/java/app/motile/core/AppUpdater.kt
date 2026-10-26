@@ -11,6 +11,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.provider.Settings
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -54,8 +55,9 @@ class AppUpdater {
     private val main = Handler(Looper.getMainLooper())
     @Volatile
     private var downloading: String? = null
+    private var lastCheck: Long? = null
 
-    /** Looks for a new release now and every few hours. */
+    /** Looks for a new release now and every few minutes. */
     fun start() {
         check()
         main.postDelayed(object : Runnable {
@@ -66,10 +68,18 @@ class AppUpdater {
         }, CHECK_EVERY)
     }
 
+    /** Looks again if the timer missed its turn while the client was in the back. */
+    fun checkIfDue() {
+        val lastCheck = lastCheck ?: return
+        if (SystemClock.elapsedRealtime() - lastCheck < CHECK_EVERY) return
+        check()
+    }
+
     /** `asked` is for when the user wants to know: finding nothing new is then said too. */
     fun check(asked: Boolean = false) {
         if (state is State.Checking || state is State.Downloading || state is State.Installing) return
         if (asked) state = State.Checking
+        lastCheck = SystemClock.elapsedRealtime()
         val releases = releases
         thread(isDaemon = true) {
             // The address redirects to the release's own page, whose last part is its tag.
@@ -269,7 +279,7 @@ class AppUpdater {
         private const val RELEASES = "https://github.com/motileapp/motile/releases"
         /** The client's file in every release. */
         const val ASSET = "Motile-android.apk"
-        private const val CHECK_EVERY = 6 * 3600 * 1000L
+        private const val CHECK_EVERY = 5 * 60 * 1000L
 
         /** The updater of the running client, for the installer's answer. */
         var shared: AppUpdater? = null
