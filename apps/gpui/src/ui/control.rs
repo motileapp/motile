@@ -68,6 +68,8 @@ pub struct Look {
     pub joined: (bool, bool),
     /// A colour that says something, like a pull request's state, in place of the quiet ones.
     pub tint: Option<Hsla>,
+    /// A ghost button that, until it is lit, is as muted as the time beside it.
+    pub quiet: bool,
 }
 
 impl Look {
@@ -81,6 +83,7 @@ impl Look {
             round: false,
             joined: (false, false),
             tint: None,
+            quiet: false,
         }
     }
 
@@ -99,6 +102,8 @@ impl Look {
             Variant::Ghost => {
                 if self.selected || lit {
                     c.foreground
+                } else if self.quiet {
+                    c.muted_stronger_foreground
                 } else {
                     c.muted_foreground
                 }
@@ -740,6 +745,12 @@ impl ActionButton {
     /// The layer the button lies on.
     pub fn surface(mut self, surface: Surface) -> Self {
         self.look.surface = surface;
+        self
+    }
+
+    /// Until it is lit, as muted as the time beside it.
+    pub fn quiet(mut self) -> Self {
+        self.look.quiet = true;
         self
     }
 

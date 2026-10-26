@@ -123,6 +123,8 @@ data class ControlLook(
     val tint: Color? = null,
     /** What it fills with when lit, where that isn't its variant's colour. */
     val hover: Color? = null,
+    /** A ghost button that, until it is lit, is as muted as the time beside it. */
+    val quiet: Boolean = false,
 ) {
     fun foreground(palette: Palette): Color {
         if (tint != null && (variant == ButtonVariant.Ghost || variant == ButtonVariant.Secondary || variant == ButtonVariant.Outline)) return tint
@@ -132,7 +134,11 @@ data class ControlLook(
             ButtonVariant.Danger -> palette.destructiveForeground
             ButtonVariant.Success -> palette.successForeground
             ButtonVariant.Warning -> palette.warningForeground
-            ButtonVariant.Ghost -> if (selected || lit) palette.foreground else palette.mutedForeground
+            ButtonVariant.Ghost -> when {
+                selected || lit -> palette.foreground
+                quiet -> palette.mutedStrongerForeground
+                else -> palette.mutedForeground
+            }
             ButtonVariant.Link, ButtonVariant.Accent -> palette.primary
             ButtonVariant.Overlay -> OverPicture.foreground
         }
@@ -395,6 +401,7 @@ fun ActionButton(
     joined: Set<HorizontalEdge> = emptySet(),
     tint: Color? = null,
     hover: Color? = null,
+    quiet: Boolean = false,
     margin: PaddingValues = PaddingValues(0.dp),
     disabled: Boolean = false,
     inline: Boolean = false,
@@ -402,7 +409,7 @@ fun ActionButton(
     onClick: () -> Unit,
 ) {
     val words = title?.takeIf { it.isNotEmpty() }
-    val look = ControlLook(variant, size, selected = selected, round = round, joined = joined, tint = tint, hover = hover)
+    val look = ControlLook(variant, size, selected = selected, round = round, joined = joined, tint = tint, hover = hover, quiet = quiet)
     val label = @Composable {
         ControlLabel(
             words, ControlIcon.of(icon, picture, pictures), size, chevron = opens, pending = pending, pendingTitle = pendingTitle, fills = fills,

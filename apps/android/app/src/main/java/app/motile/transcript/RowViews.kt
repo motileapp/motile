@@ -611,9 +611,9 @@ fun MessageMeta(stamp: String, trailing: Boolean, help: String, modifier: Modifi
         horizontalArrangement = if (trailing) Arrangement.End else Arrangement.Start,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (!trailing) CopyButton(help, symbolSize = 12f, copy = copy)
+        if (!trailing) CopyButton(help, symbolSize = 12f, quiet = true, copy = copy)
         Text(stamp, Modifier.weight(1f, fill = false), style = Theme.smallFont, color = palette.mutedStrongerForeground, maxLines = 1)
-        if (trailing) CopyButton(help, symbolSize = 12f, copy = copy)
+        if (trailing) CopyButton(help, symbolSize = 12f, quiet = true, copy = copy)
     }
 }
 

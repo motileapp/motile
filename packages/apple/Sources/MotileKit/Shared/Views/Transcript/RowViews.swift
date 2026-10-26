@@ -1608,6 +1608,7 @@ final class MessageMeta: FlippedView {
         super.init(frame: .zero)
         addSubview(time)
         let button = IconButton(symbol: .copy, symbolSize: 12, tooltip: tooltip) { [weak self] in self?.copy() }
+        button.quiet = true
         self.button = button
         addSubview(button)
         opacity = shown ? 1 : 0

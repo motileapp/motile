@@ -452,6 +452,8 @@ final class IconButton: UIButton {
 
     /// The layer it lies on.
     var surface = Surface.background
+    /// Until it is pressed, as muted as the time beside it.
+    var quiet = false { didSet { light() } }
     private var symbolSize = IconButton.metrics.symbol
 
     convenience init(symbol: Symbol, title: String = "", symbolSize: CGFloat? = nil, tooltip: String, action: @escaping () -> Void) {
@@ -473,10 +475,12 @@ final class IconButton: UIButton {
     }
 
     override var isHighlighted: Bool {
-        didSet {
-            backgroundColor = isHighlighted ? surface.platform(.control) : .clear
-            tintColor = isHighlighted ? Theme.foreground : Theme.mutedForeground
-        }
+        didSet { light() }
+    }
+
+    private func light() {
+        backgroundColor = isHighlighted ? surface.platform(.control) : .clear
+        tintColor = isHighlighted ? Theme.foreground : quiet ? Theme.mutedStrongerForeground : Theme.mutedForeground
     }
 
     override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {

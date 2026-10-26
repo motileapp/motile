@@ -699,7 +699,7 @@ fn message_meta(
     let shown = ctx.meta_shown(row_id) || copied;
     let time =
         div().px(px(2.)).text_size(px(12.)).text_color(c.muted_stronger_foreground).whitespace_nowrap().child(stamp);
-    let button = copy_button(row_id.to_string(), help, copied, Surface::Background, ctx, copy);
+    let button = copy_button(row_id.to_string(), help, copied, Surface::Background, ctx, copy).quiet();
     let meta = div().h(px(META_HEIGHT)).w_full().flex().items_center();
     let meta = if trailing { meta.justify_end().child(time).child(button) } else { meta.child(button).child(time) };
     fade_meta(row_id, shown, copied, meta, ctx)
