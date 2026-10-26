@@ -72,8 +72,10 @@ struct ThreadPane: View {
         GeometryReader { proxy in
             HStack(spacing: 8) {
                 HStack(spacing: ControlSize.regular.padding) {
-                    if let parent = backTo {
-                        backButton(to: parent, bar: proxy.safeAreaInsets.top)
+                    if store.shownAgent != nil {
+                        backButton(help: "Back to the thread", bar: proxy.safeAreaInsets.top) { store.rightPanel.showAgents() }
+                    } else if let parent = store.parentThread {
+                        backButton(help: "Open \(parent.title)", bar: proxy.safeAreaInsets.top) { store.openStartedThread(parent.id) }
                     }
                     title
                 }
@@ -95,16 +97,13 @@ struct ThreadPane: View {
         }
     }
 
-    /// The thread whose agent started the open one, which the button before the title opens.
-    private var backTo: ThreadInfo? {
-        store.shownAgent == nil ? store.parentThread : nil
-    }
-
-    /// Its light is as far from the pane's side as from the bar's top, beside the sidebar.
-    private func backButton(to parent: ThreadInfo, bar: CGFloat) -> some View {
+    /// Before the title, the way back to the thread from the agent shown in its place, or to the
+    /// thread whose agent started the open one. Its light is as far from the pane's side as from
+    /// the bar's top, beside the sidebar.
+    private func backButton(help: String, bar: CGFloat, action: @escaping () -> Void) -> some View {
         let size = ControlSize.large
         let light = (size.height - size.symbolSide) / 2
-        return ActionButton(icon: .cornerLeftUp, help: "Open \(parent.title)", size: size) { store.openStartedThread(parent.id) }
+        return ActionButton(icon: .cornerLeftUp, help: help, size: size, action: action)
             .padding(.leading, (bar - size.height) / 2 - Self.besideSidebarInset)
             .padding(.trailing, -light)
     }

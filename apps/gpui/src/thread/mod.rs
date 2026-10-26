@@ -187,24 +187,33 @@ impl ThreadPane {
             .children(control)
     }
 
-    /// Before the title, the button that opens the thread whose agent started the open one. Its
-    /// light is as far from the pane's side as from the bar's top, beside the sidebar.
+    /// Before the title, the way back to the thread from the agent shown in its place, or to the
+    /// thread whose agent started the open one. Its light is as far from the pane's side as from
+    /// the bar's top, beside the sidebar.
     fn back_button(&self, cx: &App) -> Option<Div> {
         let store = self.store.read(cx);
-        if store.shown_agent().is_some() {
-            return None;
-        }
-        let parent = store.parent_thread()?;
-        let id = parent.id.clone();
         let handle = self.store.clone();
-        let button = ActionButton::icon("parent-thread", "corner-left-up", format!("Open {}", parent.title))
-            .large()
-            .on_click(move |_, _, cx| {
-                handle.update(cx, |store, cx| {
-                    store.open_started_thread(&id, cx);
-                    cx.notify();
-                })
-            });
+        let button = if store.shown_agent().is_some() {
+            ActionButton::icon("parent-thread", "corner-left-up", "Back to the thread").large().on_click(
+                move |_, _, cx| {
+                    handle.update(cx, |store, cx| {
+                        store.show_agents(cx);
+                        cx.notify();
+                    })
+                },
+            )
+        } else {
+            let parent = store.parent_thread()?;
+            let id = parent.id.clone();
+            ActionButton::icon("parent-thread", "corner-left-up", format!("Open {}", parent.title)).large().on_click(
+                move |_, _, cx| {
+                    handle.update(cx, |store, cx| {
+                        store.open_started_thread(&id, cx);
+                        cx.notify();
+                    })
+                },
+            )
+        };
         let size = ControlSize::Large;
         let light = (size.height() - size.symbol_side()) / 2.;
         Some(

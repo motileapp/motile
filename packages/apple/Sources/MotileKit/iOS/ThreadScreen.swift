@@ -75,7 +75,14 @@ struct ThreadScreen: View {
                 }
                 .accessibilityLabel("Threads")
             }
-            if let parent = store.shownAgent == nil ? store.parentThread : nil {
+            if store.shownAgent != nil {
+                Button {
+                    store.rightPanel.showAgents()
+                } label: {
+                    Image(.cornerLeftUp, size: 16)
+                }
+                .accessibilityLabel("Back to the thread")
+            } else if let parent = store.parentThread {
                 Button {
                     store.openStartedThread(parent.id)
                 } label: {
