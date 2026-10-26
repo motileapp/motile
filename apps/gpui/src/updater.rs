@@ -6,7 +6,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, OnceLock};
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
 use futures::StreamExt;
 use gpui_kit::*;
@@ -29,7 +29,7 @@ const ASSET: Option<&str> = if cfg!(all(target_os = "linux", target_arch = "x86_
     None
 };
 const FOLDER: &str = "motile-gpui";
-const CHECK_EVERY: Duration = Duration::from_secs(6 * 3600);
+const CHECK_EVERY: Duration = Duration::from_secs(5 * 60);
 /// How long "Up to date" stays said after the user asked.
 const UP_TO_DATE_FOR: Duration = Duration::from_secs(4);
 /// Given to the copy an update starts, which the one that started it is still quitting for. An
@@ -72,6 +72,8 @@ pub struct Updater {
     pub latest: Option<String>,
     pub state: UpdateState,
     cancelled: Arc<AtomicBool>,
+    /// The wall clock's, which goes on while the computer sleeps.
+    last_check: Option<SystemTime>,
     _timer: Option<Task<()>>,
     _check: Option<Task<()>>,
     _download: Option<Task<()>>,
@@ -84,13 +86,14 @@ impl Updater {
             latest: None,
             state: UpdateState::Idle,
             cancelled: Arc::default(),
+            last_check: None,
             _timer: None,
             _check: None,
             _download: None,
         }
     }
 
-    /// Looks for a new release now and every few hours.
+    /// Looks for a new release now and every few minutes.
     pub fn start(&mut self, cx: &mut Context<Store>) {
         self._timer = Some(cx.spawn(async move |this, cx| {
             loop {
@@ -101,6 +104,15 @@ impl Updater {
                 cx.background_executor().timer(CHECK_EVERY).await;
             }
         }));
+    }
+
+    /// Looks again if the timer missed its turn while the computer slept.
+    pub fn check_if_due(&mut self, cx: &mut Context<Store>) {
+        let Some(last_check) = self.last_check else { return };
+        if last_check.elapsed().is_ok_and(|elapsed| elapsed < CHECK_EVERY) {
+            return;
+        }
+        self.check(false, cx);
     }
 
     /// `asked` is for when the user wants to know: finding nothing new is then said too.
@@ -115,6 +127,7 @@ impl Updater {
             self.state = UpdateState::Checking;
             cx.notify();
         }
+        self.last_check = Some(SystemTime::now());
         self._check = Some(cx.spawn(async move |this, cx| {
             let found = cx.background_executor().spawn(async move { latest_version() }).await;
             let _ = this.update(cx, |store, cx| {

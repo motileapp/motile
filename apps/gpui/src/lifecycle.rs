@@ -1,5 +1,6 @@
 //! Tells the core when the computer wakes or changes networks, so that it dials again the moment
-//! the client is back instead of waiting to find out. Coming to the front is told by the store.
+//! the client is back instead of waiting to find out, and looks for a new release on waking if the
+//! last look was a while ago. Coming to the front is told by the store.
 
 use futures::StreamExt;
 use futures::channel::mpsc::UnboundedSender;
@@ -22,6 +23,7 @@ pub fn start(store: &Entity<Store>, cx: &mut App) {
     cx.spawn(async move |cx| {
         let mut path: Option<String> = None;
         while let Some(signal) = signals.next().await {
+            let woke = matches!(signal, Signal::Woke);
             let command = match signal {
                 Signal::Woke => Command::Foreground,
                 Signal::Path(name) => {
@@ -33,7 +35,13 @@ pub fn start(store: &Entity<Store>, cx: &mut App) {
                     Command::NetworkChanged
                 }
             };
-            if store.update(cx, |store, _| store.send(command)).is_err() {
+            let sent = store.update(cx, |store, cx| {
+                store.send(command);
+                if woke {
+                    store.updater.check_if_due(cx);
+                }
+            });
+            if sent.is_err() {
                 break;
             }
         }

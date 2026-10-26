@@ -6,7 +6,8 @@ import AppKit
 #endif
 
 /// Tells the core when the client comes to the front, wakes or changes networks, so that it dials
-/// again the moment the client is back instead of waiting to find out.
+/// again the moment the client is back instead of waiting to find out. Coming back also looks for
+/// a new release, if the last look was a while ago.
 final class Lifecycle {
     private weak var store: AppStore?
     private let monitor = NWPathMonitor()
@@ -27,14 +28,19 @@ final class Lifecycle {
         }
         monitor.start(queue: DispatchQueue(label: "app.motile.network"))
         NotificationCenter.default.addObserver(forName: Platform.becameActive, object: nil, queue: .main) { [weak self] _ in
-            self?.store?.core.send("foreground")
+            self?.cameBack()
         }
         #if os(macOS)
         let workspace = NSWorkspace.shared.notificationCenter
         workspace.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
-            self?.store?.core.send("foreground")
+            self?.cameBack()
         }
         #endif
+    }
+
+    private func cameBack() {
+        store?.core.send("foreground")
+        store?.updater.checkIfDue()
     }
 
     private func pathChanged(to name: String) {

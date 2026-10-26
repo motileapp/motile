@@ -533,6 +533,7 @@ impl Store {
         if active {
             // What waits to dial again dials now.
             self.send(Command::Foreground);
+            self.updater.check_if_due(cx);
             self.send(Command::ReloadKeybindings);
             self.mark_open_thread_seen();
             self.read_git(true, None::<fn(&mut Store, Vec<ChangedFile>, &mut Context<Store>)>, cx);

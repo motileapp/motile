@@ -13,7 +13,8 @@ import androidx.lifecycle.ProcessLifecycleOwner
 /**
  * Tells the core when the client goes to the back, comes to the front or changes networks, so that
  * it dials again the moment the client is back instead of waiting to find out, and whether the
- * network costs by the byte.
+ * network costs by the byte. Coming back also looks for a new release, if the last look was a while
+ * ago.
  */
 class Lifecycle {
     private val main = Handler(Looper.getMainLooper())
@@ -25,6 +26,7 @@ class Lifecycle {
             override fun onStart(owner: LifecycleOwner) {
                 store.core.send("foreground")
                 store.becameActive()
+                store.updater.checkIfDue()
             }
 
             override fun onStop(owner: LifecycleOwner) {
