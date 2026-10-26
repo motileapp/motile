@@ -944,6 +944,7 @@ private struct PanelRow: View {
     static let margin = EdgeInsets(top: 0, leading: sideMargin, bottom: 0, trailing: sideMargin)
     private static let titleHeight: CGFloat = scaled(17)
     private static let detailHeight: CGFloat = scaled(15)
+    private static let dotGap: CGFloat = 6
 
     let item: PanelItem
     @State private var faded = false
@@ -956,7 +957,7 @@ private struct PanelRow: View {
                 if item.placeholderLines > 0 {
                     placeholderLines
                 } else if item.oneLine {
-                    HStack(spacing: 4) {
+                    HStack(spacing: Self.dotGap) {
                         Text(item.title)
                             .font(.ui(size: 14))
                             .lineLimit(1)
@@ -1004,7 +1005,7 @@ private struct PanelRow: View {
     }
 
     private var detailParts: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: Self.dotGap) {
             ForEach(Array(item.detailParts.enumerated()), id: \.offset) { position, part in
                 if position > 0 {
                     Text("·")

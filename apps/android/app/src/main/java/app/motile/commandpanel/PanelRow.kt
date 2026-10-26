@@ -56,6 +56,7 @@ internal object PanelRow {
     val radius = Radius.md
     val titleHeight = scaled(17f).dp
     val detailHeight = scaled(15f).dp
+    val dotGap = 6.dp
 }
 
 @Composable
@@ -103,7 +104,7 @@ private fun Modifier.pulsing(): Modifier {
 private fun Words(item: PanelItem) {
     val palette = LocalPalette.current
     if (item.oneLine) {
-        Row(Modifier.height(PanelRow.titleHeight), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.height(PanelRow.titleHeight), horizontalArrangement = Arrangement.spacedBy(PanelRow.dotGap), verticalAlignment = Alignment.CenterVertically) {
             Text(item.title, size = 14f, maxLines = 1)
             if (item.detailParts.isNotEmpty()) {
                 Text("·", size = 12f, color = palette.mutedStrongerForeground)
@@ -126,7 +127,7 @@ private fun Words(item: PanelItem) {
 @Composable
 private fun DetailParts(parts: List<Pair<Symbol, String>>) {
     val palette = LocalPalette.current
-    Row(Modifier.height(PanelRow.detailHeight), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(Modifier.height(PanelRow.detailHeight), horizontalArrangement = Arrangement.spacedBy(PanelRow.dotGap), verticalAlignment = Alignment.CenterVertically) {
         parts.forEachIndexed { position, (symbol, text) ->
             if (position > 0) Text("·", size = 12f, color = palette.mutedStrongerForeground)
             // The first part keeps its room; the ones after it are cut short first.
