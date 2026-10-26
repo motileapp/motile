@@ -298,13 +298,14 @@ impl Render for Root {
                         crate::ui::modal::end_frame(window, cx);
                         crate::keyboard::end_frame(cx);
                     },
-                    // Every press, wherever it lands, for the tooltips.
+                    // Every press and release, wherever it lands, for the tooltips and the selection.
                     move |_, _, window, _| {
                         window.on_mouse_event(|_: &MouseDownEvent, phase, _, cx| {
                             if phase == DispatchPhase::Capture {
                                 crate::ui::mouse_pressed(cx);
                             }
                         });
+                        crate::ui::rich_text::watch_releases(window);
                         crate::keyboard::watch_modifiers_in(&held, window);
                     },
                 )

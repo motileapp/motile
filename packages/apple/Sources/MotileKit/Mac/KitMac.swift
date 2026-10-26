@@ -586,32 +586,34 @@ final class RowTextView: NSTextView {
     override var intrinsicContentSize: NSSize { NSSize(width: NSView.noIntrinsicMetric, height: NSView.noIntrinsicMetric) }
 }
 
-/// Shows code that is wider than the column and moves it sideways under the pointer. It is a
-/// plain clipping view rather than a scroll view: a scroll view inside the transcript's own
-/// doesn't redraw what the transcript scrolls into view.
-final class SidewaysClipView: NSView {
-    private weak var content: NSView?
-    private var contentWidth: CGFloat = 0
-    private var offset: CGFloat = 0
-    /// Whether the gesture under way moves the code sideways. A gesture keeps the way it set out,
-    /// as it does in a scroll view, so one that scrolls the transcript never drags the code along.
+/// Shows what is wider than the column and scrolls it sideways, with the system's scroller.
+final class SidewaysScrollView: NSScrollView {
+    /// Whether the gesture under way moves the content sideways. A gesture keeps the way it set
+    /// out, so one that scrolls the transcript never drags the content along.
     private var gestureIsSideways: Bool?
-
-    override var isFlipped: Bool { true }
 
     override init(frame: NSRect) {
         super.init(frame: frame)
         wantsLayer = true
-        layer?.masksToBounds = true
+        drawsBackground = false
+        hasHorizontalScroller = true
+        hasVerticalScroller = false
+        autohidesScrollers = true
+        scrollerStyle = .overlay
+        verticalScrollElasticity = .none
+        automaticallyAdjustsContentInsets = false
+        contentView.drawsBackground = false
     }
 
     required init?(coder: NSCoder) { fatalError("not used") }
 
     func setContent(_ view: NSView, size: NSSize) {
-        content = view
-        contentWidth = size.width
-        offset = min(offset, max(0, contentWidth - bounds.width))
-        view.frame = NSRect(x: -offset, y: 0, width: size.width, height: size.height)
+        if documentView !== view { documentView = view }
+        view.frame = NSRect(origin: .zero, size: size)
+        let x = min(contentView.bounds.minX, max(0, size.width - contentView.bounds.width))
+        guard x != contentView.bounds.minX else { return }
+        contentView.scroll(to: NSPoint(x: x, y: 0))
+        reflectScrolledClipView(contentView)
     }
 
     private func isSideways(_ event: NSEvent) -> Bool {
@@ -624,13 +626,12 @@ final class SidewaysClipView: NSView {
     }
 
     override func scrollWheel(with event: NSEvent) {
-        let overflow = contentWidth - bounds.width
-        guard isSideways(event), overflow > 0, let content else {
+        let overflow = (documentView?.frame.width ?? 0) - contentView.bounds.width
+        guard isSideways(event), overflow > 0 else {
             nextResponder?.scrollWheel(with: event)
             return
         }
-        offset = min(max(0, offset - event.scrollingDeltaX), overflow)
-        content.frame.origin.x = -offset
+        super.scrollWheel(with: event)
     }
 }
 

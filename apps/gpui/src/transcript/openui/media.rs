@@ -15,7 +15,7 @@ use super::text::rich;
 use super::{UiCx, framed, node};
 use crate::media::pictures::{Picture, Pictures};
 use crate::theme::{Layer, Surface, colors};
-use crate::transcript::kit::ShimmerBox;
+use crate::transcript::kit::{ShimmerBox, Sideways};
 
 const FADE_IN: Duration = Duration::from_millis(300);
 const MISSING_SYMBOL: f32 = 26.;
@@ -375,7 +375,7 @@ fn table(
         .bg(c.card)
         .overflow_hidden()
         .child(header_fill)
-        .child(div().id(cx.id(id, "scroll")).w_full().overflow_x_scroll().child(grid))
+        .child(Sideways::new(cx.id(id, "scroll"), grid))
         .child(div().absolute().inset_0().rounded(px(radius)).border_1().border_color(c.border_card))
 }
 

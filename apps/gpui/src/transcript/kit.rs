@@ -7,6 +7,8 @@ use std::f32::consts::PI;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
+use gpui_kit::base::ScrollbarHandle;
+use gpui_kit::component::scroll::Scrollbar;
 use gpui_kit::prelude::*;
 use gpui_kit::*;
 
@@ -224,18 +226,70 @@ pub fn dashed_outline(radius: f32, dash: [f32; 2], color: Hsla) -> impl IntoElem
     .inset_0()
 }
 
-/// How far code that is wider than its box has been moved, and the way the gesture under way set
-/// out in.
+/// How far what is wider than its box has moved, and the way the gesture under way set out in.
 #[derive(Default)]
 struct SidewaysState {
     offset: f32,
+    viewport: Bounds<Pixels>,
     content: f32,
-    overflow: f32,
     sideways: Option<bool>,
 }
 
-/// Code wider than the column, moved sideways under the pointer. A gesture keeps the way it set
-/// out, as it does in a scroll view, so one that scrolls the transcript never drags the code along.
+impl SidewaysState {
+    fn overflow(&self) -> f32 {
+        (self.content - f32::from(self.viewport.size.width)).max(0.)
+    }
+
+    /// Moves by a wheel's `dx` if the gesture it is part of set out sideways, and says whether it did.
+    fn scroll(&mut self, event: &ScrollWheelEvent, dx: f32, dy: f32) -> bool {
+        let sideways = dx.abs() > dy.abs();
+        let sideways = match event.delta {
+            ScrollDelta::Lines(_) => sideways,
+            ScrollDelta::Pixels(_) => {
+                if event.touch_phase == TouchPhase::Started {
+                    self.sideways = None;
+                }
+                if self.sideways.is_none() && (dx != 0. || dy != 0.) {
+                    self.sideways = Some(sideways);
+                }
+                self.sideways.unwrap_or(false)
+            }
+        };
+        if !sideways || self.overflow() <= 0. {
+            return false;
+        }
+        self.offset = (self.offset - dx).clamp(0., self.overflow());
+        true
+    }
+}
+
+/// The state the box and its scrollbar share.
+#[derive(Clone, Default)]
+struct SidewaysScroll(Rc<RefCell<SidewaysState>>);
+
+impl ScrollbarHandle for SidewaysScroll {
+    fn viewport_bounds(&self) -> Bounds<Pixels> {
+        self.0.borrow().viewport
+    }
+
+    fn offset(&self) -> Point<Pixels> {
+        point(px(-self.0.borrow().offset), px(0.))
+    }
+
+    fn set_offset(&self, offset: Point<Pixels>) {
+        let mut state = self.0.borrow_mut();
+        state.offset = (-f32::from(offset.x)).clamp(0., state.overflow());
+    }
+
+    fn content_size(&self) -> Size<Pixels> {
+        let state = self.0.borrow();
+        size(px(state.content), state.viewport.size.height)
+    }
+}
+
+/// What is wider than the column, scrolled sideways, with a scrollbar along its bottom. A gesture
+/// keeps the way it set out, as it does in a scroll view, so one that scrolls the transcript never
+/// drags it along. Shift turns a wheel sideways.
 #[derive(IntoElement)]
 pub struct Sideways {
     id: ElementId,
@@ -250,61 +304,54 @@ impl Sideways {
 
 impl RenderOnce for Sideways {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let state = window.use_keyed_state(self.id.clone(), cx, |_, _| SidewaysState::default());
-        let offset = state.read(cx).offset;
-        let (outer, inner, scrolled) = (state.clone(), state.clone(), state);
+        let state = window.use_keyed_state(self.id.clone(), cx, |_, _| SidewaysScroll::default());
+        let scroll = state.read(cx).clone();
+        let offset = scroll.0.borrow().offset;
+        let (inner, outer, wheel) = (scroll.clone(), scroll.clone(), scroll.clone());
+        let (laid_out, scrolled) = (state.clone(), state);
         div()
+            .relative()
             .w_full()
             .overflow_hidden()
             .child(
                 div()
                     .flex()
                     .child(div().flex_none().min_w_full().ml(px(-offset)).child(self.child))
-                    .on_children_prepainted(move |bounds, _, cx| {
+                    .on_children_prepainted(move |bounds, _, _| {
                         let Some(content) = bounds.first() else { return };
-                        let width = f32::from(content.size.width);
-                        inner.update(cx, |state, _| state.content = width);
+                        inner.0.borrow_mut().content = f32::from(content.size.width);
                     }),
+            )
+            .child(
+                div()
+                    .absolute()
+                    .inset_0()
+                    .child(Scrollbar::horizontal(&scroll).id((self.id.clone(), "scroller")).viewport_from_layout()),
             )
             .on_children_prepainted(move |bounds, _, cx| {
                 let Some(row) = bounds.first() else { return };
-                let width = f32::from(row.size.width);
-                outer.update(cx, |state, cx| {
-                    let overflow = (state.content - width).max(0.);
-                    if overflow != state.overflow {
-                        state.overflow = overflow;
-                        if state.offset > overflow {
-                            state.offset = overflow;
-                            cx.notify();
-                        }
-                    }
-                });
+                let mut state = outer.0.borrow_mut();
+                state.viewport = *row;
+                let overflow = state.overflow();
+                if state.offset <= overflow {
+                    return;
+                }
+                state.offset = overflow;
+                drop(state);
+                laid_out.update(cx, |_, cx| cx.notify());
             })
             .id(self.id)
             .on_scroll_wheel(move |event, _, cx| {
                 let delta = event.delta.pixel_delta(px(18.));
-                let (dx, dy) = (f32::from(delta.x), f32::from(delta.y));
-                let sideways = scrolled.update(cx, |state, _| {
-                    let sideways = dx.abs() > dy.abs();
-                    if matches!(event.delta, ScrollDelta::Lines(_)) {
-                        return sideways;
-                    }
-                    if event.touch_phase == TouchPhase::Started {
-                        state.sideways = None;
-                    }
-                    if state.sideways.is_none() && (dx != 0. || dy != 0.) {
-                        state.sideways = Some(sideways);
-                    }
-                    state.sideways.unwrap_or(false)
-                });
-                if !sideways || scrolled.read(cx).overflow <= 0. {
+                let (mut dx, mut dy) = (f32::from(delta.x), f32::from(delta.y));
+                if event.modifiers.shift && dx == 0. {
+                    (dx, dy) = (dy, 0.);
+                }
+                if !wheel.0.borrow_mut().scroll(event, dx, dy) {
                     return;
                 }
                 cx.stop_propagation();
-                scrolled.update(cx, |state, cx| {
-                    state.offset = (state.offset - dx).clamp(0., state.overflow);
-                    cx.notify();
-                });
+                scrolled.update(cx, |_, cx| cx.notify());
             })
     }
 }

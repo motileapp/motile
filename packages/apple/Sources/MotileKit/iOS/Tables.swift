@@ -115,7 +115,7 @@ struct TableSetter {
 
 /// A table of a reply, over the line of the text that keeps its place.
 final class TableView: FlippedView {
-    private let scroll = SidewaysClipView()
+    private let scroll = SidewaysScrollView()
     private let grid = Grid()
 
     override init(frame: CGRect) {
