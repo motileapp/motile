@@ -310,6 +310,24 @@ impl ControlLabel {
         if self.prose { FontWeight::NORMAL } else { FontWeight::MEDIUM }
     }
 
+    /// How far prose words set on a line as tall as the control, and the chevron after them, move
+    /// from where they would be centred. The words are mostly small letters, so the middle of their
+    /// capitals and of their small letters is the control's, and the chevron is on the small
+    /// letters' middle.
+    fn prose_shifts(&self, cx: &App) -> (f32, f32) {
+        let height = self.size.height();
+        let system = cx.text_system();
+        let id = system.resolve_font(&crate::transcript::rows::font(crate::theme::UI_FONT, self.weight(), false));
+        let size = px(self.text_size());
+        let (cap, x) = (f32::from(system.cap_height(id, size)), f32::from(system.x_height(id, size)));
+        let baseline = (height / 2. + (cap + x) / 4.).round();
+        // A line centres its ascent and descent, which the font gives below its baseline as negative.
+        let (ascent, descent) = (f32::from(system.ascent(id, size)), f32::from(system.descent(id, size)).abs());
+        let drawn = (height - ascent - descent) / 2. + ascent;
+        // GPUI rounds a symbol's half-pixel top toward zero, up the screen, so the chevron starts half lower.
+        (baseline - drawn, baseline - x / 2. - height / 2. + 0.5)
+    }
+
     fn wordless(&self) -> bool {
         self.title.is_none() && !self.chevron
     }
@@ -382,6 +400,9 @@ impl ControlLabel {
         let spread = self.fills && self.spread;
         let symbol_after = self.symbol_after;
         let (text_size, weight) = (self.text_size(), self.weight());
+        let prose = self.prose;
+        let (words_shift, chevron_shift) = if prose { self.prose_shifts(cx) } else { (0., 0.) };
+        let line = size.height();
         let words = |title: Option<SharedString>,
                      tinted: Option<(SharedString, Hsla)>,
                      spins: bool,
@@ -417,6 +438,7 @@ impl ControlLabel {
                             .min_w_0()
                             .text_size(px(text_size))
                             .font_weight(weight)
+                            .when(prose, |text| text.line_height(px(line)).relative().top(px(words_shift)))
                             .whitespace_nowrap()
                             .overflow_hidden()
                             .map(|text| if middle { text.text_ellipsis_middle() } else { text.text_ellipsis() })
@@ -471,7 +493,8 @@ impl ControlLabel {
             })
             .when(self.chevron, |label| {
                 let chevron = icons::trimmed_chevron(size.chevron()).text_color(c.muted_stronger_foreground);
-                label.child(if self.chevron_up { chevron.rotate(180.) } else { chevron })
+                let chevron = if self.chevron_up { chevron.rotate(180.) } else { chevron };
+                label.child(div().flex().relative().top(px(chevron_shift)).child(chevron))
             })
             .when(overlay_spinner, |label| {
                 label.child(

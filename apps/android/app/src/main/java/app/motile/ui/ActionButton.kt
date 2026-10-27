@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -44,6 +45,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.offset
 import androidx.compose.ui.unit.dp
+import kotlin.math.roundToInt
 import app.motile.platform.Symbol
 import app.motile.theme.ControlSize
 import app.motile.theme.IconSize
@@ -235,8 +237,11 @@ fun ControlLabel(
     tinted: Pair<String, Color>? = null,
     /** Its chevron points up, at what it hides again. */
     chevronUp: Boolean = false,
-    font: TextStyle = size.font,
+    /** Its words are the prose's, as the text it stands under. */
+    prose: Boolean = false,
 ) {
+    val font = if (prose) Theme.proseFont else size.font
+    val (wordsShift, chevronShift) = if (prose) proseShifts(size.height) else 0.dp to 0.dp
     val wordless = title == null && !chevron
     val markSize = symbolSize ?: size.symbol
     val waitingTitle = if (pending) pendingTitle else null
@@ -253,14 +258,41 @@ fun ControlLabel(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (icon != null || title != null) {
-                Box(Modifier.weight(1f, fill = false), contentAlignment = Alignment.Center) {
+                Box(Modifier.weight(1f, fill = false).offset(y = wordsShift), contentAlignment = Alignment.Center) {
                     ControlWords(title, tinted, icon, size, font, markSize, pictureSide, gap, detail, place, pending, spins = pending && icon != null, Modifier.alpha(if (waitingTitle == null) 1f else 0f))
                     if (waitingTitle != null) ControlWords(waitingTitle, null, icon, size, font, markSize, pictureSide, gap, null, null, pending, spins = true)
                 }
             }
-            if (chevron) Icon(if (chevronUp) Symbol.ChevronUp else Symbol.ChevronDown, size.chevron, color = LocalPalette.current.mutedStrongerForeground, trimmed = true)
+            if (chevron) Icon(
+                if (chevronUp) Symbol.ChevronUp else Symbol.ChevronDown, size.chevron, Modifier.offset(y = chevronShift),
+                color = LocalPalette.current.mutedStrongerForeground, trimmed = true,
+            )
         }
         if (pending && icon == null && waitingTitle == null) Spinner(markSize)
+    }
+}
+
+/**
+ * How far prose words, centred in a control `height` tall, and the chevron after them move. The
+ * words are mostly small letters, so the middle of their capitals and of their small letters is the
+ * control's, and the chevron is on the small letters' middle.
+ */
+@Composable
+private fun proseShifts(height: Dp): Pair<Dp, Dp> {
+    val density = LocalDensity.current
+    val measurer = rememberTextMeasurer()
+    return remember(height, density) {
+        with(density) {
+            val paint = android.graphics.Paint().apply { textSize = Theme.proseSize.toPx() }
+            val bounds = android.graphics.Rect()
+            fun letterHeight(letter: String): Float = bounds.also { paint.getTextBounds(letter, 0, 1, it) }.height().toFloat()
+            val (cap, x) = letterHeight("H") to letterHeight("x")
+            val line = measurer.measure("x", Theme.proseFont)
+            val box = height.toPx()
+            val drawn = (box - line.size.height) / 2 + line.firstBaseline
+            val baseline = (box / 2 + (cap + x) / 4).roundToInt().toFloat()
+            (baseline - drawn).toDp() to (baseline - x / 2 - box / 2).toDp()
+        }
     }
 }
 
@@ -432,7 +464,7 @@ fun ActionButton(
         ControlLabel(
             words, ControlIcon.of(icon, picture, pictures), size, chevron = opens || expanded != null, pending = pending, pendingTitle = pendingTitle, fills = fills,
             alignment = alignment, symbolSize = symbolSize, gap = gap, padding = padding, detail = detail, place = place,
-            tinted = tinted?.let { tail -> tint?.let { tail to it } }, chevronUp = expanded == true, font = if (prose) Theme.proseFont else size.font,
+            tinted = tinted?.let { tail -> tint?.let { tail to it } }, chevronUp = expanded == true, prose = prose,
         )
     }
     if (!inline) return ControlButton(look, onClick, modifier, pending, disabled, margin, words?.let { listOfNotNull(it, tinted).joinToString(" ") } ?: help, onLongClick, stretches = stretches, content = label)
