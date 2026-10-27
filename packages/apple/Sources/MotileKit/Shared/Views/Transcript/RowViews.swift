@@ -645,7 +645,7 @@ final class ToolRowView: RowView {
     override init(frame: CGRect) {
         super.init(frame: frame)
         highlight.radius = 6
-        rule.fill = Theme.borderMuted
+        rule.fill = Theme.border
         addSubview(rule)
         addSubview(stamp)
         addSubview(header)
@@ -1361,8 +1361,8 @@ final class LineageView: FlippedView {
 
     override init(frame: CGRect) {
         super.init(frame: frame)
-        leading.fill = Theme.borderMuted
-        trailing.fill = Theme.borderMuted
+        leading.fill = Theme.border
+        trailing.fill = Theme.border
         pill.radius = Self.size.height / 2
         pill.stroke = Theme.borderAccent
         [leading, trailing, pill, symbol, words].forEach { addSubview($0) }

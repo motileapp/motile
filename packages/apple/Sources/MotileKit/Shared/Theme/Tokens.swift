@@ -37,7 +37,6 @@ extension Theme {
     static let pink = tone(0xb7377c, 0xf28cc0)
     static let skill = tone(0x47730d, 0xa3e635)
     static let border = tone(0xe2e3e5, 0x191a1e)
-    static let borderMuted = tone(0xe8e9eb, 0x15161a)
     static let borderCard = tone(0xe9ebf0, 0x1e1f25)
     static let borderInput = tone(0xeaecf0, 0x1a1b21)
     static let borderPopover = tone(0xe6e8eb, 0x222228)
@@ -122,7 +121,6 @@ extension Theme {
         case "pink": pink
         case "skill": skill
         case "border": border
-        case "border-muted": borderMuted
         case "border-card": borderCard
         case "border-input": borderInput
         case "border-popover": borderPopover
@@ -207,7 +205,6 @@ extension Color {
     static let themePink = Color(platform: Theme.pink)
     static let themeSkill = Color(platform: Theme.skill)
     static let themeBorder = Color(platform: Theme.border)
-    static let themeBorderMuted = Color(platform: Theme.borderMuted)
     static let themeBorderCard = Color(platform: Theme.borderCard)
     static let themeBorderInput = Color(platform: Theme.borderInput)
     static let themeBorderPopover = Color(platform: Theme.borderPopover)
