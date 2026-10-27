@@ -22,19 +22,13 @@ import app.motile.theme.Radius
 import app.motile.theme.ShadowSize
 import app.motile.theme.Theme
 import app.motile.theme.shadow
+import app.motile.ui.floatingSurface
 
-/**
- * The surface of the composer and its strips: the composer's colour with a hairline around it, where
- * iOS has Liquid Glass. `shadow` is cast by the composer's box alone.
- */
+/** The surface of the composer and its strips, the one the buttons that float over the client lie on. `shadow` is cast by the composer's box alone. */
 @Composable
 fun Modifier.composerSurface(shape: Shape, shadow: ShadowSize? = null): Modifier {
-    val palette = Theme.colors
     val shaded = if (shadow == null) this else shadow(shadow, shape)
-    return shaded
-        .clip(shape)
-        .background(palette.composer, shape)
-        .border(1.dp, palette.borderComposer, shape)
+    return shaded.floatingSurface(shape)
 }
 
 /**

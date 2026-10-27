@@ -234,7 +234,7 @@ final class TranscriptView: FlippedView, RowOwner {
         jumpButton.tip = "Scroll to end"
         jumpButton.describe("Scroll to end", button: true)
         #if os(iOS)
-        jumpButton.addSubview(ComposerGlassView(frame: jumpButton.bounds))
+        jumpButton.addSubview(GlassView(frame: jumpButton.bounds))
         let arrow = SymbolView(.arrowDown, size: .lg, tint: Theme.foreground)
         let arrowSide = PlatformImage.symbolSide(.lg)
         #else

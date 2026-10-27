@@ -34,20 +34,23 @@ import app.motile.theme.LocalSurface
 import app.motile.theme.Opacity
 import app.motile.theme.ShadowSize
 import app.motile.theme.Surface
-import app.motile.theme.at
 import app.motile.theme.shadow
 
+/** The surface of a button that floats over the client, with a shadow under it. */
+@Composable
+fun Modifier.glassButton(shape: Shape, size: GlassSize = GlassSize.Regular): Modifier =
+    shadow(size.shadow, shape, size.shadowStrength).floatingSurface(shape)
+
 /**
- * The surface of a button that floats over the client, where iOS has Liquid Glass: the popover's
- * colour a little see-through, with its border around it and a shadow under it.
+ * The surface of what floats over the client, the composer and the buttons alike, where iOS has
+ * Liquid Glass: the composer's colour with its hairline around it.
  */
 @Composable
-fun Modifier.glassButton(shape: Shape, size: GlassSize = GlassSize.Regular): Modifier {
+fun Modifier.floatingSurface(shape: Shape): Modifier {
     val palette = LocalPalette.current
-    return shadow(size.shadow, shape, size.shadowStrength)
-        .clip(shape)
-        .background(palette.popover.at(Opacity.InputGlassTint), shape)
-        .border(1.dp, palette.borderPopover, shape)
+    return clip(shape)
+        .background(palette.composer, shape)
+        .border(1.dp, palette.borderComposer, shape)
 }
 
 /** Glass shapes side by side. */
@@ -94,7 +97,7 @@ fun GlassButton(
     ) {
         DimButton(onClick, Modifier.size(size.side), enabled = enabled, contentAlignment = Alignment.Center) {
             CompositionLocalProvider(
-                LocalSurface provides Surface.Popover,
+                LocalSurface provides Surface.Background,
                 LocalRow provides null,
                 LocalForeground provides LocalPalette.current.foreground,
                 content = content,
@@ -139,7 +142,7 @@ fun GlassCapsule(title: String, symbol: Symbol, onClick: () -> Unit, modifier: M
     ) {
         DimButton(onClick, Modifier.height(size.side), contentAlignment = Alignment.Center) {
             CompositionLocalProvider(
-                LocalSurface provides Surface.Popover,
+                LocalSurface provides Surface.Background,
                 LocalRow provides null,
                 LocalForeground provides LocalPalette.current.foreground,
             ) {

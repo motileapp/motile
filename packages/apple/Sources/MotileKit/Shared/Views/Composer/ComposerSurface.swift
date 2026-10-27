@@ -3,9 +3,8 @@ import SwiftUI
 extension View {
     /// The surface of the composer and its strips. On the Mac it is the composer's colour with a
     /// hairline around it, and `shadow` is cast by the fill alone: on the whole box, the text
-    /// view inside splits it into layers that shade each other. On iOS it is Liquid Glass under
-    /// a tint where the system has it, which draws its own edge, and the system's material with
-    /// a hairline before that.
+    /// view inside splits it into layers that shade each other. On iOS it is the glass the buttons
+    /// over the client lie on.
     func composerSurface<S: Shape>(in shape: S, shadow: ShadowSize? = nil) -> some View {
         composerFill(in: shape, shadow: shadow)
             .composerSilhouette(shape)
@@ -51,33 +50,10 @@ extension View {
         }
         .overlay { shape.stroke(Color.themeBorderComposer, lineWidth: 1) }
         #else
-        modifier(ComposerGlass(shape: shape))
+        glassSurface(in: shape)
         #endif
     }
 }
-
-#if os(iOS)
-/// Liquid Glass gives what lies on it the light or dark of what is behind it, and can keep that
-/// after the client's appearance changes. The composer is tinted for the client's appearance, so
-/// it keeps that one.
-private struct ComposerGlass<S: Shape>: ViewModifier {
-    let shape: S
-    @Environment(\.colorScheme) private var scheme
-
-    func body(content: Content) -> some View {
-        let tinted = content
-            .background(Color.themeComposer.at(.inputGlassTint), in: shape)
-            .environment(\.colorScheme, scheme)
-        if #available(iOS 26.0, *) {
-            tinted.glassEffect(.regular, in: shape)
-        } else {
-            tinted
-                .background(.regularMaterial, in: shape)
-                .overlay { shape.stroke(Color.themeBorderComposer, lineWidth: 1) }
-        }
-    }
-}
-#endif
 
 #if os(macOS)
 /// The surfaces of the composer and its strips, where they are and their outlines.
