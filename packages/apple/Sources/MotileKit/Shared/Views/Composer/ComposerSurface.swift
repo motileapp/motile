@@ -70,17 +70,3 @@ struct ComposerSilhouette: PreferenceKey {
     }
 }
 #endif
-
-/// Draws the glass surfaces inside it as one piece of glass, in the client's appearance.
-struct GlassGroup<Content: View>: View {
-    @ViewBuilder let content: Content
-    @Environment(\.colorScheme) private var scheme
-
-    var body: some View {
-        if #available(iOS 26.0, macOS 26.0, *) {
-            GlassEffectContainer(spacing: 0) { content.environment(\.colorScheme, scheme) }
-        } else {
-            content
-        }
-    }
-}
