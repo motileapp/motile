@@ -46,6 +46,7 @@ class Palette(
     val borderPopover: Color,
     val input: Color,
     val composer: Color,
+    val glass: Color,
     val borderComposer: Color,
     val borderAccent: Color,
     val ring: Color,
@@ -127,6 +128,7 @@ class Palette(
             borderPopover = Color(0xFFE6E8EB),
             input = Color(0xFFE8EAEE),
             composer = Color(0xFFFFFFFF),
+            glass = Color(0xFFFFFFFF),
             borderComposer = Color(0xFFEAECF0),
             borderAccent = Color(0xFFD9DCE5),
             ring = Color(0xFF22242B),
@@ -208,6 +210,7 @@ class Palette(
             borderPopover = Color(0xFF222228),
             input = Color(0xFF14151A),
             composer = Color(0xFF111217),
+            glass = Color(0xFF0A0B0F),
             borderComposer = Color(0xFF1A1B21),
             borderAccent = Color(0xFF25262C),
             ring = Color(0xFFD0D2D9),
@@ -291,6 +294,7 @@ class Palette(
         "border-popover" -> borderPopover
         "input" -> input
         "composer" -> composer
+        "glass" -> glass
         "border-composer" -> borderComposer
         "border-accent" -> borderAccent
         "ring" -> ring
@@ -350,6 +354,7 @@ enum class Opacity(val light: Float, val dark: Float) {
     Glow(0.4f, 0.4f),
     GlowFaint(0.3f, 0.3f),
     GlowBright(0.5f, 0.5f),
+    GlassTint(0.2f, 0.4f),
 }
 
 /** How round corners are: every radius is one of these. */

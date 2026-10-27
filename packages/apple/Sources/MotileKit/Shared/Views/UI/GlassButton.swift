@@ -16,4 +16,12 @@ struct GlassButtonStyle: ButtonStyle {
 extension ButtonStyle where Self == GlassButtonStyle {
     static var glassSymbol: GlassButtonStyle { GlassButtonStyle() }
 }
+
+extension View {
+    /// A menu's place among glass buttons, as large as theirs.
+    func glassSymbolFrame() -> some View {
+        frame(width: GlassButtonStyle.side, height: GlassButtonStyle.side)
+            .contentShape(Rectangle())
+    }
+}
 #endif

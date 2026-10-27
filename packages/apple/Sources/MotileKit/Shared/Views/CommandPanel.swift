@@ -27,8 +27,6 @@ struct CommandPanel: View {
     @State private var copied = false
     #if os(macOS)
     @FocusState private var searching: Bool
-    #else
-    @FocusState private var typing: PanelPage?
     #endif
 
     init(start: PanelPage, inStack: Bool = false) {
@@ -85,7 +83,7 @@ struct CommandPanel: View {
         }
     }
     #else
-    /// The panel as a sheet: its pages pushed on a stack, each with the system's search field,
+    /// The panel as a sheet: its pages pushed on a stack, each with a search field at its bottom,
     /// picked by a tap. The keyboard only comes by itself where the page is something to type.
     @ViewBuilder private var panel: some View {
         if inStack {
@@ -93,6 +91,7 @@ struct CommandPanel: View {
                 .navigationDestination(item: $next) { page in
                     CommandPanel(start: page, inStack: true)
                         .environment(\.leavePushedPanel, leavePushedPanel ?? dismiss)
+                        .glassBackButton()
                 }
         } else {
             sheet
@@ -103,9 +102,9 @@ struct CommandPanel: View {
         NavigationStack(path: pushed) {
             screen(pages[0])
                 .toolbar {
-                    ToolbarItem(placement: .topBarLeading) { SheetCloseButton() }
+                    GlassToolbarItem(placement: .topBarLeading) { SheetCloseButton() }
                 }
-                .navigationDestination(for: PanelPage.self) { screen($0) }
+                .navigationDestination(for: PanelPage.self) { screen($0).glassBackButton() }
         }
         .onKeyPress(.downArrow) { steer(1) }
         .onKeyPress(.upArrow) { steer(-1) }
@@ -133,21 +132,13 @@ struct CommandPanel: View {
             .background(Color.themeBackground.ignoresSafeArea())
             .navigationTitle(title(page))
             .navigationBarTitleDisplayMode(.inline)
-            .searchField(text: $query, prompt: prompt(page))
-            .searchFocused($typing, equals: page)
-            .searchPresentationToolbarBehavior(.avoidHidingContent)
-            .searchAtBottom()
+            .bottomSearch(text: $query, prompt: prompt(page), focusesOnAppear: page.isTyped, submit: runHighlighted)
             .textInputAutocapitalization(.never)
             .autocorrectionDisabled()
-            .onSubmit(of: .search, runHighlighted)
             .toolbar {
                 if let id = page.githubID {
-                    ToolbarItem(placement: .topBarTrailing) { refreshButton(id) }
+                    GlassToolbarItem(placement: .topBarTrailing) { refreshButton(id) }
                 }
-            }
-            .task {
-                guard page.isTyped else { return }
-                typing = page
             }
     }
 

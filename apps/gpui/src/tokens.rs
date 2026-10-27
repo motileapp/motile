@@ -46,6 +46,7 @@ pub struct Tokens {
     pub border_popover: Hsla,
     pub input: Hsla,
     pub composer: Hsla,
+    pub glass: Hsla,
     pub border_composer: Hsla,
     pub border_accent: Hsla,
     pub ring: Hsla,
@@ -129,6 +130,7 @@ impl Tokens {
             border_popover: hex(0xe6e8eb),
             input: hex(0xe8eaee),
             composer: hex(0xffffff),
+            glass: hex(0xffffff),
             border_composer: hex(0xeaecf0),
             border_accent: hex(0xd9dce5),
             ring: hex(0x22242b),
@@ -212,6 +214,7 @@ impl Tokens {
             border_popover: hex(0x222228),
             input: hex(0x14151a),
             composer: hex(0x111217),
+            glass: hex(0x0a0b0f),
             border_composer: hex(0x1a1b21),
             border_accent: hex(0x25262c),
             ring: hex(0xd0d2d9),
@@ -296,6 +299,7 @@ impl Tokens {
             "border-popover" => self.border_popover,
             "input" => self.input,
             "composer" => self.composer,
+            "glass" => self.glass,
             "border-composer" => self.border_composer,
             "border-accent" => self.border_accent,
             "ring" => self.ring,
@@ -361,6 +365,7 @@ pub enum Opacity {
     Glow,
     GlowFaint,
     GlowBright,
+    GlassTint,
 }
 
 impl Opacity {
@@ -381,6 +386,7 @@ impl Opacity {
             Opacity::Glow => 0.4,
             Opacity::GlowFaint => 0.3,
             Opacity::GlowBright => 0.5,
+            Opacity::GlassTint => 0.2,
         }
     }
 
@@ -401,6 +407,7 @@ impl Opacity {
             Opacity::Glow => 0.4,
             Opacity::GlowFaint => 0.3,
             Opacity::GlowBright => 0.5,
+            Opacity::GlassTint => 0.4,
         }
     }
 }

@@ -231,8 +231,8 @@ private final class DayPickerController: UIViewController, UIPopoverPresentation
 }
 
 /// The glass a `GlassButtonView` and the jump to the end lie on, `glassSurface` in UIKit: a capsule
-/// as tall as its frame, Liquid Glass where the system has it, and the system's material with a
-/// hairline around it and a shadow before that.
+/// as tall as its frame, Liquid Glass in its tint where the system has it, and the system's
+/// material with a hairline around it and a shadow before that.
 final class GlassView: UIView {
     private let effect = UIVisualEffectView()
 
@@ -241,7 +241,9 @@ final class GlassView: UIView {
         isUserInteractionEnabled = false
         addSubview(effect)
         if #available(iOS 26.0, *) {
-            effect.effect = UIGlassEffect()
+            let glass = UIGlassEffect()
+            glass.tintColor = Theme.glassTint
+            effect.effect = glass
             effect.cornerConfiguration = .capsule()
             return
         }

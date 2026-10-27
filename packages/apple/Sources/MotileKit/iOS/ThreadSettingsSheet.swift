@@ -25,7 +25,7 @@ struct ThreadSettingsSheet: View {
             .navigationTitle("Thread Settings")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) { SheetCloseButton() }
+                GlassToolbarItem(placement: .topBarLeading) { SheetCloseButton() }
             }
             .navigationDestination(isPresented: $tmpReasoning) {
                 if let model = store.composerModel {
@@ -33,12 +33,14 @@ struct ThreadSettingsSheet: View {
                         title: "Reasoning", options: model.effortChoices, chosen: store.composerEffort ?? "", label: ComposerView.effortLabel,
                         symbol: ComposerView.effortSymbol
                     ) { store.setEffort($0) }
+                    .glassBackButton()
                 }
             }
             .onAppear { tmpReasoning = UserDefaults.standard.bool(forKey: "tmpReasoning") }
             .navigationDestination(isPresented: $store.showsBranches) {
                 if let project = store.composerProject {
                     BranchPicker(project: project, base: store.draftUsesWorktree ? store.draftBase : nil)
+                        .glassBackButton()
                 }
             }
         }
@@ -98,6 +100,7 @@ struct ThreadSettingsSheet: View {
                         title: "Reasoning", options: model.effortChoices, chosen: effort, label: ComposerView.effortLabel,
                         symbol: ComposerView.effortSymbol
                     ) { store.setEffort($0) }
+                    .glassBackButton()
                 } label: {
                     LabeledContent("Reasoning") { SymbolValue(ComposerView.effortLabel(effort), symbol: ComposerView.effortSymbol(effort)) }
                 }
@@ -106,6 +109,7 @@ struct ThreadSettingsSheet: View {
                 ChoiceList(title: "Access", options: Access.allCases, chosen: store.composerAccess, label: \.label, symbol: \.symbol) {
                     store.setAccess($0)
                 }
+                .glassBackButton()
             } label: {
                 LabeledContent("Access") { SymbolValue(store.composerAccess.label, symbol: store.composerAccess.symbol) }
             }

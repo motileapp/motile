@@ -223,7 +223,7 @@ struct RootView: View {
                         ConnectServerView(isFirst: false)
                             .navigationTitle("Add a Server")
                             .navigationBarTitleDisplayMode(.inline)
-                            .toolbar { ToolbarItem(placement: .topBarLeading) { SheetCloseButton() } }
+                            .toolbar { GlassToolbarItem(placement: .topBarLeading) { SheetCloseButton() } }
                     }
                     .presentationDragIndicator(.visible)
                 case .panel(let page):
