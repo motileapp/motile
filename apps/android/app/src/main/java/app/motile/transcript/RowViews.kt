@@ -334,7 +334,7 @@ private fun ToolRow(row: RowModel) {
             }
         }
         if (fold != null) {
-            Box(Modifier.padding(top = ToolRow.ruleGap).fillMaxWidth().height(1.dp).background(palette.borderMuted))
+            Box(Modifier.padding(top = ToolRow.ruleGap).fillMaxWidth().height(1.dp).background(palette.border))
         }
         if (expanded) {
             val detail = remember(row, palette) { tool?.detail?.get(palette) ?: AnnotatedString(thought.orEmpty(), SpanStyle(color = palette.mutedForeground)) }
