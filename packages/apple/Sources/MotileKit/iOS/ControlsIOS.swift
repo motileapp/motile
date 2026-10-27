@@ -230,8 +230,9 @@ private final class DayPickerController: UIViewController, UIPopoverPresentation
     }
 }
 
-/// The glass a `GlassButtonView` lies on, a capsule as tall as its frame: Liquid Glass where the
-/// system has it, and the system's material with a hairline around it and a shadow before that.
+/// The glass a `GlassButtonView` and the jump to the end lie on, `glassSurface` in UIKit: a capsule
+/// as tall as its frame, Liquid Glass where the system has it, and the system's material with a
+/// hairline around it and a shadow before that.
 final class GlassView: UIView {
     private let effect = UIVisualEffectView()
 
@@ -264,48 +265,6 @@ final class GlassView: UIView {
     private func paint() {
         effect.layer.borderColor = Theme.border.resolvedColor(with: traitCollection).cgColor
         applyShadow(.sm, .shadowStronger)
-    }
-}
-
-/// The composer's surface (`composerSurface`) in UIKit, a capsule as tall as its frame: Liquid
-/// Glass under the composer's tint where the system has it, and the system's material with the
-/// composer's hairline before that. The glass keeps the client's appearance, as the composer's does.
-final class ComposerGlassView: UIView {
-    private let effect = UIVisualEffectView()
-    private let tint = UIView()
-
-    override init(frame: CGRect) {
-        super.init(frame: frame)
-        isUserInteractionEnabled = false
-        addSubview(effect)
-        effect.contentView.addSubview(tint)
-        if #available(iOS 26.0, *) {
-            effect.effect = UIGlassEffect()
-            effect.cornerConfiguration = .capsule()
-        } else {
-            effect.effect = UIBlurEffect(style: .systemMaterial)
-            effect.clipsToBounds = true
-            effect.layer.borderWidth = 1
-        }
-        paint()
-        registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (view: Self, _: UITraitCollection) in view.paint() }
-    }
-
-    required init?(coder: NSCoder) { fatalError("not used") }
-
-    override func layoutSubviews() {
-        super.layoutSubviews()
-        effect.frame = bounds
-        tint.frame = effect.contentView.bounds
-        tint.layer.cornerRadius = bounds.height / 2
-        guard #unavailable(iOS 26.0) else { return }
-        effect.layer.cornerRadius = bounds.height / 2
-    }
-
-    private func paint() {
-        effect.overrideUserInterfaceStyle = traitCollection.userInterfaceStyle
-        tint.backgroundColor = Theme.thinned(Theme.composer, .inputGlassTint)
-        effect.layer.borderColor = Theme.borderComposer.resolvedColor(with: traitCollection).cgColor
     }
 }
 #endif

@@ -345,7 +345,6 @@ enum class Opacity(val light: Float, val dark: Float) {
     ColorTint(0.12f, 0.1f),
     ColorTintStronger(0.2f, 0.16f),
     ColorTintChart(0.25f, 0.2f),
-    InputGlassTint(0.8f, 0.8f),
     ShimmerBandEdge(0.12f, 0.12f),
     ShimmerBandMiddle(0.55f, 0.55f),
     Glow(0.4f, 0.4f),
