@@ -228,20 +228,26 @@ final class TranscriptView: FlippedView, RowOwner {
         }
 
         let side = Self.jumpButtonSide
-        jumpButton.fill = Theme.popover
-        jumpButton.stroke = Theme.borderPopover
         jumpButton.radius = side / 2
         jumpButton.frame = CGRect(x: 0, y: 0, width: side, height: side)
         jumpButton.isHidden = true
         jumpButton.tip = "Scroll to end"
         jumpButton.describe("Scroll to end", button: true)
-        let arrow = SymbolView(.arrowDown, size: ControlSize.regular.symbol)
+        #if os(iOS)
+        jumpButton.addSubview(ComposerGlassView(frame: jumpButton.bounds))
+        let arrow = SymbolView(.arrowDown, size: .lg, tint: Theme.foreground)
+        let arrowSide = PlatformImage.symbolSide(.lg)
+        #else
+        jumpButton.fill = Theme.popover
+        jumpButton.stroke = Theme.borderPopover
+        jumpButton.onHover = { [weak self] point in self?.jumpButton.fill = point == nil ? Theme.popover : Theme.borderPopover }
+        jumpButton.drop = (.md, .shadow)
+        let arrow = SymbolView(.arrowDown, size: ControlSize.regular.symbol, tint: Theme.foreground)
         let arrowSide = ControlSize.regular.symbolSide
+        #endif
         arrow.frame = CGRect(x: (side - arrowSide) / 2, y: (side - arrowSide) / 2, width: arrowSide, height: arrowSide)
         jumpButton.addSubview(arrow)
         jumpButton.onClick = { [weak self] in self?.scrollToEnd() }
-        jumpButton.onHover = { [weak self] point in self?.jumpButton.fill = point == nil ? Theme.popover : Theme.borderPopover }
-        jumpButton.drop = (.md, .shadow)
         addSubview(jumpButton)
 
         if Platform.hoverReveals {
@@ -867,7 +873,9 @@ final class TranscriptView: FlippedView, RowOwner {
         let hidden = pinned || rows.isEmpty || distance < jumpDistance
         guard hidden != jumpButton.isHidden else { return }
         jumpButton.isHidden = hidden
+        #if os(macOS)
         if hidden { jumpButton.fill = Theme.popover }
+        #endif
     }
 
     private func scroll(to y: CGFloat) {

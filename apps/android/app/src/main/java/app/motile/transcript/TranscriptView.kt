@@ -66,16 +66,17 @@ import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import app.motile.DemoHooks
 import app.motile.LocalStore
+import app.motile.composer.composerSurface
 import app.motile.core.AppStore
 import app.motile.core.TranscriptModel
 import app.motile.panel.DiffScope
 import app.motile.platform.Platform
 import app.motile.platform.Symbol
 import app.motile.theme.ControlSize
+import app.motile.theme.IconSize
 import app.motile.theme.LocalPalette
 import app.motile.theme.ShadowSize
 import app.motile.theme.Theme
-import app.motile.theme.shadow
 import app.motile.theme.symbolSide
 import app.motile.ui.Icon
 import app.motile.ui.Text
@@ -509,14 +510,13 @@ private fun JumpButton(modifier: Modifier, onClick: () -> Unit) {
     Box(
         modifier
             .size(TranscriptView.jumpButtonSide)
-            .shadow(ShadowSize.Md, CircleShape)
-            .background(if (pressed) palette.borderPopover else palette.popover, CircleShape)
-            .border(1.dp, palette.borderPopover, CircleShape)
+            .composerSurface(CircleShape, ShadowSize.Md)
+            .background(if (pressed) palette.borderComposer else Color.Transparent, CircleShape)
             .semantics { contentDescription = "Scroll to end" }
             .clickable(interaction, null, role = Role.Button, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(Symbol.ArrowDown, ControlSize.Regular.symbol, color = palette.foreground)
+        Icon(Symbol.ArrowDown, IconSize.Lg, color = palette.foreground)
     }
 }
 
