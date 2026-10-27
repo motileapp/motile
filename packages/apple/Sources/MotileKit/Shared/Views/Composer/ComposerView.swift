@@ -21,41 +21,39 @@ struct ComposerView: View {
     static let roomSpace = "composerRoom"
 
     var body: some View {
-        GlassGroup {
-            VStack(spacing: 0) {
-                if store.selectedThread != nil, let approval = store.activity.approvals.first {
-                    WaitingStrip(approval: approval, count: store.activity.approvals.count)
-                } else if let children = store.selectedThread?.children, let first = children.waiting.first,
-                          let text = children.waitingText {
-                    ChildrenStrip(text: text, first: first, count: children.waiting.count)
-                } else if let thread = store.selectedThread, !thread.busy, !store.activity.busy, let interruption = thread.interruption {
-                    InterruptionStrip(interruption: interruption)
-                } else if store.selectedThread != nil, store.activity.monitoring {
-                    monitoringStrip
-                } else if let thread = store.selectedThread, let children = thread.children, let text = children.runningText {
-                    agentsStrip(text, children: children, stops: thread.waitsOnAgents && !store.activity.running)
-                }
-                box
-                    .zIndex(1)
-                #if os(macOS)
-                if let project = store.composerProject {
-                    ContextStrip(project: project, server: store.server(project.serverID))
-                }
-                #endif
+        VStack(spacing: 0) {
+            if store.selectedThread != nil, let approval = store.activity.approvals.first {
+                WaitingStrip(approval: approval, count: store.activity.approvals.count)
+            } else if let children = store.selectedThread?.children, let first = children.waiting.first,
+                      let text = children.waitingText {
+                ChildrenStrip(text: text, first: first, count: children.waiting.count)
+            } else if let thread = store.selectedThread, !thread.busy, !store.activity.busy, let interruption = thread.interruption {
+                InterruptionStrip(interruption: interruption)
+            } else if store.selectedThread != nil, store.activity.monitoring {
+                monitoringStrip
+            } else if let thread = store.selectedThread, let children = thread.children, let text = children.runningText {
+                agentsStrip(text, children: children, stops: thread.waitsOnAgents && !store.activity.running)
             }
-            .overlay(alignment: .top) {
-                // Hangs above the composer from its top edge, over the transcript.
-                if store.skillMenu != nil || store.skillMenuLoading {
-                    Color.clear
-                        .frame(height: 0)
-                        .overlay(alignment: .bottom) { SkillMenuStrip(menu: store.skillMenu, room: room) }
-                }
+            box
+                .zIndex(1)
+            #if os(macOS)
+            if let project = store.composerProject {
+                ContextStrip(project: project, server: store.server(project.serverID))
             }
-            .onGeometryChange(for: CGFloat.self) { proxy in
-                proxy.frame(in: .named(Self.roomSpace)).minY
-            } action: { top in
-                room = top
+            #endif
+        }
+        .overlay(alignment: .top) {
+            // Hangs above the composer from its top edge, over the transcript.
+            if store.skillMenu != nil || store.skillMenuLoading {
+                Color.clear
+                    .frame(height: 0)
+                    .overlay(alignment: .bottom) { SkillMenuStrip(menu: store.skillMenu, room: room) }
             }
+        }
+        .onGeometryChange(for: CGFloat.self) { proxy in
+            proxy.frame(in: .named(Self.roomSpace)).minY
+        } action: { top in
+            room = top
         }
         .composerOutlineShadow()
         .frame(maxWidth: Theme.composerWidth)
