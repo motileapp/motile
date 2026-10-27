@@ -109,6 +109,7 @@ async fn main() -> anyhow::Result<()> {
 
     for prompt in PROMPTS {
         let new_thread = NewThread {
+            id: None,
             project_id: project_id.clone(),
             agent: Agent::Claude,
             agent_account: None,

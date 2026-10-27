@@ -91,6 +91,7 @@ impl Store {
         }
         self.show_server_updates(false);
         self.ensure_draft_project();
+        self.resend_drafts(cx);
         // The server has arrived; the install command has done its job.
         if self.shows_add_server && self.servers.len() > self.add_server_count {
             self.shows_add_server = false;

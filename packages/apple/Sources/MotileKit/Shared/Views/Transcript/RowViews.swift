@@ -791,7 +791,7 @@ final class ToolRowView: RowView {
 
         detailSurface.isHidden = !expanded
         rule.frame = CGRect(x: 0, y: Self.rowHeight + above + Self.ruleGap, width: width, height: 1)
-        let stampWidth = ceil(stamp.naturalWidth)
+        let stampWidth = stamp.natural.width
         stamp.frame = CGRect(x: width - stampWidth, y: above + middle(scaled(16)), width: stampWidth, height: scaled(16))
         guard expanded else { return Self.rowHeight + above + (rule.isHidden ? 0 : Self.ruleGap + 1) }
         if !loadedDetail {
@@ -810,7 +810,7 @@ final class ToolRowView: RowView {
     /// The header ends as far past the last thing on it as it starts before the icon, and a point
     /// further past the chevron, whose 9 points are drawn in the middle of its frame.
     private func fitHeader() {
-        elapsed.frame.size.width = elapsed.isHidden ? 0 : elapsed.naturalWidth
+        elapsed.frame.size.width = elapsed.isHidden ? 0 : elapsed.natural.width
         let end = !elapsed.isHidden ? elapsed.frame.maxX : hasDetail ? chevron.frame.midX + 5.5 : title.frame.maxX
         header.frame.size.width = (end + Self.bleed).rounded()
         highlight.frame = CGRect(x: 0, y: 1, width: header.frame.width, height: Self.line)

@@ -295,6 +295,7 @@ async fn a_client_signs_in_links_a_server_and_runs_a_thread_it_still_has_after_a
     assert_eq!(std::fs::read_to_string(client.projects[0].icon_path.as_ref().unwrap()).unwrap(), "picked");
 
     let new_thread = NewThread {
+        id: None,
         project_id: client.projects[0].project.id.clone(),
         agent: Agent::Claude,
         agent_account: None,
@@ -571,6 +572,7 @@ async fn a_removed_servers_threads_stay_readable_from_the_copies_until_it_is_del
     let project_id =
         client.projects_of[&build].iter().find(|view| !view.project.no_project).unwrap().project.id.clone();
     let new_thread = |project_id: String| NewThread {
+        id: None,
         project_id,
         agent: Agent::Claude,
         agent_account: None,

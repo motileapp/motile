@@ -27,7 +27,7 @@ use gpui_kit::*;
 use motile_core::api::{AccountView, Command, Config, Event};
 use motile_core::render::agents::AgentView;
 use motile_protocol::wire::{
-    Access, AgentAccount, Branch, ChangedFile, GitHubState, GitStage, ModelInfo, Repo, Request,
+    Access, AgentAccount, Branch, ChangedFile, GitHubState, GitStage, ModelInfo, NewThread, Repo, Request,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -120,19 +120,36 @@ pub struct UiConfirm {
     pub command: String,
 }
 
-/// The first message of a draft, on its way to the server.
-#[derive(Clone, Debug)]
+/// The first message of a draft, from when it is sent until the client has the thread it started,
+/// which takes the draft's id. It is kept across restarts and sent again when its server is back.
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SendingDraft {
     pub text: String,
     pub attachments: Vec<AttachedFile>,
-    pub activity: Activity,
-    /// The client has gone elsewhere since, so the sidebar lists the draft.
-    pub left: bool,
+    pub started_at: f64,
+    pub server_id: String,
+    pub new_thread: NewThread,
+    pub paths: Vec<String>,
 }
 
 impl SendingDraft {
     fn preview(&self) -> String {
         preview_of(&self.text, self.attachments.len()).unwrap_or_default()
+    }
+
+    pub fn activity(&self) -> Activity {
+        Activity { started_at: Some(self.started_at), ..Activity::starting() }
+    }
+
+    fn command(&self) -> Command {
+        Command::Send {
+            server_id: self.server_id.clone(),
+            thread_id: None,
+            new_thread: Some(self.new_thread.clone()),
+            text: self.text.clone(),
+            attachments: self.paths.clone(),
+            now: false,
+        }
     }
 }
 
@@ -281,8 +298,12 @@ pub struct Store {
     pub transcript_is_empty: bool,
     /// The agents the open thread's agent has started, in the order it started them.
     pub agents: Vec<AgentView>,
-    /// The drafts whose first message is on its way to the server, by draft.
+    /// The drafts whose first message is on its way, until the client has the thread it started.
     pub sending_drafts: HashMap<String, SendingDraft>,
+    /// The drafts sent since the client started, which aren't sent again.
+    sent_drafts: HashSet<String>,
+    /// The threads drafts started under another id than theirs, with their drafts.
+    awaited_threads: HashMap<String, String>,
     pub error_message: Option<String>,
     /// The stop that waits for the user to say it may end the agents a thread started.
     pub stopping: Option<StopQuestion>,
@@ -413,6 +434,8 @@ impl Store {
             transcript_is_empty: true,
             agents: Vec::new(),
             sending_drafts: HashMap::new(),
+            sent_drafts: HashSet::new(),
+            awaited_threads: HashMap::new(),
             error_message: None,
             stopping: None,
             ui_confirm: None,
@@ -456,6 +479,7 @@ impl Store {
             _page_watch: Self::watch_page(cx),
         };
         store.load_preferences();
+        store.show_sending_message(cx);
         store
     }
 
@@ -653,7 +677,10 @@ impl Store {
             Event::Threads { server_id, threads } => {
                 self.apply_threads(threads.into_iter().map(ThreadInfo::from).collect(), &server_id, cx)
             }
-            Event::ThreadUpsert { thread } => self.upsert((*thread).into()),
+            Event::ThreadUpsert { thread } => {
+                self.upsert((*thread).into());
+                self.open_arrived_threads(cx);
+            }
             Event::ThreadDeleted { thread_id } => self.remove_thread(&thread_id, cx),
             Event::Projects { server_id, projects } => {
                 let projects = projects.into_iter().map(|view| Project::new(view, &server_id)).collect();
@@ -836,15 +863,14 @@ impl Store {
     }
 
     /// Every draft with something written in it, newest first. The open one is listed as it was
-    /// when it was opened, and one being sent once it has been left.
+    /// when it was opened, and one being sent at once, until its thread takes its place.
     pub fn listed_drafts(&self) -> Vec<ListedDraft> {
         self.thread_drafts
             .iter()
             .rev()
             .filter_map(|draft| {
                 if let Some(sending) = self.sending_drafts.get(&draft.id) {
-                    let listed = ListedDraft { draft: draft.clone(), preview: sending.preview(), sending: true };
-                    return sending.left.then_some(listed);
+                    return Some(ListedDraft { draft: draft.clone(), preview: sending.preview(), sending: true });
                 }
                 let written = if self.selection == Selection::Draft(draft.id.clone()) {
                     self.opened_draft_preview.clone()
@@ -1226,11 +1252,16 @@ impl Store {
         self.drafts = self.prefs.get("drafts").unwrap_or_default();
         self.last_selection = self.prefs.string("selection");
         let saved: Vec<ThreadDraft> = self.prefs.get("threadDrafts").unwrap_or_default();
+        let mut sending: HashMap<String, SendingDraft> = self.prefs.get("sendingDrafts").unwrap_or_default();
         let last = self.last_selection.clone();
         self.thread_drafts = saved
             .into_iter()
-            .filter(|draft| self.preview(draft).is_some() || Some(&draft.id) == last.as_ref())
+            .filter(|draft| {
+                self.preview(draft).is_some() || sending.contains_key(&draft.id) || Some(&draft.id) == last.as_ref()
+            })
             .collect();
+        sending.retain(|id, _| self.thread_drafts.iter().any(|draft| &draft.id == id));
+        self.sending_drafts = sending;
         let restored = self.thread_drafts.iter().find(|draft| Some(&draft.id) == last.as_ref()).cloned();
         let restored_preview = self.prefs.string("openedDraftPreview");
         let opened = match &restored {
@@ -1260,6 +1291,15 @@ impl Store {
     fn save_thread_drafts(&mut self) {
         let drafts = self.thread_drafts.clone();
         self.prefs.set("threadDrafts", drafts);
+    }
+
+    fn set_sending(&mut self, draft_id: &str, sending: Option<SendingDraft>) {
+        match sending {
+            Some(sending) => self.sending_drafts.insert(draft_id.to_string(), sending),
+            None => self.sending_drafts.remove(draft_id),
+        };
+        let kept = self.sending_drafts.clone();
+        self.prefs.set("sendingDrafts", kept);
     }
 
     /// A draft that starts with what the last one was set to.
