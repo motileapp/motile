@@ -256,9 +256,9 @@ struct SidebarScreen: View {
                     AccountMenu()
                         .appearing(.scale.combined(with: .opacity))
                 }
-                SearchField(text: $store.threadSearch, bare: true, clearable: false, focus: $searchFocused)
+                SearchField(text: $store.threadSearch, capsule: true, clearable: false, focus: $searchFocused)
                     .steersSearch(highlighted: highlighted, open: openSearchResult)
-                    .padding(.horizontal, 6)
+                    .padding(.leading, 6)
                     .frame(height: 46)
                     .glassButton(in: Capsule())
                 if searching {

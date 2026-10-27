@@ -298,14 +298,15 @@ struct ProjectButtons: View {
 struct SearchField: View {
     @Binding var text: String
     var prompt = "Search"
-    /// Without a background or a height of its own, for a field that lies on glass.
-    var bare = false
+    /// Without a background or a height of its own, for a field that lies on a glass capsule and
+    /// reaches its trailing end.
+    var capsule = false
     var clearable = true
     var focus: FocusState<Bool>.Binding?
 
     var body: some View {
         InputField(
-            prompt, text: $text, icon: .search, variant: bare ? .bare : .filled, size: Platform.scale > 1 ? .large : .regular, clearable: clearable,
+            prompt, text: $text, icon: .search, variant: capsule ? .capsule : .filled, size: Platform.scale > 1 ? .large : .regular, clearable: clearable,
             focus: focus
         )
     }

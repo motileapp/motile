@@ -551,9 +551,9 @@ private fun Footer(
                     .weight(1f)
                     .height(46.dp)
                     .glassButton(CircleShape)
-                    .padding(horizontal = 6.dp)
+                    .padding(start = 6.dp)
                     .steersSearch(store, highlighted),
-                bare = true, clearable = false, focusRequester = searchFocus, onFocusChange = onFocusChange, onSubmit = openHighlighted,
+                capsule = true, clearable = false, focusRequester = searchFocus, onFocusChange = onFocusChange, onSubmit = openHighlighted,
             )
             Appearing(searching, enter = appear, exit = leave) { GlassButton(Symbol.X, "Close search", onClick = closeSearch) }
             Appearing(!searching, enter = appear, exit = leave) {

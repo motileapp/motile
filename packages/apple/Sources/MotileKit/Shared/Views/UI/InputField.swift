@@ -7,6 +7,9 @@ enum InputVariant {
     /// No background or height of its own, for a field that lies on glass, with its symbol in the
     /// foreground as the system's glass fields have.
     case bare
+    /// A bare field that reaches the end of the capsule it lies on, whose clear button is a circle
+    /// in that end, as far from its side as from its top and bottom.
+    case capsule
 }
 
 /// A line to type in, as tall as a button of its size, with a symbol before it when it has one
@@ -42,7 +45,7 @@ struct InputField: View {
     }
 
     /// A button inside the field is as far from its top and bottom as from its side.
-    private var bare: Bool { variant == .bare }
+    private var bare: Bool { variant != .filled }
 
     private var clearInset: CGFloat { (size.height - ControlSize.small.height) / 2 }
 
@@ -60,11 +63,11 @@ struct InputField: View {
                 .numberKeypad(numeric)
                 .onEscape(clearable && !text.isEmpty ? { text = "" } : nil)
             if clearable, !text.isEmpty {
-                ActionButton(icon: .x, help: "Clear", size: .small) { text = "" }
-                    .padding(.trailing, clearInset - size.padding + 2)
+                clearButton
             }
         }
-        .padding(.horizontal, size.padding - 2)
+        .padding(.leading, size.padding - 2)
+        .padding(.trailing, clearsInEnd ? 0 : size.padding - 2)
         .frame(height: bare ? nil : size.height)
         .frame(maxHeight: bare ? .infinity : nil)
         .background {
@@ -78,6 +81,19 @@ struct InputField: View {
 }
 
 extension InputField {
+    private var clearsInEnd: Bool { variant == .capsule && clearable && !text.isEmpty }
+
+    @ViewBuilder fileprivate var clearButton: some View {
+        if variant == .capsule {
+            Color.clear
+                .aspectRatio(1, contentMode: .fit)
+                .overlay { ActionButton(icon: .x, help: "Clear", round: true) { text = "" } }
+        } else {
+            ActionButton(icon: .x, help: "Clear", size: .small) { text = "" }
+                .padding(.trailing, clearInset - size.padding + 2)
+        }
+    }
+
     @ViewBuilder fileprivate var field: some View {
         if secure {
             SecureField("", text: $text).placeholder(placeholder, shown: text.isEmpty)
