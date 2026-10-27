@@ -22,13 +22,14 @@ use motile_protocol::wire::{
     CONTINUE_PROMPT, ChangedFile, ContinueSettings, CopiedThread, DiffScope, FileKind, GitAction, GitHubState,
     GitStage, GitStatus, HandoffEnd, Interruption, Item, ItemKind, Media, MergeMethod, Message, ModelInfo, NewThread,
     NoticeEvent, OriginUsage, Project, PullRequest, PullRequestAction, Queued, RunsOn, ServerInfo, ServerUpdate,
-    SkillMention, Subagent, Thread, ThreadChange, ToolCall, ToolStatus, TurnChanges, TurnSummary, Worktree,
+    SkillMention, Subagent, Thread, ThreadChange, ThreadParent, ToolCall, ToolStatus, TurnChanges, TurnSummary,
+    Worktree,
 };
 use motile_protocol::{error_text, now};
 use serde_json::Value;
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, ChildStdin, Command};
-use tokio::sync::{Mutex, broadcast, mpsc, watch};
+use tokio::sync::{Mutex, OwnedMutexGuard, broadcast, mpsc, watch};
 use tokio::task::AbortHandle;
 
 use crate::agents::environment::Environment;
@@ -122,8 +123,10 @@ pub struct Hub {
     pub ricrac: Ricrac,
     pub lookups: Lookups,
     environment: Environment,
-    threads: Mutex<HashMap<String, Live>>,
-    /// Locked after `threads` when both are needed.
+    /// The server's own threads, each behind a lock of its own. A thread's lock is never waited for
+    /// while another's is held, and the map is never held while a lock is waited for.
+    threads: std::sync::Mutex<HashMap<String, Slot>>,
+    /// Locked after a thread's when both are needed.
     projects: Mutex<Vec<StoredProject>>,
     /// What git last said about each folder threads work in: the projects' and the worktrees'.
     git: std::sync::Mutex<HashMap<String, GitRead>>,
@@ -171,10 +174,28 @@ pub struct Hub {
     /// The threads agents started whose parents have news to hear, and where that is read.
     children_changed: mpsc::UnboundedSender<String>,
     children_changes: std::sync::Mutex<Option<mpsc::UnboundedReceiver<String>>>,
+    /// The threads agents started whose parents were told how they are doing.
+    children_told: broadcast::Sender<String>,
     /// How many of an agent's calls wait for each thread it started, by thread.
     waiting_on: std::sync::Mutex<HashMap<String, usize>>,
     /// The threads agents started, by the thread that started each and the id it gave the request.
     started: std::sync::Mutex<HashMap<(String, String), String>>,
+}
+
+/// A thread with the lock its work takes.
+#[derive(Clone)]
+struct Slot {
+    live: Arc<Mutex<Live>>,
+    /// The thread that started it, which never changes, so that a thread's family is known without
+    /// its lock.
+    parent: Option<ThreadParent>,
+}
+
+impl Slot {
+    fn new(live: Live) -> Self {
+        let parent = live.stored.thread.parent.clone();
+        Self { live: Arc::new(Mutex::new(live)), parent }
+    }
 }
 
 /// What the agent of a thread that watches its pull request was last told about.
@@ -246,6 +267,10 @@ struct Live {
     told_question: Option<String>,
     /// The agent that started the thread was told it waits for its usage limit to reset.
     told_limit: bool,
+    /// How many tool calls of its own the transcript has, once they were counted.
+    tools: Option<u64>,
+    /// The thread was deleted while this waited for its lock.
+    deleted: bool,
 }
 
 struct StartedTurn {
@@ -343,7 +368,10 @@ impl Hub {
             }
             Ok((live.stored.thread.id.clone(), live))
         };
-        let threads = threads.into_iter().map(&mut live).collect::<anyhow::Result<_>>()?;
+        let threads = threads
+            .into_iter()
+            .map(|stored| live(stored).map(|(id, live)| (id, Slot::new(live))))
+            .collect::<anyhow::Result<_>>()?;
         let mut projects = store.load_projects()?;
         for project in &mut projects {
             refresh_icon(&store, project);
@@ -353,8 +381,10 @@ impl Hub {
         let (list_updates, _) = broadcast::channel(UPDATES_BUFFER);
         let git = std::sync::Mutex::default();
         let (children_changed, children_changes) = mpsc::unbounded_channel();
+        let (children_told, _) = broadcast::channel(UPDATES_BUFFER);
         Ok(Arc::new(Self {
             children_changed,
+            children_told,
             children_changes: std::sync::Mutex::new(Some(children_changes)),
             waiting_on: std::sync::Mutex::default(),
             started: std::sync::Mutex::default(),
@@ -382,7 +412,7 @@ impl Hub {
             watched: std::sync::Mutex::default(),
             worktrees: std::sync::Mutex::new(worktrees),
             snapshotting: Mutex::default(),
-            threads: Mutex::new(threads),
+            threads: std::sync::Mutex::new(threads),
             store: Arc::new(store),
             media,
             linear: Linear::from_environment(),
@@ -420,9 +450,60 @@ impl Hub {
         &self.environment
     }
 
+    fn lock_threads(&self) -> std::sync::MutexGuard<'_, HashMap<String, Slot>> {
+        self.threads.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    fn slot(&self, thread_id: &str) -> Option<Slot> {
+        self.lock_threads().get(thread_id).cloned()
+    }
+
+    fn add_thread(&self, live: Live) {
+        self.lock_threads().insert(live.stored.thread.id.clone(), Slot::new(live));
+    }
+
+    /// The thread, once nothing else works on it, while it is there.
+    async fn live(&self, thread_id: &str) -> Option<OwnedMutexGuard<Live>> {
+        let live = self.slot(thread_id)?.live.lock_owned().await;
+        (!live.deleted).then_some(live)
+    }
+
+    async fn live_or(&self, thread_id: &str, gone: &'static str) -> anyhow::Result<OwnedMutexGuard<Live>> {
+        self.live(thread_id).await.context(gone)
+    }
+
+    /// What `pick` takes from each thread, one thread at a time.
+    async fn each_thread<T>(&self, mut pick: impl FnMut(&mut Live) -> Option<T>) -> Vec<T> {
+        let slots: Vec<Slot> = self.lock_threads().values().cloned().collect();
+        let mut picked = Vec::new();
+        for slot in slots {
+            let mut live = slot.live.lock().await;
+            if !live.deleted {
+                picked.extend(pick(&mut live));
+            }
+        }
+        picked
+    }
+
+    /// Every thread at once, each locked in the order of its id, for what has to see them all as
+    /// they are.
+    async fn every_thread(&self) -> Vec<OwnedMutexGuard<Live>> {
+        let mut slots: Vec<(String, Slot)> =
+            self.lock_threads().iter().map(|(id, slot)| (id.clone(), slot.clone())).collect();
+        slots.sort_by(|a, b| a.0.cmp(&b.0));
+        let mut locked = Vec::new();
+        for (_, slot) in slots {
+            let live = slot.live.lock_owned().await;
+            if !live.deleted {
+                locked.push(live);
+            }
+        }
+        locked
+    }
+
     /// One of the server's own threads, as it is now.
     pub async fn thread(&self, thread_id: &str) -> Option<Thread> {
-        self.threads.lock().await.get(thread_id).map(|live| live.stored.thread.clone())
+        Some(self.live(thread_id).await?.stored.thread.clone())
     }
 
     /// The projects' names, by id.
@@ -592,7 +673,7 @@ impl Hub {
     /// Adds an account of an agent or changes one. Threads whose sessions it no longer has start
     /// new ones, told what was said.
     pub async fn save_agent_account(self: &Arc<Self>, account: AgentAccount) -> anyhow::Result<String> {
-        let mut threads = self.threads.lock().await;
+        let mut threads = self.every_thread().await;
         let accounts = self.agent_accounts();
         let mut account = agent_accounts::checked(account, &accounts)?;
         agent_accounts::prepare(&account, &self.environment)?;
@@ -658,7 +739,7 @@ impl Hub {
     /// Removes an account. Its threads go on with the agent's default account, which is the next
     /// one when it was the default.
     pub async fn remove_agent_account(self: &Arc<Self>, id: &str) -> anyhow::Result<()> {
-        let mut threads = self.threads.lock().await;
+        let mut threads = self.every_thread().await;
         let mut accounts = self.agent_accounts();
         let account =
             accounts.iter().find(|account| account.id == id).context("That account is no longer on your server.")?;
@@ -687,11 +768,11 @@ impl Hub {
     /// go on with the sessions of the folder the account keeps them in now.
     fn reload_sessions(
         &self,
-        threads: &mut HashMap<String, Live>,
+        threads: &mut [OwnedMutexGuard<Live>],
         id: &str,
         moving: Option<&AgentAccount>,
     ) -> anyhow::Result<()> {
-        for live in threads.values_mut().filter(|live| live.stored.thread.agent_account == id) {
+        for live in threads.iter_mut().filter(|live| live.stored.thread.agent_account == id) {
             if let Some(to) = moving {
                 live.stored.thread.agent_account = to.id.clone();
             }
@@ -806,14 +887,13 @@ impl Hub {
 
     /// The threads that wait to continue once their usage limit resets, and whose limit has.
     async fn limits_reset(&self) -> Vec<String> {
-        let threads = self.threads.lock().await;
-        let idle = |live: &&Live| !live.busy();
-        let reset = |live: &&Live| match live.stored.thread.interruption {
+        let reset = |live: &Live| match live.stored.thread.interruption {
             Some(Interruption::Limit { resets_at: Some(at), continues: true }) => at <= now(),
             _ => false,
         };
-        let open = |live: &&Live| live.stored.thread.done_at.is_none();
-        threads.values().filter(idle).filter(reset).filter(open).map(|live| live.stored.thread.id.clone()).collect()
+        let open = |live: &Live| live.stored.thread.done_at.is_none();
+        self.each_thread(|live| (!live.busy() && reset(live) && open(live)).then(|| live.stored.thread.id.clone()))
+            .await
     }
 
     /// Lets the agents go before the server stops: nothing new starts, and what runs is stopped
@@ -824,13 +904,14 @@ impl Hub {
         if continues && let Err(error) = self.store.set_setting(CONTINUE_AFTER_THIS_RESTART, Some("true")) {
             tracing::error!("couldn't note that the threads continue after the restart: {error:#}");
         }
-        let processes: Vec<u32> = {
-            let threads = self.threads.lock().await;
-            for preparing in threads.values().filter_map(|live| live.preparing.as_ref()) {
-                preparing.task.abort();
-            }
-            threads.values().filter_map(|live| live.run.as_ref().map(|run| run.process_id)).collect()
-        };
+        let processes: Vec<u32> = self
+            .each_thread(|live| {
+                if let Some(preparing) = &live.preparing {
+                    preparing.task.abort();
+                }
+                live.run.as_ref().map(|run| run.process_id)
+            })
+            .await;
         if processes.is_empty() {
             return;
         }
@@ -874,8 +955,8 @@ impl Hub {
     }
 
     pub async fn subscribe(&self) -> ListSubscription {
-        let threads = self.threads.lock().await;
-        let mut list: Vec<Thread> = threads.values().map(|live| live.stored.thread.clone()).collect();
+        let updates = self.list_updates.subscribe();
+        let mut list: Vec<Thread> = self.each_thread(|live| Some(live.stored.thread.clone())).await;
         list.sort_by(|a, b| b.updated_at.total_cmp(&a.updated_at));
         ListSubscription {
             first: Message::Welcome {
@@ -883,14 +964,13 @@ impl Hub {
                 threads: list,
                 projects: self.projects_of(&self.projects.lock().await),
             },
-            updates: self.list_updates.subscribe(),
+            updates,
         }
     }
 
     /// What changed in the thread after revision `since`, and every change from now on.
     pub async fn open(&self, thread_id: &str, since: u64) -> anyhow::Result<ThreadSubscription> {
-        let mut threads = self.threads.lock().await;
-        let live = threads.get_mut(thread_id).context("That thread no longer exists.")?;
+        let mut live = self.live_or(thread_id, "That thread no longer exists.").await?;
         live.flush(&self.store)?;
         let rev = live.stored.thread.rev;
         // A client ahead of the server has a copy from before the server's data was replaced.
@@ -922,7 +1002,6 @@ impl Hub {
         if !motile_protocol::skills::mentions(&text).is_empty() {
             self.list_skills_once(thread_id.as_deref(), new_thread.as_ref()).await;
         }
-        let mut threads = self.threads.lock().await;
         let (thread_id, is_new) = match (thread_id, new_thread) {
             (Some(thread_id), _) => (thread_id, false),
             (None, Some(new_thread)) => {
@@ -944,12 +1023,13 @@ impl Hub {
                 if let Some((_, items)) = from {
                     live.take_history(&self.store, items)?;
                 }
-                threads.insert(thread_id.clone(), live);
+                self.add_thread(live);
                 (thread_id, true)
             }
             (None, None) => bail!("No thread was given."),
         };
-        let live = threads.get_mut(&thread_id).context("That thread no longer exists.")?;
+        let mut live = self.live_or(&thread_id, "That thread no longer exists.").await?;
+        let live = &mut *live;
         // A message goes on with the thread, so it no longer waits to be continued.
         live.stored.thread.interruption = None;
         let message = Queued {
@@ -1003,8 +1083,7 @@ impl Hub {
         if state.to_string().len() > ui::MAX_STATE {
             bail!("That program's state is too large to keep.");
         }
-        let mut threads = self.threads.lock().await;
-        let live = threads.get_mut(thread_id).context("That thread isn't one of your server's own.")?;
+        let mut live = self.live_or(thread_id, "That thread isn't one of your server's own.").await?;
         live.set_ui(&self.store, item_id, block, state)
     }
 
@@ -1147,8 +1226,7 @@ impl Hub {
 
     /// The first message didn't say enough; the transcript will, once the first turn has ended.
     async fn refine_title_later(self: &Arc<Self>, thread_id: &str) {
-        let mut threads = self.threads.lock().await;
-        let Some(live) = threads.get_mut(thread_id) else { return };
+        let Some(mut live) = self.live(thread_id).await else { return };
         if live.stored.thread.running {
             live.title_needs_refinement = true;
             return;
@@ -1158,12 +1236,9 @@ impl Hub {
 
     async fn title_from_transcript(self: Arc<Self>, thread_id: String) {
         let Some(account) = self.account_of_thread(&thread_id).await else { return };
-        let (previous_title, items) = {
-            let threads = self.threads.lock().await;
-            let Some(live) = threads.get(&thread_id) else { return };
-            let Ok(items) = self.store.items_since(&thread_id, 0) else { return };
-            (live.stored.thread.title.clone(), items)
-        };
+        let Some(thread) = self.thread(&thread_id).await else { return };
+        let Ok(items) = self.store.items_since(&thread_id, 0) else { return };
+        let previous_title = thread.title;
         let writer = self.writer(&account);
         let generated = title::from_transcript(&writer, &previous_title, &items).await;
         self.keep_written_in(&thread_id, &writer, Purpose::Title).await;
@@ -1181,9 +1256,8 @@ impl Hub {
     }
 
     async fn keep_written_in(&self, thread_id: &str, writer: &Writer, purpose: Purpose) {
-        let project_id = self.threads.lock().await.get(thread_id).map(|live| live.stored.thread.project_id.clone());
-        let Some(project_id) = project_id else { return };
-        self.keep_written(writer, purpose, &project_id, Some(thread_id));
+        let Some(thread) = self.thread(thread_id).await else { return };
+        self.keep_written(writer, purpose, &thread.project_id, Some(thread_id));
     }
 
     /// Who writes titles, commit messages and pull requests: the model the user picked, or the
@@ -1236,13 +1310,11 @@ impl Hub {
     }
 
     async fn account_of_thread(&self, thread_id: &str) -> Option<AgentAccount> {
-        let threads = self.threads.lock().await;
-        threads.get(thread_id).map(|live| self.account_of(&live.stored.thread))
+        Some(self.account_of(&self.thread(thread_id).await?))
     }
 
     async fn set_generated_title(&self, thread_id: &str, title: String) {
-        let mut threads = self.threads.lock().await;
-        let Some(live) = threads.get_mut(thread_id) else { return };
+        let Some(mut live) = self.live(thread_id).await else { return };
         if live.stored.title_source != TitleSource::Placeholder {
             return;
         }
@@ -1263,8 +1335,8 @@ impl Hub {
         allow: bool,
         answers: HashMap<String, String>,
     ) -> anyhow::Result<()> {
-        let mut threads = self.threads.lock().await;
-        let live = threads.get_mut(thread_id).context("That thread no longer exists.")?;
+        let mut live = self.live_or(thread_id, "That thread no longer exists.").await?;
+        let live = &mut *live;
         let waiting = live.activity.approvals.iter().position(|approval| approval.id == approval_id);
         let approval = live.activity.approvals.remove(waiting.context("The agent no longer waits for that answer.")?);
         let thread = &live.stored.thread;
@@ -1287,8 +1359,8 @@ impl Hub {
     /// Gives the agent a queued message now: the turn that runs takes it at once, an idle
     /// process starts its next turn with it.
     pub async fn send_queued(self: &Arc<Self>, thread_id: &str, message_id: &str) -> anyhow::Result<()> {
-        let mut threads = self.threads.lock().await;
-        let live = threads.get_mut(thread_id).context("That thread no longer exists.")?;
+        let mut live = self.live_or(thread_id, "That thread no longer exists.").await?;
+        let live = &mut *live;
         let index = live.queued_index(message_id)?;
         if live.preparing.is_some() {
             bail!("The agent isn't ready yet. Send it again in a moment.");
@@ -1315,8 +1387,7 @@ impl Hub {
 
     /// Takes a queued message back.
     pub async fn cancel_queued(&self, thread_id: &str, message_id: &str) -> anyhow::Result<()> {
-        let mut threads = self.threads.lock().await;
-        let live = threads.get_mut(thread_id).context("That thread no longer exists.")?;
+        let mut live = self.live_or(thread_id, "That thread no longer exists.").await?;
         let index = live.queued_index(message_id)?;
         live.queued.remove(index);
         live.save_queued(&self.store)?;
@@ -1336,21 +1407,17 @@ impl Hub {
     /// Stops the thread's agent and every agent it started, theirs first. What they would have
     /// told it of their ends isn't told: the user stopped it all.
     pub async fn stop(self: &Arc<Self>, thread_id: &str) {
-        let children = {
-            let mut threads = self.threads.lock().await;
-            if let Some(live) = threads.get_mut(thread_id) {
-                live.queued.retain(|queued| queued.notice.is_none());
+        if let Some(mut live) = self.live(thread_id).await {
+            live.queued.retain(|queued| queued.notice.is_none());
+        }
+        let children = self.descendants(thread_id);
+        for id in &children {
+            let Some(mut child) = self.live(id).await else { continue };
+            child.stored.reports = false;
+            if let Err(error) = self.store.save_thread(&child.stored) {
+                tracing::error!(thread_id, "couldn't save a thread: {error:#}");
             }
-            let children = children::descendants(&threads, thread_id);
-            for id in &children {
-                let Some(child) = threads.get_mut(id) else { continue };
-                child.stored.reports = false;
-                if let Err(error) = self.store.save_thread(&child.stored) {
-                    tracing::error!(thread_id, "couldn't save a thread: {error:#}");
-                }
-            }
-            children
-        };
+        }
         for child in children {
             self.stop_one(&child).await;
         }
@@ -1358,8 +1425,8 @@ impl Hub {
     }
 
     async fn stop_one(self: &Arc<Self>, thread_id: &str) {
-        let mut threads = self.threads.lock().await;
-        let Some(live) = threads.get_mut(thread_id) else { return };
+        let Some(mut live) = self.live(thread_id).await else { return };
+        let live = &mut *live;
         if let Some(preparing) = live.preparing.take() {
             preparing.task.abort();
             // What was made of the worktree so far may be half of it.
@@ -1399,8 +1466,8 @@ impl Hub {
         tokio::spawn(async move {
             for (delay, signal_number) in [(1500, libc::SIGTERM), (2500, libc::SIGKILL)] {
                 tokio::time::sleep(Duration::from_millis(delay)).await;
-                let threads = hub.threads.lock().await;
-                let still_running = threads.get(&thread_id).and_then(|live| live.run.as_ref());
+                let live = hub.live(&thread_id).await;
+                let still_running = live.as_ref().and_then(|live| live.run.as_ref());
                 if still_running.is_none_or(|run| run.process_id != process_id) {
                     return;
                 }
@@ -1410,8 +1477,8 @@ impl Hub {
     }
 
     pub async fn update(&self, thread_id: &str, change: ThreadChange) -> anyhow::Result<()> {
-        let mut threads = self.threads.lock().await;
-        let live = threads.get_mut(thread_id).context("That thread no longer exists.")?;
+        let mut live = self.live_or(thread_id, "That thread no longer exists.").await?;
+        let live = &mut *live;
         if let Some(id) = change.agent_account.as_ref().filter(|id| **id != live.stored.thread.agent_account) {
             self.move_to_account(live, id)?;
         }
@@ -1500,7 +1567,7 @@ impl Hub {
 
     /// Deletes the thread and the threads its agent started, theirs first.
     pub async fn delete(&self, thread_id: &str) -> anyhow::Result<()> {
-        let children = children::descendants(&*self.threads.lock().await, thread_id);
+        let children = self.descendants(thread_id);
         for child in children {
             self.delete_one(&child).await?;
         }
@@ -1508,8 +1575,9 @@ impl Hub {
     }
 
     async fn delete_one(&self, thread_id: &str) -> anyhow::Result<()> {
-        let mut threads = self.threads.lock().await;
-        let Some(live) = threads.remove(thread_id) else { return Ok(()) };
+        let Some(mut live) = self.live(thread_id).await else { return Ok(()) };
+        live.deleted = true;
+        self.lock_threads().remove(thread_id);
         if let Some(run) = &live.run {
             signal(run.process_id, libc::SIGKILL);
         }
@@ -1545,7 +1613,7 @@ impl Hub {
     }
 
     pub async fn any_running(&self) -> bool {
-        self.threads.lock().await.values().any(Live::busy)
+        !self.each_thread(|live| live.busy().then_some(())).await.is_empty()
     }
 
     /// Answers with the project's id, also when the folder was a project already.
@@ -1769,10 +1837,7 @@ impl Hub {
     /// may start one.
     async fn list_skills_once(&self, thread_id: Option<&str>, new_thread: Option<&NewThread>) {
         let project_id = match (thread_id, new_thread) {
-            (Some(thread_id), _) => {
-                let threads = self.threads.lock().await;
-                threads.get(thread_id).map(|live| live.stored.thread.project_id.clone())
-            }
+            (Some(thread_id), _) => self.thread(thread_id).await.map(|thread| thread.project_id),
             (None, new_thread) => new_thread.map(|new_thread| new_thread.project_id.clone()),
         };
         let Some(project_id) = project_id else { return };
@@ -1826,19 +1891,19 @@ impl Hub {
     /// folder can check it out. A worktree that isn't a thread's, or whose agent still works, keeps it.
     async fn take_back_branch(&self, path: &str, branch: &str) -> anyhow::Result<()> {
         let Some(holder) = git::worktree_holding(path, &self.environment, branch).await else { return Ok(()) };
-        let own = {
-            let threads = self.threads.lock().await;
-            let live = threads.values().find(|live| same_folder(&live.stored.thread.cwd, &holder));
-            match live {
-                None => bail!("{branch} is checked out in the worktree at {holder}."),
-                Some(live) if live.activity.running => {
-                    bail!(
-                        "{branch} is checked out in the worktree of “{}”, which is still working.",
-                        live.stored.thread.title
-                    )
-                }
-                Some(live) => live.stored.worktree.as_ref().map(|worktree| worktree.branch.clone()),
+        let holders = self
+            .each_thread(|live| {
+                let holds = same_folder(&live.stored.thread.cwd, &holder);
+                let branch = live.stored.worktree.as_ref().map(|worktree| worktree.branch.clone());
+                holds.then(|| (live.activity.running, live.stored.thread.title.clone(), branch))
+            })
+            .await;
+        let own = match holders.into_iter().next() {
+            None => bail!("{branch} is checked out in the worktree at {holder}."),
+            Some((true, title, _)) => {
+                bail!("{branch} is checked out in the worktree of “{title}”, which is still working.")
             }
+            Some((false, _, own)) => own,
         };
         git::release_branch(&holder, &self.environment, own.as_deref()).await?;
         self.read_git(&holder, false).await;
@@ -1859,9 +1924,9 @@ impl Hub {
     }
 
     async fn refuse_while_working(&self, folder: &str) -> anyhow::Result<()> {
-        let threads = self.threads.lock().await;
-        let working = threads.values().any(|live| live.stored.thread.cwd == folder && live.activity.running);
-        if working {
+        let working =
+            self.each_thread(|live| (live.stored.thread.cwd == folder && live.activity.running).then_some(()));
+        if !working.await.is_empty() {
             bail!("An agent is still working. Switch branches when it has finished.");
         }
         Ok(())
@@ -1910,11 +1975,8 @@ impl Hub {
             DiffScope::Branch => {
                 let base = match thread_id {
                     Some(thread_id) => {
-                        let threads = self.threads.lock().await;
-                        threads
-                            .get(thread_id)
-                            .and_then(|live| live.stored.worktree.as_ref())
-                            .map(|own| own.base.clone())
+                        let live = self.live(thread_id).await;
+                        live.and_then(|live| live.stored.worktree.as_ref().map(|own| own.base.clone()))
                     }
                     None => None,
                 };
@@ -1971,11 +2033,13 @@ impl Hub {
 
     /// The project's threads whose pull request has that number.
     async fn threads_following(&self, project_id: &str, number: u64) -> Vec<String> {
-        let threads = self.threads.lock().await;
-        let following = threads.values().map(|live| &live.stored.thread).filter(|thread| {
-            thread.project_id == project_id && thread.pull_request.as_ref().is_some_and(|found| found.number == number)
-        });
-        following.map(|thread| thread.id.clone()).collect()
+        self.each_thread(|live| {
+            let thread = &live.stored.thread;
+            let follows = thread.project_id == project_id
+                && thread.pull_request.as_ref().is_some_and(|found| found.number == number);
+            follows.then(|| thread.id.clone())
+        })
+        .await
     }
 
     /// Changes the pull request as the edit says, then reads it again.
@@ -2006,8 +2070,7 @@ impl Hub {
 
     /// Makes the pull request with that number the thread's own, or takes its own away.
     pub async fn link_pull_request(&self, thread_id: &str, number: Option<u64>) -> anyhow::Result<()> {
-        let project_id = self.threads.lock().await.get(thread_id).map(|live| live.stored.thread.project_id.clone());
-        let project_id = project_id.context("That thread no longer exists.")?;
+        let project_id = self.thread(thread_id).await.context("That thread no longer exists.")?.project_id;
         let found = match number {
             Some(number) => {
                 let folder = self.github_folder(&project_id, Some(thread_id)).await?;
@@ -2016,8 +2079,7 @@ impl Hub {
             }
             None => None,
         };
-        let mut threads = self.threads.lock().await;
-        let live = threads.get_mut(thread_id).context("That thread no longer exists.")?;
+        let mut live = self.live_or(thread_id, "That thread no longer exists.").await?;
         live.stored.thread.watching &= found
             .as_ref()
             .is_some_and(|found| live.stored.thread.pull_request.as_ref().map(|own| own.number) == Some(found.number));
@@ -2029,8 +2091,7 @@ impl Hub {
 
     /// Has the thread's agent told what happens on its pull request, or stops it.
     pub async fn watch_pull_request(&self, thread_id: &str, watch: bool) -> anyhow::Result<()> {
-        let mut threads = self.threads.lock().await;
-        let live = threads.get_mut(thread_id).context("That thread no longer exists.")?;
+        let mut live = self.live_or(thread_id, "That thread no longer exists.").await?;
         if watch && !live.stored.thread.pull_request.as_ref().is_some_and(PullRequest::is_open) {
             bail!("This thread has no open pull request to watch.");
         }
@@ -2162,15 +2223,13 @@ impl Hub {
     }
 
     async fn look_at_watched(self: &Arc<Self>) {
-        let watched: Vec<(String, String, u64)> = {
-            let threads = self.threads.lock().await;
-            let watched = threads.values().map(|live| &live.stored.thread).filter(|thread| thread.watching);
-            watched
-                .filter_map(|thread| {
-                    Some((thread.id.clone(), thread.project_id.clone(), thread.pull_request.as_ref()?.number))
-                })
-                .collect()
-        };
+        let watched: Vec<(String, String, u64)> = self
+            .each_thread(|live| {
+                let thread = &live.stored.thread;
+                let number = thread.pull_request.as_ref().filter(|_| thread.watching)?.number;
+                Some((thread.id.clone(), thread.project_id.clone(), number))
+            })
+            .await;
         for (thread_id, project_id, number) in watched {
             let Ok(folder) = self.github_folder(&project_id, Some(&thread_id)).await else { continue };
             let Ok(found) = pull_requests::detail(&folder, &self.environment, number).await else { continue };
@@ -2228,9 +2287,8 @@ impl Hub {
         }
         let path = self.project_path(project_id).await?;
         let Some(thread_id) = thread_id.filter(|_| Path::new(&path) == self.no_project_folder) else { return Ok(path) };
-        let threads = self.threads.lock().await;
-        let thread = threads.get(thread_id).context("That thread is no longer on your server.")?;
-        Ok(thread.stored.thread.cwd.clone())
+        let thread = self.thread(thread_id).await.context("That thread is no longer on your server.")?;
+        Ok(thread.cwd)
     }
 
     /// Reads the folder's status. GitHub is asked for the branch's pull request when it was last
@@ -2277,27 +2335,29 @@ impl Hub {
     /// Who writes for the run and what its thread is about. Without a thread, the first agent
     /// that is installed writes.
     async fn writer_of(&self, thread_id: Option<&str>) -> anyhow::Result<(Writer, drafts::Thread)> {
-        let threads = self.threads.lock().await;
-        let Some(live) = thread_id.and_then(|thread_id| threads.get(thread_id)) else {
+        let thread = match thread_id {
+            Some(thread_id) => self.thread(thread_id).await,
+            None => None,
+        };
+        let Some(thread) = thread else {
             let installed =
                 [Agent::Claude, Agent::Codex].into_iter().find(|agent| self.environment.executable(*agent).is_some());
             let agent = installed.context("No agent is installed on your server to write this.")?;
             return Ok((self.writer(&self.default_account(agent)), drafts::Thread::default()));
         };
-        let thread = &live.stored.thread;
         let items = self.store.items_since(&thread.id, 0).unwrap_or_default();
         let said = items.iter().filter_map(|item| match &item.kind {
             ItemKind::User { text, .. } if !text.is_empty() => Some(format!("USER:\n{text}")),
             _ => None,
         });
         let messages = said.collect::<Vec<_>>().join("\n\n");
-        Ok((self.writer(&self.account_of(thread)), drafts::Thread { title: thread.title.clone(), messages }))
+        Ok((self.writer(&self.account_of(&thread)), drafts::Thread { title: thread.title.clone(), messages }))
     }
 
     /// Makes the pull request the thread's own, or keeps what GitHub now says of it.
     async fn set_pull_request(&self, thread_id: Option<&str>, pull_request: PullRequest) {
-        let mut threads = self.threads.lock().await;
-        let Some(live) = thread_id.and_then(|thread_id| threads.get_mut(thread_id)) else { return };
+        let Some(thread_id) = thread_id else { return };
+        let Some(mut live) = self.live(thread_id).await else { return };
         if live.stored.thread.pull_request.as_ref() == Some(&pull_request) {
             return;
         }
@@ -2320,7 +2380,7 @@ impl Hub {
         let removes =
             merged && settings.remove_merged_worktrees && live.stored.worktree.is_some() && !live.stored.thread.running;
         let (cwd, project_id) = (live.stored.thread.cwd.clone(), live.stored.thread.project_id.clone());
-        drop(threads);
+        drop(live);
         if removes {
             self.remove_merged_worktree(&cwd, &project_id).await;
         }
@@ -2410,12 +2470,13 @@ impl Hub {
         found: &PullRequest,
         wanted: impl Fn(&PullRequest, &Thread) -> bool,
     ) {
-        let chosen: Vec<String> = {
-            let threads = self.threads.lock().await;
-            let in_folder = threads.values().map(|live| &live.stored.thread).filter(|thread| thread.cwd == folder);
-            let chosen = in_folder.filter(|thread| thread.pull_request.as_ref().is_some_and(|own| wanted(own, thread)));
-            chosen.map(|thread| thread.id.clone()).collect()
-        };
+        let chosen: Vec<String> = self
+            .each_thread(|live| {
+                let thread = &live.stored.thread;
+                let own = thread.pull_request.as_ref().filter(|_| thread.cwd == folder)?;
+                wanted(own, thread).then(|| thread.id.clone())
+            })
+            .await;
         for thread_id in chosen {
             self.set_pull_request(Some(&thread_id), found.clone()).await;
         }
@@ -2434,17 +2495,16 @@ impl Hub {
     }
 
     async fn refresh_pull_requests(&self) {
-        let followed: Vec<(String, String, u64)> = {
-            let threads = self.threads.lock().await;
-            let followed = threads.values().map(|live| &live.stored.thread).filter_map(|thread| {
+        let followed: Vec<(String, String, u64)> = self
+            .each_thread(|live| {
+                let thread = &live.stored.thread;
                 let pull_request = thread.pull_request.as_ref().filter(|found| match thread.done_at {
                     Some(_) => found.is_open(),
                     None => !found.merged,
                 })?;
                 Some((thread.id.clone(), thread.project_id.clone(), pull_request.number))
-            });
-            followed.collect()
-        };
+            })
+            .await;
         let mut asked: HashMap<(String, u64), Option<PullRequest>> = HashMap::new();
         for (thread_id, project_id, number) in followed {
             let Ok(folder) = self.project_path(&project_id).await else { continue };
@@ -2577,8 +2637,8 @@ impl Hub {
     }
 
     async fn set_git_stage(&self, thread_id: Option<&str>, stage: Option<GitStage>) {
-        let mut threads = self.threads.lock().await;
-        let Some(live) = thread_id.and_then(|thread_id| threads.get_mut(thread_id)) else { return };
+        let Some(thread_id) = thread_id else { return };
+        let Some(mut live) = self.live(thread_id).await else { return };
         if live.stored.thread.git_stage == stage {
             return;
         }
@@ -2676,8 +2736,8 @@ impl Hub {
         if made.is_ok() {
             self.snapshot(&thread_id, &folder).await;
         }
-        let mut threads = self.threads.lock().await;
-        let Some(live) = threads.get_mut(&thread_id) else { return };
+        let Some(mut live) = self.live(&thread_id).await else { return };
+        let live = &mut *live;
         live.preparing = None;
         let started = match made {
             Ok(()) => self.start_agent(live, prompt, false),
@@ -2721,8 +2781,7 @@ impl Hub {
             Ok(files) => files,
             Err(error) => return tracing::debug!(thread_id, "couldn't read a turn's changes: {error:#}"),
         };
-        let mut threads = self.threads.lock().await;
-        let Some(live) = threads.get_mut(&thread_id) else { return };
+        let Some(mut live) = self.live(&thread_id).await else { return };
         if let Err(error) = live.set_changes(&self.store, &item_id, TurnChanges { snapshot, files }) {
             tracing::error!(thread_id, "couldn't save a turn's changes: {error:#}");
         }
@@ -2732,8 +2791,8 @@ impl Hub {
     /// project's setup script there.
     async fn make_worktree(self: &Arc<Self>, thread_id: &str, message: &str) -> anyhow::Result<()> {
         let (project_id, path, worktree) = {
-            let threads = self.threads.lock().await;
-            let stored = &threads.get(thread_id).context("That thread no longer exists.")?.stored;
+            let live = self.live_or(thread_id, "That thread no longer exists.").await?;
+            let stored = &live.stored;
             let worktree = stored.worktree.clone().context("That thread has no worktree.")?;
             (stored.thread.project_id.clone(), stored.thread.cwd.clone(), worktree)
         };
@@ -2809,8 +2868,7 @@ impl Hub {
     }
 
     async fn show_setup(&self, thread_id: &str, call: &ToolCall) {
-        let mut threads = self.threads.lock().await;
-        let Some(live) = threads.get_mut(thread_id) else { return };
+        let Some(mut live) = self.live(thread_id).await else { return };
         if let Err(error) = live.upsert(&self.store, call.id.clone(), ItemKind::Tool { call: call.clone() }) {
             tracing::error!(thread_id, "couldn't save a thread update: {error:#}");
         }
@@ -2827,15 +2885,15 @@ impl Hub {
             Ok(name) => name,
             Err(error) => return tracing::warn!(thread_id, "couldn't name a branch: {error:#}"),
         };
-        let mut threads = self.threads.lock().await;
-        let Some(live) = threads.get_mut(&thread_id) else { return };
+        let Some(live) = self.live(&thread_id).await else { return };
         let Some(worktree) = live.stored.worktree.clone() else { return };
-        let path = live.stored.thread.cwd.clone();
+        let (path, project_id) = (live.stored.thread.cwd.clone(), live.stored.thread.project_id.clone());
+        drop(live);
         // The agent may have checked out another branch by now.
         if git::current_branch(&path).as_deref() != Some(worktree.branch.as_str()) {
             return;
         }
-        let Ok(repository) = self.project_path(&live.stored.thread.project_id).await else { return };
+        let Ok(repository) = self.project_path(&project_id).await else { return };
         let name = git::free_branch_name(&repository, &self.environment, &name).await;
         if let Err(error) = git::rename_branch(&repository, &self.environment, &worktree.branch, &name).await {
             return tracing::warn!(thread_id, "couldn't rename a branch: {error:#}");
@@ -2843,11 +2901,12 @@ impl Hub {
         if let Some(own) = self.lock_worktrees().get_mut(&thread_id) {
             own.branch = name.clone();
         }
+        let Some(mut live) = self.live(&thread_id).await else { return };
         live.stored.worktree = Some(StoredWorktree { branch: name, ..worktree });
         if let Err(error) = self.store.save_thread(&live.stored) {
             tracing::error!(thread_id, "couldn't save a thread: {error:#}");
         }
-        drop(threads);
+        drop(live);
         self.read_git(&path, false).await;
         self.announce_projects(&self.projects.lock().await);
     }
@@ -3127,8 +3186,7 @@ impl Hub {
         let hub = self.clone();
         tokio::spawn(async move {
             tokio::time::sleep(RESTING_PROCESS_STAYS).await;
-            let mut threads = hub.threads.lock().await;
-            let Some(live) = threads.get_mut(&thread_id) else { return };
+            let Some(mut live) = hub.live(&thread_id).await else { return };
             if live.run.as_ref().is_some_and(|run| run.resting == Some(since)) {
                 live.let_go();
             }
@@ -3223,8 +3281,8 @@ impl Hub {
         if self.closing.load(Ordering::SeqCst) {
             return;
         }
-        let mut threads = self.threads.lock().await;
-        let Some(live) = threads.get_mut(thread_id) else { return };
+        let Some(mut live) = self.live(thread_id).await else { return };
+        let live = &mut *live;
         let was_running = live.stored.thread.running;
         // A turn that ended while its agents worked settles once they are done, which they can
         // be without waking the agent, when the usage limit stopped them all.
@@ -3493,8 +3551,8 @@ impl Hub {
         if self.closing.load(Ordering::SeqCst) {
             return;
         }
-        let mut threads = self.threads.lock().await;
-        let Some(live) = threads.get_mut(thread_id) else { return };
+        let Some(mut live) = self.live(thread_id).await else { return };
+        let live = &mut *live;
         // A process that was let go, or ended as it rested, has told of its turn already.
         let Some(run) = live.run.as_ref().filter(|run| run.process_id == process_id) else { return };
         if run.resting.is_some() {
@@ -3715,6 +3773,8 @@ impl Live {
             mcp_token: None,
             told_question: None,
             told_limit: false,
+            tools: None,
+            deleted: false,
             session_model: None,
             handoff_item: None,
             skills: Vec::new(),
@@ -3724,6 +3784,16 @@ impl Live {
     fn next_rev(&mut self) -> u64 {
         self.stored.thread.rev += 1;
         self.stored.thread.rev
+    }
+
+    /// How many tool calls of its own the transcript has, counted once.
+    fn tool_count(&mut self, store: &Store) -> rusqlite::Result<u64> {
+        if let Some(tools) = self.tools {
+            return Ok(tools);
+        }
+        let tools = store.tool_count(&self.stored.thread.id)?;
+        self.tools = Some(tools);
+        Ok(tools)
     }
 
     fn tool_call(&self, id: &str) -> Option<ToolCall> {
@@ -4026,6 +4096,7 @@ impl Live {
     /// Makes another thread's transcript the beginning of this one's, which its agent is then told
     /// as the thread's history.
     fn take_history(&mut self, store: &Store, items: Vec<Item>) -> anyhow::Result<()> {
+        self.tools = None;
         let mut taken = Vec::with_capacity(items.len());
         for item in items {
             let seq = self.stored.next_seq;
@@ -4047,6 +4118,12 @@ impl Live {
         let seq = self.stored.next_seq;
         self.stored.next_seq += 1;
         let parent = self.parent.clone();
+        if parent.is_none()
+            && matches!(kind, ItemKind::Tool { .. })
+            && let Some(tools) = &mut self.tools
+        {
+            *tools += 1;
+        }
         Item {
             id,
             seq,
@@ -4247,16 +4324,16 @@ fn continuation_of(thread: &Thread, accounts: &[AgentAccount], environment: &Env
     Continuation { agent: thread.agent, folder: folder.to_string_lossy().into_owned() }
 }
 
-fn ensure_idle(threads: &HashMap<String, Live>, account_id: &str) -> anyhow::Result<()> {
-    if threads.values().any(|live| live.stored.thread.agent_account == account_id && live.busy()) {
+fn ensure_idle(threads: &[OwnedMutexGuard<Live>], account_id: &str) -> anyhow::Result<()> {
+    if threads.iter().any(|live| live.stored.thread.agent_account == account_id && live.busy()) {
         bail!("An agent still works with this account. Change it once the agent has finished.");
     }
     Ok(())
 }
 
 /// Lets the account's resting processes go, so that the next turn starts with what it is now.
-fn let_go_of_account(threads: &mut HashMap<String, Live>, account_id: &str) {
-    for live in threads.values_mut().filter(|live| live.stored.thread.agent_account == account_id) {
+fn let_go_of_account(threads: &mut [OwnedMutexGuard<Live>], account_id: &str) {
+    for live in threads.iter_mut().filter(|live| live.stored.thread.agent_account == account_id) {
         live.let_go();
     }
 }

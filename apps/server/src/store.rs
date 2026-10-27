@@ -5,7 +5,7 @@ use std::path::Path;
 use std::sync::Mutex;
 
 use motile_protocol::wire::{
-    Access, Agent, Item, Media, Queued, Speaker, Thread, ThreadMatch, ThreadParent, Tokens, UsageBucket,
+    Access, Agent, Item, ItemKind, Media, Queued, Speaker, Thread, ThreadMatch, ThreadParent, Tokens, UsageBucket,
 };
 use rusqlite::{Connection, OptionalExtension, params};
 
@@ -633,14 +633,21 @@ impl Store {
     /// The thread's own items from its last message on: what its last turn did.
     pub fn last_turn(&self, thread_id: &str) -> rusqlite::Result<Vec<Item>> {
         let connection = self.connection();
-        let mut statement = connection.prepare(
-            "SELECT payload FROM items WHERE thread_id = ?1 AND json_extract(payload, '$.parent') IS NULL
-                 AND seq >= (SELECT COALESCE(MAX(seq), 0) FROM items WHERE thread_id = ?1
-                             AND json_extract(payload, '$.type') IN ('user', 'notice'))
-             ORDER BY seq",
-        )?;
-        let payloads = statement.query_map([thread_id], |row| row.get::<_, String>(0))?;
-        Ok(payloads.filter_map(|payload| serde_json::from_str(&payload.ok()?).ok()).collect())
+        let mut statement = connection.prepare("SELECT payload FROM items WHERE thread_id = ?1 ORDER BY seq DESC")?;
+        let mut rows = statement.query([thread_id])?;
+        let mut items = Vec::new();
+        while let Some(row) = rows.next()? {
+            let Ok(item) = serde_json::from_str::<Item>(&row.get::<_, String>(0)?) else { continue };
+            let starts = matches!(item.kind, ItemKind::User { .. } | ItemKind::Notice { .. });
+            if item.parent.is_none() {
+                items.push(item);
+            }
+            if starts {
+                break;
+            }
+        }
+        items.reverse();
+        Ok(items)
     }
 
     /// The thread's own replies whose programs the user changed after the last message.
