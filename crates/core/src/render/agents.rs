@@ -2,8 +2,11 @@
 //! own: the items whose `parent` is the tool call that started it. A workflow's is its agents,
 //! under the phases they run in.
 
+use std::collections::HashMap;
+
 use motile_protocol::wire::{
-    Agent, AgentNotice, Ask, Item, ItemKind, NoticeEvent, Subagent, ToolCall, ToolStatus, Workflow, WorkflowAgent,
+    Agent, AgentNotice, Ask, Interruption, Item, ItemKind, NoticeEvent, Subagent, Thread, ToolCall, ToolStatus,
+    Workflow, WorkflowAgent,
 };
 use serde::Serialize;
 use serde_json::{Value, json};
@@ -14,6 +17,38 @@ use super::rows::short_model_name;
 const MAX_DETAIL_CHARS: usize = 280;
 /// The tool calls that start agents, before they have said anything of them.
 const STARTING: [&str; 4] = ["Task", "Agent", "Workflow", "mcp__motile__start_agent"];
+/// What an older server says an agent does while it waits for the user.
+const WAITING_PROGRESS: [&str; 2] = ["Waiting for your approval", "Asking a question"];
+
+/// How the thread an agent works in is doing, which it says before the agent's tool call does.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum ThreadState {
+    Working,
+    Waiting(Ask),
+    Limited,
+}
+
+impl ThreadState {
+    pub fn of(thread: &Thread) -> Self {
+        if thread.needs_approval {
+            return Self::Waiting(thread.asking.unwrap_or(Ask::Approval));
+        }
+        if thread.running || thread.monitoring {
+            return Self::Working;
+        }
+        match thread.interruption {
+            Some(Interruption::Limit { .. }) => Self::Limited,
+            _ => Self::Working,
+        }
+    }
+
+    /// The states of the threads the agents of the thread `thread_id` work in, by their ids.
+    pub fn of_children(threads: &HashMap<String, Thread>, thread_id: &str) -> HashMap<String, Self> {
+        let children =
+            threads.values().filter(|thread| thread.parent.as_ref().is_some_and(|of| of.thread_id == thread_id));
+        children.map(|thread| (thread.id.clone(), Self::of(thread))).collect()
+    }
+}
 
 /// How an agent is doing, which its avatar's dot shows.
 #[derive(Serialize, Clone, Copy, PartialEq, Eq, Debug)]
@@ -115,11 +150,12 @@ pub fn avatars_shown(count: usize) -> usize {
     if count <= 4 { count } else { 3 }
 }
 
-/// The agent the item's tool call started, once the agent has said something of it.
-pub fn view(item: &Item) -> Option<AgentView> {
+/// The agent the item's tool call started, once the agent has said something of it. `threads` are
+/// the states of the threads agents work in, by their ids.
+pub fn view(item: &Item, threads: &HashMap<String, ThreadState>) -> Option<AgentView> {
     let ItemKind::Tool { call } = &item.kind else { return None };
     call.agent.as_ref()?;
-    starting(item, call)
+    starting(item, call, threads)
 }
 
 /// Whether the tool call starts an agent.
@@ -127,8 +163,9 @@ pub fn starts_agent(call: &ToolCall) -> bool {
     call.agent.is_some() || STARTING.contains(&call.name.as_str())
 }
 
-/// The agent the tool call starts, as far as it is known.
-pub fn starting(item: &Item, call: &ToolCall) -> Option<AgentView> {
+/// The agent the tool call starts, as far as it is known. While it works in a thread of its own,
+/// that thread says whether it waits.
+pub fn starting(item: &Item, call: &ToolCall, threads: &HashMap<String, ThreadState>) -> Option<AgentView> {
     if !starts_agent(call) {
         return None;
     }
@@ -138,6 +175,9 @@ pub fn starting(item: &Item, call: &ToolCall) -> Option<AgentView> {
     let prompt = text("prompt");
     let status = agent.map_or(call.status, |agent| agent.status);
     let working = status == ToolStatus::Running;
+    let runs_on = agent.and_then(|agent| agent.runs_on.as_deref());
+    let thread_id = runs_on.and_then(|on| on.thread_id.clone());
+    let thread = thread_id.as_ref().and_then(|id| threads.get(id)).copied().filter(|_| working);
     let workflow = agent.and_then(|agent| agent.workflow.as_ref());
     let (title, kind, detail) = match workflow {
         Some(workflow) => {
@@ -151,6 +191,12 @@ pub fn starting(item: &Item, call: &ToolCall) -> Option<AgentView> {
             let reply = call.output.as_deref().filter(|_| !own_thread);
             let reported = agent.and_then(|agent| agent.result.as_deref()).or(reply);
             let progress = agent.and_then(|agent| agent.progress.as_deref());
+            let progress = match thread {
+                Some(ThreadState::Waiting(Ask::Question)) => Some("Asking a question"),
+                Some(ThreadState::Waiting(_)) => Some("Waiting for your approval"),
+                Some(_) => progress.filter(|progress| !WAITING_PROGRESS.contains(progress)),
+                None => progress,
+            };
             let detail = match working {
                 true => progress.or(reported),
                 false => reported.or(progress),
@@ -158,10 +204,14 @@ pub fn starting(item: &Item, call: &ToolCall) -> Option<AgentView> {
             (title, agent.and_then(|agent| agent.kind.clone()), detail.unwrap_or_default().to_string())
         }
     };
-    let state = AgentState::of(status, agent);
-    let label = state.label(agent.and_then(|agent| agent.waits)).to_string();
+    let (state, waits) = match thread {
+        Some(ThreadState::Working) => (AgentState::Working, None),
+        Some(ThreadState::Waiting(ask)) => (AgentState::Waiting, Some(ask)),
+        Some(ThreadState::Limited) => (AgentState::Limited, None),
+        None => (AgentState::of(status, agent), agent.and_then(|agent| agent.waits)),
+    };
+    let label = state.label(waits).to_string();
     let detail = if detail.trim().is_empty() && working { label.clone() } else { detail };
-    let runs_on = agent.and_then(|agent| agent.runs_on.as_deref());
     Some(AgentView {
         id: item.id.clone(),
         parent: item.parent.clone(),
@@ -178,7 +228,7 @@ pub fn starting(item: &Item, call: &ToolCall) -> Option<AgentView> {
         duration_ms: agent.and_then(|agent| agent.duration_ms).filter(|_| !working || state == AgentState::Limited),
         tokens: agent.and_then(|agent| agent.tokens),
         tool_uses: agent.and_then(|agent| agent.tool_uses),
-        thread_id: runs_on.and_then(|on| on.thread_id.clone()),
+        thread_id,
         agent: runs_on.map(|on| on.agent),
         model: runs_on
             .and_then(|on| on.model.as_deref())
@@ -358,6 +408,11 @@ mod tests {
 
     use super::*;
 
+    /// The agent as its tool call alone says.
+    fn alone(item: &Item) -> Option<AgentView> {
+        view(item, &HashMap::new())
+    }
+
     fn started(status: ToolStatus, progress: Option<&str>, result: Option<&str>) -> Item {
         let agent = Subagent {
             kind: Some("Explore".into()),
@@ -396,11 +451,11 @@ mod tests {
 
     #[test]
     fn an_agent_that_works_says_what_it_does_and_one_that_ended_what_it_reported() {
-        let working = view(&started(ToolStatus::Running, Some("Reading a.txt"), None)).unwrap();
+        let working = alone(&started(ToolStatus::Running, Some("Reading a.txt"), None)).unwrap();
         assert_eq!((working.title.as_str(), working.detail.as_str()), ("Count the files", "Reading a.txt"));
         assert_eq!((working.duration_ms, working.tool_uses), (None, Some(3)));
 
-        let ended = view(&started(ToolStatus::Succeeded, Some("Reading a.txt"), Some("Three\n\nfiles"))).unwrap();
+        let ended = alone(&started(ToolStatus::Succeeded, Some("Reading a.txt"), Some("Three\n\nfiles"))).unwrap();
         assert_eq!((ended.detail.as_str(), ended.duration_ms), ("Three files", Some(30_000)));
     }
 
@@ -410,7 +465,7 @@ mod tests {
             id: id.into(),
             parent: parent.map(String::from),
             previous: status != ToolStatus::Running,
-            ..view(&started(status, None, None)).unwrap()
+            ..alone(&started(status, None, None)).unwrap()
         };
         let started = [
             agent("spec", None, ToolStatus::Running),
@@ -430,7 +485,7 @@ mod tests {
         let mut item = started(ToolStatus::Running, Some("Reached its usage limit"), None);
         let ItemKind::Tool { call } = &mut item.kind else { unreachable!() };
         call.agent.as_mut().unwrap().limited = true;
-        let limited = view(&item).unwrap();
+        let limited = alone(&item).unwrap();
         assert_eq!((limited.state, limited.duration_ms), (AgentState::Limited, Some(30_000)));
     }
 
@@ -443,7 +498,7 @@ mod tests {
         let agent = call.agent.as_mut().unwrap();
         agent.runs_on =
             Some(Box::new(RunsOn { agent: Agent::Codex, model: None, account: None, thread_id: Some("c1".into()) }));
-        assert_eq!(view(&item).unwrap().detail, "Working");
+        assert_eq!(alone(&item).unwrap().detail, "Working");
     }
 
     fn workflow_call(status: ToolStatus, agents: &[(&str, &str, ToolStatus)]) -> Item {
@@ -475,12 +530,12 @@ mod tests {
     #[test]
     fn a_workflow_says_its_phase_and_how_many_of_its_agents_are_done() {
         let running = [("red", "Ask", ToolStatus::Succeeded), ("blue", "Ask", ToolStatus::Running)];
-        let working = view(&workflow_call(ToolStatus::Running, &running)).unwrap();
+        let working = alone(&workflow_call(ToolStatus::Running, &running)).unwrap();
         assert_eq!((working.title.as_str(), working.kind.as_deref()), ("colours", Some("Workflow")));
         assert_eq!(working.detail, "Ask · 1 of 2 agents done");
 
         let ran = [("red", "Ask", ToolStatus::Succeeded), ("blue", "Ask", ToolStatus::Failed)];
-        assert_eq!(view(&workflow_call(ToolStatus::Succeeded, &ran)).unwrap().detail, "Ran 2 agents, 1 failed");
+        assert_eq!(alone(&workflow_call(ToolStatus::Succeeded, &ran)).unwrap().detail, "Ran 2 agents, 1 failed");
     }
 
     #[test]
@@ -512,7 +567,7 @@ mod tests {
         let mut item = started(ToolStatus::Running, None, None);
         let ItemKind::Tool { call } = &mut item.kind else { unreachable!() };
         call.agent = None;
-        assert_eq!(view(&item), None);
+        assert_eq!(alone(&item), None);
     }
 
     #[test]
@@ -537,5 +592,93 @@ mod tests {
             (newer.label.as_str(), newer.state, newer.status),
             ("Told", AgentState::Done, ToolStatus::Succeeded)
         );
+    }
+
+    fn in_its_own_thread(status: ToolStatus, waits: Option<Ask>, progress: &str) -> Item {
+        let result = (status != ToolStatus::Running).then_some("Counted three");
+        let mut item = started(status, Some(progress), result);
+        let ItemKind::Tool { call } = &mut item.kind else { unreachable!() };
+        call.name = "mcp__motile__start_agent".into();
+        let agent = call.agent.as_mut().unwrap();
+        agent.waits = waits;
+        agent.runs_on =
+            Some(Box::new(RunsOn { agent: Agent::Codex, model: None, account: None, thread_id: Some("c1".into()) }));
+        item
+    }
+
+    fn shown(item: &Item, thread: ThreadState) -> (AgentState, String, String) {
+        let agent = view(item, &HashMap::from([("c1".to_string(), thread)])).unwrap();
+        (agent.state, agent.label, agent.detail)
+    }
+
+    fn states(state: AgentState, label: &str, detail: &str) -> (AgentState, String, String) {
+        (state, label.to_string(), detail.to_string())
+    }
+
+    #[test]
+    fn an_agent_whose_thread_no_longer_waits_works_whatever_its_tool_call_still_says() {
+        let item = in_its_own_thread(ToolStatus::Running, Some(Ask::Approval), "Waiting for your approval");
+        assert_eq!(shown(&item, ThreadState::Working), states(AgentState::Working, "Working", "Working"));
+
+        let item = in_its_own_thread(ToolStatus::Running, None, "Reading a.txt");
+        assert_eq!(shown(&item, ThreadState::Working), states(AgentState::Working, "Working", "Reading a.txt"));
+    }
+
+    #[test]
+    fn an_agent_whose_thread_waits_says_what_for_before_its_tool_call_does() {
+        let item = in_its_own_thread(ToolStatus::Running, None, "Running the tests");
+        assert_eq!(
+            shown(&item, ThreadState::Waiting(Ask::Approval)),
+            states(AgentState::Waiting, "Needs approval", "Waiting for your approval")
+        );
+        assert_eq!(
+            shown(&item, ThreadState::Waiting(Ask::Question)),
+            states(AgentState::Waiting, "Has a question", "Asking a question")
+        );
+        assert_eq!(
+            shown(&item, ThreadState::Waiting(Ask::Plan)),
+            states(AgentState::Waiting, "Has a plan", "Waiting for your approval")
+        );
+    }
+
+    #[test]
+    fn an_agent_whose_thread_reached_its_limit_keeps_what_its_tool_call_says_of_it() {
+        let item = in_its_own_thread(ToolStatus::Running, None, "Waiting for its usage limit to reset");
+        assert_eq!(
+            shown(&item, ThreadState::Limited),
+            states(AgentState::Limited, "Usage limit", "Waiting for its usage limit to reset")
+        );
+    }
+
+    #[test]
+    fn an_agent_that_ended_is_as_its_tool_call_says() {
+        let item = in_its_own_thread(ToolStatus::Succeeded, None, "Reading a.txt");
+        assert_eq!(
+            shown(&item, ThreadState::Waiting(Ask::Approval)),
+            states(AgentState::Done, "Done", "Counted three")
+        );
+    }
+
+    #[test]
+    fn a_thread_s_state_comes_from_what_it_waits_for_then_whether_it_works() {
+        let thread: Thread = serde_json::from_value(json!({
+            "id": "c1", "title": "Count", "project_id": "p", "cwd": "/", "agent": "codex", "model": null,
+            "effort": null, "access": "full", "created_at": 0.0, "updated_at": 0.0, "done_at": null,
+            "running": false, "needs_approval": false, "turn_ended_at": null, "rev": 0,
+            "parent": {"thread_id": "t", "tool_id": "call"},
+        }))
+        .unwrap();
+        let limited =
+            Thread { interruption: Some(Interruption::Limit { resets_at: None, continues: true }), ..thread.clone() };
+        let asking = Thread { needs_approval: true, asking: Some(Ask::Question), running: true, ..limited.clone() };
+        let other = Thread { id: "c2".into(), parent: None, needs_approval: true, ..thread.clone() };
+        assert_eq!(ThreadState::of(&thread), ThreadState::Working);
+        assert_eq!(ThreadState::of(&limited), ThreadState::Limited);
+        assert_eq!(ThreadState::of(&Thread { running: true, ..limited.clone() }), ThreadState::Working);
+        assert_eq!(ThreadState::of(&asking), ThreadState::Waiting(Ask::Question));
+
+        let threads = HashMap::from([("c1".to_string(), asking), ("c2".to_string(), other)]);
+        let children = ThreadState::of_children(&threads, "t");
+        assert_eq!(children, HashMap::from([("c1".to_string(), ThreadState::Waiting(Ask::Question))]));
     }
 }

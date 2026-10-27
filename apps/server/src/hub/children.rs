@@ -16,8 +16,9 @@ use motile_protocol::wire::{
 };
 use serde::Serialize;
 use serde_json::{Value, json};
+use tokio::sync::broadcast;
 
-use super::{Hub, Live, TitleSource, agent_name, new_id, plain_message, thread_worktree};
+use super::{Hub, Live, Slot, TitleSource, agent_name, new_id, plain_message, thread_worktree};
 use crate::git;
 use crate::mcp::StartAgent;
 
@@ -28,8 +29,6 @@ pub const LONGEST_WAIT: Duration = Duration::from_secs(3600);
 /// How long a call that starts an agent waits for its own tool call to show in the transcript.
 const LINK_WITHIN: Duration = Duration::from_secs(3);
 const LINK_EVERY: Duration = Duration::from_millis(50);
-/// How often the agents that started others hear how those are doing, at most.
-const TELL_EVERY: Duration = Duration::from_millis(500);
 /// How much of a reply a notice or an answer carries; `read_thread` reads the rest.
 const NOTICE_REPLY_CHARS: usize = 6000;
 const STATE_REPLY_CHARS: usize = 20_000;
@@ -77,31 +76,15 @@ impl Status {
     }
 }
 
-/// The threads the thread's agent started, theirs before them, deepest first.
-pub(super) fn descendants(threads: &HashMap<String, Live>, thread_id: &str) -> Vec<String> {
+fn descendants_in(threads: &HashMap<String, Slot>, thread_id: &str) -> Vec<String> {
     let mut found = Vec::new();
-    for (id, live) in threads {
-        if live.stored.thread.parent.as_ref().is_some_and(|parent| parent.thread_id == thread_id) {
-            found.extend(descendants(threads, id));
+    for (id, slot) in threads {
+        if slot.parent.as_ref().is_some_and(|parent| parent.thread_id == thread_id) {
+            found.extend(descendants_in(threads, id));
             found.push(id.clone());
         }
     }
     found
-}
-
-fn descends_from(threads: &HashMap<String, Live>, thread_id: &str, ancestor: &str) -> bool {
-    let mut seen = HashSet::new();
-    let mut parent = threads.get(thread_id).and_then(|live| live.stored.thread.parent.as_ref());
-    while let Some(found) = parent {
-        if found.thread_id == ancestor {
-            return true;
-        }
-        if !seen.insert(found.thread_id.clone()) {
-            return false;
-        }
-        parent = threads.get(&found.thread_id).and_then(|live| live.stored.thread.parent.as_ref());
-    }
-    false
 }
 
 /// Counts a call that waits for agents while it does; the agents are looked at again once it no
@@ -140,6 +123,27 @@ impl Drop for Waiting {
 }
 
 impl Hub {
+    /// The threads the thread's agent started, theirs before them, deepest first.
+    pub(super) fn descendants(&self, thread_id: &str) -> Vec<String> {
+        descendants_in(&self.lock_threads(), thread_id)
+    }
+
+    fn descends_from(&self, thread_id: &str, ancestor: &str) -> bool {
+        let threads = self.lock_threads();
+        let mut seen = HashSet::new();
+        let mut parent = threads.get(thread_id).and_then(|slot| slot.parent.as_ref());
+        while let Some(found) = parent {
+            if found.thread_id == ancestor {
+                return true;
+            }
+            if !seen.insert(found.thread_id.clone()) {
+                return false;
+            }
+            parent = threads.get(&found.thread_id).and_then(|slot| slot.parent.as_ref());
+        }
+        false
+    }
+
     fn lock_waiting(&self) -> std::sync::MutexGuard<'_, HashMap<String, usize>> {
         self.waiting_on.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
     }
@@ -158,11 +162,8 @@ impl Hub {
     /// Your server's accounts an agent can start agents on, with their models and how much of
     /// their plans they have used.
     pub async fn accounts_for(&self, caller: &str) -> anyhow::Result<Value> {
-        let own = {
-            let threads = self.threads.lock().await;
-            let live = threads.get(caller).context("Your thread is no longer on your server.")?;
-            self.account_of(&live.stored.thread).id
-        };
+        let own = self.thread(caller).await.context("Your thread is no longer on your server.")?;
+        let own = self.account_of(&own).id;
         let limits = match self.limits().await {
             Message::Limits { agents } => agents,
             _ => Vec::new(),
@@ -220,9 +221,7 @@ impl Hub {
         }
         let agent = start.agent.as_deref().map(parse_agent).transpose()?;
         self.wait_for_start_call(caller, &text).await;
-        let mut threads = self.threads.lock().await;
-        let parent = threads.get(caller).context("Your thread is no longer on your server.")?;
-        let own = parent.stored.thread.clone();
+        let own = self.thread(caller).await.context("Your thread is no longer on your server.")?;
         let account = self.pick_account(&own, start.account.as_deref(), agent)?;
         let (model, effort) = self.pick_model(&own, &account, start.model, start.effort)?;
         let access = pick_access(own.access, start.access.as_deref())?;
@@ -251,8 +250,16 @@ impl Hub {
         };
         let folder = (!start.worktree).then(|| own.cwd.clone());
         let mut stored = self.new_thread(new_thread, &prompt, &[], folder).await?;
-        let tool_id = start_call(parent, &text);
-        stored.thread.parent = Some(ThreadParent { thread_id: caller.to_string(), tool_id: tool_id.clone() });
+        let child_id = stored.thread.id.clone();
+        let model = stored.thread.model.clone().map(|model| self.model_name(account.agent, &model).unwrap_or(model));
+        let runs_on = RunsOn {
+            agent: account.agent,
+            model,
+            account: self.account_name(&account),
+            thread_id: Some(child_id.clone()),
+        };
+        let tool_id = self.show_started(caller, &text, role, runs_on).await?;
+        stored.thread.parent = Some(ThreadParent { thread_id: caller.to_string(), tool_id });
         stored.reports = true;
         let title = start.title.map(|title| title.trim().to_string()).filter(|title| !title.is_empty());
         if let Some(title) = &title {
@@ -263,40 +270,11 @@ impl Hub {
         if let Some((thread_id, worktree)) = thread_worktree(&stored) {
             self.lock_worktrees().insert(thread_id, worktree);
         }
-        let child_id = stored.thread.id.clone();
-        let model = stored.thread.model.clone().map(|model| self.model_name(account.agent, &model).unwrap_or(model));
-        let runs_on = RunsOn {
-            agent: account.agent,
-            model,
-            account: self.account_name(&account),
-            thread_id: Some(child_id.clone()),
-        };
-        threads.insert(child_id.clone(), Live::new(stored, self.media.clone()));
-        let live = threads.get_mut(&child_id).context("The agent's thread is gone.")?;
+        self.add_thread(Live::new(stored, self.media.clone()));
+        let mut live = self.live_or(&child_id, "The agent's thread is gone.").await?;
         live.append_queued(&self.store, plain_message(prompt.clone()))?;
-        self.start_turn(live, prompt)?;
-        if let (Some(tool_id), Some(parent)) = (&tool_id, threads.get_mut(caller)) {
-            let agent = Subagent {
-                kind: role,
-                status: ToolStatus::Running,
-                progress: None,
-                result: None,
-                tokens: None,
-                tool_uses: None,
-                duration_ms: None,
-                workflow: None,
-                runs_on: Some(Box::new(runs_on)),
-                waits: None,
-                stopped: false,
-                limited: false,
-            };
-            parent.change_tool(&self.store, tool_id, |call| {
-                call.agent = Some(agent);
-                true
-            })?;
-            self.count_agents(parent);
-        }
-        drop(threads);
+        self.start_turn(&mut live, prompt)?;
+        drop(live);
         if let Some(request) = request {
             self.lock_started().insert(request, child_id.clone());
         }
@@ -311,13 +289,44 @@ impl Hub {
     async fn wait_for_start_call(&self, caller: &str, prompt: &str) {
         let started = Instant::now();
         while started.elapsed() < LINK_WITHIN {
-            let threads = self.threads.lock().await;
-            if threads.get(caller).is_none_or(|live| start_call(live, prompt).is_some()) {
+            if self.live(caller).await.is_none_or(|live| start_call(&live, prompt).is_some()) {
                 return;
             }
-            drop(threads);
             tokio::time::sleep(LINK_EVERY).await;
         }
+    }
+
+    /// Shows the agent in the caller's tool call that started it, which no other agent can take
+    /// then, and answers with that call's id.
+    async fn show_started(
+        &self,
+        caller: &str,
+        prompt: &str,
+        kind: Option<String>,
+        runs_on: RunsOn,
+    ) -> anyhow::Result<Option<String>> {
+        let mut parent = self.live_or(caller, "Your thread is no longer on your server.").await?;
+        let Some(tool_id) = start_call(&parent, prompt) else { return Ok(None) };
+        let agent = Subagent {
+            kind,
+            status: ToolStatus::Running,
+            progress: None,
+            result: None,
+            tokens: None,
+            tool_uses: None,
+            duration_ms: None,
+            workflow: None,
+            runs_on: Some(Box::new(runs_on)),
+            waits: None,
+            stopped: false,
+            limited: false,
+        };
+        parent.change_tool(&self.store, &tool_id, |call| {
+            call.agent = Some(agent);
+            true
+        })?;
+        self.count_agents(&mut parent);
+        Ok(Some(tool_id))
     }
 
     fn pick_account(&self, own: &Thread, named: Option<&str>, agent: Option<Agent>) -> anyhow::Result<AgentAccount> {
@@ -397,50 +406,50 @@ impl Hub {
         }
         let deadline = wait.map(|wait| Instant::now() + wait);
         let _waiting = Waiting::new(self, ids);
-        let mut updates = self.list_updates.subscribe();
+        let mut told = self.children_told.subscribe();
         loop {
             let timed_out = deadline.is_some_and(|deadline| Instant::now() >= deadline);
-            {
-                let mut threads = self.threads.lock().await;
+            let mut seen = Vec::new();
+            for id in ids {
+                if !self.descends_from(id, caller) {
+                    bail!("No agent you started has the id {id}.");
+                }
+                let live = self.live_or(id, "That agent's thread is gone.").await?;
+                let question = live.activity.approvals.first().map(|approval| approval.id.clone());
+                seen.push((self.state_of(&live)?, question, live.told_limit));
+            }
+            let settled = seen.iter().all(|(state, ..)| state.status.settled());
+            let asking = seen.iter().any(|(state, ..)| state.status == Status::Asking);
+            // An agent that reached its usage limit is worth hearing of once, not waited for.
+            let limited =
+                seen.iter().any(|(state, _, told_limit)| state.status == Status::WaitingForUsageLimit && !told_limit);
+            if deadline.is_none() || timed_out || settled || asking || limited {
                 let mut states = Vec::new();
-                for id in ids {
-                    if !descends_from(&threads, id, caller) {
-                        bail!("No agent you started has the id {id}.");
+                for (mut state, question, _) in seen {
+                    state.wait_timed_out = timed_out && !settled && !asking && !limited;
+                    if let Some(mut live) = self.live(&state.id).await {
+                        self.taken(&mut live, state.status, question)?;
                     }
-                    states.push(self.state_of(&threads[id])?);
+                    states.push(state);
                 }
-                let settled = states.iter().all(|state| state.status.settled());
-                let asking = states.iter().any(|state| state.status == Status::Asking);
-                // An agent that reached its usage limit is worth hearing of once, not waited for.
-                let limited = states.iter().any(|state| {
-                    state.status == Status::WaitingForUsageLimit
-                        && !threads.get(&state.id).is_some_and(|live| live.told_limit)
-                });
-                if deadline.is_none() || timed_out || settled || asking || limited {
-                    for state in &mut states {
-                        state.wait_timed_out = timed_out && !settled && !asking && !limited;
-                        let Some(live) = threads.get_mut(&state.id) else { continue };
-                        self.taken(live, state.status)?;
-                    }
-                    return Ok(states);
-                }
+                return Ok(states);
             }
             let Some(deadline) = deadline else { unreachable!("a call that doesn't wait has returned") };
             tokio::select! {
-                _ = updates.recv() => {}
+                _ = told_of(&mut told, ids) => {}
                 _ = tokio::time::sleep_until(deadline.into()) => {}
             }
         }
     }
 
     /// The caller's agent was told what this state says: it needn't be told again.
-    fn taken(&self, live: &mut Live, status: Status) -> anyhow::Result<()> {
+    fn taken(&self, live: &mut Live, status: Status, question: Option<String>) -> anyhow::Result<()> {
         if status.settled() && live.stored.reports {
             live.stored.reports = false;
             self.store.save_thread(&live.stored)?;
         }
         if status == Status::Asking {
-            live.told_question = live.activity.approvals.first().map(|approval| approval.id.clone());
+            live.told_question = question;
         }
         live.told_limit = status == Status::WaitingForUsageLimit;
         Ok(())
@@ -449,11 +458,10 @@ impl Hub {
     /// Gives an agent the caller started another message, which it is told the end of.
     pub async fn message_child(self: &Arc<Self>, caller: &str, id: &str, text: String) -> anyhow::Result<ChildState> {
         {
-            let mut threads = self.threads.lock().await;
-            if !descends_from(&threads, id, caller) {
+            if !self.descends_from(id, caller) {
                 bail!("No agent you started has the id {id}.");
             }
-            let live = threads.get_mut(id).context("That agent's thread is gone.")?;
+            let mut live = self.live_or(id, "That agent's thread is gone.").await?;
             live.stored.reports = true;
             self.store.save_thread(&live.stored)?;
         }
@@ -469,11 +477,11 @@ impl Hub {
         answers: HashMap<String, String>,
     ) -> anyhow::Result<ChildState> {
         let approval_id = {
-            let threads = self.threads.lock().await;
-            if !descends_from(&threads, id, caller) {
+            if !self.descends_from(id, caller) {
                 bail!("No agent you started has the id {id}.");
             }
-            let asking = threads[id].activity.approvals.iter().find(|approval| approval.ask() == Ask::Question);
+            let live = self.live_or(id, "That agent's thread is gone.").await?;
+            let asking = live.activity.approvals.iter().find(|approval| approval.ask() == Ask::Question);
             asking.context("That agent isn't asking anything now.")?.id.clone()
         };
         self.answer(id, &approval_id, true, answers).await?;
@@ -483,11 +491,10 @@ impl Hub {
     /// Stops an agent the caller started, and the agents it started.
     pub async fn stop_child(self: &Arc<Self>, caller: &str, id: &str) -> anyhow::Result<ChildState> {
         {
-            let mut threads = self.threads.lock().await;
-            if !descends_from(&threads, id, caller) {
+            if !self.descends_from(id, caller) {
                 bail!("No agent you started has the id {id}.");
             }
-            let live = threads.get_mut(id).context("That agent's thread is gone.")?;
+            let mut live = self.live_or(id, "That agent's thread is gone.").await?;
             live.stored.reports = false;
             self.store.save_thread(&live.stored)?;
         }
@@ -552,22 +559,25 @@ impl Hub {
         Ok(state)
     }
 
-    /// Has the agents that started others hear how those are doing, as they change.
+    /// Has the agents that started others see how those are doing the moment they change, and hear
+    /// what they are to hear. What changed while one was being told is told next, once.
     pub fn keep_parents_told(self: &Arc<Self>) {
         let changes = self.children_changes.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).take();
         let Some(mut changes) = changes else { return };
         let hub = self.clone();
         tokio::spawn(async move {
             while let Some(first) = changes.recv().await {
-                tokio::time::sleep(TELL_EVERY).await;
-                let mut changed = HashSet::from([first]);
+                let mut changed = vec![first];
                 while let Ok(more) = changes.try_recv() {
-                    changed.insert(more);
+                    if !changed.contains(&more) {
+                        changed.push(more);
+                    }
                 }
                 for child in changed {
                     if let Err(error) = hub.tell_parent(&child).await {
                         tracing::warn!(child, "couldn't tell an agent of the agent it started: {error:#}");
                     }
+                    let _ = hub.children_told.send(child);
                 }
             }
         });
@@ -576,33 +586,32 @@ impl Hub {
     /// Shows how the agent is doing in the tool call that started it, and tells the agent that
     /// started it what it is to hear.
     async fn tell_parent(self: &Arc<Self>, child_id: &str) -> anyhow::Result<()> {
-        let notice = {
-            let mut threads = self.threads.lock().await;
-            let Some(child) = threads.get(child_id) else { return Ok(()) };
-            let Some(parent) = child.stored.thread.parent.clone() else { return Ok(()) };
-            let state = self.state_of(child)?;
-            let agent = self.subagent_of(child, &state)?;
-            let waited_on = self.lock_waiting().contains_key(child_id);
-            let child = threads.get_mut(child_id).context("The agent's thread is gone.")?;
+        let Some(parent) = self.slot(child_id).and_then(|slot| slot.parent) else { return Ok(()) };
+        let (agent, notice) = {
+            let Some(mut child) = self.live(child_id).await else { return Ok(()) };
+            let state = self.state_of(&child)?;
+            let agent = self.subagent_of(&mut child, &state)?;
             if state.status != Status::WaitingForUsageLimit {
                 child.told_limit = false;
             }
-            let notice = if waited_on { None } else { self.notice_due(child, &state)? };
-            if let (Some(tool_id), Some(live)) = (&parent.tool_id, threads.get_mut(&parent.thread_id)) {
-                live.change_tool(&self.store, tool_id, |call| shows(call, agent))?;
-                self.count_agents(live);
-            }
-            notice.map(|(notice, text)| (parent.thread_id, notice, text))
+            let waited_on = self.lock_waiting().contains_key(child_id);
+            let notice = if waited_on { None } else { self.notice_due(&mut child, &state)? };
+            (agent, notice)
         };
-        if let Some((parent_id, notice, text)) = notice {
-            self.notify(&parent_id, notice, text).await?;
+        let Some(mut live) = self.live(&parent.thread_id).await else { return Ok(()) };
+        if let Some(tool_id) = &parent.tool_id {
+            live.change_tool(&self.store, tool_id, |call| shows(call, agent))?;
+            self.count_agents(&mut live);
         }
-        Ok(())
+        match notice {
+            Some((notice, text)) => self.tell(&mut live, notice, text),
+            None => Ok(()),
+        }
     }
 
-    fn subagent_of(&self, live: &Live, state: &ChildState) -> anyhow::Result<Subagent> {
+    fn subagent_of(&self, live: &mut Live, state: &ChildState) -> anyhow::Result<Subagent> {
+        let tool_uses = live.tool_count(&self.store)?;
         let thread = &live.stored.thread;
-        let tool_uses = self.store.tool_count(&thread.id)?;
         let tokens =
             self.store.session(&thread.id, &self.continuation(thread))?.and_then(|session| session.context_used);
         let status = match state.status {
@@ -610,14 +619,13 @@ impl Hub {
             Status::Failed | Status::Stopped => ToolStatus::Failed,
             _ => ToolStatus::Running,
         };
+        // What it waits for the clients read from its thread; this says what it is doing.
         let progress = match state.status {
-            Status::NeedsApproval => Some("Waiting for your approval".to_string()),
-            Status::Asking => Some("Asking a question".to_string()),
             Status::WaitingForUsageLimit if limit_continues(thread) => {
                 Some("Waiting for its usage limit to reset".to_string())
             }
             Status::WaitingForUsageLimit => Some("Reached its usage limit".to_string()),
-            Status::Running => {
+            Status::Running | Status::NeedsApproval | Status::Asking => {
                 live.open.values().filter(|item| item.parent.is_none()).max_by_key(|item| item.seq).and_then(|item| {
                     match &item.kind {
                         ItemKind::Tool { call } => Some(doing(call, &thread.cwd)),
@@ -737,12 +745,6 @@ impl Hub {
         Ok(Some((notice, text)))
     }
 
-    async fn notify(self: &Arc<Self>, thread_id: &str, notice: AgentNotice, text: String) -> anyhow::Result<()> {
-        let mut threads = self.threads.lock().await;
-        let Some(live) = threads.get_mut(thread_id) else { return Ok(()) };
-        self.tell(live, notice, text)
-    }
-
     /// Tells the thread's agent what the notice is about: at once while it works, in a turn of its
     /// own when it doesn't, and after the turn it is about to start otherwise.
     pub(super) fn tell(self: &Arc<Self>, live: &mut Live, notice: AgentNotice, text: String) -> anyhow::Result<()> {
@@ -792,6 +794,15 @@ fn shows(call: &mut ToolCall, agent: Subagent) -> bool {
     }
     call.agent = agent;
     true
+}
+
+/// Waits until the agent that started one of the agents was told how it is doing.
+async fn told_of(told: &mut broadcast::Receiver<String>, ids: &[String]) {
+    while let Ok(id) = told.recv().await {
+        if ids.contains(&id) {
+            return;
+        }
+    }
 }
 
 /// The tool call of the thread's turn that started an agent with `prompt`, and hasn't been

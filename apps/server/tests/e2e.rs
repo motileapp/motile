@@ -3973,15 +3973,25 @@ async fn an_agent_answers_the_question_an_agent_it_started_asks() {
     let new_thread = full_access(&harness, &connection, Agent::Claude).await;
     let parent = send(&connection, None, new_thread, "Ask an agent which color").await;
 
-    let done = |transcript: &Transcript| {
-        transcript.texts().last().is_some_and(|text| text.starts_with("Pick a color is done"))
-    };
-    let told = transcript_once(&connection, &parent, done).await;
     use motile_protocol::wire::NoticeEvent::{Asked, Finished};
+    // The agent hears it finished while it still answers, or after.
+    let finished = |transcript: &Transcript| notices(transcript).iter().any(|(_, event)| *event == Finished);
+    let told = transcript_once(&connection, &parent, finished).await;
     let events: Vec<_> = notices(&told).into_iter().map(|(_, event)| event).collect();
     assert_eq!(events, [Asked, Finished]);
-    assert!(told.texts().contains(&"I told Pick a color to make it blue."), "{:?}", told.texts());
-    assert_eq!(told.texts().last().copied(), Some("Pick a color is done: The button will be blue."));
+    let answered = told.items.iter().any(|item| match &item.kind {
+        ItemKind::Tool { call } => call.name == "mcp__motile__answer_agent" && call.input.contains("Blue"),
+        _ => false,
+    });
+    assert!(answered, "{:?}", told.texts());
+    let finished_text = told.items.iter().find_map(|item| match &item.kind {
+        ItemKind::Notice { notice, text } if notice.event == Finished => Some(text.as_str()),
+        _ => None,
+    });
+    assert!(
+        finished_text.is_some_and(|text| text.ends_with("Its reply:\n\nThe button will be blue.")),
+        "{finished_text:?}"
+    );
 }
 
 #[tokio::test]

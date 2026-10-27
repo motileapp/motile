@@ -39,7 +39,7 @@ use crate::linear;
 use crate::link::{Link, LinkEvent, State, Status};
 use crate::media::{self, MediaCache};
 use crate::pull_request;
-use crate::render::agents;
+use crate::render::agents::{self, ThreadState};
 use crate::render::diff;
 use crate::render::highlight::{self, Spans};
 use crate::render::openui::host::{Out, Programs, TimerKey};
@@ -258,6 +258,8 @@ struct OpenThread {
     rev: u64,
     /// The tool calls that started an agent, in order.
     agents: Vec<Item>,
+    /// How the threads its agents work in are doing, by their ids.
+    threads: HashMap<String, ThreadState>,
     /// The agent whose transcript the client shows: the tool call that started it, and what it did.
     agent: Option<(String, Transcript)>,
     /// Items whose streamed text hasn't been rendered yet.
@@ -1307,6 +1309,26 @@ impl Core {
         }
     }
 
+    /// Shows the open thread's agents again once a thread one of them works in changed how it is
+    /// doing, which their tool calls say only later.
+    fn refresh_agents(&mut self, thread_id: &str) {
+        let Some(open) = self.open.get_mut(thread_id) else { return };
+        let Some(server) = self.servers.iter().find(|server| server.device.public_key == open.server_id) else {
+            return;
+        };
+        let threads = ThreadState::of_children(&server.threads, thread_id);
+        if threads == open.threads {
+            return;
+        }
+        open.threads = threads;
+        let splice = open.transcript.set_agents(&open.agents, &open.threads);
+        let agents = agents_event(thread_id, &open.agents, &open.threads);
+        if let Some(splice) = splice {
+            self.emit_rows(thread_id, false, splice);
+        }
+        self.emit(agents);
+    }
+
     /// Tells the clients again of the threads whose agents started the thread's, which show how
     /// it is doing.
     fn emit_ancestors(&mut self, server_id: &str, parent: Option<&str>) {
@@ -1610,6 +1632,7 @@ impl Core {
                 self.emit_projects(server_id, projects);
                 for thread_id in known {
                     self.refollow(server_id, &thread_id);
+                    self.refresh_agents(&thread_id);
                 }
                 self.read_limits(server_id);
                 self.schedule_relay(RELAY_SOON);
@@ -1635,6 +1658,9 @@ impl Core {
                 let view = self.thread_view(server_id, &thread);
                 self.emit(Event::ThreadUpsert { thread: Box::new(view) });
                 self.emit_ancestors(server_id, parent.as_deref());
+                if let Some(parent) = &parent {
+                    self.refresh_agents(parent);
+                }
                 if before.and_then(|before| before.pull_request) != pull_request {
                     let projects = self.cache.projects(server_id);
                     self.emit_projects(server_id, projects);
@@ -1650,6 +1676,9 @@ impl Core {
                 self.emit(Event::ThreadDeleted { thread_id });
                 let parent = removed.and_then(|thread| thread.parent).map(|parent| parent.thread_id);
                 self.emit_ancestors(server_id, parent.as_deref());
+                if let Some(parent) = &parent {
+                    self.refresh_agents(parent);
+                }
                 self.schedule_relay(RELAY_AFTER_CHANGE);
             }
             other => tracing::debug!("unexpected message on the thread list: {other:?}"),
@@ -1765,7 +1794,7 @@ impl Core {
                     open.rev = if live { open.rev.max(item.rev) } else { open.rev };
                     open.unrendered.remove(&item.id);
                     open.unsaved.remove(&item.id);
-                    if let Some(agent) = agents::view(item) {
+                    if let Some(agent) = agents::view(item, &open.threads) {
                         agents_changed = true;
                         note_agent(&mut open.agents, item);
                         if let Some((_, transcript)) = open.agent.as_mut().filter(|(id, _)| id == &item.id) {
@@ -1789,7 +1818,7 @@ impl Core {
                     splices.extend(open.transcript.upsert(item.clone(), live));
                 }
                 if agents_changed {
-                    splices.extend(open.transcript.set_agents(&open.agents));
+                    splices.extend(open.transcript.set_agents(&open.agents, &open.threads));
                 }
                 let synced = live.then_some(open.rev);
                 let mut to_save: Vec<&Item> = items.iter().collect();
@@ -1801,7 +1830,7 @@ impl Core {
                 to_save.extend(&unsaved);
                 self.cache.save_items(thread_id, &to_save, synced);
                 open.saved_at = Instant::now();
-                let agents = agents_changed.then(|| agents_event(thread_id, &open.agents));
+                let agents = agents_changed.then(|| agents_event(thread_id, &open.agents, &open.threads));
                 let restored: Vec<Out> = items.iter().flat_map(|item| open.programs.saved(item)).collect();
                 self.carry_out(thread_id, restored);
                 for splice in merge(splices) {
@@ -2088,7 +2117,7 @@ impl Core {
     fn open_agent(&mut self, thread_id: &str, agent_id: &str) {
         let Some(open) = self.open.get_mut(thread_id) else { return };
         let call = open.agents.iter().find(|item| item.id == agent_id);
-        let started = call.and_then(agents::view);
+        let started = call.and_then(|call| agents::view(call, &open.threads));
         let workflow = call.map(agents::workflow_items).filter(|items| !items.is_empty());
         let mut items = workflow.unwrap_or_else(|| self.cache.agent_items(thread_id, agent_id));
         // What the agent was asked to do is the message its transcript starts with.
@@ -3074,7 +3103,7 @@ impl Core {
             open.left = None;
             let activity = activity.map(|activity| activity_changed(thread_id, &mut open.transcript, activity).1);
             let rows = open.transcript.rows().to_vec();
-            let agents = agents_event(thread_id, &open.agents);
+            let agents = agents_event(thread_id, &open.agents, &open.threads);
             let live = open.live;
             if let Some(activity) = activity {
                 self.emit(activity);
@@ -3102,9 +3131,10 @@ impl Core {
         let since = self.cache.synced_rev(thread_id);
         let newest = items.split_off(items.len().saturating_sub(FIRST_ITEMS));
         let agents = self.cache.agents(thread_id);
+        let threads = ThreadState::of_children(&server.threads, thread_id);
         let mut transcript = Transcript::new(&cwd);
         transcript.set_removed(removed.clone());
-        transcript.set_agents(&agents);
+        transcript.set_agents(&agents, &threads);
         transcript.load(newest);
         let activity = activity.map(|activity| activity_changed(thread_id, &mut transcript, activity).1);
         let rows = transcript.rows().to_vec();
@@ -3112,6 +3142,7 @@ impl Core {
             server_id: server_id.to_string(),
             transcript,
             agents: agents.clone(),
+            threads: threads.clone(),
             agent: None,
             earlier,
             live,
@@ -3127,7 +3158,7 @@ impl Core {
         if let Some(activity) = activity {
             self.emit(activity);
         }
-        self.emit(agents_event(thread_id, &agents));
+        self.emit(agents_event(thread_id, &agents, &threads));
         self.emit_rows(thread_id, true, Splice { start: 0, remove: 0, rows });
         let open = self.open.get_mut(thread_id).ok_or("The thread closed.")?;
         if let Some(rest) =
@@ -3328,8 +3359,9 @@ fn children_of(threads: &HashMap<String, Thread>, thread_id: &str) -> Option<Chi
     Some(Children { running, working, waiting, waiting_text, running_count, running_text, stop_question })
 }
 
-fn agents_event(thread_id: &str, started: &[Item]) -> Event {
-    Event::Agents { thread_id: thread_id.to_string(), agents: agents::listed(started.iter().filter_map(agents::view)) }
+fn agents_event(thread_id: &str, started: &[Item], threads: &HashMap<String, ThreadState>) -> Event {
+    let agents = agents::listed(started.iter().filter_map(|item| agents::view(item, threads)));
+    Event::Agents { thread_id: thread_id.to_string(), agents }
 }
 
 /// Keeps the tool call that started an agent, in the place the thread has it.

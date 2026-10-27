@@ -15,7 +15,7 @@ use motile_protocol::wire::{
 use serde::Serialize;
 use serde_json::Value;
 
-use super::agents::{self, AgentState, AgentView, workflow_name};
+use super::agents::{self, AgentState, AgentView, ThreadState, workflow_name};
 use super::highlight::{self, Incremental, Spans};
 use super::markdown::{self, Block, ParaKind, Prose};
 use super::openui::UiRow;
@@ -450,11 +450,20 @@ pub struct Transcript {
     removed: Option<String>,
     /// Nothing more is coming, as in the transcript of an agent that has ended.
     settled: bool,
-    /// The agents the thread's agent started, as they are now, by the thread each works in.
-    agents: HashMap<String, AgentView>,
+    /// The agents the thread's agent started, as they are now.
+    agents: Started,
     /// Each patch's program, by its row: the program it was merged over, the patch, and the two
     /// merged.
     merged: HashMap<String, (String, String, String)>,
+}
+
+/// The agents a thread's agent started, as they are now.
+#[derive(Default)]
+struct Started {
+    /// By the thread each works in.
+    views: HashMap<String, AgentView>,
+    /// How those threads are doing, by their ids.
+    threads: HashMap<String, ThreadState>,
 }
 
 /// Code that came without highlighting: a code row, or the code paragraph `para` of a prose row.
@@ -608,13 +617,16 @@ impl Transcript {
         self.show()
     }
 
-    /// Takes the agents the thread's tool calls started, as they are now. The notice of one that
-    /// has worked since shows it as it is now.
-    pub fn set_agents(&mut self, started: &[Item]) -> Option<Splice> {
-        self.agents =
-            started.iter().filter_map(agents::view).filter_map(|view| Some((view.thread_id.clone()?, view))).collect();
+    /// Takes the agents the thread's tool calls started and the states of the threads they work
+    /// in, as they are now. The notice of one that has worked since shows it as it is now.
+    pub fn set_agents(&mut self, started: &[Item], threads: &HashMap<String, ThreadState>) -> Option<Splice> {
+        let views = started.iter().filter_map(|item| agents::view(item, threads));
+        self.agents = Started {
+            views: views.filter_map(|view| Some((view.thread_id.clone()?, view))).collect(),
+            threads: threads.clone(),
+        };
         for (item, rendered) in self.items.iter().zip(&mut self.rendered) {
-            if matches!(item.kind, ItemKind::Notice { .. }) {
+            if matches!(item.kind, ItemKind::Notice { .. }) || starts_agent(item) {
                 *rendered = render(item, &self.cwd, &self.agents, None);
             }
         }
@@ -1220,12 +1232,7 @@ fn counted(kind: &str, count: usize) -> String {
     }
 }
 
-fn render(
-    item: &Item,
-    cwd: &str,
-    started: &HashMap<String, AgentView>,
-    streaming: Option<&mut HashMap<String, Incremental>>,
-) -> Vec<Row> {
+fn render(item: &Item, cwd: &str, started: &Started, streaming: Option<&mut HashMap<String, Incremental>>) -> Vec<Row> {
     let row = |index: usize, kind: RowKind| Row {
         id: format!("{}/{index}", item.id),
         item: item.id.clone(),
@@ -1248,7 +1255,7 @@ fn render(
             let input: Value = serde_json::from_str(&call.input).unwrap_or_default();
             render_markdown(item, input["plan"].as_str().unwrap_or_default(), streaming)
         }
-        ItemKind::Tool { call } => match agents::starting(item, call) {
+        ItemKind::Tool { call } => match agents::starting(item, call, &started.threads) {
             Some(view) => vec![row(0, RowKind::Agent { agent: AgentRow::new(view, None) })],
             None => vec![row(0, RowKind::Tool { tool: describe(call, cwd, item.created_at) })],
         },
@@ -1268,7 +1275,7 @@ fn render(
             vec![row(0, RowKind::Handoff { from: HandoffLabel::new(from), to: HandoffLabel::new(to) })]
         }
         ItemKind::Notice { notice, .. } => {
-            let now = started.get(&notice.thread_id).filter(|now| agents::worked_since(now, item.created_at));
+            let now = started.views.get(&notice.thread_id).filter(|now| agents::worked_since(now, item.created_at));
             let agent = match now {
                 Some(now) => AgentRow::new(now.clone(), None),
                 None => AgentRow::new(agents::noticed(item, notice), Some(item.created_at)),
@@ -2031,6 +2038,29 @@ mod tests {
     }
 
     #[test]
+    fn an_agent_s_row_follows_the_thread_it_works_in_while_it_works() {
+        let mut item = agent_call("t1", 0, "Run greet.py", Some("Waiting for your approval"), ToolStatus::Running);
+        let ItemKind::Tool { call } = &mut item.kind else { unreachable!() };
+        let agent = call.agent.as_mut().unwrap();
+        agent.waits = Some(Ask::Approval);
+        agent.runs_on = Some(Box::new(motile_protocol::wire::RunsOn {
+            agent: Agent::Codex,
+            model: None,
+            account: None,
+            thread_id: Some("c".into()),
+        }));
+        let started = [item.clone()];
+        let mut transcript = Transcript::new("");
+        transcript.load(vec![item]);
+        assert_eq!(agent_row(&transcript, 0).state, AgentState::Waiting);
+
+        let working = HashMap::from([("c".to_string(), ThreadState::Working)]);
+        assert!(transcript.set_agents(&started, &working).is_some());
+        let row = agent_row(&transcript, 0);
+        assert_eq!((row.state, row.label.as_str(), row.detail.as_str()), (AgentState::Working, "Working", "Working"));
+    }
+
+    #[test]
     fn a_notice_of_an_agent_that_worked_since_shows_it_as_it_is_now() {
         let started = |status: ToolStatus, duration_ms: Option<u64>| {
             let mut item = agent_call("t1", 0, "Kernel", None, status);
@@ -2055,16 +2085,16 @@ mod tests {
         };
         let notice = Item { created_at: 12.0, ..item("n", 5, ItemKind::Notice { notice, text: String::new() }) };
         let mut transcript = Transcript::new("");
-        transcript.set_agents(&[started(ToolStatus::Succeeded, Some(10_000))]);
+        transcript.set_agents(&[started(ToolStatus::Succeeded, Some(10_000))], &HashMap::new());
         transcript.load(vec![notice]);
         let told = agent_row(&transcript, 0);
         assert_eq!((told.label.as_str(), told.at), ("Finished", Some(12.0)));
 
-        assert!(transcript.set_agents(&[started(ToolStatus::Running, None)]).is_some());
+        assert!(transcript.set_agents(&[started(ToolStatus::Running, None)], &HashMap::new()).is_some());
         let working = agent_row(&transcript, 0);
         assert_eq!((working.state, working.label.as_str(), working.at), (AgentState::Working, "Working", None));
 
-        transcript.set_agents(&[started(ToolStatus::Succeeded, Some(30_000))]);
+        transcript.set_agents(&[started(ToolStatus::Succeeded, Some(30_000))], &HashMap::new());
         let done = agent_row(&transcript, 0);
         assert_eq!((done.state, done.at, done.duration_ms), (AgentState::Done, None, Some(30_000)));
     }
