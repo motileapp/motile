@@ -270,6 +270,10 @@ pub struct ControlLabel {
     pub spread: bool,
     /// Its symbol stands after its words, as an Expand button's.
     pub symbol_after: bool,
+    /// Its words are the prose's, as the text it stands under.
+    pub prose: bool,
+    /// Its chevron points up, at what it hides again.
+    pub chevron_up: bool,
 }
 
 impl ControlLabel {
@@ -293,7 +297,35 @@ impl ControlLabel {
             placeholder: false,
             spread: false,
             symbol_after: false,
+            prose: false,
+            chevron_up: false,
         }
+    }
+
+    fn text_size(&self) -> f32 {
+        if self.prose { crate::theme::PROSE_SIZE } else { self.size.text_size() }
+    }
+
+    fn weight(&self) -> FontWeight {
+        if self.prose { FontWeight::NORMAL } else { FontWeight::MEDIUM }
+    }
+
+    /// How far prose words set on a line as tall as the control, and the chevron after them, move
+    /// from where they would be centred. The words are mostly small letters, so the middle of their
+    /// capitals and of their small letters is the control's, and the chevron is on the small
+    /// letters' middle.
+    fn prose_shifts(&self, cx: &App) -> (f32, f32) {
+        let height = self.size.height();
+        let system = cx.text_system();
+        let id = system.resolve_font(&crate::transcript::rows::font(crate::theme::UI_FONT, self.weight(), false));
+        let size = px(self.text_size());
+        let (cap, x) = (f32::from(system.cap_height(id, size)), f32::from(system.x_height(id, size)));
+        let baseline = (height / 2. + (cap + x) / 4.).round();
+        // A line centres its ascent and descent, which the font gives below its baseline as negative.
+        let (ascent, descent) = (f32::from(system.ascent(id, size)), f32::from(system.descent(id, size)).abs());
+        let drawn = (height - ascent - descent) / 2. + ascent;
+        // GPUI rounds a symbol's half-pixel top toward zero, up the screen, so the chevron starts half lower.
+        (baseline - drawn, baseline - x / 2. - height / 2. + 0.5)
     }
 
     fn wordless(&self) -> bool {
@@ -320,7 +352,7 @@ impl ControlLabel {
                 Some(tinted) => format!("{title} {tinted}"),
                 None => title.to_string(),
             };
-            crate::ui::text_width(&text, size.text_size(), FontWeight::MEDIUM, window)
+            crate::ui::text_width(&text, self.text_size(), self.weight(), window)
         });
         let stack = match (mark, words) {
             (Some(mark), Some(words)) => mark + self.gap.unwrap_or(size.gap()) + words,
@@ -367,6 +399,10 @@ impl ControlLabel {
         let placeholder = self.placeholder;
         let spread = self.fills && self.spread;
         let symbol_after = self.symbol_after;
+        let (text_size, weight) = (self.text_size(), self.weight());
+        let prose = self.prose;
+        let (words_shift, chevron_shift) = if prose { self.prose_shifts(cx) } else { (0., 0.) };
+        let line = size.height();
         let words = |title: Option<SharedString>,
                      tinted: Option<(SharedString, Hsla)>,
                      spins: bool,
@@ -400,8 +436,9 @@ impl ControlLabel {
                     row.child(
                         div()
                             .min_w_0()
-                            .text_size(px(size.text_size()))
-                            .font_weight(FontWeight::MEDIUM)
+                            .text_size(px(text_size))
+                            .font_weight(weight)
+                            .when(prose, |text| text.line_height(px(line)).relative().top(px(words_shift)))
                             .whitespace_nowrap()
                             .overflow_hidden()
                             .map(|text| if middle { text.text_ellipsis_middle() } else { text.text_ellipsis() })
@@ -455,7 +492,9 @@ impl ControlLabel {
                 label.child(stack)
             })
             .when(self.chevron, |label| {
-                label.child(icons::trimmed_chevron(size.chevron()).text_color(c.muted_stronger_foreground))
+                let chevron = icons::trimmed_chevron(size.chevron()).text_color(c.muted_stronger_foreground);
+                let chevron = if self.chevron_up { chevron.rotate(180.) } else { chevron };
+                label.child(div().flex().relative().top(px(chevron_shift)).child(chevron))
             })
             .when(overlay_spinner, |label| {
                 label.child(
@@ -541,6 +580,8 @@ pub struct ActionButton {
     /// It stands in a line of text: its symbol or words start where the line does, and it is no
     /// taller than its words, so that nothing moves for it. Its light and its press reach around.
     inline: bool,
+    /// Its press reaches across the room it stands in, while its light keeps its own width.
+    stretches: bool,
     on_click: Option<OnClick>,
 }
 
@@ -559,6 +600,7 @@ impl ActionButton {
             disabled: false,
             truncates: false,
             inline: false,
+            stretches: false,
             on_click: None,
         }
     }
@@ -711,6 +753,19 @@ impl ActionButton {
         self
     }
 
+    /// It shows more of what it stands under, with a chevron that points up while that is `open`.
+    pub fn expands(mut self, open: bool) -> Self {
+        self.label.chevron = true;
+        self.label.chevron_up = open;
+        self
+    }
+
+    /// Its words are the prose's, as the text it stands under.
+    pub fn prose(mut self) -> Self {
+        self.label.prose = true;
+        self
+    }
+
     /// Its words stand for what isn't chosen yet, in the placeholder colour.
     pub fn placeholder(mut self, placeholder: bool) -> Self {
         self.label.placeholder = placeholder;
@@ -772,6 +827,12 @@ impl ActionButton {
     /// It stands in a line of text, taking no more room than its symbol and words.
     pub fn inline(mut self) -> Self {
         self.inline = true;
+        self
+    }
+
+    /// Its press reaches across the room it stands in, while its light keeps its own width.
+    pub fn stretches(mut self) -> Self {
+        self.stretches = true;
         self
     }
 
@@ -849,7 +910,8 @@ impl RenderOnce for ActionButton {
             .group(group.clone())
             .when(truncates, |button| button.min_w_0().flex())
             .when(!truncates, |button| button.flex_shrink_0())
-            .when(fills, |button| button.w_full())
+            .when(fills || self.stretches, |button| button.w_full())
+            .when(self.stretches, |button| button.flex())
             .pt(px(self.margin.top))
             .pl(px(self.margin.left))
             .pb(px(self.margin.bottom))

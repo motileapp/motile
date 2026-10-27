@@ -324,6 +324,9 @@ class TextLabel: UILabel {
 
     var naturalWidth: CGFloat { intrinsicContentSize.width }
 
+    /// Where its words' baseline is drawn, from its top: a line shorter than the label is centred in it.
+    var baselineFromTop: CGFloat { (bounds.height - font.lineHeight) / 2 + font.ascender }
+
     /// The size the words take, whatever width it was last given.
     var natural: CGSize {
         let size = intrinsicContentSize
