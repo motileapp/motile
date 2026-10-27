@@ -16,7 +16,7 @@ struct AttachMenu: View {
 
     var body: some View {
         ActionMenu(
-            icon: .plus, help: "Attach files", round: true, tint: .themeForeground, margin: ComposerView.margin(leading: 8)
+            icon: .plus, help: "Attach files", symbolSize: .lg, round: true, tint: .themeForeground, margin: ComposerView.margin(leading: 8)
         ) {
             Button {
                 picksPhotos = true

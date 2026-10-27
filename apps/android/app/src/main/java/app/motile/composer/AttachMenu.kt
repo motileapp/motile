@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.dp
 import app.motile.LocalStore
 import app.motile.platform.Platform
 import app.motile.platform.Symbol
+import app.motile.theme.IconSize
 import app.motile.theme.Theme
 import app.motile.ui.ActionMenu
 import kotlinx.coroutines.Dispatchers
@@ -57,7 +58,7 @@ fun AttachMenu() {
     val hasCamera = remember { Platform.context.packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY) }
 
     ActionMenu(
-        icon = Symbol.Plus, help = "Attach files", round = true, tint = Theme.colors.foreground,
+        icon = Symbol.Plus, help = "Attach files", symbolSize = IconSize.Lg, round = true, tint = Theme.colors.foreground,
         margin = ComposerView.margin(leading = 8.dp),
     ) {
         item("Photo Library", Symbol.Images) {
