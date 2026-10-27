@@ -37,8 +37,8 @@ struct UsageSheet: View {
             .navigationTitle("Usage")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) { SheetCloseButton() }
-                ToolbarItem(placement: .topBarTrailing) {
+                GlassToolbarItem(placement: .topBarLeading) { SheetCloseButton() }
+                GlassToolbarItem(placement: .topBarTrailing) {
                     Button {
                         model.refresh()
                     } label: {

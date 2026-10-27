@@ -59,6 +59,8 @@ enum Theme {
     static let warningTint = thinned(warning, .colorTint)
     /// The scrim at its opacity.
     static let scrim = thinned(overlay, .overlay)
+    /// The glass's tint: its colour at its opacity.
+    static let glassTint = thinned(glass, .glassTint)
 
     /// The colours code is highlighted with, by the core's palette index.
     static let syntax: [PlatformColor] = [
@@ -410,4 +412,5 @@ extension Color {
     static let themeControlOverPicture = Color(platform: Theme.controlOverPicture)
     static let themeControlLitOverPicture = Color(platform: Theme.controlLitOverPicture)
     static let themeScrim = Color(platform: Theme.scrim)
+    static let themeGlassTint = Color(platform: Theme.glassTint)
 }

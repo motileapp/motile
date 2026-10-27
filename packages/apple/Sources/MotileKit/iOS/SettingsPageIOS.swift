@@ -14,7 +14,7 @@ struct SettingsSections: View {
     var body: some View {
         @Bindable var store = store
         SettingsList { sections }
-            .searchField(text: $store.settingsQuery, prompt: "Search")
+            .bottomSearch(text: $store.settingsQuery, prompt: "Search")
     }
 
     @ViewBuilder private var sections: some View {
@@ -179,7 +179,7 @@ struct SettingsPage: View {
         Section {
             ForEach(store.servers) { server in
                 NavigationLink {
-                    ServerSettingsPage(serverID: server.id, removed: false)
+                    ServerSettingsPage(serverID: server.id, removed: false).glassBackButton()
                 } label: {
                     SettingsItem(server.name, description: server.state == .connected ? "Connected · version \(server.version)" : server.stateLabel) {
                         SettingsTile(symbol: .server)
@@ -189,7 +189,7 @@ struct SettingsPage: View {
                 }
             }
             NavigationLink {
-                AddServerPage()
+                AddServerPage().glassBackButton()
             } label: {
                 SettingsActionLabel("Add a Server", symbol: .plus)
             }
@@ -199,7 +199,7 @@ struct SettingsPage: View {
             Section("Unlinked") {
                 ForEach(store.removedServers) { server in
                     NavigationLink {
-                        ServerSettingsPage(serverID: server.id, removed: true)
+                        ServerSettingsPage(serverID: server.id, removed: true).glassBackButton()
                     } label: {
                         SettingsItem(server.name, description: "Its threads stay readable from the copies") {
                             SettingsTile(symbol: .server)
@@ -291,7 +291,7 @@ struct SettingsPage: View {
         Section {
             ForEach(store.projects) { project in
                 NavigationLink {
-                    ProjectSettingsPage(projectID: project.id)
+                    ProjectSettingsPage(projectID: project.id).glassBackButton()
                 } label: {
                     SettingsItem(project.name, description: project.path, truncates: .head) {
                         ProjectIcon(project: project, size: SettingsTile.symbolSize)
@@ -300,7 +300,7 @@ struct SettingsPage: View {
                 }
             }
             NavigationLink {
-                CommandPanel(start: store.addProjectPage, inStack: true)
+                CommandPanel(start: store.addProjectPage, inStack: true).glassBackButton()
             } label: {
                 SettingsActionLabel("Add a Project", symbol: .plus)
             }
@@ -337,7 +337,7 @@ struct SettingsPage: View {
                 Section {
                     ForEach(naming) { server in
                         NavigationLink {
-                            BranchNamesPage(serverID: server.id)
+                            BranchNamesPage(serverID: server.id).glassBackButton()
                         } label: {
                             LabeledContent(
                                 naming.count > 1 ? server.name : "Branch Names",
@@ -528,13 +528,13 @@ private struct ProjectSettingsPage: View {
                 }
                 Section {
                     NavigationLink {
-                        CommandPanel(start: .icon(project.id), inStack: true)
+                        CommandPanel(start: .icon(project.id), inStack: true).glassBackButton()
                     } label: {
                         SettingsActionLabel("Choose an Icon", symbol: .image)
                     }
                     if (store.server(project.serverID)?.protocolVersion ?? 0) >= 6 {
                         NavigationLink {
-                            WorktreeSetupPage(project: project)
+                            WorktreeSetupPage(project: project).glassBackButton()
                         } label: {
                             LabeledContent("Worktree Setup", value: project.setup == nil ? "None" : "Script")
                         }

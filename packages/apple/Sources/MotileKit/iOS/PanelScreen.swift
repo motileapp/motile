@@ -31,7 +31,7 @@ struct PanelScreen: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             if !beside {
-                ToolbarItem(placement: .topBarLeading) {
+                GlassToolbarItem(placement: .topBarLeading) {
                     Button {
                         store.rightPanel.isOpen = false
                     } label: {

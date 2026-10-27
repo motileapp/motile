@@ -246,14 +246,17 @@ private final class DayPickerController: NSViewController {
     }
 }
 
-/// The glass a `GlassButtonView` lies on, a capsule as tall as its frame: Liquid Glass where the
-/// system has it, and the popover's material with a hairline around it and a shadow before that.
+/// The glass a `GlassButtonView` lies on, a capsule as tall as its frame: Liquid Glass in its tint
+/// where the system has it, and the popover's material with a hairline around it and a shadow
+/// before that.
 final class GlassView: NSView {
     private let effect: NSView
 
     override init(frame: NSRect) {
         if #available(macOS 26.0, *) {
-            effect = NSGlassEffectView()
+            let glass = NSGlassEffectView()
+            glass.tintColor = Theme.glassTint
+            effect = glass
         } else {
             let blur = NSVisualEffectView()
             blur.material = .popover

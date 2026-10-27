@@ -348,12 +348,9 @@ struct BranchPicker: View {
         .environment(\.surface, .background)
         .navigationTitle(base == nil ? "Branch" : "Start From")
         .navigationBarTitleDisplayMode(.inline)
-        .searchField(text: $query, prompt: prompt)
-        .searchPresentationToolbarBehavior(.avoidHidingContent)
-        .searchAtBottom()
+        .bottomSearch(text: $query, prompt: prompt) { choose(choices, at: highlighted.index) }
         .textInputAutocapitalization(.never)
         .autocorrectionDisabled()
-        .onSubmit(of: .search) { choose(choices, at: highlighted.index) }
         #endif
         .onChange(of: query) { highlighted.index = 0 }
     }

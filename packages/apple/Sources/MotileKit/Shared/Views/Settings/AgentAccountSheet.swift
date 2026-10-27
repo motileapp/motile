@@ -128,7 +128,7 @@ struct AgentAccountSheet: View {
                 .navigationTitle(title)
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
-                    ToolbarItem(placement: .cancellationAction) { SheetCloseButton() }
+                    GlassToolbarItem(placement: .cancellationAction) { SheetCloseButton() }
                     ToolbarItem(placement: .confirmationAction) {
                         if saving {
                             Spinner(size: .xl)

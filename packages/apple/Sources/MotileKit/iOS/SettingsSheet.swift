@@ -35,10 +35,10 @@ struct SettingsSheet: View {
                 .navigationTitle("Settings")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
-                    ToolbarItem(placement: .topBarLeading) { SheetCloseButton() }
+                    GlassToolbarItem(placement: .topBarLeading) { SheetCloseButton() }
                 }
                 .navigationDestination(for: SettingsSection.self) { section in
-                    page(section)
+                    page(section).glassBackButton()
                 }
         }
         .onChange(of: path) {
@@ -55,7 +55,7 @@ struct SettingsSheet: View {
                 .navigationSplitViewColumnWidth(MainScreen.sidebarWidth)
                 .toolbar(removing: .sidebarToggle)
                 .toolbar {
-                    ToolbarItem(placement: .topBarLeading) { SheetCloseButton() }
+                    GlassToolbarItem(placement: .topBarLeading) { SheetCloseButton() }
                 }
         } detail: {
             NavigationStack {

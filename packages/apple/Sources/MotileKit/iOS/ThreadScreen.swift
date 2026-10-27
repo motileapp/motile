@@ -66,47 +66,53 @@ struct ThreadScreen: View {
     }
 
     @ToolbarContentBuilder private var bar: some ToolbarContent {
-        ToolbarItemGroup(placement: .topBarLeading) {
-            if overSidebar {
-                Button {
-                    drawer.isOpen.toggle()
-                } label: {
-                    menuIcon
-                }
-                .accessibilityLabel("Threads")
-            }
-            if store.shownAgent != nil {
-                Button {
-                    store.rightPanel.showAgents()
-                } label: {
-                    Image(.cornerLeftUp, size: .lg)
-                }
-                .accessibilityLabel("Back to the thread")
-            } else if let parent = store.parentThread {
-                Button {
-                    store.openStartedThread(parent.id)
-                } label: {
-                    Image(.cornerLeftUp, size: .lg)
-                }
-                .accessibilityLabel("Open \(parent.title)")
-            }
+        if overSidebar || store.shownAgent != nil || store.parentThread != nil {
+            GlassToolbarItem(placement: .topBarLeading) { leading }
         }
         ToolbarItem(placement: .principal) { title }
-        ToolbarItemGroup(placement: .topBarTrailing) {
-            if let project = store.gitProject, let control = project.gitControl {
-                GitButton(project: project, control: control)
-            } else if let project = store.gitProject, store.canInitializeGit(of: project) {
-                InitializeGitButton(project: project)
-            } else if let base = store.draftBaseToPull {
-                PullBaseButton(base: base)
-            }
+        GlassToolbarItem(placement: .topBarTrailing) { trailing }
+    }
+
+    @ViewBuilder private var leading: some View {
+        if overSidebar {
             Button {
-                store.rightPanel.isOpen.toggle()
+                drawer.isOpen.toggle()
             } label: {
-                Image(.panelRight, size: .lg)
+                menuIcon
             }
-            .accessibilityLabel("Files and changes")
+            .accessibilityLabel("Threads")
         }
+        if store.shownAgent != nil {
+            Button {
+                store.rightPanel.showAgents()
+            } label: {
+                Image(.cornerLeftUp, size: .lg)
+            }
+            .accessibilityLabel("Back to the thread")
+        } else if let parent = store.parentThread {
+            Button {
+                store.openStartedThread(parent.id)
+            } label: {
+                Image(.cornerLeftUp, size: .lg)
+            }
+            .accessibilityLabel("Open \(parent.title)")
+        }
+    }
+
+    @ViewBuilder private var trailing: some View {
+        if let project = store.gitProject, let control = project.gitControl {
+            GitButton(project: project, control: control).glassSymbolFrame()
+        } else if let project = store.gitProject, store.canInitializeGit(of: project) {
+            InitializeGitButton(project: project).glassSymbolFrame()
+        } else if let base = store.draftBaseToPull {
+            PullBaseButton(base: base).glassSymbolFrame()
+        }
+        Button {
+            store.rightPanel.isOpen.toggle()
+        } label: {
+            Image(.panelRight, size: .lg)
+        }
+        .accessibilityLabel("Files and changes")
     }
 
     /// The colour of the first thread, other than the open one, that waits for the user or has a

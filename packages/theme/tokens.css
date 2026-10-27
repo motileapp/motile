@@ -42,6 +42,7 @@
   --border-popover: #e6e8eb;
   --input: #e8eaee;
   --composer: #ffffff;
+  --glass: #ffffff;
   --border-composer: #eaecf0;
   --border-accent: #d9dce5;
   --ring: #22242b;
@@ -96,6 +97,7 @@
   --opacity-glow: 40%;
   --opacity-glow-faint: 30%;
   --opacity-glow-bright: 50%;
+  --opacity-glass-tint: 20%;
 }
 
 .dark {
@@ -139,6 +141,7 @@
   --border-popover: #222228;
   --input: #14151a;
   --composer: #111217;
+  --glass: #0a0b0f;
   --border-composer: #1a1b21;
   --border-accent: #25262c;
   --ring: #d0d2d9;
@@ -193,6 +196,7 @@
   --opacity-glow: 40%;
   --opacity-glow-faint: 30%;
   --opacity-glow-bright: 50%;
+  --opacity-glass-tint: 40%;
 }
 
 :root {

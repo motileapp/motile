@@ -8,14 +8,87 @@ extension View {
     }
 
     /// The surface of what floats over the client, like the composer and the buttons: the system's
-    /// Liquid Glass where it has it, and the system's material with a hairline around it before that.
+    /// Liquid Glass in its tint where it has it, and the system's material with a hairline around
+    /// it before that.
     @ViewBuilder
     func glassSurface<S: Shape>(in shape: S, interactive: Bool = false) -> some View {
         if #available(iOS 26.0, *) {
-            glassEffect(interactive ? .regular.interactive() : .regular, in: shape)
+            let glass = Glass.regular.tint(.themeGlassTint)
+            glassEffect(interactive ? glass.interactive() : glass, in: shape)
         } else {
             background(.regularMaterial, in: shape)
                 .overlay { shape.stroke(Color.themeBorder, lineWidth: 1) }
+        }
+    }
+}
+
+/// Buttons in the top bar on one capsule of the client's glass in place of the system's, which
+/// can't be tinted, so that they look like every other glass of the client.
+struct GlassToolbarItem<Content: View>: ToolbarContent {
+    let placement: ToolbarItemPlacement
+    @ViewBuilder let content: Content
+
+    var body: some ToolbarContent {
+        ToolbarItem(placement: placement) {
+            HStack(spacing: 0) { content }
+                .buttonStyle(.glassSymbol)
+                .foregroundStyle(Color.themeForeground)
+                .glassButton(in: Capsule())
+        }
+        .withoutSystemGlass()
+    }
+}
+
+extension View {
+    /// A pushed page's way back on the client's glass in place of the system's, which keeps the
+    /// swipe from the edge.
+    func glassBackButton() -> some View {
+        modifier(GlassBack())
+    }
+}
+
+private struct GlassBack: ViewModifier {
+    @Environment(\.dismiss) private var dismiss
+
+    func body(content: Content) -> some View {
+        content
+            .navigationBarBackButtonHidden()
+            .toolbar {
+                GlassToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(.chevronLeft, size: .lg)
+                    }
+                    .accessibilityLabel("Back")
+                }
+            }
+            .background(EdgeSwipeBack())
+    }
+}
+
+/// The stack's swipe from the edge, which it turns off once its back button is hidden.
+private struct EdgeSwipeBack: UIViewRepresentable {
+    func makeUIView(context: Context) -> Finder { Finder() }
+
+    func updateUIView(_ view: Finder, context: Context) {}
+
+    final class Finder: UIView {
+        private let swipe = Swipe()
+
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            guard window != nil else { return }
+            swipe.stack = sequence(first: self as UIResponder, next: \.next).lazy.compactMap { $0 as? UINavigationController }.first
+            swipe.stack?.interactivePopGestureRecognizer?.delegate = swipe
+        }
+    }
+
+    final class Swipe: NSObject, UIGestureRecognizerDelegate {
+        weak var stack: UINavigationController?
+
+        func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+            (stack?.viewControllers.count ?? 0) > 1
         }
     }
 }
@@ -32,58 +105,36 @@ extension View {
         }
     }
 
-    /// The search field in the bottom bar, in glass, where the system has it there.
-    @ViewBuilder
-    func searchAtBottom() -> some View {
-        if #available(iOS 26.0, *) {
-            toolbar { DefaultToolbarItem(kind: .search, placement: .bottomBar) }
-        } else {
-            self
-        }
-    }
-
-    /// The system's search field with its symbol in the foreground and its placeholder in the
-    /// colour every field's has. The field ignores both colours of SwiftUI, so they are set on the
-    /// field once it is in the window.
-    func searchField(text: Binding<String>, prompt: String) -> some View {
-        searchable(text: text, prompt: prompt)
-            .background(SearchFieldColors(prompt: prompt))
+    /// A search field at the bottom of the page on the client's glass, as the sidebar's, in place
+    /// of the system's, which can't be tinted. `submit` is what return does in it.
+    func bottomSearch(text: Binding<String>, prompt: String, focusesOnAppear: Bool = false, submit: @escaping () -> Void = {}) -> some View {
+        modifier(BottomSearch(text: text, prompt: prompt, focusesOnAppear: focusesOnAppear, submit: submit))
     }
 }
 
-private struct SearchFieldColors: UIViewRepresentable {
+private struct BottomSearch: ViewModifier {
+    @Binding var text: String
     let prompt: String
+    let focusesOnAppear: Bool
+    let submit: () -> Void
+    @FocusState private var focused: Bool
 
-    func makeUIView(context: Context) -> Finder { Finder() }
-
-    func updateUIView(_ view: Finder, context: Context) {
-        view.prompt = prompt
-    }
-
-    final class Finder: UIView {
-        var prompt = "" {
-            didSet { color() }
-        }
-
-        override func didMoveToWindow() {
-            super.didMoveToWindow()
-            color()
-        }
-
-        private func color(attempt: Int = 0) {
-            guard attempt < 10 else { return }
-            guard let field = UIView.first(UISearchTextField.self, in: stack ?? window) else {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in self?.color(attempt: attempt + 1) }
-                return
+    func body(content: Content) -> some View {
+        content
+            .safeAreaInset(edge: .bottom) {
+                SearchField(text: $text, prompt: prompt, bare: true, focus: $focused)
+                    .onSubmit(submit)
+                    .submitLabel(.search)
+                    .padding(.horizontal, 6)
+                    .frame(height: GlassButtonStyle.side)
+                    .glassButton(in: Capsule())
+                    .padding(.horizontal, sidebarEdge)
+                    .padding(.vertical, 8)
             }
-            field.attributedPlaceholder = NSAttributedString(string: prompt, attributes: [.foregroundColor: Theme.mutedStrongerForeground])
-            field.leftView?.tintColor = Theme.foreground
-        }
-
-        /// The navigation stack the field belongs to, where another sheet's field can't be found.
-        private var stack: UIView? {
-            sequence(first: self as UIResponder, next: \.next).lazy.compactMap { $0 as? UINavigationController }.first?.view
-        }
+            .task {
+                guard focusesOnAppear else { return }
+                focused = true
+            }
     }
 }
 
@@ -95,22 +146,18 @@ extension UIView {
     }
 }
 
-/// What closes a sheet: the system's round glass button with an x, or "Done" before iOS 26.
+/// What closes a sheet: an x, for a `GlassToolbarItem`.
 struct SheetCloseButton: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        if #available(iOS 26, *) {
-            Button(role: .close) {
-                dismiss()
-            } label: {
-                Image(.x, size: .lg)
-                    .foregroundStyle(Color.themeForeground)
-            }
-            .accessibilityLabel("Close")
-        } else {
-            Button("Done") { dismiss() }
+        Button {
+            dismiss()
+        } label: {
+            Image(.x, size: .lg)
+                .foregroundStyle(Color.themeForeground)
         }
+        .accessibilityLabel("Close")
     }
 }
 #endif
