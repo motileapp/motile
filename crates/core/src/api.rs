@@ -149,6 +149,11 @@ pub enum Command {
         account: String,
         text: String,
     },
+    /// Whether a message of `text` is shown cut, for the copy shown while it travels. Answers with
+    /// `collapsible`.
+    Collapses {
+        text: String,
+    },
     /// Sends the message with `attachments`, the paths `upload` answered with. Answers with
     /// `thread_id`. With `now`, a turn that runs takes the message at once instead of the next
     /// turn starting with it.

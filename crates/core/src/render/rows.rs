@@ -68,6 +68,9 @@ pub enum RowKind {
         #[serde(skip_serializing_if = "Option::is_none")]
         values: Option<SentValues>,
         at: f64,
+        /// The message is long enough to be shown cut, with a button that shows the rest.
+        #[serde(skip_serializing_if = "std::ops::Not::not")]
+        collapsible: bool,
     },
     Prose {
         #[serde(flatten)]
@@ -1246,7 +1249,9 @@ fn render(item: &Item, cwd: &str, started: &Started, streaming: Option<&mut Hash
             let links = markdown::links_in(text);
             let skills = skill_chips(text, skills);
             let values = sent_values(context.as_ref(), programs);
-            vec![row(0, RowKind::User { text: text.clone(), links, skills, attachments, values, at: item.created_at })]
+            let collapsible = collapses(text, &skills);
+            let at = item.created_at;
+            vec![row(0, RowKind::User { text: text.clone(), links, skills, attachments, values, at, collapsible })]
         }
         ItemKind::Assistant { text } => render_markdown(item, text, streaming),
         ItemKind::Thinking { text } => vec![row(0, RowKind::Thinking { text: text.clone() })],
@@ -1306,6 +1311,20 @@ pub fn skill_chips(text: &str, skills: &[SkillMention]) -> Vec<SkillChip> {
             label: skill.label.clone(),
         })
         .collect()
+}
+
+const COLLAPSED_LENGTH: u32 = 600;
+const COLLAPSED_LINES: usize = 8;
+
+/// Whether a message is long enough to be shown cut: its text as it reads, each skill by its label.
+pub fn collapses(text: &str, skills: &[SkillChip]) -> bool {
+    if text.trim().is_empty() {
+        return false;
+    }
+    let length = skills
+        .iter()
+        .fold(markdown::utf16_len(text), |length, chip| length + markdown::utf16_len(&chip.label) - chip.len);
+    length > COLLAPSED_LENGTH || text.trim_end().lines().count() > COLLAPSED_LINES
 }
 
 fn render_markdown(item: &Item, text: &str, mut streaming: Option<&mut HashMap<String, Incremental>>) -> Vec<Row> {
@@ -1714,6 +1733,31 @@ mod tests {
         assert_eq!(serde_json::to_value(cut).unwrap()["after"], "prose");
         let tool = transcript.rows().iter().find(|row| row.id == "t/0").unwrap();
         assert_eq!(tool.after, Some(After::Prose));
+    }
+
+    #[test]
+    fn a_long_message_is_shown_cut() {
+        let collapsible = |text: &str, skills: Vec<SkillMention>| {
+            let mut transcript = Transcript::new("");
+            let message = ItemKind::User {
+                text: text.into(),
+                attachments: vec!["/tmp/a/notes.txt".into()],
+                skills,
+                context: None,
+                programs: Vec::new(),
+            };
+            transcript.load(vec![item("u", 0, message)]);
+            matches!(transcript.rows()[0].kind, RowKind::User { collapsible: true, .. })
+        };
+        let skill = || vec![SkillMention { name: "a-skill-with-a-long-name".into(), label: "Go".into() }];
+
+        assert!(!collapsible("Short", Vec::new()));
+        assert!(!collapsible(&"a".repeat(600), Vec::new()));
+        assert!(collapsible(&"a".repeat(601), Vec::new()));
+        assert!(!collapsible(&"line\n".repeat(8), Vec::new()));
+        assert!(collapsible(&"line\n".repeat(9), Vec::new()));
+        assert!(!collapsible(&"\n".repeat(20), Vec::new()), "only files");
+        assert!(!collapsible(&format!("$a-skill-with-a-long-name {}", "a".repeat(590)), skill()));
     }
 
     #[test]

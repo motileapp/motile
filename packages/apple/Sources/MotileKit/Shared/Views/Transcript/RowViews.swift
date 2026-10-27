@@ -79,9 +79,10 @@ class RowView: FlippedView {
     /// the main thread. A queued message is only estimated: it is always among the last rows.
     class func height(_ row: RowModel, width: CGFloat) -> CGFloat {
         switch row.kind {
-        case .user(let text, let attachments, let values, _):
-            let fit = BubbleFit(text: text, attachments: attachments, values: values, width: width)
-            return UserRowView.height(fit, textHeight: fit.hasText ? TextMeasure.height(of: text, width: fit.innerWidth) : 0)
+        case .user(let text, let attachments, let values, _, let collapsible):
+            let fit = BubbleFit(text: text, attachments: attachments, values: values, width: width, collapsible: collapsible)
+            let textHeight = fit.hasText ? TextMeasure.height(of: text, width: fit.innerWidth) : 0
+            return UserRowView.height(fit, shown: UserRowView.Shown(textHeight: textHeight, collapsible: collapsible, open: false))
         case .prose(let text, _):
             return TextMeasure.height(of: text, width: width) + ProseRowView.gap + row.above
         case .error(let text):
@@ -98,9 +99,11 @@ class RowView: FlippedView {
     /// What the row would be without measuring its text, until it has been measured.
     class func estimatedHeight(_ row: RowModel, width: CGFloat) -> CGFloat {
         switch row.kind {
-        case .user(let text, let attachments, let values, _):
+        case .user(let text, let attachments, let values, _, let collapsible):
             let chip = values == nil ? 0 : SentValuesChip.gap + SentValuesChip.size.height + BubbleFit.padding - 10
-            return estimatedTextHeight(text.length, width: width * 0.75) + 34 + chip + UserRowView.footHeight + AttachedFilesView.height(attachments, width: width)
+            let full = estimatedTextHeight(text.length, width: width * 0.75)
+            let shown = collapsible ? min(full, UserRowView.cutHeight + UserRowView.moreHeight) : full
+            return shown + 34 + chip + UserRowView.footHeight + AttachedFilesView.height(attachments, width: width)
         case .prose(let text, _):
             return estimatedTextHeight(text.length, width: width) + ProseRowView.gap + row.above
         case .code(let content):
@@ -196,13 +199,15 @@ struct BubbleFit {
     /// The room the chip of the message's values takes under the rest.
     let chip: CGFloat
 
-    init(text: NSAttributedString, attachments: [AttachedFile], values: SentValues? = nil, width: CGFloat, least: CGFloat = 12) {
+    /// A `collapsible` message is at least as wide as the button that shows the rest of it.
+    init(text: NSAttributedString, attachments: [AttachedFile], values: SentValues? = nil, width: CGFloat, least: CGFloat = 12, collapsible: Bool = false) {
         let widest = max(120, width * 0.8) - Self.padding * 2
         let natural = text.bounds(width: widest)
         hasText = text.length > 0
         files = AttachedFilesView.size(attachments, width: widest)
         let chipWidth = values.map(SentValuesChip.width) ?? 0
-        innerWidth = min(widest, max(hasText ? ceil(natural.width) + 2 : 0, files.width, chipWidth, least))
+        let buttonWidth = collapsible ? UserRowView.moreWidth : 0
+        innerWidth = min(widest, max(hasText ? ceil(natural.width) + 2 : 0, files.width, chipWidth, buttonWidth, least))
         top = files.height > 0 ? Self.padding : 10
         between = files.height > 0 && hasText ? 8 : 0
         chip = values == nil ? 0 : SentValuesChip.gap + SentValuesChip.size.height
@@ -211,12 +216,16 @@ struct BubbleFit {
 
 final class UserRowView: RowView {
     private let bubble = SurfaceView()
+    private let clip = FlippedView()
+    private let fade = EdgeFade()
     private let text = RowTextView.make()
+    private var more: RowButton!
     private let attachments = AttachedFilesView()
     private let chip = SentValuesChip()
     private let meta = MessageMeta(trailing: true, tooltip: "Copy message")
     private var files: [AttachedFile] = []
     private var values: SentValues?
+    private var collapsible = false
     private var pending = false
 
     override var showsMeta: Bool {
@@ -228,7 +237,25 @@ final class UserRowView: RowView {
         bubble.fill = Theme.backgroundSecondary
         bubble.radius = 18
         addSubview(bubble)
-        bubble.addSubview(text)
+        bubble.addSubview(clip)
+        clip.addSubview(text)
+        #if os(macOS)
+        clip.wantsLayer = true
+        clip.layer?.masksToBounds = true
+        #else
+        clip.clipsToBounds = true
+        #endif
+        more = RowButton(
+            title: Self.moreTitle,
+            tooltip: Self.moreTitle,
+            radius: ControlSize.small.radius,
+            hover: Theme.backgroundSecondaryAccent,
+            insets: PlatformEdgeInsets(top: 0, left: 0, bottom: 0, right: 0)
+        ) { [weak self] in
+            guard let self else { return }
+            self.owner?.rowToggledExpansion(id: self.rowID)
+        }
+        bubble.addSubview(more)
         bubble.addSubview(attachments)
         bubble.addSubview(chip)
         addSubview(meta)
@@ -246,11 +273,13 @@ final class UserRowView: RowView {
 
     override func configure(_ row: RowModel) {
         super.configure(row)
-        guard case .user(let content, let files, let values, let at) = row.kind else { return }
+        guard case .user(let content, let files, let values, let at, let collapsible) = row.kind else { return }
         meta.show(Time.stamp(at))
         text.content = content
         self.files = files
         self.values = values
+        self.collapsible = collapsible
+        more.dim()
         chip.show(values)
         text.isHidden = content.length == 0
         attachments.show(files, owner: owner)
@@ -263,30 +292,80 @@ final class UserRowView: RowView {
     static let footHeight = metaGap + MessageMeta.height + 25
     private static let metaGap: CGFloat = 4
 
-    static func height(_ fit: BubbleFit, textHeight: CGFloat) -> CGFloat {
-        margin + bubbleHeight(fit, textHeight: textHeight) + footHeight
+    static func height(_ fit: BubbleFit, shown: Shown) -> CGFloat {
+        margin + bubbleHeight(fit, shown: shown) + footHeight
     }
 
-    private static func bubbleHeight(_ fit: BubbleFit, textHeight: CGFloat) -> CGFloat {
-        let bottom: CGFloat = fit.hasText && fit.chip == 0 ? 10 : BubbleFit.padding
-        return fit.top + fit.files.height + fit.between + textHeight + fit.chip + bottom
+    private static func bubbleHeight(_ fit: BubbleFit, shown: Shown) -> CGFloat {
+        let more = shown.more ? moreHeight : 0
+        let bottom: CGFloat = if fit.chip > 0 { BubbleFit.padding } else if shown.more { moreInset } else if fit.hasText { 10 } else { BubbleFit.padding }
+        return fit.top + fit.files.height + fit.between + shown.textHeight + more + fit.chip + bottom
+    }
+
+    /// The text as the bubble shows it: a long message cut, unless it is open, with the button that
+    /// shows the rest or hides it again.
+    struct Shown {
+        let textHeight: CGFloat
+        let more: Bool
+
+        init(textHeight: CGFloat, collapsible: Bool, open: Bool) {
+            more = collapsible && textHeight > UserRowView.cutsPast
+            self.textHeight = more && !open ? UserRowView.cutHeight : textHeight
+        }
+    }
+
+    /// A cut message shows eight lines, and is only cut when that hides more than one.
+    static let cutHeight = linesHeight(8)
+    private static let cutsPast = linesHeight(9)
+    private static let moreTitle = "Show more"
+    private static let lessTitle = "Show less"
+    /// The button's light is as far from the bubble's side as from its bottom.
+    private static let moreInset = BubbleFit.padding - RowButton.padding
+    private static let moreGap: CGFloat = 4
+    static let moreHeight = moreGap + ControlSize.small.height
+    static let moreWidth = [moreTitle, lessTitle].map { ceil($0.size(withAttributes: [.font: Theme.smallFont]).width) }.max() ?? 0
+
+    private static func linesHeight(_ count: Int) -> CGFloat {
+        let lines = Array(repeating: "M", count: count).joined(separator: "\u{2028}")
+        return TextMeasure.height(of: Typesetter.plain(lines, color: Theme.foreground), width: 1000)
     }
 
     override func layout(width: CGFloat) -> CGFloat {
         let padding = BubbleFit.padding
-        let fit = BubbleFit(text: text.content, attachments: files, values: values, width: width)
+        let fit = BubbleFit(text: text.content, attachments: files, values: values, width: width, collapsible: collapsible)
         let textHeight = fit.hasText ? text.height(forWidth: fit.innerWidth) : 0
-        let bubbleSize = CGSize(width: fit.innerWidth + padding * 2, height: Self.bubbleHeight(fit, textHeight: textHeight))
+        let open = owner?.isExpanded(id: rowID) ?? false
+        let shown = Shown(textHeight: textHeight, collapsible: collapsible, open: open)
+        let bubbleSize = CGSize(width: fit.innerWidth + padding * 2, height: Self.bubbleHeight(fit, shown: shown))
         bubble.frame = CGRect(x: width - bubbleSize.width, y: Self.margin, width: bubbleSize.width, height: bubbleSize.height)
         attachments.frame = CGRect(x: padding, y: fit.top, width: fit.innerWidth, height: fit.files.height)
         attachments.layout(width: fit.innerWidth)
-        text.frame = CGRect(x: padding, y: fit.top + fit.files.height + fit.between, width: fit.innerWidth, height: textHeight)
+        clip.frame = CGRect(x: padding, y: fit.top + fit.files.height + fit.between, width: fit.innerWidth, height: shown.textHeight)
+        text.frame = CGRect(x: 0, y: 0, width: fit.innerWidth, height: textHeight)
+        layoutMore(shown, open: open)
+        let above = shown.more ? more.frame.maxY : clip.frame.maxY
         if let values {
             let size = SentValuesChip.size
-            chip.frame = CGRect(x: padding, y: text.frame.maxY + SentValuesChip.gap, width: SentValuesChip.width(values), height: size.height)
+            chip.frame = CGRect(x: padding, y: above + SentValuesChip.gap, width: SentValuesChip.width(values), height: size.height)
         }
         meta.frame = CGRect(x: 0, y: bubble.frame.maxY + Self.metaGap, width: width, height: MessageMeta.height)
-        return Self.height(fit, textHeight: textHeight)
+        return Self.height(fit, shown: shown)
+    }
+
+    /// The button under a long message, and the fade over the end of its text while it is cut.
+    private func layoutMore(_ shown: Shown, open: Bool) {
+        more.isHidden = !shown.more
+        let cut = shown.more && !open
+        #if os(macOS)
+        clip.layer?.mask = cut ? fade : nil
+        #else
+        clip.layer.mask = cut ? fade : nil
+        #endif
+        fade.update(frame: clip.bounds, above: 0, below: cut ? EdgeFade.length : 0)
+        guard shown.more else { return }
+        more.setTitle(open ? Self.lessTitle : Self.moreTitle)
+        let y = clip.frame.maxY + Self.moreGap
+        more.frame = CGRect(x: Self.moreInset, y: y, width: more.width, height: ControlSize.small.height)
     }
 
     override func clearSelection() { text.clearSelection() }

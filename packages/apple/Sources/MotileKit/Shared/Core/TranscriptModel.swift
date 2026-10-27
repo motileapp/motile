@@ -27,6 +27,8 @@ final class TranscriptModel {
     private var pending: RowModel?
     /// The text of the message on its way.
     private var pendingText: String?
+    private var pendingSkills: [SkillSpan] = []
+    private var pendingCollapsible = false
     private var hooks: Hooks?
     private var owner: ObjectIdentifier?
 
@@ -113,16 +115,24 @@ final class TranscriptModel {
         hooks?.splice(start, remove, new)
     }
 
-    func setPending(_ text: String?, attachments: [AttachedFile] = [], queued: Bool = false, skills: [SkillSpan] = []) {
+    func setPending(_ text: String?, attachments: [AttachedFile] = [], queued: Bool = false, skills: [SkillSpan] = [], collapsible: Bool = false) {
         pendingText = text
-        pending = text.map { RowModel.pending(text: $0, attachments: attachments, queued: queued, skills: skills) }
+        pendingSkills = skills
+        pendingCollapsible = collapsible
+        pending = text.map { RowModel.pending(text: $0, attachments: attachments, queued: queued, skills: skills, collapsible: collapsible) }
         hooks?.pending(pending)
     }
 
     /// Shows the skills of the message on its way as chips, while it is still the one shown.
     func setPendingSkills(_ skills: [SkillSpan], of text: String, attachments: [AttachedFile], queued: Bool) {
         guard !skills.isEmpty, pending != nil, pendingText == text else { return }
-        setPending(text, attachments: attachments, queued: queued, skills: skills)
+        setPending(text, attachments: attachments, queued: queued, skills: skills, collapsible: pendingCollapsible)
+    }
+
+    /// Shows the message on its way cut, as it will be once the server has it.
+    func setPendingCollapsible(of text: String, attachments: [AttachedFile]) {
+        guard pending != nil, pendingText == text else { return }
+        setPending(text, attachments: attachments, skills: pendingSkills, collapsible: true)
     }
 
     /// While the view keeps the rows of the thread open before, what this one's agent does waits

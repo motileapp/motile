@@ -2252,6 +2252,12 @@ final class AppStore {
         readSkillSpans(in: text) { [weak self] spans in
             self?.transcript.setPendingSkills(spans, of: text, attachments: attached.map(\.attached), queued: queued)
         }
+        if !queued {
+            core.send("collapses", ["text": text]) { [weak self] result in
+                guard case .success(let answer) = result, answer.bool("collapsible") else { return }
+                self?.transcript.setPendingCollapsible(of: text, attachments: attached.map(\.attached))
+            }
+        }
         transcriptIsEmpty = false
 
         core.send("send", command) { [weak self] result in

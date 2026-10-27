@@ -1,6 +1,14 @@
 package app.motile.transcript
 
 import androidx.compose.foundation.background
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.text.rememberTextMeasurer
+import app.motile.ui.edgeFade
+import app.motile.ui.ButtonVariant
+import app.motile.ui.ActionButton
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -120,20 +128,49 @@ private object Bubble {
 
 /** A bubble is as wide as what it holds, up to the widest it may be: most of the column, and never too narrow for a word. */
 private fun Modifier.bubbleWidth(): Modifier = layout { measurable, constraints ->
-    val widest = maxOf(120.dp.roundToPx(), (constraints.maxWidth * 0.8f).toInt()).coerceAtMost(constraints.maxWidth)
+    val widest = bubbleWidest(constraints.maxWidth)
     val placeable = measurable.measure(constraints.copy(minWidth = 0, maxWidth = widest))
     layout(placeable.width, placeable.height) { placeable.place(0, 0) }
 }
 
+private fun Density.bubbleWidest(maxWidth: Int): Int = maxOf(120.dp.roundToPx(), (maxWidth * 0.8f).toInt()).coerceAtMost(maxWidth)
+
 private val messageStyle: TextStyle get() = TextStyle(fontSize = Theme.proseSize, lineHeight = Typesetter.messageLineHeight)
+
+/** A cut message shows eight lines, and is only cut when that hides more than one. */
+private object Cut {
+    const val LINES = 8
+    const val PAST = 9
+    /** The button's light is as far from the bubble's side as from its bottom. */
+    val inset = Bubble.PADDING.dp - ControlSize.Small.padding
+}
 
 @Composable
 private fun UserRow(row: RowModel, user: RowModel.Kind.User) {
     val palette = LocalPalette.current
     val text = remember(user.text, palette) { user.text.styled.get(palette) }
+    if (!user.collapsible) return UserBubble(row, user, text, more = false)
+    // A long message counts its lines as its bubble's widest text sets them, before it is drawn.
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val measurer = rememberTextMeasurer()
+        val density = LocalDensity.current
+        val width = with(density) { bubbleWidest(constraints.maxWidth) - (Bubble.PADDING.dp * 2).roundToPx() }
+        val lines = remember(text, width) { measurer.measure(text, messageStyle, constraints = Constraints(maxWidth = width)).lineCount }
+        UserBubble(row, user, text, more = lines > Cut.PAST)
+    }
+}
+
+/** A message in its bubble: a `more` one is cut, unless it is open, with the button that shows the rest or hides it again. */
+@Composable
+private fun UserBubble(row: RowModel, user: RowModel.Kind.User, text: AnnotatedString, more: Boolean) {
+    val palette = LocalPalette.current
+    val actions = LocalTranscript.current
     val pending = row.id == RowModel.pendingID
     val hasText = text.isNotEmpty()
     val hasFiles = user.attachments.isNotEmpty()
+    val open = actions.isExpanded(row.id)
+    val cut = more && !open
+    val cutHeight = with(LocalDensity.current) { (Typesetter.messageLineHeight * Cut.LINES).toDp() }
     Column(Modifier.fillMaxWidth().padding(top = 14.dp), horizontalAlignment = Alignment.End) {
         val shape = RoundedCornerShape(Bubble.radius)
         Column(
@@ -144,13 +181,30 @@ private fun UserRow(row: RowModel, user: RowModel.Kind.User) {
                 .background(palette.backgroundSecondary, shape)
                 .padding(
                     start = Bubble.PADDING.dp, end = Bubble.PADDING.dp,
-                    top = if (hasFiles) Bubble.PADDING.dp else 10.dp, bottom = if (hasText && user.values == null) 10.dp else Bubble.PADDING.dp,
+                    top = if (hasFiles) Bubble.PADDING.dp else 10.dp,
+                    bottom = when {
+                        user.values != null -> Bubble.PADDING.dp
+                        more -> Cut.inset
+                        hasText -> 10.dp
+                        else -> Bubble.PADDING.dp
+                    },
                 ),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             CompositionLocalProvider(LocalSurface provides Surface.Secondary) {
                 if (hasFiles) AttachedFiles(user.attachments)
-                if (hasText) SelectionContainer { MarkedText(text, messageStyle) }
+                if (hasText) {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        val shown = if (cut) Modifier.heightIn(max = cutHeight).clipToBounds().edgeFade(above = { 0f }, below = { Float.MAX_VALUE }) else Modifier
+                        SelectionContainer(shown) { MarkedText(text, messageStyle) }
+                        if (more) {
+                            ActionButton(
+                                if (open) "Show less" else "Show more", variant = ButtonVariant.Ghost, size = ControlSize.Small, quiet = true,
+                                modifier = Modifier.offset(x = -ControlSize.Small.padding),
+                            ) { actions.toggleExpansion(row.id) }
+                        }
+                    }
+                }
                 user.values?.let { SentValuesChip(it) }
             }
         }
