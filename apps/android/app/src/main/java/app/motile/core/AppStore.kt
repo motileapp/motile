@@ -2216,6 +2216,11 @@ class AppStore(private val context: Context) {
         val shown = attached.map { it.attached }
         transcript.setPending(text, shown, queued)
         readSkillSpans(text) { spans -> transcript.setPendingSkills(spans, text, shown, queued) }
+        if (!queued) {
+            core.send("collapses", mapOf("text" to text)) { result ->
+                if (result.getOrNull()?.bool("collapsible") == true) transcript.setPendingCollapsible(text, shown)
+            }
+        }
         transcriptIsEmpty = false
 
         core.send("send", command) { result ->

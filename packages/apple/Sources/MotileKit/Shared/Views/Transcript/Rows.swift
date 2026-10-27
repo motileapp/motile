@@ -28,7 +28,8 @@ enum TranscriptColumn {
 /// here, off the main thread, so showing a row costs the main thread nothing but drawing.
 final class RowModel {
     enum Kind {
-        case user(text: NSAttributedString, attachments: [AttachedFile], values: SentValues?, at: Double)
+        /// `collapsible` when it is long enough to be shown cut, with a button that shows the rest.
+        case user(text: NSAttributedString, attachments: [AttachedFile], values: SentValues?, at: Double, collapsible: Bool)
         /// `uncoloured` when code inside it still waits for highlighting.
         case prose(NSAttributedString, uncoloured: Bool)
         case code(CodeContent)
@@ -93,7 +94,8 @@ final class RowModel {
         switch json.string("kind") {
         case "user":
             let attachments = json.objects("attachments").map(AttachedFile.init(json:))
-            kind = .user(text: Typesetter.message(json), attachments: attachments, values: SentValues(json: json.object("values")), at: json.double("at"))
+            let values = SentValues(json: json.object("values"))
+            kind = .user(text: Typesetter.message(json), attachments: attachments, values: values, at: json.double("at"), collapsible: json.bool("collapsible"))
         case "prose":
             let uncoloured = json.objects("paras").contains { $0.string("kind") == "pre" && $0["spans"] as? [NSNumber] == nil }
             kind = .prose(Typesetter.prose(json), uncoloured: uncoloured)
@@ -140,14 +142,14 @@ final class RowModel {
     /// A user message shown the moment it is sent, before the server has it.
     /// A message on its way to the server. One sent while the agent works will wait for it, so
     /// it shows as it will once the server has it.
-    static func pending(text: String, attachments: [AttachedFile], queued: Bool, skills: [SkillSpan] = []) -> RowModel {
+    static func pending(text: String, attachments: [AttachedFile], queued: Bool, skills: [SkillSpan] = [], collapsible: Bool = false) -> RowModel {
         let typeset = NSMutableAttributedString(attributedString: Typesetter.plain(text, color: queued ? Theme.mutedForeground : Theme.foreground))
         SkillChip.set(skills, in: typeset)
         guard !queued else {
             let content = QueuedContent(text: typeset, attachments: attachments, status: "Queued")
             return RowModel(id: pendingID, itemID: pendingID, kind: .queued(content))
         }
-        return RowModel(id: pendingID, itemID: pendingID, kind: .user(text: typeset, attachments: attachments, values: nil, at: Date().timeIntervalSince1970))
+        return RowModel(id: pendingID, itemID: pendingID, kind: .user(text: typeset, attachments: attachments, values: nil, at: Date().timeIntervalSince1970, collapsible: collapsible))
     }
 
     static let pendingID = "pending"

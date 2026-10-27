@@ -729,20 +729,36 @@ struct Message<'a> {
     skills: Vec<(Range<usize>, String)>,
 }
 
+/// A cut message shows eight lines, and is only cut when that hides more than one.
+const CUT_LINES: f32 = 8.;
+const CUT_PAST_LINES: f32 = 9.;
+const MESSAGE_LINE: f32 = 22.;
+/// The room between a long message's text and the button under it.
+const MORE_GAP: f32 = 4.;
+/// The button's light is as far from the bubble's side as from its bottom.
+const MORE_INSET: f32 = BUBBLE_PADDING - 8.;
+
 /// The message and the files of a bubble, as wide as they are up to the widest a bubble may be.
+/// A `collapsible` message too long for it is cut, with a button under it that shows the rest;
+/// says whether it has that button.
+#[allow(clippy::too_many_arguments)]
 fn bubble_content(
     model: &RowModel,
     message: Message,
+    collapsible: bool,
     attachments: &[AttachedFile],
     color: Hsla,
     ctx: &RowContext,
     window: &mut Window,
     cx: &App,
-) -> Div {
+) -> (Div, bool) {
     let text = message.text;
     let shown = with_skill_chips(message, window);
     let has_files = !attachments.is_empty();
-    div()
+    let widest = (ctx.width * 0.8).max(120.) - BUBBLE_PADDING * 2.;
+    let more = collapsible && message_height(&shown.text, widest, window) > CUT_PAST_LINES * MESSAGE_LINE;
+    let open = ctx.expanded.contains(&model.row.id);
+    let bubble = div()
         .px(px(BUBBLE_PADDING))
         .pt(px(if has_files { BUBBLE_PADDING } else { 10. }))
         .flex()
@@ -751,7 +767,7 @@ fn bubble_content(
         .when(has_files, |bubble| bubble.child(crate::media::attached_files(&ctx.store, attachments, cx)))
         .when(!text.is_empty(), |bubble| {
             let id = format!("{}-text", model.row.id);
-            bubble.child(text_box(theme::PROSE_SIZE, 22.).text_color(color).child(plain(
+            let body = text_box(theme::PROSE_SIZE, MESSAGE_LINE).text_color(color).child(plain(
                 &id,
                 &shown.text,
                 &shown.links,
@@ -759,8 +775,58 @@ fn bubble_content(
                 color,
                 row_key(&model.row.id),
                 cx,
-            )))
+            ));
+            let fade = || {
+                let under = colors(cx).background_secondary;
+                div().absolute().left_0().right_0().bottom_0().h(px(24.)).bg(linear_gradient(
+                    0.,
+                    linear_color_stop(under, 0.),
+                    linear_color_stop(under.opacity(0.), 1.),
+                ))
+            };
+            let body = body.when(more && !open, |body| {
+                body.relative().max_h(px(CUT_LINES * MESSAGE_LINE)).overflow_hidden().child(fade())
+            });
+            bubble.child(body).when(more, |bubble| bubble.child(more_button(model, open, ctx)))
+        });
+    (bubble, more)
+}
+
+/// How tall a message's text is in a bubble `width` wide, as `plain` lays it out.
+fn message_height(text: &str, width: f32, window: &Window) -> f32 {
+    let mut wrapper =
+        window.text_system().line_wrapper(font(theme::UI_FONT, FontWeight::NORMAL, false), px(theme::PROSE_SIZE));
+    let parts = plain_parts(text);
+    let count = parts.len();
+    parts
+        .into_iter()
+        .enumerate()
+        .map(|(index, part)| {
+            let words = &text[part];
+            let line = words.trim_end_matches('\n');
+            let breaks = 1 + words.len() - line.len();
+            let gap = if index + 1 < count { PLAIN_PARAGRAPH_GAP * breaks as f32 } else { 0. };
+            let fragments = [LineFragment::text(line)];
+            let lines = 1 + wrapper.wrap_line(&fragments, px(width), IndentAdjustment::NoIndent).count();
+            lines as f32 * MESSAGE_LINE + gap
         })
+        .sum()
+}
+
+/// The button under a long message that shows the rest of it, or cuts it again.
+fn more_button(model: &RowModel, open: bool, ctx: &RowContext) -> Div {
+    let view = ctx.view.clone();
+    let row_id = model.row.id.clone();
+    let title = if open { "Show less" } else { "Show more" };
+    let button = ActionButton::new(ElementId::Name(format!("{row_id}-more").into()), title)
+        .ghost()
+        .small()
+        .quiet()
+        .surface(Surface::Secondary)
+        .on_click(move |_, _, cx| {
+            let _ = view.update(cx, |view, cx| view.toggle_expanded(&row_id, cx));
+        });
+    div().flex().mt(px(MORE_GAP)).ml(px(MORE_INSET - BUBBLE_PADDING)).child(button)
 }
 
 /// A message of the user: a bubble against the column's right edge, as wide as its text, with
@@ -772,6 +838,7 @@ fn user_row(
     attachments: &[AttachedFile],
     values: Option<&SentValues>,
     at: f64,
+    collapsible: bool,
     ctx: &RowContext,
     window: &mut Window,
     cx: &mut App,
@@ -781,6 +848,14 @@ fn user_row(
     let copied_text = text.to_string();
     let below_gap = !attachments.is_empty() && !text.is_empty();
     let chip = values.map(|values| values_chip(&model.row.id, values, below_gap, window, cx));
+    let (bubble, more) = bubble_content(model, message, collapsible, attachments, c.foreground, ctx, window, cx);
+    let bottom = if text.is_empty() || values.is_some() {
+        BUBBLE_PADDING
+    } else if more {
+        MORE_INSET
+    } else {
+        10.
+    };
     div()
         .pt(px(14.))
         .pb(px(25.))
@@ -788,11 +863,11 @@ fn user_row(
         .flex_col()
         .items_end()
         .child(
-            bubble_content(model, message, attachments, c.foreground, ctx, window, cx)
+            bubble
                 .children(chip)
                 .max_w(relative(0.8))
                 .min_w(px(12. + BUBBLE_PADDING * 2.))
-                .pb(px(if text.is_empty() || values.is_some() { BUBBLE_PADDING } else { 10. }))
+                .pb(px(bottom))
                 .bg(c.background_secondary)
                 .rounded(px(BUBBLE_RADIUS))
                 .when(model.is_pending(), |bubble| bubble.opacity(0.6)),
@@ -956,7 +1031,7 @@ fn queued_row(
                 .flex()
                 .flex_col()
                 .child(dashed_outline(QUEUED_RADIUS, [2., 3.], c.border))
-                .child(bubble_content(model, shown, attachments, c.muted_foreground, ctx, window, cx))
+                .child(bubble_content(model, shown, false, attachments, c.muted_foreground, ctx, window, cx).0)
                 .child(foot),
         )
         .into_any_element()
@@ -1979,11 +2054,11 @@ fn fitted(from: f32, to: f32, room: f32) -> (f32, f32) {
 
 pub fn render_row(model: &RowModel, ctx: &RowContext, window: &mut Window, cx: &mut App) -> AnyElement {
     match &model.row.kind {
-        RowKind::User { text, links, skills, attachments, values, at } => {
+        RowKind::User { text, links, skills, attachments, values, at, collapsible } => {
             let files: Vec<AttachedFile> = attachments.iter().map(AttachedFile::from).collect();
             let message =
                 Message { text, links: prose::link_ranges(text, links), skills: prose::skill_ranges(text, skills) };
-            user_row(model, message, &files, values.as_ref(), *at, ctx, window, cx)
+            user_row(model, message, &files, values.as_ref(), *at, *collapsible, ctx, window, cx)
         }
         RowKind::Prose { .. } => prose_row(model, ctx, cx),
         RowKind::Code { language, code, .. } => code_row(model, language, code, ctx, cx),

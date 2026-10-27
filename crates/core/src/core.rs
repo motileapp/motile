@@ -43,7 +43,7 @@ use crate::render::agents::{self, ThreadState};
 use crate::render::diff;
 use crate::render::highlight::{self, Spans};
 use crate::render::openui::host::{Out, Programs, TimerKey};
-use crate::render::rows::{Row, RowKind, Splice, Transcript, Uncoloured, short_model_name};
+use crate::render::rows::{Row, RowKind, Splice, Transcript, Uncoloured, collapses, short_model_name};
 use crate::ricrac;
 use crate::search;
 use crate::skills;
@@ -2370,6 +2370,9 @@ impl Core {
                     account,
                     move |skills| json!({ "chips": skills::chips(&text, skills) }),
                 );
+            }
+            Command::Collapses { text } => {
+                self.reply(id, Ok(json!({ "collapsible": collapses(&text, &[]) })));
             }
             Command::Send { server_id, thread_id, new_thread, text, attachments, now } => {
                 let link = match self.link(&server_id) {

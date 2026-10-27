@@ -152,6 +152,16 @@ final class RowButton: FlippedView {
         }
     }
 
+    var words: String { title.string }
+
+    /// What it says, for a button that says what it does next.
+    func setTitle(_ words: String) {
+        guard title.string != words else { return }
+        title.string = words
+        tip = words
+        describe(words, button: true)
+    }
+
     /// A button that is shown again starts unlit, wherever the pointer left it.
     func dim() {
         light(false)

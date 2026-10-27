@@ -56,6 +56,7 @@ impl RowModel {
             RowKind::Queued { text, skills: Vec::new(), attachments, status: "Queued" }
         } else {
             RowKind::User {
+                collapsible: motile_core::render::rows::collapses(&text, &[]),
                 text,
                 links: Vec::new(),
                 skills: Vec::new(),

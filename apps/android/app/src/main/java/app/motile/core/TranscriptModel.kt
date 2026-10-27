@@ -46,6 +46,8 @@ class TranscriptModel {
     private var keptLive = false
     /** The text of the message on its way. */
     private var pendingText: String? = null
+    private var pendingSkills: List<SkillSpan> = emptyList()
+    private var pendingCollapsible = false
 
     /**
      * Whether the line that says the agent is at work shows under the rows. The row that ends a
@@ -132,15 +134,29 @@ class TranscriptModel {
         version += 1
     }
 
-    fun setPending(text: String?, attachments: List<AttachedFile> = emptyList(), queued: Boolean = false, skills: List<SkillSpan> = emptyList()) {
+    fun setPending(
+        text: String?,
+        attachments: List<AttachedFile> = emptyList(),
+        queued: Boolean = false,
+        skills: List<SkillSpan> = emptyList(),
+        collapsible: Boolean = false,
+    ) {
         pendingText = text
-        pending = text?.let { RowModel.pending(it, attachments, queued, skills) }
+        pendingSkills = skills
+        pendingCollapsible = collapsible
+        pending = text?.let { RowModel.pending(it, attachments, queued, skills, collapsible) }
     }
 
     /** Shows the skills of the message on its way as chips, while it is still the one shown. */
     fun setPendingSkills(skills: List<SkillSpan>, text: String, attachments: List<AttachedFile>, queued: Boolean) {
         if (skills.isEmpty() || pending == null || pendingText != text) return
-        setPending(text, attachments, queued, skills)
+        setPending(text, attachments, queued, skills, pendingCollapsible)
+    }
+
+    /** Shows the message on its way cut, as it will be once the server has it. */
+    fun setPendingCollapsible(text: String, attachments: List<AttachedFile>) {
+        if (pending == null || pendingText != text) return
+        setPending(text, attachments, skills = pendingSkills, collapsible = true)
     }
 
     fun changeActivity(activity: Activity) {
