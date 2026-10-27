@@ -1072,6 +1072,8 @@ data class QueuedMessage(
 data class AttachedFile(val name: String, val media: String?, val video: Boolean, val poster: String?) {
     constructor(json: JSON) : this(json.string("name"), json.optionalString("media"), json.bool("video"), json.optionalString("poster"))
 
+    val json: Map<String, Any?> get() = mapOf("name" to name, "media" to media, "video" to video, "poster" to poster)
+
     /** The image a tile of it shows. */
     val picture: String? get() = if (video) poster else media
 }

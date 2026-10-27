@@ -1134,7 +1134,7 @@ struct QueuedMessage: Equatable, Identifiable {
 
 /// A file attached to a message, as the transcript shows it. An image or a video names the file
 /// the core has it under, and a video the image that stands for it until it plays.
-struct AttachedFile: Equatable {
+struct AttachedFile: Equatable, Codable {
     let name: String
     let media: String?
     let video: Bool

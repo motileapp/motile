@@ -239,6 +239,7 @@ impl Hub {
             None => text.clone(),
         };
         let new_thread = NewThread {
+            id: None,
             project_id: own.project_id.clone(),
             agent: account.agent,
             agent_account: Some(account.id.clone()),

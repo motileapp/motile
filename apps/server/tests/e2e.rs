@@ -134,6 +134,7 @@ impl Harness {
     async fn new_thread(&self, connection: &Connection, agent: Agent) -> Option<NewThread> {
         let project = self.project(connection).await;
         Some(NewThread {
+            id: None,
             project_id: project.id,
             agent,
             agent_account: None,
@@ -787,6 +788,45 @@ async fn the_thread_list_follows_new_retitled_and_deleted_threads() {
     let Message::Error { .. } = next(&mut open(&connection, &thread_id, 0).await).await else {
         panic!("a deleted thread can't be opened");
     };
+}
+
+#[tokio::test]
+async fn a_thread_the_client_names_starts_once_however_often_it_is_sent() {
+    let harness = Harness::start("fixtures/read-and-bash.jsonl", "0").await;
+    let connection = harness.connect().await;
+    let id = "6F1C2E0A-3B4D-4E5F-8A9B-0C1D2E3F4A5B".to_string();
+    let new_thread = harness
+        .new_thread(&connection, Agent::Claude)
+        .await
+        .map(|new_thread| NewThread { id: Some(id.clone()), ..new_thread });
+    let mut list = connection.follow(&Request::Subscribe).await.unwrap();
+    next(&mut list).await;
+
+    assert_eq!(send(&connection, None, new_thread.clone(), "Tell me about README.md").await, id);
+    assert_eq!(next_thread(&mut list).await.id, id);
+    assert_eq!(send(&connection, None, new_thread.clone(), "Tell me about README.md").await, id);
+    let transcript = finished_transcript(&connection, &id).await;
+    assert_eq!(messages_and_turn_ends(&transcript), ["Tell me about README.md", "(turn end)"]);
+
+    // Once the thread is deleted, its message starts a thread of its own, once.
+    connection.request(&Request::Delete { thread_id: id.clone() }).await.unwrap();
+    while next(&mut list).await != (Message::ThreadDeleted { thread_id: id.clone() }) {}
+    let again = send(&connection, None, new_thread.clone(), "Tell me about README.md").await;
+    assert_ne!(again, id);
+    assert_eq!(thread_where(&mut list, |thread| thread.id == again).await.id, again);
+    assert_eq!(send(&connection, None, new_thread.clone(), "Tell me about README.md").await, again);
+
+    let made_up = new_thread.map(|new_thread| NewThread { id: Some("../threads".to_string()), ..new_thread });
+    let request = Request::Send {
+        thread_id: None,
+        new_thread: made_up,
+        text: "Hello".to_string(),
+        attachments: Vec::new(),
+        now: false,
+        context: None,
+    };
+    let refused = connection.request(&request).await.unwrap();
+    assert!(matches!(refused, Message::Error { .. }), "{refused:?}");
 }
 
 #[tokio::test]
@@ -1602,6 +1642,7 @@ async fn the_model_effort_and_access_chosen_for_a_thread_reach_the_agent() {
     assert!(server.models.iter().all(|model| model.id != "default"), "the picker's default row isn't a model");
 
     let new_thread = NewThread {
+        id: None,
         project_id: project.id,
         agent: Agent::Claude,
         agent_account: None,
@@ -1687,6 +1728,7 @@ async fn a_thread_works_with_the_account_it_was_started_with_and_moves_to_anothe
     assert!(lists_for(&server, "claude"));
 
     let new_thread = NewThread {
+        id: None,
         project_id: project.id,
         agent: Agent::Claude,
         agent_account: Some(personal_id.clone()),
@@ -1883,6 +1925,7 @@ async fn a_project_is_started_from_a_name_or_cloned_from_github() {
     assert!(project.git.as_ref().is_some_and(|git| git.no_commit), "{:?}", project.git);
     // A thread asked to start in a worktree anyway works in the project's folder.
     let new_thread = NewThread {
+        id: None,
         project_id: named.clone(),
         agent: Agent::Claude,
         agent_account: None,
@@ -2009,6 +2052,7 @@ async fn a_projects_branches_are_listed_switched_and_created() {
 
     // Not while an agent works in the project.
     let new_thread = NewThread {
+        id: None,
         project_id: project.id.clone(),
         agent: Agent::Claude,
         agent_account: None,
@@ -2598,6 +2642,7 @@ async fn a_worktree_asked_for_with_a_branch_is_made_on_it() {
     let connection = harness.connect().await;
     let (project, _) = project_with_a_branch(&harness, &connection).await;
     let new_thread = NewThread {
+        id: None,
         project_id: project.id.clone(),
         agent: Agent::Claude,
         agent_account: None,
@@ -2624,6 +2669,7 @@ async fn a_branch_a_threads_worktree_took_is_given_back_when_the_project_switche
     let (project, _) = project_with_a_branch(&harness, &connection).await;
     let repository = harness.dir.path().join("repository");
     let new_thread = NewThread {
+        id: None,
         project_id: project.id.clone(),
         agent: Agent::Claude,
         agent_account: None,
@@ -2671,6 +2717,7 @@ async fn a_worktree_whose_pull_request_merged_is_removed_when_nothing_in_it_is_l
     assert_eq!(connection.request(&settings).await.unwrap(), Message::Ok);
 
     let new_thread = NewThread {
+        id: None,
         project_id: project.id.clone(),
         agent: Agent::Claude,
         agent_account: None,
@@ -2838,6 +2885,7 @@ async fn where_a_new_worktree_starts_is_said_and_so_is_a_remote_that_cannot_be_f
     };
     assert!(problem.is_some_and(|problem| problem.contains("origin.git")));
     let new_thread = NewThread {
+        id: None,
         project_id: project.id.clone(),
         agent: Agent::Claude,
         agent_account: None,
@@ -2886,6 +2934,7 @@ async fn a_thread_works_in_a_worktree_of_its_own_on_a_branch_named_for_it() {
     assert_eq!(connection.request(&named).await.unwrap(), Message::Ok);
 
     let new_thread = NewThread {
+        id: None,
         project_id: project.id.clone(),
         agent: Agent::Claude,
         agent_account: None,
@@ -3008,6 +3057,7 @@ async fn what_a_turn_changed_is_listed_with_the_turn_and_shown_as_a_diff() {
     assert_eq!(connection.request(&Request::AddProject { path }).await.unwrap(), Message::Ok);
     let project = projects_now(&connection).await.remove(0);
     let new_thread = NewThread {
+        id: None,
         project_id: project.id.clone(),
         agent: Agent::Claude,
         agent_account: None,
@@ -3464,6 +3514,7 @@ async fn a_thread_without_a_project_works_in_a_folder_of_its_own() {
     assert_eq!(no_project.name, "No project");
 
     let new_thread = NewThread {
+        id: None,
         project_id: no_project.id.clone(),
         agent: Agent::Claude,
         agent_account: None,

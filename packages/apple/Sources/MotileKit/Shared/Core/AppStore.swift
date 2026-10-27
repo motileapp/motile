@@ -48,15 +48,25 @@ struct ListedDraft: Identifiable {
     var id: String { draft.id }
 }
 
-/// The first message of a draft, on its way to the server.
-struct SendingDraft {
+/// The first message of a draft, from when it is sent until the client has the thread it started,
+/// which takes the draft's id. It is kept across restarts and sent again when its server is back.
+struct SendingDraft: Codable {
     let text: String
     let attachments: [AttachedFile]
-    let activity: Activity
-    /// The client has gone elsewhere since, so the sidebar lists the draft.
-    var left = false
+    let startedAt: Double
+    /// The `send` command, as JSON.
+    let command: Data
 
+    var serverID: String? { json?["server_id"] as? String }
+    var paths: [String] { json?["attachments"] as? [String] ?? [] }
+    var json: JSON? { (try? JSONSerialization.jsonObject(with: command)) as? JSON }
     var preview: String { AppStore.preview(text: text, attachments: attachments.count) ?? "" }
+
+    var activity: Activity {
+        var activity = Activity.starting
+        activity.startedAt = startedAt
+        return activity
+    }
 }
 
 /// Where the command panel opens.
@@ -283,8 +293,12 @@ final class AppStore {
     private(set) var agents: [AgentInfo] = []
     /// The agents each thread showed last, for the lists kept of threads that aren't open.
     @ObservationIgnored private var lastAgents: [String: [AgentInfo]] = [:]
-    /// The drafts whose first message is on its way to the server, by draft.
+    /// The drafts whose first message is on its way, until the client has the thread it started.
     private(set) var sendingDrafts: [String: SendingDraft] = [:]
+    /// The drafts sent since the client started, which aren't sent again.
+    @ObservationIgnored private var sentDrafts: Set<String> = []
+    /// The threads drafts started under another id than theirs, with their drafts.
+    @ObservationIgnored private var awaitedThreads: [String: String] = [:]
     var errorMessage: String?
     /// The stop that waits for the user to say it may end the agents a thread started.
     var stopping: StopQuestion?
@@ -642,6 +656,7 @@ final class AppStore {
         }
         showServerUpdates()
         ensureDraftProject()
+        resendDrafts()
         // The server has arrived; the install command has done its job.
         if showsAddServer, servers.count > addServerCount {
             showsAddServer = false
@@ -652,6 +667,8 @@ final class AppStore {
         var kept = everyThread.filter { $0.value.serverID != serverID }
         for thread in new { kept[thread.id] = thread }
         setThreads(kept)
+        openArrivedThreads()
+        resendDrafts()
         if case .thread(let id) = selection, anyThread(id) == nil {
             openEmptyDraft()
         }
@@ -663,6 +680,7 @@ final class AppStore {
         let before = anyThread(thread.id)
         guard before != thread else { return }
         setThread(thread, id: thread.id)
+        openArrivedThreads()
         markOpenThreadSeen()
         guard let before else { return }
         if !before.isDone, thread.isDone, before.pullRequest != thread.pullRequest { revealedThreadID = thread.id }
@@ -785,11 +803,11 @@ final class AppStore {
     }
 
     /// Every draft with something written in it, newest first. The open one is listed as it was
-    /// when it was opened, and one being sent once it has been left.
+    /// when it was opened, and one being sent at once, until its thread takes its place.
     var listedDrafts: [ListedDraft] {
         threadDrafts.reversed().compactMap { draft -> ListedDraft? in
             if let sending = sendingDrafts[draft.id] {
-                return sending.left ? ListedDraft(draft: draft, preview: sending.preview, sending: true) : nil
+                return ListedDraft(draft: draft, preview: sending.preview, sending: true)
             }
             let written = selection == .draft(draft.id) ? openedDraftPreview : preview(of: draft)
             return written.map { ListedDraft(draft: draft, preview: $0) }
@@ -1130,17 +1148,25 @@ final class AppStore {
         drafts = defaults.dictionary(forKey: "drafts") as? [String: String] ?? [:]
         lastSelection = defaults.string(forKey: "selection")
         let saved = defaults.data(forKey: "threadDrafts").flatMap { try? JSONDecoder().decode([ThreadDraft].self, from: $0) }
-        threadDrafts = (saved ?? []).filter { preview(of: $0) != nil || $0.id == lastSelection }
+        let sending = defaults.data(forKey: "sendingDrafts").flatMap { try? JSONDecoder().decode([String: SendingDraft].self, from: $0) }
+        threadDrafts = (saved ?? []).filter { preview(of: $0) != nil || sending?[$0.id] != nil || $0.id == lastSelection }
+        sendingDrafts = (sending ?? [:]).filter { id, _ in threadDrafts.contains { $0.id == id } }
         let restored = threadDrafts.first { $0.id == lastSelection }
         let restoredPreview = defaults.string(forKey: "openedDraftPreview")
         let opened = restored ?? emptyDraft()
         if opened.model == nil, opened.agentAccount == nil, opened.effort == nil { draftAwaitingServer = opened.id }
         selection = .draft(opened.id)
         openedDraftPreview = restored == nil ? nil : restoredPreview
+        showSendingMessage()
     }
 
     private func saveThreadDrafts() {
         defaults.set(try? JSONEncoder().encode(threadDrafts), forKey: "threadDrafts")
+    }
+
+    private func setSending(_ sending: SendingDraft?, for draftID: String) {
+        sendingDrafts[draftID] = sending
+        defaults.set(try? JSONEncoder().encode(sendingDrafts), forKey: "sendingDrafts")
     }
 
     /// A draft that starts with what the last one was set to.
@@ -2081,7 +2107,6 @@ final class AppStore {
         let left = selectedDraft
         selection = new
         if new != revealedThreadID.map(Selection.thread) { revealedThreadID = nil }
-        if let left, isSending(left) { sendingDrafts[left.id]?.left = true }
         if let left, preview(of: left) == nil, !isSending(left) { removeDraft(left.id) }
         openedDraftPreview = selectedDraft.flatMap { preview(of: $0) }
         activity = Activity()
@@ -2237,13 +2262,17 @@ final class AppStore {
                 settings["worktree"] = worktree
             }
             if let from = draft.from { settings["from"] = ["origin": from.origin, "thread_id": from.threadID] }
+            settings["id"] = draft.id
             command["server_id"] = project.serverID
             command["new_thread"] = settings
-            activity = Activity.starting
+            guard let data = try? JSONSerialization.data(withJSONObject: command) else { return }
+            let sending = SendingDraft(
+                text: text, attachments: attached.map(\.attached), startedAt: Date().timeIntervalSince1970, command: data
+            )
+            setSending(sending, for: draft.id)
+            activity = sending.activity
             transcript.setActivity(activity)
-            sendingDrafts[draft.id] = SendingDraft(text: text, attachments: attached.map(\.attached), activity: activity)
         }
-        let serverID = command.string("server_id")
         draft = ""
         attachmentsByKey[key] = nil
         // The server queues what is sent while the agent works, unless the message steers it.
@@ -2259,40 +2288,104 @@ final class AppStore {
             }
         }
         transcriptIsEmpty = false
+        guard existing != nil else { return sendDraft(key) }
 
         core.send("send", command) { [weak self] result in
+            guard let self, case .failure(let error) = result else { return }
+            // The message goes back to where it was written, wherever the client is now.
+            self.setText(text, for: key)
+            self.attachmentsByKey[key] = attached.isEmpty ? nil : attached
+            self.alert(error)
+            guard self.draftKey == key else { return }
+            self.transcript.setPending(nil)
+            self.transcriptIsEmpty = self.transcript.isEmpty
+            self.transcript.setActivity(self.activity)
+        }
+    }
+
+    /// Sends a draft's first message, which starts its thread under the draft's id. The draft
+    /// stays until the thread reaches the client, whether before the server answers or after.
+    private func sendDraft(_ draftID: String) {
+        guard let command = sendingDrafts[draftID]?.json, sentDrafts.insert(draftID).inserted else { return }
+        core.send("send", command) { [weak self] result in
             guard let self else { return }
-            if existing == nil { self.sendingDrafts[key] = nil }
             switch result {
             case .failure(let error):
-                // The message goes back to where it was written, wherever the client is now.
-                self.setText(text, for: key)
-                self.attachmentsByKey[key] = attached.isEmpty ? nil : attached
+                self.sentDrafts.remove(draftID)
+                self.unsend(draftID)
                 self.alert(error)
-                guard self.draftKey == key else { return }
-                self.transcript.setPending(nil)
-                self.transcriptIsEmpty = self.transcript.isEmpty
-                self.activity = existing == nil ? Activity() : self.activity
-                self.transcript.setActivity(self.activity)
             case .success(let value):
-                guard existing == nil else { return }
-                self.openNewThread(id: value.string("thread_id"), serverID: serverID, draftID: key)
+                // A server from before thread ids picks its own, and one whose thread was deleted
+                // starts another.
+                let threadID = value.string("thread_id")
+                if threadID != draftID { self.awaitedThreads[threadID] = draftID }
+                self.openArrivedThreads()
             }
         }
     }
 
-    /// Replaces a draft with the thread its first message created. If the draft is still open,
-    /// the thread opens in its place with the message kept on screen.
-    private func openNewThread(id: String, serverID: String, draftID: String) {
+    /// Sends again the first messages that were on their way when the client was last closed,
+    /// once their servers are back. A server from before thread ids could start them twice, so
+    /// they go back to their drafts there.
+    private func resendDrafts() {
+        for (draftID, sending) in sendingDrafts where !sentDrafts.contains(draftID) && anyThread(draftID) == nil {
+            guard let server = server(sending.serverID), !isRemoved(server.id) else {
+                if !servers.isEmpty { unsend(draftID) }
+                continue
+            }
+            guard server.state == .connected, server.known else { continue }
+            if server.protocolVersion >= 36 { sendDraft(draftID) } else { unsend(draftID) }
+        }
+    }
+
+    /// Puts a draft's first message back in its composer, before what was written there since.
+    private func unsend(_ draftID: String) {
+        guard let sending = sendingDrafts[draftID] else { return }
+        setSending(nil, for: draftID)
+        let written = (drafts[draftID] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        setText(written.isEmpty ? sending.text : "\(sending.text)\n\n\(written)", for: draftID)
+        let serverID = sending.serverID ?? ""
+        let back = zip(sending.paths, sending.attachments).map { Attachment(path: $0, shown: $1, serverID: serverID) }
+        attachmentsByKey[draftID] = back + (attachmentsByKey[draftID] ?? [])
+        if attachmentsByKey[draftID]?.isEmpty == true { attachmentsByKey[draftID] = nil }
+        guard draftKey == draftID else { return }
+        transcript.setPending(nil)
+        transcriptIsEmpty = transcript.isEmpty
+        activity = Activity()
+        transcript.setActivity(activity)
+    }
+
+    /// Replaces the drafts whose threads the client now has with them.
+    private func openArrivedThreads() {
+        for draft in threadDrafts {
+            let awaited = awaitedThreads.first { $0.value == draft.id }?.key
+            guard let thread = anyThread(draft.id) ?? awaited.flatMap(anyThread) else { continue }
+            if let awaited { awaitedThreads[awaited] = nil }
+            openNewThread(thread, draftID: draft.id)
+        }
+    }
+
+    /// Replaces a draft with the thread its first message started. What was written or attached
+    /// in the meantime stays in the composer, which is the thread's now. If the draft is still
+    /// open, the thread opens in its place with the message kept on screen.
+    private func openNewThread(_ thread: ThreadInfo, draftID: String) {
         let wasOpen = selection == .draft(draftID)
-        removeDraft(draftID)
-        rightPanel.move(from: draftID, to: id)
+        setSending(nil, for: draftID)
+        sentDrafts.remove(draftID)
+        threadDrafts.removeAll { $0.id == draftID }
+        saveThreadDrafts()
+        if thread.id != draftID {
+            setText(drafts[draftID] ?? "", for: thread.id)
+            setText("", for: draftID)
+            attachmentsByKey[thread.id] = attachmentsByKey.removeValue(forKey: draftID)
+            rightPanel.move(from: draftID, to: thread.id)
+        }
         guard wasOpen else { return }
-        selection = .thread(id)
-        openThreadID = id
-        transcript.adopt(threadID: id)
-        core.send("open_thread", ["server_id": serverID, "thread_id": id])
-        core.send("mark_seen", ["thread_id": id])
+        selection = .thread(thread.id)
+        openThreadID = thread.id
+        transcript.adopt(threadID: thread.id)
+        core.send("open_thread", ["server_id": thread.serverID, "thread_id": thread.id])
+        core.send("mark_seen", ["thread_id": thread.id])
     }
 
     // MARK: Images and videos

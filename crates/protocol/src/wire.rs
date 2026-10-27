@@ -414,6 +414,11 @@ impl Approval {
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct NewThread {
+    /// The id the client gave the thread, a UUID, so that it knows the thread before the server
+    /// answers and a send that comes again starts nothing more. Without it the server picks one,
+    /// and once the thread was deleted it makes one from it, the same however often it comes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
     pub project_id: String,
     pub agent: Agent,
     /// The id of one of the agent's accounts; `None` is the agent's default account.

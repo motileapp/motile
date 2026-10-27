@@ -1004,7 +1004,15 @@ impl Hub {
         }
         let (thread_id, is_new) = match (thread_id, new_thread) {
             (Some(thread_id), _) => (thread_id, false),
-            (None, Some(new_thread)) => {
+            (None, Some(mut new_thread)) => {
+                // The client sends again what it can't tell reached the server.
+                if let Some(id) = &new_thread.id {
+                    let id = self.free_thread_id(id)?;
+                    if self.thread(&id).await.is_some() {
+                        return Ok(id);
+                    }
+                    new_thread.id = Some(id);
+                }
                 let from = match &new_thread.from {
                     Some(from) => Some(self.copied_history(from)?),
                     None => None,
@@ -1133,6 +1141,18 @@ impl Hub {
 
     /// A new thread from what a client asked for. With `folder` and no worktree it works in that
     /// folder, as a thread an agent started works in the folder of the thread that started it.
+    /// The id a thread the client named starts under. A deleted thread's id isn't taken again, so
+    /// its message starts a thread under an id made from it, the same each time it comes.
+    fn free_thread_id(&self, requested: &str) -> anyhow::Result<String> {
+        let Ok(mut uuid) = uuid::Uuid::parse_str(requested) else { bail!("{requested} isn't a thread's id.") };
+        let mut id = requested.to_string();
+        while self.store.thread_deleted(&id)? {
+            uuid = uuid::Uuid::new_v5(&uuid, b"deleted");
+            id = uuid.to_string();
+        }
+        Ok(id)
+    }
+
     async fn new_thread(
         &self,
         new_thread: NewThread,
@@ -1153,7 +1173,7 @@ impl Hub {
         };
         let account = account.context("That account is no longer on your server.")?;
         let created_at = now();
-        let id = new_id();
+        let id = new_thread.id.clone().unwrap_or_else(new_id);
         let no_project = self.is_no_project(project);
         let worktree = match new_thread.worktree {
             Some(_) if no_project => bail!("A thread without a project can't have a worktree."),

@@ -14,7 +14,7 @@ use motile_protocol::wire::{
     Access, Agent, AgentAccount, Ask, ContinueSettings, GitStatus, Interruption, ModelInfo, PullRequest,
     PullRequestSettings, Queued, Thread,
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 pub fn agent_name(agent: Agent) -> &'static str {
     match agent {
@@ -732,7 +732,7 @@ pub fn tokens(count: u64) -> String {
 
 /// A file attached to a message, as the transcript shows it. An image or a video names the file
 /// the core has it under, and a video the image that stands for it until it plays.
-#[derive(Clone, PartialEq, Debug, Default)]
+#[derive(Clone, PartialEq, Debug, Default, Serialize, Deserialize)]
 pub struct AttachedFile {
     pub name: String,
     pub media: Option<String>,

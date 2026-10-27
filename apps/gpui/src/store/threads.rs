@@ -30,6 +30,8 @@ impl Store {
             kept.insert(thread.id.clone(), thread);
         }
         self.set_threads(kept);
+        self.open_arrived_threads(cx);
+        self.resend_drafts(cx);
         if let Selection::Thread(id) = &self.selection
             && !self.threads.contains_key(id)
         {
@@ -91,12 +93,11 @@ impl Store {
         if self.sidebar.revealed_thread_id.as_ref().map(|id| Selection::Thread(id.clone())) != Some(new.clone()) {
             self.sidebar.revealed_thread_id = None;
         }
-        if let Some(left) = left {
-            if let Some(sending) = self.sending_drafts.get_mut(&left.id) {
-                sending.left = true;
-            } else if self.preview(&left).is_none() {
-                self.remove_draft(&left.id);
-            }
+        if let Some(left) = left
+            && !self.is_sending(&left.id)
+            && self.preview(&left).is_none()
+        {
+            self.remove_draft(&left.id);
         }
         let preview = self.selected_draft().cloned().and_then(|draft| self.preview(&draft));
         self.set_opened_draft_preview(preview);
@@ -129,14 +130,15 @@ impl Store {
     }
 
     /// A draft whose first message is still on its way shows it as it was sent.
-    fn show_sending_message(&mut self, cx: &mut Context<Self>) {
+    pub(super) fn show_sending_message(&mut self, cx: &mut Context<Self>) {
         let Some(sending) = self.selected_draft().and_then(|draft| self.sending_drafts.get(&draft.id)).cloned() else {
             return;
         };
-        self.activity = sending.activity.clone();
+        self.activity = sending.activity();
+        let activity = self.activity.clone();
         let pending = RowModel::pending(sending.text, sending.attachments, false);
         self.transcript.update(cx, |transcript, cx| {
-            transcript.set_activity(sending.activity);
+            transcript.set_activity(activity);
             transcript.set_pending(Some(pending));
             cx.notify();
         });
@@ -305,6 +307,7 @@ impl Store {
             };
             let account = self.composer_account().map(|account| account.id);
             let new_thread = NewThread {
+                id: Some(draft.id.clone()),
                 project_id: project.id.clone(),
                 agent: model.agent,
                 agent_account: account,
@@ -317,30 +320,24 @@ impl Store {
                     .as_ref()
                     .map(|from| CopiedThread { origin: from.origin.clone(), thread_id: from.thread_id.clone() }),
             };
-            self.activity = Activity::starting();
-            let activity = self.activity.clone();
             let sending = SendingDraft {
                 text: text.clone(),
                 attachments: attached.iter().map(Attachment::attached).collect(),
-                activity: activity.clone(),
-                left: false,
+                started_at: now(),
+                server_id: project.server_id.clone(),
+                new_thread,
+                paths,
             };
-            self.sending_drafts.insert(draft.id.clone(), sending);
+            self.activity = sending.activity();
+            let activity = self.activity.clone();
+            let command = sending.command();
+            self.set_sending(&draft.id, Some(sending));
             self.transcript.update(cx, |transcript, cx| {
                 transcript.set_activity(activity);
                 cx.notify();
             });
-            Command::Send {
-                server_id: project.server_id.clone(),
-                thread_id: None,
-                new_thread: Some(new_thread),
-                text: text.clone(),
-                attachments: paths,
-                now: false,
-            }
+            command
         };
-        let Command::Send { server_id, .. } = &command else { unreachable!() };
-        let server_id = server_id.clone();
         self.set_draft(String::new());
         self.draft_version += 1;
         self.attachments_by_key.remove(&key);
@@ -352,53 +349,155 @@ impl Store {
             cx.notify();
         });
         self.transcript_is_empty = false;
+        if existing.is_none() {
+            return self.send_draft(&key);
+        }
 
-        let was_new = existing.is_none();
         self.ask(command, move |store, result, cx| {
-            if was_new {
-                store.sending_drafts.remove(&key);
+            let Err(error) = result else { return };
+            // The message goes back to where it was written, wherever the app is now.
+            store.set_text(text, &key);
+            store.draft_version += 1;
+            if !attached.is_empty() {
+                store.attachments_by_key.insert(key.clone(), attached);
             }
-            match result {
-                Err(error) => {
-                    // The message goes back to where it was written, wherever the app is now.
-                    store.set_text(text, &key);
-                    store.draft_version += 1;
-                    if !attached.is_empty() {
-                        store.attachments_by_key.insert(key.clone(), attached);
-                    }
-                    store.fail(error);
-                    if store.draft_key() != key {
-                        return;
-                    }
-                    if was_new {
-                        store.activity = Activity::default();
-                    }
-                    let activity = store.activity.clone();
-                    let is_empty = store.transcript.update(cx, |transcript, cx| {
-                        transcript.set_pending(None);
-                        transcript.set_activity(activity);
-                        cx.notify();
-                        transcript.is_empty()
-                    });
-                    store.transcript_is_empty = is_empty;
+            store.fail(error);
+            if store.draft_key() != key {
+                return;
+            }
+            let activity = store.activity.clone();
+            let is_empty = store.transcript.update(cx, |transcript, cx| {
+                transcript.set_pending(None);
+                transcript.set_activity(activity);
+                cx.notify();
+                transcript.is_empty()
+            });
+            store.transcript_is_empty = is_empty;
+        });
+    }
+
+    /// Sends a draft's first message, which starts its thread under the draft's id. The draft
+    /// stays until the thread reaches the client, whether before the server answers or after.
+    fn send_draft(&mut self, draft_id: &str) {
+        let Some(sending) = self.sending_drafts.get(draft_id) else { return };
+        if !self.sent_drafts.insert(draft_id.to_string()) {
+            return;
+        }
+        let draft_id = draft_id.to_string();
+        self.ask(sending.command(), move |store, result, cx| match result {
+            Err(error) => {
+                store.sent_drafts.remove(&draft_id);
+                store.unsend(&draft_id, cx);
+                store.fail(error);
+            }
+            Ok(value) => {
+                // A server from before thread ids picks its own, and one whose thread was deleted
+                // starts another.
+                let thread_id = value["thread_id"].as_str().unwrap_or_default().to_string();
+                if thread_id != draft_id {
+                    store.awaited_threads.insert(thread_id, draft_id);
                 }
-                Ok(value) => {
-                    if !was_new {
-                        return;
-                    }
-                    let thread_id = value["thread_id"].as_str().unwrap_or_default().to_string();
-                    store.open_new_thread(thread_id, server_id, key, cx);
-                }
+                store.open_arrived_threads(cx);
             }
         });
     }
 
-    /// Replaces a draft with the thread its first message created. If the draft is still open,
-    /// the thread opens in its place with the message kept on screen.
+    /// Sends again the first messages that were on their way when the client was last closed,
+    /// once their servers are back. A server from before thread ids could start them twice, so
+    /// they go back to their drafts there.
+    pub(super) fn resend_drafts(&mut self, cx: &mut Context<Self>) {
+        let waiting: Vec<(String, String)> = self
+            .sending_drafts
+            .iter()
+            .filter(|(id, _)| !self.sent_drafts.contains(*id) && !self.threads.contains_key(*id))
+            .map(|(id, sending)| (id.clone(), sending.server_id.clone()))
+            .collect();
+        for (draft_id, server_id) in waiting {
+            let Some(server) = self.server(Some(&server_id)).filter(|server| !server.removed).cloned() else {
+                if !self.servers.is_empty() {
+                    self.unsend(&draft_id, cx);
+                }
+                continue;
+            };
+            if !server.connected() || !server.known {
+                continue;
+            }
+            if server.protocol_version >= 36 {
+                self.send_draft(&draft_id);
+            } else {
+                self.unsend(&draft_id, cx);
+            }
+        }
+    }
+
+    /// Puts a draft's first message back in its composer, before what was written there since.
+    fn unsend(&mut self, draft_id: &str, cx: &mut Context<Self>) {
+        let Some(sending) = self.sending_drafts.get(draft_id).cloned() else { return };
+        self.set_sending(draft_id, None);
+        let written = self.drafts.get(draft_id).map(|text| text.trim().to_string()).unwrap_or_default();
+        let text = if written.is_empty() { sending.text.clone() } else { format!("{}\n\n{written}", sending.text) };
+        self.set_text(text, draft_id);
+        self.draft_version += 1;
+        let mut back: Vec<Attachment> = sending
+            .paths
+            .iter()
+            .zip(&sending.attachments)
+            .map(|(path, shown)| Attachment::from_server(path, Some(shown), &sending.server_id))
+            .collect();
+        back.extend(self.attachments_by_key.remove(draft_id).unwrap_or_default());
+        if !back.is_empty() {
+            self.attachments_by_key.insert(draft_id.to_string(), back);
+        }
+        if self.draft_key() != draft_id {
+            return;
+        }
+        self.activity = Activity::default();
+        let is_empty = self.transcript.update(cx, |transcript, cx| {
+            transcript.set_pending(None);
+            transcript.set_activity(Activity::default());
+            cx.notify();
+            transcript.is_empty()
+        });
+        self.transcript_is_empty = is_empty;
+    }
+
+    /// Replaces the drafts whose threads the client now has with them.
+    pub(super) fn open_arrived_threads(&mut self, cx: &mut Context<Self>) {
+        let drafts: Vec<String> = self.thread_drafts.iter().map(|draft| draft.id.clone()).collect();
+        for draft_id in drafts {
+            let awaited = self.awaited_threads.iter().find(|(_, draft)| **draft == draft_id).map(|(id, _)| id.clone());
+            let thread_id = if self.threads.contains_key(&draft_id) {
+                draft_id.clone()
+            } else {
+                match awaited.filter(|id| self.threads.contains_key(id)) {
+                    Some(id) => id,
+                    None => continue,
+                }
+            };
+            self.awaited_threads.remove(&thread_id);
+            let server_id = self.threads[&thread_id].server_id.clone();
+            self.open_new_thread(thread_id, server_id, draft_id, cx);
+        }
+    }
+
+    /// Replaces a draft with the thread its first message started. What was written or attached
+    /// in the meantime stays in the composer, which is the thread's now. If the draft is still
+    /// open, the thread opens in its place with the message kept on screen.
     fn open_new_thread(&mut self, id: String, server_id: String, draft_id: String, cx: &mut Context<Self>) {
         let was_open = self.selection == Selection::Draft(draft_id.clone());
-        self.remove_draft(&draft_id);
-        self.move_tabs(&draft_id, &id);
+        self.set_sending(&draft_id, None);
+        self.sent_drafts.remove(&draft_id);
+        self.thread_drafts.retain(|draft| draft.id != draft_id);
+        self.save_thread_drafts();
+        if id != draft_id {
+            let written = self.drafts.get(&draft_id).cloned().unwrap_or_default();
+            self.set_text(written, &id);
+            self.set_text(String::new(), &draft_id);
+            if let Some(attachments) = self.attachments_by_key.remove(&draft_id) {
+                self.attachments_by_key.insert(id.clone(), attachments);
+            }
+            self.move_tabs(&draft_id, &id);
+        }
         if !was_open {
             return;
         }

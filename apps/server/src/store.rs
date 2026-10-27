@@ -363,6 +363,15 @@ impl Store {
         ids.collect()
     }
 
+    /// Whether a thread of this id was deleted.
+    pub fn thread_deleted(&self, thread_id: &str) -> rusqlite::Result<bool> {
+        self.connection().query_row(
+            "SELECT EXISTS (SELECT 1 FROM tombstones WHERE kind = 'thread' AND id = ?1)",
+            [thread_id],
+            |row| row.get(0),
+        )
+    }
+
     /// Whether any thread still shows the file.
     pub fn shows_media(&self, media_id: &str) -> rusqlite::Result<bool> {
         self.connection().query_row("SELECT EXISTS (SELECT 1 FROM media WHERE id = ?1)", [media_id], |row| row.get(0))
