@@ -152,16 +152,6 @@ final class RowButton: FlippedView {
         }
     }
 
-    var words: String { title.string }
-
-    /// What it says, for a button that says what it does next.
-    func setTitle(_ words: String) {
-        guard title.string != words else { return }
-        title.string = words
-        tip = words
-        describe(words, button: true)
-    }
-
     /// A button that is shown again starts unlit, wherever the pointer left it.
     func dim() {
         light(false)
@@ -175,6 +165,94 @@ final class RowButton: FlippedView {
         }
         highlight.fill = lit ? hover : rest
         title.color = lit || bordered ? Theme.foreground : Theme.mutedForeground
+    }
+}
+
+/// The button under a cut message that shows the rest of it or hides it again, in the message's
+/// text with a chevron. Its frame is the strip it stands in, which all takes the press; what
+/// lights is a regular control in its bottom left corner, `inset` from both sides.
+final class ExpandButton: FlippedView {
+    static let size = ControlSize.regular
+    static let inset: CGFloat = 6
+    private static let font = Theme.proseFont
+    private static let leading = BubbleFit.padding - inset
+    private static let trailing = leading - size.chevronOutset
+    private static let chevronSize = PlatformImage.symbol(.chevronDown, size: size.chevron, trimmed: true).size
+    /// The words are mostly small letters, so they sit where the middle of their capitals and of
+    /// their small letters is the middle of the light, and the chevron on the small letters' middle.
+    private static let baseline = (size.height / 2 + (font.capHeight + font.xHeight) / 4).rounded()
+    private static let titles = (more: "Show more", less: "Show less")
+    private static let titleHeight = ceil(titles.more.size(withAttributes: [.font: font]).height)
+
+    /// The widest the lit part gets, whichever it says.
+    static let litWidth = [titles.more, titles.less].map { ExpandButton.width($0) }.max() ?? 0
+
+    private let highlight = SurfaceView()
+    private let title = TextLabel(font: font, color: Theme.mutedForeground)
+    private let chevron = SymbolView()
+
+    var open = false {
+        didSet {
+            guard open != oldValue else { return }
+            show()
+        }
+    }
+
+    var words: String { title.string }
+
+    init(action: @escaping () -> Void) {
+        super.init(frame: .zero)
+        highlight.radius = Radius.lg
+        addSubview(highlight)
+        highlight.addSubview(title)
+        highlight.addSubview(chevron)
+        chevron.tint = Theme.mutedStrongerForeground
+        show()
+        onPress = { _ in action() }
+        onHover = { [weak self] point in self?.light(point != nil) }
+        light(false)
+    }
+
+    required init?(coder: NSCoder) { fatalError("not used") }
+
+    private func show() {
+        let words = open ? Self.titles.less : Self.titles.more
+        title.string = words
+        chevron.image = .symbol(open ? .chevronUp : .chevronDown, size: Self.size.chevron, trimmed: true)
+        tip = words
+        describe(words, button: true)
+        relayout()
+    }
+
+    private static func width(_ words: String) -> CGFloat {
+        leading + ceil(words.size(withAttributes: [.font: font]).width) + size.gap + chevronSize.width + trailing
+    }
+
+    override var frame: CGRect {
+        didSet { relayout() }
+    }
+
+    override func layoutNow() {
+        let height = Self.size.height
+        let width = Self.width(title.string)
+        highlight.frame = CGRect(x: Self.inset, y: bounds.height - Self.inset - height, width: width, height: height)
+        let words = width - Self.leading - Self.size.gap - Self.chevronSize.width - Self.trailing
+        // The Mac's field draws its words a little in from its sides.
+        let room = (title.natural.width - words) / 2
+        title.frame = CGRect(x: Self.leading - room, y: 0, width: words + room * 2, height: Self.titleHeight)
+        title.frame.origin.y = Self.baseline - title.baselineFromTop
+        let chevronMiddle = Self.baseline - Self.font.xHeight / 2
+        chevron.frame = CGRect(x: Self.leading + words + Self.size.gap, y: chevronMiddle - height / 2, width: Self.chevronSize.width, height: height)
+    }
+
+    /// A button that is shown again starts unlit, wherever the pointer left it.
+    func dim() {
+        light(false)
+    }
+
+    private func light(_ lit: Bool) {
+        highlight.fill = lit ? Theme.backgroundSecondaryAccent : .clear
+        title.color = lit ? Theme.foreground : Theme.mutedForeground
     }
 }
 

@@ -41,6 +41,7 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.AnnotatedString
@@ -141,8 +142,9 @@ private val messageStyle: TextStyle get() = TextStyle(fontSize = Theme.proseSize
 private object Cut {
     const val LINES = 8
     const val PAST = 9
-    /** The button's light is as far from the bubble's side as from its bottom. */
-    val inset = Bubble.PADDING.dp - ControlSize.Small.padding
+    /** The button's light is as far from the bubble's side as from its bottom, and its words start where the text's do. */
+    val inset = 6.dp
+    val gap = 4.dp
 }
 
 @Composable
@@ -184,7 +186,7 @@ private fun UserBubble(row: RowModel, user: RowModel.Kind.User, text: AnnotatedS
                     top = if (hasFiles) Bubble.PADDING.dp else 10.dp,
                     bottom = when {
                         user.values != null -> Bubble.PADDING.dp
-                        more -> Cut.inset
+                        more -> 0.dp
                         hasText -> 10.dp
                         else -> Bubble.PADDING.dp
                     },
@@ -194,13 +196,14 @@ private fun UserBubble(row: RowModel, user: RowModel.Kind.User, text: AnnotatedS
             CompositionLocalProvider(LocalSurface provides Surface.Secondary) {
                 if (hasFiles) AttachedFiles(user.attachments)
                 if (hasText) {
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    MessageWithMore(more) {
                         val shown = if (cut) Modifier.heightIn(max = cutHeight).clipToBounds().edgeFade(above = { 0f }, below = { Float.MAX_VALUE }) else Modifier
                         SelectionContainer(shown) { MarkedText(text, messageStyle) }
                         if (more) {
                             ActionButton(
-                                if (open) "Show less" else "Show more", variant = ButtonVariant.Ghost, size = ControlSize.Small, quiet = true,
-                                modifier = Modifier.offset(x = -ControlSize.Small.padding),
+                                if (open) "Show less" else "Show more", variant = ButtonVariant.Ghost, prose = true, expanded = open,
+                                padding = Bubble.PADDING.dp - Cut.inset, stretches = true,
+                                margin = PaddingValues(start = Cut.inset, top = Cut.gap, bottom = if (user.values == null) Cut.inset else 0.dp),
                             ) { actions.toggleExpansion(row.id) }
                         }
                     }
@@ -210,6 +213,26 @@ private fun UserBubble(row: RowModel, user: RowModel.Kind.User, text: AnnotatedS
         }
         MessageMeta(Time.stamp(user.at), trailing = true, help = "Copy message", Modifier.padding(top = 4.dp, bottom = 25.dp)) {
             Platform.copy(user.text.text)
+        }
+    }
+}
+
+/**
+ * A message's text, and under a `more` one the button that shows the rest, whose press takes the
+ * strip from the text across the whole bubble. The text is at least as wide as the button's light.
+ */
+@Composable
+private fun MessageWithMore(more: Boolean, content: @Composable () -> Unit) {
+    Layout(content) { measurables, constraints ->
+        val side = Bubble.PADDING.dp.roundToPx()
+        val button = measurables.getOrNull(1)?.takeIf { more }
+        val least = button?.let { it.maxIntrinsicWidth(constraints.maxHeight) + Cut.inset.roundToPx() - side * 2 } ?: 0
+        val text = measurables[0].measure(constraints.copy(minWidth = 0))
+        val width = maxOf(text.width, least).coerceAtMost(constraints.maxWidth)
+        val placed = button?.measure(Constraints.fixedWidth(width + side * 2))
+        layout(width, text.height + (placed?.height ?: 0)) {
+            text.place(0, 0)
+            placed?.place(-side, text.height)
         }
     }
 }
@@ -388,7 +411,7 @@ private fun ToolRow(row: RowModel) {
             }
         }
         if (fold != null) {
-            Box(Modifier.padding(top = ToolRow.ruleGap).fillMaxWidth().height(1.dp).background(palette.border))
+            Box(Modifier.padding(vertical = ToolRow.ruleGap).fillMaxWidth().height(1.dp).background(palette.border))
         }
         if (expanded) {
             val detail = remember(row, palette) { tool?.detail?.get(palette) ?: AnnotatedString(thought.orEmpty(), SpanStyle(color = palette.mutedForeground)) }
@@ -410,7 +433,7 @@ private fun ToolRow(row: RowModel) {
 
 object ToolRow {
     val height = 36.dp
-    /** The room between a fold's line and the rule under it. */
+    /** The room between a fold's line and the rule under it, and between the rule and the row after. */
     val ruleGap = 4.dp
 }
 

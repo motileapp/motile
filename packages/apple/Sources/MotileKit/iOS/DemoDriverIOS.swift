@@ -226,7 +226,7 @@ enum DemoDriver {
             slider.onDrag?(.moved, CGPoint(x: slider.bounds.width * share, y: y))
             slider.onDrag?(.ended, CGPoint(x: slider.bounds.width * share, y: y))
         case "press":
-            let button: FlippedView? = views(ControlView.self).last { $0.title == rest } ?? views(RowButton.self).last { !$0.isHidden && $0.words == rest }
+            let button: FlippedView? = views(ControlView.self).last { $0.title == rest } ?? views(ExpandButton.self).last { !$0.isHidden && $0.words == rest }
             guard let button else { return }
             button.onPress?(CGPoint(x: button.bounds.midX, y: button.bounds.midY))
         case "scroll":

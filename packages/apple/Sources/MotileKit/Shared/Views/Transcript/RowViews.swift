@@ -219,7 +219,7 @@ final class UserRowView: RowView {
     private let clip = FlippedView()
     private let fade = EdgeFade()
     private let text = RowTextView.make()
-    private var more: RowButton!
+    private var more: ExpandButton!
     private let attachments = AttachedFilesView()
     private let chip = SentValuesChip()
     private let meta = MessageMeta(trailing: true, tooltip: "Copy message")
@@ -245,13 +245,7 @@ final class UserRowView: RowView {
         #else
         clip.clipsToBounds = true
         #endif
-        more = RowButton(
-            title: Self.moreTitle,
-            tooltip: Self.moreTitle,
-            radius: ControlSize.small.radius,
-            hover: Theme.backgroundSecondaryAccent,
-            insets: PlatformEdgeInsets(top: 0, left: 0, bottom: 0, right: 0)
-        ) { [weak self] in
+        more = ExpandButton { [weak self] in
             guard let self else { return }
             self.owner?.rowToggledExpansion(id: self.rowID)
         }
@@ -317,13 +311,11 @@ final class UserRowView: RowView {
     /// A cut message shows eight lines, and is only cut when that hides more than one.
     static let cutHeight = linesHeight(8)
     private static let cutsPast = linesHeight(9)
-    private static let moreTitle = "Show more"
-    private static let lessTitle = "Show less"
-    /// The button's light is as far from the bubble's side as from its bottom.
-    private static let moreInset = BubbleFit.padding - RowButton.padding
+    private static let moreInset = ExpandButton.inset
     private static let moreGap: CGFloat = 4
-    static let moreHeight = moreGap + ControlSize.small.height
-    static let moreWidth = [moreTitle, lessTitle].map { ceil($0.size(withAttributes: [.font: Theme.smallFont]).width) }.max() ?? 0
+    static let moreHeight = moreGap + ExpandButton.size.height
+    /// The text's width that leaves room for the button's light at either side.
+    static let moreWidth = ExpandButton.litWidth - 2 * (BubbleFit.padding - moreInset)
 
     private static func linesHeight(_ count: Int) -> CGFloat {
         let lines = Array(repeating: "M", count: count).joined(separator: "\u{2028}")
@@ -343,7 +335,7 @@ final class UserRowView: RowView {
         clip.frame = CGRect(x: padding, y: fit.top + fit.files.height + fit.between, width: fit.innerWidth, height: shown.textHeight)
         text.frame = CGRect(x: 0, y: 0, width: fit.innerWidth, height: textHeight)
         layoutMore(shown, open: open)
-        let above = shown.more ? more.frame.maxY : clip.frame.maxY
+        let above = shown.more ? clip.frame.maxY + Self.moreHeight : clip.frame.maxY
         if let values {
             let size = SentValuesChip.size
             chip.frame = CGRect(x: padding, y: above + SentValuesChip.gap, width: SentValuesChip.width(values), height: size.height)
@@ -353,6 +345,7 @@ final class UserRowView: RowView {
     }
 
     /// The button under a long message, and the fade over the end of its text while it is cut.
+    /// The button takes the strip from the text down to the bubble's edge, as tall as a finger needs.
     private func layoutMore(_ shown: Shown, open: Bool) {
         more.isHidden = !shown.more
         let cut = shown.more && !open
@@ -363,9 +356,10 @@ final class UserRowView: RowView {
         #endif
         fade.update(frame: clip.bounds, above: 0, below: cut ? EdgeFade.length : 0)
         guard shown.more else { return }
-        more.setTitle(open ? Self.lessTitle : Self.moreTitle)
-        let y = clip.frame.maxY + Self.moreGap
-        more.frame = CGRect(x: Self.moreInset, y: y, width: more.width, height: ControlSize.small.height)
+        more.open = open
+        let bottom = clip.frame.maxY + Self.moreHeight + Self.moreInset
+        let height = max(bottom - clip.frame.maxY, Platform.minimumPress)
+        more.frame = CGRect(x: 0, y: bottom - height, width: bubble.frame.width, height: height)
     }
 
     override func clearSelection() { text.clearSelection() }
@@ -673,7 +667,7 @@ final class ToolRowView: RowView {
     static let rowHeight: CGFloat = Platform.scale > 1 ? 36 : 28
     /// What the row keeps from a paragraph above it, so that the two are a paragraph apart.
     static let afterProse: CGFloat = 8
-    /// The room between a fold's line and the rule under it.
+    /// The room between a fold's line and the rule under it, and between the rule and the row after.
     private static let ruleGap: CGFloat = 4
     private var above: CGFloat = 0
     private let rule = SurfaceView()
@@ -683,7 +677,7 @@ final class ToolRowView: RowView {
 
     static func height(_ row: RowModel) -> CGFloat {
         guard case .fold = row.kind else { return rowHeight + row.above }
-        return rowHeight + row.above + ruleGap + 1
+        return rowHeight + row.above + ruleGap * 2 + 1
     }
 
     /// The header reaches past the row's sides by as much room as its icon has above it, so
@@ -872,7 +866,7 @@ final class ToolRowView: RowView {
         rule.frame = CGRect(x: 0, y: Self.rowHeight + above + Self.ruleGap, width: width, height: 1)
         let stampWidth = stamp.natural.width
         stamp.frame = CGRect(x: width - stampWidth, y: above + middle(scaled(16)), width: stampWidth, height: scaled(16))
-        guard expanded else { return Self.rowHeight + above + (rule.isHidden ? 0 : Self.ruleGap + 1) }
+        guard expanded else { return Self.rowHeight + above + (rule.isHidden ? 0 : Self.ruleGap * 2 + 1) }
         if !loadedDetail {
             detail.content = detailText?() ?? NSAttributedString()
             loadedDetail = true

@@ -29,7 +29,7 @@ pub const PROSE_GAP: f32 = 9.;
 pub const TOOL_ROW_HEIGHT: f32 = 28.;
 /// What a tool row keeps from a paragraph above it, so that the two are a paragraph apart.
 pub const AFTER_PROSE: f32 = 8.;
-/// The room between a fold's line and the rule under it.
+/// The room between a fold's line and the rule under it, and between the rule and the row after.
 const FOLD_RULE_GAP: f32 = 4.;
 /// The line under a message or a reply with its time and the button that copies it: as tall as
 /// the button.
@@ -735,12 +735,13 @@ const CUT_PAST_LINES: f32 = 9.;
 const MESSAGE_LINE: f32 = 22.;
 /// The room between a long message's text and the button under it.
 const MORE_GAP: f32 = 4.;
-/// The button's light is as far from the bubble's side as from its bottom.
-const MORE_INSET: f32 = BUBBLE_PADDING - 8.;
+/// The button's light is as far from the bubble's side as from its bottom, and its words start
+/// where the text's do.
+const MORE_INSET: f32 = 6.;
 
 /// The message and the files of a bubble, as wide as they are up to the widest a bubble may be.
-/// A `collapsible` message too long for it is cut, with a button under it that shows the rest;
-/// says whether it has that button.
+/// A `collapsible` message too long for it is cut, and wants a button under it that shows the
+/// rest; says whether it does.
 #[allow(clippy::too_many_arguments)]
 fn bubble_content(
     model: &RowModel,
@@ -757,7 +758,6 @@ fn bubble_content(
     let has_files = !attachments.is_empty();
     let widest = (ctx.width * 0.8).max(120.) - BUBBLE_PADDING * 2.;
     let more = collapsible && message_height(&shown.text, widest, window) > CUT_PAST_LINES * MESSAGE_LINE;
-    let open = ctx.expanded.contains(&model.row.id);
     let bubble = div()
         .px(px(BUBBLE_PADDING))
         .pt(px(if has_files { BUBBLE_PADDING } else { 10. }))
@@ -784,10 +784,10 @@ fn bubble_content(
                     linear_color_stop(under.opacity(0.), 1.),
                 ))
             };
-            let body = body.when(more && !open, |body| {
+            let body = body.when(more && !ctx.expanded.contains(&model.row.id), |body| {
                 body.relative().max_h(px(CUT_LINES * MESSAGE_LINE)).overflow_hidden().child(fade())
             });
-            bubble.child(body).when(more, |bubble| bubble.child(more_button(model, open, ctx)))
+            bubble.child(body)
         });
     (bubble, more)
 }
@@ -813,20 +813,25 @@ fn message_height(text: &str, width: f32, window: &Window) -> f32 {
         .sum()
 }
 
-/// The button under a long message that shows the rest of it, or cuts it again.
-fn more_button(model: &RowModel, open: bool, ctx: &RowContext) -> Div {
+/// The button under a long message that shows the rest of it, or cuts it again. Its press takes
+/// the strip from the text down to the bubble's edge, or to the chip of the message's values.
+fn more_button(model: &RowModel, chip: bool, ctx: &RowContext) -> Div {
+    let open = ctx.expanded.contains(&model.row.id);
     let view = ctx.view.clone();
     let row_id = model.row.id.clone();
     let title = if open { "Show less" } else { "Show more" };
     let button = ActionButton::new(ElementId::Name(format!("{row_id}-more").into()), title)
         .ghost()
-        .small()
-        .quiet()
+        .prose()
+        .expands(open)
+        .padding(BUBBLE_PADDING - MORE_INSET)
         .surface(Surface::Secondary)
+        .stretches()
+        .margin(Edges { top: MORE_GAP, left: MORE_INSET, bottom: if chip { 0. } else { MORE_INSET }, right: 0. })
         .on_click(move |_, _, cx| {
             let _ = view.update(cx, |view, cx| view.toggle_expanded(&row_id, cx));
         });
-    div().flex().mt(px(MORE_GAP)).ml(px(MORE_INSET - BUBBLE_PADDING)).child(button)
+    div().flex().mx(px(-BUBBLE_PADDING)).child(button)
 }
 
 /// A message of the user: a bubble against the column's right edge, as wide as its text, with
@@ -852,7 +857,7 @@ fn user_row(
     let bottom = if text.is_empty() || values.is_some() {
         BUBBLE_PADDING
     } else if more {
-        MORE_INSET
+        0.
     } else {
         10.
     };
@@ -864,6 +869,7 @@ fn user_row(
         .items_end()
         .child(
             bubble
+                .when(more, |bubble| bubble.child(more_button(model, values.is_some(), ctx)))
                 .children(chip)
                 .max_w(relative(0.8))
                 .min_w(px(12. + BUBBLE_PADDING * 2.))
@@ -1336,7 +1342,7 @@ fn tool_row(model: &RowModel, ctx: &RowContext, cx: &App) -> AnyElement {
                 .child(div().flex_1())
                 .child(fade_meta(&row_id, shown, false, time, ctx)),
         )
-        .child(div().mt(px(FOLD_RULE_GAP)).h(px(1.)).bg(c.border))
+        .child(div().my(px(FOLD_RULE_GAP)).h(px(1.)).bg(c.border))
         .into_any_element()
 }
 

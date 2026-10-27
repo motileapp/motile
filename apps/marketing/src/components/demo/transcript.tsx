@@ -237,7 +237,7 @@ function FoldRow({
         {worked}
         <Chevron className="-ml-1 size-3 shrink-0" />
       </button>
-      <span className="mt-1 h-px bg-border" />
+      <span className="my-1 h-px bg-border" />
     </div>
   )
 }

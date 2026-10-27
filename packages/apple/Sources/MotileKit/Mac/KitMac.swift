@@ -297,6 +297,9 @@ class TextLabel: NSTextField {
 
     var naturalWidth: CGFloat { intrinsicContentSize.width }
 
+    /// Where its words' baseline is drawn, from its top.
+    var baselineFromTop: CGFloat { firstBaselineOffsetFromTop }
+
     /// The size the words take with the room the field draws around them, whatever width it
     /// was last given.
     var natural: CGSize {
