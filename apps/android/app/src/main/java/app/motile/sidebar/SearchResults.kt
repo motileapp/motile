@@ -51,13 +51,13 @@ import app.motile.ui.PullRequestLabel
 import app.motile.ui.Spinner
 import app.motile.ui.Text
 
-/** The field the sidebar searches its threads with. `bare` leaves out its background and height, for a field that lies on glass. */
+/** The field the sidebar searches its threads with. `capsule` leaves out its background and height, for a field that lies on a glass capsule and reaches its trailing end. */
 @Composable
 fun SearchField(
     text: String,
     onTextChange: (String) -> Unit,
     modifier: Modifier = Modifier,
-    bare: Boolean = false,
+    capsule: Boolean = false,
     clearable: Boolean = true,
     focusRequester: FocusRequester? = null,
     onFocusChange: ((Boolean) -> Unit)? = null,
@@ -66,7 +66,7 @@ fun SearchField(
     InputField(
         "Search", text, onTextChange, modifier,
         icon = Symbol.Search,
-        variant = if (bare) InputVariant.Bare else InputVariant.Filled,
+        variant = if (capsule) InputVariant.Capsule else InputVariant.Filled,
         size = if (Platform.scale > 1) ControlSize.Large else ControlSize.Regular,
         clearable = clearable,
         focusRequester = focusRequester,

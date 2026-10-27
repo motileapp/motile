@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -40,6 +41,11 @@ enum class InputVariant {
     Filled,
     /** No background or height of its own, for a field that lies on glass, with its symbol in the foreground. */
     Bare,
+    /**
+     * A bare field that reaches the end of the capsule it lies on, whose clear button is a circle in
+     * that end, as far from its side as from its top and bottom.
+     */
+    Capsule,
 }
 
 /**
@@ -65,7 +71,8 @@ fun InputField(
     onSubmit: (() -> Unit)? = null,
 ) {
     val palette = LocalPalette.current
-    val bare = variant == InputVariant.Bare
+    val bare = variant != InputVariant.Filled
+    val capsule = variant == InputVariant.Capsule
     val focus = focusRequester ?: remember { FocusRequester() }
     val clears = clearable && text.isNotEmpty()
     val clearInset = (size.height - ControlSize.Small.height) / 2
@@ -76,7 +83,14 @@ fun InputField(
             .then(height)
             .fieldFrame(size, filled = !bare)
             .clickable(interactionSource = null, indication = null, enabled = enabled) { focus.requestFocus() }
-            .padding(start = size.padding - fieldInset, end = if (clears) clearInset else size.padding - fieldInset),
+            .padding(
+                start = size.padding - fieldInset,
+                end = when {
+                    clears && capsule -> 0.dp
+                    clears -> clearInset
+                    else -> size.padding - fieldInset
+                },
+            ),
         horizontalArrangement = Arrangement.spacedBy(size.gap),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -108,7 +122,13 @@ fun InputField(
                 }
             },
         )
-        if (clears) ActionButton(icon = Symbol.X, help = "Clear", size = ControlSize.Small) { onTextChange("") }
+        if (clears && capsule) {
+            Box(Modifier.fillMaxHeight().aspectRatio(1f), contentAlignment = Alignment.Center) {
+                ActionButton(icon = Symbol.X, help = "Clear", round = true) { onTextChange("") }
+            }
+        } else if (clears) {
+            ActionButton(icon = Symbol.X, help = "Clear", size = ControlSize.Small) { onTextChange("") }
+        }
     }
 }
 

@@ -122,10 +122,10 @@ private struct BottomSearch: ViewModifier {
     func body(content: Content) -> some View {
         content
             .safeAreaInset(edge: .bottom) {
-                SearchField(text: $text, prompt: prompt, bare: true, focus: $focused)
+                SearchField(text: $text, prompt: prompt, capsule: true, focus: $focused)
                     .onSubmit(submit)
                     .submitLabel(.search)
-                    .padding(.horizontal, 6)
+                    .padding(.leading, 6)
                     .frame(height: GlassButtonStyle.side)
                     .glassButton(in: Capsule())
                     .padding(.horizontal, sidebarEdge)

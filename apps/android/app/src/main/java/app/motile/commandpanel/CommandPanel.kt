@@ -179,7 +179,7 @@ private fun SearchField(state: PanelState, field: FocusRequester) {
             .padding(horizontal = 16.dp, vertical = 8.dp)
             .height(GlassButton.side)
             .glassButton(CircleShape)
-            .padding(horizontal = 8.dp),
+            .padding(start = 8.dp),
     ) {
         InputField(
             state.prompt(page),
@@ -187,7 +187,7 @@ private fun SearchField(state: PanelState, field: FocusRequester) {
             state::type,
             Modifier.fillMaxSize(),
             icon = Symbol.Search,
-            variant = InputVariant.Bare,
+            variant = InputVariant.Capsule,
             size = ControlSize.Large,
             clearable = true,
             focusRequester = field,
