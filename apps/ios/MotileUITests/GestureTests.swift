@@ -47,6 +47,17 @@ final class GestureTests: XCTestCase {
         XCTAssertFalse(newThread.exists && newThread.isHittable)
     }
 
+    func testTheJumpToTheEndScrollsThereWhenTapped() {
+        openSidebar()
+        guard let thread = row("Add API Rate Limiting") else { return XCTFail("no row") }
+        thread.tap()
+        let jump = app.buttons["Scroll to end"]
+        for _ in 0..<6 where !shown(jump) { app.swipeDown() }
+        XCTAssertTrue(shown(jump))
+        jump.tap()
+        XCTAssertTrue(jump.waitForNonExistence(timeout: 3) || !jump.isHittable)
+    }
+
     func testASwipeToTheLeftShowsThePanelAndOneBackHidesItWithoutTheSidebar() {
         let back = app.navigationBars.buttons["Back"]
         app.swipeLeft()

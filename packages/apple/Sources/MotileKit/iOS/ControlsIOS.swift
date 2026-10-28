@@ -231,28 +231,45 @@ private final class DayPickerController: UIViewController, UIPopoverPresentation
 }
 
 /// The glass a `GlassButtonView` and the jump to the end lie on, `glassSurface` in UIKit: a capsule
-/// as tall as its frame, Liquid Glass in its tint where the system has it, and the system's
-/// material with a hairline around it and a shadow before that.
+/// as tall as its frame, Liquid Glass in its tint that answers a finger where the system has it, and
+/// the system's material with a hairline around it and a shadow before that.
 final class GlassView: UIView {
+    /// Whether it answers a finger itself, as the system's interactive glass does.
+    static var answersTouch: Bool {
+        guard #available(iOS 26.0, *) else { return false }
+        return true
+    }
+
     private let effect = UIVisualEffectView()
+
+    /// What lies on it, which moves with it as a finger presses it.
+    var content: UIView { effect.contentView }
 
     override init(frame: CGRect) {
         super.init(frame: frame)
-        isUserInteractionEnabled = false
         addSubview(effect)
         if #available(iOS 26.0, *) {
             let glass = UIGlassEffect()
             glass.tintColor = Theme.glassTint
+            glass.isInteractive = true
             effect.effect = glass
             effect.cornerConfiguration = .capsule()
             return
         }
+        isUserInteractionEnabled = false
         effect.effect = UIBlurEffect(style: .systemMaterial)
         effect.clipsToBounds = true
         effect.layer.cornerCurve = .continuous
         effect.layer.borderWidth = 1
         paint()
         registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (view: Self, _: UITraitCollection) in view.paint() }
+    }
+
+    /// The button it lies on takes its taps through it, so that it sees them too.
+    override func didMoveToSuperview() {
+        super.didMoveToSuperview()
+        guard Self.answersTouch, let button = superview as? FlippedView else { return }
+        button.tapSurface = content
     }
 
     required init?(coder: NSCoder) { fatalError("not used") }
