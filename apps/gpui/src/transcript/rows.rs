@@ -729,15 +729,20 @@ struct Message<'a> {
     skills: Vec<(Range<usize>, String)>,
 }
 
-/// A cut message shows eight lines, and is only cut when that hides more than one.
-const CUT_LINES: f32 = 8.;
-const CUT_PAST_LINES: f32 = 9.;
+/// A cut message shows nine lines, cut where the next one starts, and is only cut when that hides
+/// more than one.
+const CUT_LINES: f32 = 9.;
+const CUT_PAST_LINES: f32 = 10.;
+/// The cut text fades out over its last two and a half lines, so that it plainly goes on.
+const CUT_FADE_LINES: f32 = 2.5;
 const MESSAGE_LINE: f32 = 22.;
 /// The room between a long message's text and the button under it.
-const MORE_GAP: f32 = 4.;
-/// The button's light is as far from the bubble's side as from its bottom, and its words start
-/// where the text's do.
+const MORE_GAP: f32 = 8.;
+/// The button's light is this far from the bubble's side, so that its words start where the
+/// text's do.
 const MORE_INSET: f32 = 6.;
+/// The room between the button's light and the bubble's bottom.
+const MORE_BELOW: f32 = 10.;
 
 /// The message and the files of a bubble, as wide as they are up to the widest a bubble may be.
 /// A `collapsible` message too long for it is cut, and wants a button under it that shows the
@@ -757,7 +762,8 @@ fn bubble_content(
     let shown = with_skill_chips(message, window);
     let has_files = !attachments.is_empty();
     let widest = (ctx.width * 0.8).max(120.) - BUBBLE_PADDING * 2.;
-    let more = collapsible && message_height(&shown.text, widest, window) > CUT_PAST_LINES * MESSAGE_LINE;
+    let cut = if collapsible { cut_height(&shown.text, widest, window) } else { None };
+    let more = cut.is_some();
     let bubble = div()
         .px(px(BUBBLE_PADDING))
         .pt(px(if has_files { BUBBLE_PADDING } else { 10. }))
@@ -776,41 +782,47 @@ fn bubble_content(
                 row_key(&model.row.id),
                 cx,
             ));
-            let fade = || {
-                let under = colors(cx).background_secondary;
-                div().absolute().left_0().right_0().bottom_0().h(px(24.)).bg(linear_gradient(
-                    0.,
-                    linear_color_stop(under, 0.),
-                    linear_color_stop(under.opacity(0.), 1.),
-                ))
+            let fade = || cut_fade(colors(cx).background_secondary);
+            let body = match cut.filter(|_| !ctx.expanded.contains(&model.row.id)) {
+                Some(height) => body.relative().max_h(px(height)).overflow_hidden().child(fade()),
+                None => body,
             };
-            let body = body.when(more && !ctx.expanded.contains(&model.row.id), |body| {
-                body.relative().max_h(px(CUT_LINES * MESSAGE_LINE)).overflow_hidden().child(fade())
-            });
             bubble.child(body)
         });
     (bubble, more)
 }
 
-/// How tall a message's text is in a bubble `width` wide, as `plain` lays it out.
-fn message_height(text: &str, width: f32, window: &Window) -> f32 {
+/// What covers the end of a cut message: the bubble's colour, coming in to its bottom.
+fn cut_fade(under: Hsla) -> Div {
+    div().absolute().left_0().right_0().bottom_0().h(px(CUT_FADE_LINES * MESSAGE_LINE)).bg(linear_gradient(
+        180.,
+        linear_color_stop(under.opacity(0.), 0.),
+        linear_color_stop(under, 1.),
+    ))
+}
+
+/// Where a message's text, in a bubble `width` wide as `plain` lays it out, is cut: where the
+/// line after its first `CUT_LINES` starts, when it has more than `CUT_PAST_LINES`.
+fn cut_height(text: &str, width: f32, window: &Window) -> Option<f32> {
     let mut wrapper =
         window.text_system().line_wrapper(font(theme::UI_FONT, FontWeight::NORMAL, false), px(theme::PROSE_SIZE));
-    let parts = plain_parts(text);
-    let count = parts.len();
-    parts
-        .into_iter()
-        .enumerate()
-        .map(|(index, part)| {
-            let words = &text[part];
-            let line = words.trim_end_matches('\n');
-            let breaks = 1 + words.len() - line.len();
-            let gap = if index + 1 < count { PLAIN_PARAGRAPH_GAP * breaks as f32 } else { 0. };
-            let fragments = [LineFragment::text(line)];
-            let lines = 1 + wrapper.wrap_line(&fragments, px(width), IndentAdjustment::NoIndent).count();
-            lines as f32 * MESSAGE_LINE + gap
-        })
-        .sum()
+    let (mut lines, mut top, mut cut) = (0., 0., None);
+    for part in plain_parts(text) {
+        let words = &text[part];
+        let line = words.trim_end_matches('\n');
+        let breaks = 1 + words.len() - line.len();
+        let fragments = [LineFragment::text(line)];
+        let count = (1 + wrapper.wrap_line(&fragments, px(width), IndentAdjustment::NoIndent).count()) as f32;
+        if cut.is_none() && lines + count >= CUT_LINES {
+            cut = Some(top + (CUT_LINES - lines) * MESSAGE_LINE);
+        }
+        lines += count;
+        if lines > CUT_PAST_LINES {
+            return cut;
+        }
+        top += count * MESSAGE_LINE + PLAIN_PARAGRAPH_GAP * breaks as f32;
+    }
+    None
 }
 
 /// The button under a long message that shows the rest of it, or cuts it again. Its press takes
@@ -827,7 +839,7 @@ fn more_button(model: &RowModel, chip: bool, ctx: &RowContext) -> Div {
         .padding(BUBBLE_PADDING - MORE_INSET)
         .surface(Surface::Secondary)
         .stretches()
-        .margin(Edges { top: MORE_GAP, left: MORE_INSET, bottom: if chip { 0. } else { MORE_INSET }, right: 0. })
+        .margin(Edges { top: MORE_GAP, left: MORE_INSET, bottom: if chip { 0. } else { MORE_BELOW }, right: 0. })
         .on_click(move |_, _, cx| {
             let _ = view.update(cx, |view, cx| view.toggle_expanded(&row_id, cx));
         });

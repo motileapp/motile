@@ -82,7 +82,8 @@ class RowView: FlippedView {
         case .user(let text, let attachments, let values, _, let collapsible):
             let fit = BubbleFit(text: text, attachments: attachments, values: values, width: width, collapsible: collapsible)
             let textHeight = fit.hasText ? TextMeasure.height(of: text, width: fit.innerWidth) : 0
-            return UserRowView.height(fit, shown: UserRowView.Shown(textHeight: textHeight, collapsible: collapsible, open: false))
+            let tops = collapsible ? TextMeasure.lineTops(of: text, count: UserRowView.linesCounted, width: fit.innerWidth) : []
+            return UserRowView.height(fit, shown: UserRowView.Shown(textHeight: textHeight, lineTops: tops, open: false))
         case .prose(let text, _):
             return TextMeasure.height(of: text, width: width) + ProseRowView.gap + row.above
         case .error(let text):
@@ -292,7 +293,7 @@ final class UserRowView: RowView {
 
     private static func bubbleHeight(_ fit: BubbleFit, shown: Shown) -> CGFloat {
         let more = shown.more ? moreHeight : 0
-        let bottom: CGFloat = if fit.chip > 0 { BubbleFit.padding } else if shown.more { moreInset } else if fit.hasText { 10 } else { BubbleFit.padding }
+        let bottom: CGFloat = if fit.chip > 0 { BubbleFit.padding } else if shown.more { ExpandButton.below } else if fit.hasText { 10 } else { BubbleFit.padding }
         return fit.top + fit.files.height + fit.between + shown.textHeight + more + fit.chip + bottom
     }
 
@@ -302,17 +303,23 @@ final class UserRowView: RowView {
         let textHeight: CGFloat
         let more: Bool
 
-        init(textHeight: CGFloat, collapsible: Bool, open: Bool) {
-            more = collapsible && textHeight > UserRowView.cutsPast
-            self.textHeight = more && !open ? UserRowView.cutHeight : textHeight
+        /// `lineTops` are where the message's first lines start, as many as `linesCounted`.
+        init(textHeight: CGFloat, lineTops: [CGFloat], open: Bool) {
+            more = lineTops.count == UserRowView.linesCounted
+            self.textHeight = more && !open ? lineTops[UserRowView.cutLines] : textHeight
         }
     }
 
-    /// A cut message shows eight lines, and is only cut when that hides more than one.
-    static let cutHeight = linesHeight(8)
-    private static let cutsPast = linesHeight(9)
+    /// A cut message shows nine lines, cut where the next one starts, and is only cut when that
+    /// hides more than one.
+    private static let cutLines = 9
+    static let linesCounted = cutLines + 2
+    /// How tall a cut message is when its lines are all one paragraph.
+    static let cutHeight = linesHeight(cutLines + 1) - linesHeight(1)
+    /// The cut text fades out over its last two and a half lines, so that it plainly goes on.
+    private static let cutFade = (linesHeight(2) + linesHeight(3)) / 2
     private static let moreInset = ExpandButton.inset
-    private static let moreGap: CGFloat = 4
+    private static let moreGap: CGFloat = 8
     static let moreHeight = moreGap + ExpandButton.size.height
     /// The text's width that leaves room for the button's light at either side.
     static let moreWidth = ExpandButton.litWidth - 2 * (BubbleFit.padding - moreInset)
@@ -327,7 +334,8 @@ final class UserRowView: RowView {
         let fit = BubbleFit(text: text.content, attachments: files, values: values, width: width, collapsible: collapsible)
         let textHeight = fit.hasText ? text.height(forWidth: fit.innerWidth) : 0
         let open = owner?.isExpanded(id: rowID) ?? false
-        let shown = Shown(textHeight: textHeight, collapsible: collapsible, open: open)
+        let tops = collapsible && fit.hasText ? text.lineTops(Self.linesCounted, forWidth: fit.innerWidth) : []
+        let shown = Shown(textHeight: textHeight, lineTops: tops, open: open)
         let bubbleSize = CGSize(width: fit.innerWidth + padding * 2, height: Self.bubbleHeight(fit, shown: shown))
         bubble.frame = CGRect(x: width - bubbleSize.width, y: Self.margin, width: bubbleSize.width, height: bubbleSize.height)
         attachments.frame = CGRect(x: padding, y: fit.top, width: fit.innerWidth, height: fit.files.height)
@@ -354,10 +362,10 @@ final class UserRowView: RowView {
         #else
         clip.layer.mask = cut ? fade : nil
         #endif
-        fade.update(frame: clip.bounds, above: 0, below: cut ? EdgeFade.length : 0)
+        fade.update(frame: clip.bounds, above: 0, below: cut ? Self.cutFade : 0, length: Self.cutFade)
         guard shown.more else { return }
         more.open = open
-        let bottom = clip.frame.maxY + Self.moreHeight + Self.moreInset
+        let bottom = clip.frame.maxY + Self.moreHeight + ExpandButton.below
         let height = max(bottom - clip.frame.maxY, Platform.minimumPress)
         more.frame = CGRect(x: 0, y: bottom - height, width: bubble.frame.width, height: height)
     }

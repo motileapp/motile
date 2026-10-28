@@ -22,15 +22,15 @@ object EdgeFade {
 }
 
 /** Fades the content out at its top and bottom by how much is hidden past each, in pixels, read as it draws. */
-fun Modifier.edgeFade(above: () -> Float, below: () -> Float): Modifier =
+fun Modifier.edgeFade(above: () -> Float, below: () -> Float, length: Dp = EdgeFade.length): Modifier =
     graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
         .drawWithContent {
             drawContent()
-            val length = EdgeFade.length.toPx()
+            val fade = length.toPx()
             if (size.height <= 0f) return@drawWithContent
-            val edge = min(0.5f, length / size.height)
-            val top = 1f - min(1f, above() / length)
-            val bottom = 1f - min(1f, below() / length)
+            val edge = min(0.5f, fade / size.height)
+            val top = 1f - min(1f, above() / fade)
+            val bottom = 1f - min(1f, below() / fade)
             val mask = Brush.verticalGradient(
                 0f to Color.Black.copy(alpha = top),
                 edge to Color.Black,
