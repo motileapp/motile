@@ -250,7 +250,13 @@ private final class DayPickerController: NSViewController {
 /// where the system has it, and the popover's material with a hairline around it and a shadow
 /// before that.
 final class GlassView: NSView {
+    /// Whether it answers the pointer itself, which it leaves to what lies on it here.
+    static let answersTouch = false
+
     private let effect: NSView
+
+    /// What lies on it.
+    var content: NSView { self }
 
     override init(frame: NSRect) {
         if #available(macOS 26.0, *) {

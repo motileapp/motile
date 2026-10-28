@@ -930,7 +930,8 @@ final class GlassButtonView: FlippedView {
         chevron.image = .symbol(.chevronDown, size: Self.size.chevron, trimmed: true)
         chevron.tint = Theme.foreground
         chevron.isHidden = true
-        for view in [glass, light, mark, words, chevron] as [PlatformView] { addSubview(view) }
+        addSubview(glass)
+        for view in [light, mark, words, chevron] as [PlatformView] { glass.content.addSubview(view) }
         focusable = true
         pointer = .hand
         onPress = { [weak self] _ in self?.press() }
@@ -994,6 +995,7 @@ final class GlassButtonView: FlippedView {
     }
 
     private func lightUp(_ lit: Bool) {
+        guard !GlassView.answersTouch else { return }
         let opacity: CGFloat = lit && enabled ? 1 : 0
         guard !Platform.reducesMotion else { return light.opacity = opacity }
         light.fade(to: opacity, duration: Self.fadeDuration)

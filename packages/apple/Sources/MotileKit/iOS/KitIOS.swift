@@ -112,6 +112,8 @@ class FlippedView: UIView, UIContextMenuInteractionDelegate, UIGestureRecognizer
     }
     /// Called with 1 or -1 when an assistive technology steps its value.
     var onAdjust: ((Int) -> Void)?
+    /// The view inside that takes its taps and passes them on to it, such as glass that answers a finger.
+    weak var tapSurface: UIView?
     private var hover: UIHoverGestureRecognizer?
     private var drag: UIPanGestureRecognizer?
     private var hasMenu = false
@@ -199,7 +201,7 @@ class FlippedView: UIView, UIContextMenuInteractionDelegate, UIGestureRecognizer
         guard onPress != nil, !isHidden, alpha > 0.01, isUserInteractionEnabled, takesPress(at: point) else {
             return super.hitTest(point, with: event)
         }
-        return self
+        return tapSurface ?? self
     }
 
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {

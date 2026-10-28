@@ -234,9 +234,11 @@ final class TranscriptView: FlippedView, RowOwner {
         jumpButton.tip = "Scroll to end"
         jumpButton.describe("Scroll to end", button: true)
         #if os(iOS)
-        jumpButton.addSubview(GlassView(frame: jumpButton.bounds))
+        let glass = GlassView(frame: jumpButton.bounds)
+        jumpButton.addSubview(glass)
         let arrow = SymbolView(.arrowDown, size: .lg, tint: Theme.foreground)
         let arrowSide = PlatformImage.symbolSide(.lg)
+        let arrowParent = glass.content
         #else
         jumpButton.fill = Theme.popover
         jumpButton.stroke = Theme.borderPopover
@@ -244,9 +246,10 @@ final class TranscriptView: FlippedView, RowOwner {
         jumpButton.drop = (.md, .shadow)
         let arrow = SymbolView(.arrowDown, size: ControlSize.regular.symbol, tint: Theme.foreground)
         let arrowSide = ControlSize.regular.symbolSide
+        let arrowParent = jumpButton
         #endif
         arrow.frame = CGRect(x: (side - arrowSide) / 2, y: (side - arrowSide) / 2, width: arrowSide, height: arrowSide)
-        jumpButton.addSubview(arrow)
+        arrowParent.addSubview(arrow)
         jumpButton.onClick = { [weak self] in self?.scrollToEnd() }
         addSubview(jumpButton)
 
