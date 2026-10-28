@@ -264,8 +264,8 @@ enum Opacity {
         case .disabled: 0.45
         case .lit: 0.88
         case .shadow: 0.06
-        case .shadowStronger: 0.14
-        case .shadowStrongest: 0.25
+        case .shadowStronger: 0.12
+        case .shadowStrongest: 0.24
         case .colorTint: 0.12
         case .colorTintStronger: 0.2
         case .colorTintChart: 0.25
@@ -285,8 +285,8 @@ enum Opacity {
         case .disabled: 0.45
         case .lit: 0.88
         case .shadow: 0.2
-        case .shadowStronger: 0.4
-        case .shadowStrongest: 0.6
+        case .shadowStronger: 0.5
+        case .shadowStrongest: 0.7
         case .colorTint: 0.1
         case .colorTintStronger: 0.16
         case .colorTintChart: 0.2
