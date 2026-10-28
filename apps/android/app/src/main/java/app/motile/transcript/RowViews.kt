@@ -138,13 +138,16 @@ private fun Density.bubbleWidest(maxWidth: Int): Int = maxOf(120.dp.roundToPx(),
 
 private val messageStyle: TextStyle get() = TextStyle(fontSize = Theme.proseSize, lineHeight = Typesetter.messageLineHeight)
 
-/** A cut message shows eight lines, and is only cut when that hides more than one. */
+/** A cut message shows nine lines, cut where the next one starts, and is only cut when that hides more than one. */
 private object Cut {
-    const val LINES = 8
-    const val PAST = 9
-    /** The button's light is as far from the bubble's side as from its bottom, and its words start where the text's do. */
+    const val LINES = 9
+    const val PAST = 10
+    /** The cut text fades out over its last two and a half lines, so that it plainly goes on. */
+    const val FADE_LINES = 2.5f
+    /** The button's light is this far from the bubble's side, so that its words start where the text's do. */
     val inset = 6.dp
-    val gap = 4.dp
+    val gap = 8.dp
+    val below = 10.dp
 }
 
 @Composable
@@ -173,6 +176,7 @@ private fun UserBubble(row: RowModel, user: RowModel.Kind.User, text: AnnotatedS
     val open = actions.isExpanded(row.id)
     val cut = more && !open
     val cutHeight = with(LocalDensity.current) { (Typesetter.messageLineHeight * Cut.LINES).toDp() }
+    val cutFade = with(LocalDensity.current) { (Typesetter.messageLineHeight * Cut.FADE_LINES).toDp() }
     Column(Modifier.fillMaxWidth().padding(top = 14.dp), horizontalAlignment = Alignment.End) {
         val shape = RoundedCornerShape(Bubble.radius)
         Column(
@@ -197,13 +201,13 @@ private fun UserBubble(row: RowModel, user: RowModel.Kind.User, text: AnnotatedS
                 if (hasFiles) AttachedFiles(user.attachments)
                 if (hasText) {
                     MessageWithMore(more) {
-                        val shown = if (cut) Modifier.heightIn(max = cutHeight).clipToBounds().edgeFade(above = { 0f }, below = { Float.MAX_VALUE }) else Modifier
+                        val shown = if (cut) Modifier.heightIn(max = cutHeight).clipToBounds().edgeFade(above = { 0f }, below = { Float.MAX_VALUE }, length = cutFade) else Modifier
                         SelectionContainer(shown) { MarkedText(text, messageStyle) }
                         if (more) {
                             ActionButton(
                                 if (open) "Show less" else "Show more", variant = ButtonVariant.Ghost, prose = true, expanded = open,
                                 padding = Bubble.PADDING.dp - Cut.inset, stretches = true,
-                                margin = PaddingValues(start = Cut.inset, top = Cut.gap, bottom = if (user.values == null) Cut.inset else 0.dp),
+                                margin = PaddingValues(start = Cut.inset, top = Cut.gap, bottom = if (user.values == null) Cut.below else 0.dp),
                             ) { actions.toggleExpansion(row.id) }
                         }
                     }

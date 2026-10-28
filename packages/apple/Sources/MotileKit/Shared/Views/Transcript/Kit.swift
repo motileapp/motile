@@ -170,10 +170,11 @@ final class RowButton: FlippedView {
 
 /// The button under a cut message that shows the rest of it or hides it again, in the message's
 /// text with a chevron. Its frame is the strip it stands in, which all takes the press; what
-/// lights is a regular control in its bottom left corner, `inset` from both sides.
+/// lights is a regular control in its bottom left corner, `inset` from the side and `below` from the bottom.
 final class ExpandButton: FlippedView {
     static let size = ControlSize.regular
     static let inset: CGFloat = 6
+    static let below: CGFloat = 10
     private static let font = Theme.proseFont
     private static let leading = BubbleFit.padding - inset
     private static let trailing = leading - size.chevronOutset
@@ -202,7 +203,7 @@ final class ExpandButton: FlippedView {
 
     init(action: @escaping () -> Void) {
         super.init(frame: .zero)
-        highlight.radius = Radius.lg
+        highlight.radius = Self.size.radius
         addSubview(highlight)
         highlight.addSubview(title)
         highlight.addSubview(chevron)
@@ -235,7 +236,7 @@ final class ExpandButton: FlippedView {
     override func layoutNow() {
         let height = Self.size.height
         let width = Self.width(title.string)
-        highlight.frame = CGRect(x: Self.inset, y: bounds.height - Self.inset - height, width: width, height: height)
+        highlight.frame = CGRect(x: Self.inset, y: bounds.height - Self.below - height, width: width, height: height)
         let words = width - Self.leading - Self.size.gap - Self.chevronSize.width - Self.trailing
         // The Mac's field draws its words a little in from its sides.
         let room = (title.natural.width - words) / 2

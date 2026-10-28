@@ -207,6 +207,19 @@ final class TextSystem {
     }
 
     /// Lays the text out at `width` and returns how tall it is.
+    /// Where each of its first `count` lines starts, from its top, laid out `width` wide.
+    func lineTops(_ count: Int, forWidth width: CGFloat) -> [CGFloat] {
+        guard storage.length > 0 else { return [] }
+        let size = CGSize(width: width, height: CGFloat.greatestFiniteMagnitude)
+        if container.size != size { container.size = size }
+        var tops: [CGFloat] = []
+        layout.enumerateLineFragments(forGlyphRange: NSRange(location: 0, length: layout.numberOfGlyphs)) { rect, _, _, _, stop in
+            tops.append(rect.minY)
+            if tops.count == count { stop.pointee = true }
+        }
+        return tops
+    }
+
     func height(forWidth width: CGFloat) -> CGFloat {
         guard storage.length > 0 else { return 0 }
         // A text view on iOS makes its container as tall as itself, which would cut off what a
@@ -305,6 +318,14 @@ enum TextMeasure {
         defer { lock.unlock() }
         system.storage.setAttributedString(text)
         return system.height(forWidth: width)
+    }
+
+    static func lineTops(of text: NSAttributedString, count: Int, width: CGFloat) -> [CGFloat] {
+        guard text.length > 0 else { return [] }
+        lock.lock()
+        defer { lock.unlock() }
+        system.storage.setAttributedString(text)
+        return system.lineTops(count, forWidth: width)
     }
 }
 

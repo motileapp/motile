@@ -538,6 +538,10 @@ final class RowTextView: NSTextView {
         system.height(forWidth: width)
     }
 
+    func lineTops(_ count: Int, forWidth width: CGFloat) -> [CGFloat] {
+        system.lineTops(count, forWidth: width)
+    }
+
     /// Fades in the text under `oldHeight`, which was just added, and leaves the rest as it is.
     func fadeIn(below oldHeight: CGFloat) {
         wantsLayer = true
