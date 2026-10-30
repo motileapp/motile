@@ -43,6 +43,7 @@ extension Theme {
     static let input = tone(0xe8eaee, 0x14151a)
     static let composer = tone(0xffffff, 0x111217)
     static let glass = tone(0xffffff, 0x0a0b0f)
+    static let accentWithOpacity = tone(0x22242b, 0xd0d2d9)
     static let borderComposer = tone(0xeaecf0, 0x1a1b21)
     static let borderAccent = tone(0xd9dce5, 0x25262c)
     static let ring = tone(0x22242b, 0xd0d2d9)
@@ -128,6 +129,7 @@ extension Theme {
         case "input": input
         case "composer": composer
         case "glass": glass
+        case "accent-with-opacity": accentWithOpacity
         case "border-composer": borderComposer
         case "border-accent": borderAccent
         case "ring": ring
@@ -213,6 +215,7 @@ extension Color {
     static let themeInput = Color(platform: Theme.input)
     static let themeComposer = Color(platform: Theme.composer)
     static let themeGlass = Color(platform: Theme.glass)
+    static let themeAccentWithOpacity = Color(platform: Theme.accentWithOpacity)
     static let themeBorderComposer = Color(platform: Theme.borderComposer)
     static let themeBorderAccent = Color(platform: Theme.borderAccent)
     static let themeRing = Color(platform: Theme.ring)
@@ -255,7 +258,7 @@ extension Color {
 
 /// How much of a colour shows: every opacity in the clients is one of these.
 enum Opacity {
-    case overlay, overlayPulled, disabled, lit, shadow, shadowStronger, shadowStrongest, colorTint, colorTintStronger, colorTintChart, shimmerBandEdge, shimmerBandMiddle, glow, glowFaint, glowBright, glassTint
+    case overlay, overlayPulled, disabled, lit, shadow, shadowStronger, shadowStrongest, colorTint, colorTintStronger, colorTintChart, shimmerBandEdge, shimmerBandMiddle, glow, glowFaint, glowBright, glassTint, accentOpacity
 
     var light: CGFloat {
         switch self {
@@ -275,6 +278,7 @@ enum Opacity {
         case .glowFaint: 0.3
         case .glowBright: 0.5
         case .glassTint: 0.2
+        case .accentOpacity: 0.1
         }
     }
 
@@ -296,6 +300,7 @@ enum Opacity {
         case .glowFaint: 0.3
         case .glowBright: 0.5
         case .glassTint: 0.4
+        case .accentOpacity: 0.1
         }
     }
 }

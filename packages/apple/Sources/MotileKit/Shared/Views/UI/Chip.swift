@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// A word or two that says what something is: a state, a label, a name. With a `tone` it is in
-/// that colour on a wash of it; without, it is bordered, a step above the row it lies on. With a
+/// that colour on a wash of it; without, it is a step above the row it lies on, bordered but on glass. With a
 /// `dot` the colour is the dot's and the words stay plain.
 struct Chip: View {
     static let height = scaled(20)
@@ -41,7 +41,7 @@ struct Chip: View {
         .frame(height: Self.height)
         .background(tone.map { AnyShapeStyle($0.wash()) } ?? AnyShapeStyle(surface.color(layer)), in: Capsule())
         .overlay {
-            if tone == nil {
+            if tone == nil && surface != .glass {
                 Capsule().strokeBorder(surface.border, lineWidth: 1)
             }
         }

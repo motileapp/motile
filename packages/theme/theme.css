@@ -55,6 +55,7 @@
   --color-input: var(--input);
   --color-composer: var(--composer);
   --color-glass: var(--glass);
+  --color-accent-with-opacity: var(--accent-with-opacity);
   --color-border-composer: var(--border-composer);
   --color-border-accent: var(--border-accent);
   --color-ring: var(--ring);

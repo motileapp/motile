@@ -220,6 +220,7 @@ fn hex(value: u32) -> Hsla {
 
 /// How much of a colour shows: every opacity in the app is one of these.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[allow(clippy::enum_variant_names)]
 pub enum Opacity {
 ${opacities.map((name) => `    ${pascal(name)},`).join("\n")}
 }

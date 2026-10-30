@@ -93,6 +93,9 @@ fun ComposerView(modifier: Modifier = Modifier) {
     CompositionLocalProvider(LocalSurface provides Surface.Background) {
         Box(modifier, contentAlignment = Alignment.BottomCenter) {
             Box(Modifier.widthIn(max = Theme.composerWidth).fillMaxWidth()) {
+                // Behind the composer and its strip, so its open edge tucks under theirs.
+                val menu = store.skillMenu
+                if (menu != null) SkillMenuStrip(menu, Modifier.fillMaxWidth().hangingAbove())
                 Column(Modifier.fillMaxWidth()) {
                     val thread = store.selectedThread
                     val approval = store.activity.approvals.firstOrNull()
@@ -112,8 +115,6 @@ fun ComposerView(modifier: Modifier = Modifier) {
                     }
                     ComposerBox(model, focus, press)
                 }
-                val menu = store.skillMenu
-                if (menu != null) SkillMenuStrip(menu, Modifier.fillMaxWidth().hangingAbove())
             }
         }
     }

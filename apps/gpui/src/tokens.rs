@@ -47,6 +47,7 @@ pub struct Tokens {
     pub input: Hsla,
     pub composer: Hsla,
     pub glass: Hsla,
+    pub accent_with_opacity: Hsla,
     pub border_composer: Hsla,
     pub border_accent: Hsla,
     pub ring: Hsla,
@@ -131,6 +132,7 @@ impl Tokens {
             input: hex(0xe8eaee),
             composer: hex(0xffffff),
             glass: hex(0xffffff),
+            accent_with_opacity: hex(0x22242b),
             border_composer: hex(0xeaecf0),
             border_accent: hex(0xd9dce5),
             ring: hex(0x22242b),
@@ -215,6 +217,7 @@ impl Tokens {
             input: hex(0x14151a),
             composer: hex(0x111217),
             glass: hex(0x0a0b0f),
+            accent_with_opacity: hex(0xd0d2d9),
             border_composer: hex(0x1a1b21),
             border_accent: hex(0x25262c),
             ring: hex(0xd0d2d9),
@@ -300,6 +303,7 @@ impl Tokens {
             "input" => self.input,
             "composer" => self.composer,
             "glass" => self.glass,
+            "accent-with-opacity" => self.accent_with_opacity,
             "border-composer" => self.border_composer,
             "border-accent" => self.border_accent,
             "ring" => self.ring,
@@ -349,6 +353,7 @@ fn hex(value: u32) -> Hsla {
 
 /// How much of a colour shows: every opacity in the app is one of these.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[allow(clippy::enum_variant_names)]
 pub enum Opacity {
     Overlay,
     OverlayPulled,
@@ -366,6 +371,7 @@ pub enum Opacity {
     GlowFaint,
     GlowBright,
     GlassTint,
+    AccentOpacity,
 }
 
 impl Opacity {
@@ -387,6 +393,7 @@ impl Opacity {
             Opacity::GlowFaint => 0.3,
             Opacity::GlowBright => 0.5,
             Opacity::GlassTint => 0.2,
+            Opacity::AccentOpacity => 0.1,
         }
     }
 
@@ -408,6 +415,7 @@ impl Opacity {
             Opacity::GlowFaint => 0.3,
             Opacity::GlowBright => 0.5,
             Opacity::GlassTint => 0.4,
+            Opacity::AccentOpacity => 0.1,
         }
     }
 }
