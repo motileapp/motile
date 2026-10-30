@@ -61,6 +61,8 @@ enum Theme {
     static let scrim = thinned(overlay, .overlay)
     /// The glass's tint: its colour at its opacity.
     static let glassTint = thinned(glass, .glassTint)
+    /// What is drawn on glass, which shows through it: the accent at its opacity.
+    static let accentWithOpacityTint = thinned(accentWithOpacity, .accentOpacity)
 
     /// The colours code is highlighted with, by the core's palette index.
     static let syntax: [PlatformColor] = [
@@ -272,10 +274,10 @@ enum ControlSize {
     var symbolOutset: CGFloat { (symbolSide / 5 * 2).rounded() / 2 }
 }
 
-/// What a view lies on: the page, a box on it, a card, a popover or the composer. What is drawn
+/// What a view lies on: the page, a box on it, a card, a popover, the composer or glass. What is drawn
 /// on a surface takes the surface's accent.
 enum Surface {
-    case background, secondary, card, popover, composer
+    case background, secondary, card, popover, composer, glass
 
     /// What is drawn on a surface, each in the surface's own accent.
     enum Layer {
@@ -302,6 +304,7 @@ enum Surface {
         case .card: Theme.card
         case .popover: Theme.popover
         case .composer: Theme.composer
+        case .glass: Theme.glassTint
         }
     }
 
@@ -313,7 +316,7 @@ enum Surface {
         case .background, .secondary: .themeBorder
         case .card: .themeBorderCard
         case .popover: .themeBorderPopover
-        case .composer: .themeBorderComposer
+        case .composer, .glass: .themeBorderComposer
         }
     }
 
@@ -322,7 +325,7 @@ enum Surface {
         case .background, .secondary: Theme.border
         case .card: Theme.borderCard
         case .popover: Theme.borderPopover
-        case .composer: Theme.borderComposer
+        case .composer, .glass: Theme.borderComposer
         }
     }
 
@@ -345,6 +348,7 @@ enum Surface {
         case .card: Theme.cardAccent
         case .popover: Theme.popoverAccent
         case .composer: Theme.borderComposer
+        case .glass: Theme.accentWithOpacityTint
         }
     }
 

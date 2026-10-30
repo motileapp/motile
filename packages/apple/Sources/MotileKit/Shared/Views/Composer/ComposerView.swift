@@ -32,8 +32,10 @@ struct ComposerView: View {
             }
             #endif
         }
-        .overlay(alignment: .top) {
-            // Hangs above the composer from its top edge, over the transcript.
+        .background(alignment: .top) {
+            // Hangs above the composer from its top edge, over the transcript. It lies behind the
+            // composer and its strip, as a strip lies behind the composer, so its open edge tucks
+            // under theirs and its shadow falls behind them.
             if skillMenuOpen {
                 Color.clear
                     .frame(height: 0)

@@ -537,16 +537,24 @@ struct ActionMenu<Content: View>: View {
         } label: {
             ControlLabel(title: title, icon: icon, size: look.size, chevron: chevron, pending: pending, symbolSize: symbolSize, gap: gap,
                 padding: padding)
+                #if os(macOS)
                 .foregroundStyle(look.foreground)
+                #endif
                 .padding(reach.around)
                 .contentShape(Rectangle())
         }
         .menuStyle(.button)
         .menuOrder(.fixed)
+        #if os(iOS)
+        .buttonStyle(PressedMenuLabel(look: look, enabled: enabled && !pending, margin: reach.around))
+        #else
         .buttonStyle(.plain)
+        #endif
         .menuIndicator(.hidden)
         .fixedSize()
+        #if os(macOS)
         .background { look.background.padding(reach.around) }
+        #endif
         .opacity(.disabled, when: !enabled && !pending)
         .onHover { hovering = $0 }
         .padding(reach.outset)
@@ -555,6 +563,23 @@ struct ActionMenu<Content: View>: View {
         .accessibilityLabel(title ?? help ?? "")
     }
 }
+
+#if os(iOS)
+/// A menu's label lit under a finger, as a button's is.
+private struct PressedMenuLabel: ButtonStyle {
+    let look: ControlLook
+    let enabled: Bool
+    let margin: EdgeInsets
+
+    func makeBody(configuration: Configuration) -> some View {
+        var look = self.look
+        look.lit = enabled && configuration.isPressed
+        return configuration.label
+            .foregroundStyle(look.foreground)
+            .background { look.background.padding(margin) }
+    }
+}
+#endif
 
 extension Text {
     /// The text with the dots between its parts muted, as "Opus 5.5 · Work".
