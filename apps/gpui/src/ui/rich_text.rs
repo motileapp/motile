@@ -96,13 +96,55 @@ fn scope_of(row: Option<u64>, cx: &App) -> TextSelectionScopeId {
     }
 }
 
-/// What a `RichText` keeps between frames: its part in the selection, the text it said it has and
-/// where a press on a link fell.
+/// What a `RichText` keeps between frames: its part in the selection, the text it said it has,
+/// what a copy of it takes and where a press on a link fell.
 #[derive(Clone)]
 pub struct Kept {
     handle: TextSelectionHandle,
     text: SharedString,
+    copied: Rc<std::cell::RefCell<Copied>>,
+    _redraws: Rc<Subscription>,
     link_press: LinkPress,
+}
+
+/// The text a copy takes from, with its links, and the part of it selected when it last painted.
+#[derive(Default)]
+struct Copied {
+    text: SharedString,
+    links: Rc<Vec<(Range<usize>, String)>>,
+    selected: Option<Range<usize>>,
+}
+
+impl Copied {
+    fn markdown(&self) -> String {
+        let range = self.selected.clone().unwrap_or(0..self.text.len());
+        with_links(&self.text, range, &self.links)
+    }
+}
+
+/// The text of `range`, with the links in it written as Markdown's.
+fn with_links(text: &str, range: Range<usize>, links: &[(Range<usize>, String)]) -> String {
+    let mut copied = String::new();
+    let mut at = range.start;
+    let mut links: Vec<_> = links.iter().collect();
+    links.sort_by_key(|(link, _)| link.start);
+    for (link, url) in links {
+        let (start, end) = (link.start.max(at), link.end.min(range.end));
+        if start >= end {
+            continue;
+        }
+        copied.push_str(&text[at..start]);
+        let words = &text[start..end];
+        let bare = url.split_once("://").map_or(url.as_str(), |(_, rest)| rest);
+        if words == url || words == bare {
+            copied.push_str(words);
+        } else {
+            copied.push_str(&format!("[{words}]({url})"));
+        }
+        at = end;
+    }
+    copied.push_str(&text[at..range.end]);
+    copied
 }
 
 impl RichText {
@@ -309,13 +351,17 @@ impl Element for RichText {
         cx: &mut App,
     ) -> (LayoutId, Self::RequestLayoutState) {
         let (kept, changed) =
-            window.with_element_state(global_id.expect("RichText has an id"), |kept: Option<Kept>, _| {
+            window.with_element_state(global_id.expect("RichText has an id"), |kept: Option<Kept>, window| {
                 let kept = kept.unwrap_or_else(|| {
                     let handle = TextSelectionHandle::new(self.text.clone(), cx);
                     // Selecting takes the keys from a field, as a text view of the Mac's becomes the
                     // first responder, so that ⌘C copies the selection.
                     handle.focus_with(|window, cx| window.focus(&selection_focus(cx), cx), cx);
-                    Kept { handle, text: self.text.clone(), link_press: Rc::default() }
+                    let copied = Rc::new(std::cell::RefCell::new(Copied::default()));
+                    let source = copied.clone();
+                    handle.copy_with(move |_| source.borrow().markdown(), cx);
+                    let redraws = Rc::new(handle.refresh_window_on_change(window, cx));
+                    Kept { handle, text: self.text.clone(), copied, _redraws: redraws, link_press: Rc::default() }
                 });
                 let changed = kept.text != self.text;
                 let kept = Kept { text: self.text.clone(), ..kept };
@@ -323,6 +369,11 @@ impl Element for RichText {
             });
         if changed {
             kept.handle.set_fallback_copy_text(self.text.to_string(), cx);
+        }
+        {
+            let mut copied = kept.copied.borrow_mut();
+            copied.text = self.text.clone();
+            copied.links = self.links.clone();
         }
         let (layout_id, ()) = self.styled.request_layout(global_id, inspector_id, window, cx);
         (layout_id, kept)
@@ -378,6 +429,7 @@ impl Element for RichText {
                 crate::ui::skill_chip::paint_box(start, end, layout.line_height(), window, cx);
             }
         }
+        kept.copied.borrow_mut().selected = projection.ranges().iter().flatten().next().cloned();
         let color = gpui_kit::base::Theme::global(cx).tokens.colors.selection;
         for range in projection.ranges().iter().flatten().cloned() {
             Self::paint_selection(&layout, range, color, window);
@@ -778,13 +830,53 @@ mod tests {
     impl Render for Linked {
         fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
             let opened = self.opened.clone();
-            div().font_family(crate::theme::UI_FONT).child(
+            div().font_family(crate::theme::UI_FONT).child(gpui_kit::base::TextSelectionLayer).child(
                 RichText::new("linked", "open the site")
                     .links(vec![(5..13, "https://motile.app".into())], move |url, _, _| {
                         opened.borrow_mut().push(url.into())
                     }),
             )
         }
+    }
+
+    #[test]
+    fn a_copy_writes_the_links_it_takes_as_markdown() {
+        let links = [(4..8, "https://motile.app/docs".to_string()), (13..23, "https://motile.app".to_string())];
+        let text = "see docs and motile.app now";
+        assert_eq!(with_links(text, 0..text.len(), &links), "see [docs](https://motile.app/docs) and motile.app now");
+        assert_eq!(with_links(text, 6..12, &links), "[cs](https://motile.app/docs) and");
+        assert_eq!(with_links(text, 9..12, &links), "and");
+    }
+
+    #[test]
+    fn a_selection_dragged_over_a_link_copies_it_as_markdown() {
+        let opened = Rc::new(RefCell::new(Vec::new()));
+        let Some((mut cx, window)) = headless_window(|_| Linked { opened }) else { return };
+        draw(&mut cx, window);
+        let (from, to) = (point(px(1.), px(8.)), point(px(200.), px(8.)));
+        send(
+            &mut cx,
+            window,
+            vec![
+                PlatformInput::MouseMove(MouseMoveEvent { position: from, ..Default::default() }),
+                PlatformInput::MouseDown(MouseDownEvent {
+                    position: from,
+                    button: MouseButton::Left,
+                    click_count: 1,
+                    ..Default::default()
+                }),
+                PlatformInput::MouseMove(MouseMoveEvent {
+                    position: to,
+                    pressed_button: Some(MouseButton::Left),
+                    ..Default::default()
+                }),
+            ],
+        );
+        draw(&mut cx, window);
+        let copied = cx
+            .update_window(window.into(), |_, window, cx| TextSelection::selected_text(window, cx))
+            .expect("the selection");
+        assert_eq!(copied, "open [the site](https://motile.app)");
     }
 
     #[test]
