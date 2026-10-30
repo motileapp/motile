@@ -630,7 +630,7 @@ final class TranscriptScroller: UIView, UIScrollViewDelegate, UIGestureRecognize
         addSubview(scrollView)
         scrollView.addSubview(document)
         // A tap on the transcript puts the keyboard away at once, whatever else the tap does.
-        let tap = UITapGestureRecognizer(target: self, action: #selector(tapped))
+        let tap = UITapGestureRecognizer(target: self, action: #selector(tapped(_:)))
         tap.cancelsTouchesInView = false
         tap.delegate = self
         scrollView.addGestureRecognizer(tap)
@@ -649,7 +649,13 @@ final class TranscriptScroller: UIView, UIScrollViewDelegate, UIGestureRecognize
         addSubview(topBar)
     }
 
-    @objc private func tapped() {
+    /// Leaves be the text the finger just selected, which a press that lifts counts as a tap on.
+    @objc private func tapped(_ tap: UITapGestureRecognizer) {
+        var view = scrollView.hitTest(tap.location(in: scrollView), with: nil)
+        while let current = view, current !== scrollView {
+            if let text = current as? UITextView, !text.isEditable, text.isFirstResponder { return }
+            view = current.superview
+        }
         Platform.endEditing()
     }
 

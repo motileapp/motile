@@ -374,10 +374,14 @@ fun TranscriptView(model: TranscriptModel, modifier: Modifier = Modifier, conten
 
     BoxWithConstraints(
         modifier.pointerInput(Unit) {
-            // A tap on the transcript puts the keyboard away, whatever else the tap does.
+            // A tap on the transcript puts the keyboard away, whatever else the tap does. A press
+            // that lasts is not a tap: it selects text, which losing the focus would let go of.
             awaitEachGesture {
                 awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
-                if (waitForUpOrCancellation(PointerEventPass.Initial) != null) Platform.endEditing()
+                val up = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
+                    waitForUpOrCancellation(PointerEventPass.Initial)
+                }
+                if (up != null) Platform.endEditing()
             }
         },
     ) {

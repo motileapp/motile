@@ -348,6 +348,25 @@ final class GestureTests: XCTestCase {
         return nil
     }
 
+    /// A hold on a reply's word selects it, and the selection stays once the finger lifts.
+    func testAHoldOnAReplySelectsAWordThatStaysOnceTheFingerLifts() {
+        openSidebar()
+        guard let thread = row("Add API Rate Limiting") else { return XCTFail("no row") }
+        thread.tap()
+        XCTAssertTrue(newThread.waitForNonExistence(timeout: 3) || !newThread.isHittable)
+        let composer = app.textViews.firstMatch
+        XCTAssertTrue(composer.waitForExistence(timeout: 10))
+        sleep(2)
+        guard let reply = app.textViews.allElementsBoundByIndex.first(where: {
+            $0.isHittable && $0.frame.height > 40 && $0.frame.maxY < composer.frame.minY - 40
+        }) else { return XCTFail("no reply") }
+        reply.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: 40, dy: 10)).press(forDuration: 0.8)
+        let copy = app.menuItems["Copy"]
+        XCTAssertTrue(copy.waitForExistence(timeout: 3))
+        sleep(1)
+        XCTAssertTrue(copy.exists)
+    }
+
     func testATapBesideTheComposersTextBringsTheKeyboard() {
         let text = app.textViews.firstMatch
         XCTAssertTrue(text.waitForExistence(timeout: 10))

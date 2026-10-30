@@ -441,6 +441,23 @@ class GestureTests {
     private fun searchField(): UiObject2 =
         device.wait(Until.findObject(By.desc("Search")), 3_000) ?: device.wait(Until.findObject(By.text("Search")), 3_000)
 
+    /** A hold on a reply's word selects it, and the selection stays once the finger lifts. */
+    @Test
+    fun aHoldOnAReplySelectsAWordThatStaysOnceTheFingerLifts() {
+        openSidebar()
+        val thread = row("Add API Rate Limiting") ?: return fail("no row")
+        thread.click()
+        assertTrue(gone(newThread))
+        val reply = device.wait(Until.findObject(By.textContains("bucket lives in memory")), 10_000) ?: return fail("no reply")
+        val bounds = reply.visibleBounds
+        val (x, y) = bounds.left + bounds.width() / 4 to bounds.top + 20
+        device.swipe(x, y, x, y, 160)
+        val copy = By.text("Copy")
+        assertTrue(shown(copy))
+        Thread.sleep(1_000)
+        assertTrue(device.hasObject(copy))
+    }
+
     private fun fail(message: String) {
         assertEquals("", message)
     }
