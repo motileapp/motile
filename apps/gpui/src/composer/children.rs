@@ -17,13 +17,7 @@ const TEXT_SIZE: f32 = 12.5;
 
 /// Above the composer of a thread whose agent started agents that wait for the user: which, and
 /// the way to the first of them, where it is answered.
-pub fn children_strip(
-    store: &Entity<Store>,
-    text: String,
-    first: &WaitingChild,
-    count: usize,
-    cx: &App,
-) -> impl IntoElement {
+pub fn children_strip(store: &Entity<Store>, text: String, first: &WaitingChild, count: usize, cx: &App) -> Div {
     let c = colors(cx);
     let (word, symbol) = ask_label(first.ask);
     // A narrow composer says what is asked without naming the agent.

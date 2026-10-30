@@ -62,13 +62,7 @@ pub(super) fn strip(top: bool, height: Option<f32>, cx: &App) -> Div {
 
 /// The agent is watching something it left running: the strip says for how long, which agents
 /// it started work meanwhile, and has the button that stops it.
-pub fn monitoring_strip(
-    store: &Entity<Store>,
-    thread: &ThreadInfo,
-    width: f32,
-    window: &mut Window,
-    cx: &App,
-) -> impl IntoElement {
+pub fn monitoring_strip(store: &Entity<Store>, thread: &ThreadInfo, width: f32, window: &mut Window, cx: &App) -> Div {
     let c = colors(cx);
     let children = thread.children.as_ref().filter(|children| children.running_text.is_some());
     let help = if children.is_some() { "Stop monitoring and its agents" } else { "Stop monitoring" };
@@ -128,7 +122,7 @@ pub fn agents_strip(
     width: f32,
     window: &mut Window,
     cx: &App,
-) -> impl IntoElement {
+) -> Div {
     let stop = stops.then(|| stop_button(store, "stop-agents", "Stop its agents", cx));
     let room = width - strip_sides() - INSET - SPACER - stop.as_ref().map_or(0., |stop| stop.natural_width(window, cx));
     strip(true, Some(HEIGHT), cx)
@@ -202,7 +196,7 @@ fn agents_button(store: &Entity<Store>, children: &Children, room: f32, window: 
 
 /// Why the agent stopped before it finished: the usage limit, with when the thread goes on by
 /// itself, or a restart of the server. The agent is continued from here.
-pub fn interruption_strip(store: &Entity<Store>, interruption: Interruption, cx: &App) -> impl IntoElement {
+pub fn interruption_strip(store: &Entity<Store>, interruption: Interruption, cx: &App) -> Div {
     let c = colors(cx);
     let at = now();
     let title = interruption_title(interruption);
@@ -349,7 +343,7 @@ pub fn waiting_strip(
     count: usize,
     questions: Option<Entity<Questions>>,
     cx: &App,
-) -> impl IntoElement {
+) -> Div {
     let content = match questions {
         Some(questions) => div().p(px(PADDING)).child(questions).into_any_element(),
         None => waiting_call(store, approval, count, cx).into_any_element(),

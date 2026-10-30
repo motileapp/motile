@@ -832,20 +832,23 @@ impl Render for Composer {
         let interrupted = thread.as_ref().and_then(|thread| interruption(thread, store));
         let project = store.composer_project();
         let server = project.as_ref().and_then(|project| store.server(Some(&project.server_id)).cloned());
-        let top_strip: Option<AnyElement> = if let Some(approval) = &approval {
+        let skill_menu_open = store.skills.menu.is_some() || store.skills.loading;
+        let top_strip: Option<Div> = if let Some(approval) = &approval {
             let questions = self.questions.get(&approval.id).cloned();
-            Some(waiting_strip(&self.store, approval, count, questions, cx).into_any_element())
+            Some(waiting_strip(&self.store, approval, count, questions, cx))
         } else if let Some((text, first, count)) = waiting_children {
-            Some(children::children_strip(&self.store, text, &first, count, cx).into_any_element())
+            Some(children::children_strip(&self.store, text, &first, count, cx))
         } else if let Some(interruption) = interrupted {
-            Some(interruption_strip(&self.store, interruption, cx).into_any_element())
+            Some(interruption_strip(&self.store, interruption, cx))
         } else if let Some(thread) = thread.as_ref().filter(|_| monitoring) {
-            Some(monitoring_strip(&self.store, thread, self.width, window, cx).into_any_element())
+            Some(monitoring_strip(&self.store, thread, self.width, window, cx))
         } else {
-            working_children.map(|(children, stops)| {
-                agents_strip(&self.store, &children, stops, self.width, window, cx).into_any_element()
-            })
+            working_children
+                .map(|(children, stops)| agents_strip(&self.store, &children, stops, self.width, window, cx))
         };
+        // Under the skill menu, whose corners are the rounded ones, the strip is square.
+        let top_radius = if skill_menu_open { 0. } else { strips::STRIP_RADIUS };
+        let top_strip = top_strip.map(|strip| strip.rounded_t(px(top_radius)));
         let bottom_strip = project.map(|project| {
             let picker = self.branch_picker.clone();
             context_strip(&self.store, &project, server.as_ref(), &self.branch_anchor, picker, self.width, window, cx)
@@ -896,7 +899,7 @@ impl Render for Composer {
                                 .flex_none()
                                 .h(px(top_height))
                                 .mx(px(RADIUS))
-                                .rounded_t(px(strips::STRIP_RADIUS))
+                                .rounded_t(px(top_radius))
                                 .bg(c.composer)
                                 .shadow(shadow.clone()),
                         )

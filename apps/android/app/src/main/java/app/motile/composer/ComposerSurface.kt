@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Shape
@@ -34,7 +35,8 @@ fun Modifier.composerSurface(shape: Shape, shadow: ShadowSize? = null): Modifier
 /**
  * A strip against the composer's top or bottom, on the composer's surface: rounded on its outer
  * corners and open where it meets the composer. It stands in from the composer's sides by the
- * composer's corner radius, so it meets the composer's straight edge.
+ * composer's corner radius, so it meets the composer's straight edge. Under the skill menu, whose
+ * corners are the rounded ones, it is square.
  */
 object ComposerStrip {
     enum class Edge { Top, Bottom }
@@ -52,11 +54,13 @@ object ComposerStrip {
     val overlap = 1.dp
 }
 
+val LocalUnderSkillMenu = compositionLocalOf { false }
+
 /** Makes the view a strip of the composer on `edge`; a `height` of null makes it as tall as what is in it. */
 @Composable
 fun Modifier.composerStrip(edge: ComposerStrip.Edge, height: Dp? = ComposerStrip.height): Modifier {
     val top = edge == ComposerStrip.Edge.Top
-    val radius = ComposerStrip.radius
+    val radius = if (LocalUnderSkillMenu.current) 0.dp else ComposerStrip.radius
     val shape = if (top) RoundedCornerShape(topStart = radius, topEnd = radius) else RoundedCornerShape(bottomStart = radius, bottomEnd = radius)
     val sized = if (height == null) Modifier else Modifier.height(height + ComposerStrip.overlap)
     val hidden = if (top) Modifier.padding(bottom = ComposerStrip.overlap) else Modifier.padding(top = ComposerStrip.overlap)

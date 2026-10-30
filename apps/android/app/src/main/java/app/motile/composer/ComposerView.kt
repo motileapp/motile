@@ -100,13 +100,15 @@ fun ComposerView(modifier: Modifier = Modifier) {
                     val children = thread?.children
                     val waitingChild = children?.waiting?.firstOrNull()
                     val waitingText = children?.waitingText
-                    when {
-                        thread != null && approval != null -> WaitingStrip(approval, store.activity.approvals.size)
-                        waitingChild != null && waitingText != null -> ChildrenStrip(waitingText, waitingChild, children.waiting.size)
-                        thread != null && !thread.busy && !store.activity.busy && interruption != null -> InterruptionStrip(interruption)
-                        thread != null && store.activity.monitoring -> MonitoringStrip(thread)
-                        thread != null && children?.runningText != null ->
-                            AgentsStrip(children.runningText, children, stops = thread.waitsOnAgents && !store.activity.running)
+                    CompositionLocalProvider(LocalUnderSkillMenu provides (store.skillMenu != null)) {
+                        when {
+                            thread != null && approval != null -> WaitingStrip(approval, store.activity.approvals.size)
+                            waitingChild != null && waitingText != null -> ChildrenStrip(waitingText, waitingChild, children.waiting.size)
+                            thread != null && !thread.busy && !store.activity.busy && interruption != null -> InterruptionStrip(interruption)
+                            thread != null && store.activity.monitoring -> MonitoringStrip(thread)
+                            thread != null && children?.runningText != null ->
+                                AgentsStrip(children.runningText, children, stops = thread.waitsOnAgents && !store.activity.running)
+                        }
                     }
                     ComposerBox(model, focus, press)
                 }

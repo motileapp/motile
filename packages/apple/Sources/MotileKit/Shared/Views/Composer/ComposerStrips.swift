@@ -2,8 +2,11 @@ import SwiftUI
 
 /// A strip against the composer's top or bottom, on the composer's surface: rounded on
 /// its outer corners and open where it meets the composer. It stands in from the composer's
-/// sides by the composer's corner radius, so it meets the composer's straight edge.
+/// sides by the composer's corner radius, so it meets the composer's straight edge. Under the
+/// skill menu, whose corners are the rounded ones, it is square.
 struct ComposerStrip: ViewModifier {
+    @Environment(\.underSkillMenu) private var underSkillMenu
+
     enum Edge {
         case top, bottom
     }
@@ -29,7 +32,7 @@ struct ComposerStrip: ViewModifier {
         content
             .padding(hidden, Self.overlap)
             .frame(height: height.map { $0 + Self.overlap })
-            .composerSurface(in: StripShape(edge: edge))
+            .composerSurface(in: StripShape(edge: edge, radius: underSkillMenu ? 0 : Self.radius))
             .padding(.horizontal, ComposerView.radius)
             .padding(hidden, -Self.overlap)
     }
@@ -38,12 +41,16 @@ struct ComposerStrip: ViewModifier {
     static let overlap: CGFloat = 1
 }
 
+extension EnvironmentValues {
+    @Entry var underSkillMenu = false
+}
+
 /// The strip's outline, rounded on the two outer corners.
 struct StripShape: Shape {
     let edge: ComposerStrip.Edge
+    var radius = ComposerStrip.radius
 
     func path(in rect: CGRect) -> Path {
-        let radius = ComposerStrip.radius
         var path = Path()
         switch edge {
         case .top:
