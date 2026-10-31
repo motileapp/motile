@@ -210,13 +210,24 @@ final class AppUpdater: NSObject, URLSessionDownloadDelegate {
         return (information as? [String: Any])?[kSecCodeInfoTeamIdentifier as String] as? String
     }
 
-    /// The new client has to be intact and meet this client's own requirement: the same identifier,
-    /// signed by the same developer.
+    /// The identifiers the client is released under: the current one and the one before it.
+    private static let identifiers = ["app.motile.motile", "app.motile.mac"]
+
+    /// The new client has to be intact, signed with Developer ID by the same team, under one of the
+    /// client's identifiers.
+    private static func rule(team: String) -> String {
+        let names = identifiers.map { "identifier \"\($0)\"" }.joined(separator: " or ")
+        return "anchor apple generic and certificate 1[field.1.2.840.113635.100.6.2.6] "
+            + "and certificate leaf[field.1.2.840.113635.100.6.1.13] "
+            + "and certificate leaf[subject.OU] = \"\(team)\" and (\(names))"
+    }
+
     private static func verify(_ app: URL) throws {
         let notOurs = Failure(message: "The download isn’t signed by Motile’s developer, so it wasn’t installed.")
-        guard let running = runningCode() else { throw notOurs }
+        guard let team = team(of: runningCode()) else { throw notOurs }
         var requirement: SecRequirement?
-        guard SecCodeCopyDesignatedRequirement(running, [], &requirement) == errSecSuccess, let requirement else { throw notOurs }
+        guard SecRequirementCreateWithString(rule(team: team) as CFString, [], &requirement) == errSecSuccess,
+              let requirement else { throw notOurs }
         var downloaded: SecStaticCode?
         guard SecStaticCodeCreateWithPath(app as CFURL, [], &downloaded) == errSecSuccess, let downloaded else { throw notOurs }
         let strict = SecCSFlags(rawValue: kSecCSCheckAllArchitectures | kSecCSCheckNestedCode | kSecCSStrictValidate)
