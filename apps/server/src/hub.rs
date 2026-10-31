@@ -673,14 +673,24 @@ impl Hub {
     /// Adds an account of an agent or changes one. Threads whose sessions it no longer has start
     /// new ones, told what was said.
     pub async fn save_agent_account(self: &Arc<Self>, account: AgentAccount) -> anyhow::Result<String> {
+        self.keep_agent_account(account, None).await
+    }
+
+    /// Saves the account, signed in as `signed_in_as` when that is known already.
+    async fn keep_agent_account(
+        self: &Arc<Self>,
+        account: AgentAccount,
+        signed_in_as: Option<(Option<String>, Option<String>)>,
+    ) -> anyhow::Result<String> {
         let mut threads = self.every_thread().await;
         let accounts = self.agent_accounts();
         let mut account = agent_accounts::checked(account, &accounts)?;
         agent_accounts::prepare(&account, &self.environment)?;
         let before = accounts.iter().find(|kept| kept.id == account.id);
         // Who is signed in is known again once the agent has said, unless it signs in as before.
-        (account.email, account.plan) = match before {
-            Some(before) if before.folder == account.folder && before.variables == account.variables => {
+        (account.email, account.plan) = match (signed_in_as, before) {
+            (Some(signed_in_as), _) => signed_in_as,
+            (None, Some(before)) if before.folder == account.folder && before.variables == account.variables => {
                 (before.email.clone(), before.plan.clone())
             }
             _ => (None, None),
@@ -724,11 +734,12 @@ impl Hub {
         let accounts = self.agent_accounts();
         let folder = agent_accounts::checked(account.clone(), &accounts)?.folder;
         let environment = self.sign_ins.finish(id, code, &folder).await?;
-        let account = self.save_agent_account(account).await?;
-        let (email, plan) = limits::claude_login(&environment).await.unwrap_or_else(|error| {
-            tracing::warn!("couldn't read who signed in: {error:#}");
-            (None, None)
-        });
+        let signed_in_as = limits::claude_login(&environment)
+            .await
+            .inspect_err(|error| tracing::warn!("couldn't read who signed in: {error:#}"))
+            .ok();
+        let account = self.keep_agent_account(account, signed_in_as.clone()).await?;
+        let (email, plan) = signed_in_as.unwrap_or_default();
         Ok(Message::SignedIn { account, email, plan })
     }
 
