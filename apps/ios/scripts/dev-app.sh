@@ -13,7 +13,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 source ../macos/scripts/dev-stack.sh
 SIM="${MOTILE_SIM:-iPhone 17}"
-BUNDLE=app.motile.ios
+BUNDLE=app.motile.motile
 
 if [ "${1:-}" = "--stop" ]; then
     xcrun simctl shutdown "$SIM" 2>/dev/null || true

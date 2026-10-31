@@ -303,7 +303,7 @@
 					Security,
 					"-liconv",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = app.motile.ios;
+				PRODUCT_BUNDLE_IDENTIFIER = app.motile.motile;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
@@ -345,7 +345,7 @@
 					Security,
 					"-liconv",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = app.motile.ios;
+				PRODUCT_BUNDLE_IDENTIFIER = app.motile.motile;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "$(IOS_PROFILE_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
@@ -362,7 +362,7 @@
 				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = x86_64;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 0.0.0;
-				PRODUCT_BUNDLE_IDENTIFIER = app.motile.ios.uitests;
+				PRODUCT_BUNDLE_IDENTIFIER = app.motile.motile.uitests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
@@ -379,7 +379,7 @@
 				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = x86_64;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 0.0.0;
-				PRODUCT_BUNDLE_IDENTIFIER = app.motile.ios.uitests;
+				PRODUCT_BUNDLE_IDENTIFIER = app.motile.motile.uitests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
