@@ -88,7 +88,7 @@
   --opacity-disabled: 45%;
   --opacity-lit: 88%;
   --opacity-shadow: 6%;
-  --opacity-shadow-stronger: 12%;
+  --opacity-shadow-stronger: 10%;
   --opacity-shadow-strongest: 24%;
   --opacity-color-tint: 12%;
   --opacity-color-tint-stronger: 20%;
@@ -189,7 +189,7 @@
   --opacity-disabled: 45%;
   --opacity-lit: 88%;
   --opacity-shadow: 20%;
-  --opacity-shadow-stronger: 50%;
+  --opacity-shadow-stronger: 60%;
   --opacity-shadow-strongest: 70%;
   --opacity-color-tint: 10%;
   --opacity-color-tint-stronger: 16%;
