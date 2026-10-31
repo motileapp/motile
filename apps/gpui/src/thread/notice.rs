@@ -70,7 +70,7 @@ pub fn notice_view(store: &Entity<Store>, notice: &Notice, cx: &App) -> impl Int
         .rounded(px(NOTICE_RADIUS))
         .border_1()
         .border_color(c.border_popover)
-        .shadow(c.shadow(ShadowSize::Md, Opacity::Shadow))
+        .shadow(c.shadow(ShadowSize::Lg, Opacity::ShadowStronger))
         .flex()
         .items_start()
         .gap(px(10.))

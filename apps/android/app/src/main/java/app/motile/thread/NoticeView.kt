@@ -30,6 +30,7 @@ import app.motile.theme.ControlSize
 import app.motile.theme.LocalForeground
 import app.motile.theme.LocalRow
 import app.motile.theme.LocalSurface
+import app.motile.theme.Opacity
 import app.motile.theme.Radius
 import app.motile.theme.ShadowSize
 import app.motile.theme.Surface
@@ -76,7 +77,7 @@ fun NoticeView(notice: Notice, modifier: Modifier = Modifier) {
         Box(
             modifier
                 .widthIn(max = NoticeView.maxWidth)
-                .shadow(ShadowSize.Md, NoticeView.shape)
+                .shadow(ShadowSize.Lg, NoticeView.shape, Opacity.ShadowStronger)
                 .background(palette.popover, NoticeView.shape)
                 .border(1.dp, palette.borderPopover, NoticeView.shape),
         ) {

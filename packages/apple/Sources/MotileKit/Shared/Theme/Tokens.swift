@@ -288,7 +288,7 @@ enum Opacity {
         case .overlayPulled: 0.4
         case .disabled: 0.45
         case .lit: 0.88
-        case .shadow: 0.2
+        case .shadow: 0.3
         case .shadowStronger: 0.6
         case .shadowStrongest: 0.7
         case .colorTint: 0.1
