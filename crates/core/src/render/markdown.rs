@@ -156,6 +156,8 @@ pub fn parse(markdown: &str) -> Vec<Block> {
 /// Like `parse`, with the images that point at one of `shown` as blocks of their own.
 pub fn parse_showing(markdown: &str, shown: &[&str]) -> Vec<Block> {
     let options = Options::ENABLE_TABLES | Options::ENABLE_STRIKETHROUGH | Options::ENABLE_TASKLISTS;
+    let markdown = motile_protocol::media::bracket_spaced_images(markdown);
+    let markdown = markdown.as_ref();
     let mut builder = Builder { shown, ..Builder::default() };
     for (event, range) in TextMergeWithOffset::new(Parser::new_ext(markdown, options).into_offset_iter()) {
         if let Event::Start(Tag::CodeBlock(CodeBlockKind::Fenced(_))) = &event {
@@ -803,6 +805,14 @@ mod tests {
         assert_eq!(blocks[7], image("b.png", "cell"));
         assert_eq!(prose(&blocks, 8).text, "End");
         assert_eq!(blocks.len(), 9);
+    }
+
+    #[test]
+    fn an_image_path_with_spaces_is_shown() {
+        let blocks = parse_showing("Here:\n\n![Book](/out/A b (Dort).epub)", &["/out/A b (Dort).epub"]);
+
+        assert_eq!(prose(&blocks, 0).text, "Here:");
+        assert_eq!(blocks[1], Block::Image { src: "/out/A b (Dort).epub".into(), alt: "Book".into() });
     }
 
     #[test]
