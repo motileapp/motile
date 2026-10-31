@@ -68,7 +68,7 @@ struct NoticeView: View {
         .background {
             RoundedRectangle(cornerRadius: Self.radius, style: .continuous)
                 .fill(Color.themePopover)
-                .shadow(.md)
+                .shadow(.lg, .shadowStronger)
         }
         .overlay {
             RoundedRectangle(cornerRadius: Self.radius, style: .continuous).strokeBorder(Color.themeBorderPopover, lineWidth: 1)

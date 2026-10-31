@@ -403,7 +403,7 @@ impl Opacity {
             Opacity::OverlayPulled => 0.4,
             Opacity::Disabled => 0.45,
             Opacity::Lit => 0.88,
-            Opacity::Shadow => 0.2,
+            Opacity::Shadow => 0.3,
             Opacity::ShadowStronger => 0.6,
             Opacity::ShadowStrongest => 0.7,
             Opacity::ColorTint => 0.1,
