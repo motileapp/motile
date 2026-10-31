@@ -66,7 +66,8 @@ pub const REGISTER: &str = "--register";
 #[cfg(target_os = "linux")]
 pub fn register_scheme() {
     const ICON: &[u8] = include_bytes!("../assets/icon.png");
-    const NAME: &str = "app.motile.gpui";
+    const NAME: &str = "app.motile.motile";
+    const FORMER: &str = "app.motile.gpui";
 
     let Ok(program) = std::env::current_exe() else { return };
     let Some(share) = std::env::var_os("XDG_DATA_HOME")
@@ -84,6 +85,8 @@ pub fn register_scheme() {
         desktop_quoted(&program.to_string_lossy())
     );
     let applications = share.join("applications");
+    let _ = std::fs::remove_file(applications.join(format!("{FORMER}.desktop")));
+    let _ = std::fs::remove_file(share.join(format!("icons/hicolor/512x512/apps/{FORMER}.png")));
     let file = applications.join(format!("{NAME}.desktop"));
     let written = |path: &std::path::Path, bytes: &[u8]| -> bool {
         if std::fs::read(path).is_ok_and(|kept| kept == bytes) {

@@ -377,7 +377,7 @@ The iOS app ported to Android, for phones and tablets, from Android 10. A Gradle
 run `./gradlew` from `apps/android`, with a JDK 21 (`JAVA_HOME`). It does what the iOS app does, the
 way iOS does it, with Android's own facilities where iOS uses the system's: Custom Tabs for signing
 in, the photo picker and the camera for attachments, the share sheet, Media3 for videos, the back
-gesture for what Esc does. Its package is `app.motile`, its application `app.motile.android`.
+gesture for what Esc does. Its package is `app.motile`, its application `app.motile.motile`.
 
 - `core/`: the Rust core's JNI crate (`motile-android`, a member of the workspace), which wraps
   `crates/core/src/ffi.rs`. Its events wait in a queue the app's event thread takes them from, so no

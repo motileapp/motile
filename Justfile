@@ -1,6 +1,6 @@
 set shell := ["bash", "-euo", "pipefail", "-c"]
 
-app_id := "app.motile.gpui"
+app_id := "app.motile.motile"
 prefix := env("PREFIX", if `id -u` == "0" { "/usr/local" } else { home_directory() / ".local" })
 client := prefix / "bin/motile-gpui"
 desktop_entry := prefix / "share/applications" / (app_id + ".desktop")

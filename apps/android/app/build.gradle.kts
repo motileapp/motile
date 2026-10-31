@@ -30,7 +30,7 @@ android {
     ndkVersion = "28.2.13676358"
 
     defaultConfig {
-        applicationId = "app.motile.android"
+        applicationId = "app.motile.motile"
         minSdk = 29
         targetSdk = 36
         versionName = cargoVersion

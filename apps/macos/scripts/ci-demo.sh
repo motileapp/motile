@@ -78,7 +78,8 @@ git -C "$PROJECT" -c user.name=Demo -c user.email=demo@motile.app add -A && git 
 git -C "$PROJECT" branch release 2>/dev/null || true
 
 echo "▸ Starting the client…"
-defaults delete app.motile.mac >/dev/null 2>&1 || true
+defaults delete app.motile.motile >/dev/null 2>&1 || true
+defaults write app.motile.motile adoptedFormerSettings -bool true
 MOTILE_DEMO=1 MOTILE_DEMO_OUTPUT="$OUT" MOTILE_DEMO_TOKEN_FILE="$WORK/token" MOTILE_DEMO_PROJECT="$PROJECT" \
     MOTILE_DATA_DIR="$WORK/app" MOTILE_AUTH_URL="$AUTH_URL" MOTILE_LOCAL=1 MOTILE_SERVER_ADDR="127.0.0.1:$SERVER_PORT" \
     "$APP" > "$OUT/app.log" 2>&1 &

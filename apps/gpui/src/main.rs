@@ -127,7 +127,7 @@ fn main() {
             // The top bar is drawn here and moves the window itself; AppKit would otherwise hold
             // clicks in it back while it waits to see whether they are double clicks.
             app_owns_titlebar_drag: true,
-            app_id: Some("app.motile.gpui".into()),
+            app_id: Some("app.motile.motile".into()),
             // Where the desktop draws no frame, as GNOME under Wayland, the app draws its own.
             window_decorations: Some(WindowDecorations::Server),
             ..Default::default()

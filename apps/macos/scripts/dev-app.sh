@@ -31,7 +31,7 @@ if ! current app "$BUILT"; then
     stop app
     rm -rf "$APP"
     cp -R "build/Motile Dev.app" "$APP"
-    plutil -replace CFBundleIdentifier -string app.motile.mac.dev "$APP/Contents/Info.plist"
+    plutil -replace CFBundleIdentifier -string app.motile.motile.dev "$APP/Contents/Info.plist"
     codesign --force --deep --sign - "$APP" >/dev/null 2>&1
     MOTILE_DATA_DIR="$DEV/app" nohup "$APP/Contents/MacOS/Motile" > "$DEV/app.log" 2>&1 &
     started app $! "$BUILT"

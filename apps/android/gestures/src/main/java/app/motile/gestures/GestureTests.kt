@@ -30,7 +30,7 @@ import org.junit.runner.RunWith
 class GestureTests {
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val device = UiDevice.getInstance(instrumentation)
-    private val packageName = "app.motile.android"
+    private val packageName = "app.motile.motile"
 
     /** What the screen showed when a test failed: a picture and its views, in /data/local/tmp/motile-failures. */
     @get:Rule

@@ -16,7 +16,23 @@ public func runMotile() {
         return
     }
     #endif
+    adoptFormerSettings()
     MotileApp.main()
+}
+
+/// Brings over the settings the Mac app kept before its identifier became app.motile.motile.
+private func adoptFormerSettings() {
+    let defaults = UserDefaults.standard
+    let adopted = "adoptedFormerSettings"
+    guard !defaults.bool(forKey: adopted), let identifier = Bundle.main.bundleIdentifier else { return }
+    let former = identifier.replacingOccurrences(of: "app.motile.motile", with: "app.motile.mac")
+    if former != identifier, let settings = defaults.persistentDomain(forName: former) {
+        let own = defaults.persistentDomain(forName: identifier) ?? [:]
+        for (key, value) in settings where own[key] == nil {
+            defaults.set(value, forKey: key)
+        }
+    }
+    defaults.set(true, forKey: adopted)
 }
 
 struct MotileApp: App {

@@ -2,6 +2,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- Sees the client, to start it. -->
     <queries>
-        <package android:name="app.motile.android" />
+        <package android:name="app.motile.motile" />
     </queries>
 </manifest>

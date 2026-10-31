@@ -7,7 +7,7 @@ export JAVA_HOME="${JAVA_HOME:-/opt/homebrew/opt/openjdk@21}"
 ADB="$ANDROID_HOME/platform-tools/adb"
 AVD="${MOTILE_AVD:-motile}"
 IMAGE="system-images;android-36;google_apis;$( [ "$(uname -m)" = arm64 ] && echo arm64-v8a || echo x86_64 )"
-PACKAGE=app.motile.android
+PACKAGE=app.motile.motile
 # The file of steps the dev app reads, in its own folder; scripts/do.sh adds to it.
 STEPS=/data/data/$PACKAGE/files/demo.steps
 

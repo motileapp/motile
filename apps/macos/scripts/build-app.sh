@@ -53,7 +53,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <key>CFBundleName</key><string>Motile</string>
     <key>CFBundleDisplayName</key><string>Motile</string>
     <key>CFBundleExecutable</key><string>Motile</string>
-    <key>CFBundleIdentifier</key><string>app.motile.mac</string>
+    <key>CFBundleIdentifier</key><string>app.motile.motile</string>
     <key>CFBundlePackageType</key><string>APPL</string>
     <key>CFBundleShortVersionString</key><string>$VERSION</string>
     <key>CFBundleVersion</key><string>$VERSION</string>
