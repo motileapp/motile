@@ -1,6 +1,10 @@
 //! How the images, videos and other files a thread shows are named: by their contents, so a server
 //! and a client that both have a file call it the same.
 
+use std::borrow::Cow;
+use std::ops::Range;
+
+use pulldown_cmark::{Event, Options, Parser, Tag};
 use sha2::{Digest, Sha256};
 
 pub const IMAGES: [&str; 5] = ["png", "jpg", "jpeg", "gif", "webp"];
@@ -52,6 +56,77 @@ pub fn is_id(id: &str) -> bool {
         && extension.is_none_or(is_extension)
 }
 
+/// `text` with the path of each image that has spaces in angle brackets, as Markdown asks of one
+/// and agents often leave out: `![Report](/a b.pdf)` reads as `![Report](</a b.pdf>)`.
+pub fn bracket_spaced_images(text: &str) -> Cow<'_, str> {
+    let mut code: Option<Vec<Range<usize>>> = None;
+    let (mut bracketed, mut copied, mut from) = (String::new(), 0, 0);
+    while let Some(found) = text[from..].find("![") {
+        let alt = from + found + 2;
+        from = alt;
+        let Some((path, end)) = spaced_path(text, alt) else { continue };
+        if code.get_or_insert_with(|| code_ranges(text)).iter().any(|range| range.contains(&alt)) {
+            continue;
+        }
+        bracketed.push_str(&text[copied..path.start]);
+        bracketed.push('<');
+        bracketed.push_str(&text[path.clone()]);
+        bracketed.push('>');
+        (copied, from) = (path.end, end);
+    }
+    if copied == 0 {
+        return Cow::Borrowed(text);
+    }
+    bracketed.push_str(&text[copied..]);
+    Cow::Owned(bracketed)
+}
+
+/// Where the path of the image whose alt text starts at `alt` is, when it has spaces and no angle
+/// brackets, and where the image ends.
+fn spaced_path(text: &str, alt: usize) -> Option<(Range<usize>, usize)> {
+    let line = &text[alt..text[alt..].find('\n').map_or(text.len(), |end| alt + end)];
+    let alt_end = closing(line, '[', ']')?;
+    let inside = line[alt_end + 1..].strip_prefix('(')?;
+    let inside = &inside[..closing(inside, '(', ')')?];
+    let path = match inside.strip_suffix('"').and_then(|quoted| quoted.rfind(" \"")) {
+        Some(title) => &inside[..title],
+        None => inside,
+    };
+    let leading = path.len() - path.trim_start().len();
+    let path = path.trim();
+    if !path.contains(' ') || path.contains(['<', '>']) {
+        return None;
+    }
+    let start = alt + alt_end + 2 + leading;
+    Some((start..start + path.len(), alt + alt_end + 2 + inside.len() + 1))
+}
+
+/// Where in `text` the `close` that ends what `open`s nest in is, after a backslash's escape.
+fn closing(text: &str, open: char, close: char) -> Option<usize> {
+    let (mut depth, mut escaped) = (0, false);
+    for (index, character) in text.char_indices() {
+        match character {
+            _ if escaped => escaped = false,
+            '\\' => escaped = true,
+            _ if character == open => depth += 1,
+            _ if character == close && depth == 0 => return Some(index),
+            _ if character == close => depth -= 1,
+            _ => {}
+        }
+    }
+    None
+}
+
+/// The code and HTML of `text`, where an image is only text.
+fn code_ranges(text: &str) -> Vec<Range<usize>> {
+    let options = Options::ENABLE_TABLES | Options::ENABLE_STRIKETHROUGH | Options::ENABLE_TASKLISTS;
+    let ranges = Parser::new_ext(text, options).into_offset_iter().filter_map(|(event, range)| match event {
+        Event::Code(_) | Event::InlineHtml(_) | Event::Start(Tag::CodeBlock(_) | Tag::HtmlBlock) => Some(range),
+        _ => None,
+    });
+    ranges.collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -85,5 +160,22 @@ mod tests {
         assert_eq!(extension(std::path::Path::new("logs.tar.gz")), "gz");
         assert_eq!(extension(std::path::Path::new("Makefile")), "");
         assert_eq!(extension(std::path::Path::new("odd.ext-ension")), "");
+    }
+
+    #[test]
+    fn an_image_path_with_spaces_is_bracketed() {
+        let cases = [
+            ("![Book](/out/A b (Dort) - C.epub)", "![Book](</out/A b (Dort) - C.epub>)"),
+            (
+                "![Demo](my demo.mp4 \"my poster.png\") and ![x](y z.png)",
+                "![Demo](<my demo.mp4> \"my poster.png\") and ![x](<y z.png>)",
+            ),
+            ("![a [b] c]( a b.png )", "![a [b] c]( <a b.png> )"),
+            ("![a](a.png) ![b](<b c.png>) ![c](c d.png", "![a](a.png) ![b](<b c.png>) ![c](c d.png"),
+            ("`![a](a b.png)`\n\n```\n![a](a b.png)\n```", "`![a](a b.png)`\n\n```\n![a](a b.png)\n```"),
+        ];
+        for (text, read) in cases {
+            assert_eq!(bracket_spaced_images(text), read);
+        }
     }
 }

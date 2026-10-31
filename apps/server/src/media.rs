@@ -6,7 +6,7 @@ use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, bail};
-use motile_protocol::media::{MAX_SIZE, Namer, extension, is_id, kind};
+use motile_protocol::media::{MAX_SIZE, Namer, bracket_spaced_images, extension, is_id, kind};
 use motile_protocol::wire::Media;
 use pulldown_cmark::{Event, Options, Parser, Tag};
 
@@ -210,7 +210,8 @@ impl MediaStore {
 /// Where the images of a reply point, as the clients' Markdown parser reads them, with their titles.
 fn images(text: &str) -> Vec<(String, String)> {
     let options = Options::ENABLE_TABLES | Options::ENABLE_STRIKETHROUGH | Options::ENABLE_TASKLISTS;
-    let images = Parser::new_ext(text, options).filter_map(|event| match event {
+    let text = bracket_spaced_images(text);
+    let images = Parser::new_ext(&text, options).filter_map(|event| match event {
         Event::Start(Tag::Image { dest_url, title, .. }) => Some((dest_url.to_string(), title.to_string())),
         _ => None,
     });
@@ -294,8 +295,9 @@ mod tests {
         std::fs::write(dir.path().join("project/demo.mp4"), b"not really a video").unwrap();
         std::fs::write(dir.path().join("project/notes.png"), b"not an image").unwrap();
         std::fs::write(dir.path().join("project/report.pdf"), b"a report").unwrap();
+        std::fs::write(dir.path().join("project/my notes (1).txt"), b"notes").unwrap();
         std::fs::create_dir_all(dir.path().join("project/folder")).unwrap();
-        let text = "![a](shot.png) ![b](demo.mp4) ![c](notes.png) ![d](report.pdf) ![e](folder) ![f](https://example.com/a.png)";
+        let text = "![a](shot.png) ![b](demo.mp4) ![c](notes.png) ![d](report.pdf) ![e](folder) ![f](https://example.com/a.png) ![g](my notes (1).txt)";
 
         let captured = store.capture_new(text, &cwd, &[]);
         std::fs::remove_file(&shot).unwrap();
@@ -308,13 +310,14 @@ mod tests {
                 ("shot.png", false, false),
                 ("demo.mp4", true, false),
                 ("notes.png", false, true),
-                ("report.pdf", false, true)
+                ("report.pdf", false, true),
+                ("my notes (1).txt", false, true)
             ]
         );
         assert!(captured[3].id.ends_with(".pdf"));
         assert_eq!(std::fs::read(dir.path().join("media").join(&captured[0].id)).unwrap(), png(10, 20));
         assert_eq!(std::fs::read(dir.path().join("media").join(&captured[3].id)).unwrap(), b"a report");
-        assert_eq!(std::fs::read_dir(dir.path().join("media")).unwrap().count(), 4);
+        assert_eq!(std::fs::read_dir(dir.path().join("media")).unwrap().count(), 5);
     }
 
     #[test]
