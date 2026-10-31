@@ -48,7 +48,7 @@ class RowModel(
 ) {
     sealed interface Kind {
         /** `collapsible` when it is long enough to be shown cut, with a button that shows the rest. */
-        class User(val text: MessageText, val attachments: List<AttachedFile>, val values: SentValues?, val at: Double, val collapsible: Boolean) : Kind
+        class User(val text: MessageText, val attachments: List<AttachedFile>, val at: Double, val collapsible: Boolean) : Kind
         class Prose(val content: ProseContent) : Kind
         class Code(val content: CodeContent) : Kind
         /** A program the core runs, drawn from the tree it resolves. */
@@ -117,7 +117,7 @@ class RowModel(
         fun parse(json: JSON): RowModel? {
             val kind = when (json.string("kind")) {
                 "user" -> Kind.User(
-                    MessageText(json, muted = false), json.objects("attachments").map(::AttachedFile), json.obj("values")?.let(::SentValues), json.double("at"),
+                    MessageText(json, muted = false), json.objects("attachments").map(::AttachedFile), json.double("at"),
                     json.bool("collapsible"),
                 )
                 "prose" -> Kind.Prose(ProseContent(json))
@@ -145,7 +145,7 @@ class RowModel(
         /** A message on its way to the server. One sent while the agent works will wait for it, so it shows as it will once the server has it. */
         fun pending(text: String, attachments: List<AttachedFile>, queued: Boolean, skills: List<SkillSpan> = emptyList(), collapsible: Boolean = false): RowModel {
             val message = MessageText(text, emptyList(), skills, muted = queued)
-            val kind = if (queued) Kind.Queued(QueuedContent(message, attachments, "Queued")) else Kind.User(message, attachments, null, Time.now(), collapsible)
+            val kind = if (queued) Kind.Queued(QueuedContent(message, attachments, "Queued")) else Kind.User(message, attachments, Time.now(), collapsible)
             return RowModel(pendingID, pendingID, false, kind)
         }
     }

@@ -19,7 +19,6 @@ use super::agents::{self, AgentState, AgentView, ThreadState, workflow_name};
 use super::highlight::{self, Incremental, Spans};
 use super::markdown::{self, Block, ParaKind, Prose};
 use super::openui::UiRow;
-use super::openui::sent::{SentValues, sent_values};
 
 /// Tool output beyond this is cut; nobody reads more of it in a chat.
 const MAX_OUTPUT_CHARS: usize = 20_000;
@@ -64,9 +63,6 @@ pub enum RowKind {
         /// The skills the message starts, each drawn as a chip in place of its `$name`.
         skills: Vec<SkillChip>,
         attachments: Vec<Attached>,
-        /// What programs sent with the message, drawn as a chip that opens them.
-        #[serde(skip_serializing_if = "Option::is_none")]
-        values: Option<SentValues>,
         at: f64,
         /// The message is long enough to be shown cut, with a button that shows the rest.
         #[serde(skip_serializing_if = "std::ops::Not::not")]
@@ -1244,14 +1240,13 @@ fn render(item: &Item, cwd: &str, started: &Started, streaming: Option<&mut Hash
         after: None,
     };
     match &item.kind {
-        ItemKind::User { text, attachments, skills, context, programs } => {
+        ItemKind::User { text, attachments, skills, .. } => {
             let attachments = attached(attachments, &item.media);
             let links = markdown::links_in(text);
             let skills = skill_chips(text, skills);
-            let values = sent_values(context.as_ref(), programs);
             let collapsible = collapses(text, &skills);
             let at = item.created_at;
-            vec![row(0, RowKind::User { text: text.clone(), links, skills, attachments, values, at, collapsible })]
+            vec![row(0, RowKind::User { text: text.clone(), links, skills, attachments, at, collapsible })]
         }
         ItemKind::Assistant { text } => render_markdown(item, text, streaming),
         ItemKind::Thinking { text } => vec![row(0, RowKind::Thinking { text: text.clone() })],

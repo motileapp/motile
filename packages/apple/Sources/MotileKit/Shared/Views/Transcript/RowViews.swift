@@ -79,8 +79,8 @@ class RowView: FlippedView {
     /// the main thread. A queued message is only estimated: it is always among the last rows.
     class func height(_ row: RowModel, width: CGFloat) -> CGFloat {
         switch row.kind {
-        case .user(let text, let attachments, let values, _, let collapsible):
-            let fit = BubbleFit(text: text, attachments: attachments, values: values, width: width, collapsible: collapsible)
+        case .user(let text, let attachments, _, let collapsible):
+            let fit = BubbleFit(text: text, attachments: attachments, width: width, collapsible: collapsible)
             let textHeight = fit.hasText ? TextMeasure.height(of: text, width: fit.innerWidth) : 0
             let tops = collapsible ? TextMeasure.lineTops(of: text, count: UserRowView.linesCounted, width: fit.innerWidth) : []
             return UserRowView.height(fit, shown: UserRowView.Shown(textHeight: textHeight, lineTops: tops, open: false))
@@ -100,11 +100,10 @@ class RowView: FlippedView {
     /// What the row would be without measuring its text, until it has been measured.
     class func estimatedHeight(_ row: RowModel, width: CGFloat) -> CGFloat {
         switch row.kind {
-        case .user(let text, let attachments, let values, _, let collapsible):
-            let chip = values == nil ? 0 : SentValuesChip.gap + SentValuesChip.size.height + BubbleFit.padding - 10
+        case .user(let text, let attachments, _, let collapsible):
             let full = estimatedTextHeight(text.length, width: width * 0.75)
             let shown = collapsible ? min(full, UserRowView.cutHeight + UserRowView.moreHeight) : full
-            return shown + 34 + chip + UserRowView.footHeight + AttachedFilesView.height(attachments, width: width)
+            return shown + 34 + UserRowView.footHeight + AttachedFilesView.height(attachments, width: width)
         case .prose(let text, _):
             return estimatedTextHeight(text.length, width: width) + ProseRowView.gap + row.above
         case .code(let content):
@@ -197,21 +196,17 @@ struct BubbleFit {
     let innerWidth: CGFloat
     let top: CGFloat
     let between: CGFloat
-    /// The room the chip of the message's values takes under the rest.
-    let chip: CGFloat
 
     /// A `collapsible` message is at least as wide as the button that shows the rest of it.
-    init(text: NSAttributedString, attachments: [AttachedFile], values: SentValues? = nil, width: CGFloat, least: CGFloat = 12, collapsible: Bool = false) {
+    init(text: NSAttributedString, attachments: [AttachedFile], width: CGFloat, least: CGFloat = 12, collapsible: Bool = false) {
         let widest = max(120, width * 0.8) - Self.padding * 2
         let natural = text.bounds(width: widest)
         hasText = text.length > 0
         files = AttachedFilesView.size(attachments, width: widest)
-        let chipWidth = values.map(SentValuesChip.width) ?? 0
         let buttonWidth = collapsible ? UserRowView.moreWidth : 0
-        innerWidth = min(widest, max(hasText ? ceil(natural.width) + 2 : 0, files.width, chipWidth, buttonWidth, least))
+        innerWidth = min(widest, max(hasText ? ceil(natural.width) + 2 : 0, files.width, buttonWidth, least))
         top = files.height > 0 ? Self.padding : 10
         between = files.height > 0 && hasText ? 8 : 0
-        chip = values == nil ? 0 : SentValuesChip.gap + SentValuesChip.size.height
     }
 }
 
@@ -222,10 +217,8 @@ final class UserRowView: RowView {
     private let text = RowTextView.make()
     private var more: ExpandButton!
     private let attachments = AttachedFilesView()
-    private let chip = SentValuesChip()
     private let meta = MessageMeta(trailing: true, tooltip: "Copy message")
     private var files: [AttachedFile] = []
-    private var values: SentValues?
     private var collapsible = false
     private var pending = false
 
@@ -252,7 +245,6 @@ final class UserRowView: RowView {
         }
         bubble.addSubview(more)
         bubble.addSubview(attachments)
-        bubble.addSubview(chip)
         addSubview(meta)
         meta.onCopy = { [weak self] in
             guard let self else { return }
@@ -268,14 +260,12 @@ final class UserRowView: RowView {
 
     override func configure(_ row: RowModel) {
         super.configure(row)
-        guard case .user(let content, let files, let values, let at, let collapsible) = row.kind else { return }
+        guard case .user(let content, let files, let at, let collapsible) = row.kind else { return }
         meta.show(Time.stamp(at))
         text.content = content
         self.files = files
-        self.values = values
         self.collapsible = collapsible
         more.dim()
-        chip.show(values)
         text.isHidden = content.length == 0
         attachments.show(files, owner: owner)
         pending = row.id == RowModel.pendingID
@@ -293,8 +283,8 @@ final class UserRowView: RowView {
 
     private static func bubbleHeight(_ fit: BubbleFit, shown: Shown) -> CGFloat {
         let more = shown.more ? moreHeight : 0
-        let bottom: CGFloat = if fit.chip > 0 { BubbleFit.padding } else if shown.more { ExpandButton.below } else if fit.hasText { 10 } else { BubbleFit.padding }
-        return fit.top + fit.files.height + fit.between + shown.textHeight + more + fit.chip + bottom
+        let bottom: CGFloat = if shown.more { ExpandButton.below } else if fit.hasText { 10 } else { BubbleFit.padding }
+        return fit.top + fit.files.height + fit.between + shown.textHeight + more + bottom
     }
 
     /// The text as the bubble shows it: a long message cut, unless it is open, with the button that
@@ -331,7 +321,7 @@ final class UserRowView: RowView {
 
     override func layout(width: CGFloat) -> CGFloat {
         let padding = BubbleFit.padding
-        let fit = BubbleFit(text: text.content, attachments: files, values: values, width: width, collapsible: collapsible)
+        let fit = BubbleFit(text: text.content, attachments: files, width: width, collapsible: collapsible)
         let textHeight = fit.hasText ? text.height(forWidth: fit.innerWidth) : 0
         let open = owner?.isExpanded(id: rowID) ?? false
         let tops = collapsible && fit.hasText ? text.lineTops(Self.linesCounted, forWidth: fit.innerWidth) : []
@@ -343,11 +333,6 @@ final class UserRowView: RowView {
         clip.frame = CGRect(x: padding, y: fit.top + fit.files.height + fit.between, width: fit.innerWidth, height: shown.textHeight)
         text.frame = CGRect(x: 0, y: 0, width: fit.innerWidth, height: textHeight)
         layoutMore(shown, open: open)
-        let above = shown.more ? clip.frame.maxY + Self.moreHeight : clip.frame.maxY
-        if let values {
-            let size = SentValuesChip.size
-            chip.frame = CGRect(x: padding, y: above + SentValuesChip.gap, width: SentValuesChip.width(values), height: size.height)
-        }
         meta.frame = CGRect(x: 0, y: bubble.frame.maxY + Self.metaGap, width: width, height: MessageMeta.height)
         return Self.height(fit, shown: shown)
     }

@@ -61,7 +61,6 @@ impl RowModel {
                 links: Vec::new(),
                 skills: Vec::new(),
                 attachments,
-                values: None,
                 at: crate::models::now(),
             }
         };
