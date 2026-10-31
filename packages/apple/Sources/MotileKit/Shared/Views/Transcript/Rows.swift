@@ -29,7 +29,7 @@ enum TranscriptColumn {
 final class RowModel {
     enum Kind {
         /// `collapsible` when it is long enough to be shown cut, with a button that shows the rest.
-        case user(text: NSAttributedString, attachments: [AttachedFile], values: SentValues?, at: Double, collapsible: Bool)
+        case user(text: NSAttributedString, attachments: [AttachedFile], at: Double, collapsible: Bool)
         /// `uncoloured` when code inside it still waits for highlighting.
         case prose(NSAttributedString, uncoloured: Bool)
         case code(CodeContent)
@@ -94,8 +94,7 @@ final class RowModel {
         switch json.string("kind") {
         case "user":
             let attachments = json.objects("attachments").map(AttachedFile.init(json:))
-            let values = SentValues(json: json.object("values"))
-            kind = .user(text: Typesetter.message(json), attachments: attachments, values: values, at: json.double("at"), collapsible: json.bool("collapsible"))
+            kind = .user(text: Typesetter.message(json), attachments: attachments, at: json.double("at"), collapsible: json.bool("collapsible"))
         case "prose":
             let uncoloured = json.objects("paras").contains { $0.string("kind") == "pre" && $0["spans"] as? [NSNumber] == nil }
             kind = .prose(Typesetter.prose(json), uncoloured: uncoloured)
@@ -149,7 +148,7 @@ final class RowModel {
             let content = QueuedContent(text: typeset, attachments: attachments, status: "Queued")
             return RowModel(id: pendingID, itemID: pendingID, kind: .queued(content))
         }
-        return RowModel(id: pendingID, itemID: pendingID, kind: .user(text: typeset, attachments: attachments, values: nil, at: Date().timeIntervalSince1970, collapsible: collapsible))
+        return RowModel(id: pendingID, itemID: pendingID, kind: .user(text: typeset, attachments: attachments, at: Date().timeIntervalSince1970, collapsible: collapsible))
     }
 
     static let pendingID = "pending"

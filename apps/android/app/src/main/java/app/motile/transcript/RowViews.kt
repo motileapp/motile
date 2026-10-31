@@ -189,7 +189,6 @@ private fun UserBubble(row: RowModel, user: RowModel.Kind.User, text: AnnotatedS
                     start = Bubble.PADDING.dp, end = Bubble.PADDING.dp,
                     top = if (hasFiles) Bubble.PADDING.dp else 10.dp,
                     bottom = when {
-                        user.values != null -> Bubble.PADDING.dp
                         more -> 0.dp
                         hasText -> 10.dp
                         else -> Bubble.PADDING.dp
@@ -207,12 +206,11 @@ private fun UserBubble(row: RowModel, user: RowModel.Kind.User, text: AnnotatedS
                             ActionButton(
                                 if (open) "Show less" else "Show more", variant = ButtonVariant.Ghost, prose = true, expanded = open,
                                 padding = Bubble.PADDING.dp - Cut.inset, stretches = true,
-                                margin = PaddingValues(start = Cut.inset, top = Cut.gap, bottom = if (user.values == null) Cut.below else 0.dp),
+                                margin = PaddingValues(start = Cut.inset, top = Cut.gap, bottom = Cut.below),
                             ) { actions.toggleExpansion(row.id) }
                         }
                     }
                 }
-                user.values?.let { SentValuesChip(it) }
             }
         }
         MessageMeta(Time.stamp(user.at), trailing = true, help = "Copy message", Modifier.padding(top = 4.dp, bottom = 25.dp)) {

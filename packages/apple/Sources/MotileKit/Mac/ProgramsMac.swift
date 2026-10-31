@@ -73,7 +73,7 @@ final class CarouselTrack: NSView {
 /// or a scroll of the transcript closes.
 final class ProgramPopoverPanel {
     private weak var anchor: NSView?
-    private var view: NSView = ProgramPanelView()
+    private let view = ProgramPanelView()
     private let onClose: () -> Void
     private var monitor: Any?
 
@@ -83,20 +83,8 @@ final class ProgramPopoverPanel {
     }
 
     func show(_ slot: UiSlot, host: ProgramHost?, surface: Surface) {
-        guard let panel = view as? ProgramPanelView else { return }
-        show { window in panel.show(slot, host: host, window: window) }
-    }
-
-    /// Shows a message's values in its place.
-    func show(_ values: SentValues) {
-        let panel = view as? SentValuesPanel ?? SentValuesPanel()
-        view = panel
-        show { window in panel.show(values, window: window) }
-    }
-
-    private func show(_ fill: (CGSize) -> CGSize) {
         guard let anchor, let content = anchor.window?.contentView else { return }
-        let size = fill(content.bounds.size)
+        let size = view.show(slot, host: host, window: content.bounds.size)
         place(size, anchor: anchor, in: content)
         if view.superview !== content { content.addSubview(view) }
         watch()
