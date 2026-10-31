@@ -1822,9 +1822,9 @@ async fn an_account_signs_in_with_the_code_its_page_showed_and_is_saved() {
     assert_eq!((email.as_deref(), plan.as_deref()), (Some("work@motile.app"), Some("Max")));
     let mut list = connection.follow(&Request::Subscribe).await.unwrap();
     let Message::Welcome { server, .. } = next(&mut list).await else { panic!("the list starts with a welcome") };
-    let saved: Vec<(&str, &str)> =
-        server.agent_accounts.iter().map(|kept| (kept.id.as_str(), kept.name.as_str())).collect();
-    assert_eq!(saved.last(), Some(&(account.as_str(), "Work")));
+    let saved = server.agent_accounts.last().unwrap();
+    assert_eq!((saved.id.as_str(), saved.name.as_str()), (account.as_str(), "Work"));
+    assert_eq!((saved.email.as_deref(), saved.plan.as_deref()), (Some("work@motile.app"), Some("Max")));
 
     let Message::SignInLink { id, .. } = start().await.unwrap() else { panic!("a sign-in starts with its link") };
     assert_eq!(connection.request(&Request::CancelSignIn { id: id.clone() }).await.unwrap(), Message::Ok);
