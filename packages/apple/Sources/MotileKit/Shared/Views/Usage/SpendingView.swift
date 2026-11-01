@@ -81,7 +81,7 @@ struct SpendingView: View {
                     .foregroundStyle(Color.themeMutedForeground)
                 if report.writingTokens > 0 {
                     let written = measure == .cost ? Self.cost(report.writingCostUSD) : Self.count(report.writingTokens)
-                    Text("\(written) of \(measure == .cost ? "it" : "them") for titles, branch names, commit messages and pull requests")
+                    Text("\(written) for titles, branch names, etc.")
                         .font(.caption)
                         .foregroundStyle(Color.themeMutedStrongerForeground)
                         .fixedSize(horizontal: false, vertical: true)
