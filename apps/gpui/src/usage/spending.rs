@@ -113,10 +113,7 @@ impl SpendingView {
                 c.muted_foreground,
             ))
             .when(report.writing_tokens > 0, |summary| {
-                summary.child(caption(
-                    format!("{written} for titles, branch names, etc."),
-                    c.muted_stronger_foreground,
-                ))
+                summary.child(caption(format!("{written} for titles, branch names, etc."), c.muted_stronger_foreground))
             })
             .when(cost_shown && report.unpriced_tokens > 0, |summary| {
                 let unpriced = count(report.unpriced_tokens);
