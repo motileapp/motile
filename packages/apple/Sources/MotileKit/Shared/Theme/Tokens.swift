@@ -299,7 +299,7 @@ enum Opacity {
         case .glow: 0.4
         case .glowFaint: 0.3
         case .glowBright: 0.5
-        case .glassTint: 0.4
+        case .glassTint: 0.5
         case .accentOpacity: 0.1
         }
     }
