@@ -197,6 +197,7 @@ private struct MediaPage: View {
                 image: image,
                 size: CGSize(width: CGFloat(image.width) / scale, height: CGFloat(image.height) / scale),
                 margin: .zero,
+                largestFit: ZoomingScrollView.viewerLargestFit,
                 onZoom: { zoomed = $0 },
                 tapped: tapped
             )
@@ -271,13 +272,15 @@ struct ZoomableImage: UIViewRepresentable {
     let size: CGSize
     let margin: CGSize
     var radius: CGFloat = 0
+    /// The most it is enlarged to fit, as a multiple of `size`.
+    var largestFit: CGFloat = 1
     /// The Mac's zoom keys. A screen is zoomed with fingers.
     var keys = true
     var onZoom: (Bool) -> Void = { _ in }
     var tapped: () -> Void = {}
 
     func makeUIView(context: Context) -> ZoomingScrollView {
-        ZoomingScrollView(margin: margin, radius: radius)
+        ZoomingScrollView(margin: margin, radius: radius, largestFit: largestFit)
     }
 
     func updateUIView(_ view: ZoomingScrollView, context: Context) {
@@ -290,15 +293,21 @@ struct ZoomableImage: UIViewRepresentable {
 /// An image that fits the screen until it is zoomed: by pinching or a double tap. Zoomed, it is
 /// moved by dragging.
 final class ZoomingScrollView: UIScrollView, UIScrollViewDelegate {
+    /// A small image is enlarged to fit the viewer, up to twice its size.
+    static let viewerLargestFit: CGFloat = 2
     var onZoom: (Bool) -> Void = { _ in }
     var tapped: () -> Void = {}
     private let margin: CGSize
+    private let largestFit: CGFloat
     private let picture = UIImageView()
     private var shown: AnyObject?
     private var laidOut = CGSize.zero
+    /// The scale that fit the last layout.
+    private var fitted: CGFloat = 1
 
-    init(margin: CGSize, radius: CGFloat) {
+    init(margin: CGSize, radius: CGFloat, largestFit: CGFloat) {
         self.margin = margin
+        self.largestFit = largestFit
         super.init(frame: .zero)
         delegate = self
         showsVerticalScrollIndicator = false
@@ -325,7 +334,7 @@ final class ZoomingScrollView: UIScrollView, UIScrollViewDelegate {
         guard size.width > 0, size.height > 0, bounds.width > 0 else { return 1 }
         let width = (bounds.width - 2 * margin.width) / size.width
         let height = (bounds.height - 2 * margin.height) / size.height
-        return max(0.01, min(1, width, height))
+        return max(0.01, min(largestFit, width, height))
     }
 
     func show(_ image: AnyObject, size: CGSize) {
@@ -342,16 +351,18 @@ final class ZoomingScrollView: UIScrollView, UIScrollViewDelegate {
         super.layoutSubviews()
         if bounds.size != laidOut {
             laidOut = bounds.size
-            refit(reset: zoomScale <= minimumZoomScale + 0.001)
+            refit(reset: abs(zoomScale - fitted) < 0.001)
         }
         center()
     }
 
     private func refit(reset: Bool) {
         guard bounds.width > 0 else { return }
-        minimumZoomScale = fit
-        maximumZoomScale = max(4, fit * 8)
-        if reset || zoomScale < fit { zoomScale = fit }
+        fitted = fit
+        // An image enlarged to fit can still be shown at its real size.
+        minimumZoomScale = min(fitted, 1)
+        maximumZoomScale = max(4, fitted * 8)
+        if reset || zoomScale < minimumZoomScale { zoomScale = fitted }
         center()
     }
 
@@ -366,13 +377,13 @@ final class ZoomingScrollView: UIScrollView, UIScrollViewDelegate {
 
     func scrollViewDidZoom(_ scrollView: UIScrollView) {
         center()
-        onZoom(zoomScale > minimumZoomScale + 0.001)
+        onZoom(zoomScale > fitted + 0.001)
     }
 
     @objc private func doubleTapped(_ recognizer: UITapGestureRecognizer) {
-        guard zoomScale <= minimumZoomScale + 0.001 else { return setZoomScale(minimumZoomScale, animated: true) }
+        guard abs(zoomScale - fitted) < 0.001 else { return setZoomScale(fitted, animated: true) }
         let point = recognizer.location(in: picture)
-        let scale = min(maximumZoomScale, max(minimumZoomScale * 2.5, 1))
+        let scale = min(maximumZoomScale, max(fitted * 2.5, 1))
         let size = CGSize(width: bounds.width / scale, height: bounds.height / scale)
         zoom(to: CGRect(x: point.x - size.width / 2, y: point.y - size.height / 2, width: size.width, height: size.height), animated: true)
     }

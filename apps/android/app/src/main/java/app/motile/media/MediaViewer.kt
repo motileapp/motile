@@ -51,12 +51,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.ScaleFactor
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -309,13 +311,19 @@ private fun ZoomableImage(image: ImageBitmap, onZoom: (Boolean) -> Unit, tapped:
     var offset by remember(image) { mutableStateOf(Offset.Zero) }
     var size by remember { mutableStateOf(IntSize.Zero) }
     fun clamped(value: Offset, at: Float): Offset {
-        val x = size.width * (at - 1) / 2
-        val y = size.height * (at - 1) / 2
+        val x = (size.width * (at - 1) / 2).coerceAtLeast(0f)
+        val y = (size.height * (at - 1) / 2).coerceAtLeast(0f)
         return Offset(value.x.coerceIn(-x, x), value.y.coerceIn(-y, y))
+    }
+    // The scale is the fitted image's; an image enlarged to fit can still be shown at its real size.
+    fun smallest(): Float {
+        if (size.width == 0 || size.height == 0) return 1f
+        val fit = FitAtMostTwice.computeScaleFactor(Size(image.width.toFloat(), image.height.toFloat()), Size(size.width.toFloat(), size.height.toFloat())).scaleX
+        return (1f / fit).coerceAtMost(1f)
     }
     fun zoom(to: Float, around: Offset) {
         val center = Offset(size.width / 2f, size.height / 2f)
-        val next = to.coerceIn(1f, 8f)
+        val next = to.coerceIn(smallest(), 8f)
         offset = clamped((around - center) - (around - center - offset) * (next / scale), next)
         scale = next
         if (scale <= 1.001f) offset = Offset.Zero
@@ -327,7 +335,7 @@ private fun ZoomableImage(image: ImageBitmap, onZoom: (Boolean) -> Unit, tapped:
             .onSizeChanged { size = it }
             .pointerInput(image) {
                 detectTapGestures(
-                    onDoubleTap = { point -> if (scale > 1.001f) zoom(1f, point) else zoom(2.5f, point) },
+                    onDoubleTap = { point -> if (abs(scale - 1f) > 0.001f) zoom(1f, point) else zoom(2.5f, point) },
                     onTap = { tapped() },
                 )
             }
@@ -354,8 +362,16 @@ private fun ZoomableImage(image: ImageBitmap, onZoom: (Boolean) -> Unit, tapped:
                 translationX = offset.x
                 translationY = offset.y
             },
-            contentScale = ContentScale.Fit,
+            contentScale = FitAtMostTwice,
         )
+    }
+}
+
+/** Fits the screen, but enlarges a small image to twice its size at most. */
+private object FitAtMostTwice : ContentScale {
+    override fun computeScaleFactor(srcSize: Size, dstSize: Size): ScaleFactor {
+        val fit = ContentScale.Fit.computeScaleFactor(srcSize, dstSize).scaleX.coerceAtMost(2f)
+        return ScaleFactor(fit, fit)
     }
 }
 
