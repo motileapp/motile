@@ -1146,8 +1146,6 @@ async fn a_thread_the_usage_limit_stopped_waits_when_it_is_not_to_continue() {
 async fn a_turn_a_restart_cuts_off_says_so_and_continues_once_the_server_is_back() {
     let mut harness = Harness::start(fixture(Agent::Claude), "0").await;
     let connection = harness.connect().await;
-    let set = Request::SetContinueSettings { after_limits: None, after_restarts: Some(true) };
-    assert_eq!(connection.request(&set).await.unwrap(), Message::Ok);
     let new_thread = harness.new_thread(&connection, Agent::Claude).await;
     let thread_id = send(&connection, None, new_thread, "Run greet.py").await;
     let mut transcript = Transcript::default();
@@ -1303,6 +1301,8 @@ async fn queue_while_waiting(
 async fn a_queued_message_survives_a_restart_and_waits_to_be_sent() {
     let mut harness = Harness::start(fixture(Agent::Claude), "0").await;
     let connection = harness.connect().await;
+    let set = Request::SetContinueSettings { after_limits: None, after_restarts: Some(false) };
+    assert_eq!(connection.request(&set).await.unwrap(), Message::Ok);
     let new_thread = harness.new_thread(&connection, Agent::Claude).await;
     let thread_id = send(&connection, None, new_thread, "Run greet.py").await;
     let mut transcript = Transcript::default();
@@ -2789,7 +2789,7 @@ fn git_says(folder: &Path, arguments: &[&str]) -> String {
 }
 
 #[tokio::test]
-async fn the_default_branch_is_pulled_when_asked_and_only_when_nothing_of_its_own_is_there() {
+async fn the_default_branch_is_pulled_unless_turned_off_and_only_when_nothing_of_its_own_is_there() {
     let harness = Harness::start("fixtures/read-and-bash.jsonl", "0").await;
     let connection = harness.connect().await;
     let (project, _) = project_with_a_branch(&harness, &connection).await;
@@ -2811,32 +2811,41 @@ async fn the_default_branch_is_pulled_when_asked_and_only_when_nothing_of_its_ow
         head()
     };
 
+    let pulls = async |on| {
+        let settings = Request::SetPullRequestSettings {
+            done_on_merge: None,
+            remove_merged_worktrees: None,
+            pull_default_branch: Some(on),
+        };
+        assert_eq!(connection.request(&settings).await.unwrap(), Message::Ok);
+    };
+
     push("First");
-    assert_eq!(fetch().await, "Add the greeting");
+    assert_eq!(fetch().await, "First", "a new server pulls");
+    pulls(false).await;
+    push("Second");
+    assert_eq!(fetch().await, "First");
 
     // Turning it on pulls at once.
-    let on = Some(true);
-    let settings =
-        Request::SetPullRequestSettings { done_on_merge: None, remove_merged_worktrees: None, pull_default_branch: on };
-    assert_eq!(connection.request(&settings).await.unwrap(), Message::Ok);
+    pulls(true).await;
     for _ in 0..50 {
-        if head() == "First" {
+        if head() == "Second" {
             break;
         }
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
-    assert_eq!(head(), "First");
+    assert_eq!(head(), "Second");
 
     // A change of its own keeps the folder where it is, and so does another branch.
-    push("Second");
-    std::fs::write(repository.join("greet.py"), "print('changed')\n").unwrap();
-    assert_eq!(fetch().await, "First");
-    git(&repository, &["checkout", "-q", "--", "greet.py"]);
-    assert_eq!(fetch().await, "Second");
     push("Third");
+    std::fs::write(repository.join("greet.py"), "print('changed')\n").unwrap();
+    assert_eq!(fetch().await, "Second");
+    git(&repository, &["checkout", "-q", "--", "greet.py"]);
+    assert_eq!(fetch().await, "Third");
+    push("Fourth");
     git(&repository, &["switch", "-q", "greet"]);
     assert_eq!(fetch().await, "Greet you");
-    assert_eq!(git_says(&repository, &["log", "-1", "--format=%s", "main"]), "Second");
+    assert_eq!(git_says(&repository, &["log", "-1", "--format=%s", "main"]), "Third");
 }
 
 #[tokio::test]
