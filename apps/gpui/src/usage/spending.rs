@@ -113,11 +113,7 @@ impl SpendingView {
                 c.muted_foreground,
             ))
             .when(report.writing_tokens > 0, |summary| {
-                let of = if cost_shown { "it" } else { "them" };
-                summary.child(caption(
-                    format!("{written} of {of} for titles, branch names, commit messages and pull requests"),
-                    c.muted_stronger_foreground,
-                ))
+                summary.child(caption(format!("{written} for titles, branch names, etc."), c.muted_stronger_foreground))
             })
             .when(cost_shown && report.unpriced_tokens > 0, |summary| {
                 let unpriced = count(report.unpriced_tokens);

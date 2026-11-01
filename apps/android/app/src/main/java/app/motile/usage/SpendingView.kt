@@ -131,7 +131,7 @@ private fun Summary(report: UsageReport, measure: Measure) {
             if (report.writingTokens > 0) {
                 val written = if (cost) cost(report.writingCostUSD) else count(report.writingTokens)
                 Text(
-                    "$written of ${if (cost) "it" else "them"} for titles, branch names, commit messages and pull requests",
+                    "$written for titles, branch names, etc.",
                     size = 11f, color = palette.mutedStrongerForeground,
                 )
             }
