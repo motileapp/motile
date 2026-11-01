@@ -567,9 +567,10 @@ class AppStore(private val context: Context) {
                 val remove = event.int("remove")
                 val rows = event.objects("rows").mapNotNull(RowModel::parse)
                 val earlier = event.bool("earlier")
+                val at = TranscriptPlace.of(event.obj("at"))
                 return {
                     if (transcript.threadID == threadID) {
-                        transcript.apply(reset, start, remove, rows, earlier)
+                        transcript.apply(reset, start, remove, rows, earlier, at)
                         // Assigned only when it changes: rows arrive many times a second.
                         val isEmpty = transcript.isEmpty
                         if (transcriptIsEmpty != isEmpty) transcriptIsEmpty = isEmpty
@@ -596,9 +597,10 @@ class AppStore(private val context: Context) {
                 val start = event.int("start")
                 val remove = event.int("remove")
                 val rows = event.objects("rows").mapNotNull(RowModel::parse)
+                val at = TranscriptPlace.of(event.obj("at"))
                 return {
                     if (transcript.threadID == threadID && rightPanel.shownAgent == agentID) {
-                        agentTranscript.apply(reset, start, remove, rows, earlier = false)
+                        agentTranscript.apply(reset, start, remove, rows, earlier = false, at = at)
                     }
                 }
             }
@@ -2078,6 +2080,7 @@ class AppStore(private val context: Context) {
         val reopens = selectedThread != null && openThreadID == null
         if (new == selection && !reopens) return
         openThreadID?.let {
+            transcript.leave { place -> keepPlace(place, it) }
             core.send("close_thread", json("thread_id" to it))
             openThreadID = null
         }
@@ -2101,6 +2104,11 @@ class AppStore(private val context: Context) {
             return
         }
         open(thread)
+    }
+
+    /** Has the core open the transcript of the thread, or of its agent, where it was left. */
+    fun keepPlace(place: TranscriptPlace?, threadID: String, agentID: String? = null) {
+        core.send("keep_place", mapOf("thread_id" to threadID, "agent_id" to agentID, "at" to place?.json))
     }
 
     /** A draft whose first message is still on its way shows it as it was sent. */

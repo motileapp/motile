@@ -61,7 +61,8 @@ struct TranscriptRepresentable {
             }
         }
         let hooks = TranscriptModel.Hooks(
-            reset: { [weak view] rows in view?.reset(rows: rows) },
+            reset: { [weak view] rows, place in view?.reset(rows: rows, at: place) },
+            place: { [weak view] in view?.place },
             keep: { [weak view] in view?.keepRows() },
             splice: { [weak view] start, remove, rows in view?.splice(start: start, remove: remove, rows: rows) },
             pending: { [weak view] row in view?.setPending(row) },

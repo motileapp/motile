@@ -528,9 +528,10 @@ final class AppStore {
             let (reset, start, remove) = (event.bool("reset"), event.int("start"), event.int("remove"))
             let rows = event.objects("rows").compactMap { RowModel(json: $0) }
             let earlier = event.bool("earlier")
+            let at = TranscriptPlace(json: event["at"] as? [String: Any])
             return { [weak self] in
                 guard let self, self.transcript.threadID == threadID else { return }
-                self.transcript.apply(reset: reset, start: start, remove: remove, rows: rows, earlier: earlier)
+                self.transcript.apply(reset: reset, start: start, remove: remove, rows: rows, earlier: earlier, at: at)
                 // Assigned only when it changes: every assignment makes the views that read it
                 // update, and rows arrive many times a second.
                 let isEmpty = self.transcript.isEmpty
@@ -551,9 +552,10 @@ final class AppStore {
             let (threadID, agentID) = (event.string("thread_id"), event.string("agent_id"))
             let (reset, start, remove) = (event.bool("reset"), event.int("start"), event.int("remove"))
             let rows = event.objects("rows").compactMap { RowModel(json: $0) }
+            let at = TranscriptPlace(json: event["at"] as? [String: Any])
             return { [weak self] in
                 guard let self, self.transcript.threadID == threadID, self.rightPanel.shownAgent == agentID else { return }
-                self.agentTranscript.apply(reset: reset, start: start, remove: remove, rows: rows, earlier: false)
+                self.agentTranscript.apply(reset: reset, start: start, remove: remove, rows: rows, earlier: false, at: at)
             }
         case "code_spans":
             let request = (event["id"] as? NSNumber)?.uint64Value ?? 0
@@ -2101,6 +2103,7 @@ final class AppStore {
         let reopens = selectedThread != nil && openThreadID == nil
         guard new != selection || reopens else { return }
         if let open = openThreadID {
+            transcript.leave { keepPlace($0, threadID: open) }
             core.send("close_thread", ["thread_id": open])
             openThreadID = nil
         }
@@ -2123,6 +2126,14 @@ final class AppStore {
             return
         }
         open(thread)
+    }
+
+    /// Has the core open the transcript of the thread, or of its agent, where it was left.
+    func keepPlace(_ place: TranscriptPlace?, threadID: String, agentID: String? = nil) {
+        var command: [String: Any] = ["thread_id": threadID]
+        command["agent_id"] = agentID
+        command["at"] = place?.json
+        core.send("keep_place", command)
     }
 
     /// A draft whose first message is still on its way shows it as it was sent.

@@ -36,6 +36,7 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.staticCompositionLocalOf
@@ -61,6 +62,7 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
@@ -69,6 +71,7 @@ import app.motile.LocalStore
 import app.motile.composer.composerSurface
 import app.motile.core.AppStore
 import app.motile.core.TranscriptModel
+import app.motile.core.TranscriptPlace
 import app.motile.panel.DiffScope
 import app.motile.platform.Platform
 import app.motile.platform.Symbol
@@ -219,8 +222,23 @@ fun TranscriptView(model: TranscriptModel, modifier: Modifier = Modifier, conten
             if (parent != null) add(StartedBy(end = true))
         }
     }
-    val follower = remember(model, resets) { Follower() }
-    val state = remember(model, resets) { LazyListState(firstVisibleItemIndex = max(0, entries.size - 1)) }
+    val placed = remember(model, resets) { model.place?.let { entries.shownAt(it, density) } }
+    val follower = remember(model, resets) { Follower().apply { pinned = placed == null } }
+    val state = remember(model, resets) {
+        placed?.let { (index, offset) -> LazyListState(index, offset) } ?: LazyListState(firstVisibleItemIndex = max(0, entries.size - 1))
+    }
+    val place by rememberUpdatedState {
+        val pinned = if (follower.hold != null) follower.wasPinned else follower.pinned
+        if (pinned) null else entries.placeAt(state, density)
+    }
+    DisposableEffect(model) {
+        val view = { place() }
+        model.placeOfView = view
+        onDispose {
+            if (!model.keepsRows) model.place = view()
+            if (model.placeOfView === view) model.placeOfView = null
+        }
+    }
     // The way back at the end only shows while the one at the top is out of sight; its room stays, so that nothing moves when it does.
     val topInSight by remember(state, entries) { derivedStateOf { entries.firstOrNull() is StartedBy && state.firstVisibleItemIndex == 0 } }
     val actions = remember(model, resets) { TranscriptActions(store, model, ofAgent) }
@@ -454,6 +472,22 @@ private fun workingIndex(rows: List<RowModel>, pending: RowModel?): Int {
     var index = end
     while (index > 0 && rows[index - 1].isQueued) index -= 1
     return if (index == end) rows.size else index
+}
+
+/** The first row at or under the viewport's top, and how far the top is below the row's: less than none when the row is under it. */
+private fun List<Any>.placeAt(state: LazyListState, density: Density): TranscriptPlace? {
+    val top = state.firstVisibleItemIndex
+    val index = (top until size).firstOrNull { this[it] is RowModel } ?: return null
+    val above = state.layoutInfo.visibleItemsInfo.filter { it.index in top until index }.sumOf { it.size }
+    val delta = with(density) { (state.firstVisibleItemScrollOffset - above).toDp().value }
+    return TranscriptPlace((this[index] as RowModel).id, delta)
+}
+
+/** The entry and the offset in it a list opens at to show the place, or null when its row is gone. A place above its row shows the entry before it. */
+private fun List<Any>.shownAt(place: TranscriptPlace, density: Density): Pair<Int, Int>? {
+    val index = indexOfFirst { (it as? RowModel)?.id == place.rowID }.takeIf { it >= 0 } ?: return null
+    if (place.delta < 0) return max(0, index - 1) to 0
+    return index to with(density) { place.delta.dp.roundToPx() }
 }
 
 /** How far the end of the rows is below the end of the viewport, or null when the last row isn't on screen. */

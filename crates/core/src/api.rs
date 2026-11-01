@@ -45,6 +45,14 @@ pub struct Config {
     pub media_limit: Option<u64>,
 }
 
+/// A place in a transcript: the row at the top of the viewport, and how far the viewport's top is
+/// below the row's.
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct ScrollAt {
+    pub row_id: String,
+    pub delta: f64,
+}
+
 #[derive(Deserialize, Debug)]
 pub struct Envelope {
     /// Echoed in the `reply` event.
@@ -458,6 +466,15 @@ pub enum Command {
     CloseAgent {
         thread_id: String,
     },
+    /// Where the client left the thread's transcript, or with `agent_id` the agent's: `at` a row,
+    /// or without it at the end. The transcript opens there again until the client quits.
+    KeepPlace {
+        thread_id: String,
+        #[serde(default)]
+        agent_id: Option<String>,
+        #[serde(default)]
+        at: Option<ScrollAt>,
+    },
     /// Asks for the turns before the first row, when the rows said there are some.
     LoadEarlier {
         thread_id: String,
@@ -573,6 +590,9 @@ pub enum Event {
         remove: usize,
         rows: Vec<Row>,
         earlier: bool,
+        /// With `reset`, where the client left the transcript, which shows that in place of the end.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        at: Option<ScrollAt>,
     },
     /// Whether the thread has caught up with its server, so that what arrives from now on is new.
     Live {
@@ -592,6 +612,8 @@ pub enum Event {
         start: usize,
         remove: usize,
         rows: Vec<Row>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        at: Option<ScrollAt>,
     },
     Spans {
         thread_id: String,

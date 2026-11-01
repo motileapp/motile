@@ -1,10 +1,32 @@
 import Foundation
 
+/// Where a transcript was left: the row at the top of its viewport, and how far the viewport's
+/// top is below the row's.
+struct TranscriptPlace: Equatable {
+    let rowID: String
+    let delta: CGFloat
+
+    init(rowID: String, delta: CGFloat) {
+        self.rowID = rowID
+        self.delta = delta
+    }
+
+    init?(json: [String: Any]?) {
+        guard let json, let rowID = json["row_id"] as? String else { return nil }
+        self.init(rowID: rowID, delta: CGFloat((json["delta"] as? NSNumber)?.doubleValue ?? 0))
+    }
+
+    var json: [String: Any] { ["row_id": rowID, "delta": Double(delta)] }
+}
+
 /// The rows of the open thread, kept in step with the core, and passed on to the view that draws
 /// them. The view registers itself with `attach`; until it has, the rows wait here.
 final class TranscriptModel {
     struct Hooks {
-        let reset: ([RowModel]) -> Void
+        /// The view shows the rows at the place, or at the end without one.
+        let reset: ([RowModel], TranscriptPlace?) -> Void
+        /// Where the view shows the rows, or nil at the end.
+        let place: () -> TranscriptPlace?
         /// The view keeps what it shows until the next reset.
         let keep: () -> Void
         let splice: (Int, Int, [RowModel]) -> Void
@@ -19,6 +41,8 @@ final class TranscriptModel {
 
     private(set) var threadID: String?
     private(set) var rows: [RowModel] = []
+    /// Where the rows are shown when a view next shows them.
+    private var place: TranscriptPlace?
     private(set) var activity = Activity()
     private var hasEarlier = false
     private(set) var live = false
@@ -46,7 +70,7 @@ final class TranscriptModel {
         self.hooks = hooks
         self.owner = ObjectIdentifier(owner)
         hooks.live(live)
-        hooks.reset(rows)
+        hooks.reset(rows, place)
         hooks.pending(pending)
         hooks.activity(activity)
         hooks.earlier(hasEarlier)
@@ -55,6 +79,7 @@ final class TranscriptModel {
     /// Lets go of the view, unless another one has attached since.
     func detach(owner: AnyObject) {
         guard self.owner == ObjectIdentifier(owner) else { return }
+        if !keepsRows { place = hooks?.place() }
         hooks = nil
         self.owner = nil
     }
@@ -64,6 +89,7 @@ final class TranscriptModel {
     func begin(threadID: String?, live: Bool = false, keepingRows: Bool = false) {
         self.threadID = threadID
         rows = []
+        place = nil
         pending = nil
         activity = Activity()
         hasEarlier = false
@@ -83,8 +109,15 @@ final class TranscriptModel {
         showState()
     }
 
+    /// Tells `keep` where the view leaves the thread's rows, nil at the end. It isn't told while the
+    /// view still shows the rows of the thread before.
+    func leave(_ keep: (TranscriptPlace?) -> Void) {
+        guard threadID != nil, !keepsRows else { return }
+        keep(hooks.map { $0.place() } ?? place)
+    }
+
     private func showState() {
-        hooks?.reset(rows)
+        hooks?.reset(rows, nil)
         hooks?.activity(activity)
     }
 
@@ -93,7 +126,7 @@ final class TranscriptModel {
         self.threadID = threadID
     }
 
-    func apply(reset: Bool, start: Int, remove: Int, rows new: [RowModel], earlier: Bool) {
+    func apply(reset: Bool, start: Int, remove: Int, rows new: [RowModel], earlier: Bool, at: TranscriptPlace? = nil) {
         hasEarlier = earlier
         defer { hooks?.earlier(earlier) }
         // The server has the message now, so the copy shown while it travelled goes. The view lets
@@ -102,7 +135,8 @@ final class TranscriptModel {
         if reset {
             if sent { pending = nil }
             rows = new
-            hooks?.reset(new)
+            place = at
+            hooks?.reset(new, at)
             if let pending { hooks?.pending(pending) }
             guard keepsRows else { return }
             keepsRows = false

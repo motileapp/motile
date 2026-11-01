@@ -58,6 +58,40 @@ final class GestureTests: XCTestCase {
         XCTAssertTrue(jump.waitForNonExistence(timeout: 3) || !jump.isHittable)
     }
 
+    func testAThreadScrolledUpOpensWhereItWasLeftAfterAnotherOne() {
+        openSidebar()
+        guard let thread = row("Add API Rate Limiting") else { return XCTFail("no row") }
+        thread.tap()
+        let jump = app.buttons["Scroll to end"]
+        for _ in 0..<6 where !shown(jump) { app.swipeDown() }
+        XCTAssertTrue(shown(jump))
+        guard let reply = shownReply(), let text = reply.value as? String else { return XCTFail("no reply") }
+        let top = settled(reply)
+
+        openSidebar()
+        guard let other = row("Screenshot of the Landing Page") else { return XCTFail("no row") }
+        other.tap()
+        XCTAssertTrue(jump.waitForNonExistence(timeout: 3) || !jump.isHittable)
+        openSidebar()
+        guard let again = row("Add API Rate Limiting") else { return XCTFail("no row") }
+        again.tap()
+
+        XCTAssertTrue(shown(jump))
+        guard let same = shownReply(saying: text) else { return XCTFail("the reply isn't where it was") }
+        XCTAssertEqual(settled(same), top, accuracy: 2)
+    }
+
+    /// The first reply on the screen above the composer, or the one that says `text`.
+    private func shownReply(saying text: String? = nil) -> XCUIElement? {
+        let composer = app.textViews.firstMatch
+        XCTAssertTrue(composer.waitForExistence(timeout: 10))
+        sleep(1)
+        return app.textViews.allElementsBoundByIndex.first { reply in
+            guard reply.isHittable, reply.frame.height > 40, reply.frame.maxY < composer.frame.minY - 40 else { return false }
+            return text.map { reply.value as? String == $0 } ?? true
+        }
+    }
+
     func testASwipeToTheLeftShowsThePanelAndOneBackHidesItWithoutTheSidebar() {
         let back = app.navigationBars.buttons["Back"]
         app.swipeLeft()
