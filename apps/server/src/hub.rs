@@ -341,7 +341,7 @@ impl Hub {
         let accounts = agent_accounts::with_every_agent(kept_accounts.unwrap_or_default());
         let continue_settings = ContinueSettings {
             after_limits: store.setting(CONTINUE_AFTER_LIMITS).is_none_or(|value| value == "true"),
-            after_restarts: store.setting(CONTINUE_AFTER_RESTARTS).is_some_and(|value| value == "true"),
+            after_restarts: store.setting(CONTINUE_AFTER_RESTARTS).is_none_or(|value| value == "true"),
         };
         let continues = continue_settings.after_restarts || store.setting(CONTINUE_AFTER_THIS_RESTART).is_some();
         store.set_setting(CONTINUE_AFTER_THIS_RESTART, None)?;
@@ -399,7 +399,7 @@ impl Hub {
             pull_request_settings: std::sync::Mutex::new(PullRequestSettings {
                 done_on_merge: store.setting(DONE_ON_MERGE).is_some_and(|value| value == "true"),
                 remove_merged_worktrees: store.setting(REMOVE_MERGED_WORKTREES).is_some_and(|value| value == "true"),
-                pull_default_branch: store.setting(PULL_DEFAULT_BRANCH).is_some_and(|value| value == "true"),
+                pull_default_branch: store.setting(PULL_DEFAULT_BRANCH).is_none_or(|value| value == "true"),
             }),
             continue_settings: std::sync::Mutex::new(continue_settings),
             to_continue: std::sync::Mutex::new(to_continue),
