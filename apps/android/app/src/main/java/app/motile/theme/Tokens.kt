@@ -358,7 +358,7 @@ enum class Opacity(val light: Float, val dark: Float) {
     Glow(0.4f, 0.4f),
     GlowFaint(0.3f, 0.3f),
     GlowBright(0.5f, 0.5f),
-    GlassTint(0.2f, 0.4f),
+    GlassTint(0.2f, 0.5f),
     AccentOpacity(0.1f, 0.1f),
 }
 

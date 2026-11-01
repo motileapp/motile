@@ -414,7 +414,7 @@ impl Opacity {
             Opacity::Glow => 0.4,
             Opacity::GlowFaint => 0.3,
             Opacity::GlowBright => 0.5,
-            Opacity::GlassTint => 0.4,
+            Opacity::GlassTint => 0.5,
             Opacity::AccentOpacity => 0.1,
         }
     }
