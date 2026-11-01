@@ -285,6 +285,11 @@ final class ZoomingScrollView: NSScrollView {
         return max(0.01, min(largestFit, width, height))
     }
 
+    /// An image enlarged to fit can still be shown at its real size.
+    private var smallest: CGFloat { min(fit, 1) }
+
+    private var fitted: Bool { abs(magnification - fit) < 0.001 }
+
     init(margin: CGSize, radius: CGFloat, largestFit: CGFloat) {
         self.margin = margin
         self.radius = radius
@@ -309,15 +314,15 @@ final class ZoomingScrollView: NSScrollView {
         guard picture.layer?.contents as AnyObject? !== image else { return }
         picture.layer?.contents = image
         picture.setFrameSize(size)
-        minMagnification = fit
+        minMagnification = smallest
         magnification = fit
     }
 
     override func setFrameSize(_ size: NSSize) {
-        let fitted = magnification <= minMagnification + 0.001
+        let wasFitted = fitted
         super.setFrameSize(size)
-        minMagnification = fit
-        guard fitted || magnification < fit else { return }
+        minMagnification = smallest
+        guard wasFitted || magnification < smallest else { return }
         magnification = fit
     }
 
@@ -354,7 +359,7 @@ final class ZoomingScrollView: NSScrollView {
             return super.scrollWheel(with: event)
         }
         let target = magnification * exp(event.scrollingDeltaY * log(1.12))
-        setMagnification(min(max(target, fit), maxMagnification), centeredAt: contentView.convert(event.locationInWindow, from: nil))
+        setMagnification(min(max(target, smallest), maxMagnification), centeredAt: contentView.convert(event.locationInWindow, from: nil))
     }
 
     override func smartMagnify(with event: NSEvent) {
@@ -378,13 +383,12 @@ final class ZoomingScrollView: NSScrollView {
     }
 
     private func toggleZoom(at point: NSPoint) {
-        let zoomed = magnification > fit + 0.001
-        animator().setMagnification(zoomed ? fit : max(1, fit * 2), centeredAt: point)
+        animator().setMagnification(fitted ? max(1, fit * 2) : fit, centeredAt: point)
     }
 
     private func zoom(to magnification: CGFloat) {
         let center = NSPoint(x: contentView.bounds.midX, y: contentView.bounds.midY)
-        animator().setMagnification(min(max(magnification, fit), maxMagnification), centeredAt: center)
+        animator().setMagnification(min(max(magnification, smallest), maxMagnification), centeredAt: center)
     }
 }
 

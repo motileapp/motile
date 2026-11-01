@@ -112,11 +112,12 @@ impl ZoomableImage {
             return false;
         }
         let scale = self.scale_now(cx);
+        let (_, points) = self.picture(cx);
         let target = match keystroke.key.as_str() {
             "=" | "+" => scale * 1.5,
             "-" => scale / 1.5,
             "0" => 1.,
-            "9" => 0.,
+            "9" => self.fit(points),
             _ => return false,
         };
         self.zoom_smoothly(target, None, cx);
@@ -141,6 +142,11 @@ impl ZoomableImage {
         let across = (f32::from(room.width) - 2. * self.margin.width) / points.width;
         let down = (f32::from(room.height) - 2. * self.margin.height) / points.height;
         across.min(down).clamp(0.01, self.largest_fit)
+    }
+
+    /// An image enlarged to fit can still be shown at its real size.
+    fn smallest(&self, points: Size<f32>) -> f32 {
+        self.fit(points).min(1.)
     }
 
     fn scale_now(&self, cx: &mut App) -> f32 {
@@ -177,14 +183,14 @@ impl ZoomableImage {
         let (Picture::Ready(_), points) = self.picture(cx) else { return };
         let fit = self.fit(points);
         let old = self.scale.unwrap_or(fit);
-        let new = scale.clamp(fit, MAX_ZOOM);
+        let new = scale.clamp(self.smallest(points), MAX_ZOOM);
         // The point under the pointer stays where it is.
         if let Some(around) = around {
             let from_center = around - self.bounds.get().center() - self.offset;
             self.offset -= from_center * (new / old - 1.);
         }
         self.scale = Some(new);
-        if (new - fit).abs() < 0.001 {
+        if new <= fit + 0.001 {
             self.offset = Point::default();
         }
         self.clamp_offset(points);
@@ -202,8 +208,8 @@ impl ZoomableImage {
 
     /// A scale left from a larger room, smaller than fitting now, is let go of.
     fn refit(&mut self, points: Size<f32>) {
-        let fit = self.fit(points);
-        if self.scale.is_some_and(|scale| scale < fit) {
+        let smallest = self.smallest(points);
+        if self.scale.is_some_and(|scale| scale < smallest) {
             self.scale = None;
             self.offset = Point::default();
         }
@@ -293,8 +299,8 @@ impl Render for ZoomableImage {
                     if event.click_count == 2 && this.on_picture(event.position) {
                         let (_, points) = this.picture(cx);
                         let fit = this.fit(points);
-                        let zoomed = this.scale.unwrap_or(fit) > fit + 0.001;
-                        let target = if zoomed { fit } else { (fit * 2.).max(1.) };
+                        let fitted = (this.scale.unwrap_or(fit) - fit).abs() < 0.001;
+                        let target = if fitted { (fit * 2.).max(1.) } else { fit };
                         this.zoom_smoothly(target, Some(event.position), cx);
                     }
                 }),
