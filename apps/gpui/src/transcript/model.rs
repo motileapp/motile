@@ -8,7 +8,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use gpui_kit::*;
-use motile_core::api::Event;
+use motile_core::api::{Event, ScrollAt};
 use motile_core::render::agents::AgentState;
 use motile_core::render::markdown::ParaKind;
 use motile_core::render::rows::{After, Row, RowKind};
@@ -143,6 +143,7 @@ pub enum Prepared {
         remove: usize,
         rows: Vec<Arc<RowModel>>,
         earlier: bool,
+        at: Option<ScrollAt>,
     },
     AgentRows {
         thread_id: String,
@@ -151,6 +152,7 @@ pub enum Prepared {
         start: usize,
         remove: usize,
         rows: Vec<Arc<RowModel>>,
+        at: Option<ScrollAt>,
     },
 }
 
@@ -158,21 +160,23 @@ pub enum Prepared {
 #[allow(clippy::result_large_err)]
 pub fn prepare(event: Event) -> Result<Prepared, Event> {
     match event {
-        Event::Rows { thread_id, reset, start, remove, rows, earlier } => Ok(Prepared::Rows {
+        Event::Rows { thread_id, reset, start, remove, rows, earlier, at } => Ok(Prepared::Rows {
             thread_id,
             reset,
             start,
             remove,
             rows: rows.into_iter().map(|row| Arc::new(RowModel::new(row))).collect(),
             earlier,
+            at,
         }),
-        Event::AgentRows { thread_id, agent_id, reset, start, remove, rows } => Ok(Prepared::AgentRows {
+        Event::AgentRows { thread_id, agent_id, reset, start, remove, rows, at } => Ok(Prepared::AgentRows {
             thread_id,
             agent_id,
             reset,
             start,
             remove,
             rows: rows.into_iter().map(|row| Arc::new(RowModel::new(row))).collect(),
+            at,
         }),
         event => Err(event),
     }
@@ -239,6 +243,8 @@ pub struct Transcript {
     /// What the agent of the thread opened does, shown once its rows replace the ones kept.
     opened_activity: Activity,
     pub list: ListState,
+    /// The viewport glides after a reply that streams, which follows the end as the list does.
+    pub gliding: bool,
     /// What the list shows, in order.
     pub items: Rc<Vec<Item>>,
     keys: Vec<Key>,
@@ -268,6 +274,7 @@ impl Transcript {
             keeps_rows: false,
             opened_activity: Activity::default(),
             list,
+            gliding: false,
             items: Rc::default(),
             keys: Vec::new(),
             end_of_running_turn: None,
@@ -457,7 +464,50 @@ impl Transcript {
         self.live = live;
     }
 
-    pub fn apply(&mut self, reset: bool, start: usize, remove: usize, rows: Vec<Arc<RowModel>>, earlier: bool) {
+    /// Where the viewport shows the rows: the first row at or under its top, and how far the top
+    /// is below the row's. None while it follows the end.
+    pub fn place(&self) -> Option<ScrollAt> {
+        if self.gliding || self.list.is_following_tail() {
+            return None;
+        }
+        let top = self.list.logical_scroll_top();
+        let (shown, row) = self.items.iter().enumerate().skip(top.item_ix).find_map(|(shown, item)| match item {
+            Item::Row(row) => Some((shown, *row)),
+            _ => None,
+        })?;
+        let above: f32 = (top.item_ix..shown)
+            .map(|shown| self.list.bounds_for_item(shown).map_or(0., |bounds| f32::from(bounds.size.height)))
+            .sum();
+        let delta = f32::from(top.offset_in_item) - above;
+        Some(ScrollAt { row_id: self.rows[row].row.id.clone(), delta: f64::from(delta) })
+    }
+
+    /// Puts the viewport at the place, or at the end when its row isn't among the rows.
+    fn show(&mut self, at: Option<ScrollAt>) {
+        self.list.set_follow_mode(FollowMode::Tail);
+        let shown = at.as_ref().and_then(|at| {
+            self.items.iter().position(|item| matches!(item, Item::Row(row) if self.rows[*row].row.id == at.row_id))
+        });
+        let (Some(at), Some(shown)) = (at, shown) else {
+            self.list.scroll_to_end();
+            return;
+        };
+        let delta = at.delta as f32;
+        self.list.scroll_to(ListOffset { item_ix: shown, offset_in_item: px(delta.max(0.)) });
+        if delta < 0. {
+            self.list.scroll_by(px(delta));
+        }
+    }
+
+    pub fn apply(
+        &mut self,
+        reset: bool,
+        start: usize,
+        remove: usize,
+        rows: Vec<Arc<RowModel>>,
+        earlier: bool,
+        at: Option<ScrollAt>,
+    ) {
         self.earlier = earlier;
         // The server has the message now, so the copy shown while it travelled goes.
         let sent = self.pending.is_some() && rows.iter().any(|row| row.is_sent_message());
@@ -475,9 +525,8 @@ impl Transcript {
             self.grown.clear();
             self.keys.clear();
             self.list.reset(0);
-            self.list.set_follow_mode(FollowMode::Tail);
             self.sync(&changed);
-            self.list.scroll_to_end();
+            self.show(at);
             return;
         }
         if start + remove > self.rows.len() {

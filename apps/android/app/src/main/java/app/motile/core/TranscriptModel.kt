@@ -8,6 +8,18 @@ import androidx.compose.runtime.setValue
 import app.motile.panel.TurnChange
 import app.motile.transcript.RowModel
 
+/** Where a transcript was left: the row at the top of its viewport, and how far the viewport's top is below the row's, in dp. */
+data class TranscriptPlace(val rowID: String, val delta: Float) {
+    val json: Map<String, Any?> get() = mapOf("row_id" to rowID, "delta" to delta.toDouble())
+
+    companion object {
+        fun of(json: JSON?): TranscriptPlace? {
+            val rowID = json?.optionalString("row_id") ?: return null
+            return TranscriptPlace(rowID, json.double("delta").toFloat())
+        }
+    }
+}
+
 /**
  * The rows of the open thread, kept in step with the core, as the transcript draws them. Rows
  * arrive as splices; the list only changes where they say.
@@ -32,6 +44,10 @@ class TranscriptModel {
     /** Counts up when the rows are replaced as a whole, which puts the transcript at its end. */
     var resets by mutableIntStateOf(0)
         private set
+    /** Where the rows are shown when a view next shows them. */
+    var place: TranscriptPlace? = null
+    /** Where the view that shows the rows has them, null at the end. */
+    var placeOfView: (() -> TranscriptPlace?)? = null
     /** Counts up whenever the rows change. */
     var version by mutableIntStateOf(0)
         private set
@@ -73,6 +89,7 @@ class TranscriptModel {
     /** Starts showing another thread, or none. Its rows follow from the core. With `keepingRows` the view shows the rows it has until they do, so that it isn't empty in between. */
     fun begin(threadID: String?, live: Boolean = false, keepingRows: Boolean = false) {
         this.threadID = threadID
+        place = null
         pending = null
         pendingText = null
         keptActivity = Activity()
@@ -101,12 +118,19 @@ class TranscriptModel {
         if (keepsRows) showOpened()
     }
 
+    /** Tells `keep` where the view leaves the thread's rows, null at the end. It isn't told while the view still shows the rows of the thread before. */
+    fun leave(keep: (TranscriptPlace?) -> Unit) {
+        if (threadID == null || keepsRows) return
+        val view = placeOfView
+        keep(if (view != null) view() else place)
+    }
+
     /** The message on screen now belongs to a thread; its rows are about to arrive. */
     fun adopt(threadID: String) {
         this.threadID = threadID
     }
 
-    fun apply(reset: Boolean, start: Int, remove: Int, new: List<RowModel>, earlier: Boolean) {
+    fun apply(reset: Boolean, start: Int, remove: Int, new: List<RowModel>, earlier: Boolean, at: TranscriptPlace? = null) {
         if (keepsRows && !reset) return
         this.earlier = earlier
         // The server has the message now, so the copy shown while it travelled goes.
@@ -120,6 +144,7 @@ class TranscriptModel {
             }
             rows.clear()
             rows.addAll(new)
+            place = at
             endOfRunningTurn = null
             resets += 1
             version += 1

@@ -418,6 +418,7 @@ final class RightPanel {
     /// a phone the panel it was opened from goes away.
     func showAgent(_ id: String) {
         guard let store, let threadID = store.transcript.threadID else { return }
+        leaveAgent()
         shownAgent = id
         store.agentTranscript.begin(threadID: threadID, live: store.transcript.live)
         agentsChanged()
@@ -436,9 +437,15 @@ final class RightPanel {
     /// Goes back from the agent shown to the thread.
     func showAgents() {
         guard let store, shownAgent != nil else { return }
+        leaveAgent()
         shownAgent = nil
         if let threadID = store.agentTranscript.threadID { store.core.send("close_agent", ["thread_id": threadID]) }
         store.agentTranscript.begin(threadID: nil)
+    }
+
+    private func leaveAgent() {
+        guard let store, let agentID = shownAgent, let threadID = store.agentTranscript.threadID else { return }
+        store.agentTranscript.leave { store.keepPlace($0, threadID: threadID, agentID: agentID) }
     }
 
     /// The shown agent's transcript says that it works for as long as it does.

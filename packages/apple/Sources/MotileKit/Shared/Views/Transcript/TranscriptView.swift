@@ -189,6 +189,8 @@ final class TranscriptView: FlippedView, RowOwner {
     private var trimming = false
     /// Where the viewport was when rows came in front of it while it bounced at the top.
     private var heldAnchor: Anchor?
+    /// Where the transcript was left, which the viewport goes to once it has a size.
+    private var placed: Anchor?
     /// Rows that just arrived in a streaming reply; they fade in.
     private var fresh: Set<String> = []
     /// The group or fold that was just clicked. It stays where it is while its rows come and go.
@@ -393,7 +395,12 @@ final class TranscriptView: FlippedView, RowOwner {
     }
 
     private func currentAnchor() -> Anchor? {
-        pinned ? nil : viewportAnchor()
+        pinned ? nil : placed ?? viewportAnchor()
+    }
+
+    /// Where the viewport shows the rows, nil while it follows the end.
+    var place: TranscriptPlace? {
+        currentAnchor().map { TranscriptPlace(rowID: $0.id, delta: $0.delta) }
     }
 
     private func viewportAnchor() -> Anchor? {
@@ -463,7 +470,7 @@ final class TranscriptView: FlippedView, RowOwner {
         keepsRows = true
     }
 
-    func reset(rows new: [RowModel]) {
+    func reset(rows new: [RowModel], at place: TranscriptPlace? = nil) {
         if keepsRows { showKept() }
         for id in Array(views.keys) { recycle(id) }
         rows = new
@@ -481,6 +488,10 @@ final class TranscriptView: FlippedView, RowOwner {
         heldAnchor = nil
         stopGlide()
         pin()
+        if let place, new.contains(where: { $0.id == place.rowID }) {
+            pinned = false
+            placed = Anchor(id: place.rowID, delta: place.delta)
+        }
         updateVisible(glides: false)
         measureRows()
     }
@@ -629,6 +640,7 @@ final class TranscriptView: FlippedView, RowOwner {
         pinned = true
         userScrolling = false
         bounceEnd = nil
+        placed = nil
     }
 
     // MARK: Rows on screen
@@ -727,6 +739,7 @@ final class TranscriptView: FlippedView, RowOwner {
     }
 
     private func userScrollBegan() {
+        placed = nil
         userScrolling = true
         stopGlide()
     }
@@ -797,6 +810,7 @@ final class TranscriptView: FlippedView, RowOwner {
             recomputeOffsets(from: firstChanged)
         }
         position(anchor: anchor, follows: follows, glides: glides)
+        if viewportHeight > 0 { placed = nil }
 
         let workingY = firstLowered < offsets.count ? offsets[firstLowered] : 0
         working.frame = CGRect(x: x, y: topPadding + workingY + 2, width: width, height: Self.workingHeight)

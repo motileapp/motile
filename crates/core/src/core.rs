@@ -25,7 +25,7 @@ use tokio::sync::mpsc;
 use tokio::task::AbortHandle;
 
 use crate::api::{
-    AccountView, Children, Command, Config, Event, ProjectView, ServerView, SyncState, SyncView, ThreadView,
+    AccountView, Children, Command, Config, Event, ProjectView, ScrollAt, ServerView, SyncState, SyncView, ThreadView,
     WaitingChild,
 };
 use crate::browse;
@@ -276,6 +276,34 @@ struct OpenThread {
     left: Option<Instant>,
 }
 
+/// A place the client left a transcript at, with the item of its row, which the transcript loads
+/// back to when the thread opens again.
+struct Place {
+    at: ScrollAt,
+    item: String,
+    seq: u64,
+}
+
+impl Place {
+    /// The place among the rows, or the top of the first row of its item when its row is gone.
+    fn among(&self, rows: &[Row]) -> Option<ScrollAt> {
+        if rows.iter().any(|row| row.id == self.at.row_id) {
+            return Some(self.at.clone());
+        }
+        let row = rows.iter().find(|row| row.item == self.item)?;
+        Some(ScrollAt { row_id: row.id.clone(), delta: 0.0 })
+    }
+}
+
+/// Puts the cache's earlier pages in front of the transcript until it has the item at `seq`.
+fn load_back_to(cache: &Cache, thread_id: &str, transcript: &mut Transcript, earlier: &mut bool, seq: u64) {
+    while *earlier && transcript.first_seq().is_some_and(|first| first > seq) {
+        let page = cache.page(thread_id, transcript.first_seq());
+        *earlier = page.earlier;
+        transcript.prepend(page.items);
+    }
+}
+
 #[derive(Default)]
 struct UiTimers(HashMap<TimerKey, AbortHandle>);
 
@@ -318,6 +346,8 @@ struct Core {
     account_error: Option<String>,
     servers: Vec<Server>,
     open: HashMap<String, OpenThread>,
+    /// Where the client left each transcript, by its thread and its agent.
+    places: HashMap<(String, Option<String>), Place>,
     /// Active threads that aren't open, kept current in the cache.
     followed: HashMap<String, Followed>,
     /// The secret and the state of the sign-in the browser is busy with.
@@ -442,6 +472,7 @@ pub fn start(config: Config, sink: EventSink) -> anyhow::Result<Handle> {
         account_error: None,
         servers: Vec::new(),
         open: HashMap::new(),
+        places: HashMap::new(),
         followed: HashMap::new(),
         pending_sign_in: None,
         watch_servers: false,
@@ -1887,11 +1918,13 @@ impl Core {
             return;
         }
         self.dress(thread_id, &mut splice.rows);
+        let place = self.places.get(&(thread_id.to_string(), None)).filter(|_| reset);
         self.emit(Event::Rows {
             thread_id: thread_id.to_string(),
             reset,
             start: splice.start,
             remove: splice.remove,
+            at: place.and_then(|place| place.among(&splice.rows)),
             rows: splice.rows,
             earlier: self.open.get(thread_id).is_some_and(|open| open.earlier),
         });
@@ -1902,12 +1935,14 @@ impl Core {
         let Some((agent_id, _)) = shown.and_then(|open| open.agent.as_ref()) else { return };
         let agent_id = agent_id.clone();
         self.dress(thread_id, &mut splice.rows);
+        let place = self.places.get(&(thread_id.to_string(), Some(agent_id.clone()))).filter(|_| reset);
         self.emit(Event::AgentRows {
             thread_id: thread_id.to_string(),
             agent_id,
             reset,
             start: splice.start,
             remove: splice.remove,
+            at: place.and_then(|place| place.among(&splice.rows)),
             rows: splice.rows,
         });
     }
@@ -2979,6 +3014,10 @@ impl Core {
                 }
                 self.reply(id, Ok(json!({})));
             }
+            Command::KeepPlace { thread_id, agent_id, at } => {
+                self.keep_place(thread_id, agent_id, at);
+                self.reply(id, Ok(json!({})));
+            }
             Command::LoadEarlier { thread_id } => {
                 self.load_earlier(&thread_id);
                 self.reply(id, Ok(json!({})));
@@ -3070,6 +3109,27 @@ impl Core {
         self.emit(Event::ThreadSearch { query: query.clone(), searching, matches });
     }
 
+    fn keep_place(&mut self, thread_id: String, agent_id: Option<String>, at: Option<ScrollAt>) {
+        let open = self.open.get(&thread_id);
+        let transcript = match &agent_id {
+            None => open.map(|open| &open.transcript),
+            Some(agent_id) => open
+                .and_then(|open| open.agent.as_ref())
+                .filter(|(id, _)| id == agent_id)
+                .map(|(_, transcript)| transcript),
+        };
+        let key = (thread_id, agent_id);
+        let Some(at) = at else {
+            self.places.remove(&key);
+            return;
+        };
+        let Some(transcript) = transcript else { return };
+        let row = transcript.rows().iter().find(|row| row.id == at.row_id);
+        let Some(item) = row.and_then(|row| transcript.item(&row.item)) else { return };
+        let place = Place { item: item.id.clone(), seq: item.seq, at };
+        self.places.insert(key, place);
+    }
+
     fn trim_earlier(&mut self, thread_id: &str, keep_rows: usize) {
         let Some(open) = self.open.get_mut(thread_id) else { return };
         save_streamed(&self.cache, thread_id, open);
@@ -3100,10 +3160,14 @@ impl Core {
     /// Opens the thread's rows with what the agent does and the agents it started, which come
     /// first so that the client shows them with the rows, not a moment after.
     fn open_thread(&mut self, server_id: &str, thread_id: &str) -> Result<(), String> {
+        let place = self.places.get(&(thread_id.to_string(), None)).map(|place| place.seq);
         if self.open.contains_key(thread_id) {
             let activity = self.last_activity(server_id, thread_id);
             let open = self.open.get_mut(thread_id).ok_or("The thread closed.")?;
             open.left = None;
+            if let Some(seq) = place {
+                load_back_to(&self.cache, thread_id, &mut open.transcript, &mut open.earlier, seq);
+            }
             let activity = activity.map(|activity| activity_changed(thread_id, &mut open.transcript, activity).1);
             let rows = open.transcript.rows().to_vec();
             let agents = agents_event(thread_id, &open.agents, &open.threads);
@@ -3130,15 +3194,21 @@ impl Core {
         let link = server.link.clone();
         let removed = server.removed.then(|| server.device.name.clone());
 
-        let Page { mut items, earlier } = self.cache.page(thread_id, None);
+        let Page { mut items, mut earlier } = self.cache.page(thread_id, None);
         let since = self.cache.synced_rev(thread_id);
-        let newest = items.split_off(items.len().saturating_sub(FIRST_ITEMS));
+        let first_shown = items.len().saturating_sub(FIRST_ITEMS);
+        let first_shown =
+            place.map_or(first_shown, |seq| first_shown.min(items.partition_point(|item| item.seq < seq)));
+        let newest = items.split_off(first_shown);
         let agents = self.cache.agents(thread_id);
         let threads = ThreadState::of_children(&server.threads, thread_id);
         let mut transcript = Transcript::new(&cwd);
         transcript.set_removed(removed.clone());
         transcript.set_agents(&agents, &threads);
         transcript.load(newest);
+        if let Some(seq) = place {
+            load_back_to(&self.cache, thread_id, &mut transcript, &mut earlier, seq);
+        }
         let activity = activity.map(|activity| activity_changed(thread_id, &mut transcript, activity).1);
         let rows = transcript.rows().to_vec();
         let open = OpenThread {
@@ -3617,6 +3687,53 @@ mod tests {
     fn an_approval_answered_since_no_longer_waits() {
         let cached = Activity { running: true, approvals: vec![approval()], ..Activity::default() };
         assert!(restored_activity(&thread(true, false, false), Some(cached)).approvals.is_empty());
+    }
+
+    #[test]
+    fn a_thread_opens_with_the_turns_back_to_where_it_was_left() {
+        let dir = tempfile::tempdir().unwrap();
+        let cache = Cache::open(&dir.path().join("cache.sqlite")).unwrap();
+        let kind = |seq: u64| match seq % 3 {
+            0 => ItemKind::User {
+                text: format!("message {seq}"),
+                attachments: Vec::new(),
+                skills: Vec::new(),
+                context: None,
+                programs: Vec::new(),
+            },
+            1 => ItemKind::Assistant { text: format!("reply {seq}") },
+            _ => ItemKind::TurnEnd { summary: Default::default() },
+        };
+        let items: Vec<Item> = (0..600)
+            .map(|seq| Item {
+                id: format!("i{seq}"),
+                seq,
+                rev: seq + 1,
+                created_at: 0.0,
+                media: Vec::new(),
+                parent: None,
+                ui: Default::default(),
+                kind: kind(seq),
+            })
+            .collect();
+        cache.save_items("t", &items.iter().collect::<Vec<_>>(), None);
+        let Page { items: newest, mut earlier } = cache.page("t", None);
+        let mut transcript = Transcript::new("/srv");
+        transcript.load(newest);
+        let row_of = |transcript: &Transcript, item: &str| {
+            transcript.rows().iter().find(|row| row.item == item).map(|row| row.id.clone())
+        };
+        assert_eq!(row_of(&transcript, "i201"), None);
+
+        load_back_to(&cache, "t", &mut transcript, &mut earlier, 201);
+
+        let row_id = row_of(&transcript, "i201").unwrap();
+        let place = Place { at: ScrollAt { row_id: row_id.clone(), delta: 40.0 }, item: "i201".into(), seq: 201 };
+        assert_eq!(place.among(transcript.rows()), Some(place.at.clone()));
+        let gone = Place { at: ScrollAt { row_id: "i201/gone".into(), delta: 40.0 }, ..place };
+        assert_eq!(gone.among(transcript.rows()), Some(ScrollAt { row_id, delta: 0.0 }));
+        assert!(earlier);
+        assert_eq!(row_of(&transcript, "i99"), None);
     }
 
     #[test]

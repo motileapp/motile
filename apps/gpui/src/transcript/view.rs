@@ -79,7 +79,7 @@ impl TranscriptView {
                 this.requested_highlight.clear();
                 this.loading_earlier = false;
                 this.trimming = false;
-                this.glide = None;
+                this.set_glide(None, cx);
             }
             this.follow_stream(cx);
             this.measures_after_layout = true;
@@ -135,7 +135,7 @@ impl TranscriptView {
                         view.top_in_sight = top_in_sight;
                         cx.notify();
                     }
-                    view.glide = None;
+                    view.set_glide(None, cx);
                     let top = view.scroll_offsets(cx).0;
                     if top != view.scrolled.0 {
                         view.scrolled = (top, Some(Instant::now()));
@@ -236,7 +236,7 @@ impl TranscriptView {
         if self.glide.is_some() {
             return;
         }
-        self.glide = Some(cx.spawn(async move |this, cx| {
+        let glide = cx.spawn(async move |this, cx| {
             loop {
                 cx.background_executor().timer(Duration::from_millis(16)).await;
                 let Ok(gliding) = this.update(cx, |this, cx| this.glide_step(cx)) else { break };
@@ -244,7 +244,17 @@ impl TranscriptView {
                     break;
                 }
             }
-        }));
+        });
+        self.set_glide(Some(glide), cx);
+    }
+
+    /// The model knows of the glide, which follows the end as the list does.
+    fn set_glide(&mut self, glide: Option<Task<()>>, cx: &mut App) {
+        let gliding = glide.is_some();
+        self.glide = glide;
+        if self.model.read(cx).gliding != gliding {
+            self.model.update(cx, |model, _| model.gliding = gliding);
+        }
     }
 
     /// Goes a little over a fifth of the way in every sixtieth of a second, and never slower than
@@ -254,7 +264,7 @@ impl TranscriptView {
         let remaining = self.distance_to_end(cx);
         if list.is_following_tail() || remaining <= 0.5 || remaining >= self.viewport_height(cx) {
             list.set_follow_mode(FollowMode::Tail);
-            self.glide = None;
+            self.set_glide(None, cx);
             cx.notify();
             self.trim_earlier_if_far(cx);
             return false;
@@ -391,7 +401,7 @@ impl TranscriptView {
     /// Opening a row shouldn't drag the view to the end: the rows on screen stay where they are,
     /// and the view follows the end again once it is back there.
     fn hold_still(&mut self, cx: &mut Context<Self>) {
-        self.glide = None;
+        self.set_glide(None, cx);
         self.list(cx).pause_following_tail();
     }
 
@@ -412,7 +422,7 @@ impl TranscriptView {
     }
 
     pub fn scroll_to_end(&mut self, cx: &mut Context<Self>) {
-        self.glide = None;
+        self.set_glide(None, cx);
         let list = self.list(cx);
         list.set_follow_mode(FollowMode::Tail);
         list.scroll_to_end();

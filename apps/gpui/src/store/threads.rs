@@ -86,6 +86,7 @@ impl Store {
             return;
         }
         if let Some(open) = self.open_thread_id.take() {
+            self.keep_place(open.clone(), None, cx);
             self.send(Command::CloseThread { thread_id: open });
         }
         let left = self.selected_draft().cloned();
@@ -143,6 +144,17 @@ impl Store {
             cx.notify();
         });
         self.transcript_is_empty = false;
+    }
+
+    /// Has the core open the thread's transcript, or its agent's, where the transcript leaves it,
+    /// unless it still shows the rows of the thread before.
+    pub(crate) fn keep_place(&mut self, thread_id: String, agent_id: Option<String>, cx: &Context<Self>) {
+        let transcript = if agent_id.is_some() { &self.agent_transcript } else { &self.transcript }.read(cx);
+        if transcript.keeps_rows || transcript.thread_id.as_deref() != Some(&thread_id) {
+            return;
+        }
+        let at = transcript.place();
+        self.send(Command::KeepPlace { thread_id, agent_id, at });
     }
 
     fn open(&mut self, thread: &ThreadInfo, cx: &mut Context<Self>) {

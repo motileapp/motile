@@ -638,12 +638,12 @@ impl Store {
 
     fn apply_rows(&mut self, prepared: Prepared, cx: &mut Context<Self>) {
         match prepared {
-            Prepared::Rows { thread_id, reset, start, remove, rows, earlier } => {
+            Prepared::Rows { thread_id, reset, start, remove, rows, earlier, at } => {
                 if self.transcript.read(cx).thread_id.as_deref() != Some(&thread_id) {
                     return;
                 }
                 let (is_empty, turns) = self.transcript.update(cx, |transcript, cx| {
-                    transcript.apply(reset, start, remove, rows, earlier);
+                    transcript.apply(reset, start, remove, rows, earlier, at);
                     cx.notify();
                     (transcript.is_empty(), transcript.turns())
                 });
@@ -652,14 +652,14 @@ impl Store {
                     self.right_panel.turns = turns;
                 }
             }
-            Prepared::AgentRows { thread_id, agent_id, reset, start, remove, rows } => {
+            Prepared::AgentRows { thread_id, agent_id, reset, start, remove, rows, at } => {
                 if self.transcript.read(cx).thread_id.as_deref() != Some(&thread_id)
                     || self.right_panel.shown_agent.as_deref() != Some(&agent_id)
                 {
                     return;
                 }
                 self.agent_transcript.update(cx, |transcript, cx| {
-                    transcript.apply(reset, start, remove, rows, false);
+                    transcript.apply(reset, start, remove, rows, false, at);
                     cx.notify();
                 });
             }

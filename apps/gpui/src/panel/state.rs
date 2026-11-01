@@ -807,6 +807,7 @@ impl Store {
     /// Shows what the agent did that the tool call started in the thread's place, read only.
     pub fn show_agent(&mut self, id: String, cx: &mut Context<Self>) {
         let Some(thread_id) = self.transcript.read(cx).thread_id.clone() else { return };
+        self.leave_agent(cx);
         self.right_panel.shown_agent = Some(id.clone());
         let live = self.transcript.read(cx).live;
         self.agent_transcript.update(cx, |transcript, _| transcript.begin(Some(thread_id.clone()), live, false));
@@ -827,6 +828,7 @@ impl Store {
 
     /// Goes back from the agent shown to the thread.
     pub fn show_agents(&mut self, cx: &mut Context<Self>) {
+        self.leave_agent(cx);
         if self.right_panel.shown_agent.take().is_none() {
             return;
         }
@@ -835,6 +837,12 @@ impl Store {
             self.send(Command::CloseAgent { thread_id });
         }
         self.agent_transcript.update(cx, |transcript, _| transcript.begin(None, false, false));
+    }
+
+    fn leave_agent(&mut self, cx: &mut Context<Self>) {
+        let Some(agent_id) = self.right_panel.shown_agent.clone() else { return };
+        let Some(thread_id) = self.agent_transcript.read(cx).thread_id.clone() else { return };
+        self.keep_place(thread_id, Some(agent_id), cx);
     }
 
     /// The shown agent's transcript says that it works for as long as it does.

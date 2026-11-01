@@ -437,6 +437,7 @@ class RightPanel {
     fun showAgent(id: String) {
         val store = store ?: return
         val threadID = store.transcript.threadID ?: return
+        leaveAgent()
         shownAgent = id
         store.agentTranscript.begin(threadID, live = store.transcript.live)
         agentsChanged()
@@ -456,9 +457,17 @@ class RightPanel {
     fun showAgents() {
         val store = store ?: return
         if (shownAgent == null) return
+        leaveAgent()
         shownAgent = null
         store.agentTranscript.threadID?.let { store.core.send("close_agent", json("thread_id" to it)) }
         store.agentTranscript.begin(null)
+    }
+
+    private fun leaveAgent() {
+        val store = store ?: return
+        val agentID = shownAgent ?: return
+        val threadID = store.agentTranscript.threadID ?: return
+        store.agentTranscript.leave { store.keepPlace(it, threadID, agentID) }
     }
 
     /** The shown agent's transcript says that it works for as long as it does. */
