@@ -95,7 +95,8 @@ struct MediaViewer: View {
                 image: image,
                 size: CGSize(width: CGFloat(image.width) / scale, height: CGFloat(image.height) / scale),
                 margin: ZoomingScrollView.viewerMargin,
-                radius: Radius.md
+                radius: Radius.md,
+                largestFit: ZoomingScrollView.viewerLargestFit
             ) { store.closeViewer() }
             .ignoresSafeArea()
         case .video(let player):
@@ -243,12 +244,14 @@ struct ZoomableImage: NSViewRepresentable {
     let size: CGSize
     let margin: CGSize
     var radius: CGFloat = 0
+    /// The most it is enlarged to fit, as a multiple of `size`.
+    var largestFit: CGFloat = 1
     /// Whether ⌘+, ⌘−, ⌘0 and ⌘9 are this image's.
     var keys = true
     var clickedBeside: () -> Void = {}
 
     func makeNSView(context: Context) -> ZoomingScrollView {
-        ZoomingScrollView(margin: margin, radius: radius)
+        ZoomingScrollView(margin: margin, radius: radius, largestFit: largestFit)
     }
 
     func updateNSView(_ view: ZoomingScrollView, context: Context) {
@@ -263,11 +266,14 @@ struct ZoomableImage: NSViewRepresentable {
 /// ⌘0 for its real size and ⌘9 to fit again. Zoomed, it is moved by scrolling or dragging.
 final class ZoomingScrollView: NSScrollView {
     static let viewerMargin = CGSize(width: 64, height: 52)
+    /// A small image is enlarged to fit the viewer, up to twice its size.
+    static let viewerLargestFit: CGFloat = 2
 
     var keys = true
     var clickedBeside: () -> Void = {}
     private let margin: CGSize
     private let radius: CGFloat
+    private let largestFit: CGFloat
     private let picture = FlippedView()
     private var dragged = false
 
@@ -276,12 +282,13 @@ final class ZoomingScrollView: NSScrollView {
         guard size.width > 0, size.height > 0 else { return 1 }
         let width = (bounds.width - 2 * margin.width) / size.width
         let height = (bounds.height - 2 * margin.height) / size.height
-        return max(0.01, min(1, width, height))
+        return max(0.01, min(largestFit, width, height))
     }
 
-    init(margin: CGSize, radius: CGFloat) {
+    init(margin: CGSize, radius: CGFloat, largestFit: CGFloat) {
         self.margin = margin
         self.radius = radius
+        self.largestFit = largestFit
         super.init(frame: .zero)
         contentView = CenteringClipView()
         documentView = picture

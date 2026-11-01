@@ -17,6 +17,8 @@ use crate::ui::{ActionButton, Spinner, Variant};
 
 /// The room the picture leaves around it when it fits the window.
 pub const MARGIN: (f32, f32) = (64., 52.);
+/// A small image is enlarged to fit the window, up to twice its size.
+const LARGEST_FIT: f32 = 2.;
 
 pub struct MediaViewer {
     store: Entity<Store>,
@@ -98,6 +100,7 @@ impl MediaViewer {
         if !item.video {
             let viewer = cx.entity().downgrade();
             let image = ZoomableImage::new(&file, size(MARGIN.0, MARGIN.1), Radius::MD)
+                .largest_fit(LARGEST_FIT)
                 .over_picture()
                 .on_clicked_beside(move |_, cx| {
                     let _ = viewer.update(cx, |viewer, cx| viewer.close(cx));

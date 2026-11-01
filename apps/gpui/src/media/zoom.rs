@@ -30,6 +30,8 @@ pub struct ZoomableImage {
     /// The room it leaves around it when it fits.
     margin: Size<f32>,
     radius: f32,
+    /// The most it is enlarged to fit, as a multiple of its real size.
+    largest_fit: f32,
     /// It lies over a picture's darkness, as in the viewer.
     over_picture: bool,
     clicked_beside: Option<ClickedBeside>,
@@ -61,6 +63,7 @@ impl ZoomableImage {
             file: file.to_path_buf(),
             margin,
             radius,
+            largest_fit: 1.,
             over_picture: false,
             clicked_beside: None,
             pixels_per_point: 2.,
@@ -73,6 +76,11 @@ impl ZoomableImage {
             bounds: Rc::default(),
             picture_bounds: Rc::default(),
         }
+    }
+
+    pub fn largest_fit(mut self, times: f32) -> Self {
+        self.largest_fit = times;
+        self
     }
 
     pub fn over_picture(mut self) -> Self {
@@ -124,7 +132,7 @@ impl ZoomableImage {
         (picture, points)
     }
 
-    /// The scale at which the image fits its room, never larger than its real size.
+    /// The scale at which the image fits its room, never larger than `largest_fit`.
     fn fit(&self, points: Size<f32>) -> f32 {
         let room = self.bounds.get().size;
         if points.width <= 0. || points.height <= 0. {
@@ -132,7 +140,7 @@ impl ZoomableImage {
         }
         let across = (f32::from(room.width) - 2. * self.margin.width) / points.width;
         let down = (f32::from(room.height) - 2. * self.margin.height) / points.height;
-        across.min(down).clamp(0.01, 1.)
+        across.min(down).clamp(0.01, self.largest_fit)
     }
 
     fn scale_now(&self, cx: &mut App) -> f32 {

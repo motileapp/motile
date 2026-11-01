@@ -51,12 +51,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.ScaleFactor
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -354,8 +356,16 @@ private fun ZoomableImage(image: ImageBitmap, onZoom: (Boolean) -> Unit, tapped:
                 translationX = offset.x
                 translationY = offset.y
             },
-            contentScale = ContentScale.Fit,
+            contentScale = FitAtMostTwice,
         )
+    }
+}
+
+/** Fits the screen, but enlarges a small image to twice its size at most. */
+private object FitAtMostTwice : ContentScale {
+    override fun computeScaleFactor(srcSize: Size, dstSize: Size): ScaleFactor {
+        val fit = ContentScale.Fit.computeScaleFactor(srcSize, dstSize).scaleX.coerceAtMost(2f)
+        return ScaleFactor(fit, fit)
     }
 }
 
