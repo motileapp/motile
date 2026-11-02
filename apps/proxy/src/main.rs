@@ -1,5 +1,5 @@
 //! `motile-proxy`: links itself to the account with `MOTILE_ENROLL_CODE` on its first start, then
-//! serves the account's servers and clients. Its only HTTP is `/healthz` on `PORT`.
+//! serves the account's servers and clients.
 
 use std::path::{Path, PathBuf};
 
@@ -16,7 +16,6 @@ use serde::{Deserialize, Serialize};
 use tracing_subscriber::EnvFilter;
 
 const DEVICE_NAME: &str = "Proxy";
-const DEFAULT_PORT: u16 = 8080;
 
 #[derive(Serialize, Deserialize)]
 struct Linked {
@@ -32,7 +31,6 @@ async fn main() -> anyhow::Result<()> {
 
     let data_dir = PathBuf::from(variable("DATA_DIR").unwrap_or_else(|| "data".into()));
     let auth_url = variable("MOTILE_AUTH_URL").unwrap_or_else(|| DEFAULT_AUTH_URL.into());
-    let port = variable("PORT").and_then(|port| port.parse().ok()).unwrap_or(DEFAULT_PORT);
     std::fs::create_dir_all(&data_dir).context("The data folder couldn't be made.")?;
     let key = DeviceKey::load_or_create(&data_dir.join("device.key")).context("The device key couldn't be read.")?;
 
@@ -47,7 +45,6 @@ async fn main() -> anyhow::Result<()> {
         false => Access::fixed(&servers, &clients),
     };
 
-    tokio::spawn(serve_health(port));
     let options = Options {
         data_dir,
         key: DeviceKey::from_bytes(key.to_bytes()),
@@ -95,17 +92,6 @@ async fn link(data_dir: &Path, auth_url: &str, key: &DeviceKey) {
         Err(error) => tracing::error!(
             "The enroll code didn't link this proxy: {error:#}. Make a new code in a client and set MOTILE_ENROLL_CODE to it."
         ),
-    }
-}
-
-async fn serve_health(port: u16) {
-    let app = axum::Router::new().route("/healthz", axum::routing::get(|| async { "ok" }));
-    let listener = match tokio::net::TcpListener::bind(("0.0.0.0", port)).await {
-        Ok(listener) => listener,
-        Err(error) => return tracing::error!("the health check couldn't listen on port {port}: {error}"),
-    };
-    if let Err(error) = axum::serve(listener, app).await {
-        tracing::error!("the health check stopped: {error}");
     }
 }
 

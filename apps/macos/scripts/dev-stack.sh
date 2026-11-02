@@ -91,7 +91,7 @@ start_proxy() {
     fi
     if [ -n "$code" ] || ! current proxy "$BIN/motile-proxy"; then
         stop proxy
-        MOTILE_ENROLL_CODE="$code" DATA_DIR="$DEV/proxy" PORT=0 MOTILE_PROXY_PORT="$PROXY_PORT" \
+        MOTILE_ENROLL_CODE="$code" DATA_DIR="$DEV/proxy" MOTILE_PROXY_PORT="$PROXY_PORT" \
             MOTILE_ANTHROPIC_URL="$upstream" MOTILE_CLAUDE_AUTHORIZE_URL="$upstream/oauth/authorize" \
             MOTILE_CLAUDE_TOKEN_URL="$upstream/v1/oauth/token" MOTILE_CHATGPT_URL="$upstream/backend-api" \
             MOTILE_OPENAI_AUTH_URL="$upstream" MOTILE_PRICES_URL="$upstream/prices" NO_COLOR=1 \

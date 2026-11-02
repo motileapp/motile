@@ -4,10 +4,9 @@ FROM debian:bookworm-slim
 LABEL org.opencontainers.image.source=https://github.com/motileapp/motile
 ARG TARGETARCH
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates curl \
+    && apt-get install -y --no-install-recommends ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 COPY bin/${TARGETARCH}/motile-proxy /usr/local/bin/motile-proxy
-ENV DATA_DIR=/data PORT=8080 RUST_LOG=info
+ENV DATA_DIR=/data RUST_LOG=info
 VOLUME /data
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s CMD curl -fsS http://127.0.0.1:8080/healthz || exit 1
 CMD ["motile-proxy"]

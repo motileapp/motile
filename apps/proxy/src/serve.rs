@@ -5,7 +5,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::Context;
-use iroh::endpoint::{Connection, RecvStream, SendStream, presets};
+use futures_util::StreamExt;
+use iroh::endpoint::{Connection, PathEvent, PathEventStream, RecvStream, SendStream, presets};
 use iroh::{Endpoint, SecretKey};
 use motile_protocol::PROXY_ALPN;
 use motile_protocol::frame::{read_frame, write_frame};
@@ -49,6 +50,16 @@ pub async fn run(proxy: Arc<Proxy>, access: Arc<Access>, endpoint: Endpoint) {
     }
 }
 
+/// Says in the log whether a device's traffic goes straight to it or through a relay, each time
+/// that changes.
+async fn log_paths(device: String, mut events: PathEventStream) {
+    while let Some(event) = events.next().await {
+        let PathEvent::Selected { remote_addr, .. } = event else { continue };
+        let path = if remote_addr.is_relay() { "relayed" } else { "direct" };
+        tracing::info!(device, path, "traffic path");
+    }
+}
+
 async fn handle_connection(proxy: Arc<Proxy>, access: Arc<Access>, connection: Connection) {
     let device = connection.remote_id().to_string();
     let Some(role) = access.role(&device).await else {
@@ -57,6 +68,7 @@ async fn handle_connection(proxy: Arc<Proxy>, access: Arc<Access>, connection: C
         return;
     };
     tracing::info!(device, ?role, "connected");
+    tokio::spawn(log_paths(device.clone(), connection.path_events()));
     let mut recheck = tokio::time::interval(RECHECK_ACCESS_EVERY);
     loop {
         tokio::select! {
