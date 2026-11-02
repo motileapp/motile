@@ -13,7 +13,7 @@ use super::account_sheet::AccountSheet;
 use super::keybindings::KeybindingsPage;
 use super::layout::{
     Cut, END_ROOM, GROUP_GAP, INSET, PAGE_PADDING, TRAILING_GAP, Targets, column, footed_label, group, label,
-    large_outset, more, note, row, switch_row, target,
+    large_outset, more, note, proxied_label, row, switch_row, target,
 };
 use super::proxy::ProxyPage;
 use crate::format;
@@ -519,12 +519,11 @@ impl SettingsPage {
                         })
                 })
             });
-            let title = format!("{} · {}", agent_name(account.agent), account.name);
             let description = account.settings_description();
             let description = if is_default { format!("Default · {description}") } else { description };
             let leading = vec![
                 logos::agent_icon(account.agent, IconSize::Md, cx).into_any_element(),
-                label(title, Some(description), None, Cut::Wraps, cx),
+                proxied_label(account.settings_title(), Some(description), account.proxy, cx),
             ];
             rows.push(row(leading, menu.into_iter().map(IntoElement::into_any_element).collect()).into_any_element());
             rows.push(divider_on(Surface::Card, cx).into_any_element());

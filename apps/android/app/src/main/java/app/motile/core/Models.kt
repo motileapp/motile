@@ -262,12 +262,19 @@ data class Server(
         return roomier to found.id
     }
 
-    /** The model's name, with the account's when its agent has more than one. */
+    /**
+     * The model's name, with the account's when its agent has more than one. The Proxy account,
+     * whose threads the proxy places, has no name of its own to show: the proxy's symbol says it.
+     */
     fun label(of: ModelInfo, account: String?): String {
         if (accounts(of.agent).size <= 1) return of.shortName
         val found = account(account, of.agent) ?: return of.shortName
+        if (found.proxy && found.pin == null) return of.shortName
         return "${of.shortName} · ${found.name}"
     }
+
+    /** Whether the account runs through the proxy, which the proxy's symbol after its name says. */
+    fun runsThroughProxy(account: String?, of: Agent): Boolean = account(account, of)?.proxy ?: false
 
     companion object {
         operator fun invoke(json: JSON): Server {
@@ -1036,6 +1043,8 @@ data class AgentInfo(
     val model: String? = null,
     /** The account's name, when its agent has more than one. */
     val account: String? = null,
+    /** It runs through the account's proxy. */
+    val proxy: Boolean = false,
 ) {
     constructor(json: JSON) : this(
         id = json.string("id"),
@@ -1055,6 +1064,7 @@ data class AgentInfo(
         agent = Agent.of(json.optionalString("agent")),
         model = json.optionalString("model"),
         account = json.optionalString("account"),
+        proxy = json.bool("proxy"),
     )
 
     val working: Boolean get() = status == ToolStatus.Running
@@ -1434,6 +1444,8 @@ data class UsageReport(
         val tokens: Long,
         val costUSD: Double?,
         val share: Double,
+        /** An account that runs through the proxy, which its symbol after the name says. */
+        val proxy: Boolean = false,
     ) {
         val id: String get() = "${agent?.raw ?: ""}/${server ?: ""}/$name"
     }
@@ -1449,6 +1461,7 @@ data class UsageReport(
                 tokens = line.long("tokens"),
                 costUSD = line.optionalDouble("cost_usd"),
                 share = share ?: line.double("share"),
+                proxy = line.bool("proxy"),
             )
             return UsageReport(
                 costUSD = cost,

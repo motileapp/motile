@@ -56,8 +56,7 @@ pub fn limits(report: &LimitsReport, width: f32, cx: &App) -> AnyElement {
 
 fn header(section: &LimitsSection, cx: &App) -> Div {
     let c = colors(cx);
-    let on_proxy = (section.proxy && section.servers.is_empty()).then_some("On your proxy".to_string());
-    let parts: Vec<String> = [section.name.clone(), section.account.clone(), on_proxy].into_iter().flatten().collect();
+    let parts: Vec<String> = [section.name.clone(), section.account.clone()].into_iter().flatten().collect();
     let account = (!parts.is_empty()).then(|| parts.join(" · "));
     div()
         .px(px(4.))
@@ -75,7 +74,7 @@ fn header(section: &LimitsSection, cx: &App) -> Div {
                 .child(agent_name(section.agent)),
         )
         .when_some(section.plan.clone(), |header, plan| header.child(Chip::new(plan)))
-        .when(section.proxy, |header| header.child(Chip::new("Proxy").icon("network")))
+        .when(section.proxy, |header| header.child(Chip::new("Proxy").icon("waypoints")))
         .when_some(account, |header, account| {
             header.child(
                 div()

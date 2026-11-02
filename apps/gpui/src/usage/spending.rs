@@ -340,6 +340,9 @@ impl SpendingView {
         let numbers = 64. + 72.;
         let dot_room = if line.agent.is_some() { DOT + 10. } else { 0. };
         let mut name_width = text_width(&line.name, 12., FontWeight::NORMAL, window);
+        if line.proxy {
+            name_width += crate::ui::proxy_mark_width(12.);
+        }
         if let Some(server) = &line.server {
             name_width += 10. + text_width(server, 12., FontWeight::NORMAL, window);
         }
@@ -350,7 +353,11 @@ impl SpendingView {
             .items_center()
             .gap(px(10.))
             .when_some(line.agent, |row, agent| row.child(dot(logos::agent_color(agent, c))))
-            .child(crate::ui::middle_truncated(line.name.clone()).min_w_0().flex_shrink(1.).text_color(c.foreground))
+            .child(
+                crate::ui::proxied(crate::ui::middle_truncated(line.name.clone()), line.proxy, 12.)
+                    .flex_shrink(1.)
+                    .text_color(c.foreground),
+            )
             .when_some(line.server.clone(), |row, server| {
                 row.child(crate::ui::middle_truncated(server).min_w_0().flex_shrink(1.).text_color(c.muted_foreground))
             })

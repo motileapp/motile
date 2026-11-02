@@ -13,7 +13,7 @@ use crate::models::{ThreadInfo, last_component, shortened};
 use crate::theme::{IconSize, Surface, colors};
 use crate::ui::control::dotted;
 use crate::ui::logos::{self, pull_request_color, pull_request_symbol};
-use crate::ui::{divider_on, dropdown_card, icons, tabular_numbers};
+use crate::ui::{divider_on, dropdown_card, icons, proxied, tabular_numbers};
 
 const MAX_WIDTH: f32 = 320.;
 /// Every line's icon, beside its 12-point text.
@@ -120,7 +120,7 @@ impl Sidebar {
         let store = self.store.read(cx);
         let project = store.project(Some(&thread.project_id)).map(|project| project.seen(thread));
         let server = store.server(Some(&thread.server_id));
-        let line = |text: String, middle: bool, icon: AnyElement| {
+        let card_line = |text: String, middle: bool, through_proxy: bool, icon: AnyElement| {
             let shown = div().min_w_0().text_size(px(12.)).whitespace_nowrap().overflow_hidden();
             let shown = if middle { shown.text_ellipsis_middle() } else { shown.text_ellipsis() };
             div()
@@ -130,9 +130,10 @@ impl Sidebar {
                 .gap(px(8.))
                 .text_color(c.muted_foreground)
                 .child(icon)
-                .child(shown.child(dotted(text, c)))
+                .child(proxied(shown.child(dotted(text, c)), through_proxy, 12.))
                 .into_any_element()
         };
+        let line = |text: String, middle: bool, icon: AnyElement| card_line(text, middle, false, icon);
         let name = project.as_ref().map(|project| project.name.clone()).unwrap_or_else(|| last_component(&thread.cwd));
         let checkout = match project.as_ref().and_then(|project| project.branch.clone().map(|branch| (project, branch)))
         {
@@ -166,9 +167,10 @@ impl Sidebar {
                     .gap(px(10.))
                     .child(line(name, false, logos::project_icon(project.as_ref(), ICON, cx)))
                     .child(checkout)
-                    .child(line(
+                    .child(card_line(
                         store.model_label(thread),
                         false,
+                        store.model_proxied(thread),
                         logos::agent_icon(thread.agent, ICON, cx).into_any_element(),
                     ))
                     .when_some(server, |lines, server| {

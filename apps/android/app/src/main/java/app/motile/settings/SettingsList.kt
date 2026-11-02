@@ -30,6 +30,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -57,6 +58,8 @@ import app.motile.ui.Text
 import app.motile.ui.TextArea
 import app.motile.ui.ThemeDivider
 import app.motile.ui.pressable
+import app.motile.ui.ProxyMark
+import app.motile.ui.proxied
 import kotlinx.coroutines.delay
 
 /** The text of a row, as iOS's body. */
@@ -264,12 +267,19 @@ fun RowScope.SettingsItem(
     description: String,
     truncates: TextOverflow = TextOverflow.Ellipsis,
     lines: Int = 1,
+    /** What the title names runs through the proxy, which its symbol after it says. */
+    proxied: Boolean = false,
     footer: (@Composable () -> Unit)? = null,
     picture: (@Composable () -> Unit)? = null,
 ) {
     picture?.invoke()
     Column(Modifier.weight(1f).padding(vertical = 2.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        RowText(title, color = LocalPalette.current.foreground, maxLines = 1)
+        if (proxied) {
+            val color = LocalPalette.current.foreground
+            Text(AnnotatedString(title).proxied(true), size = ROW_TEXT, color = color, maxLines = 1, inlineContent = ProxyMark.content(color, ROW_TEXT))
+        } else {
+            RowText(title, color = LocalPalette.current.foreground, maxLines = 1)
+        }
         Text(description, size = NOTE_TEXT, color = LocalPalette.current.mutedForeground, maxLines = lines, overflow = truncates)
         footer?.let { Box(Modifier.padding(top = 2.dp)) { it() } }
     }

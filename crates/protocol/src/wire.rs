@@ -272,9 +272,13 @@ pub struct HandoffEnd {
     pub model: Option<String>,
     /// The model's name as the picker lists it, e.g. "Claude Opus 5.5" or "GPT-6.1-Sol".
     pub name: Option<String>,
-    /// The account's name, when its agent has more than one.
+    /// The account's name, when its agent has more than one. None for the Proxy account that
+    /// places its threads itself, which has no name of its own to show.
     #[serde(default)]
     pub account: Option<String>,
+    /// The account runs through the account's proxy.
+    #[serde(default)]
+    pub proxy: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
@@ -337,9 +341,13 @@ pub struct RunsOn {
     /// The model's name as the picker lists it, or else its id.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
-    /// The account's name, when its agent has more than one.
+    /// The account's name, when its agent has more than one: for one of the proxy's accounts, the
+    /// one it is pinned to or the one that last answered it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub account: Option<String>,
+    /// It runs through the account's proxy.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub proxy: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub thread_id: Option<String>,
 }

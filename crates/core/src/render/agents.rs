@@ -142,6 +142,9 @@ pub struct AgentView {
     /// The account's name, when its agent has more than one.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub account: Option<String>,
+    /// It runs through the account's proxy, which the proxy's symbol after the account says.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub proxy: bool,
 }
 
 /// How many of `count` agents stand side by side as avatars: all of four or fewer, else three
@@ -234,6 +237,7 @@ pub fn starting(item: &Item, call: &ToolCall, threads: &HashMap<String, ThreadSt
             .and_then(|on| on.model.as_deref())
             .map(|model| short_model_name(model).unwrap_or(model).to_string()),
         account: runs_on.and_then(|on| on.account.clone()),
+        proxy: runs_on.is_some_and(|on| on.proxy),
     })
 }
 
@@ -302,6 +306,7 @@ pub fn noticed(item: &Item, notice: &AgentNotice) -> AgentView {
         agent: Some(notice.agent),
         model: None,
         account: None,
+        proxy: false,
     }
 }
 
@@ -496,8 +501,13 @@ mod tests {
         call.name = "mcp__motile__start_agent".into();
         call.output = Some(r#"{"id":"c1","title":"Count the files"}"#.into());
         let agent = call.agent.as_mut().unwrap();
-        agent.runs_on =
-            Some(Box::new(RunsOn { agent: Agent::Codex, model: None, account: None, thread_id: Some("c1".into()) }));
+        agent.runs_on = Some(Box::new(RunsOn {
+            agent: Agent::Codex,
+            model: None,
+            account: None,
+            proxy: false,
+            thread_id: Some("c1".into()),
+        }));
         assert_eq!(alone(&item).unwrap().detail, "Working");
     }
 
@@ -601,8 +611,13 @@ mod tests {
         call.name = "mcp__motile__start_agent".into();
         let agent = call.agent.as_mut().unwrap();
         agent.waits = waits;
-        agent.runs_on =
-            Some(Box::new(RunsOn { agent: Agent::Codex, model: None, account: None, thread_id: Some("c1".into()) }));
+        agent.runs_on = Some(Box::new(RunsOn {
+            agent: Agent::Codex,
+            model: None,
+            account: None,
+            proxy: false,
+            thread_id: Some("c1".into()),
+        }));
         item
     }
 

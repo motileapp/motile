@@ -62,7 +62,7 @@ impl SettingsSection {
             SettingsSection::TextGeneration => "pencil-line",
             SettingsSection::PullRequests => "git-pull-request",
             SettingsSection::Integrations => "blocks",
-            SettingsSection::Proxy => "network",
+            SettingsSection::Proxy => "waypoints",
         }
     }
 }

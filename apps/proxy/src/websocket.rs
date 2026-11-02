@@ -47,7 +47,7 @@ pub async fn serve(
     mut recv: RecvStream,
 ) -> anyhow::Result<()> {
     if incoming.agent != Agent::Codex {
-        write_frame(&mut send, &ProxyReply::HttpHead { status: 426, headers: vec![] }).await?;
+        write_frame(&mut send, &ProxyReply::HttpHead { status: 426, headers: vec![], account: None }).await?;
         let _ = send.finish();
         return Ok(());
     }
@@ -144,7 +144,8 @@ async fn open(
         let Some(account) = proxy.choose(key, asked, &tried, now()) else {
             match limit_reply(proxy, incoming.agent, pin) {
                 Some(made) => {
-                    write_frame(send, &ProxyReply::HttpHead { status: 429, headers: made.headers }).await?;
+                    write_frame(send, &ProxyReply::HttpHead { status: 429, headers: made.headers, account: None })
+                        .await?;
                     send.write_all(&made.body).await?;
                 }
                 None => {
@@ -172,7 +173,9 @@ async fn open(
                 if let Some(reading) = limits::from_headers(incoming.agent, &headers) {
                     proxy.observe(&account.id, &reading, now());
                 }
-                write_frame(send, &ProxyReply::WebSocketOpen { headers: passed_back(&headers) }).await?;
+                let open =
+                    ProxyReply::WebSocketOpen { headers: passed_back(&headers), account: Some(account.id.clone()) };
+                write_frame(send, &open).await?;
                 return Ok(Some((account, upstream)));
             }
             Err(tungstenite::Error::Http(response)) => {
@@ -196,7 +199,11 @@ async fn open(
                     tried.push(account.id);
                     continue;
                 }
-                write_frame(send, &ProxyReply::HttpHead { status, headers: passed_back(&headers) }).await?;
+                write_frame(
+                    send,
+                    &ProxyReply::HttpHead { status, headers: passed_back(&headers), account: Some(account.id.clone()) },
+                )
+                .await?;
                 send.write_all(&body).await?;
                 let _ = send.finish();
                 return Ok(None);

@@ -61,6 +61,9 @@ pub struct UsageLine {
     #[serde(default)]
     pub cost_usd: Option<f64>,
     pub share: f64,
+    /// An account that runs through the proxy, which its symbol after the name says.
+    #[serde(default)]
+    pub proxy: bool,
 }
 
 impl UsageReport {
@@ -81,6 +84,7 @@ impl UsageReport {
                     tokens: kind.tokens,
                     cost_usd: Some(kind.cost_usd),
                     share,
+                    proxy: false,
                 }
             })
             .collect()

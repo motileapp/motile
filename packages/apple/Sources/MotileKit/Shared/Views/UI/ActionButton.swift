@@ -188,6 +188,8 @@ struct ControlLabel: View {
     /// Words after the title in a colour of their own, as "working" after "2 agents", which
     /// leave the title in the foreground.
     var tinted: (words: String, color: Color)?
+    /// What the words name runs through the proxy, which its symbol after them says.
+    var proxied = false
 
     private var wordless: Bool { title == nil && !chevron }
     private var markSize: IconSize { symbolSize ?? size.symbol }
@@ -261,8 +263,9 @@ struct ControlLabel: View {
     }
 
     private func text(_ title: String, tinted: (words: String, color: Color)?) -> Text {
-        guard let tinted else { return Text(dotted: title) }
-        return Text("\(Text(dotted: title).foregroundStyle(Color.themeForeground)) \(Text(verbatim: tinted.words).foregroundStyle(tinted.color))")
+        let named = Text(dotted: title).proxied(proxied, fontSize: size.textSize)
+        guard let tinted else { return named }
+        return Text("\(named.foregroundStyle(Color.themeForeground)) \(Text(verbatim: tinted.words).foregroundStyle(tinted.color))")
     }
 
     @ViewBuilder private func mark(_ icon: ControlIcon) -> some View {
@@ -397,6 +400,7 @@ struct ActionButton: View {
     private let detail: Symbol?
     private var place: String?
     private var tinted: String?
+    private var proxied = false
     private let margin: EdgeInsets
     /// It stands in a line of text: its symbol or words start where the line does, and it is no
     /// taller than its words, so that nothing moves for it. Its light and its press reach around.
@@ -405,7 +409,7 @@ struct ActionButton: View {
 
     init(
         _ title: String, tinted: String? = nil, icon: Symbol? = nil, picture: AnyView? = nil, pictures: AnyView? = nil, detail: Symbol? = nil,
-        place: String? = nil, help: String? = nil,
+        place: String? = nil, proxied: Bool = false, help: String? = nil,
         variant: ButtonVariant = .secondary, size: ControlSize = .regular, symbolSize: IconSize? = nil, gap: CGFloat? = nil,
         padding: CGFloat? = nil, pending: Bool = false, pendingTitle: String? = nil,
         selected: Bool = false, round: Bool = false,
@@ -420,6 +424,7 @@ struct ActionButton: View {
         self.detail = detail
         self.place = place
         self.tinted = tinted
+        self.proxied = proxied
         self.help = help
         look = ControlLook(variant: variant, size: size, selected: selected, round: round, joined: joined, tint: tint)
         self.pending = pending
@@ -479,7 +484,7 @@ struct ActionButton: View {
                 chevronColor: look.foreground == .themeForeground ? .themeMutedForeground : .themeMutedStrongerForeground, pending: pending,
                 pendingTitle: pendingTitle, fills: fills,
                 alignment: alignment, symbolSize: symbolSize, gap: gap, padding: padding, detail: detail, place: place,
-                tinted: look.tint.flatMap { tint in tinted.map { (words: $0, color: tint) } }
+                tinted: look.tint.flatMap { tint in tinted.map { (words: $0, color: tint) } }, proxied: proxied
             )
             .padding(reach.around)
         }
@@ -626,6 +631,27 @@ extension Text {
     /// The text with the dots between its parts muted, as "Opus 5.5 · Work".
     init(dotted text: String) {
         self.init(dotted: text.components(separatedBy: " · ").map { Text(verbatim: $0) })
+    }
+
+    /// The proxy's symbol beside words of `fontSize` that stand alone, centred on their line. It
+    /// stands outside the line, which a symbol moved off the baseline would make taller.
+    func proxyMarked(_ proxied: Bool, fontSize: CGFloat) -> some View {
+        HStack(spacing: (fontSize / 4).rounded()) {
+            self
+            if proxied {
+                Image(.waypoints, size: ProxyMark.size(for: fontSize))
+            }
+        }
+    }
+
+    /// The proxy's symbol after words of `fontSize` inside a line of fixed height, which says what
+    /// they name runs through the proxy: centred on their capitals rather than standing on their
+    /// baseline.
+    func proxied(_ proxied: Bool, fontSize: CGFloat) -> Text {
+        guard proxied else { return self }
+        let size = ProxyMark.size(for: fontSize)
+        let rise = ((PlatformFont.ui(fontSize).capHeight - PlatformImage.symbolSide(size)) / 2).rounded()
+        return Text("\(self) \(Text(Image(.waypoints, size: size)).baselineOffset(rise))")
     }
 
     init(dotted parts: [Text]) {

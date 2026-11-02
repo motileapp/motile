@@ -4617,7 +4617,7 @@ async fn answer_as_proxy(
             let body = recv.read_to_end(1 << 20).await.unwrap();
             asked.send((request, body)).unwrap();
             let head = vec![("content-type".to_string(), "text/event-stream".to_string())];
-            write_frame(&mut send, &ProxyReply::HttpHead { status: 200, headers: head }).await.unwrap();
+            write_frame(&mut send, &ProxyReply::HttpHead { status: 200, headers: head, account: None }).await.unwrap();
             send.write_all(b"data: first\n\n").await.unwrap();
             release.notified().await;
             send.write_all(b"data: second\n\n").await.unwrap();
@@ -4625,7 +4625,7 @@ async fn answer_as_proxy(
         }
         ProxyRequest::WebSocket { .. } => {
             asked.send((request, vec![])).unwrap();
-            write_frame(&mut send, &ProxyReply::WebSocketOpen { headers: vec![] }).await.unwrap();
+            write_frame(&mut send, &ProxyReply::WebSocketOpen { headers: vec![], account: None }).await.unwrap();
             while let Ok(Some(message)) = read_frame::<_, WsMessage>(&mut recv).await {
                 let WsMessage::Text { text } = message else { break };
                 write_frame(&mut send, &WsMessage::Text { text: format!("echo {text}") }).await.unwrap();

@@ -203,12 +203,10 @@ private struct AgentRow: View {
                         .font(.ui(size: 12))
                         .foregroundStyle(agent.status == .failed ? Color.themeDestructive : Color.themeMutedForeground)
                         .lineLimit(1, reservesSpace: true)
-                    if let facts = facts {
-                        Text(facts)
-                            .font(.ui(size: 11))
-                            .foregroundStyle(Color.themeMutedStrongerForeground)
-                            .lineLimit(1)
-                    }
+                    facts
+                        .font(.ui(size: 11))
+                        .foregroundStyle(Color.themeMutedStrongerForeground)
+                        .lineLimit(1)
                 }
             }
             .padding(.horizontal, 10)
@@ -241,10 +239,22 @@ private struct AgentRow: View {
         }
     }
 
-    /// "6.1-Sol · work · 3 tools · 21k tokens", as far as each is known.
-    private var facts: String? {
-        let parts = [agent.model, agent.account, agent.usage].compactMap { $0 }
-        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    /// "6.1-Sol · work · 3 tools · 21k tokens", as far as each is known, with the proxy's symbol
+    /// after the account of one that runs through the proxy.
+    @ViewBuilder private var facts: some View {
+        let runsOn = [agent.model, agent.account].compactMap { $0 }.map { Text(verbatim: $0) }
+        let usage = (agent.usage?.components(separatedBy: " · ") ?? []).map { Text(verbatim: $0) }
+        if agent.proxy && !runsOn.isEmpty {
+            HStack(spacing: 0) {
+                Text(dotted: runsOn).proxyMarked(true, fontSize: 11)
+                    .layoutPriority(1)
+                if !usage.isEmpty {
+                    Text(dotted: [Text(verbatim: "")] + usage)
+                }
+            }
+        } else if !(runsOn + usage).isEmpty {
+            Text(dotted: runsOn + usage)
+        }
     }
 
     private func open() {

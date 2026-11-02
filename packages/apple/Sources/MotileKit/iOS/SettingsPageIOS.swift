@@ -261,7 +261,9 @@ struct SettingsPage: View {
                     guard !account.proxy else { return store.openSettings(.proxy) }
                     editedAccount = EditedAccount(server: server, account: account)
                 } label: {
-                    SettingsItem("\(account.agent.name) · \(account.name)", description: account.settingsDescription(isDefault: server.isDefault(account))) {
+                    SettingsItem(
+                        account.settingsTitle, description: account.settingsDescription(isDefault: server.isDefault(account)), proxied: account.proxy
+                    ) {
                         AgentIcon(agent: account.agent, size: SettingsTile.symbolSize)
                             .frame(width: SettingsTile.size, height: SettingsTile.size)
                     }
@@ -699,14 +701,20 @@ private struct SettingsItem<Picture: View, Footer: View>: View {
     let title: String
     let description: String
     var truncates: Text.TruncationMode = .tail
+    /// What the title names runs through the proxy, which its symbol after it says.
+    var proxied = false
     @ViewBuilder let picture: Picture
     /// What stands under the description.
     @ViewBuilder let footer: Footer
 
-    init(_ title: String, description: String, truncates: Text.TruncationMode = .tail, @ViewBuilder picture: () -> Picture, @ViewBuilder footer: () -> Footer) {
+    init(
+        _ title: String, description: String, truncates: Text.TruncationMode = .tail, proxied: Bool = false,
+        @ViewBuilder picture: () -> Picture, @ViewBuilder footer: () -> Footer
+    ) {
         self.title = title
         self.description = description
         self.truncates = truncates
+        self.proxied = proxied
         self.picture = picture()
         self.footer = footer()
     }
@@ -715,7 +723,8 @@ private struct SettingsItem<Picture: View, Footer: View>: View {
         HStack(spacing: 12) {
             picture
             VStack(alignment: .leading, spacing: 2) {
-                Text(title)
+                Text(verbatim: title)
+                    .proxyMarked(proxied, fontSize: UIFont.preferredFont(forTextStyle: .body).pointSize)
                     .foregroundStyle(Color.themeForeground)
                 Text(description)
                     .font(.footnote)
@@ -730,8 +739,8 @@ private struct SettingsItem<Picture: View, Footer: View>: View {
 }
 
 extension SettingsItem where Footer == EmptyView {
-    init(_ title: String, description: String, truncates: Text.TruncationMode = .tail, @ViewBuilder picture: () -> Picture) {
-        self.init(title, description: description, truncates: truncates, picture: picture) { EmptyView() }
+    init(_ title: String, description: String, truncates: Text.TruncationMode = .tail, proxied: Bool = false, @ViewBuilder picture: () -> Picture) {
+        self.init(title, description: description, truncates: truncates, proxied: proxied, picture: picture) { EmptyView() }
     }
 }
 

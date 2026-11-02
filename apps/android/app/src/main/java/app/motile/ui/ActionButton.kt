@@ -235,6 +235,8 @@ fun ControlLabel(
     place: String? = null,
     /** Words after the title in a colour of their own, as "working" after "2 agents", which leave the title in the foreground. */
     tinted: Pair<String, Color>? = null,
+    /** What the words name runs through the proxy, which its symbol after them says. */
+    proxied: Boolean = false,
     /** Its chevron points up, at what it hides again. */
     chevronUp: Boolean = false,
     /** Its words are the prose's, as the text it stands under. */
@@ -259,8 +261,8 @@ fun ControlLabel(
         ) {
             if (icon != null || title != null) {
                 Box(Modifier.weight(1f, fill = false).offset(y = wordsShift), contentAlignment = Alignment.Center) {
-                    ControlWords(title, tinted, icon, size, font, markSize, pictureSide, gap, detail, place, pending, spins = pending && icon != null, Modifier.alpha(if (waitingTitle == null) 1f else 0f))
-                    if (waitingTitle != null) ControlWords(waitingTitle, null, icon, size, font, markSize, pictureSide, gap, null, null, pending, spins = true)
+                    ControlWords(title, tinted, proxied, icon, size, font, markSize, pictureSide, gap, detail, place, pending, spins = pending && icon != null, Modifier.alpha(if (waitingTitle == null) 1f else 0f))
+                    if (waitingTitle != null) ControlWords(waitingTitle, null, false, icon, size, font, markSize, pictureSide, gap, null, null, pending, spins = true)
                 }
             }
             if (chevron) Icon(
@@ -300,6 +302,7 @@ private fun proseShifts(height: Dp): Pair<Dp, Dp> {
 private fun ControlWords(
     title: String?,
     tinted: Pair<String, Color>?,
+    proxied: Boolean,
     icon: ControlIcon?,
     size: ControlSize,
     font: TextStyle,
@@ -328,7 +331,11 @@ private fun ControlWords(
                 Modifier.weight(1f, fill = false).alpha(if (pending && !spins) 0f else 1f),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(words(title, tinted, muted), style = font, maxLines = 1, modifier = Modifier.weight(1f, fill = false))
+                val markColor = if (tinted == null) LocalForeground.current else LocalPalette.current.foreground
+                Text(
+                    words(title, tinted, proxied, muted), style = font, maxLines = 1, modifier = Modifier.weight(1f, fill = false),
+                    inlineContent = if (proxied) ProxyMark.content(markColor, size.textSize) else emptyMap(),
+                )
                 if (detail != null) {
                     Text(" · ", style = font, color = muted, maxLines = 1)
                     Icon(detail, size.smallSymbol, color = muted)
@@ -343,11 +350,12 @@ private fun ControlWords(
 }
 
 @Composable
-private fun words(title: String, tinted: Pair<String, Color>?, muted: Color): AnnotatedString {
-    if (tinted == null) return dotted(title, muted)
+private fun words(title: String, tinted: Pair<String, Color>?, proxied: Boolean, muted: Color): AnnotatedString {
+    val named = dotted(title, muted).proxied(proxied)
+    if (tinted == null) return named
     val foreground = LocalPalette.current.foreground
     return buildAnnotatedString {
-        withStyle(SpanStyle(color = foreground)) { append(dotted(title, muted)) }
+        withStyle(SpanStyle(color = foreground)) { append(named) }
         withStyle(SpanStyle(color = tinted.second)) { append(" ${tinted.first}") }
     }
 }
@@ -452,6 +460,8 @@ fun ActionButton(
     place: String? = null,
     /** Words after its title in its tint, which leave the title in the foreground. */
     tinted: String? = null,
+    /** What its title names runs through the proxy, which its symbol after the title says. */
+    proxied: Boolean = false,
     help: String? = null,
     variant: ButtonVariant = if (title.isNullOrEmpty()) ButtonVariant.Ghost else ButtonVariant.Secondary,
     size: ControlSize = ControlSize.Regular,
@@ -486,7 +496,7 @@ fun ActionButton(
         ControlLabel(
             words, ControlIcon.of(icon, picture, pictures), size, chevron = opens || expanded != null, pending = pending, pendingTitle = pendingTitle, fills = fills,
             alignment = alignment, symbolSize = symbolSize, gap = gap, padding = padding, detail = detail, place = place,
-            tinted = tinted?.let { tail -> tint?.let { tail to it } }, chevronUp = expanded == true, prose = prose,
+            tinted = tinted?.let { tail -> tint?.let { tail to it } }, proxied = proxied, chevronUp = expanded == true, prose = prose,
         )
     }
     if (!inline) return ControlButton(look, onClick, modifier, pending, disabled, margin, words?.let { listOfNotNull(it, tinted).joinToString(" ") } ?: help, onLongClick, stretches = stretches, content = label)

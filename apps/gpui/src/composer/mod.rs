@@ -416,7 +416,14 @@ impl Composer {
             settings -= context.map_or(0., |context| words(&context, window));
         }
         let model = match store.composer_model() {
-            Some(_) => words(&store.composer_model_label().unwrap_or_default(), window),
+            Some(_) => {
+                words(&store.composer_model_label().unwrap_or_default(), window)
+                    + if store.composer_proxied() {
+                        crate::ui::proxy_mark_width(ControlSize::Regular.text_size())
+                    } else {
+                        0.
+                    }
+            }
             None => 0.,
         };
         let row = self.row.get();
@@ -505,6 +512,7 @@ impl Composer {
         let open = store.composer_picker.is_some();
         let disabled = store.composer_models().is_empty() || crate::ui::inert(cx);
         let help = store.shortcuts.help("Model, effort and access", "modelPicker.toggle");
+        let proxied = store.composer_proxied();
         let model_title = (labels != Labels::None || model.is_none())
             .then(|| store.composer_model_label().unwrap_or("No agent".into()));
         let effort_title = match labels {
@@ -552,17 +560,18 @@ impl Composer {
                             .group_active(group.clone(), move |face| face.bg(lit))
                     })
                     .child(self.settings_anchor.track())
-                    .child(settings_part(logo, model_title, c))
+                    .child(settings_part(logo, model_title, proxied, c))
                     .when(effort.is_some() || context.is_some(), |face| {
                         let mark = effort
                             .as_deref()
                             .map(|effort| icons::symbol(effort_symbol(effort), symbol).into_any_element());
-                        face.child(divider()).child(settings_part(mark, effort_title, c))
+                        face.child(divider()).child(settings_part(mark, effort_title, false, c))
                     })
                     .child(divider())
                     .child(settings_part(
                         Some(icons::symbol(access_symbol(access), symbol).into_any_element()),
                         (labels == Labels::All).then(|| access_label(access).to_string()),
+                        false,
                         c,
                     )),
             )
@@ -774,7 +783,7 @@ fn toggle_picker(store: &Entity<Store>, cx: &mut App) {
 
 /// A part of the settings button: its symbol or picture, and its words when it has room for
 /// them, the symbol standing closer to the edge than words do, with words or without.
-fn settings_part(mark: Option<AnyElement>, title: Option<String>, c: &theme::Colors) -> Div {
+fn settings_part(mark: Option<AnyElement>, title: Option<String>, proxied: bool, c: &theme::Colors) -> Div {
     let size = ControlSize::Regular;
     let square = |mark: AnyElement| {
         div().size(px(size.symbol().side())).flex_shrink_0().flex().items_center().justify_center().child(mark)
@@ -788,7 +797,7 @@ fn settings_part(mark: Option<AnyElement>, title: Option<String>, c: &theme::Col
             .text_size(px(size.text_size()))
             .font_weight(FontWeight::MEDIUM)
             .whitespace_nowrap()
-            .child(dotted(title, c)),
+            .child(crate::ui::proxied(dotted(title, c), proxied, size.text_size())),
     )
 }
 

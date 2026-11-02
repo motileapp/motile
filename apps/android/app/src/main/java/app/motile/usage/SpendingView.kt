@@ -25,6 +25,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
@@ -43,12 +44,15 @@ import app.motile.theme.LocalPalette
 import app.motile.theme.LocalSurface
 import app.motile.theme.Surface
 import app.motile.theme.Theme
+import app.motile.theme.symbolSide
 import app.motile.ui.AgentIcon
 import app.motile.ui.Card
+import app.motile.ui.ProxyMark
 import app.motile.ui.Segmented
 import app.motile.ui.Text
 import app.motile.ui.ThemeDivider
 import app.motile.ui.color
+import app.motile.ui.proxied
 import java.text.NumberFormat
 import java.util.Currency
 
@@ -250,7 +254,8 @@ private fun LineRow(line: UsageReport.Line, measure: Measure, stacked: Boolean) 
         val density = LocalDensity.current
         val style = Theme.ui(12f)
         val named = with(density) {
-            val name = measurer.measure(line.name, style, maxLines = 1).size.width.toDp()
+            val name = measurer.measure(if (line.proxy) "${line.name} " else line.name, style, maxLines = 1).size.width.toDp() +
+                if (line.proxy) symbolSide(ProxyMark.size(12f)) else 0.dp
             val server = line.server?.let { measurer.measure(it, style, maxLines = 1).size.width.toDp() + spacing } ?: 0.dp
             name + server
         }
@@ -266,7 +271,10 @@ private fun LineNumbers(line: UsageReport.Line, measure: Measure, bar: Boolean) 
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(spacing), verticalAlignment = Alignment.CenterVertically) {
         line.agent?.let { Dot(it.color(palette)) }
         Row(Modifier.weight(1f).padding(end = 8.dp), horizontalArrangement = Arrangement.spacedBy(spacing), verticalAlignment = Alignment.CenterVertically) {
-            Text(line.name, Modifier.weight(1f, fill = false), style = style, color = palette.foreground, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
+            Text(
+                AnnotatedString(line.name).proxied(line.proxy), Modifier.weight(1f, fill = false), style = style, color = palette.foreground, maxLines = 1,
+                overflow = TextOverflow.MiddleEllipsis, inlineContent = ProxyMark.content(palette.foreground, 12f),
+            )
             line.server?.let {
                 Text(it, Modifier.weight(1f, fill = false), style = style, color = palette.mutedForeground, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
             }

@@ -230,12 +230,29 @@ prompts = queue.Queue()
 answers = queue.Queue()
 
 
+def ask_through_proxy():
+    """On one of the proxy's accounts, sends a request through it as Claude Code does, so that the proxy
+    places the thread on one of its accounts."""
+    base, token = os.environ.get("ANTHROPIC_BASE_URL", ""), os.environ.get("ANTHROPIC_AUTH_TOKEN", "")
+    if not base.startswith("http://127.0.0.1") or not token:
+        return
+    body = {"model": "claude-opus-4-5", "max_tokens": 1, "messages": [{"role": "user", "content": "hi"}]}
+    request = urllib.request.Request(f"{base}/v1/messages", data=json.dumps(body).encode(),
+                                     headers={"Content-Type": "application/json", "x-api-key": token})
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            response.read()
+    except Exception:
+        pass
+
+
 def read_stdin():
     for line in sys.stdin:
         if not line.strip():
             continue
         message = json.loads(line)
         if message["type"] == "user":
+            ask_through_proxy()
             prompts.put(message)
         if message["type"] == "control_response":
             answers.put(message)

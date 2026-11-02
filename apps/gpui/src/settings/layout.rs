@@ -172,9 +172,28 @@ pub fn label(
     footed_label(title, description, icon, cut, None, cx)
 }
 
+/// A label whose title names what runs through the proxy where `proxied`, which its symbol after
+/// the title says. Such a title is cut on its line rather than wrapped.
+pub fn proxied_label(title: String, description: Option<String>, proxied: bool, cx: &App) -> AnyElement {
+    let title =
+        if proxied { crate::ui::proxied(title, true, 13.).into_any_element() } else { title.into_any_element() };
+    titled_label(title, description, None, Cut::Wraps, None, cx)
+}
+
 /// A label with something under its description.
 pub fn footed_label(
     title: impl Into<SharedString>,
+    description: Option<String>,
+    icon: Option<&'static str>,
+    cut: Cut,
+    footer: Option<AnyElement>,
+    cx: &App,
+) -> AnyElement {
+    titled_label(title.into().into_any_element(), description, icon, cut, footer, cx)
+}
+
+fn titled_label(
+    title: AnyElement,
     description: Option<String>,
     icon: Option<&'static str>,
     cut: Cut,
@@ -198,7 +217,7 @@ pub fn footed_label(
                 .flex()
                 .flex_col()
                 .gap(px(2.))
-                .child(div().text_size(px(13.)).font_weight(FontWeight::MEDIUM).child(title.into()))
+                .child(div().text_size(px(13.)).font_weight(FontWeight::MEDIUM).child(title))
                 .when_some(description, |label, description| {
                     label.child(
                         div()

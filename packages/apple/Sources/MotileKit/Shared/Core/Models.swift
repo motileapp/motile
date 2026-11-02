@@ -380,10 +380,17 @@ struct Server: Equatable, Identifiable {
         return (roomier, model.id)
     }
 
-    /// The model's name, with the account's when its agent has more than one.
+    /// The model's name, with the account's when its agent has more than one. The Proxy account,
+    /// whose threads the proxy places, has no name of its own to show: the proxy's symbol says it.
     func label(of model: ModelInfo, account id: String?) -> String {
         guard accounts(of: model.agent).count > 1, let account = account(id, of: model.agent) else { return model.shortName }
+        guard !account.proxy || account.pin != nil else { return model.shortName }
         return "\(model.shortName) · \(account.name)"
+    }
+
+    /// Whether the account runs through the proxy, which the proxy's symbol after its name says.
+    func runsThroughProxy(_ id: String?, of agent: Agent) -> Bool {
+        account(id, of: agent)?.proxy ?? false
     }
 }
 
@@ -1123,6 +1130,8 @@ struct AgentInfo: Equatable, Identifiable {
     let model: String?
     /// The account's name, when its agent has more than one.
     let account: String?
+    /// It runs through the account's proxy.
+    let proxy: Bool
 
     init(json: JSON) {
         let number = { (key: String) in (json[key] as? NSNumber)?.intValue }
@@ -1143,6 +1152,7 @@ struct AgentInfo: Equatable, Identifiable {
         agent = json.optionalString("agent").flatMap(Agent.init(rawValue:))
         model = json.optionalString("model")
         account = json.optionalString("account")
+        proxy = json.bool("proxy")
     }
 
     var working: Bool { status == .running }
@@ -1510,6 +1520,8 @@ struct UsageReport {
         let tokens: Int
         let costUSD: Double?
         let share: Double
+        /// An account that runs through the proxy, which its symbol after the name says.
+        let proxy: Bool
 
         var id: String { "\(agent?.rawValue ?? "")/\(server ?? "")/\(name)" }
     }
@@ -1548,7 +1560,7 @@ struct UsageReport {
             Line(
                 name: line.string("name"), agent: line.optionalString("agent").flatMap(Agent.init(rawValue:)),
                 server: line.optionalString("server"), tokens: line.int("tokens"), costUSD: line.optionalDouble("cost_usd"),
-                share: share ?? line.double("share"))
+                share: share ?? line.double("share"), proxy: line.bool("proxy"))
         }
         let (cost, tokens) = (costUSD, tokens)
         kinds = json.objects("kinds").map { kind in

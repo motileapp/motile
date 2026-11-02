@@ -44,6 +44,12 @@ extension ServerSync {
 }
 
 extension AgentAccount {
+    /// "Claude Code · Work". The Proxy account has no name of its own to show: the proxy's symbol
+    /// after its agent's says it.
+    var settingsTitle: String {
+        proxy ? agent.name : "\(agent.name) · \(name)"
+    }
+
     func settingsDescription(isDefault: Bool) -> String {
         let signedIn = email.map { [$0, plan].compactMap { $0 }.joined(separator: " · ") }
         let who = proxy ? "Your proxy's accounts" : signedIn ?? (variables.isEmpty ? "Not signed in" : "Signs in with its variables")

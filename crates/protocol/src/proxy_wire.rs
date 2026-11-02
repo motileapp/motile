@@ -51,17 +51,43 @@ pub enum ProxyRequest {
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ProxyReply {
-    HttpHead { status: u16, headers: Vec<(String, String)> },
-    WebSocketOpen { headers: Vec<(String, String)> },
-    Pool { limits: Option<AgentLimits> },
-    Accounts { accounts: Vec<ProxyAccount> },
-    State { state: ProxyState },
-    SignInStarted { sign_in: ProxySignIn },
-    Log { entries: Vec<LogEntry> },
-    Captured { request: Option<CapturedRequest> },
-    Usage { rows: Vec<UsageRow> },
+    /// `account` is the id of the proxy's account that answered, when one did.
+    HttpHead {
+        status: u16,
+        headers: Vec<(String, String)>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        account: Option<String>,
+    },
+    WebSocketOpen {
+        headers: Vec<(String, String)>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        account: Option<String>,
+    },
+    Pool {
+        limits: Option<AgentLimits>,
+    },
+    Accounts {
+        accounts: Vec<ProxyAccount>,
+    },
+    State {
+        state: ProxyState,
+    },
+    SignInStarted {
+        sign_in: ProxySignIn,
+    },
+    Log {
+        entries: Vec<LogEntry>,
+    },
+    Captured {
+        request: Option<CapturedRequest>,
+    },
+    Usage {
+        rows: Vec<UsageRow>,
+    },
     Ok,
-    Error { message: String },
+    Error {
+        message: String,
+    },
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]

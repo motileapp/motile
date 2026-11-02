@@ -197,6 +197,12 @@ impl Store {
         server.label(model, account)
     }
 
+    /// Whether the thread's model runs through the proxy.
+    pub fn model_proxied(&self, thread: &ThreadInfo) -> bool {
+        let account = Some(thread.agent_account.as_str()).filter(|account| !account.is_empty());
+        self.server(Some(&thread.server_id)).is_some_and(|server| server.runs_through_proxy(account, thread.agent))
+    }
+
     fn bare_model(&self, thread: &ThreadInfo) -> String {
         thread.model.clone().unwrap_or_else(|| crate::models::agent_name(thread.agent).to_string())
     }

@@ -1139,6 +1139,17 @@ class AppStore(private val context: Context) {
             return composerServer?.label(model, accountID) ?: model.shortName
         }
 
+    /** The composer's model runs through the proxy. */
+    val composerProxied: Boolean
+        get() {
+            val model = composerModel ?: return false
+            val accountID = selectedThread?.agentAccount ?: selectedDraft?.agentAccount
+            return composerServer?.runsThroughProxy(accountID, model.agent) ?: false
+        }
+
+    /** Whether the thread's model runs through the proxy. */
+    fun modelProxied(thread: ThreadInfo): Boolean = server(thread.serverID)?.runsThroughProxy(thread.agentAccount, thread.agent) ?: false
+
     /** The thread's model as the composer shows it, with the account when its agent has more than one. */
     fun modelLabel(thread: ThreadInfo): String {
         val server = server(thread.serverID)
@@ -1151,11 +1162,15 @@ class AppStore(private val context: Context) {
     /** One account with its agent's models, as the composer's model menu lists them. */
     data class ModelChoice(val title: String, val account: AgentAccount, val models: List<ModelInfo>)
 
-    /** What the composer's model menu lists: each account with its agent's models, titled with the account's name when its agent has more than one. */
+    /**
+     * What the composer's model menu lists: each account with its agent's models, titled with the
+     * account's name when its agent has more than one. The Proxy account's title is its agent's
+     * alone, which the proxy's symbol follows.
+     */
     val composerChoices: List<ModelChoice>
         get() = composerAccounts.map { account ->
             val several = (composerServer?.accounts(account.agent)?.size ?: 0) > 1
-            val title = if (several) "${account.agent.title} · ${account.name}" else account.agent.title
+            val title = if (several && !account.proxy) "${account.agent.title} · ${account.name}" else account.agent.title
             ModelChoice(title, account, composerModels.filter { it.runs(account) })
         }
 

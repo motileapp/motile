@@ -17,6 +17,64 @@ use crate::ui::{edges, icons, motion};
 
 type Run = Rc<dyn Fn(&mut Window, &mut App)>;
 
+/// The proxy's symbol beside words of `font_size`, as the Mac app sizes it.
+pub fn proxy_mark_size(font_size: f32) -> IconSize {
+    match font_size {
+        size if size <= 12.5 => IconSize::Xs,
+        size if size <= 15. => IconSize::Sm,
+        _ => IconSize::Md,
+    }
+}
+
+/// How much wider the proxy's symbol makes words of `font_size`: a space of DM Sans, and itself.
+pub fn proxy_mark_width(font_size: f32) -> f32 {
+    proxy_gap(font_size) + proxy_mark_size(font_size).side()
+}
+
+fn proxy_gap(font_size: f32) -> f32 {
+    font_size * 0.266
+}
+
+/// The proxy's symbol after words of `font_size`, which says what they name runs through the
+/// proxy, centred on their capitals, which DM Sans centres in the line.
+fn proxy_mark(font_size: f32, spaced: bool) -> Div {
+    div()
+        .flex_none()
+        .when(spaced, |mark| mark.ml(px(proxy_gap(font_size))))
+        .flex()
+        .items_center()
+        .child(icons::symbol("waypoints", proxy_mark_size(font_size)))
+}
+
+/// The words with the proxy's symbol after them where what they name runs through the proxy,
+/// cut at their end before the symbol is.
+pub fn proxied(words: impl IntoElement, proxied: bool, font_size: f32) -> Div {
+    div()
+        .min_w_0()
+        .flex()
+        .items_center()
+        .child(div().min_w_0().whitespace_nowrap().overflow_hidden().text_ellipsis().child(words))
+        .when(proxied, |line| line.child(proxy_mark(font_size, true)))
+}
+
+/// What something runs on, the proxy's symbol after it where it runs through the proxy, then
+/// `rest` after a dot: one line of `font_size`, cut at its end.
+pub fn proxied_line(runs_on: &str, proxied: bool, rest: &str, font_size: f32) -> Div {
+    if !proxied {
+        let words = [runs_on, rest].into_iter().filter(|part| !part.is_empty()).collect::<Vec<_>>().join(" · ");
+        return div().min_w_0().text_size(px(font_size)).truncate().child(words);
+    }
+    div()
+        .min_w_0()
+        .flex()
+        .items_center()
+        .overflow_hidden()
+        .text_size(px(font_size))
+        .when(!runs_on.is_empty(), |line| line.child(div().flex_none().whitespace_nowrap().child(runs_on.to_string())))
+        .child(proxy_mark(font_size, !runs_on.is_empty()))
+        .when(!rest.is_empty(), |line| line.child(div().min_w_0().truncate().child(format!(" · {rest}"))))
+}
+
 /// Keys to press, each on a cap of its own, or all on one when `joined`.
 #[derive(IntoElement)]
 pub struct KeyCaps {

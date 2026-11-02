@@ -163,6 +163,22 @@ impl Hub {
         several.then(|| account.name.clone())
     }
 
+    /// The account a thread runs on, as its agent's row names it, and whether it runs through the
+    /// proxy: then the proxy's account it is pinned to, or the one that last answered it.
+    pub(super) fn shown_account(&self, thread_id: &str, account: &AgentAccount) -> (Option<String>, bool) {
+        if !account.proxy {
+            return (self.account_name(account), false);
+        }
+        if account.pin.is_some() {
+            return (Some(account.name.clone()), true);
+        }
+        let Some(way) = self.proxy.get() else { return (None, true) };
+        let placed = way.tunnel.placed(thread_id);
+        let name =
+            placed.and_then(|id| way.pool().into_iter().find(|pooled| pooled.id == id).map(|pooled| pooled.name));
+        (name, true)
+    }
+
     fn lock_started(&self) -> std::sync::MutexGuard<'_, HashMap<(String, String), String>> {
         self.started.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
     }
@@ -268,12 +284,8 @@ impl Hub {
         let mut stored = self.new_thread(new_thread, &prompt, &[], folder).await?;
         let child_id = stored.thread.id.clone();
         let model = stored.thread.model.clone().map(|model| self.model_name(account.agent, &model).unwrap_or(model));
-        let runs_on = RunsOn {
-            agent: account.agent,
-            model,
-            account: self.account_name(&account),
-            thread_id: Some(child_id.clone()),
-        };
+        let (shown, proxy) = self.shown_account(&child_id, &account);
+        let runs_on = RunsOn { agent: account.agent, model, account: shown, proxy, thread_id: Some(child_id.clone()) };
         let tool_id = self.show_started(caller, &text, role, runs_on).await?;
         stored.thread.parent = Some(ThreadParent { thread_id: caller.to_string(), tool_id });
         stored.reports = true;
@@ -664,11 +676,15 @@ impl Hub {
             duration_ms: (state.status.settled() || state.status == Status::WaitingForUsageLimit)
                 .then(|| ((ended - thread.created_at).max(0.0) * 1000.0) as u64),
             workflow: None,
-            runs_on: Some(Box::new(RunsOn {
-                agent: thread.agent,
-                model: state.model.clone().map(|model| self.model_name(thread.agent, &model).unwrap_or(model)),
-                account: state.account.clone(),
-                thread_id: Some(thread.id.clone()),
+            runs_on: Some(Box::new({
+                let (account, proxy) = self.shown_account(&thread.id, &self.account_of(thread));
+                RunsOn {
+                    agent: thread.agent,
+                    model: state.model.clone().map(|model| self.model_name(thread.agent, &model).unwrap_or(model)),
+                    account,
+                    proxy,
+                    thread_id: Some(thread.id.clone()),
+                }
             })),
             waits: match state.status {
                 Status::NeedsApproval => live.activity.approvals.first().map(Approval::ask),

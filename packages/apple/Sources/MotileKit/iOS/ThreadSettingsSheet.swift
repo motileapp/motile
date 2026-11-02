@@ -77,7 +77,8 @@ struct ThreadSettingsSheet: View {
                         VStack(spacing: 12) {
                             HStack(spacing: 6) {
                                 AgentIcon(agent: choices.account.agent, size: .sm)
-                                Text(choices.title)
+                                Text(verbatim: choices.title)
+                                    .proxyMarked(choices.account.proxy, fontSize: UIFont.preferredFont(forTextStyle: .body).pointSize)
                                 Spacer()
                                 Image(.chevronDown, size: .sm)
                                     .rotationEffect(.degrees(listed.contains(id) ? 180 : 0))

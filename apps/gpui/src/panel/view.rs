@@ -1677,7 +1677,7 @@ impl AgentEntry {
             Self::Parent(id) => format!("parent:{id}"),
             Self::Ended { count, failed, shown } => format!("ended:{count}:{failed}:{shown}"),
             Self::Agent(agent) => format!(
-                "agent:{}:{}:{:?}:{:?}:{:?}:{}:{:?}:{}:{}:{}",
+                "agent:{}:{}:{:?}:{:?}:{:?}:{}:{:?}:{}:{}:{}:{}",
                 agent.id,
                 agent.title,
                 agent.status,
@@ -1687,6 +1687,7 @@ impl AgentEntry {
                 agent.kind,
                 agent.detail,
                 agent.facts().unwrap_or_default(),
+                agent.proxy,
                 agent.parent.is_some()
             ),
         }
@@ -1891,13 +1892,13 @@ fn agent_row(
                                 .truncate()
                                 .child(agent.detail.clone()),
                         )
-                        .when_some(agent.facts(), |text, facts| {
+                        .when(agent.facts().is_some(), |text| {
+                            let runs_on = agent.runs_on();
+                            let usage = agent.usage().unwrap_or_default();
+                            let proxied = agent.proxy && runs_on.is_some();
                             text.child(
-                                div()
-                                    .text_size(px(11.))
-                                    .text_color(c.muted_stronger_foreground)
-                                    .truncate()
-                                    .child(facts),
+                                crate::ui::proxied_line(&runs_on.unwrap_or_default(), proxied, &usage, 11.)
+                                    .text_color(c.muted_stronger_foreground),
                             )
                         }),
                 ),

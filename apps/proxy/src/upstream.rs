@@ -178,12 +178,16 @@ pub async fn serve(
     let mut response_headers = Vec::new();
     match outcome {
         Outcome::Response(account, response, headers) => {
-            entry.account = Some(account);
             entry.status = response.status().as_u16();
             entry.latency_ms = started.elapsed().as_millis() as u64;
             response_headers = passed_back(&headers);
-            write_frame(&mut send, &ProxyReply::HttpHead { status: entry.status, headers: response_headers.clone() })
-                .await?;
+            let head = ProxyReply::HttpHead {
+                status: entry.status,
+                headers: response_headers.clone(),
+                account: Some(account.clone()),
+            };
+            entry.account = Some(account);
+            write_frame(&mut send, &head).await?;
             let streams = header(&headers, "content-type").is_some_and(|kind| kind.contains("event-stream"));
             let keep = if captured {
                 CAPTURE_KEPT
@@ -231,7 +235,8 @@ pub async fn serve(
             entry.status = status;
             entry.error = Some(String::from_utf8_lossy(&error[..error.len().min(ERROR_KEPT)]).into_owned());
             response_headers = passed_back(&headers);
-            write_frame(&mut send, &ProxyReply::HttpHead { status, headers: response_headers.clone() }).await?;
+            write_frame(&mut send, &ProxyReply::HttpHead { status, headers: response_headers.clone(), account: None })
+                .await?;
             send.write_all(&error).await?;
             entry.response_bytes = error.len() as u64;
             kept_response = error;
@@ -243,8 +248,11 @@ pub async fn serve(
             match limit_reply(&proxy, incoming.agent, incoming.pin.as_deref()) {
                 Some(made) => {
                     entry.status = 429;
-                    write_frame(&mut send, &ProxyReply::HttpHead { status: 429, headers: made.headers.clone() })
-                        .await?;
+                    write_frame(
+                        &mut send,
+                        &ProxyReply::HttpHead { status: 429, headers: made.headers.clone(), account: None },
+                    )
+                    .await?;
                     send.write_all(&made.body).await?;
                     response_headers = made.headers;
                     kept_response = made.body;

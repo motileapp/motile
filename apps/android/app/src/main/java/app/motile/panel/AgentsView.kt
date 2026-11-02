@@ -49,9 +49,11 @@ import app.motile.ui.AgentAvatar
 import app.motile.ui.HighlightButton
 import app.motile.ui.Icon
 import app.motile.ui.MenuPopup
+import app.motile.ui.ProxyMark
 import app.motile.ui.Text
 import app.motile.ui.color
 import app.motile.ui.pressPosition
+import app.motile.ui.proxied
 import app.motile.ui.rememberMenuState
 import kotlinx.coroutines.delay
 
@@ -177,8 +179,12 @@ private fun AgentRow(agent: AgentInfo) {
         store.rightPanel.visit(agent.id)
         if (threadID != null) store.openStartedThread(threadID) else store.rightPanel.showAgent(agent.id)
     }
-    // "6.1-Sol · work · 3 tools · 21k tokens", as far as each is known.
-    val facts = listOfNotNull(agent.model, agent.account, agent.usage).joinToString(" · ").ifEmpty { null }
+    // "6.1-Sol · work · 3 tools · 21k tokens", as far as each is known, with the proxy's symbol after the account of one that runs through the proxy.
+    val runsOn = listOfNotNull(agent.model, agent.account).joinToString(" · ")
+    val facts = buildAnnotatedString {
+        append(AnnotatedString(runsOn).proxied(agent.proxy && runsOn.isNotEmpty()))
+        agent.usage?.let { append(if (runsOn.isEmpty()) it else " · $it") }
+    }.takeIf { it.isNotEmpty() }
     Box(Modifier.fillMaxWidth().pressPosition(menu)) {
         HighlightButton(
             onClick = open, modifier = Modifier.fillMaxWidth(), inset = panelRowMargin,
@@ -211,7 +217,9 @@ private fun AgentRow(agent: AgentInfo) {
                     // Always one line, so that a row keeps its height as what its agent does changes.
                     val color = if (agent.status == ToolStatus.Failed) palette.destructive else palette.mutedForeground
                     Text(agent.detail, size = 12f, color = color, maxLines = 1)
-                    facts?.let { Text(it, size = 11f, color = palette.mutedStrongerForeground, maxLines = 1) }
+                    facts?.let {
+                        Text(it, size = 11f, color = palette.mutedStrongerForeground, maxLines = 1, inlineContent = ProxyMark.content(palette.mutedStrongerForeground, 11f))
+                    }
                 }
             }
         }

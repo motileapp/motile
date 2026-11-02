@@ -1120,6 +1120,13 @@ final class AppStore {
         return composerServer?.label(of: model, account: accountID) ?? model.shortName
     }
 
+    /// The composer's model runs through the proxy.
+    var composerProxied: Bool {
+        guard let model = composerModel else { return false }
+        let accountID = selectedThread.map { $0.agentAccount } ?? selectedDraft?.agentAccount
+        return composerServer?.runsThroughProxy(accountID, of: model.agent) ?? false
+    }
+
     /// The thread's model as the composer shows it, with the account when its agent has more than one.
     func modelLabel(of thread: ThreadInfo) -> String {
         let server = self.server(thread.serverID)
@@ -1132,10 +1139,11 @@ final class AppStore {
 
     /// What the composer's model menu lists: each account with its agent's models, titled with
     /// the account's name when its agent has more than one.
+    /// The Proxy account's title is its agent's alone, which the proxy's symbol follows.
     var composerChoices: [(title: String, account: AgentAccount, models: [ModelInfo])] {
         composerAccounts.map { account in
             let several = (composerServer?.accounts(of: account.agent).count ?? 0) > 1
-            let title = several ? "\(account.agent.name) · \(account.name)" : account.agent.name
+            let title = several && !account.proxy ? "\(account.agent.name) · \(account.name)" : account.agent.name
             return (title, account, composerModels.filter { $0.runs(under: account) })
         }
     }

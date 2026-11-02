@@ -413,6 +413,22 @@ final class ProgressRingView: LayerView {
 }
 
 /// Symbols drawn in a colour that follows the appearance.
+/// The proxy's symbol in a line of text, as tall as the line's capitals and centred on them.
+enum ProxyMark {
+    /// The symbol's size beside words of `fontSize`.
+    static func size(for fontSize: CGFloat) -> IconSize {
+        fontSize <= 12.5 ? .xs : fontSize <= 15 ? .sm : .md
+    }
+
+    static func attachment(font: PlatformFont, color: PlatformColor) -> NSAttributedString {
+        let image = TintedSymbol.image(.waypoints, size: size(for: font.pointSize), color: color)
+        let attachment = NSTextAttachment()
+        attachment.image = image
+        attachment.bounds = CGRect(x: 0, y: ((font.capHeight - image.size.height) / 2).rounded(), width: image.size.width, height: image.size.height)
+        return NSAttributedString(attachment: attachment)
+    }
+}
+
 enum TintedSymbol {
     private static var cache: [String: PlatformImage] = [:]
 

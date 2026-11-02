@@ -168,6 +168,9 @@ pub fn new_account(agent: Agent) -> AgentAccount {
 
 /// What the app asks of an agent's account.
 pub trait AgentAccountExt {
+    /// "Claude Code · Work". The Proxy account has no name of its own to show: the proxy's symbol
+    /// after its agent's says it.
+    fn settings_title(&self) -> String;
     /// Who is signed in, or how it signs in, and its folder: what the settings say of it.
     fn settings_description(&self) -> String;
     /// The variable the account's folder is given to its agent as.
@@ -182,6 +185,11 @@ pub trait AgentAccountExt {
 }
 
 impl AgentAccountExt for AgentAccount {
+    fn settings_title(&self) -> String {
+        let agent = agent_name(self.agent);
+        if self.proxy { agent.to_string() } else { format!("{agent} · {}", self.name) }
+    }
+
     fn settings_description(&self) -> String {
         if self.proxy {
             return "Works with your proxy's logins".into();
@@ -366,14 +374,23 @@ impl Server {
         Some((model, roomier.as_str()))
     }
 
-    /// The model's name, with the account's when its agent has more than one.
+    /// The model's name, with the account's when its agent has more than one. The Proxy account,
+    /// whose threads the proxy places, has no name of its own to show: the proxy's symbol says it.
     pub fn label(&self, model: &ModelInfo, account: Option<&str>) -> String {
         let short = self.short_name(model);
         if self.accounts(model.agent).len() < 2 {
             return short.to_string();
         }
         let Some(account) = self.account(account, model.agent) else { return short.to_string() };
+        if account.proxy && account.pin.is_none() {
+            return short.to_string();
+        }
         format!("{short} · {}", account.name)
+    }
+
+    /// Whether the account runs through the proxy, which the proxy's symbol after its name says.
+    pub fn runs_through_proxy(&self, account: Option<&str>, agent: Agent) -> bool {
+        self.account(account, agent).is_some_and(|account| account.proxy)
     }
 }
 
@@ -738,6 +755,7 @@ impl Activity {
 pub trait AgentViewExt {
     fn working(&self) -> bool;
     fn usage(&self) -> Option<String>;
+    fn runs_on(&self) -> Option<String>;
     fn facts(&self) -> Option<String>;
 }
 
@@ -753,10 +771,15 @@ impl AgentViewExt for AgentView {
         (!parts.is_empty()).then(|| parts.join(" · "))
     }
 
+    /// "6.1-Sol · work", as far as either is known.
+    fn runs_on(&self) -> Option<String> {
+        let parts: Vec<String> = [self.model.clone(), self.account.clone()].into_iter().flatten().collect();
+        (!parts.is_empty()).then(|| parts.join(" · "))
+    }
+
     /// "6.1-Sol · work · 3 tools · 21.4K tokens", as far as each is known.
     fn facts(&self) -> Option<String> {
-        let parts: Vec<String> =
-            [self.model.clone(), self.account.clone(), self.usage()].into_iter().flatten().collect();
+        let parts: Vec<String> = [self.runs_on(), self.usage()].into_iter().flatten().collect();
         (!parts.is_empty()).then(|| parts.join(" · "))
     }
 }
@@ -1141,12 +1164,8 @@ mod tests {
         assert_eq!(Server::model(None, None, &[]), None);
     }
 
-    #[test]
-    fn a_new_thread_moves_to_the_roomier_account_that_runs_its_model() {
-        let account = |id: &str| AgentAccount { id: id.into(), name: id.into(), ..new_account(Agent::Claude) };
-        let roomier =
-            HashMap::from([("claude".to_string(), HashMap::from([("opus".to_string(), "work".to_string())]))]);
-        let server = Server::from(ServerView {
+    fn studio() -> Server {
+        Server::from(ServerView {
             id: "key".into(),
             name: "studio".into(),
             short_name: "studio".into(),
@@ -1158,15 +1177,23 @@ mod tests {
             rtt_ms: None,
             info: None,
             short_model_names: HashMap::new(),
-            roomier_accounts: roomier,
+            roomier_accounts: HashMap::new(),
             account_limits: HashMap::new(),
             accounts_by_room: Vec::new(),
             sync: None,
-        });
+        })
+    }
+
+    #[test]
+    fn a_new_thread_moves_to_the_roomier_account_that_runs_its_model() {
+        let account = |id: &str| AgentAccount { id: id.into(), name: id.into(), ..new_account(Agent::Claude) };
+        let roomier =
+            HashMap::from([("claude".to_string(), HashMap::from([("opus".to_string(), "work".to_string())]))]);
         let server = Server {
             models: vec![model("opus", ""), model("sonnet", "")],
             agent_accounts: vec![account("claude"), account("work")],
-            ..server
+            roomier_accounts: roomier,
+            ..studio()
         };
         let found = |model, account| server.roomier_account(model, account).map(|(model, to)| (model.id.as_str(), to));
         assert_eq!(found(Some("opus"), Some("claude")), Some(("opus", "work")));
@@ -1174,6 +1201,21 @@ mod tests {
         assert_eq!(found(Some("opus"), Some("gone")), Some(("opus", "work")));
         assert_eq!(found(Some("sonnet"), Some("claude")), None);
         assert_eq!(found(Some("opus"), Some("work")), None);
+    }
+
+    #[test]
+    fn the_proxy_account_leaves_its_name_to_the_symbol() {
+        let account = |id: &str| AgentAccount { id: id.into(), name: id.into(), ..new_account(Agent::Claude) };
+        let proxy = AgentAccount { proxy: true, ..account("Proxy") };
+        let pinned = AgentAccount { proxy: true, pin: Some("seat".into()), ..account("Seat") };
+        let server = Server { agent_accounts: vec![account("work"), proxy, pinned], ..studio() };
+        let opus = model("opus", "");
+        assert_eq!(server.label(&opus, Some("work")), "opus · work");
+        assert_eq!(server.label(&opus, Some("Proxy")), "opus");
+        assert_eq!(server.label(&opus, Some("Seat")), "opus · Seat");
+        assert!(!server.runs_through_proxy(Some("work"), Agent::Claude));
+        assert!(server.runs_through_proxy(Some("Proxy"), Agent::Claude));
+        assert!(server.runs_through_proxy(Some("Seat"), Agent::Claude));
     }
 
     #[test]

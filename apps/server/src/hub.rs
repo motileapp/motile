@@ -3850,8 +3850,10 @@ impl Hub {
     fn handoff_end(&self, agent: Agent, model: Option<String>, account: Option<&str>) -> HandoffEnd {
         let name = model.as_deref().and_then(|model| self.model_name(agent, model));
         let accounts = self.agent_accounts().into_iter().filter(|kept| kept.agent == agent).collect::<Vec<_>>();
-        let named = accounts.iter().find(|kept| accounts.len() > 1 && Some(kept.id.as_str()) == account);
-        HandoffEnd { agent, model, name, account: named.map(|kept| kept.name.clone()) }
+        let used = accounts.iter().find(|kept| Some(kept.id.as_str()) == account);
+        let proxy = used.is_some_and(|used| used.proxy);
+        let named = used.filter(|used| accounts.len() > 1 && (!used.proxy || used.pin.is_some()));
+        HandoffEnd { agent, model, name, account: named.map(|kept| kept.name.clone()), proxy }
     }
 
     /// The model's name as the picker lists it. An agent names a model it runs with its whole id,
@@ -3884,7 +3886,8 @@ impl Hub {
             None => thread.model.clone().or_else(|| live.session_model.clone()),
         };
         let model = model.map(|model| self.model_name(thread.agent, &model).unwrap_or(model));
-        RunsOn { agent: thread.agent, model, account: self.account_name(&account), thread_id: None }
+        let (shown, proxy) = self.shown_account(&thread.id, &account);
+        RunsOn { agent: thread.agent, model, account: shown, proxy, thread_id: None }
     }
 
     /// Gives the handoff that waited for it the model the new session runs.
@@ -3892,7 +3895,8 @@ impl Hub {
         let Some(item_id) = live.handoff_item.take() else { return Ok(()) };
         let Some(mut item) = self.store.item(&live.stored.thread.id, &item_id)? else { return Ok(()) };
         let ItemKind::Handoff { to, .. } = &mut item.kind else { return Ok(()) };
-        *to = HandoffEnd { account: to.account.take(), ..self.handoff_end(to.agent, Some(model.to_string()), None) };
+        let named = self.handoff_end(to.agent, Some(model.to_string()), None);
+        *to = HandoffEnd { account: to.account.take(), proxy: to.proxy, ..named };
         item.rev = live.next_rev();
         live.save(&self.store, item)
     }

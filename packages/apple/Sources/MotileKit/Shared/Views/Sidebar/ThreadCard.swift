@@ -30,7 +30,8 @@ struct ThreadCard: View {
                     let home = store.server(thread.serverID)?.home ?? ""
                     CardLine(text: ThreadFolderLabel.shortened(thread.cwd, home: home), middle: true) { Image(.folder, size: Self.iconSize) }
                 }
-                CardLine(text: store.modelLabel(of: thread)) { AgentIcon(agent: thread.agent, size: Self.iconSize) }
+                let proxied = store.server(thread.serverID)?.runsThroughProxy(thread.agentAccount, of: thread.agent) ?? false
+                CardLine(text: store.modelLabel(of: thread), proxied: proxied) { AgentIcon(agent: thread.agent, size: Self.iconSize) }
                 if let server = store.server(thread.serverID) {
                     CardLine(text: server.name) { Image(.server, size: Self.iconSize) }
                 }
@@ -62,12 +63,14 @@ private struct CardLine<Icon: View>: View {
     let text: String
     /// Cut in the middle, as a path or a branch is.
     var middle = false
+    var proxied = false
     @ViewBuilder let icon: () -> Icon
 
     var body: some View {
         HStack(spacing: 8) {
             icon()
             Text(dotted: text)
+                .proxyMarked(proxied, fontSize: 12)
                 .font(.ui(size: 12))
                 .lineLimit(1)
                 .truncationMode(middle ? .middle : .tail)

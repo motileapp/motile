@@ -48,10 +48,12 @@ import app.motile.ui.AgentIcon
 import app.motile.ui.DropdownCard
 import app.motile.ui.Icon
 import app.motile.ui.ProjectIcon
+import app.motile.ui.ProxyMark
 import app.motile.ui.Text
 import app.motile.ui.ThemeDivider
 import app.motile.ui.color
 import app.motile.ui.dotted
+import app.motile.ui.proxied
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -84,7 +86,7 @@ fun ThreadCard(threadID: String, modifier: Modifier = Modifier) {
                     val home = store.server(thread.serverID)?.home ?: ""
                     CardLine(shortenedFolder(thread.cwd, home), middle = true) { Icon(Symbol.Folder, ThreadCard.iconSize) }
                 }
-                CardLine(store.modelLabel(thread)) { AgentIcon(thread.agent, size = ThreadCard.iconSize) }
+                CardLine(store.modelLabel(thread), proxied = store.modelProxied(thread)) { AgentIcon(thread.agent, size = ThreadCard.iconSize) }
                 store.server(thread.serverID)?.let { server -> CardLine(server.name) { Icon(Symbol.Server, ThreadCard.iconSize) } }
             }
             val pullRequest = project?.pullRequest(thread) ?: return@Column
@@ -99,14 +101,15 @@ fun ThreadCard(threadID: String, modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun CardLine(text: String, middle: Boolean = false, icon: @Composable () -> Unit) {
+private fun CardLine(text: String, middle: Boolean = false, proxied: Boolean = false, icon: @Composable () -> Unit) {
     val palette = Theme.colors
     CompositionLocalProvider(LocalForeground provides palette.mutedForeground) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             icon()
             Text(
-                dotted(text, palette.mutedStrongerForeground), size = 12f, maxLines = 1,
+                dotted(text, palette.mutedStrongerForeground).proxied(proxied), size = 12f, maxLines = 1,
                 overflow = if (middle) TextOverflow.MiddleEllipsis else TextOverflow.Ellipsis,
+                inlineContent = if (proxied) ProxyMark.content(palette.mutedForeground, 12f) else emptyMap(),
             )
         }
     }

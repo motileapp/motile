@@ -230,6 +230,9 @@ pub struct AgentRow {
     /// The model's short name and the account, when they are known: "Opus 5.5 · work".
     #[serde(skip_serializing_if = "String::is_empty")]
     pub runs_on: String,
+    /// It runs through the account's proxy, which the proxy's symbol after `runs_on` says.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub proxy: bool,
     pub started_at: f64,
     /// How long it worked, once it has ended.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -257,6 +260,7 @@ impl AgentRow {
             detail: view.detail,
             agent: view.agent,
             runs_on,
+            proxy: view.proxy,
             started_at: view.started_at,
             duration_ms: view.duration_ms,
             at,
@@ -298,7 +302,13 @@ pub struct HandoffLabel {
     pub label: String,
     /// The account's name, when its agent has more than one.
     pub account: Option<String>,
+    /// The account runs through the proxy, which its symbol after the label says.
+    pub proxy: bool,
 }
+
+/// The name servers give their Proxy account, which a handoff written before `HandoffEnd.proxy`
+/// kept as its account's.
+const PROXY_ACCOUNT: &str = "Proxy";
 
 impl HandoffLabel {
     fn new(end: &HandoffEnd) -> Self {
@@ -311,7 +321,9 @@ impl HandoffLabel {
             (None, Some(model)) => model,
             (None, None) => agent_name,
         };
-        Self { agent: end.agent, label: label.to_string(), account: end.account.clone() }
+        let before_proxy_mark = !end.proxy && end.account.as_deref() == Some(PROXY_ACCOUNT);
+        let account = end.account.clone().filter(|_| !before_proxy_mark);
+        Self { agent: end.agent, label: label.to_string(), account, proxy: end.proxy || before_proxy_mark }
     }
 }
 
@@ -2064,6 +2076,7 @@ mod tests {
             agent: Agent::Codex,
             model: Some("GPT-6.1-Sol".into()),
             account: Some("work".into()),
+            proxy: false,
             thread_id: Some("c".into()),
         }));
         let mut transcript = Transcript::new("");
@@ -2086,6 +2099,7 @@ mod tests {
             agent: Agent::Codex,
             model: None,
             account: None,
+            proxy: false,
             thread_id: Some("c".into()),
         }));
         let started = [item.clone()];
@@ -2110,6 +2124,7 @@ mod tests {
                 agent: Agent::Claude,
                 model: None,
                 account: None,
+                proxy: false,
                 thread_id: Some("c".into()),
             }));
             item
@@ -2332,6 +2347,7 @@ mod tests {
             model: model.map(str::to_string),
             name: name.map(str::to_string),
             account: None,
+            proxy: false,
         };
         let user = |id: &str, seq| item(id, seq, said("Go"));
         let read = call("t1", 2, "Read", serde_json::json!({"file_path": "/srv/api/a.rs"}), ToolStatus::Succeeded);
@@ -2359,6 +2375,18 @@ mod tests {
         assert_eq!(label(end(Agent::Codex, Some("gpt-6.1-sol"), None)), "gpt-6.1-sol");
         assert_eq!(label(end(Agent::Claude, None, None)), "Claude Code");
         assert_eq!(label(end(Agent::Codex, None, None)), "Codex");
+
+        let on = |account: &str, proxy| {
+            let label = HandoffLabel::new(&HandoffEnd {
+                account: Some(account.into()),
+                proxy,
+                ..end(Agent::Claude, None, None)
+            });
+            (label.account, label.proxy)
+        };
+        assert_eq!(on("Work", false), (Some("Work".into()), false));
+        assert_eq!(on("work@example.com", true), (Some("work@example.com".into()), true));
+        assert_eq!(on("Proxy", false), (None, true));
     }
 
     #[test]

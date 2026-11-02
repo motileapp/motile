@@ -11,7 +11,7 @@ use gpui_kit::prelude::*;
 use gpui_kit::*;
 use motile_core::render::agents::AgentState;
 use motile_core::render::rows::{AgentRow, CardPlace, ChangeEntry, HandoffLabel, RowKind, StateCount, Tool};
-use motile_protocol::wire::{Agent, Ask, ToolStatus};
+use motile_protocol::wire::{Ask, ToolStatus};
 
 use super::kit::{GrowthFade, RowButton, Shimmer, Sideways, TailLine, dashed_outline};
 use super::model::RowModel;
@@ -1316,10 +1316,11 @@ const CARD_LIGHT: f32 = 4.;
 const CARD_ABOVE: f32 = 4. + CARD_LIGHT - LIGHT_GAP;
 const CARD_BELOW: f32 = 10. + CARD_LIGHT - LIGHT_GAP;
 
-/// What the second line of an agent's row says: what it runs on, then what it does or said.
-fn agent_line(agent: &AgentRow) -> String {
+/// The second line of an agent's row: what it runs on, with the proxy's symbol after it where it
+/// runs through the proxy, then what it does or said.
+fn agent_line(agent: &AgentRow) -> Div {
     let said = if agent.detail.is_empty() && agent.runs_on.is_empty() { &agent.label } else { &agent.detail };
-    [&agent.runs_on, said].into_iter().filter(|part| !part.is_empty()).cloned().collect::<Vec<_>>().join(" · ")
+    crate::ui::proxied_line(&agent.runs_on, agent.proxy, said, 12.)
 }
 
 /// When the thread's agent was told, for what it was told; else how long the agent has worked
@@ -1433,7 +1434,7 @@ fn agent_row(model: &RowModel, agent: &AgentRow, ctx: &RowContext, cx: &App) -> 
             )
         });
     let failed = agent.state == AgentState::Failed;
-    let line = div().text_color(if failed { c.destructive } else { c.muted_foreground }).child(agent_line(agent));
+    let line = agent_line(agent).text_color(if failed { c.destructive } else { c.muted_foreground });
     let (store, item, thread) = (ctx.store.clone(), model.row.item.clone(), agent.thread.clone());
     div()
         .id(group.clone())
@@ -1865,22 +1866,24 @@ fn handoff_row(from: &HandoffLabel, to: &HandoffLabel, ctx: &RowContext, window:
         }
         (text.into(), runs)
     };
-    let width = |(text, runs): &(SharedString, Vec<TextRun>), window: &mut Window| {
-        f32::from(window.text_system().shape_line(text.clone(), px(12.), runs, None).width).ceil()
+    let width = |end: &HandoffLabel, (text, runs): &(SharedString, Vec<TextRun>), window: &mut Window| {
+        let mark = if end.proxy { crate::ui::proxy_mark_width(12.) } else { 0. };
+        f32::from(window.text_system().shape_line(text.clone(), px(12.), runs, None).width).ceil() + mark
     };
     let (from_text, to_text) = (text(from), text(to));
-    let (from_width, to_width) = (width(&from_text, window), width(&to_text, window));
+    let (from_width, to_width) = (width(from, &from_text, window), width(to, &to_text, window));
     let fixed = (logo.side() + label_gap) * 2. + arrow_gap * 2. + arrow.side();
     let room = (ctx.width - line_gap * 4. - fixed).max(0.);
     let (from_width, to_width) = fitted(from_width, to_width, room);
-    let end = |agent: Agent, (text, runs): (SharedString, Vec<TextRun>), width: f32| {
+    let end = |end: &HandoffLabel, (text, runs): (SharedString, Vec<TextRun>), width: f32| {
+        let label = crate::ui::proxied(StyledText::new(text).with_runs(runs), end.proxy, 12.);
         div()
             .flex()
             .flex_none()
             .items_center()
             .gap(px(label_gap))
-            .child(crate::ui::logos::agent_icon(agent, logo, cx))
-            .child(div().w(px(width)).text_size(px(12.)).truncate().child(StyledText::new(text).with_runs(runs)))
+            .child(crate::ui::logos::agent_icon(end.agent, logo, cx))
+            .child(label.w(px(width)).text_size(px(12.)).text_color(c.foreground))
     };
     let rule = || div().flex_1().h(px(1.)).bg(c.border);
     div()
@@ -1894,13 +1897,13 @@ fn handoff_row(from: &HandoffLabel, to: &HandoffLabel, ctx: &RowContext, window:
                 .flex()
                 .flex_none()
                 .items_center()
-                .child(end(from.agent, from_text, from_width))
+                .child(end(from, from_text, from_width))
                 .child(
                     div()
                         .mx(px(arrow_gap))
                         .child(icons::symbol("arrow-right", arrow).text_color(c.muted_stronger_foreground)),
                 )
-                .child(end(to.agent, to_text, to_width)),
+                .child(end(to, to_text, to_width)),
         )
         .child(rule())
         .into_any_element()

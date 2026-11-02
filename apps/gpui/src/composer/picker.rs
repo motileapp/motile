@@ -761,10 +761,7 @@ fn header(group: &Group, cx: &App) -> Div {
                 .text_size(px(11.5))
                 .font_weight(FontWeight::MEDIUM)
                 .text_color(c.muted_foreground)
-                .whitespace_nowrap()
-                .overflow_hidden()
-                .text_ellipsis()
-                .child(group.title.clone()),
+                .child(crate::ui::proxied(group.title.clone(), group.account.proxy, 11.5)),
         )
         .when(!group.windows.is_empty(), |header| header.child(limit_pills(&group.account.id, &group.windows, cx)))
 }

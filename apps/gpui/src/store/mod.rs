@@ -1188,9 +1188,16 @@ impl Store {
         Some(label.unwrap_or_else(|| model.name.clone()))
     }
 
+    /// The composer's model runs through the proxy.
+    pub fn composer_proxied(&self) -> bool {
+        let Some(model) = self.composer_model() else { return false };
+        self.composer_server().is_some_and(|server| server.runs_through_proxy(self.composer_account_id(), model.agent))
+    }
+
     /// What the model picker lists: each account with its agent's models, titled with the
     /// account's name when its agent has more than one. Each agent's account that a new thread
-    /// would start on comes first.
+    /// would start on comes first. The Proxy account's title is its agent's alone, which the
+    /// proxy's symbol follows.
     pub fn composer_choices(&self) -> Vec<(String, AgentAccount, Vec<ModelInfo>)> {
         let Some(server) = self.composer_server() else { return Vec::new() };
         let models = self.composer_models();
@@ -1208,7 +1215,8 @@ impl Store {
             .map(|account| {
                 let several = server.accounts(account.agent).len() > 1;
                 let name = agent_name(account.agent);
-                let title = if several { format!("{name} · {}", account.name) } else { name.to_string() };
+                let title =
+                    if several && !account.proxy { format!("{name} · {}", account.name) } else { name.to_string() };
                 let offered = models.iter().filter(|model| model.runs_under(account)).cloned().collect();
                 (title, account.clone(), offered)
             })

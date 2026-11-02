@@ -3044,6 +3044,7 @@ impl Core {
                 let window = usage::Window::ending(now(), bucket_secs, buckets, utc_offset_secs);
                 let mut project_names = HashMap::new();
                 let mut server_names = HashMap::new();
+                let mut proxied = HashMap::new();
                 let (removed, holder) = self.removed_and_holder();
                 let removed: Vec<String> = removed
                     .into_iter()
@@ -3071,6 +3072,11 @@ impl Core {
                         project_names.insert((server_id.clone(), project.id), project.name);
                     }
                     server_names.insert(server_id.clone(), server.device.name.clone());
+                    let proxies =
+                        server.info.iter().flat_map(|info| &info.agent_accounts).filter(|account| account.proxy);
+                    for account in proxies {
+                        proxied.insert((server_id.clone(), account.agent, account.name.clone()), account.pin.is_some());
+                    }
                     links.push((server_id, link));
                 }
                 let holder = holder_link.and(holder).filter(|_| !removed.is_empty());
@@ -3116,7 +3122,7 @@ impl Core {
                     }
                     let answer = match failure {
                         Some(failure) if spent.is_empty() => Err(failure),
-                        _ => serde_json::to_value(usage::view(&spent, window, &project_names, &server_names))
+                        _ => serde_json::to_value(usage::view(&spent, window, &project_names, &server_names, &proxied))
                             .map_err(|error| error.to_string()),
                     };
                     if let Ok(view) = &answer {

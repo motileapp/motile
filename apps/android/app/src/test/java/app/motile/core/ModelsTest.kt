@@ -133,6 +133,25 @@ class ModelsTest {
     }
 
     @Test
+    fun theProxyAccountLeavesItsNameToTheSymbol() {
+        val info = mapOf(
+            "protocol" to 31,
+            "agent_accounts" to listOf(
+                mapOf("id" to "work", "agent" to "claude", "name" to "Work"),
+                mapOf("id" to "proxy", "agent" to "claude", "name" to "Proxy", "proxy" to true),
+                mapOf("id" to "seat", "agent" to "claude", "name" to "Seat", "proxy" to true, "pin" to "a"),
+            ),
+            "models" to listOf(mapOf("id" to "opus", "name" to "Opus 5.5", "agent" to "claude")),
+        )
+        val server = Server(json("id" to "s", "name" to "studio", "state" to "connected", "info" to info))
+        val opus = server.models.first()
+        assertEquals("Opus 5.5 · Work", server.label(opus, "work"))
+        assertEquals("Opus 5.5", server.label(opus, "proxy"))
+        assertEquals("Opus 5.5 · Seat", server.label(opus, "seat"))
+        assertEquals(listOf(false, true, true), listOf("work", "proxy", "seat").map { server.runsThroughProxy(it, Agent.Claude) })
+    }
+
+    @Test
     fun aRemovedServerKeepsItsLastNameWithoutInfo() {
         val server = Server(json("id" to "s", "name" to "build-box", "short_name" to "build-box", "removed" to true, "state" to "disconnected", "info" to null))
         assertTrue(server.removed)
@@ -178,14 +197,17 @@ class ModelsTest {
             json("id" to "t1", "item" to "t1", "kind" to "agent", "title" to "Review", "state" to "waiting", "label" to "Needs approval", "flagged" to true, "started_at" to 1.0, *extra),
         )?.kind as? RowModel.Kind.Agent
         val running = agent("agent" to "codex", "runs_on" to "6.1-Sol · work", "detail" to "Reading a.rs", "thread" to "c", "card" to "last")?.content
-        assertEquals("6.1-Sol · work · Reading a.rs", running?.line)
+        assertEquals("6.1-Sol · work · Reading a.rs", running?.line?.text)
         assertEquals(Agent.Codex, running?.agent)
         assertEquals(AgentState.Waiting, running?.state)
         assertEquals(AgentContent.Card.Last, running?.card)
         assertEquals("c", running?.thread)
         val bare = agent()?.content
-        assertEquals("Needs approval", bare?.line)
+        assertEquals("Needs approval", bare?.line?.text)
         assertNull(bare?.card)
+        val proxied = agent("runs_on" to "Opus 5.5", "proxy" to true, "detail" to "Reading a.rs")?.content
+        assertEquals("Opus 5.5 Proxy · Reading a.rs", proxied?.line?.text)
+        assertEquals("Proxy · Needs approval", agent("proxy" to true)?.content?.line?.text)
     }
 
     @Test

@@ -92,8 +92,13 @@ impl ProxyPage {
                     cx.notify();
                 })
             });
-            let leading =
-                label("No proxy", Some("Runs on a machine that is always on".into()), Some("network"), Cut::Wraps, cx);
+            let leading = label(
+                "No proxy",
+                Some("Runs on a machine that is always on".into()),
+                Some("waypoints"),
+                Cut::Wraps,
+                cx,
+            );
             let rows = vec![row(vec![leading], vec![add.into_any_element()]).into_any_element()];
             return group("proxy", "Proxy", None, true, rows, cx);
         };
@@ -121,7 +126,7 @@ impl ProxyPage {
                 .separator()
                 .danger_symbol_item("Remove Proxy", "trash-2", move |window, cx| remove(window, cx))
         });
-        let leading = footed_label(name, Some(description), Some("network"), Cut::Wraps, error, cx);
+        let leading = footed_label(name, Some(description), Some("waypoints"), Cut::Wraps, error, cx);
         let rows = vec![row(vec![leading], vec![menu.into_any_element()]).into_any_element()];
         group("proxy", "Proxy", None, true, rows, cx)
     }

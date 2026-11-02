@@ -103,11 +103,19 @@ pub struct Tunnel {
     connection: Mutex<Option<(String, Connection)>>,
     /// The proxy's account each pinned thread goes to.
     pins: std::sync::Mutex<HashMap<String, String>>,
+    /// The proxy's account that last answered each thread.
+    placed: std::sync::Mutex<HashMap<String, String>>,
 }
 
 impl Tunnel {
     pub fn new(endpoint: Endpoint, key: watch::Receiver<Option<String>>) -> Arc<Self> {
-        Arc::new(Self { endpoint, key, connection: Mutex::default(), pins: std::sync::Mutex::default() })
+        Arc::new(Self {
+            endpoint,
+            key,
+            connection: Mutex::default(),
+            pins: std::sync::Mutex::default(),
+            placed: std::sync::Mutex::default(),
+        })
     }
 
     /// Pins the thread's requests to one of the proxy's accounts, or lets the proxy place them.
@@ -121,6 +129,16 @@ impl Tunnel {
 
     fn pin_of(&self, thread: &str) -> Option<String> {
         self.pins.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).get(thread).cloned()
+    }
+
+    /// The id of the proxy's account that last answered the thread.
+    pub fn placed(&self, thread: &str) -> Option<String> {
+        self.placed.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).get(thread).cloned()
+    }
+
+    fn answered(&self, thread: &str, account: Option<String>) {
+        let Some(account) = account else { return };
+        self.placed.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).insert(thread.to_string(), account);
     }
 
     /// The proxy's accounts, which the server's agents can be pinned to.
@@ -238,18 +256,20 @@ async fn handle(State(way): State<Way>, request: Request) -> Response {
     }
     let headers = passed(&parts.headers);
     let pin = way.tunnel.pin_of(&thread);
+    let asking = thread.clone();
     let upgrading =
         parts.headers.get(header::UPGRADE).is_some_and(|value| value.as_bytes().eq_ignore_ascii_case(b"websocket"));
     let answered = match upgrading {
         true => match WebSocketUpgrade::from_request_parts(&mut parts, &()).await {
             Ok(upgrade) => {
-                bridge(&way.tunnel, ProxyRequest::WebSocket { thread, agent, path, headers, pin }, upgrade).await
+                bridge(&way.tunnel, &asking, ProxyRequest::WebSocket { thread, agent, path, headers, pin }, upgrade)
+                    .await
             }
             Err(rejection) => return rejection.into_response(),
         },
         false => {
             let request = ProxyRequest::Http { thread, agent, method: parts.method.to_string(), path, headers, pin };
-            tunnel(&way.tunnel, request, body).await
+            tunnel(&way.tunnel, &asking, request, body).await
         }
     };
     answered.unwrap_or_else(|error| refused(StatusCode::BAD_GATEWAY, &motile_protocol::error_text(&error)))
@@ -284,7 +304,7 @@ fn refused(status: StatusCode, message: &str) -> Response {
 
 /// Sends the request and its body to the proxy as they come, and answers with what it answers, its
 /// body as it comes.
-async fn tunnel(tunnel: &Tunnel, request: ProxyRequest, body: Body) -> anyhow::Result<Response> {
+async fn tunnel(tunnel: &Tunnel, thread: &str, request: ProxyRequest, body: Body) -> anyhow::Result<Response> {
     let (mut send, mut recv) = tunnel.open(&request).await?;
     tokio::spawn(async move {
         let mut chunks = body.into_data_stream();
@@ -302,7 +322,10 @@ async fn tunnel(tunnel: &Tunnel, request: ProxyRequest, body: Body) -> anyhow::R
     });
     let reply = read_frame(&mut recv).await?.context("Your proxy hung up.")?;
     let (status, headers) = match reply {
-        ProxyReply::HttpHead { status, headers } => (status, headers),
+        ProxyReply::HttpHead { status, headers, account } => {
+            tunnel.answered(thread, account);
+            (status, headers)
+        }
         ProxyReply::Error { message } => return Ok(refused(StatusCode::BAD_GATEWAY, &message)),
         other => bail!("Your proxy answered {other:?}."),
     };
@@ -338,10 +361,18 @@ fn body_of(recv: RecvStream) -> Body {
 
 /// Opens the WebSocket at the proxy, and once it is open there, the agent's, passing each message
 /// on until either side closes.
-async fn bridge(tunnel: &Tunnel, request: ProxyRequest, upgrade: WebSocketUpgrade) -> anyhow::Result<Response> {
+async fn bridge(
+    tunnel: &Tunnel,
+    thread: &str,
+    request: ProxyRequest,
+    upgrade: WebSocketUpgrade,
+) -> anyhow::Result<Response> {
     let (send, mut recv) = tunnel.open(&request).await?;
     let headers = match read_frame(&mut recv).await?.context("Your proxy hung up.")? {
-        ProxyReply::WebSocketOpen { headers } => headers,
+        ProxyReply::WebSocketOpen { headers, account } => {
+            tunnel.answered(thread, account);
+            headers
+        }
         ProxyReply::Error { message } => return Ok(refused(StatusCode::BAD_GATEWAY, &message)),
         other => bail!("Your proxy answered {other:?}."),
     };

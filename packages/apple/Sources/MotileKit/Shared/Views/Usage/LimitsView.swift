@@ -74,11 +74,9 @@ struct LimitsView: View {
         .padding(.bottom, 2)
     }
 
-    /// "Work · a@b.c", or whichever of the two is known, and "On your proxy" for an account no
-    /// server has.
+    /// "Work · a@b.c", or whichever of the two is known.
     private func account(_ section: LimitsReport.Section) -> some View {
-        let onProxy = section.proxy && section.servers.isEmpty ? "On your proxy" : nil
-        return Text(dotted: [section.name, section.account, onProxy].compactMap { $0 }.map { Text(verbatim: $0) })
+        Text(dotted: [section.name, section.account].compactMap { $0 }.map { Text(verbatim: $0) })
             .font(.ui(size: 12))
             .foregroundStyle(Color.themeMutedForeground)
             .truncationMode(.middle)

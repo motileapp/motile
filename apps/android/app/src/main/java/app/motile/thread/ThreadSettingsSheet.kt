@@ -29,6 +29,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.motile.LocalCloseSheet
@@ -53,10 +54,12 @@ import app.motile.ui.GlassButton
 import app.motile.ui.HighlightButton
 import app.motile.ui.Icon
 import app.motile.ui.Menu
+import app.motile.ui.ProxyMark
 import app.motile.ui.SheetCloseButton
 import app.motile.ui.Text
 import app.motile.ui.ThemeDivider
 import app.motile.ui.pressable
+import app.motile.ui.proxied
 import app.motile.usage.LimitPills
 
 private const val rowText = 15f
@@ -157,7 +160,10 @@ private fun Models() {
                 ) {
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                         AgentIcon(choices.account.agent, size = noteSymbol)
-                        Text(choices.title, Modifier.weight(1f), size = noteText, color = palette.mutedForeground, maxLines = 1)
+                        Text(
+                            AnnotatedString(choices.title).proxied(choices.account.proxy), Modifier.weight(1f), size = noteText,
+                            color = palette.mutedForeground, maxLines = 1, inlineContent = ProxyMark.content(palette.mutedForeground, noteText),
+                        )
                         Icon(Symbol.ChevronDown, noteSymbol, Modifier.rotate(turn), color = palette.mutedForeground)
                     }
                     store.composerServer?.accountLimits?.get(id)?.takeIf { it.isNotEmpty() }?.let { windows ->

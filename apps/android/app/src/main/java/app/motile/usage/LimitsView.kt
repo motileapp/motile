@@ -81,7 +81,7 @@ fun LimitsView(report: LimitsReport) {
 @Composable
 private fun Header(section: LimitsReport.Section, beside: Boolean) {
     val palette = LocalPalette.current
-    val parts = listOfNotNull(section.name, section.account, "On your proxy".takeIf { section.proxy && section.servers.isEmpty() })
+    val parts = listOfNotNull(section.name, section.account)
     val account = buildAnnotatedString {
         parts.forEachIndexed { index, part ->
             if (index > 0) withStyle(SpanStyle(color = palette.mutedStrongerForeground)) { append(" · ") }

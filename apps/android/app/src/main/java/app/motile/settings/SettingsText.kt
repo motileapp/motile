@@ -49,6 +49,10 @@ val Server.accountsUnavailable: String?
 val Server.textModelName: String
     get() = models.firstOrNull { it.id == textModel }?.name ?: "Automatic"
 
+/** "Claude Code · Work". The Proxy account has no name of its own to show: the proxy's symbol after its agent's says it. */
+val AgentAccount.settingsTitle: String
+    get() = if (proxy) agent.title else "${agent.title} · $name"
+
 val AgentAccount.settingsDescription: String
     get() {
         if (proxy) return "Works through your proxy's accounts"

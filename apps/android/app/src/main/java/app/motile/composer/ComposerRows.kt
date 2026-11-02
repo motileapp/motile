@@ -79,8 +79,8 @@ private fun SettingsButton() {
     val logo: (@Composable () -> Unit)? = model?.let { { AgentIcon(it.agent) } }
     Box(Modifier.semantics { contentDescription = "Thread settings" }) {
         ActionButton(
-            store.composerModelLabel, picture = logo, detail = effort, place = store.composerServer?.shortName, variant = ButtonVariant.Ghost,
-            gap = 5.dp,
+            store.composerModelLabel, picture = logo, detail = effort, place = store.composerServer?.shortName, proxied = store.composerProxied,
+            variant = ButtonVariant.Ghost, gap = 5.dp,
         ) { store.showsThreadSettings = true }
     }
 }

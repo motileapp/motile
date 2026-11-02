@@ -97,6 +97,8 @@ pub struct Line {
     pub cost_usd: Option<f64>,
     /// Its part of the cost, from 0 to 1, or of the tokens when nothing has a price.
     pub share: f64,
+    /// An account that runs through the proxy, which its symbol after the name says.
+    pub proxy: bool,
 }
 
 fn total(tokens: &Tokens) -> u64 {
@@ -109,6 +111,7 @@ pub fn view(
     window: Window,
     project_names: &HashMap<(String, String), String>,
     server_names: &HashMap<String, String>,
+    proxied: &HashMap<(String, Agent, String), bool>,
 ) -> View {
     let starts = window.starts();
     let point = |start: f64| {
@@ -128,12 +131,15 @@ pub fn view(
         let same = |line: &Line| line.name == name && line.agent == agent && line.server.as_deref() == server;
         let index = lines.iter().position(same).unwrap_or_else(|| {
             let server = server.map(str::to_string);
-            lines.push(Line { name: name.to_string(), agent, server, tokens: 0, cost_usd: None, share: 0.0 });
+            let line =
+                Line { name: name.to_string(), agent, server, tokens: 0, cost_usd: None, share: 0.0, proxy: false };
+            lines.push(line);
             lines.len() - 1
         });
         let line = &mut lines[index];
         line.tokens += tokens;
         line.cost_usd = cost_usd.map(|cost| cost + line.cost_usd.unwrap_or_default()).or(line.cost_usd);
+        index
     };
 
     for Spent { server_id, bucket } in spent {
@@ -181,7 +187,10 @@ pub fn view(
         add(&mut projects, project.map(String::as_str).unwrap_or(REMOVED_PROJECT), None, Some(server), bucket);
         add(&mut servers, server, None, None, bucket);
         let account = if bucket.account_name.is_empty() { DEFAULT_ACCOUNT } else { &bucket.account_name };
-        add(&mut accounts, account, Some(bucket.agent), Some(server), bucket);
+        let pinned = proxied.get(&(server_id.clone(), bucket.agent, account.to_string()));
+        let account = if pinned == Some(&false) { agent_name(bucket.agent) } else { account };
+        let index = add(&mut accounts, account, Some(bucket.agent), Some(server), bucket);
+        accounts[index].proxy |= pinned.is_some();
     }
 
     let several = |line: &Line| {
@@ -209,6 +218,14 @@ pub fn view(
         view.kinds.push(Kind { name: "Other", tokens: 0, cost_usd: other_cost });
     }
     View { starts, agents, models, projects, servers, accounts, ..view }
+}
+
+/// The Proxy account that places its threads itself has no name of its own: it is its agent's.
+fn agent_name(agent: Agent) -> &'static str {
+    match agent {
+        Agent::Claude => "Claude Code",
+        Agent::Codex => "Codex",
+    }
 }
 
 #[cfg(test)]
@@ -264,7 +281,7 @@ mod tests {
         let names = HashMap::from([name("studio", "api", "API"), name("studio", "web", "Web")]);
         let servers = HashMap::from([("studio".to_string(), "Studio".to_string())]);
 
-        let view = view(&all, window, &names, &servers);
+        let view = view(&all, window, &names, &servers, &HashMap::new());
 
         assert_eq!((view.cost_usd, view.tokens, view.unpriced_tokens, view.cache_savings_usd), (4.0, 4000, 1000, 1.0));
         assert_eq!((view.writing_cost_usd, view.writing_tokens), (1.0, 1000));
@@ -297,9 +314,9 @@ mod tests {
             spent("studio", "api", Agent::Claude, "claude-opus", 0.0, Some(1.0)),
             spent("studio", "api", Agent::Codex, "gpt-6", 0.0, None),
         ];
-        assert!(view(&all, window, &HashMap::new(), &servers).accounts.is_empty());
+        assert!(view(&all, window, &HashMap::new(), &servers, &HashMap::new()).accounts.is_empty());
         all[1].bucket.account_name = "Personal".into();
-        let accounts = view(&all, window, &HashMap::new(), &servers).accounts;
+        let accounts = view(&all, window, &HashMap::new(), &servers, &HashMap::new()).accounts;
         let named: Vec<_> = accounts.iter().map(|line| (line.name.as_str(), line.agent, line.cost_usd)).collect();
         assert_eq!(
             named,
@@ -309,6 +326,16 @@ mod tests {
                 ("Default", Some(Agent::Codex), None)
             ]
         );
+
+        all[0].bucket.account_name = "Proxy".into();
+        all[1].bucket.account_name = "Work".into();
+        let proxied = HashMap::from([
+            (("studio".to_string(), Agent::Claude, "Proxy".to_string()), false),
+            (("studio".to_string(), Agent::Claude, "Work".to_string()), true),
+        ]);
+        let accounts = view(&all, window, &HashMap::new(), &servers, &proxied).accounts;
+        let named: Vec<_> = accounts.iter().map(|line| (line.name.as_str(), line.proxy)).collect();
+        assert_eq!(named, [("Claude Code", true), ("Work", true), ("Default", false)]);
     }
 
     #[test]
@@ -320,7 +347,7 @@ mod tests {
         ];
         let servers = HashMap::from([("studio".to_string(), "Studio".to_string())]);
 
-        let view = view(&all, window, &HashMap::new(), &servers);
+        let view = view(&all, window, &HashMap::new(), &servers, &HashMap::new());
 
         assert_eq!(view.projects.len(), 1);
         assert_eq!((view.projects[0].name.as_str(), view.projects[0].server.as_deref()), ("Removed project", None));

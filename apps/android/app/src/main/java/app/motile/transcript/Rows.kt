@@ -4,6 +4,8 @@ import android.text.format.Formatter
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.buildAnnotatedString
 import app.motile.core.Agent
 import app.motile.core.AgentState
 import app.motile.core.AttachedFile
@@ -28,6 +30,7 @@ import app.motile.platform.Symbol
 import app.motile.theme.Palette
 import app.motile.theme.Theme
 import app.motile.transcript.openui.UiContent
+import app.motile.ui.ProxyMark
 import java.util.concurrent.Executors
 import android.os.Handler
 import android.os.Looper
@@ -426,6 +429,8 @@ data class AgentContent(
     val agent: Agent?,
     /** "Opus 5.5 · work". */
     val runsOn: String,
+    /** It runs through the account's proxy, which the proxy's symbol after `runsOn` says. */
+    val proxy: Boolean,
     val startedAt: Double,
     val durationMs: Int?,
     /** When the thread's agent was told, for what it was told. */
@@ -446,6 +451,7 @@ data class AgentContent(
         detail = json.string("detail"),
         agent = Agent.of(json.optionalString("agent")),
         runsOn = json.string("runs_on"),
+        proxy = json.bool("proxy"),
         startedAt = json.double("started_at"),
         durationMs = json.optionalInt("duration_ms"),
         at = json.optionalDouble("at"),
@@ -453,11 +459,18 @@ data class AgentContent(
         card = Card.entries.firstOrNull { it.name.lowercase() == json.optionalString("card") },
     )
 
-    /** What the second line says: what it runs on, then what it does or said. */
-    val line: String
-        get() {
-            val said = if (detail.isEmpty() && runsOn.isEmpty()) label else detail
-            return listOf(runsOn, said).filter { it.isNotEmpty() }.joinToString(" · ")
+    /** What the second line says after what it runs on: what it does or said. */
+    val said: String get() = if (detail.isEmpty() && runsOn.isEmpty()) label else detail
+
+    /** The second line: what it runs on, with the proxy's symbol after it where it runs through the proxy, then what it does or said. */
+    val line: AnnotatedString
+        get() = buildAnnotatedString {
+            append(runsOn)
+            if (proxy) {
+                if (runsOn.isNotEmpty()) append(" ")
+                with(ProxyMark) { appendMark() }
+            }
+            if (said.isNotEmpty()) append(if (runsOn.isEmpty() && !proxy) said else " · $said")
         }
 }
 
@@ -488,6 +501,8 @@ class HandoffContent(json: JSON) {
         val agent = Agent.of(json?.string("agent")) ?: Agent.Claude
         val label = json?.string("label") ?: ""
         val account = json?.optionalString("account")
+        /** The account runs through the proxy, which its symbol after the label says. */
+        val proxy = json?.bool("proxy") ?: false
     }
 
     val from = End(json.obj("from"))

@@ -207,7 +207,7 @@ private fun AccountRow(account: AgentAccount, isDefault: Boolean, edit: () -> Un
     val description = if (isDefault) "Default · ${account.settingsDescription}" else account.settingsDescription
     Box(Modifier.pressPosition(menu)) {
         SettingsPressRow(edit, onLongClick = { menu.openAtPress() }.takeIf { !account.proxy || !isDefault }) {
-            SettingsItem("${account.agent.title} · ${account.name}", description) {
+            SettingsItem(account.settingsTitle, description, proxied = account.proxy) {
                 Box(Modifier.size(SettingsTile.size.dp), contentAlignment = Alignment.Center) { AgentIcon(account.agent, size = SettingsTile.symbolSize) }
             }
         }

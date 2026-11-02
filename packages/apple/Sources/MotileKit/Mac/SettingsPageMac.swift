@@ -337,7 +337,9 @@ struct SettingsPage: View {
             ForEach(server.agentAccounts.filter { installed.contains($0.agent) && $0.pin == nil }) { account in
                 SettingsRow {
                     AgentIcon(agent: account.agent, size: .md)
-                    SettingsLabel("\(account.agent.name) · \(account.name)", description: account.settingsDescription(isDefault: server.isDefault(account)))
+                    SettingsLabel(
+                        account.settingsTitle, description: account.settingsDescription(isDefault: server.isDefault(account)), proxied: account.proxy
+                    )
                 } trailing: {
                     if !account.proxy || !server.isDefault(account) {
                         more("What to do with the account") {
@@ -565,14 +567,20 @@ struct SettingsLabel<Footer: View>: View {
     var icon: Symbol?
     /// A description that is cut on one line instead of wrapped: a path at its start, a sentence at its end.
     var truncates: Text.TruncationMode?
+    /// What the title names runs through the proxy, which its symbol after it says.
+    var proxied = false
     /// What stands under the description.
     @ViewBuilder var footer: Footer
 
-    init(_ title: String, description: String? = nil, icon: Symbol? = nil, truncates: Text.TruncationMode? = nil, @ViewBuilder footer: () -> Footer) {
+    init(
+        _ title: String, description: String? = nil, icon: Symbol? = nil, truncates: Text.TruncationMode? = nil, proxied: Bool = false,
+        @ViewBuilder footer: () -> Footer
+    ) {
         self.title = title
         self.description = description
         self.icon = icon
         self.truncates = truncates
+        self.proxied = proxied
         self.footer = footer()
     }
 
@@ -583,7 +591,8 @@ struct SettingsLabel<Footer: View>: View {
                     .foregroundStyle(Color.themeMutedForeground)
             }
             VStack(alignment: .leading, spacing: 2) {
-                Text(title)
+                Text(verbatim: title)
+                    .proxyMarked(proxied, fontSize: 13)
                     .font(.ui(size: 13, weight: .medium))
                 if let description {
                     Text(description)
@@ -600,8 +609,8 @@ struct SettingsLabel<Footer: View>: View {
 }
 
 extension SettingsLabel where Footer == EmptyView {
-    init(_ title: String, description: String? = nil, icon: Symbol? = nil, truncates: Text.TruncationMode? = nil) {
-        self.init(title, description: description, icon: icon, truncates: truncates) { EmptyView() }
+    init(_ title: String, description: String? = nil, icon: Symbol? = nil, truncates: Text.TruncationMode? = nil, proxied: Bool = false) {
+        self.init(title, description: description, icon: icon, truncates: truncates, proxied: proxied) { EmptyView() }
     }
 }
 

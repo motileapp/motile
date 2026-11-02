@@ -1218,8 +1218,7 @@ final class AgentRowView: RowView {
         label.string = content.label
         label.color = content.state.flagged ? content.state.platformColor : Theme.mutedForeground
         label.isHidden = !content.flagged
-        line.string = content.line
-        line.color = content.state == .failed ? Theme.destructive : Theme.mutedForeground
+        line.attributed = content.line(font: .ui(12), color: content.state == .failed ? Theme.destructive : Theme.mutedForeground)
         chevron.show(.chevronRight, size: .xs)
         keepTime()
     }
@@ -1507,15 +1506,20 @@ final class HandoffRowView: RowView {
 
     override func layout(width: CGFloat) -> CGFloat { Self.height }
 
-    /// The model, and the account after a muted dot, as the model picker shows them.
+    /// The model, and the account after a muted dot, as the model picker shows them, then the
+    /// proxy's symbol where the account runs through it.
     private static func label(_ end: HandoffContent.End) -> NSAttributedString {
         let text = { (string: String, color: PlatformColor) in
             NSAttributedString(string: string, attributes: [.font: Theme.smallFont, .foregroundColor: color])
         }
         let label = NSMutableAttributedString(attributedString: text(end.label, Theme.foreground))
-        guard let account = end.account else { return label }
-        label.append(text(" · ", Theme.mutedStrongerForeground))
-        label.append(text(account, Theme.foreground))
+        if let account = end.account {
+            label.append(text(" · ", Theme.mutedStrongerForeground))
+            label.append(text(account, Theme.foreground))
+        }
+        guard end.proxy else { return label }
+        label.append(text(" ", Theme.foreground))
+        label.append(ProxyMark.attachment(font: Theme.smallFont, color: Theme.foreground))
         return label
     }
 

@@ -307,7 +307,8 @@ private struct UsageLineRow: View {
                     .fill(agent.color)
                     .frame(width: Self.dotWidth, height: Self.dotWidth)
             }
-            Text(line.name)
+            Text(verbatim: line.name)
+                .proxyMarked(line.proxy, fontSize: 12)
                 .foregroundStyle(Color.themeForeground)
                 .lineLimit(1)
                 .truncationMode(.middle)

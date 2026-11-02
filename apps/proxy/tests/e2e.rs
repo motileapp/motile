@@ -506,8 +506,8 @@ async fn a_claude_login_signs_in_and_a_threads_request_streams_through_with_its_
     send.write_all(json!({"model": "claude-opus-4-5", "stream": true}).to_string().as_bytes()).await.unwrap();
     send.finish().unwrap();
     let head: ProxyReply = read_frame(&mut recv).await.unwrap().unwrap();
-    let ProxyReply::HttpHead { status, headers } = head else { panic!("a response") };
-    assert_eq!(status, 200);
+    let ProxyReply::HttpHead { status, headers, account } = head else { panic!("a response") };
+    assert_eq!((status, account.as_deref()), (200, Some("alpha")), "the head names the account that answered");
     assert!(headers.iter().any(|(name, value)| name == "content-type" && value == "text/event-stream"));
 
     let mut first = vec![0u8; 64];
