@@ -4,6 +4,7 @@
 //! calls `/claude` and Codex `/codex`; Codex's WebSockets are bridged message by message. The
 //! token never leaves the server: the proxy is told the thread instead.
 
+use std::collections::HashMap;
 use std::path::Path;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -23,7 +24,7 @@ use iroh::endpoint::{Connection, RecvStream, SendStream};
 use iroh::{Endpoint, EndpointAddr, EndpointId};
 use motile_protocol::PROXY_ALPN;
 use motile_protocol::frame::{read_frame, write_frame};
-use motile_protocol::proxy_wire::{ProxyReply, ProxyRequest, WsMessage};
+use motile_protocol::proxy_wire::{ProxyAccount, ProxyReply, ProxyRequest, WsMessage};
 use motile_protocol::wire::{Agent, AgentLimits};
 use tokio::sync::{Mutex, mpsc, watch};
 
@@ -100,11 +101,40 @@ pub struct Tunnel {
     endpoint: Endpoint,
     key: watch::Receiver<Option<String>>,
     connection: Mutex<Option<(String, Connection)>>,
+    /// The proxy's account each pinned thread goes to.
+    pins: std::sync::Mutex<HashMap<String, String>>,
 }
 
 impl Tunnel {
     pub fn new(endpoint: Endpoint, key: watch::Receiver<Option<String>>) -> Arc<Self> {
-        Arc::new(Self { endpoint, key, connection: Mutex::default() })
+        Arc::new(Self { endpoint, key, connection: Mutex::default(), pins: std::sync::Mutex::default() })
+    }
+
+    /// Pins the thread's requests to one of the proxy's accounts, or lets the proxy place them.
+    pub fn pin(&self, thread: &str, pin: Option<&str>) {
+        let mut pins = self.pins.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        match pin {
+            Some(pin) => pins.insert(thread.to_string(), pin.to_string()),
+            None => pins.remove(thread),
+        };
+    }
+
+    fn pin_of(&self, thread: &str) -> Option<String> {
+        self.pins.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).get(thread).cloned()
+    }
+
+    /// The proxy's accounts, which the server's agents can be pinned to.
+    pub async fn accounts(&self) -> anyhow::Result<Vec<ProxyAccount>> {
+        let asked = async {
+            let (mut send, mut recv) = self.open(&ProxyRequest::Accounts).await?;
+            send.finish()?;
+            match read_frame(&mut recv).await?.context("Your proxy hung up.")? {
+                ProxyReply::Accounts { accounts } => Ok(accounts),
+                ProxyReply::Error { message } => bail!(message),
+                other => bail!("Your proxy answered {other:?}."),
+            }
+        };
+        tokio::time::timeout(ANSWER_WITHIN, asked).await.context("Your proxy didn't answer in time.")?
     }
 
     pub fn has_proxy(&self) -> bool {
@@ -207,15 +237,18 @@ async fn handle(State(way): State<Way>, request: Request) -> Response {
         return refused(StatusCode::SERVICE_UNAVAILABLE, NO_PROXY);
     }
     let headers = passed(&parts.headers);
+    let pin = way.tunnel.pin_of(&thread);
     let upgrading =
         parts.headers.get(header::UPGRADE).is_some_and(|value| value.as_bytes().eq_ignore_ascii_case(b"websocket"));
     let answered = match upgrading {
         true => match WebSocketUpgrade::from_request_parts(&mut parts, &()).await {
-            Ok(upgrade) => bridge(&way.tunnel, ProxyRequest::WebSocket { thread, agent, path, headers }, upgrade).await,
+            Ok(upgrade) => {
+                bridge(&way.tunnel, ProxyRequest::WebSocket { thread, agent, path, headers, pin }, upgrade).await
+            }
             Err(rejection) => return rejection.into_response(),
         },
         false => {
-            let request = ProxyRequest::Http { thread, agent, method: parts.method.to_string(), path, headers };
+            let request = ProxyRequest::Http { thread, agent, method: parts.method.to_string(), path, headers, pin };
             tunnel(&way.tunnel, request, body).await
         }
     };

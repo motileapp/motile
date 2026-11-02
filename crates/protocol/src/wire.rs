@@ -1137,6 +1137,10 @@ pub struct AgentAccount {
     /// while the account has a proxy; it can't be edited or removed.
     #[serde(default)]
     pub proxy: bool,
+    /// For a Proxy account, the one of the proxy's accounts its threads are pinned to: they go
+    /// there only, and stop at its limit. None for the Proxy account that places them itself.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pin: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]

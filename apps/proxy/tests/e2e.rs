@@ -439,9 +439,27 @@ async fn http(
     headers: Vec<(String, String)>,
     body: String,
 ) -> (ProxyReply, String) {
+    http_pinned(connection, thread, agent, path, headers, body, None).await
+}
+
+async fn http_pinned(
+    connection: &Connection,
+    thread: &str,
+    agent: Agent,
+    path: &str,
+    headers: Vec<(String, String)>,
+    body: String,
+    pin: Option<&str>,
+) -> (ProxyReply, String) {
     let (mut send, mut recv) = connection.open_bi().await.unwrap();
-    let request =
-        ProxyRequest::Http { thread: thread.into(), agent, method: "POST".into(), path: path.into(), headers };
+    let request = ProxyRequest::Http {
+        thread: thread.into(),
+        agent,
+        method: "POST".into(),
+        path: path.into(),
+        headers,
+        pin: pin.map(String::from),
+    };
     write_frame(&mut send, &request).await.unwrap();
     send.write_all(body.as_bytes()).await.unwrap();
     send.finish().unwrap();
@@ -469,6 +487,7 @@ async fn a_claude_login_signs_in_and_a_threads_request_streams_through_with_its_
         method: "POST".into(),
         path: "/v1/messages".into(),
         headers,
+        pin: None,
     };
     write_frame(&mut send, &request).await.unwrap();
     send.write_all(json!({"model": "claude-opus-4-5", "stream": true}).to_string().as_bytes()).await.unwrap();
@@ -610,6 +629,46 @@ async fn a_limit_before_anything_streamed_rests_the_account_and_the_next_one_ans
 }
 
 #[tokio::test]
+async fn a_pinned_thread_goes_only_to_its_account_and_hears_its_limit() {
+    let harness = Harness::start().await;
+    harness.sign_in_claude("alpha").await;
+    harness.sign_in_claude("beta").await;
+    let server = harness.server().await;
+    let ProxyReply::Accounts { accounts } = ask(&server, &ProxyRequest::Accounts).await else { panic!("accounts") };
+    let mut ids: Vec<_> = accounts.iter().map(|account| account.id.as_str()).collect();
+    ids.sort();
+    assert_eq!(ids, ["alpha", "beta"], "a server sees the accounts it can pin to");
+    harness.claude(&server, "free").await;
+    let first = harness.last_org();
+    let other = if first == "alpha" { "beta" } else { "alpha" };
+    let pinned = |thread: &'static str| {
+        let server = &server;
+        async move {
+            let headers = vec![("authorization".to_string(), "Bearer thread-token".to_string())];
+            let body = json!({"model": "claude-opus-4-5", "stream": true, "messages": []}).to_string();
+            http_pinned(server, thread, Agent::Claude, "/v1/messages", headers, body, Some(other)).await
+        }
+    };
+
+    for thread in ["p1", "p2"] {
+        let (head, _) = pinned(thread).await;
+        assert!(matches!(head, ProxyReply::HttpHead { status: 200, .. }), "{head:?}");
+        assert_eq!(harness.last_org(), other, "a pinned thread goes to its account");
+    }
+
+    harness.fake.limited.lock().unwrap().insert(format!("claude-{other}-0"));
+    let (head, _) = pinned("p1").await;
+    assert!(matches!(head, ProxyReply::HttpHead { status: 429, .. }), "{head:?}");
+    assert_eq!(harness.last_org(), other, "it never moves to another account");
+    let (head, body) = pinned("p1").await;
+    assert!(matches!(head, ProxyReply::HttpHead { status: 429, .. }), "{head:?}");
+    assert!(body.contains("is at its limit"), "{body}");
+
+    let (status, _) = harness.claude(&server, "free").await;
+    assert_eq!((status, harness.last_org()), (200, first), "a thread that isn't pinned goes on");
+}
+
+#[tokio::test]
 async fn a_response_that_breaks_off_after_it_streamed_is_not_replayed() {
     let harness = Harness::start().await;
     harness.sign_in_claude("alpha").await;
@@ -648,7 +707,13 @@ async fn a_codex_account_signs_in_with_a_device_code_and_its_websocket_is_bridge
         ("authorization".into(), "Bearer thread-token".into()),
         ("openai-beta".into(), "responses_websockets=2026-02-06".into()),
     ];
-    let open = ProxyRequest::WebSocket { thread: "c1".into(), agent: Agent::Codex, path: "/responses".into(), headers };
+    let open = ProxyRequest::WebSocket {
+        thread: "c1".into(),
+        agent: Agent::Codex,
+        path: "/responses".into(),
+        headers,
+        pin: None,
+    };
     write_frame(&mut send, &open).await.unwrap();
     let reply: ProxyReply = tokio::time::timeout(TIMEOUT, read_frame(&mut recv)).await.unwrap().unwrap().unwrap();
     assert!(matches!(reply, ProxyReply::WebSocketOpen { .. }), "{reply:?}");

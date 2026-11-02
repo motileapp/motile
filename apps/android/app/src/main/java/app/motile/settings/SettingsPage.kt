@@ -184,7 +184,7 @@ private fun SettingsGroups.agentAccounts(store: AppStore, edit: (Server, AgentAc
                 return@group
             }
             val installed = Agent.entries.filter { server.agents[it] != null }
-            for (account in server.agentAccounts.filter { it.agent in installed }) row {
+            for (account in server.agentAccounts.filter { it.agent in installed && it.pin == null }) row {
                 AccountRow(
                     account, isDefault = server.isDefault(account),
                     edit = { if (account.proxy) store.openSettings(SettingsSection.Proxy) else edit(server, account) },

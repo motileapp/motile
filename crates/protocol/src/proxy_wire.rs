@@ -13,17 +13,37 @@ pub enum ProxyRequest {
     /// server finishes its side of the stream. The proxy answers `HttpHead` (or `Error`), then the
     /// response's body as raw bytes until it finishes its side. `path` is the agent's, with its
     /// query, under the base URL it was given: Claude Code's under `ANTHROPIC_BASE_URL`
-    /// (`/v1/messages?beta=true`), Codex's under its provider's (`/v1/responses`).
-    Http { thread: String, agent: Agent, method: String, path: String, headers: Vec<(String, String)> },
+    /// (`/v1/messages?beta=true`), Codex's under its provider's (`/v1/responses`). `pin` names the
+    /// account the thread is pinned to: it goes there and nowhere else, and gets that account's limit
+    /// error when it is spent.
+    Http {
+        thread: String,
+        agent: Agent,
+        method: String,
+        path: String,
+        headers: Vec<(String, String)>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pin: Option<String>,
+    },
     /// A server's WebSocket for one of its threads (Codex). The proxy answers `WebSocketOpen` (or
     /// `Error`); then both sides send `WsMessage` frames until either sends `Close` or finishes. A
     /// refused upgrade is answered like `Http`: `HttpHead` and its body, 429 when every account is at
     /// its limit. The proxy closes the socket when the thread moves to another account, and Codex opens
-    /// a new one.
-    WebSocket { thread: String, agent: Agent, path: String, headers: Vec<(String, String)> },
+    /// a new one. `pin` as for `Http`.
+    WebSocket {
+        thread: String,
+        agent: Agent,
+        path: String,
+        headers: Vec<(String, String)>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pin: Option<String>,
+    },
     /// A server asks for its proxy account's limits: those of the account a new thread of `agent`
     /// would start on. Answered with `Pool`.
     Pool { agent: Agent },
+    /// A server asks for the proxy's accounts, which its agents can be pinned to. Answered with
+    /// `Accounts`.
+    Accounts,
     /// A client manages the proxy.
     Manage { command: Manage },
 }
@@ -34,6 +54,7 @@ pub enum ProxyReply {
     HttpHead { status: u16, headers: Vec<(String, String)> },
     WebSocketOpen { headers: Vec<(String, String)> },
     Pool { limits: Option<AgentLimits> },
+    Accounts { accounts: Vec<ProxyAccount> },
     State { state: ProxyState },
     SignInStarted { sign_in: ProxySignIn },
     Log { entries: Vec<LogEntry> },

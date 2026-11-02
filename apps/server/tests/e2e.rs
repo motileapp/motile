@@ -12,7 +12,7 @@ use motile_core::link::{Link, LinkEvent, State};
 use motile_core::sync::{self as relay, Origin};
 use motile_protocol::frame::{read_frame, write_frame};
 use motile_protocol::identity::DeviceKey;
-use motile_protocol::proxy_wire::{ProxyReply, ProxyRequest, WsMessage};
+use motile_protocol::proxy_wire::{AccountStatus, ProxyAccount, ProxyReply, ProxyRequest, WsMessage};
 use motile_protocol::wire::{
     Access as AgentAccess, Agent, AgentAccount, AgentLimits, Approval, Ask, CONTINUE_PROMPT, Change, CheckStatus,
     CopiedThread, DiffScope, EventKind, FileKind, GitAction, GitHubState, GitStage, GitStatus, Interruption, Item,
@@ -1727,6 +1727,7 @@ async fn a_thread_works_with_the_account_it_was_started_with_and_moves_to_anothe
         email: None,
         plan: None,
         proxy: false,
+        pin: None,
     };
     let saved = connection.request(&Request::SaveAgentAccount { account: personal }).await.unwrap();
     assert_eq!(saved, Message::Ok);
@@ -1817,6 +1818,7 @@ async fn an_account_signs_in_with_the_code_its_page_showed_and_is_saved() {
         email: None,
         plan: None,
         proxy: false,
+        pin: None,
     };
     let start = async || connection.request(&Request::StartSignIn { account: work.clone() }).await;
     let finish = async |id: &str, code: &str, account: &AgentAccount| {
@@ -4643,6 +4645,24 @@ async fn answer_as_proxy(
             write_frame(&mut send, &ProxyReply::Pool { limits: Some(limits) }).await.unwrap();
             send.finish().unwrap();
         }
+        ProxyRequest::Accounts => {
+            let account = ProxyAccount {
+                id: "org-1".into(),
+                agent: Agent::Claude,
+                name: "work@example.com".into(),
+                email: Some("work@example.com".into()),
+                plan: Some("Max 20x".into()),
+                priority: 0,
+                enabled: true,
+                status: AccountStatus::Ready,
+                windows: vec![],
+                reset_credits: 0,
+                threads: 0,
+                next: true,
+            };
+            write_frame(&mut send, &ProxyReply::Accounts { accounts: vec![account] }).await.unwrap();
+            send.finish().unwrap();
+        }
         ProxyRequest::Manage { .. } => panic!("a server never manages the proxy"),
     }
 }
@@ -4682,8 +4702,8 @@ async fn an_agents_request_reaches_the_proxy_as_its_threads_and_streams_back() {
     }
     assert_eq!(rest, b"data: second\n\n");
     let (request, body) = asked.recv().await.unwrap();
-    let ProxyRequest::Http { thread, agent, method, path, headers } = request else { panic!("{request:?}") };
-    assert_eq!((thread.as_str(), agent, method.as_str()), ("thread-1", Agent::Claude, "POST"));
+    let ProxyRequest::Http { thread, agent, method, path, headers, pin } = request else { panic!("{request:?}") };
+    assert_eq!((thread.as_str(), agent, method.as_str(), pin), ("thread-1", Agent::Claude, "POST", None));
     assert_eq!(path, "/v1/messages?beta=true");
     assert!(headers.contains(&("anthropic-version".to_string(), "2023-06-01".to_string())), "{headers:?}");
     assert!(!headers.iter().any(|(name, _)| name == "authorization"), "the token stays on the server: {headers:?}");
@@ -4706,6 +4726,16 @@ async fn an_agents_request_reaches_the_proxy_as_its_threads_and_streams_back() {
 
     let pool = tunnel.pool(Agent::Codex).await.unwrap().unwrap();
     assert_eq!(pool.account.as_deref(), Some("work@example.com"));
+    let accounts = tunnel.accounts().await.unwrap();
+    assert_eq!(accounts.iter().map(|account| account.id.as_str()).collect::<Vec<_>>(), ["org-1"]);
+
+    tunnel.pin("thread-1", Some("org-1"));
+    let pinned = tokio::time::timeout(TIMEOUT, post().bearer_auth(&token).send()).await.unwrap().unwrap();
+    release.notify_one();
+    let _ = pinned.bytes().await;
+    let (request, _) = asked.recv().await.unwrap();
+    let ProxyRequest::Http { pin, .. } = request else { panic!("{request:?}") };
+    assert_eq!(pin.as_deref(), Some("org-1"), "a pinned thread's requests name its account");
 
     proxy_key.send(None).unwrap();
     let without = post().bearer_auth(&token).send().await.unwrap();

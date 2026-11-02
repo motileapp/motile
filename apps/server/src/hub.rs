@@ -17,6 +17,7 @@ use std::time::{Duration, Instant};
 use anyhow::{Context, bail};
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64;
+use motile_protocol::proxy_wire::ProxyAccount;
 use motile_protocol::wire::{
     AccountSkills, Activity, Agent, AgentAccount, AgentLimits, AgentNotice, Approval, BranchInstructions,
     CONTINUE_PROMPT, ChangedFile, ContinueSettings, CopiedThread, DiffScope, FileKind, GitAction, GitHubState,
@@ -89,6 +90,8 @@ const RESTING_PROCESS_STAYS: Duration = Duration::from_secs(10 * 60);
 const MCP_WAIT: Duration = Duration::from_secs(5);
 const MCP_ASK_EVERY: Duration = Duration::from_millis(250);
 const PRICES: &str = "prices";
+/// How often the proxy is asked what accounts it has, which Proxy accounts are pinned to.
+const PROXY_ACCOUNTS_EVERY: Duration = Duration::from_secs(60);
 /// How often what the agents' accounts have used is read.
 const LIMITS_READ_EVERY: Duration = Duration::from_secs(5 * 60);
 const PRICES_STALE: Duration = Duration::from_secs(24 * 3600);
@@ -191,6 +194,14 @@ struct ProxyWay {
     token: String,
     /// Where the Proxy accounts keep their folders.
     folder: PathBuf,
+    /// The proxy's accounts as it last listed them, which Proxy accounts are pinned to.
+    pool: std::sync::Mutex<Vec<ProxyAccount>>,
+}
+
+impl ProxyWay {
+    fn pool(&self) -> Vec<ProxyAccount> {
+        self.pool.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).clone()
+    }
 }
 
 /// A thread with the lock its work takes.
@@ -476,14 +487,20 @@ impl Hub {
         let port = proxy::serve(tunnel.clone(), self.mcp_tokens.clone(), token.clone()).await?;
         std::fs::create_dir_all(folder.join(agent_accounts::usual_id(Agent::Claude)))?;
         proxy::write_codex_config(&folder.join(agent_accounts::usual_id(Agent::Codex)), port)?;
-        if self.proxy.set(ProxyWay { tunnel, port, token, folder }).is_err() {
+        let way = ProxyWay { tunnel, port, token, folder, pool: std::sync::Mutex::default() };
+        if self.proxy.set(way).is_err() {
             bail!("The way to the proxy is served already.");
         }
         let has_proxy = key.borrow_and_update().is_some();
         self.offer_proxy(has_proxy).await?;
         let hub = Arc::downgrade(self);
         tokio::spawn(async move {
-            while key.changed().await.is_ok() {
+            let mut every = tokio::time::interval(PROXY_ACCOUNTS_EVERY);
+            loop {
+                tokio::select! {
+                    changed = key.changed() => if changed.is_err() { return },
+                    _ = every.tick() => {}
+                }
                 let has_proxy = key.borrow_and_update().is_some();
                 let Some(hub) = hub.upgrade() else { return };
                 if let Err(error) = hub.offer_proxy(has_proxy).await {
@@ -494,13 +511,30 @@ impl Hub {
         Ok(())
     }
 
-    /// Offers the Proxy accounts while the account has a proxy, and takes them away when it no
-    /// longer has one, as a removed account is: their threads go on with their agents' defaults.
+    /// Offers the Proxy accounts as the proxy's accounts are now, before an agent picks one.
+    pub async fn follow_proxy(self: &Arc<Self>) {
+        let Some(way) = self.proxy.get() else { return };
+        if let Err(error) = self.offer_proxy(way.tunnel.has_proxy()).await {
+            tracing::warn!("couldn't change the Proxy accounts: {error:#}");
+        }
+    }
+
+    /// Offers the Proxy accounts while the account has a proxy, one pinned to each of its accounts
+    /// too, and takes them away when it no longer has one, or no longer has the account, as a removed
+    /// account is: their threads go on with their agents' defaults. The proxy's accounts stay as
+    /// they were while it can't be asked.
     async fn offer_proxy(self: &Arc<Self>, has_proxy: bool) -> anyhow::Result<()> {
         let Some(way) = self.proxy.get() else { return Ok(()) };
+        if has_proxy {
+            match way.tunnel.accounts().await {
+                Ok(pool) => *way.pool.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = pool,
+                Err(error) => tracing::debug!("couldn't ask the proxy for its accounts: {error:#}"),
+            }
+        }
+        let pool = way.pool();
         let mut threads = self.every_thread().await;
         let accounts = self.agent_accounts();
-        let offered = agent_accounts::with_proxy(accounts.clone(), has_proxy.then_some(way.folder.as_path()));
+        let offered = agent_accounts::with_proxy(accounts.clone(), has_proxy.then_some((way.folder.as_path(), &pool)));
         if offered == accounts {
             return Ok(());
         }
@@ -706,8 +740,9 @@ impl Hub {
     /// as it was.
     async fn ask_models(&self) {
         let known = self.models();
-        let asks: Vec<_> = self
-            .agent_accounts()
+        let (pinned, asked): (Vec<_>, Vec<_>) =
+            self.agent_accounts().into_iter().partition(|account| account.pin.is_some());
+        let asks: Vec<_> = asked
             .into_iter()
             .map(|account| {
                 let environment = self.account_environment(&account);
@@ -732,6 +767,15 @@ impl Hub {
             let models = models.into_iter().map(|model| ModelInfo { account: account.id.clone(), ..model });
             listed.extend(models.map(|model| with_known_default(model, &known)));
         }
+        let pinned_models: Vec<ModelInfo> = pinned
+            .iter()
+            .flat_map(|account| {
+                let placing = agent_accounts::proxy_id(account.agent);
+                let models = listed.iter().filter(move |model| model.account == placing);
+                models.map(|model| ModelInfo { account: account.id.clone(), ..model.clone() })
+            })
+            .collect();
+        listed.extend(pinned_models);
         if listed == known {
             return;
         }
@@ -2324,17 +2368,24 @@ impl Hub {
         agents
     }
 
-    /// What the proxy's accounts that new threads of the Proxy accounts would start on have used.
+    /// What the proxy's accounts that new threads of the Proxy accounts would start on have used,
+    /// and for each one pinned to an account, what that account has.
     async fn read_pools(&self, accounts: Vec<AgentAccount>) -> Vec<AgentLimits> {
         let Some(way) = self.proxy.get() else { return vec![] };
-        let reads: Vec<_> = accounts
+        let pool = way.pool();
+        let (pinned, placing): (Vec<_>, Vec<_>) = accounts.into_iter().partition(|account| account.pin.is_some());
+        let pinned = pinned.into_iter().map(|account| {
+            let pooled = pool.iter().find(|pooled| account.pin.as_deref() == Some(pooled.id.as_str()));
+            limits::pinned(&account, pooled)
+        });
+        let reads: Vec<_> = placing
             .into_iter()
             .map(|account| {
                 let tunnel = way.tunnel.clone();
                 tokio::spawn(async move { limits::pooled(&account, tunnel.pool(account.agent).await) })
             })
             .collect();
-        let mut read = Vec::new();
+        let mut read: Vec<AgentLimits> = pinned.collect();
         for task in reads {
             read.extend(task.await.ok());
         }
@@ -3357,6 +3408,9 @@ impl Hub {
         }
         if account.proxy {
             command.env(proxy::token_variable(account.agent), token);
+            if let (Some(way), Some(thread)) = (self.proxy.get(), self.mcp_tokens.thread_of(token)) {
+                way.tunnel.pin(&thread, account.pin.as_deref());
+            }
         }
         command.spawn().with_context(|| format!("{name} couldn't be started."))
     }

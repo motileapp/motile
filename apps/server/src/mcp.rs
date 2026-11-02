@@ -275,8 +275,8 @@ pub struct StartAgent {
     pub title: Option<String>,
     /// The part it plays, such as "reviewer". Its prompt starts by telling it.
     pub role: Option<String>,
-    /// The account it runs on, by its name or id from list_accounts. Yours when neither this nor
-    /// `agent` is given.
+    /// The account it runs on, by its name or id from list_accounts, which says how your proxy's
+    /// accounts work if you have one. Yours when neither this nor `agent` is given.
     pub account: Option<String>,
     /// "claude" or "codex": that agent's default account, or yours when you are that agent.
     pub agent: Option<String>,

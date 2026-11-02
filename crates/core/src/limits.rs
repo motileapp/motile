@@ -225,9 +225,9 @@ impl Accounts<'_> {
     /// a new thread is better off on, when it isn't the account itself: by account id, then model id.
     pub fn roomier(&self, models: &[ModelInfo], now: f64) -> HashMap<String, HashMap<String, String>> {
         let mut roomier: HashMap<String, HashMap<String, String>> = HashMap::new();
-        for account in self.accounts {
+        for account in self.offered() {
             for model in models.iter().filter(|model| runs(account, model) && self.counts(account, Some(model))) {
-                let others = self.accounts.iter().filter(|other| other.id != account.id).filter_map(|other| {
+                let others = self.offered().filter(|other| other.id != account.id).filter_map(|other| {
                     let model = models.iter().find(|listed| listed.id == model.id && runs(other, listed))?;
                     self.counts(other, Some(model)).then_some((other, model))
                 });
@@ -255,14 +255,14 @@ impl Accounts<'_> {
     /// windows of every model. Those whose limits weren't read keep their places after the others.
     pub fn by_room(&self, now: f64) -> Vec<String> {
         let mut agents: Vec<Agent> = Vec::new();
-        for account in self.accounts {
+        for account in self.offered() {
             if !agents.contains(&account.agent) {
                 agents.push(account.agent);
             }
         }
         let mut ordered = Vec::new();
         for agent in agents {
-            let of_agent = self.accounts.iter().filter(|account| account.agent == agent);
+            let of_agent = self.offered().filter(|account| account.agent == agent);
             let (read, unread): (Vec<_>, Vec<_>) = of_agent.partition(|account| self.counts(account, None));
             let ranked: Vec<Candidate> = read
                 .iter()
@@ -272,6 +272,12 @@ impl Accounts<'_> {
             ordered.extend(unread.into_iter().map(|account| account.id.clone()));
         }
         ordered
+    }
+
+    /// The accounts a new thread can be put on: all but those pinned to one of the proxy's accounts,
+    /// which only an agent that asks for one uses.
+    fn offered(&self) -> impl Iterator<Item = &AgentAccount> {
+        self.accounts.iter().filter(|account| account.pin.is_none())
     }
 
     /// Whether the account's limits were read and have a window that counts for the model.
@@ -409,7 +415,7 @@ mod tests {
     }
 
     #[test]
-    fn a_account_on_several_servers_is_shown_once_and_named() {
+    fn an_account_on_several_servers_is_shown_once_and_named() {
         let reads = vec![
             read("laptop", Agent::Codex, Some("a"), vec![window("Session", 1.0, 60.0, 18000)]),
             read("studio", Agent::Claude, Some("a"), vec![window("Session", 1.0, 60.0, 18000)]),
@@ -450,7 +456,7 @@ mod tests {
     }
 
     #[test]
-    fn a_account_without_windows_says_why() {
+    fn an_account_without_windows_says_why() {
         let mut failed = read("studio", Agent::Codex, None, vec![]);
         failed.limits.error = Some("It didn't answer in time.".into());
         let mut no_plan = read("box", Agent::Claude, Some("b"), vec![]);
@@ -469,7 +475,7 @@ mod tests {
     }
 
     #[test]
-    fn a_account_on_several_servers_shows_the_windows_one_of_them_read() {
+    fn an_account_on_several_servers_shows_the_windows_one_of_them_read() {
         let reads = vec![
             read("laptop", Agent::Claude, Some("a"), vec![]),
             read("studio", Agent::Claude, Some("a"), vec![window("Session", 24.0, 60.0, 18000)]),
@@ -490,6 +496,7 @@ mod tests {
             email: None,
             plan: None,
             proxy: false,
+            pin: None,
         }
     }
 
@@ -643,7 +650,9 @@ mod tests {
     fn accounts_are_ordered_as_a_new_thread_would_choose_them_and_unread_ones_last() {
         let mut accounts = claude(&["yekta", "unread", "work", "spare", "spent"]);
         accounts.insert(1, account("codex", Agent::Codex));
+        accounts.push(AgentAccount { proxy: true, pin: Some("org-1".into()), ..account("pinned", Agent::Claude) });
         let limits = [
+            used_by("pinned", Agent::Claude, vec![session(0.0, 10.0 * 60.0)]),
             used_by("yekta", Agent::Claude, vec![session(10.0, 3.0 * HOUR), weekly(10.0, 5.0 * DAY)]),
             used_by("work", Agent::Claude, vec![session(40.0, HOUR)]),
             used_by("spare", Agent::Claude, vec![window("Weekly · Fable", 10.0, DAY, 604800)]),
@@ -653,7 +662,11 @@ mod tests {
         let working = HashMap::new();
         let ordered =
             Accounts { accounts: &accounts, limits: &limits, read_at: Some(1000.0), working: &working }.by_room(1000.0);
-        assert_eq!(ordered, ["work", "yekta", "spent", "unread", "spare", "codex"]);
+        assert_eq!(
+            ordered,
+            ["work", "yekta", "spent", "unread", "spare", "codex"],
+            "an account pinned to one of the proxy's is never chosen"
+        );
     }
 
     fn proxy_account(name: &str, agent: Agent, email: &str, windows: Vec<LimitWindow>) -> ProxyAccount {

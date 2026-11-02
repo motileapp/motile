@@ -146,6 +146,7 @@ fn default_account(agent: Agent) -> AgentAccount {
         email: None,
         plan: None,
         proxy: false,
+        pin: None,
     }
 }
 
@@ -161,6 +162,7 @@ pub fn new_account(agent: Agent) -> AgentAccount {
         email: None,
         plan: None,
         proxy: false,
+        pin: None,
     }
 }
 
@@ -317,8 +319,10 @@ impl Server {
         self.short_model_names.get(&model.id).map_or(model.name.as_str(), String::as_str)
     }
 
+    /// The agent's accounts a person picks from: all but those pinned to one of the proxy's
+    /// accounts, which only agents pick.
     pub fn accounts(&self, agent: Agent) -> Vec<&AgentAccount> {
-        self.agent_accounts.iter().filter(|account| account.agent == agent).collect()
+        self.agent_accounts.iter().filter(|account| account.agent == agent && account.pin.is_none()).collect()
     }
 
     /// Each model once, however many accounts run it, for picking one by its id.
@@ -329,9 +333,9 @@ impl Server {
 
     /// The account with that id, or the agent's default one.
     pub fn account(&self, id: Option<&str>, agent: Agent) -> Option<&AgentAccount> {
-        let accounts = self.accounts(agent);
-        let named = accounts.iter().find(|account| Some(account.id.as_str()) == id);
-        named.or(accounts.first()).copied()
+        let named =
+            self.agent_accounts.iter().find(|account| account.agent == agent && Some(account.id.as_str()) == id);
+        named.or(self.accounts(agent).first().copied())
     }
 
     /// Whether the account is its agent's default, the first of the agent's accounts.

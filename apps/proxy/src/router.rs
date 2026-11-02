@@ -449,7 +449,7 @@ mod tests {
     }
 
     #[test]
-    fn a_account_of_the_same_plan_lends_its_measured_k() {
+    fn an_account_of_the_same_plan_lends_its_measured_k() {
         let windows = session(10.0);
         let measured = Evidence { busy_points: 20.0, busy_hours: 1.0, dollars: 10.0, ..Evidence::default() };
         let facts = |id, plan, evidence: Option<Evidence>| Facts {

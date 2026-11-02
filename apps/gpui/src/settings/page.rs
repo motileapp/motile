@@ -493,7 +493,8 @@ impl SettingsPage {
             [Agent::Claude, Agent::Codex].into_iter().filter(|agent| server.agents.contains_key(agent)).collect();
         rows.push(divider_on(Surface::Card, cx).into_any_element());
         let page = cx.weak_entity();
-        let accounts = server.agent_accounts.iter().filter(|account| installed.contains(&account.agent));
+        let accounts =
+            server.agent_accounts.iter().filter(|account| installed.contains(&account.agent) && account.pin.is_none());
         for (place, account) in accounts.enumerate() {
             let edit = self.edit_account(server, account.clone(), cx);
             let is_default = server.is_default_account(account);

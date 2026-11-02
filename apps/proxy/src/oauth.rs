@@ -401,7 +401,7 @@ mod tests {
     }
 
     #[test]
-    fn only_a_refused_refresh_token_makes_a_account_sign_in_again() {
+    fn only_a_refused_refresh_token_makes_an_account_sign_in_again() {
         assert!(is_dead(
             Agent::Claude,
             400,

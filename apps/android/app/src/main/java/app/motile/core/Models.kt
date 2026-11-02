@@ -112,6 +112,8 @@ data class AgentAccount(
     val plan: String?,
     /** The server's account for the account's proxy, which serves its turns from the proxy's accounts. It can't be edited or removed. */
     val proxy: Boolean = false,
+    /** The one of the proxy's accounts its threads are pinned to, which only agents pick. */
+    val pin: String? = null,
 ) {
     data class Variable(
         val name: String,
@@ -130,6 +132,7 @@ data class AgentAccount(
         email = json.optionalString("email"),
         plan = json.optionalString("plan"),
         proxy = json.bool("proxy"),
+        pin = json.optionalString("pin"),
     )
 
     val json: Map<String, Any?>
@@ -234,7 +237,8 @@ data class Server(
     /** Whether the server can keep its projects' folders pulled on their default branch. */
     val pullsDefaultBranch: Boolean get() = protocolVersion >= 25
 
-    fun accounts(of: Agent): List<AgentAccount> = agentAccounts.filter { it.agent == of }
+    /** The agent's accounts a person picks from: all but those pinned to one of the proxy's accounts, which only agents pick. */
+    fun accounts(of: Agent): List<AgentAccount> = agentAccounts.filter { it.agent == of && it.pin == null }
 
     /** Whether the account is its agent's default: the first of its agent's accounts. */
     fun isDefault(account: AgentAccount): Boolean = accounts(account.agent).firstOrNull()?.id == account.id
@@ -247,10 +251,8 @@ data class Server(
         }
 
     /** The account with that id, or the agent's default one. */
-    fun account(id: String?, of: Agent): AgentAccount? {
-        val accounts = accounts(of)
-        return accounts.firstOrNull { it.id == id } ?: accounts.firstOrNull()
-    }
+    fun account(id: String?, of: Agent): AgentAccount? =
+        agentAccounts.firstOrNull { it.agent == of && it.id == id } ?: accounts(of).firstOrNull()
 
     /** The account and model a new thread starts on, when another account of its agent runs the model and has used clearly less of its limits. */
     fun roomier(than: String?, model: String?): Pair<String, String>? {

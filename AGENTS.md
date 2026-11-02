@@ -110,7 +110,8 @@ place of the agent's.
   clients' management, and nothing from anyone else.
 - `router.rs`: which account a thread's requests go to. A thread stays on its account until the account
   runs out, is turned off, or the thread was idle longer than its cache lasts; then
-  `select::rank` places it again, from what the proxy measures of each account's windows.
+  `select::rank` places it again, from what the proxy measures of each account's windows. A
+  thread pinned to an account (the request's `pin`) goes there only, and gets its limit error.
 - `upstream.rs`, `websocket.rs`: the HTTP requests and Codex's WebSockets. A limit error before
   anything streamed rests the account and tries the next; a response that streamed is never replayed.
 - `oauth.rs`: signing accounts in and renewing their tokens, as the CLIs do. `seal.rs` keeps the
@@ -164,7 +165,10 @@ shadcn's own colours, opacities and radii are gone from the theme.
   is given. Every account is alike: an agent's first is its default, which any can be made, and
   any but an agent's last can be removed. A Codex account can share the usual folder but for its
   sign-in. A thread works with one account and can move to another. While the account has a
-  proxy, each agent also has a Proxy account, which the server keeps and nobody edits.
+  proxy, each agent also has a Proxy account, which the server keeps and nobody edits, and the
+  proxy places its threads; and one Proxy account pinned to each of the proxy's accounts (`pin`),
+  whose threads stay on that account and stop at its limit. Only agents pick a pinned one, through
+  `start_agent`; the clients' pickers leave them out.
 - `sign_in.rs`: signs a Claude Code account in for a client: it runs `claude auth login` with the
   account's folder, the client opens the page it links to, and the code that page shows comes
   back to it.

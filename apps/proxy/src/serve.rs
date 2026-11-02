@@ -103,15 +103,16 @@ async fn handle_stream(
 ) -> anyhow::Result<()> {
     let request: ProxyRequest = read_frame(&mut recv).await?.context("The stream ended before a request.")?;
     let reply = match (request, role) {
-        (ProxyRequest::Http { thread, agent, method, path, headers }, Role::Server) => {
-            let incoming = Incoming { server: device, thread, agent, method, path, headers };
+        (ProxyRequest::Http { thread, agent, method, path, headers, pin }, Role::Server) => {
+            let incoming = Incoming { server: device, thread, agent, method, path, headers, pin };
             return upstream::serve(proxy, incoming, send, recv).await;
         }
-        (ProxyRequest::WebSocket { thread, agent, path, headers }, Role::Server) => {
-            let incoming = Incoming { server: device, thread, agent, method: "GET".into(), path, headers };
+        (ProxyRequest::WebSocket { thread, agent, path, headers, pin }, Role::Server) => {
+            let incoming = Incoming { server: device, thread, agent, method: "GET".into(), path, headers, pin };
             return websocket::serve(proxy, incoming, send, recv).await;
         }
         (ProxyRequest::Pool { agent }, Role::Server) => ProxyReply::Pool { limits: proxy.pool(agent) },
+        (ProxyRequest::Accounts, Role::Server) => ProxyReply::Accounts { accounts: proxy.state().accounts },
         (ProxyRequest::Manage { command }, Role::Client) => manage::handle(&proxy, command).await,
         _ => ProxyReply::Error { message: "This device can't ask the proxy that.".into() },
     };

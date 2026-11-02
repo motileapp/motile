@@ -25,7 +25,7 @@ use tokio_tungstenite::tungstenite::{self, Message};
 
 use crate::accounts::Account;
 use crate::limits;
-use crate::proxy::{CODEX_CACHE, Proxy};
+use crate::proxy::{Asked, CODEX_CACHE, Proxy};
 use crate::router::ThreadKey;
 use crate::store::{Captured, Record};
 use crate::upstream::{
@@ -139,13 +139,17 @@ async fn open(
     let mut tried: Vec<String> = Vec::new();
     let mut renewed: Vec<String> = Vec::new();
     loop {
-        let Some(account) = proxy.choose(key, incoming.agent, None, CODEX_CACHE, &tried, now()) else {
-            match limit_reply(proxy, incoming.agent) {
+        let pin = incoming.pin.as_deref();
+        let asked = Asked { agent: incoming.agent, model: None, cache_lifetime: CODEX_CACHE, pin };
+        let Some(account) = proxy.choose(key, asked, &tried, now()) else {
+            match limit_reply(proxy, incoming.agent, pin) {
                 Some(made) => {
                     write_frame(send, &ProxyReply::HttpHead { status: 429, headers: made.headers }).await?;
                     send.write_all(&made.body).await?;
                 }
-                None => write_frame(send, &ProxyReply::Error { message: no_account(proxy, incoming.agent) }).await?,
+                None => {
+                    write_frame(send, &ProxyReply::Error { message: no_account(proxy, incoming.agent, pin) }).await?
+                }
             }
             let _ = send.finish();
             return Ok(None);
@@ -268,7 +272,13 @@ fn begin_turn(
         return Some(text.to_string());
     }
     let model = request["model"].as_str().map(String::from);
-    let chosen = proxy.choose(key, incoming.agent, model.as_deref(), CODEX_CACHE, &[], now())?;
+    let asked = Asked {
+        agent: incoming.agent,
+        model: model.as_deref(),
+        cache_lifetime: CODEX_CACHE,
+        pin: incoming.pin.as_deref(),
+    };
+    let chosen = proxy.choose(key, asked, &[], now())?;
     if chosen.id != account.id {
         return None;
     }

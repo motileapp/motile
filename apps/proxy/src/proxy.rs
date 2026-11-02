@@ -39,6 +39,15 @@ pub const CLAUDE_LONG_CACHE: f64 = 3600.0;
 const CAPTURE: &str = "capture";
 const ACCOUNT_NAME: &str = "Proxy";
 
+/// What a thread's request asks of `Proxy::choose`.
+pub struct Asked<'a> {
+    pub agent: Agent,
+    pub model: Option<&'a str>,
+    pub cache_lifetime: f64,
+    /// The account the thread is pinned to.
+    pub pin: Option<&'a str>,
+}
+
 pub struct Proxy {
     pub store: Store,
     seal: Seal,
@@ -223,20 +232,22 @@ impl Proxy {
         captured
     }
 
-    /// The account the thread's request goes to: its own while it can take it, else the first by the
-    /// rank, leaving out those `tried` already.
-    pub fn choose(
-        &self,
-        key: &ThreadKey,
-        agent: Agent,
-        model: Option<&str>,
-        cache_lifetime: f64,
-        tried: &[String],
-        now: f64,
-    ) -> Option<Account> {
+    /// The account the thread's request goes to: the one it is pinned to, or its own while it can take
+    /// it, else the first by the rank, leaving out those `tried` already.
+    pub fn choose(&self, key: &ThreadKey, request: Asked, tried: &[String], now: f64) -> Option<Account> {
+        let Asked { agent, model, cache_lifetime, pin } = request;
         let accounts = self.accounts();
         let open =
             |account: &&Account| account.agent == agent && account.available(now) && !tried.contains(&account.id);
+        if let Some(pin) = pin {
+            return self.pinned(
+                accounts.iter().filter(open).find(|account| account.id == pin)?,
+                key,
+                model,
+                cache_lifetime,
+                now,
+            );
+        }
         let current = {
             let mut router = self.router();
             router.touch(key, agent, model, cache_lifetime, now);
@@ -260,6 +271,26 @@ impl Proxy {
             thread.moved = Moved::Pending;
         }
         Some(account)
+    }
+
+    /// Keeps a pinned thread on its account, which counts what it is expected to spend there.
+    fn pinned(
+        &self,
+        account: &Account,
+        key: &ThreadKey,
+        model: Option<&str>,
+        cache_lifetime: f64,
+        now: f64,
+    ) -> Option<Account> {
+        let mut router = self.router();
+        router.touch(key, account.agent, model, cache_lifetime, now);
+        let current = router.thread(key).and_then(|thread| thread.account.clone());
+        if current.as_deref() != Some(account.id.as_str()) {
+            let expected = router.expected(account.agent, model);
+            router.assign(key, &account.id, expected, now);
+        }
+        router.mark(key, now);
+        Some(account.clone())
     }
 
     /// The available accounts of the agent, the one a thread should start on first.

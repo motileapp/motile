@@ -11,14 +11,14 @@ use futures_util::StreamExt;
 use iroh::endpoint::{RecvStream, SendStream};
 use motile_protocol::frame::write_frame;
 use motile_protocol::now;
-use motile_protocol::proxy_wire::{LogEntry, ProxyReply};
+use motile_protocol::proxy_wire::{AccountStatus, LogEntry, ProxyReply};
 use motile_protocol::wire::Agent;
 use serde_json::{Value, json};
 
 use crate::accounts::Tokens;
 use crate::limits::{self, header};
 use crate::oauth::CLAUDE_OAUTH_BETA;
-use crate::proxy::{CLAUDE_CACHE, CLAUDE_LONG_CACHE, CODEX_CACHE, Proxy, agent_title};
+use crate::proxy::{Asked, CLAUDE_CACHE, CLAUDE_LONG_CACHE, CODEX_CACHE, Proxy, agent_title};
 use crate::router::ThreadKey;
 use crate::store::{Captured, Record};
 use crate::usage::{EventScanner, Spent, read_body};
@@ -58,6 +58,8 @@ pub struct Incoming {
     pub method: String,
     pub path: String,
     pub headers: Vec<(String, String)>,
+    /// The account the thread is pinned to, which it never leaves.
+    pub pin: Option<String>,
 }
 
 impl Incoming {
@@ -95,7 +97,13 @@ pub async fn serve(
     let mut limited = None;
     let mut sent_body = body.clone();
     let outcome = loop {
-        let Some(account) = proxy.choose(&key, incoming.agent, model.as_deref(), lifetime, &tried, now()) else {
+        let asked = Asked {
+            agent: incoming.agent,
+            model: model.as_deref(),
+            cache_lifetime: lifetime,
+            pin: incoming.pin.as_deref(),
+        };
+        let Some(account) = proxy.choose(&key, asked, &tried, now()) else {
             break match limited.take() {
                 Some((status, headers, body)) => Outcome::Limited(status, headers, body),
                 None => Outcome::NoAccount,
@@ -230,9 +238,9 @@ pub async fn serve(
             let _ = send.finish();
         }
         Outcome::NoAccount => {
-            let message = no_account(&proxy, incoming.agent);
+            let message = no_account(&proxy, incoming.agent, incoming.pin.as_deref());
             entry.error = Some(message.clone());
-            match limit_reply(&proxy, incoming.agent) {
+            match limit_reply(&proxy, incoming.agent, incoming.pin.as_deref()) {
                 Some(made) => {
                     entry.status = 429;
                     write_frame(&mut send, &ProxyReply::HttpHead { status: 429, headers: made.headers.clone() })
@@ -379,8 +387,18 @@ fn upstream_name(agent: Agent) -> &'static str {
     }
 }
 
-pub fn no_account(proxy: &Proxy, agent: Agent) -> String {
+pub fn no_account(proxy: &Proxy, agent: Agent, pin: Option<&str>) -> String {
     let title = agent_title(agent);
+    if let Some(pin) = pin {
+        let Some(account) = proxy.accounts().into_iter().find(|account| account.id == pin) else {
+            return "The account this thread is pinned to is no longer on your proxy.".to_string();
+        };
+        return match account.status(now()) {
+            _ if !account.enabled => format!("{} is turned off on your proxy.", account.name),
+            AccountStatus::SignInAgain => format!("{} needs to be signed in again on your proxy.", account.name),
+            _ => format!("{} can't take requests right now.", account.name),
+        };
+    }
     match proxy.accounts().iter().any(|account| account.agent == agent) {
         true => format!("Every {title} account of your proxy is at its limit, turned off or signed out."),
         false => format!("Your proxy has no {title} account. Add one in Settings → Proxy."),
@@ -393,20 +411,27 @@ pub struct Made {
     pub body: Vec<u8>,
 }
 
-/// The limit error the agent knows, when its accounts all rest: it waits for the soonest reset.
-pub fn limit_reply(proxy: &Proxy, agent: Agent) -> Option<Made> {
+/// The limit error the agent knows, when its accounts all rest, or the one it is pinned to does: it
+/// waits for the soonest reset.
+pub fn limit_reply(proxy: &Proxy, agent: Agent, pin: Option<&str>) -> Option<Made> {
     let now = now();
-    let resting = proxy.accounts().into_iter().filter(|account| account.agent == agent && account.enabled);
+    let resting = proxy
+        .accounts()
+        .into_iter()
+        .filter(|account| account.agent == agent && account.enabled && pin.is_none_or(|pin| account.id == pin));
     let until = resting
         .filter_map(|account| match account.status(now) {
-            motile_protocol::proxy_wire::AccountStatus::Resting { until } => until,
+            AccountStatus::Resting { until } => until,
             _ => None,
         })
         .fold(f64::INFINITY, f64::min);
     if !until.is_finite() {
         return None;
     }
-    let message = format!("Every {} account of your proxy is at its limit.", agent_title(agent));
+    let message = match pin.and_then(|pin| proxy.accounts().into_iter().find(|account| account.id == pin)) {
+        Some(account) => format!("{} is at its limit.", account.name),
+        None => format!("Every {} account of your proxy is at its limit.", agent_title(agent)),
+    };
     let retry_after = ((until - now).max(1.0) as u64).to_string();
     let mut headers =
         vec![("content-type".to_string(), "application/json".to_string()), ("retry-after".to_string(), retry_after)];

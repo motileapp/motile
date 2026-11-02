@@ -2,6 +2,7 @@
 //! answers `account/read` and `account/rateLimits/read`, and Claude Code answers the `initialize`
 //! and `get_usage` control requests. Neither spends tokens.
 
+use motile_protocol::proxy_wire::ProxyAccount;
 use motile_protocol::wire::{Agent, AgentAccount, AgentLimits, LimitWindow};
 use serde_json::{Value, json};
 
@@ -58,6 +59,28 @@ pub fn pooled(account: &AgentAccount, read: anyhow::Result<Option<AgentLimits>>)
         )),
         Err(error) => failed(motile_protocol::error_text(&error)),
     }
+}
+
+/// What the proxy's account a Proxy account is pinned to has used, as the proxy last listed it.
+pub fn pinned(account: &AgentAccount, pooled: Option<&ProxyAccount>) -> AgentLimits {
+    let read = pooled.map(|pooled| AgentLimits {
+        agent: account.agent,
+        account_name: account.name.clone(),
+        account: pooled.email.clone(),
+        plan: pooled.plan.clone(),
+        windows: pooled.windows.clone(),
+        reset_credits: pooled.reset_credits,
+        error: None,
+    });
+    read.unwrap_or_else(|| AgentLimits {
+        agent: account.agent,
+        account_name: account.name.clone(),
+        account: None,
+        plan: None,
+        windows: vec![],
+        reset_credits: 0,
+        error: Some("This account is no longer on your proxy.".to_string()),
+    })
 }
 
 async fn read_account(account: &AgentAccount, environment: &Environment) -> Option<AgentLimits> {

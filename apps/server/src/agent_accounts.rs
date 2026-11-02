@@ -6,6 +6,7 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::bail;
+use motile_protocol::proxy_wire::ProxyAccount;
 use motile_protocol::wire::{Agent, AgentAccount, Variable};
 
 use crate::agents::environment::Environment;
@@ -43,6 +44,7 @@ pub fn usual_account(agent: Agent) -> AgentAccount {
         email: None,
         plan: None,
         proxy: false,
+        pin: None,
     }
 }
 
@@ -67,21 +69,42 @@ pub fn proxy_account(agent: Agent, folder: &Path) -> AgentAccount {
         email: None,
         plan: None,
         proxy: true,
+        pin: None,
     }
 }
 
-/// The accounts with a Proxy account for each agent while the server's account has a proxy, whose
-/// accounts keep their folders in `folder`, and without them when it has none.
-pub fn with_proxy(mut accounts: Vec<AgentAccount>, folder: Option<&Path>) -> Vec<AgentAccount> {
-    let Some(folder) = folder else {
+/// The Proxy account whose threads are pinned to one of the proxy's accounts.
+pub fn pinned_account(account: &ProxyAccount, folder: &Path) -> AgentAccount {
+    AgentAccount {
+        id: format!("{}:{}", proxy_id(account.agent), account.id),
+        name: account.name.clone(),
+        email: account.email.clone(),
+        plan: account.plan.clone(),
+        pin: Some(account.id.clone()),
+        ..proxy_account(account.agent, folder)
+    }
+}
+
+/// The accounts with the proxy's while the server's account has one: a Proxy account for each agent,
+/// which places its threads itself, and one pinned to each of the proxy's `accounts`, all keeping
+/// their folders in `folder`. They keep their places, and go when the account has no proxy.
+pub fn with_proxy(mut accounts: Vec<AgentAccount>, proxy: Option<(&Path, &[ProxyAccount])>) -> Vec<AgentAccount> {
+    let Some((folder, pool)) = proxy else {
         accounts.retain(|account| !account.proxy);
         return with_every_agent(accounts);
     };
-    for agent in [Agent::Claude, Agent::Codex] {
-        let made = proxy_account(agent, folder);
-        match accounts.iter_mut().find(|account| account.id == made.id) {
-            Some(kept) => *kept = made,
-            None => accounts.push(made),
+    let made: Vec<AgentAccount> = [Agent::Claude, Agent::Codex]
+        .into_iter()
+        .flat_map(|agent| {
+            let pinned = pool.iter().filter(move |account| account.agent == agent);
+            std::iter::once(proxy_account(agent, folder)).chain(pinned.map(|account| pinned_account(account, folder)))
+        })
+        .collect();
+    accounts.retain(|account| !account.proxy || made.iter().any(|kept| kept.id == account.id));
+    for account in made {
+        match accounts.iter_mut().find(|kept| kept.id == account.id) {
+            Some(kept) => *kept = account,
+            None => accounts.push(account),
         }
     }
     accounts
@@ -330,6 +353,7 @@ mod tests {
             email: None,
             plan: None,
             proxy: false,
+            pin: None,
         }
     }
 
@@ -370,14 +394,17 @@ mod tests {
     fn the_proxy_accounts_are_there_while_the_account_has_a_proxy_and_keep_their_place() {
         let folder = Path::new("/data/proxy");
         let work = account("work", Agent::Claude, "Work", "~/.claude-work");
-        let accounts = with_proxy(with_every_agent(vec![work]), Some(folder));
+        let accounts = with_proxy(with_every_agent(vec![work]), Some((folder, &[])));
         assert_eq!(ids(&accounts), ["work", "codex", "proxy-claude", "proxy-codex"]);
         assert_eq!(accounts[2].folder, "/data/proxy/claude");
         assert_eq!(accounts[3].folder, "/data/proxy/codex");
         assert!(accounts[2].proxy && accounts[2].name == "Proxy");
 
         let accounts = made_default(accounts, "proxy-codex").unwrap();
-        assert_eq!(ids(&with_proxy(accounts.clone(), Some(folder))), ["work", "proxy-codex", "codex", "proxy-claude"]);
+        assert_eq!(
+            ids(&with_proxy(accounts.clone(), Some((folder, &[])))),
+            ["work", "proxy-codex", "codex", "proxy-claude"]
+        );
         assert_eq!(ids(&with_proxy(accounts, None)), ["work", "codex"]);
 
         let only_proxy = vec![proxy_account(Agent::Claude, folder), proxy_account(Agent::Codex, folder)];
@@ -385,8 +412,48 @@ mod tests {
     }
 
     #[test]
+    fn each_of_the_proxys_accounts_has_a_proxy_account_pinned_to_it_while_it_is_there() {
+        let folder = Path::new("/data/proxy");
+        let pooled = |id: &str, agent| ProxyAccount {
+            id: id.into(),
+            agent,
+            name: format!("{id}@b.c"),
+            email: Some(format!("{id}@b.c")),
+            plan: Some("Max 20x".into()),
+            priority: 0,
+            enabled: true,
+            status: motile_protocol::proxy_wire::AccountStatus::Ready,
+            windows: vec![],
+            reset_credits: 0,
+            threads: 0,
+            next: false,
+        };
+        let pool = [pooled("org-1", Agent::Claude), pooled("acct-1", Agent::Codex), pooled("org-2", Agent::Claude)];
+        let accounts = with_proxy(with_every_agent(vec![]), Some((folder, &pool)));
+        assert_eq!(
+            ids(&accounts),
+            [
+                "claude",
+                "codex",
+                "proxy-claude",
+                "proxy-claude:org-1",
+                "proxy-claude:org-2",
+                "proxy-codex",
+                "proxy-codex:acct-1"
+            ]
+        );
+        let pinned = &accounts[3];
+        assert_eq!((pinned.name.as_str(), pinned.pin.as_deref(), pinned.proxy), ("org-1@b.c", Some("org-1"), true));
+        assert_eq!(pinned.folder, "/data/proxy/claude", "it runs where the Proxy account does");
+        assert_eq!(
+            ids(&with_proxy(accounts, Some((folder, &pool[..1])))),
+            ["claude", "codex", "proxy-claude", "proxy-claude:org-1", "proxy-codex"]
+        );
+    }
+
+    #[test]
     fn a_proxy_account_is_never_changed_signed_in_or_made_by_a_client() {
-        let accounts = with_proxy(with_every_agent(vec![]), Some(Path::new("/data/proxy")));
+        let accounts = with_proxy(with_every_agent(vec![]), Some((Path::new("/data/proxy"), &[])));
         let mut renamed = accounts[2].clone();
         renamed.name = "Mine".into();
         assert!(checked(renamed.clone(), &accounts).is_err());

@@ -256,7 +256,7 @@ struct SettingsPage: View {
                 .foregroundStyle(Color.themeMutedForeground)
         } else {
             let installed = Agent.allCases.filter { server.agents[$0] != nil }
-            ForEach(server.agentAccounts.filter { installed.contains($0.agent) }) { account in
+            ForEach(server.agentAccounts.filter { installed.contains($0.agent) && $0.pin == nil }) { account in
                 Button {
                     guard !account.proxy else { return store.openSettings(.proxy) }
                     editedAccount = EditedAccount(server: server, account: account)

@@ -332,7 +332,7 @@ struct SettingsPage: View {
         if server.accountsUnavailable == nil {
             let installed = Agent.allCases.filter { server.agents[$0] != nil }
             ThemeDivider()
-            ForEach(server.agentAccounts.filter { installed.contains($0.agent) }) { account in
+            ForEach(server.agentAccounts.filter { installed.contains($0.agent) && $0.pin == nil }) { account in
                 SettingsRow {
                     AgentIcon(agent: account.agent, size: .md)
                     SettingsLabel("\(account.agent.name) · \(account.name)", description: account.settingsDescription(isDefault: server.isDefault(account)))

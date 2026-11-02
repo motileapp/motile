@@ -142,6 +142,8 @@ struct AgentAccount: Equatable, Identifiable {
     /// The server's account for its account's proxy, which serves its turns from the proxy's
     /// accounts. It can't be changed, removed or signed in.
     let proxy: Bool
+    /// The one of the proxy's accounts its threads are pinned to, which only agents pick.
+    let pin: String?
 
     init(json: JSON) {
         id = json.string("id")
@@ -155,6 +157,7 @@ struct AgentAccount: Equatable, Identifiable {
         email = json.optionalString("email")
         plan = json.optionalString("plan")
         proxy = json.bool("proxy")
+        pin = json.optionalString("pin")
     }
 
     /// A new account of `agent`, until the server keeps it.
@@ -168,6 +171,7 @@ struct AgentAccount: Equatable, Identifiable {
         email = nil
         plan = nil
         proxy = false
+        pin = nil
     }
 
     var json: JSON {
@@ -339,8 +343,10 @@ struct Server: Equatable, Identifiable {
     /// Whether the server can keep its projects' folders pulled on their default branch.
     var pullsDefaultBranch: Bool { protocolVersion >= 25 }
 
+    /// The agent's accounts a person picks from: all but those pinned to one of the proxy's
+    /// accounts, which only agents pick.
     func accounts(of agent: Agent) -> [AgentAccount] {
-        agentAccounts.filter { $0.agent == agent }
+        agentAccounts.filter { $0.agent == agent && $0.pin == nil }
     }
 
     /// Each model once, however many accounts run it, for picking one by its id.
@@ -351,8 +357,7 @@ struct Server: Equatable, Identifiable {
 
     /// The account with that id, or the agent's default one.
     func account(_ id: String?, of agent: Agent) -> AgentAccount? {
-        let accounts = accounts(of: agent)
-        return accounts.first { $0.id == id } ?? accounts.first
+        agentAccounts.first { $0.agent == agent && $0.id == id } ?? accounts(of: agent).first
     }
 
     /// An agent's first account is its default.

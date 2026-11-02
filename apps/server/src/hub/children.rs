@@ -122,6 +122,14 @@ impl Drop for Waiting {
     }
 }
 
+/// How the proxy's accounts work, said to an agent that lists the accounts while there is a proxy.
+const PROXY_ACCOUNTS: &str = "Accounts with \"proxy\": true run on your proxy. The one named Proxy, \
+     not pinned, puts each agent on whichever of the proxy's accounts has room for it and moves it when \
+     that account runs out, so agents started on it spread over the proxy's accounts by themselves. A \
+     pinned one is one of the proxy's accounts: an agent started on it stays there, and stops when that \
+     account reaches its limit. Pick Proxy to let it manage the limits, or pin agents to spread work \
+     yourself.";
+
 impl Hub {
     /// The threads the thread's agent started, theirs before them, deepest first.
     pub(super) fn descendants(&self, thread_id: &str) -> Vec<String> {
@@ -161,7 +169,8 @@ impl Hub {
 
     /// Your server's accounts an agent can start agents on, with their models and how much of
     /// their plans they have used.
-    pub async fn accounts_for(&self, caller: &str) -> anyhow::Result<Value> {
+    pub async fn accounts_for(self: &Arc<Self>, caller: &str) -> anyhow::Result<Value> {
+        self.follow_proxy().await;
         let own = self.thread(caller).await.context("Your thread is no longer on your server.")?;
         let own = self.account_of(&own).id;
         let limits = match self.limits().await {
@@ -200,10 +209,16 @@ impl Hub {
                     "installed": self.environment.executable(account.agent).is_some(),
                     "models": models,
                     "limits": windows,
+                    "proxy": account.proxy,
+                    "pinned": account.pin.is_some(),
                 })
             })
             .collect();
-        Ok(json!({ "accounts": accounts }))
+        let has_proxy = accounts.iter().any(|account| account["proxy"] == true);
+        match has_proxy {
+            true => Ok(json!({ "accounts": accounts, "proxy": PROXY_ACCOUNTS })),
+            false => Ok(json!({ "accounts": accounts })),
+        }
     }
 
     /// Starts an agent in a thread of its own for the caller's agent, which goes on meanwhile
