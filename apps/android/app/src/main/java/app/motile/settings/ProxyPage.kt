@@ -306,8 +306,8 @@ private fun SheetTitle(title: String) {
 }
 
 /**
- * How to run a new proxy: the steps, the variables to give it and the one command
- * that does it all, with the code it joins with. It closes once the proxy joins.
+ * How to run a new proxy and the command that links it to the account. It closes once the proxy
+ * joins.
  */
 @Composable
 private fun AddProxySheet() {
@@ -320,7 +320,7 @@ private fun AddProxySheet() {
     Column(Modifier.fillMaxSize()) {
         SheetTitle(if (replaced == null) "Add a Proxy" else "Replace Your Proxy")
         SettingsList(Modifier.weight(1f)) {
-            group(bare = true, failure = proxy.enrollError.takeIf { enroll == null }) { row { EnrollCode(enroll, proxy) } }
+            group(bare = true, failure = proxy.enrollError.takeIf { enroll == null }) { row { EnrollStatus(enroll, proxy, replaced != null) } }
             if (enroll == null) return@SettingsList
             group(header = "Steps") {
                 enroll.steps.forEachIndexed { index, step ->
@@ -332,19 +332,16 @@ private fun AddProxySheet() {
                     }
                 }
             }
-            group(header = "Variables") {
-                for ((name, value) in enroll.variables) row { CopiedValue(name, value) }
-            }
-            group(header = "With Docker", bare = true) {
+            group(header = "Command", bare = true) {
                 row { CommandBox(enroll.command, Modifier.fillMaxWidth(), spans = enroll.spans) }
             }
         }
     }
 }
 
-/** The code the proxy joins with, large, with how long it still works or the way to a new one. */
+/** How long the code still works while the proxy is awaited, or the way to a new one. */
 @Composable
-private fun EnrollCode(enroll: ProxyEnroll?, proxy: Proxy) {
+private fun EnrollStatus(enroll: ProxyEnroll?, proxy: Proxy, replacing: Boolean) {
     val palette = LocalPalette.current
     val now by produceState(Time.now()) {
         while (true) {
@@ -358,10 +355,6 @@ private fun EnrollCode(enroll: ProxyEnroll?, proxy: Proxy) {
             else ActionButton("Try Again") { proxy.makeCode() }
             return@Column
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(enroll.code, style = Theme.uiMono(28f, FontWeight.SemiBold), color = palette.foreground.copy(alpha = if (enroll.isExpired(now)) 0.4f else 1f))
-            CopyButton("Copy the code") { Platform.copy(enroll.code) }
-        }
         if (enroll.isExpired(now)) {
             Text("The code has expired", size = 13f, color = palette.mutedForeground)
             ActionButton("New Code", pending = proxy.enrollPending) { proxy.makeCode() }
@@ -369,22 +362,9 @@ private fun EnrollCode(enroll: ProxyEnroll?, proxy: Proxy) {
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             Spinner(iconSize(text = 13f), color = palette.mutedForeground)
-            Text("Waiting for your proxy", size = 13f, color = palette.mutedForeground)
+            Text(if (replacing) "Waiting for your new proxy" else "Waiting for your proxy", size = 13f, color = palette.mutedForeground)
         }
         Text("Works for ${enroll.timeLeft(now)}", style = Theme.uiDigits(12f), color = palette.mutedStrongerForeground)
-    }
-}
-
-/** A name and its value to copy, as a variable is given to the proxy. */
-@Composable
-private fun CopiedValue(name: String, value: String) {
-    val palette = LocalPalette.current
-    SettingsRow {
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(name, style = Theme.uiMono(NOTE_TEXT), color = palette.mutedForeground, maxLines = 1)
-            Text(value, style = Theme.uiMono(13.5f), color = palette.foreground)
-        }
-        CopyButton("Copy $name") { Platform.copy(value) }
     }
 }
 

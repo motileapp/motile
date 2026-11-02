@@ -99,8 +99,9 @@ OpenUI Lang 1.0, the language of the programs agents show in their replies (thes
 ### apps/proxy (Rust, the `motile-proxy` image)
 
 The account's proxy, which the user runs from `ghcr.io/motileapp/motile-proxy` on a machine that is
-always on, with a volume at `/data`. On its first start it links itself to the account with
-`MOTILE_ENROLL_CODE`, which a client's Settings → Proxy makes. It holds Claude Code's and Codex's
+always on, with a volume at `/data`. It links itself to the account as a server does, with the code a
+client's Settings → Proxy makes: `motile-proxy setup <code>` in a shell in it, which links it again over
+any link it has, or `MOTILE_ENROLL_CODE` on a first start without a link; until then it waits. It holds Claude Code's and Codex's
 accounts, signed in from the clients, and the agents of a server's Proxy accounts reach Anthropic and
 OpenAI through it with them. It translates nothing: a request passes through with an account's token in
 place of the agent's.

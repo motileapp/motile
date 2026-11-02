@@ -157,20 +157,11 @@ struct ProxySignIn: Equatable, Identifiable {
     var id: String { agent.rawValue }
 }
 
-/// How to run a new proxy: the code it joins the account with, its variables and the command
-/// that does it all.
+/// How to run a new proxy, and the command with the code that links it to the account.
 struct ProxyEnroll {
-    struct Variable: Identifiable {
-        let name: String
-        let value: String
-
-        var id: String { name }
-    }
-
     let code: String
     let expiresAt: Double
     let image: String
-    let variables: [Variable]
     let command: String
     let spans: [Int]
     let steps: [String]
@@ -179,7 +170,6 @@ struct ProxyEnroll {
         code = json.string("code")
         expiresAt = json.double("expires_at")
         image = json.string("image")
-        variables = json.objects("variables").map { Variable(name: $0.string("name"), value: $0.string("value")) }
         command = json.string("command")
         spans = (json["spans"] as? [NSNumber] ?? []).map(\.intValue)
         steps = json.strings("steps")

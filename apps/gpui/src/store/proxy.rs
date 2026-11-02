@@ -21,17 +21,10 @@ use crate::panel::state::{CodeDocument, CodeFile, Loaded};
 pub struct Enroll {
     pub code: String,
     pub expires_at: f64,
-    pub variables: Vec<Variable>,
     pub command: String,
     #[serde(default)]
     pub spans: Vec<u32>,
     pub steps: Vec<String>,
-}
-
-#[derive(Clone, PartialEq, Debug, Deserialize)]
-pub struct Variable {
-    pub name: String,
-    pub value: String,
 }
 
 /// A request of the proxy's log: `motile_core::proxy::LogRow`, read back.

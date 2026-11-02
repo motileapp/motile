@@ -601,15 +601,14 @@ fn readable(body: String) -> String {
         .unwrap_or(body)
 }
 
-/// What a client shows to add a proxy: the code it joins the account with and how to run it.
+/// What a client shows to add a proxy: how to run it, and the command that links it to the account,
+/// which a shell in it runs.
 #[derive(Serialize, Clone, Debug, PartialEq)]
 pub struct Enroll {
     pub code: String,
     pub expires_at: f64,
     pub image: String,
-    /// The variables to give it, in order.
-    pub variables: Vec<Variable>,
-    /// The same as one `docker run`.
+    /// `motile-proxy setup <code>`.
     pub command: String,
     /// The highlighting of `command`.
     pub spans: Vec<u32>,
@@ -617,37 +616,17 @@ pub struct Enroll {
     pub steps: Vec<String>,
 }
 
-#[derive(Serialize, Clone, Debug, PartialEq)]
-pub struct Variable {
-    pub name: String,
-    pub value: String,
-}
-
 /// `auth_url` is given to the proxy only when it isn't the usual auth server.
 pub fn enroll(code: String, expires_at: f64, auth_url: Option<&str>, now: f64) -> Enroll {
-    let mut variables = vec![Variable { name: "MOTILE_ENROLL_CODE".into(), value: code.clone() }];
-    if let Some(auth_url) = auth_url {
-        variables.push(Variable { name: "MOTILE_AUTH_URL".into(), value: auth_url.into() });
-    }
-    let flags: String = variables.iter().map(|variable| format!(" -e {}={}", variable.name, variable.value)).collect();
-    let command =
-        format!("docker run -d --name motile-proxy --restart unless-stopped{flags} -v motile-proxy:{DATA_DIR} {IMAGE}");
+    let prefix = auth_url.map(|auth_url| format!("MOTILE_AUTH_URL={auth_url} ")).unwrap_or_default();
+    let command = format!("{prefix}motile-proxy setup {code}");
     let minutes = ((expires_at - now) / 60.0).round().max(1.0);
     let steps = vec![
-        "Run the motile-proxy image on a machine that is always on.".to_string(),
-        "Set the variables below.".to_string(),
-        format!("Mount a volume at {DATA_DIR}."),
+        format!("Run {IMAGE} on a machine that is always on, with a volume at {DATA_DIR}."),
+        "Open a shell in it and run the command below.".to_string(),
         format!("The code works once, for {minutes} minutes."),
     ];
-    Enroll {
-        spans: crate::render::highlight::command(&command),
-        code,
-        expires_at,
-        image: IMAGE.into(),
-        variables,
-        command,
-        steps,
-    }
+    Enroll { spans: crate::render::highlight::command(&command), code, expires_at, image: IMAGE.into(), command, steps }
 }
 
 fn zone(utc_offset_secs: i32) -> FixedOffset {
@@ -1016,17 +995,12 @@ mod tests {
     }
 
     #[test]
-    fn adding_a_proxy_says_what_to_run_it_with() {
-        let shown = enroll("ABCD1234".into(), NOW + 900.0, Some("http://localhost:8787"), NOW);
-        let variables: Vec<_> =
-            shown.variables.iter().map(|variable| (variable.name.as_str(), variable.value.as_str())).collect();
-        assert_eq!(variables, [("MOTILE_ENROLL_CODE", "ABCD1234"), ("MOTILE_AUTH_URL", "http://localhost:8787")]);
-        assert_eq!(
-            shown.command,
-            "docker run -d --name motile-proxy --restart unless-stopped -e MOTILE_ENROLL_CODE=ABCD1234 \
-             -e MOTILE_AUTH_URL=http://localhost:8787 -v motile-proxy:/data ghcr.io/motileapp/motile-proxy:latest"
-        );
-        assert!(shown.steps[3].ends_with("for 15 minutes."));
-        assert_eq!(enroll("X".into(), NOW + 900.0, None, NOW).variables.len(), 1);
+    fn adding_a_proxy_says_what_to_run_and_the_command_that_links_it() {
+        let shown = enroll("ABCD1234".into(), NOW + 900.0, None, NOW);
+        assert_eq!(shown.command, "motile-proxy setup ABCD1234");
+        assert!(shown.steps[0].starts_with("Run ghcr.io/motileapp/motile-proxy:latest"));
+        assert!(shown.steps[2].ends_with("for 15 minutes."));
+        let dev = enroll("ABCD1234".into(), NOW + 900.0, Some("http://localhost:8787"), NOW);
+        assert_eq!(dev.command, "MOTILE_AUTH_URL=http://localhost:8787 motile-proxy setup ABCD1234");
     }
 }

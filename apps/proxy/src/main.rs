@@ -1,7 +1,9 @@
-//! `motile-proxy`: links itself to the account with `MOTILE_ENROLL_CODE` on its first start, then
-//! serves the account's servers and clients.
+//! `motile-proxy`: serves the account's servers and clients once it is linked to the account, by
+//! `MOTILE_ENROLL_CODE` on its first start or by `motile-proxy setup <code>` at any time, which links
+//! it again over any link it has.
 
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use anyhow::Context;
 use motile_protocol::auth_api::DeviceKind;
@@ -16,6 +18,9 @@ use serde::{Deserialize, Serialize};
 use tracing_subscriber::EnvFilter;
 
 const DEVICE_NAME: &str = "Proxy";
+const LINKED_FILE: &str = "account.json";
+/// How often a proxy that isn't linked looks whether `setup` linked it.
+const LINK_CHECK_EVERY: Duration = Duration::from_secs(2);
 
 #[derive(Serialize, Deserialize)]
 struct Linked {
@@ -25,20 +30,31 @@ struct Linked {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
-    tracing_subscriber::fmt().with_env_filter(filter).init();
     tls::install();
-
     let data_dir = PathBuf::from(variable("DATA_DIR").unwrap_or_else(|| "data".into()));
     let auth_url = variable("MOTILE_AUTH_URL").unwrap_or_else(|| DEFAULT_AUTH_URL.into());
     std::fs::create_dir_all(&data_dir).context("The data folder couldn't be made.")?;
     let key = DeviceKey::load_or_create(&data_dir.join("device.key")).context("The device key couldn't be read.")?;
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    if let [command, code] = args.as_slice()
+        && command == "setup"
+    {
+        let email = enroll(&data_dir, &auth_url, &key, code).await?;
+        println!("Linked to {email}. Your proxy joins your account now.");
+        return Ok(());
+    }
+    if !args.is_empty() {
+        anyhow::bail!("Run motile-proxy with no arguments, or `motile-proxy setup <code>` to link it to your account.");
+    }
+
+    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
+    tracing_subscriber::fmt().with_env_filter(filter).init();
 
     let servers = keys("MOTILE_ALLOW_SERVERS")?;
     let clients = keys("MOTILE_ALLOW_CLIENTS")?;
     let access = match servers.is_empty() && clients.is_empty() {
         true => {
-            link(&data_dir, &auth_url, &key).await;
+            let auth_url = linked_auth_url(&data_dir, &auth_url, &key).await;
             let key = DeviceKey::from_bytes(key.to_bytes());
             Access::account(AccountSource { auth_url, key, cache: data_dir.join("devices.json") })
         }
@@ -63,36 +79,53 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Links the proxy to the account the enroll code belongs to, once.
-async fn link(data_dir: &Path, auth_url: &str, key: &DeviceKey) {
-    let file = data_dir.join("account.json");
-    if let Some(linked) =
-        std::fs::read_to_string(&file).ok().and_then(|text| serde_json::from_str::<Linked>(&text).ok())
-    {
+/// The auth server of the account the proxy is linked to. Without a link, `MOTILE_ENROLL_CODE`
+/// makes one; without that either, it waits until `motile-proxy setup <code>` does.
+async fn linked_auth_url(data_dir: &Path, auth_url: &str, key: &DeviceKey) -> String {
+    if let Some(linked) = linked(data_dir) {
         tracing::info!("linked to {}", linked.email);
-        return;
+        return linked.auth_url;
     }
-    let Some(code) = variable("MOTILE_ENROLL_CODE") else {
-        tracing::error!(
-            "This proxy isn't linked to an account yet. Add a proxy in a client's settings and start this one with \
-             MOTILE_ENROLL_CODE set to the code it shows."
-        );
-        return;
-    };
+    if let Some(code) = variable("MOTILE_ENROLL_CODE") {
+        match enroll(data_dir, auth_url, key, &code).await {
+            Ok(email) => tracing::info!("linked to {email}"),
+            Err(error) => tracing::error!("MOTILE_ENROLL_CODE didn't link this proxy: {error:#}"),
+        }
+    }
+    let mut asked = false;
+    loop {
+        if let Some(linked) = linked(data_dir) {
+            tracing::info!("linked to {}", linked.email);
+            return linked.auth_url;
+        }
+        if !asked {
+            tracing::warn!(
+                "Not linked to an account yet. Add a proxy in a client's Settings → Proxy and run the command it shows \
+                 in a shell here: motile-proxy setup <code>"
+            );
+            asked = true;
+        }
+        tokio::time::sleep(LINK_CHECK_EVERY).await;
+    }
+}
+
+fn linked(data_dir: &Path) -> Option<Linked> {
+    let text = std::fs::read_to_string(data_dir.join(LINKED_FILE)).ok()?;
+    serde_json::from_str(&text).ok()
+}
+
+/// Links the proxy to the account the code belongs to, over any link it has, and says to whom.
+async fn enroll(data_dir: &Path, auth_url: &str, key: &DeviceKey, code: &str) -> anyhow::Result<String> {
     let auth = AuthClient::new(auth_url);
     let device = DeviceDescription { name: DEVICE_NAME, platform: std::env::consts::OS };
-    match auth.enroll_as(key, code.trim(), &device, DeviceKind::Proxy).await {
-        Ok(enrolled) => {
-            let linked = Linked { auth_url: auth.base_url().to_string(), email: enrolled.email.clone() };
-            if let Err(error) = std::fs::write(&file, serde_json::to_string(&linked).unwrap_or_default()) {
-                tracing::warn!("couldn't keep the account: {error}");
-            }
-            tracing::info!("linked to {}", enrolled.email);
-        }
-        Err(error) => tracing::error!(
-            "The enroll code didn't link this proxy: {error:#}. Make a new code in a client and set MOTILE_ENROLL_CODE to it."
-        ),
-    }
+    let enrolled = auth
+        .enroll_as(key, code.trim(), &device, DeviceKind::Proxy)
+        .await
+        .context("That code didn't link this proxy. Make a new one in Settings → Proxy.")?;
+    let linked = Linked { auth_url: auth.base_url().to_string(), email: enrolled.email.clone() };
+    std::fs::write(data_dir.join(LINKED_FILE), serde_json::to_string(&linked)?)
+        .context("The link couldn't be kept in the data folder.")?;
+    Ok(enrolled.email)
 }
 
 async fn shutdown() {

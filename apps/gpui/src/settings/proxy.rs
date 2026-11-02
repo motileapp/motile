@@ -716,47 +716,9 @@ fn enroll_steps(store: &Entity<Store>, enroll: &Enroll, replaces: bool, cx: &App
             )
             .child(div().flex_1().min_w_0().text_color(c.muted_foreground).child(step.clone()))
     });
-    let variables = enroll.variables.iter().enumerate().map(|(index, variable)| {
-        let copied = format!("{}={}", variable.name, variable.value);
-        div()
-            .pl(px(12.))
-            .pr(px(4.))
-            .py(px(4.))
-            .flex()
-            .items_center()
-            .gap(px(10.))
-            .font_family(crate::theme::MONO_FONT)
-            .text_size(px(12.5))
-            .child(div().flex_shrink_0().text_color(c.muted_foreground).child(variable.name.clone()))
-            .child(div().flex_1().min_w_0().overflow_hidden().text_ellipsis().child(variable.value.clone()))
-            .child(
-                CopyButton::new(("copy-variable", index), format!("Copy {}", variable.name), move |_, cx| {
-                    cx.write_to_clipboard(ClipboardItem::new_string(copied.clone()))
-                })
-                .size(ControlSize::Small)
-                .surface(Surface::Card),
-            )
-    });
-    let variables = card_default(div().py(px(4.)).flex().flex_col(), cx).children(variables);
     let at = now();
     let expired = enroll.expires_at <= at;
     let seconds = (enroll.expires_at - at).ceil().max(0.) as u64;
-    let code = enroll.code.clone();
-    let code_row = div()
-        .flex()
-        .items_center()
-        .gap(px(10.))
-        .child(
-            div()
-                .text_size(px(CODE_SIZE))
-                .font_weight(FontWeight::SEMIBOLD)
-                .font_family(crate::theme::MONO_FONT)
-                .when(expired, |code| code.text_color(c.muted_stronger_foreground).line_through())
-                .child(enroll.code.clone()),
-        )
-        .child(CopyButton::new("copy-enroll-code", "Copy the code", move |_, cx| {
-            cx.write_to_clipboard(ClipboardItem::new_string(code.clone()))
-        }));
     let status = if expired {
         let store = store.clone();
         div()
@@ -792,28 +754,9 @@ fn enroll_steps(store: &Entity<Store>, enroll: &Enroll, replaces: bool, cx: &App
         .flex_col()
         .gap(px(16.))
         .child(div().flex().flex_col().gap(px(6.)).children(steps))
-        .child(field("Variables", None, variables))
-        .child(field(
-            "With Docker",
-            None,
-            CommandBox::new("proxy-command", Some(enroll.command.clone())).spans(enroll.spans.clone()),
-        ))
-        .child(field("Code", None, code_row))
+        .child(CommandBox::new("proxy-command", Some(enroll.command.clone())).spans(enroll.spans.clone()))
         .child(status)
         .into_any_element()
-}
-
-/// A part of a sheet: its title over it, and its caption under it.
-fn field(title: &str, caption: Option<String>, content: impl IntoElement) -> Div {
-    div()
-        .flex()
-        .flex_col()
-        .gap(px(6.))
-        .child(div().px(px(4.)).text_size(px(12.)).font_weight(FontWeight::MEDIUM).child(title.to_string()))
-        .child(content)
-        .when_some(caption, |field, caption| {
-            field.child(div().px(px(4.)).text_size(px(11.5)).opacity(0.7).child(caption))
-        })
 }
 
 /// A settings control: outline, large, on the card.

@@ -141,11 +141,10 @@ data class ProxySignIn(
     }
 }
 
-/** How to run a new proxy: the code it joins the account with, the variables it is given and the command that does it all. */
+/** How to run a new proxy, and the command with the code that links it to the account. */
 data class ProxyEnroll(
     val code: String,
     val expiresAt: Double,
-    val variables: List<Pair<String, String>>,
     val command: String,
     /** The command's colours, as the core's `[start, length, palette index]` spans. */
     val spans: List<Int>,
@@ -163,7 +162,6 @@ data class ProxyEnroll(
         fun of(json: JSON) = ProxyEnroll(
             code = json.string("code"),
             expiresAt = json.double("expires_at"),
-            variables = json.objects("variables").map { it.string("name") to it.string("value") },
             command = json.string("command"),
             spans = json.ints("spans").toList(),
             steps = json.strings("steps"),

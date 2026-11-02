@@ -74,7 +74,7 @@ dev_session() {
     post /api/sessions -d "{\"code\":\"$code\",\"verifier\":\"$verifier\"}" | field token
 }
 
-# The account's proxy, on scripts/fake-upstream, linked the first time with an install code. The
+# The account's proxy, on scripts/fake-upstream, linked the first time by `motile-proxy setup`. The
 # clients and the server are told where it is, since nothing looks it up here.
 start_proxy() {
     local upstream="http://127.0.0.1:$UPSTREAM_PORT" code=""
@@ -91,7 +91,8 @@ start_proxy() {
     fi
     if [ -n "$code" ] || ! current proxy "$BIN/motile-proxy"; then
         stop proxy
-        MOTILE_ENROLL_CODE="$code" DATA_DIR="$DEV/proxy" MOTILE_PROXY_PORT="$PROXY_PORT" \
+        [ -z "$code" ] || DATA_DIR="$DEV/proxy" "$BIN/motile-proxy" setup "$code" >/dev/null
+        DATA_DIR="$DEV/proxy" MOTILE_PROXY_PORT="$PROXY_PORT" \
             MOTILE_ANTHROPIC_URL="$upstream" MOTILE_CLAUDE_AUTHORIZE_URL="$upstream/oauth/authorize" \
             MOTILE_CLAUDE_TOKEN_URL="$upstream/v1/oauth/token" MOTILE_CHATGPT_URL="$upstream/backend-api" \
             MOTILE_OPENAI_AUTH_URL="$upstream" MOTILE_PRICES_URL="$upstream/prices" NO_COLOR=1 \

@@ -234,9 +234,8 @@ extension ProxyLog {
     }
 }
 
-/// How to run a new proxy: the steps, the variables to give it, the one command that
-/// does it all and the code it joins with. It watches the account, and closes once a proxy other
-/// than `replacing` joins it.
+/// How to run a new proxy and the command that links it to the account. It watches the account,
+/// and closes once a proxy other than `replacing` joins it.
 struct ProxyAddSheet: View {
     @Environment(AppStore.self) private var store
     @Environment(\.closeModal) private var close
@@ -276,60 +275,35 @@ struct ProxyAddSheet: View {
         }
     }
 
-    /// The code, large, with how long it still works or the way to a new one.
-    private var code: some View {
+    /// How long the code still works while the proxy is awaited, or the way to a new one.
+    private var status: some View {
         TimelineView(.periodic(from: .now, by: 1)) { context in
-            code(at: context.date)
+            status(at: context.date)
         }
     }
 
-    @ViewBuilder private func code(at date: Date) -> some View {
+    @ViewBuilder private func status(at date: Date) -> some View {
         if let enroll = enroll.value {
-            let expired = enroll.isExpired(at: date)
-            VStack(alignment: .leading, spacing: 10) {
+            if enroll.isExpired(at: date) {
                 HStack(spacing: 10) {
-                    Text(enroll.code)
-                        .font(.ui(size: 26, weight: .semibold, design: .monospaced))
-                        .foregroundStyle(expired ? Color.themeMutedStrongerForeground : Color.themeForeground)
-                        .strikethrough(expired)
-                        .textSelection(.enabled)
-                    CopyButton(help: "Copy the code") { Platform.copy(enroll.code) }
+                    Text("The code has expired")
+                        .font(.ui(size: 13))
+                        .foregroundStyle(Color.themeMutedForeground)
+                    ActionButton("New Code", pending: pending) { makeCode() }
                 }
-                if expired {
-                    HStack(spacing: 10) {
-                        Text("The code has expired")
-                            .font(.ui(size: 13))
-                            .foregroundStyle(Color.themeMutedForeground)
-                        ActionButton("New Code", pending: pending) { makeCode() }
-                    }
-                } else {
-                    HStack(spacing: 8) {
-                        Spinner(size: .md)
-                        Text(replacing == nil ? "Waiting for your proxy" : "Waiting for your new proxy")
-                            .font(.ui(size: 13))
-                        Text(enroll.timeLeft(at: date))
-                            .font(.ui(size: 12))
-                            .monospacedDigit()
-                            .foregroundStyle(Color.themeMutedStrongerForeground)
-                    }
-                    .foregroundStyle(Color.themeMutedForeground)
+            } else {
+                HStack(spacing: 8) {
+                    Spinner(size: .md)
+                    Text(replacing == nil ? "Waiting for your proxy" : "Waiting for your new proxy")
+                        .font(.ui(size: 13))
+                    Text(enroll.timeLeft(at: date))
+                        .font(.ui(size: 12))
+                        .monospacedDigit()
+                        .foregroundStyle(Color.themeMutedStrongerForeground)
                 }
+                .foregroundStyle(Color.themeMutedForeground)
             }
         }
-    }
-
-    private func variable(_ variable: ProxyEnroll.Variable) -> some View {
-        HStack(spacing: 10) {
-            Text(variable.name)
-                .foregroundStyle(Color.themeMutedForeground)
-            Text(variable.value)
-                .foregroundStyle(Color.themeForeground)
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            CopyButton(help: "Copy \(variable.name)", size: .small) { Platform.copy("\(variable.name)=\(variable.value)") }
-        }
-        .font(.ui(size: 12.5, design: .monospaced))
     }
 
     private var failure: String? {
@@ -387,37 +361,8 @@ struct ProxyAddSheet: View {
                     .font(.ui(size: 13))
                 }
             }
-            field("Variables") {
-                VStack(spacing: 0) {
-                    ForEach(enroll.variables) { variable($0) }
-                }
-                .padding(.leading, 12)
-                .padding(.trailing, 4)
-                .padding(.vertical, 4)
-                .card()
-            }
-            field("With Docker") {
-                CommandBox(command: enroll.command, spans: enroll.spans)
-            }
-            field("Code") {
-                code.padding(.horizontal, 4)
-            }
-        }
-    }
-
-    private func field<Content: View>(_ title: String, caption: String? = nil, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(title)
-                .font(.ui(size: 12, weight: .medium))
-                .padding(.horizontal, 4)
-            content()
-            if let caption {
-                Text(caption)
-                    .font(.ui(size: 11.5))
-                    .foregroundStyle(Color.themeMutedStrongerForeground)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.horizontal, 4)
-            }
+            CommandBox(command: enroll.command, spans: enroll.spans)
+            status.padding(.horizontal, 4)
         }
     }
     #else
@@ -426,7 +371,7 @@ struct ProxyAddSheet: View {
             SettingsList {
                 Section {
                     if enroll.value != nil {
-                        code
+                        status
                     } else if failure == nil {
                         Spinner(size: .xl)
                             .foregroundStyle(Color.themeMutedForeground)
@@ -452,10 +397,7 @@ struct ProxyAddSheet: View {
                             }
                         }
                     }
-                    Section("Variables") {
-                        ForEach(enroll.variables) { variable($0) }
-                    }
-                    Section("With Docker") {
+                    Section("Command") {
                         CommandBox(command: enroll.command, spans: enroll.spans)
                             .listRowInsets(EdgeInsets())
                             .listRowBackground(Color.clear)
