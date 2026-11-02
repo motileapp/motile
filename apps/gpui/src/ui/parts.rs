@@ -22,30 +22,24 @@ type Run = Rc<dyn Fn(&mut Window, &mut App)>;
 pub struct KeyCaps {
     caps: Vec<SharedString>,
     joined: bool,
-    surface: Surface,
 }
 
 impl KeyCaps {
     pub const HEIGHT: f32 = 20.;
 
     pub fn new(caps: impl IntoIterator<Item = impl Into<SharedString>>) -> Self {
-        Self { caps: caps.into_iter().map(Into::into).collect(), joined: false, surface: Surface::Background }
+        Self { caps: caps.into_iter().map(Into::into).collect(), joined: false }
     }
 
     pub fn joined(mut self, joined: bool) -> Self {
         self.joined = joined;
         self
     }
-
-    pub fn surface(mut self, surface: Surface) -> Self {
-        self.surface = surface;
-        self
-    }
 }
 
 impl RenderOnce for KeyCaps {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
-        let fill = self.surface.layer(Layer::Control, colors(cx));
+        let fill = colors(cx).accent_tint;
         let shown = if self.joined {
             vec![SharedString::from(crate::store::shortcuts::join_caps(&self.caps, std::env::consts::OS))]
         } else {
@@ -62,6 +56,7 @@ impl RenderOnce for KeyCaps {
                 .rounded(px(Radius::XS))
                 .bg(fill)
                 .text_size(px(11.))
+                .font_family(crate::theme::MONO_FONT)
                 .font_weight(FontWeight::MEDIUM)
                 .whitespace_nowrap()
                 .child(cap)

@@ -64,6 +64,8 @@ struct ModelInfo: Equatable, Identifiable {
     /// The effort the agent runs it at when the thread doesn't pick one. Missing when the server
     /// couldn't learn it.
     let defaultEffort: String?
+    /// The context windows it runs with, the smallest first. Empty when it has one.
+    let contexts: [ModelContext]
 
     init(json: JSON, shortNames: JSON?) {
         id = json.string("id")
@@ -73,6 +75,17 @@ struct ModelInfo: Equatable, Identifiable {
         account = json.string("account")
         efforts = json.strings("efforts")
         defaultEffort = json.optionalString("default_effort")
+        contexts = json.objects("contexts").map(ModelContext.init(json:))
+    }
+
+    /// Whether `id` names it, under its own id or one of its context windows'.
+    func named(_ id: String?) -> Bool {
+        self.id == id || contexts.contains { $0.model == id }
+    }
+
+    /// The context window `id` asks for, or the one it runs with by default.
+    func context(_ id: String?) -> ModelContext? {
+        contexts.first { $0.model == id } ?? contexts.first(where: \.isDefault)
     }
 
     /// What the effort menu offers: the efforts, with the agent's own default as "" ahead of them
@@ -84,6 +97,22 @@ struct ModelInfo: Equatable, Identifiable {
 
     func runs(under account: AgentAccount) -> Bool {
         agent == account.agent && (self.account.isEmpty || self.account == account.id)
+    }
+}
+
+/// A context window a model runs with, and the model id that asks for it.
+struct ModelContext: Equatable, Identifiable {
+    /// "200k", "1M".
+    let label: String
+    let model: String
+    let isDefault: Bool
+
+    var id: String { model }
+
+    init(json: JSON) {
+        label = json.string("label")
+        model = json.string("model")
+        isDefault = json.bool("default")
     }
 }
 
@@ -228,6 +257,10 @@ struct Server: Equatable, Identifiable {
     let agentAccounts: [AgentAccount]
     /// The account a new thread is better off starting on, by account id and model id.
     let roomierAccounts: [String: [String: String]]
+    /// What each agent account has used of its limits, by account id.
+    let accountLimits: [String: [LimitsReport.Window]]
+    /// Its agents' accounts' ids, the one with the most room left in its limits first.
+    let accountsByRoom: [String]
     /// Whether the server has ever told us about itself.
     let known: Bool
     /// The update the server is putting in place, as it last said.
@@ -246,6 +279,8 @@ struct Server: Equatable, Identifiable {
         path = json.optionalString("path")
         rttMs = (json["rtt_ms"] as? NSNumber)?.intValue
         roomierAccounts = json["roomier_accounts"] as? [String: [String: String]] ?? [:]
+        accountLimits = (json["account_limits"] as? [String: [JSON]] ?? [:]).mapValues { $0.map(LimitsReport.Window.init(json:)) }
+        accountsByRoom = json.strings("accounts_by_room")
         sync = json.object("sync").map(ServerSync.init(json:))
         let info = json.object("info")
         known = info != nil
@@ -322,7 +357,7 @@ struct Server: Equatable, Identifiable {
 
     /// The model with that id as the account lists it, or else the first one offered.
     static func model(_ id: String?, account: String?, among offered: [ModelInfo]) -> ModelInfo? {
-        let named = offered.filter { $0.id == id }
+        let named = offered.filter { $0.named(id) }
         let listedByAccount = { (model: ModelInfo) in model.account.isEmpty || model.account == account }
         return named.first(where: listedByAccount) ?? named.first ?? offered.first(where: listedByAccount) ?? offered.first
     }
@@ -701,6 +736,11 @@ struct Project: Equatable, Identifiable {
     }
 }
 
+/// The part of the Mac's composer its picker opened from, whose column the arrow keys start in.
+enum ComposerPickerPart: Equatable {
+    case model, effort, access
+}
+
 enum Access: String, CaseIterable, Identifiable, Codable {
     case supervised
     case acceptEdits = "accept_edits"
@@ -729,10 +769,10 @@ enum Access: String, CaseIterable, Identifiable, Codable {
 
     var symbol: Symbol {
         switch self {
-        case .supervised: .shield
+        case .supervised: .lock
         case .acceptEdits: .pencilLine
         case .auto: .sparkles
-        case .full: .lockOpen
+        case .full: .shieldOff
         }
     }
 }
@@ -1530,7 +1570,7 @@ struct LimitsReport {
         var id: String { "\(agent.rawValue)/\(name ?? "")/\(account ?? servers.joined(separator: ","))/\(note ?? "")" }
     }
 
-    struct Window: Identifiable {
+    struct Window: Identifiable, Equatable {
         enum Pace: String {
             case ahead, on, under
         }
@@ -1549,6 +1589,16 @@ struct LimitsReport {
         let resetCredits: Int
 
         var id: String { label }
+
+        init(json: JSON) {
+            label = json.string("label")
+            usedPercent = json.double("used_percent")
+            used = json.string("used")
+            resetsIn = json.optionalString("resets_in")
+            pace = json.optionalString("pace").flatMap(Pace.init)
+            tone = Tone(rawValue: json.string("tone")) ?? .success
+            resetCredits = json.int("reset_credits")
+        }
     }
 
     let sections: [Section]
@@ -1562,13 +1612,7 @@ struct LimitsReport {
                 agent: Agent(rawValue: section.string("agent")) ?? .claude, name: section.optionalString("name"),
                 account: section.optionalString("account"),
                 plan: section.optionalString("plan"), servers: section.strings("servers"),
-                windows: section.objects("windows").map { window in
-                    Window(
-                        label: window.string("label"), usedPercent: window.double("used_percent"), used: window.string("used"),
-                        resetsIn: window.optionalString("resets_in"), pace: window.optionalString("pace").flatMap(Window.Pace.init),
-                        tone: Window.Tone(rawValue: window.string("tone")) ?? .success,
-                        resetCredits: window.int("reset_credits"))
-                },
+                windows: section.objects("windows").map(Window.init(json:)),
                 note: section.optionalString("note"))
         }
         notes = json.strings("notes")

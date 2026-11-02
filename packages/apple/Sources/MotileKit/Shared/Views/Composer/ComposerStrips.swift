@@ -82,6 +82,8 @@ struct ContextStrip: View {
     @Environment(AppStore.self) private var store
     let project: Project
     let server: Server?
+    @State private var serverOpen = false
+    @State private var workspaceOpen = false
 
     var body: some View {
         ViewThatFits(in: .horizontal) {
@@ -118,11 +120,24 @@ struct ContextStrip: View {
                 .padding(ComposerStrip.firstMargin)
                 .help("On \(server.name)")
         } else {
-            ActionMenu(
+            ActionButton(
                 server.shortName, picture: symbol, help: store.shortcuts.help("The server the thread starts on", "composer.server"),
-                margin: ComposerStrip.firstMargin
-            ) {
-                ServerMenuItems(copies: copies)
+                variant: .ghost, opens: true, open: serverOpen, margin: ComposerStrip.firstMargin
+            ) { serverOpen.toggle() }
+            .dropdown(serverOpen, inset: ComposerStrip.firstMargin, close: { serverOpen = false }) {
+                ChoiceDropdown(
+                    title: "Server",
+                    choices: copies.map { copy in
+                        let server = store.server(copy.serverID)
+                        return DropdownChoice(
+                            id: copy.id, title: server?.name ?? "",
+                            icon: server.map { .picture(AnyView(ServerSymbol(server: $0, size: ControlSize.regular.symbol))) },
+                            chosen: store.selectedDraft?.projectID == copy.id
+                        ) { store.setNewThreadProject(copy.id) }
+                    },
+                    close: { serverOpen = false }
+                )
+                .environment(store)
             }
             .shortcutTarget("composer.server")
         }
@@ -140,7 +155,6 @@ struct ContextStrip: View {
     }
 
     @ViewBuilder private var branchPart: some View {
-        @Bindable var store = store
         let startsInWorktree = store.draftUsesWorktree
         if let branch {
             if project.worktree != nil {
@@ -150,14 +164,16 @@ struct ContextStrip: View {
                 ActionButton(
                     startsInWorktree ? "From \(store.draftStart ?? branch)" : branch, icon: .gitBranch,
                     help: store.shortcuts.help(startsInWorktree ? startHelp(base: branch) : "Switch the branch of \(project.name)", "composer.branch"),
-                    variant: .ghost, opens: true, margin: ComposerStrip.margin
+                    variant: .ghost, opens: true, open: store.showsBranches, margin: ComposerStrip.margin
                 ) {
                     store.showBranches(of: project)
                 }
                 .truncationMode(.middle)
                 .layoutPriority(1)
-                .popover(isPresented: $store.showsBranches, arrowEdge: .bottom) {
+                .dropdown(store.showsBranches, inset: ComposerStrip.margin, trailing: true, close: { store.showsBranches = false }) {
                     BranchPicker(project: project, base: startsInWorktree ? branch : nil)
+                        .dropdownCard()
+                        .environment(store)
                 }
             } else {
                 branchLabel(branch)
@@ -182,21 +198,27 @@ struct ContextStrip: View {
         } else if store.selectedThread == nil, store.canUseWorktrees(of: project) {
             let inWorktree = store.draftUsesWorktree
             let title = inWorktree ? "New worktree" : "Current checkout"
-            ActionMenu(
-                labeled ? title : nil, icon: inWorktree ? .folderGit2 : .folder,
+            ActionButton(
+                labeled ? title : "", icon: inWorktree ? .folderGit2 : .folder,
                 help: store.shortcuts.help(
                     inWorktree ? "The thread works in a folder and on a branch of its own" : "The thread works in the project's folder", "composer.workspace"
                 ),
-                margin: ComposerStrip.middleMargin
-            ) {
-                Section("Workspace") {
-                    Toggle(isOn: Binding(get: { !inWorktree }, set: { _ in store.setDraftWorktree(false) })) {
-                        Label("Current checkout", symbol: .folder)
-                    }
-                    Toggle(isOn: Binding(get: { inWorktree }, set: { _ in store.setDraftWorktree(true) })) {
-                        Label("New worktree", symbol: .folderGit2)
-                    }
-                }
+                variant: .ghost, opens: true, open: workspaceOpen, margin: ComposerStrip.middleMargin
+            ) { workspaceOpen.toggle() }
+            .dropdown(workspaceOpen, inset: ComposerStrip.middleMargin, trailing: true, close: { workspaceOpen = false }) {
+                ChoiceDropdown(
+                    title: "Workspace",
+                    choices: [
+                        DropdownChoice(
+                            id: "checkout", title: "Current checkout", detail: "In the project's folder", icon: .symbol(.folder), chosen: !inWorktree
+                        ) { store.setDraftWorktree(false) },
+                        DropdownChoice(
+                            id: "worktree", title: "New worktree", detail: "In a folder and on a branch of its own", icon: .symbol(.folderGit2),
+                            chosen: inWorktree
+                        ) { store.setDraftWorktree(true) },
+                    ],
+                    close: { workspaceOpen = false }
+                )
             }
             .shortcutTarget("composer.workspace")
         } else if store.selectedThread == nil, let branch = project.branch, project.git?.hasCommit == false {

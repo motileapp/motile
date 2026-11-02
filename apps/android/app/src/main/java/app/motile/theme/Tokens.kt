@@ -45,9 +45,13 @@ class Palette(
     val borderInput: Color,
     val borderPopover: Color,
     val input: Color,
+    val segment: Color,
+    val segmentAccent: Color,
+    val segmentSelected: Color,
     val composer: Color,
     val glass: Color,
     val accentWithOpacity: Color,
+    val accentTinted: Color,
     val borderComposer: Color,
     val borderAccent: Color,
     val ring: Color,
@@ -128,9 +132,13 @@ class Palette(
             borderInput = Color(0xFFEAECF0),
             borderPopover = Color(0xFFE6E8EB),
             input = Color(0xFFE8EAEE),
+            segment = Color(0xFFEAECF0),
+            segmentAccent = Color(0xFFDFE2E8),
+            segmentSelected = Color(0xFFFFFFFF),
             composer = Color(0xFFFFFFFF),
             glass = Color(0xFFFFFFFF),
             accentWithOpacity = Color(0xFF22242B),
+            accentTinted = Color(0xFF22242B),
             borderComposer = Color(0xFFEAECF0),
             borderAccent = Color(0xFFD9DCE5),
             ring = Color(0xFF22242B),
@@ -211,9 +219,13 @@ class Palette(
             borderInput = Color(0xFF1A1B21),
             borderPopover = Color(0xFF222228),
             input = Color(0xFF14151A),
+            segment = Color(0xFF0A0B0F),
+            segmentAccent = Color(0xFF14151A),
+            segmentSelected = Color(0xFF212329),
             composer = Color(0xFF111217),
             glass = Color(0xFF0A0B0F),
             accentWithOpacity = Color(0xFFD0D2D9),
+            accentTinted = Color(0xFFD0D2D9),
             borderComposer = Color(0xFF1A1B21),
             borderAccent = Color(0xFF25262C),
             ring = Color(0xFFD0D2D9),
@@ -296,9 +308,13 @@ class Palette(
         "border-input" -> borderInput
         "border-popover" -> borderPopover
         "input" -> input
+        "segment" -> segment
+        "segment-accent" -> segmentAccent
+        "segment-selected" -> segmentSelected
         "composer" -> composer
         "glass" -> glass
         "accent-with-opacity" -> accentWithOpacity
+        "accent-tinted" -> accentTinted
         "border-composer" -> borderComposer
         "border-accent" -> borderAccent
         "ring" -> ring
@@ -353,6 +369,8 @@ enum class Opacity(val light: Float, val dark: Float) {
     ColorTint(0.12f, 0.1f),
     ColorTintStronger(0.2f, 0.16f),
     ColorTintChart(0.25f, 0.2f),
+    ColorTintChartStronger(0.5f, 0.45f),
+    ColorTintChartStrongest(0.7f, 0.65f),
     ShimmerBandEdge(0.12f, 0.12f),
     ShimmerBandMiddle(0.55f, 0.55f),
     Glow(0.4f, 0.4f),
@@ -360,6 +378,7 @@ enum class Opacity(val light: Float, val dark: Float) {
     GlowBright(0.5f, 0.5f),
     GlassTint(0.2f, 0.5f),
     AccentOpacity(0.1f, 0.1f),
+    AccentTint(0.12f, 0.08f),
 }
 
 /** How round corners are: every radius is one of these. */

@@ -95,25 +95,17 @@ private struct LimitRow: View {
                 HStack(spacing: 24) {
                     numbers
                         .frame(width: 168, alignment: .leading)
-                    LimitBar(window: window, color: color)
+                    LimitBar(window: window, color: window.color)
                 }
             } else {
                 VStack(alignment: .leading, spacing: 12) {
                     numbers
-                    LimitBar(window: window, color: color)
+                    LimitBar(window: window, color: window.color)
                 }
             }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 14)
-    }
-
-    private var color: Color {
-        switch window.tone {
-        case .success: .themeSuccess
-        case .pending: .themePending
-        case .warning: .themeWarning
-        }
     }
 
     private var numbers: some View {

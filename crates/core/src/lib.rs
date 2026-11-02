@@ -14,6 +14,7 @@ pub mod limits;
 pub mod linear;
 pub mod link;
 pub mod media;
+pub mod model_search;
 pub mod pull_request;
 pub mod render;
 pub mod ricrac;

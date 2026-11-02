@@ -60,7 +60,7 @@ struct ThreadSettingsSheet: View {
                             store.setModel(model, account: choices.account)
                         } label: {
                             HStack {
-                                Text(model.name)
+                                Text(model.shortName)
                                     .foregroundStyle(Color.themeForeground)
                                 Spacer()
                                 if model.id == current?.id && id == account?.id {
@@ -74,12 +74,18 @@ struct ThreadSettingsSheet: View {
                     Button {
                         withAnimation { _ = listed.remove(id) ?? listed.insert(id).memberAfterInsert }
                     } label: {
-                        HStack(spacing: 6) {
-                            AgentIcon(agent: choices.account.agent, size: .sm)
-                            Text(choices.title)
-                            Spacer()
-                            Image(.chevronDown, size: .sm)
-                                .rotationEffect(.degrees(listed.contains(id) ? 180 : 0))
+                        VStack(spacing: 12) {
+                            HStack(spacing: 6) {
+                                AgentIcon(agent: choices.account.agent, size: .sm)
+                                Text(choices.title)
+                                Spacer()
+                                Image(.chevronDown, size: .sm)
+                                    .rotationEffect(.degrees(listed.contains(id) ? 180 : 0))
+                            }
+                            if let windows = store.composerServer?.accountLimits[id], !windows.isEmpty {
+                                LimitPills(windows: windows)
+                                    .padding(.bottom, 8)
+                            }
                         }
                         .frame(minHeight: 32)
                         .contentShape(Rectangle())
@@ -104,6 +110,15 @@ struct ThreadSettingsSheet: View {
                 } label: {
                     LabeledContent("Reasoning") { SymbolValue(ComposerView.effortLabel(effort), symbol: ComposerView.effortSymbol(effort)) }
                 }
+            }
+            if let model = store.composerModel, model.contexts.count > 1, let context = store.composerContext {
+                Picker(
+                    "Context window",
+                    selection: Binding(get: { context.model }, set: { id in model.contexts.first { $0.model == id }.map(store.setContext) })
+                ) {
+                    ForEach(model.contexts) { Text($0.label).tag($0.model) }
+                }
+                .tint(Color.themePrimary)
             }
             NavigationLink {
                 ChoiceList(title: "Access", options: Access.allCases, chosen: store.composerAccess, label: \.label, symbol: \.symbol) {

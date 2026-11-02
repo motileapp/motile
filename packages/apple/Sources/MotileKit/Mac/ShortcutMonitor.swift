@@ -149,7 +149,13 @@ extension AppStore {
                 NSApp.keyWindow?.performClose(nil)
             }
             return true
-        case "modelPicker.toggle", "composer.effort", "composer.access", "composer.workspace", "composer.server":
+        case "composer.effort", "composer.access":
+            guard ShortcutTargets.shown("modelPicker.toggle") != nil else { return false }
+            let part: ComposerPickerPart = command == "composer.effort" ? .effort : .access
+            composerPicker = composerPicker == part ? nil : part
+            composerAccessOpen = composerPicker == .access
+            return true
+        case "modelPicker.toggle", "composer.workspace", "composer.server":
             return ShortcutTargets.press(command)
         default:
             return false
@@ -161,17 +167,21 @@ extension AppStore {
 enum ShortcutTargets {
     fileprivate static var views: [String: [WeakTarget]] = [:]
 
+    /// The control of the command, if it is on screen.
+    fileprivate static func shown(_ command: String) -> TargetView? {
+        views[command] = views[command]?.filter { $0.view != nil }
+        return views[command]?.compactMap(\.view).first { view in
+            !view.away && view.window?.isKeyWindow == true && !view.isHiddenOrHasHiddenAncestor && view.bounds.width > 0
+        }
+    }
+
     fileprivate struct WeakTarget {
         weak var view: TargetView?
     }
 
     /// Clicks the control of the command, if it is on screen.
     static func press(_ command: String) -> Bool {
-        views[command] = views[command]?.filter { $0.view != nil }
-        let shown = views[command]?.compactMap(\.view).first { view in
-            !view.away && view.window?.isKeyWindow == true && !view.isHiddenOrHasHiddenAncestor && view.bounds.width > 0
-        }
-        guard let view = shown, let window = view.window else { return false }
+        guard let view = shown(command), let window = view.window else { return false }
         let center = view.convert(NSPoint(x: view.bounds.midX, y: view.bounds.midY), to: nil)
         for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
             guard let click = NSEvent.mouseEvent(

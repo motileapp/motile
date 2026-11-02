@@ -41,9 +41,13 @@ extension Theme {
     static let borderInput = tone(0xeaecf0, 0x1a1b21)
     static let borderPopover = tone(0xe6e8eb, 0x222228)
     static let input = tone(0xe8eaee, 0x14151a)
+    static let segment = tone(0xeaecf0, 0x0a0b0f)
+    static let segmentAccent = tone(0xdfe2e8, 0x14151a)
+    static let segmentSelected = tone(0xffffff, 0x212329)
     static let composer = tone(0xffffff, 0x111217)
     static let glass = tone(0xffffff, 0x0a0b0f)
     static let accentWithOpacity = tone(0x22242b, 0xd0d2d9)
+    static let accentTinted = tone(0x22242b, 0xd0d2d9)
     static let borderComposer = tone(0xeaecf0, 0x1a1b21)
     static let borderAccent = tone(0xd9dce5, 0x25262c)
     static let ring = tone(0x22242b, 0xd0d2d9)
@@ -127,9 +131,13 @@ extension Theme {
         case "border-input": borderInput
         case "border-popover": borderPopover
         case "input": input
+        case "segment": segment
+        case "segment-accent": segmentAccent
+        case "segment-selected": segmentSelected
         case "composer": composer
         case "glass": glass
         case "accent-with-opacity": accentWithOpacity
+        case "accent-tinted": accentTinted
         case "border-composer": borderComposer
         case "border-accent": borderAccent
         case "ring": ring
@@ -213,9 +221,13 @@ extension Color {
     static let themeBorderInput = Color(platform: Theme.borderInput)
     static let themeBorderPopover = Color(platform: Theme.borderPopover)
     static let themeInput = Color(platform: Theme.input)
+    static let themeSegment = Color(platform: Theme.segment)
+    static let themeSegmentAccent = Color(platform: Theme.segmentAccent)
+    static let themeSegmentSelected = Color(platform: Theme.segmentSelected)
     static let themeComposer = Color(platform: Theme.composer)
     static let themeGlass = Color(platform: Theme.glass)
     static let themeAccentWithOpacity = Color(platform: Theme.accentWithOpacity)
+    static let themeAccentTinted = Color(platform: Theme.accentTinted)
     static let themeBorderComposer = Color(platform: Theme.borderComposer)
     static let themeBorderAccent = Color(platform: Theme.borderAccent)
     static let themeRing = Color(platform: Theme.ring)
@@ -258,7 +270,7 @@ extension Color {
 
 /// How much of a colour shows: every opacity in the clients is one of these.
 enum Opacity {
-    case overlay, overlayPulled, disabled, lit, shadow, shadowStronger, shadowStrongest, colorTint, colorTintStronger, colorTintChart, shimmerBandEdge, shimmerBandMiddle, glow, glowFaint, glowBright, glassTint, accentOpacity
+    case overlay, overlayPulled, disabled, lit, shadow, shadowStronger, shadowStrongest, colorTint, colorTintStronger, colorTintChart, colorTintChartStronger, colorTintChartStrongest, shimmerBandEdge, shimmerBandMiddle, glow, glowFaint, glowBright, glassTint, accentOpacity, accentTint
 
     var light: CGFloat {
         switch self {
@@ -272,6 +284,8 @@ enum Opacity {
         case .colorTint: 0.12
         case .colorTintStronger: 0.2
         case .colorTintChart: 0.25
+        case .colorTintChartStronger: 0.5
+        case .colorTintChartStrongest: 0.7
         case .shimmerBandEdge: 0.12
         case .shimmerBandMiddle: 0.55
         case .glow: 0.4
@@ -279,6 +293,7 @@ enum Opacity {
         case .glowBright: 0.5
         case .glassTint: 0.2
         case .accentOpacity: 0.1
+        case .accentTint: 0.12
         }
     }
 
@@ -294,6 +309,8 @@ enum Opacity {
         case .colorTint: 0.1
         case .colorTintStronger: 0.16
         case .colorTintChart: 0.2
+        case .colorTintChartStronger: 0.45
+        case .colorTintChartStrongest: 0.65
         case .shimmerBandEdge: 0.12
         case .shimmerBandMiddle: 0.55
         case .glow: 0.4
@@ -301,6 +318,7 @@ enum Opacity {
         case .glowBright: 0.5
         case .glassTint: 0.5
         case .accentOpacity: 0.1
+        case .accentTint: 0.08
         }
     }
 }

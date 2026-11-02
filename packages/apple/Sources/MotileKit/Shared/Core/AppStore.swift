@@ -168,6 +168,12 @@ final class AppStore {
     /// What is typed in the settings' search.
     var settingsQuery = ""
     /// The thread's settings are open over the client, where they aren't around the composer.
+    /// The composer's picker on the Mac while it is open: the part of the composer it opened from.
+    var composerPicker: ComposerPickerPart?
+    /// Whether the picker's access menu is open over it.
+    var composerAccessOpen = false
+    /// The row of the picker's models that ⌘1 to ⌘9 asked for, until the picker takes it.
+    var composerPickerJump: Int?
     var showsThreadSettings = false
     /// Files are being dragged over the window.
     var dropTargeted = false
@@ -1072,13 +1078,20 @@ final class AppStore {
     /// The agent a draft starts with: its model's, or its server's first model's.
     func agent(of draft: ThreadDraft) -> Agent? {
         guard let server = server(of: draft) else { return nil }
-        return (server.models.first { $0.id == draft.model } ?? server.models.first)?.agent
+        return (server.models.first { $0.named(draft.model) } ?? server.models.first)?.agent
     }
 
-    /// The accounts the composer offers the models of, an agent's default one first.
+    /// The accounts the composer offers the models of, each agent's with the most room left in its
+    /// limits first, as a new thread would start on it.
     var composerAccounts: [AgentAccount] {
         let agents = Set(composerModels.map(\.agent))
-        return Agent.allCases.filter(agents.contains).flatMap { composerServer?.accounts(of: $0) ?? [] }
+        let order = composerServer?.accountsByRoom ?? []
+        let place = { (account: AgentAccount) in order.firstIndex(of: account.id) ?? order.count }
+        return Agent.allCases.filter(agents.contains).flatMap { agent in
+            (composerServer?.accounts(of: agent) ?? []).enumerated()
+                .sorted { (place($0.element), $0.offset) < (place($1.element), $1.offset) }
+                .map(\.element)
+        }
     }
 
     /// The account of the composer's model's agent the thread works with.
@@ -1124,6 +1137,11 @@ final class AppStore {
     }
 
     var composerAccess: Access { selectedThread?.access ?? selectedDraft?.access ?? .full }
+
+    /// The context window the thread or the draft runs with, when its model offers more than one.
+    var composerContext: ModelContext? {
+        composerModel?.context(selectedThread.map { $0.model } ?? selectedDraft?.model)
+    }
 
     /// What the composer's text and attachments are kept under: the open draft or thread.
     var draftKey: String {
@@ -1197,7 +1215,7 @@ final class AppStore {
         draft.effort = defaults.string(forKey: "new.effort-\(server.id)")
         guard defaults.bool(forKey: AppStore.managesNewThreadsKey), let roomier = server.roomier(than: draft.agentAccount, model: draft.model) else { return }
         draft.agentAccount = roomier.account
-        draft.model = roomier.model
+        if !(server.models.first { $0.id == roomier.model }?.named(draft.model) ?? false) { draft.model = roomier.model }
     }
 
     /// Whether a new thread starts on the account of its agent that has used the least of its
@@ -2263,7 +2281,7 @@ final class AppStore {
             var settings: JSON = [
                 "project_id": project.id,
                 "agent": model.agent.rawValue,
-                "model": model.id,
+                "model": composerContext?.model ?? model.id,
                 "agent_account": composerAccount?.id ?? model.agent.rawValue,
                 "access": draft.access.rawValue,
             ]
@@ -2521,18 +2539,20 @@ final class AppStore {
     /// Has the thread or the draft work with `model` under `account`. A thread that moves to an
     /// account without its session goes on in a new one, which is told what was said.
     func setModel(_ model: ModelInfo, account: AgentAccount) {
+        let label = composerContext?.label
+        let id = (model.contexts.first { $0.label == label } ?? model.context(nil))?.model ?? model.id
         guard let thread = selectedThread else {
             updateDraft {
-                $0.model = model.id
+                $0.model = id
                 $0.agentAccount = account.id
             }
             return
         }
         let effort = thread.effort.flatMap { model.efforts.contains($0) ? $0 : nil }
-        var change: JSON = ["model": model.id, "effort": effort ?? ""]
+        var change: JSON = ["model": id, "effort": effort ?? ""]
         if account.id != thread.agentAccount { change["agent_account"] = account.id }
         update(thread, change) {
-            $0.model = model.id
+            $0.model = id
             $0.effort = effort
             $0.agent = model.agent
             $0.agentAccount = account.id
@@ -2552,6 +2572,15 @@ final class AppStore {
     /// Makes the account the one its agent's new threads start with.
     func makeAgentAccountDefault(_ account: AgentAccount, on server: Server) {
         request(server.id, ["type": "make_agent_account_default", "id": account.id])
+    }
+
+    /// Has the thread or the draft run its model with the context window.
+    func setContext(_ context: ModelContext) {
+        guard let thread = selectedThread else {
+            updateDraft { $0.model = context.model }
+            return
+        }
+        update(thread, ["model": context.model]) { $0.model = context.model }
     }
 
     func setEffort(_ effort: String) {

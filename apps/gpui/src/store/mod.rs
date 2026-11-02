@@ -27,7 +27,7 @@ use gpui_kit::*;
 use motile_core::api::{AccountView, Command, Config, Event};
 use motile_core::render::agents::AgentView;
 use motile_protocol::wire::{
-    Access, AgentAccount, Branch, ChangedFile, GitHubState, GitStage, ModelInfo, NewThread, Repo, Request,
+    Access, AgentAccount, Branch, ChangedFile, GitHubState, GitStage, ModelContext, ModelInfo, NewThread, Repo, Request,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -241,6 +241,12 @@ pub struct Store {
     /// The branch picker under the composer is open. Its branches are `None` until the server
     /// has listed them.
     pub shows_branches: bool,
+    /// The composer's picker while it is open: the part of the composer it opened from.
+    pub composer_picker: Option<ComposerPickerPart>,
+    /// The picker's access menu is open over it.
+    pub composer_access_open: bool,
+    /// The row of the picker's models that ⌘1 to ⌘9 asked for, until the picker takes it.
+    pub composer_picker_jump: Option<usize>,
     pub listed_branches: Option<Result<Vec<Branch>, String>>,
     branches_project_id: Option<String>,
     /// Each project's branches as last listed, which the picker opens on while it lists them again.
@@ -400,6 +406,9 @@ impl Store {
             removing_project: None,
             sign_in_session: None,
             shows_branches: false,
+            composer_picker: None,
+            composer_access_open: false,
+            composer_picker_jump: None,
             listed_branches: None,
             branches_project_id: None,
             known_branches: HashMap::new(),
@@ -1173,15 +1182,23 @@ impl Store {
         Some(label.unwrap_or_else(|| model.name.clone()))
     }
 
-    /// What the model menu lists: each account with its agent's models, titled with the
-    /// account's name when its agent has more than one.
+    /// What the model picker lists: each account with its agent's models, titled with the
+    /// account's name when its agent has more than one. Each agent's account with the most room
+    /// left in its limits comes first, as a new thread would start on it.
     pub fn composer_choices(&self) -> Vec<(String, AgentAccount, Vec<ModelInfo>)> {
         let Some(server) = self.composer_server() else { return Vec::new() };
         let models = self.composer_models();
+        let place = |account: &&AgentAccount| {
+            server.accounts_by_room.iter().position(|id| id == &account.id).unwrap_or(server.accounts_by_room.len())
+        };
         AGENTS
             .into_iter()
             .filter(|agent| models.iter().any(|model| model.agent == *agent))
-            .flat_map(|agent| server.accounts(agent))
+            .flat_map(|agent| {
+                let mut accounts = server.accounts(agent);
+                accounts.sort_by_key(place);
+                accounts
+            })
             .map(|account| {
                 let several = server.accounts(account.agent).len() > 1;
                 let name = agent_name(account.agent);
@@ -1206,6 +1223,15 @@ impl Store {
             return Some(effort);
         }
         Some(model.default_effort.clone().unwrap_or_default())
+    }
+
+    /// The context window the thread or the draft runs with, when its model offers more than one.
+    pub fn composer_context(&self) -> Option<ModelContext> {
+        let id = match self.selected_thread() {
+            Some(thread) => thread.model.clone(),
+            None => self.selected_draft().and_then(|draft| draft.model.clone()),
+        };
+        self.composer_model()?.context(id.as_deref()).cloned()
     }
 
     pub fn composer_access(&self) -> Access {
@@ -1342,7 +1368,9 @@ impl Store {
         else {
             return;
         };
-        draft.model = Some(model.id.clone());
+        if !model.named(draft.model.as_deref()) {
+            draft.model = Some(model.id.clone());
+        }
         draft.agent_account = Some(account.to_string());
     }
 

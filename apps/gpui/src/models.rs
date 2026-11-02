@@ -11,7 +11,7 @@ use motile_core::link::State;
 use motile_core::render::agents::AgentView;
 use motile_core::render::rows::Waiting;
 use motile_protocol::wire::{
-    Access, Agent, AgentAccount, Ask, ContinueSettings, GitStatus, Interruption, ModelInfo, PullRequest,
+    Access, Agent, AgentAccount, Ask, ContinueSettings, GitStatus, Interruption, ModelContext, ModelInfo, PullRequest,
     PullRequestSettings, Queued, Thread,
 };
 use serde::{Deserialize, Serialize};
@@ -61,6 +61,10 @@ pub struct Server {
     pub agent_accounts: Vec<AgentAccount>,
     /// The account a new thread is better off starting on, by account id and model id.
     pub roomier_accounts: HashMap<String, HashMap<String, String>>,
+    /// What each agent account has used of its limits, by account id.
+    pub account_limits: HashMap<String, Vec<motile_core::limits::Row>>,
+    /// Its agents' accounts' ids, the one with the most room left in its limits first.
+    pub accounts_by_room: Vec<String>,
     /// Whether the server has ever told us about itself.
     pub known: bool,
     /// The update the server is putting in place, as it last said.
@@ -96,6 +100,8 @@ impl From<ServerView> for Server {
             models: info.as_ref().map(|info| info.models.clone()).unwrap_or_default(),
             short_model_names: view.short_model_names,
             roomier_accounts: view.roomier_accounts,
+            account_limits: view.account_limits,
+            accounts_by_room: view.accounts_by_room,
             sync: view.sync,
             text_model: info.as_ref().and_then(|info| info.text_model.clone()),
             branch_instructions: info.as_ref().map(|info| info.branch_instructions.text.clone()).unwrap_or_default(),
@@ -115,6 +121,14 @@ impl From<ServerView> for Server {
             },
         }
     }
+}
+
+/// The part of the composer its picker opened from, whose column the arrow keys start in.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum ComposerPickerPart {
+    Model,
+    Effort,
+    Access,
 }
 
 /// Every agent, in the order they are offered.
@@ -214,6 +228,10 @@ pub trait ModelInfoExt {
     /// What the effort menu offers: the efforts, with the agent's own default as "" ahead of them
     /// only when the server couldn't say which one that is.
     fn effort_choices(&self) -> Vec<String>;
+    /// Whether `id` names it, under its own id or one of its context windows'.
+    fn named(&self, id: Option<&str>) -> bool;
+    /// The context window `id` asks for, or the one it runs with by default.
+    fn context(&self, id: Option<&str>) -> Option<&ModelContext>;
 }
 
 impl ModelInfoExt for ModelInfo {
@@ -226,6 +244,15 @@ impl ModelInfoExt for ModelInfo {
             return self.efforts.clone();
         }
         std::iter::once(String::new()).chain(self.efforts.iter().cloned()).collect()
+    }
+
+    fn named(&self, id: Option<&str>) -> bool {
+        Some(self.id.as_str()) == id || self.contexts.iter().any(|context| Some(context.model.as_str()) == id)
+    }
+
+    fn context(&self, id: Option<&str>) -> Option<&ModelContext> {
+        let asked = self.contexts.iter().find(|context| Some(context.model.as_str()) == id);
+        asked.or_else(|| self.contexts.iter().find(|context| context.default))
     }
 }
 
@@ -311,7 +338,7 @@ impl Server {
     pub fn model<'a>(id: Option<&str>, account: Option<&str>, offered: &'a [ModelInfo]) -> Option<&'a ModelInfo> {
         let listed_by_account =
             |model: &&ModelInfo| model.account.is_empty() || Some(model.account.as_str()) == account;
-        let named: Vec<&ModelInfo> = offered.iter().filter(|model| Some(model.id.as_str()) == id).collect();
+        let named: Vec<&ModelInfo> = offered.iter().filter(|model| model.named(id)).collect();
         named
             .iter()
             .find(|model| listed_by_account(model))
@@ -1092,6 +1119,7 @@ mod tests {
             account: account.into(),
             efforts: Vec::new(),
             default_effort: None,
+            contexts: Vec::new(),
         }
     }
 
@@ -1122,6 +1150,8 @@ mod tests {
             info: None,
             short_model_names: HashMap::new(),
             roomier_accounts: roomier,
+            account_limits: HashMap::new(),
+            accounts_by_room: Vec::new(),
             sync: None,
         });
         let server = Server {
@@ -1169,6 +1199,8 @@ mod tests {
             info: None,
             short_model_names: HashMap::new(),
             roomier_accounts: HashMap::new(),
+            account_limits: HashMap::new(),
+            accounts_by_room: Vec::new(),
             sync: None,
         };
         let server = Server::from(view);

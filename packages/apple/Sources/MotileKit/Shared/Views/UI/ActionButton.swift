@@ -166,6 +166,10 @@ struct ControlLabel: View {
     let icon: ControlIcon?
     let size: ControlSize
     var chevron = false
+    /// What the chevron opens is open, which turns it over.
+    var chevronTurned = false
+    /// The chevron's colour, a step quieter than the words.
+    var chevronColor = Color.themeMutedStrongerForeground
     var pending = false
     var pendingTitle: String?
     var fills = false
@@ -200,7 +204,9 @@ struct ControlLabel: View {
             }
             if chevron {
                 Image(.chevronDown, size: size.chevron, trimmed: true)
-                    .foregroundStyle(Color.themeMutedStrongerForeground)
+                    .foregroundStyle(chevronColor)
+                    .rotationEffect(.degrees(chevronTurned ? 180 : 0))
+                    .animation(.smooth(duration: 0.2), value: chevronTurned)
             }
         }
         .frame(maxWidth: fills ? .infinity : nil, alignment: Alignment(horizontal: alignment, vertical: .center))
@@ -272,7 +278,7 @@ struct ControlLabel: View {
 
 /// How far around a control a finger still presses it, and the room that is the control's own
 /// outside its background.
-private struct ControlReach {
+struct ControlReach {
     let around: EdgeInsets
     let outset: EdgeInsets
 
@@ -352,6 +358,8 @@ struct ActionButton: View {
     private let look: ControlLook
     /// It opens something to choose from, and shows a chevron for it.
     private var chevron = false
+    /// What it opens is open, which turns its chevron over.
+    private var open = false
     private let pending: Bool
     private let pendingTitle: String?
     private let fills: Bool
@@ -374,10 +382,11 @@ struct ActionButton: View {
         variant: ButtonVariant = .secondary, size: ControlSize = .regular, symbolSize: IconSize? = nil, gap: CGFloat? = nil,
         padding: CGFloat? = nil, pending: Bool = false, pendingTitle: String? = nil,
         selected: Bool = false, round: Bool = false,
-        fills: Bool = false, alignment: HorizontalAlignment = .center, opens: Bool = false, joined: HorizontalEdge.Set = [],
+        fills: Bool = false, alignment: HorizontalAlignment = .center, opens: Bool = false, open: Bool = false, joined: HorizontalEdge.Set = [],
         tint: Color? = nil, margin: EdgeInsets = EdgeInsets(), inline: Bool = false, action: @escaping () -> Void
     ) {
         chevron = opens
+        self.open = open
         self.inline = inline
         self.title = title
         self.icon = icon.map(ControlIcon.symbol) ?? picture.map(ControlIcon.picture) ?? pictures.map(ControlIcon.pictures)
@@ -439,7 +448,9 @@ struct ActionButton: View {
         }
         return Button(action: action) {
             ControlLabel(
-                title: words, icon: icon, size: look.size, chevron: chevron, pending: pending, pendingTitle: pendingTitle, fills: fills,
+                title: words, icon: icon, size: look.size, chevron: chevron, chevronTurned: open,
+                chevronColor: look.foreground == .themeForeground ? .themeMutedForeground : .themeMutedStrongerForeground, pending: pending,
+                pendingTitle: pendingTitle, fills: fills,
                 alignment: alignment, symbolSize: symbolSize, gap: gap, padding: padding, detail: detail, place: place,
                 tinted: look.tint.flatMap { tint in tinted.map { (words: $0, color: tint) } }
             )

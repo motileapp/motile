@@ -6,7 +6,6 @@ struct KeyCaps: View {
 
     let caps: [String]
     var joined = false
-    @Environment(\.surface) private var surface
 
     init(_ caps: [String], joined: Bool = false) {
         self.caps = caps
@@ -18,10 +17,10 @@ struct KeyCaps: View {
         HStack(spacing: 5) {
             ForEach(shown.indices, id: \.self) { index in
                 Text(shown[index])
-                    .font(.ui(size: 11, weight: .medium))
+                    .font(.ui(size: 11, weight: .medium, design: .monospaced))
                     .padding(.horizontal, 6)
                     .frame(minWidth: 22, minHeight: Self.height)
-                    .background(surface.color(.control), in: RoundedRectangle(cornerRadius: Radius.xs, style: .continuous))
+                    .background(Color(platform: Theme.accentTint), in: RoundedRectangle(cornerRadius: Radius.xs, style: .continuous))
             }
         }
     }

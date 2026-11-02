@@ -1,10 +1,11 @@
 //! Where messages are written. A strip above says what the agent waits for or that it is
-//! monitoring. The model, the reasoning effort and how much the agent may do without asking are
-//! under the text, and a strip below says where the thread works: the server, the folder and
-//! the branch.
+//! monitoring. Under the text, attaching is on one side and on the other, by the send button,
+//! the model, the reasoning effort and how much the agent may do without asking, which open the
+//! picker. A strip below says where the thread works: the server, the folder and the branch.
 
 pub mod attachments;
 pub mod children;
+mod picker;
 mod questions;
 mod skills;
 mod strips;
@@ -20,13 +21,15 @@ use gpui_kit::prelude::*;
 use gpui_kit::*;
 use motile_protocol::wire::{Access, Interruption};
 
+use self::picker::ComposerPicker;
 use self::questions::Questions;
 use self::strips::{BranchPicker, agents_strip, context_strip, interruption_strip, monitoring_strip, waiting_strip};
-use crate::models::{ACCESSES, ModelInfoExt, ThreadInfo, access_detail, access_label};
+use crate::models::{ComposerPickerPart, ThreadInfo, access_label};
 use crate::store::Store;
 use crate::theme::{self, ControlSize, IconSize, Surface, colors};
-use crate::ui::menu::{Anchor, Menu, MenuIcon};
-use crate::ui::{ActionButton, ActionMenu, Variant, edges, icons, logos, text_width};
+use crate::ui::control::{Look, dotted};
+use crate::ui::menu::Anchor;
+use crate::ui::{ActionButton, Variant, edges, icons, logos, text_width};
 
 pub const RADIUS: f32 = theme::Radius::XXL;
 /// The text's font and line, as the Mac sets them: 14 with 3 between lines.
@@ -43,10 +46,14 @@ const MAX_TEXT_HEIGHT: f32 = 220.;
 const TEXT_SIDE: f32 = 12.;
 /// The room between the model's or the access's symbol and its words.
 const MENU_GAP: f32 = 5.;
-/// The least room between the menus and the buttons on the right.
+/// The least room between the attach button and the settings.
 const SPACER: f32 = 10.;
+/// The room before a divider of the settings, after a part's words, and after it, before the next
+/// part's symbol, which stands closer to its edge than words do: both look 9 points wide.
+const ROOM_AFTER_WORDS: f32 = 8.;
+const ROOM_BEFORE_SYMBOL: f32 = 13.;
 
-/// Which menus of the row under the text say what they are set to, the first of these that fits.
+/// Which parts of the settings under the text say what they are set to, the first of these that fits.
 #[derive(Clone, Copy, PartialEq, Debug, Default)]
 enum Labels {
     #[default]
@@ -58,8 +65,8 @@ enum Labels {
 }
 
 impl Labels {
-    /// The first that fits in `room`, for menus that were `menus` wide with `drawn`, whose words
-    /// take `settings` for the effort and the access and `model` for the model.
+    /// The first that fits in `room`, for settings that were `menus` wide with `drawn`, whose
+    /// words take `settings` for the effort and the access and `model` for the model.
     fn fitting(menus: f32, drawn: Labels, settings: f32, model: f32, room: f32) -> Self {
         let hidden = match drawn {
             Labels::All => 0.,
@@ -77,14 +84,15 @@ impl Labels {
     }
 }
 
-/// How wide the parts of the row under the text were last drawn, to tell whether the menus fit
-/// with their words.
+/// How wide the parts of the row under the text were last drawn, to tell whether the settings
+/// fit with their words.
 #[derive(Clone, Copy, Default)]
 struct RowWidths {
-    /// The menus, and which of them were drawn with their words.
+    /// The settings, and which of their parts were drawn with their words.
     menus: f32,
     labels: Labels,
-    /// The buttons on the right.
+    /// The attach button, and the buttons on the right.
+    attach: f32,
     buttons: f32,
 }
 
@@ -96,6 +104,9 @@ pub struct Composer {
     loaded: (String, u64, u64, u64),
     branch_anchor: Anchor,
     branch_picker: Option<Entity<BranchPicker>>,
+    /// The settings button's background, which the picker opens over.
+    settings_anchor: Anchor,
+    picker: Option<Entity<ComposerPicker>>,
     questions: HashMap<String, Entity<Questions>>,
     placeholder_shown: String,
     /// Redraws the strips' times: every second while the agent monitors, every 30 seconds while
@@ -140,6 +151,8 @@ impl Composer {
             loaded: (String::new(), u64::MAX, u64::MAX, u64::MAX),
             branch_anchor: Anchor::default(),
             branch_picker: None,
+            settings_anchor: Anchor::default(),
+            picker: None,
             questions: HashMap::new(),
             placeholder_shown: String::new(),
             ticker: None,
@@ -215,6 +228,7 @@ impl Composer {
         let key = (store.draft_key(), store.draft_version, store.composer_focus, store.blur_composer);
         let placeholder = self.placeholder(cx);
         let wants_picker = store.shows_branches;
+        let wants_settings = store.composer_picker.is_some();
         let tick = self.tick_period(cx);
         if self.loaded != key {
             let draft = store.draft();
@@ -251,6 +265,13 @@ impl Composer {
             self.branch_picker = None;
         }
         crate::ui::popover_shown("branch-picker", wants_picker, cx);
+        if wants_settings && self.picker.is_none() {
+            let (store, button) = (self.store.clone(), self.settings_anchor.clone());
+            self.picker = Some(cx.new(|cx| ComposerPicker::new(store, button, window, cx)));
+        } else if !wants_settings {
+            self.picker = None;
+        }
+        crate::ui::popover_shown("composer-picker", wants_settings, cx);
         self.follow_approvals(window, cx);
         self.tick(tick, cx);
         self.follow_worktree_start(cx);
@@ -379,7 +400,7 @@ impl Composer {
             ))
     }
 
-    /// Which menus of the row under the text have room to say what they are set to, as the
+    /// Which parts of the settings under the text have room to say what they are set to, as the
     /// Mac's `ViewThatFits` picks: from how wide they were last drawn, and how wide their words
     /// are.
     fn labels(&self, window: &mut Window, cx: &App) -> Labels {
@@ -388,143 +409,56 @@ impl Composer {
             text_width(text, ControlSize::Regular.text_size(), FontWeight::MEDIUM, window) + MENU_GAP
         };
         let mut settings = words(access_label(store.composer_access()), window);
-        let model = store.composer_model();
-        if model.as_ref().is_some_and(|model| !model.efforts.is_empty()) {
-            settings += words(&effort_label(&store.composer_effort().unwrap_or_default()), window);
+        let effort = store.composer_effort();
+        let context = store.composer_context().map(|context| context.label);
+        if effort.is_some() || context.is_some() {
+            settings += words(&effort_words(effort.as_deref(), context.as_deref()), window);
+            settings -= context.map_or(0., |context| words(&context, window));
         }
-        let model = match model {
+        let model = match store.composer_model() {
             Some(_) => words(&store.composer_model_label().unwrap_or_default(), window),
             None => 0.,
         };
         let row = self.row.get();
-        Labels::fitting(row.menus, row.labels, settings, model, self.width - SPACER - row.buttons)
+        Labels::fitting(row.menus, row.labels, settings, model, self.width - SPACER - row.attach - row.buttons)
     }
 
-    /// The row under the text. When it is too narrow for all of it, the effort and the access
-    /// are only their icons, then the model too. The space between its controls and around them
-    /// is their margins, so each takes clicks up to the next one and to the composer's edges.
-    fn controls(&self, labels: Labels, cx: &mut Context<Self>) -> impl IntoElement {
+    /// The row under the text: attaching on one side, the settings by the send button on the
+    /// other. When it is too narrow for all of it, the effort and the access are only their
+    /// icons, then the model too. The space between its controls and around them is their
+    /// margins, so each takes clicks up to the next one and to the composer's edges.
+    fn controls(&self, labels: Labels, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let c = colors(cx);
-        let store = self.store.read(cx);
-        let choices = store.composer_choices();
-        let disabled = store.composer_models().is_empty();
-        let current = store.composer_model();
-        let account = store.composer_account().map(|account| account.id);
-        let effort = store.composer_effort();
-        let access = store.composer_access();
-        let name = store.composer_model_label().unwrap_or("No agent".into());
-        let keys = &store.shortcuts;
-        let model_help = keys.help(current.as_ref().map_or(&name, |model| &model.name), "modelPicker.toggle");
-        let effort_help = keys.help("Reasoning effort", "composer.effort");
-        let access_help = keys.help(access_detail(access), "composer.access");
-
-        let model_menu = {
-            let store = self.store.clone();
-            let current_id = current.as_ref().map(|model| model.id.clone());
-            let logo = current.as_ref().map(|model| logos::agent_icon(model.agent, ControlSize::Regular.symbol(), cx));
-            let title = if labels == Labels::None && current.is_some() { String::new() } else { name.clone() };
-            ActionMenu::new("model", title, move |_, _| {
-                let mut menu = Menu::new();
-                for (title, account_choice, models) in &choices {
-                    if !menu.is_empty() {
-                        menu = menu.separator();
-                    }
-                    menu = menu.note(title.clone());
-                    for model in models {
-                        let (store, model, chosen_account) = (store.clone(), model.clone(), account_choice.clone());
-                        let chosen =
-                            Some(&model.id) == current_id.as_ref() && Some(&account_choice.id) == account.as_ref();
-                        let icon = Some(MenuIcon::Logo(model.agent));
-                        menu = menu.choice(chosen, model.name.clone(), icon, None, move |_, cx| {
-                            store.update(cx, |store, cx| {
-                                store.set_model(&model, &chosen_account);
-                                cx.notify();
-                            })
-                        });
-                    }
-                }
-                menu
-            })
-            .button(move |button| {
-                button
-                    .when_some(logo, |button, logo| button.picture(logo))
-                    .help(model_help)
-                    .gap(MENU_GAP)
-                    .surface(Surface::Composer)
-                    .margin(margin(8., 4.))
-                    .disabled(disabled)
-            })
-            .shortcut("modelPicker.toggle")
-        };
-
-        let effort_menu = current.as_ref().filter(|model| !model.efforts.is_empty()).map(|model| {
-            let store = self.store.clone();
-            let efforts = model.effort_choices();
-            let chosen = effort.clone();
-            let current = effort.clone().unwrap_or_default();
-            let title = if labels == Labels::All { effort_label(&current) } else { String::new() };
-            ActionMenu::new("effort", title, move |_, _| {
-                let mut menu = Menu::new();
-                for effort in &efforts {
-                    let store = store.clone();
-                    let value = effort.clone();
-                    let icon = Some(MenuIcon::Symbol(effort_symbol(effort)));
-                    menu =
-                        menu.choice(Some(effort) == chosen.as_ref(), effort_label(effort), icon, None, move |_, cx| {
-                            store.update(cx, |store, cx| {
-                                store.set_effort(&value);
-                                cx.notify();
-                            })
-                        });
-                }
-                menu
-            })
-            .button(move |button| {
-                button
-                    .symbol(effort_symbol(&current))
-                    .gap(MENU_GAP)
-                    .help(effort_help)
-                    .surface(Surface::Composer)
-                    .margin(margin(4., 4.))
-            })
-            .shortcut("composer.effort")
-        });
-
-        let access_menu = {
-            let store = self.store.clone();
-            let label = access_label(access).to_string();
-            let symbol = access_symbol(access);
-            ActionMenu::new("access", if labels == Labels::All { label } else { String::new() }, move |_, _| {
-                let mut menu = Menu::new();
-                for option in ACCESSES {
-                    let store = store.clone();
-                    let icon = Some(MenuIcon::Symbol(access_symbol(option)));
-                    let detail = Some(SharedString::from(access_detail(option)));
-                    menu = menu.choice(option == access, access_label(option), icon, detail, move |_, cx| {
-                        store.update(cx, |store, cx| {
-                            store.set_access(option);
-                            cx.notify();
-                        })
-                    });
-                }
-                menu
-            })
-            .button(move |button| {
-                button.symbol(symbol).gap(MENU_GAP).help(access_help).surface(Surface::Composer).margin(margin(4., 1.))
-            })
-            .shortcut("composer.access")
-        };
-
         let attach = {
             let store = self.store.clone();
-            ActionButton::icon("attach", "paperclip", "Attach files")
+            ActionButton::icon("attach", "plus", "Attach files")
+                .symbol_size(IconSize::Lg)
                 .round(true)
+                .tint(Some(c.foreground))
                 .surface(Surface::Composer)
-                .margin(margin(1., 4.))
+                .margin(margin(8., 1.))
                 .on_click(move |_, _, cx| choose_files(store.clone(), cx))
         };
-
-        let (menus, buttons) = (self.row.clone(), self.row.clone());
+        let measured = |part: fn(&mut RowWidths) -> &mut f32, row: Rc<Cell<RowWidths>>, labels: Option<Labels>| {
+            canvas(
+                move |bounds, window, _| {
+                    let mut widths = row.get();
+                    let width = f32::from(bounds.size.width);
+                    let changed = labels.is_some_and(|labels| widths.labels != labels);
+                    if (*part(&mut widths) - width).abs() > 0.5 || changed {
+                        *part(&mut widths) = width;
+                        if let Some(labels) = labels {
+                            widths.labels = labels;
+                        }
+                        row.set(widths);
+                        window.refresh();
+                    }
+                },
+                |_, _, _, _| {},
+            )
+            .absolute()
+            .size_full()
+        };
         div()
             .flex()
             .items_center()
@@ -533,28 +467,8 @@ impl Composer {
                     .relative()
                     .flex_shrink_0()
                     .flex()
-                    .items_center()
-                    .child(
-                        canvas(
-                            move |bounds, window, _| {
-                                let mut row = menus.get();
-                                let width = f32::from(bounds.size.width);
-                                if (row.menus - width).abs() > 0.5 || row.labels != labels {
-                                    row.menus = width;
-                                    row.labels = labels;
-                                    menus.set(row);
-                                    window.refresh();
-                                }
-                            },
-                            |_, _, _, _| {},
-                        )
-                        .absolute()
-                        .size_full(),
-                    )
-                    .child(model_menu)
-                    .child(composer_divider(c))
-                    .when_some(effort_menu, |row, effort| row.child(effort).child(composer_divider(c)))
-                    .child(access_menu),
+                    .child(measured(|row| &mut row.attach, self.row.clone(), None))
+                    .child(attach),
             )
             .child(self.typing_area("controls-room", cx).flex_1().min_w(px(SPACER)).self_stretch())
             .child(
@@ -562,26 +476,104 @@ impl Composer {
                     .relative()
                     .flex_shrink_0()
                     .flex()
+                    .child(measured(|row| &mut row.menus, self.row.clone(), Some(labels)))
+                    .child(self.settings_button(labels, window, cx)),
+            )
+            .child(
+                div()
+                    .relative()
+                    .flex_shrink_0()
+                    .flex()
                     .items_center()
-                    .child(
-                        canvas(
-                            move |bounds, window, _| {
-                                let mut row = buttons.get();
-                                let width = f32::from(bounds.size.width);
-                                if (row.buttons - width).abs() > 0.5 {
-                                    row.buttons = width;
-                                    buttons.set(row);
-                                    window.refresh();
-                                }
-                            },
-                            |_, _, _, _| {},
-                        )
-                        .absolute()
-                        .size_full(),
-                    )
-                    .child(attach)
+                    .child(measured(|row| &mut row.buttons, self.row.clone(), None))
                     .child(self.send_buttons(cx)),
             )
+    }
+
+    /// The model with its account, the effort with the context window, and the access: one
+    /// button that opens the picker which chooses all of them.
+    fn settings_button(&self, labels: Labels, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let id = ElementId::from("composer-settings");
+        let hovered = crate::ui::hover_state(&id, window, cx);
+        let lit = *hovered.read(cx);
+        let c = colors(cx);
+        let store = self.store.read(cx);
+        let model = store.composer_model();
+        let effort = store.composer_effort();
+        let context = store.composer_context().map(|context| context.label);
+        let access = store.composer_access();
+        let open = store.composer_picker.is_some();
+        let disabled = store.composer_models().is_empty() || crate::ui::inert(cx);
+        let help = store.shortcuts.help("Model, effort and access", "modelPicker.toggle");
+        let model_title = (labels != Labels::None || model.is_none())
+            .then(|| store.composer_model_label().unwrap_or("No agent".into()));
+        let effort_title = match labels {
+            Labels::All => Some(effort_words(effort.as_deref(), context.as_deref())),
+            _ => context.clone(),
+        };
+        let mut look = Look::new(Variant::Ghost, ControlSize::Regular);
+        look.surface = Surface::Composer;
+        look.selected = open;
+        let group = SharedString::from("composer-settings");
+        let symbol = ControlSize::Regular.symbol();
+        let logo = model.as_ref().map(|model| logos::agent_icon(model.agent, symbol, cx).into_any_element());
+        let divider =
+            || div().flex_shrink_0().pl(px(ROOM_AFTER_WORDS)).pr(px(ROOM_BEFORE_SYMBOL)).child(composer_divider(c));
+        let store = self.store.clone();
+        div()
+            .id(id)
+            .group(group.clone())
+            .relative()
+            .flex_shrink_0()
+            .pt(px(8.))
+            .pb(px(8.))
+            .pl(px(1.))
+            .pr(px(4.))
+            .cursor_default()
+            .when(disabled, |button| button.opacity(c.opacity(theme::Opacity::Disabled)))
+            .child({
+                let store = self.store.clone();
+                crate::keyboard::target_pressing("modelPicker.toggle", move |_, cx| toggle_picker(&store, cx))
+            })
+            .child(
+                div()
+                    .id("face")
+                    .relative()
+                    .h(px(ControlSize::Regular.height()))
+                    .px(px(ControlSize::Regular.padding()))
+                    .flex()
+                    .items_center()
+                    .rounded(px(look.radius()))
+                    .bg(look.fill(false, c))
+                    .text_color(look.foreground(lit && !disabled, c))
+                    .when(!disabled, |face| {
+                        let lit = look.fill(true, c);
+                        face.group_hover(group.clone(), move |face| face.bg(lit))
+                            .group_active(group.clone(), move |face| face.bg(lit))
+                    })
+                    .child(self.settings_anchor.track())
+                    .child(settings_part(logo, model_title, c))
+                    .when(effort.is_some() || context.is_some(), |face| {
+                        let mark = effort
+                            .as_deref()
+                            .map(|effort| icons::symbol(effort_symbol(effort), symbol).into_any_element());
+                        face.child(divider()).child(settings_part(mark, effort_title, c))
+                    })
+                    .child(divider())
+                    .child(settings_part(
+                        Some(icons::symbol(access_symbol(access), symbol).into_any_element()),
+                        (labels == Labels::All).then(|| access_label(access).to_string()),
+                        c,
+                    )),
+            )
+            .on_hover(crate::ui::track_hover(&hovered))
+            .tooltip(crate::ui::tooltip(help))
+            .when(!disabled, |button| {
+                button.on_click(move |_, _, cx| {
+                    cx.stop_propagation();
+                    toggle_picker(&store, cx)
+                })
+            })
     }
 
     /// Empty room in the composer: a click there starts typing, under the cursor of text. It is
@@ -619,7 +611,7 @@ impl Composer {
             .when(running, |buttons| {
                 buttons.child(
                     ActionButton::new("stop", "")
-                        .picture(div().size(px(10.)).rounded(px(2.5)).bg(c.destructive_foreground))
+                        .picture(div().size(px(11.)).rounded(px(2.5)).bg(c.destructive_foreground))
                         .help(stop_help)
                         .danger()
                         .round(true)
@@ -637,6 +629,7 @@ impl Composer {
                 buttons.child(
                     ActionButton::icon("send", "arrow-up", help)
                         .variant(Variant::Primary)
+                        .symbol_size(IconSize::Md)
                         .round(true)
                         .surface(Surface::Composer)
                         .margin(margin(4., 8.))
@@ -652,7 +645,13 @@ impl Composer {
     }
 
     /// The box: the done banner, the attachments, the text and the controls under it.
-    fn box_(&self, thread: Option<&ThreadInfo>, labels: Labels, cx: &mut Context<Self>) -> impl IntoElement {
+    fn box_(
+        &self,
+        thread: Option<&ThreadInfo>,
+        labels: Labels,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
         let c = colors(cx);
         let store = self.store.read(cx);
         let continues = store.selected_draft().is_some_and(|draft| draft.from.is_some());
@@ -734,7 +733,7 @@ impl Composer {
                             .child(text),
                     ),
             )
-            .child(self.controls(labels, cx))
+            .child(self.controls(labels, window, cx))
     }
 }
 
@@ -756,6 +755,47 @@ fn interruption(thread: &ThreadInfo, store: &Store) -> Option<Interruption> {
         return None;
     }
     thread.interruption
+}
+
+/// Opens the model picker, or closes it and gives the keys back to the composer.
+fn toggle_picker(store: &Entity<Store>, cx: &mut App) {
+    store.update(cx, |store, cx| {
+        store.composer_picker = match store.composer_picker {
+            None => Some(ComposerPickerPart::Model),
+            Some(_) => None,
+        };
+        store.composer_access_open = false;
+        if store.composer_picker.is_none() {
+            store.composer_focus += 1;
+        }
+        cx.notify();
+    })
+}
+
+/// A part of the settings button: its symbol or picture, and its words when it has room for
+/// them, the symbol standing closer to the edge than words do, with words or without.
+fn settings_part(mark: Option<AnyElement>, title: Option<String>, c: &theme::Colors) -> Div {
+    let size = ControlSize::Regular;
+    let square = |mark: AnyElement| {
+        div().size(px(size.symbol().side())).flex_shrink_0().flex().items_center().justify_center().child(mark)
+    };
+    let outset = if mark.is_some() { size.symbol_outset() } else { 0. };
+    let Some(title) = title else {
+        return div().h(px(size.height())).ml(px(-outset)).flex().items_center().children(mark.map(square));
+    };
+    div().h(px(size.height())).ml(px(-outset)).flex().items_center().gap(px(MENU_GAP)).children(mark.map(square)).child(
+        div()
+            .text_size(px(size.text_size()))
+            .font_weight(FontWeight::MEDIUM)
+            .whitespace_nowrap()
+            .child(dotted(title, c)),
+    )
+}
+
+/// "Medium · 1M": the effort, and the context window where the model offers more than one.
+fn effort_words(effort: Option<&str>, context: Option<&str>) -> String {
+    let effort = effort.map(effort_label);
+    [effort.as_deref(), context].into_iter().flatten().collect::<Vec<_>>().join(" · ")
 }
 
 /// The room around a control of the row under the text.
@@ -791,10 +831,10 @@ pub fn effort_symbol(effort: &str) -> &'static str {
 
 pub fn access_symbol(access: Access) -> &'static str {
     match access {
-        Access::Supervised => "shield",
+        Access::Supervised => "lock",
         Access::AcceptEdits => "pen-line",
         Access::Auto => "sparkles",
-        Access::Full => "lock-open",
+        Access::Full => "shield-off",
     }
 }
 
@@ -918,8 +958,9 @@ impl Render for Composer {
                     }),
             )
             .child(self.skill_menu(cx))
+            .children(self.picker.clone().map(|picker| picker::placed(picker, &self.settings_anchor)))
             .children(top_strip.map(|strip| div().relative().child(measure(true, self.strips.clone())).child(strip)))
-            .child(self.box_(thread.as_ref(), labels, cx))
+            .child(self.box_(thread.as_ref(), labels, window, cx))
             .children(
                 bottom_strip.map(|strip| div().relative().child(measure(false, self.strips.clone())).child(strip)),
             )

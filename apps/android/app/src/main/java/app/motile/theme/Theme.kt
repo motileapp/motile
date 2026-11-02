@@ -142,6 +142,9 @@ fun Color.wash(lit: Boolean = false): Color = at(if (lit) Opacity.ColorTintStron
 /** The scrim at its opacity. */
 val Palette.scrim: Color @Composable @ReadOnlyComposable get() = overlay.at(Opacity.Overlay)
 
+/** What marks something quietly, like a default or the keys that pick a row. */
+val Palette.accentTint: Color @Composable @ReadOnlyComposable get() = accentTinted.at(Opacity.AccentTint)
+
 /** Thins the whole view to one of the opacities, while `on`. */
 @Composable
 fun Modifier.opacity(opacity: Opacity, on: Boolean = true): Modifier {

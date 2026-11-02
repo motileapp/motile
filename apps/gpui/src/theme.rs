@@ -46,6 +46,8 @@ pub struct Colors {
     pub destructive_tint: Hsla,
     pub success_tint: Hsla,
     pub warning_tint: Hsla,
+    /// What marks something quietly, like a default or the keys that pick a row.
+    pub accent_tint: Hsla,
     /// What lies over the window behind a modal or the media viewer.
     pub scrim: Hsla,
     /// The colours code is highlighted with, by the core's palette index.
@@ -77,6 +79,7 @@ impl Colors {
             destructive_tint: thinned(t.destructive, Opacity::ColorTint),
             success_tint: thinned(t.success, Opacity::ColorTint),
             warning_tint: thinned(t.warning, Opacity::ColorTint),
+            accent_tint: thinned(t.accent_tinted, Opacity::AccentTint),
             scrim: thinned(t.overlay, Opacity::Overlay),
             syntax: [
                 t.foreground,

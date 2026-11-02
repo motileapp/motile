@@ -1101,14 +1101,16 @@ class AppStore(private val context: Context) {
     /** The agent a draft starts with: its model's, or its server's first model's. */
     fun agentOf(draft: ThreadDraft): Agent? {
         val server = serverOf(draft) ?: return null
-        return (server.models.firstOrNull { it.id == draft.model } ?: server.models.firstOrNull())?.agent
+        return (server.models.firstOrNull { it.named(draft.model) } ?: server.models.firstOrNull())?.agent
     }
 
-    /** The accounts the composer offers the models of, an agent's default one first. */
+    /** The accounts the composer offers the models of, each agent's with the most room left in its limits first, as a new thread would start on it. */
     val composerAccounts: List<AgentAccount>
         get() {
             val agents = composerModels.map { it.agent }.toSet()
-            return Agent.entries.filter { it in agents }.flatMap { composerServer?.accounts(it) ?: emptyList() }
+            val order = composerServer?.accountsByRoom ?: emptyList()
+            val place = { account: AgentAccount -> order.indexOf(account.id).takeIf { it >= 0 } ?: order.size }
+            return Agent.entries.filter { it in agents }.flatMap { agent -> (composerServer?.accounts(agent) ?: emptyList()).sortedBy(place) }
         }
 
     /** The account of the composer's model's agent the thread works with. */
@@ -1159,6 +1161,13 @@ class AppStore(private val context: Context) {
         }
 
     val composerAccess: Access get() = selectedThread?.access ?: selectedDraft?.access ?: Access.Full
+
+    /** The context window the thread or the draft runs with, when its model offers more than one. */
+    val composerContext: ModelContext?
+        get() {
+            val thread = selectedThread
+            return composerModel?.context(if (thread != null) thread.model else selectedDraft?.model)
+        }
 
     /** What the composer's text and attachments are kept under: the open draft or thread. */
     val draftKey: String get() = selection.id
@@ -1230,7 +1239,8 @@ class AppStore(private val context: Context) {
         )
         if (!Preferences.managesNewThreads) return last
         val (account, model) = server.roomier(than = last.agentAccount, model = last.model) ?: return last
-        return last.copy(agentAccount = account, model = model)
+        val keepsContext = server.models.firstOrNull { it.id == model }?.named(last.model) ?: false
+        return last.copy(agentAccount = account, model = if (keepsContext) last.model else model)
     }
 
     /** Has the next draft start with what was just chosen, and only that. */
@@ -2230,7 +2240,7 @@ class AppStore(private val context: Context) {
             val settings = buildMap<String, Any?> {
                 put("project_id", project.id)
                 put("agent", model.agent.raw)
-                put("model", model.id)
+                put("model", composerContext?.model ?: model.id)
                 put("agent_account", composerAccount?.id ?: model.agent.raw)
                 put("access", draft.access.raw)
                 composerEffort?.let { put("effort", it) }
@@ -2453,14 +2463,22 @@ class AppStore(private val context: Context) {
 
     /** Has the thread or the draft work with `model` under `account`. A thread that moves to an account without its session goes on in a new one, which is told what was said. */
     fun setModel(model: ModelInfo, account: AgentAccount) {
-        val thread = selectedThread ?: return updateDraft { it.copy(model = model.id, agentAccount = account.id) }
+        val label = composerContext?.label
+        val id = (model.contexts.firstOrNull { it.label == label } ?: model.context(null))?.model ?: model.id
+        val thread = selectedThread ?: return updateDraft { it.copy(model = id, agentAccount = account.id) }
         val effort = thread.effort?.takeIf { it in model.efforts }
         val change = buildMap<String, Any?> {
-            put("model", model.id)
+            put("model", id)
             put("effort", effort ?: "")
             if (account.id != thread.agentAccount) put("agent_account", account.id)
         }
-        update(thread, change) { it.copy(model = model.id, effort = effort, agent = model.agent, agentAccount = account.id) }
+        update(thread, change) { it.copy(model = id, effort = effort, agent = model.agent, agentAccount = account.id) }
+    }
+
+    /** Has the thread or the draft run its model with the context window. */
+    fun setContext(context: ModelContext) {
+        val thread = selectedThread ?: return updateDraft { it.copy(model = context.model) }
+        update(thread, mapOf("model" to context.model)) { it.copy(model = context.model) }
     }
 
     /** Adds an account of an agent on the server, or changes one. `done` says whether it was kept. */

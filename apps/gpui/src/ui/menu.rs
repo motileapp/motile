@@ -16,8 +16,6 @@ type Run = Rc<dyn Fn(&mut Window, &mut App)>;
 pub enum MenuIcon {
     Symbol(&'static str),
     File(SharedString),
-    /// An agent's logo, in its colour.
-    Logo(motile_protocol::wire::Agent),
 }
 
 enum Entry {
@@ -611,9 +609,6 @@ fn card(menu: &Menu, level: Level, highlighted: Option<usize>, open_submenu: Opt
                             .child(match icon {
                                 MenuIcon::Symbol(name) => icons::symbol(*name, IconSize::Sm).into_any_element(),
                                 MenuIcon::File(path) => crate::ui::logos::icon_file(path.to_string(), IconSize::Sm, cx),
-                                MenuIcon::Logo(agent) => {
-                                    crate::ui::logos::agent_icon(*agent, IconSize::Sm, cx).into_any_element()
-                                }
                             }),
                     )
                 })

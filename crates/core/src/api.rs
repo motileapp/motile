@@ -15,6 +15,7 @@ use serde_json::Value;
 use crate::connection::PathKind;
 use crate::git::Control;
 use crate::keybindings::{Rule, View as KeybindingsView};
+use crate::limits;
 use crate::link::State;
 use crate::render::agents::AgentView;
 use crate::render::highlight::Spans;
@@ -699,6 +700,10 @@ pub struct ServerView {
     /// The account a new thread is better off starting on, by account id and model id: the one
     /// of the same agent that runs the model and has used clearly less of its limits.
     pub roomier_accounts: HashMap<String, HashMap<String, String>>,
+    /// What each of its agents' accounts has used of its limits, by account id.
+    pub account_limits: HashMap<String, Vec<limits::Row>>,
+    /// Its agents' accounts, the one with the most room left in its limits first.
+    pub accounts_by_room: Vec<String>,
     /// How its copies of the account's other servers' threads stand. None for a removed server.
     pub sync: Option<SyncView>,
 }

@@ -60,6 +60,8 @@ data class ModelInfo(
     val efforts: List<String>,
     /** The effort the agent runs it at when the thread doesn't pick one. Missing when the server couldn't learn it. */
     val defaultEffort: String?,
+    /** The context windows it runs with, the smallest first. Empty when it has one. */
+    val contexts: List<ModelContext> = emptyList(),
 ) {
     constructor(json: JSON, shortNames: JSON?) : this(
         id = json.string("id"),
@@ -69,13 +71,30 @@ data class ModelInfo(
         account = json.string("account"),
         efforts = json.strings("efforts"),
         defaultEffort = json.optionalString("default_effort"),
+        contexts = json.objects("contexts").map(::ModelContext),
     )
+
+    /** Whether `id` names it, under its own id or one of its context windows'. */
+    fun named(id: String?): Boolean = this.id == id || contexts.any { it.model == id }
+
+    /** The context window `id` asks for, or the one it runs with by default. */
+    fun context(id: String?): ModelContext? = contexts.firstOrNull { it.model == id } ?: contexts.firstOrNull { it.isDefault }
 
     /** What the effort menu offers: the efforts, with the agent's own default as "" ahead of them only when the server couldn't say which one that is. */
     val effortChoices: List<String>
         get() = if (efforts.isEmpty() || defaultEffort != null) efforts else listOf("") + efforts
 
     fun runs(under: AgentAccount): Boolean = agent == under.agent && (account.isEmpty() || account == under.id)
+}
+
+/** A context window a model runs with, and the model id that asks for it. */
+data class ModelContext(
+    /** "200k", "1M". */
+    val label: String,
+    val model: String,
+    val isDefault: Boolean,
+) {
+    constructor(json: JSON) : this(json.string("label"), json.string("model"), json.bool("default"))
 }
 
 /** One of an agent's accounts on a server: the folder its CLI keeps the sign-in in. */
@@ -178,6 +197,10 @@ data class Server(
     val agentAccounts: List<AgentAccount>,
     /** The account a new thread is better off starting on, by account id and model id. */
     val roomierAccounts: Map<String, Map<String, String>>,
+    /** What each agent account has used of its limits, by account id. */
+    val accountLimits: Map<String, List<LimitsReport.Window>> = emptyMap(),
+    /** Its agents' accounts' ids, the one with the most room left in its limits first. */
+    val accountsByRoom: List<String> = emptyList(),
     /** Whether the server has ever told us about itself. */
     val known: Boolean,
     /** The update the server is putting in place, as it last said. */
@@ -280,6 +303,10 @@ data class Server(
                 agents = installed,
                 agentAccounts = accounts.ifEmpty { Agent.entries.map(::defaultAccount) },
                 roomierAccounts = json.obj("roomier_accounts")?.let { byAccount -> byAccount.keys.associateWith(byAccount::stringMap) } ?: emptyMap(),
+                accountLimits = json.obj("account_limits")?.let { byAccount ->
+                    byAccount.keys.associateWith { id -> byAccount.objects(id).map(LimitsReport::Window) }
+                } ?: emptyMap(),
+                accountsByRoom = json.strings("accounts_by_room"),
                 known = info != null,
                 update = info?.obj("update")?.let { ServerUpdate(it, version) },
                 sync = json.obj("sync")?.let(::ServerSync),
@@ -291,7 +318,7 @@ data class Server(
 
         /** The model with that id as the account lists it, or else the first one offered. */
         fun model(id: String?, account: String?, among: List<ModelInfo>): ModelInfo? {
-            val named = among.filter { it.id == id }
+            val named = among.filter { it.named(id) }
             val listedByAccount = { model: ModelInfo -> model.account.isEmpty() || model.account == account }
             return named.firstOrNull(listedByAccount) ?: named.firstOrNull() ?: among.firstOrNull(listedByAccount) ?: among.firstOrNull()
         }
@@ -660,10 +687,10 @@ enum class Access(val raw: String) {
 
     val symbol: Symbol
         get() = when (this) {
-            Supervised -> Symbol.Shield
+            Supervised -> Symbol.Lock
             AcceptEdits -> Symbol.PencilLine
             Auto -> Symbol.Sparkles
-            Full -> Symbol.LockOpen
+            Full -> Symbol.ShieldOff
         }
 
     companion object {
@@ -1481,6 +1508,16 @@ data class LimitsReport(
         enum class Tone(val raw: String) { Success("success"), Pending("pending"), Warning("warning") }
 
         val id: String get() = label
+
+        constructor(json: JSON) : this(
+            label = json.string("label"),
+            usedPercent = json.double("used_percent"),
+            used = json.string("used"),
+            resetsIn = json.optionalString("resets_in"),
+            pace = Pace.entries.firstOrNull { it.raw == json.optionalString("pace") },
+            tone = Tone.entries.firstOrNull { it.raw == json.string("tone") } ?: Tone.Success,
+            resetCredits = json.int("reset_credits"),
+        )
     }
 
     companion object {
@@ -1492,17 +1529,7 @@ data class LimitsReport(
                     account = section.optionalString("account"),
                     plan = section.optionalString("plan"),
                     servers = section.strings("servers"),
-                    windows = section.objects("windows").map { window ->
-                        Window(
-                            label = window.string("label"),
-                            usedPercent = window.double("used_percent"),
-                            used = window.string("used"),
-                            resetsIn = window.optionalString("resets_in"),
-                            pace = Window.Pace.entries.firstOrNull { it.raw == window.optionalString("pace") },
-                            tone = Window.Tone.entries.firstOrNull { it.raw == window.string("tone") } ?: Window.Tone.Success,
-                            resetCredits = window.int("reset_credits"),
-                        )
-                    },
+                    windows = section.objects("windows").map(::Window),
                     note = section.optionalString("note"),
                 )
             },

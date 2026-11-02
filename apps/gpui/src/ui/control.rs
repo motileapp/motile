@@ -274,6 +274,10 @@ pub struct ControlLabel {
     pub prose: bool,
     /// Its chevron points up, at what it hides again.
     pub chevron_up: bool,
+    /// How far its chevron has turned over, from 0 to 1, as what it opens opens.
+    pub chevron_turn: f32,
+    /// The chevron's colour where it isn't a step quieter than the words.
+    pub chevron_color: Option<Hsla>,
 }
 
 impl ControlLabel {
@@ -299,6 +303,8 @@ impl ControlLabel {
             symbol_after: false,
             prose: false,
             chevron_up: false,
+            chevron_turn: 0.,
+            chevron_color: None,
         }
     }
 
@@ -492,8 +498,10 @@ impl ControlLabel {
                 label.child(stack)
             })
             .when(self.chevron, |label| {
-                let chevron = icons::trimmed_chevron(size.chevron()).text_color(c.muted_stronger_foreground);
-                let chevron = if self.chevron_up { chevron.rotate(180.) } else { chevron };
+                let color = self.chevron_color.unwrap_or(c.muted_stronger_foreground);
+                let chevron = icons::trimmed_chevron(size.chevron()).text_color(color);
+                let turn = if self.chevron_up { 1. } else { self.chevron_turn };
+                let chevron = chevron.rotate(180. * turn);
                 label.child(div().flex().relative().top(px(chevron_shift)).child(chevron))
             })
             .when(overlay_spinner, |label| {
@@ -561,6 +569,9 @@ impl RenderOnce for TurningSymbol {
     }
 }
 
+/// How long a chevron takes to turn over as what it opens opens.
+const CHEVRON_TURN: std::time::Duration = std::time::Duration::from_millis(200);
+
 /// How far an inline button's light reaches above and below its words.
 const INLINE_LIGHT_ROOM: f32 = 3.;
 
@@ -582,6 +593,10 @@ pub struct ActionButton {
     inline: bool,
     /// Its press reaches across the room it stands in, while its light keeps its own width.
     stretches: bool,
+    /// What it opens is open, which turns its chevron over.
+    open: bool,
+    /// It is a menu's, whose chevron keeps the quieter colour.
+    menu: bool,
     on_click: Option<OnClick>,
 }
 
@@ -601,6 +616,8 @@ impl ActionButton {
             truncates: false,
             inline: false,
             stretches: false,
+            open: false,
+            menu: false,
             on_click: None,
         }
     }
@@ -753,6 +770,12 @@ impl ActionButton {
         self
     }
 
+    /// What it opens is `open`, which turns its chevron over.
+    pub fn open(mut self, open: bool) -> Self {
+        self.open = open;
+        self
+    }
+
     /// It shows more of what it stands under, with a chevron that points up while that is `open`.
     pub fn expands(mut self, open: bool) -> Self {
         self.label.chevron = true;
@@ -816,6 +839,11 @@ impl ActionButton {
     pub fn margin(mut self, margin: Edges<f32>) -> Self {
         self.margin = margin;
         self
+    }
+
+    /// The room around its light that takes its presses.
+    pub fn margin_edges(&self) -> Edges<f32> {
+        self.margin
     }
 
     /// It gives up room when there is too little, cutting its words short.
@@ -903,6 +931,13 @@ impl RenderOnce for ActionButton {
         let border = look.border(c);
         // An outline button's line lies inside its size, as the other buttons' fill does.
         let inset = if border.is_some() { 1. } else { 0. };
+        if self.label.chevron && !self.menu {
+            let turn = ElementId::NamedChild(std::sync::Arc::new(self.id.clone()), "chevron".into());
+            self.label.chevron_turn = motion::eased(turn, if self.open { 1. } else { 0. }, CHEVRON_TURN, window, cx);
+            let words = look.foreground(false, c);
+            self.label.chevron_color =
+                Some(if words == c.foreground { c.muted_foreground } else { c.muted_stronger_foreground });
+        }
         let label =
             self.label.render(cx).when(truncates, |label| label.min_w_0()).mx(px(-inset)).my(px(-light_inset - inset));
         div()
@@ -971,7 +1006,8 @@ impl ActionMenu {
         title: impl Into<SharedString>,
         build: impl Fn(&mut Window, &mut App) -> Menu + 'static,
     ) -> Self {
-        let button = ActionButton::new(id, title).variant(Variant::Ghost).opens(true);
+        let mut button = ActionButton::new(id, title).variant(Variant::Ghost).opens(true);
+        button.menu = true;
         Self { button, anchor: Anchor::default(), build: Rc::new(build), shortcut: None }
     }
 
@@ -1170,6 +1206,8 @@ pub struct Chip {
     middle: bool,
     /// Its words can be selected and copied, as part of the window's selection.
     selectable: Option<ElementId>,
+    /// It marks quietly, as a default does: its words muted on the accent's tint, with no line.
+    muted: bool,
 }
 
 impl Chip {
@@ -1187,6 +1225,7 @@ impl Chip {
             row: None,
             middle: false,
             selectable: None,
+            muted: false,
         }
     }
 
@@ -1218,6 +1257,11 @@ impl Chip {
         self
     }
 
+    pub fn muted(mut self, muted: bool) -> Self {
+        self.muted = muted;
+        self
+    }
+
     /// The layer the chip lies on.
     pub fn surface(mut self, surface: Surface) -> Self {
         self.surface = surface;
@@ -1241,9 +1285,14 @@ impl Chip {
 impl RenderOnce for Chip {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let c = colors(cx);
-        let foreground = if self.dot.is_some() { c.foreground } else { self.tone.unwrap_or(c.foreground) };
+        let foreground = match (self.muted, self.dot, self.tone) {
+            (true, _, _) => c.muted_foreground,
+            (false, Some(_), _) | (false, None, None) => c.foreground,
+            (false, None, Some(tone)) => tone,
+        };
         let background = match self.tone {
             Some(tone) => c.wash(tone, false),
+            None if self.muted => c.accent_tint,
             None => self.surface.layer(self.layer(), c),
         };
         let words: AnyElement = match self.selectable {
@@ -1257,7 +1306,7 @@ impl RenderOnce for Chip {
             .px(px(7.))
             .rounded_full()
             .bg(background)
-            .when(self.tone.is_none(), |chip| chip.border_1().border_color(self.surface.border(c)))
+            .when(self.tone.is_none() && !self.muted, |chip| chip.border_1().border_color(self.surface.border(c)))
             .flex()
             .items_center()
             .gap(px(5.))
@@ -1350,35 +1399,56 @@ impl RenderOnce for Switch {
     }
 }
 
-/// A short row of choices of which one is on, in a track on the background with the border
-/// around it. The choices touch each other and the track's edge, so no click falls between them;
-/// their light is drawn inset from their edges, as the sidebar's rows are.
+type OnHover = Rc<dyn Fn(usize, bool, &mut Window, &mut App)>;
+
+/// A short row of choices of which one is on, in a track with the border around it. The choices
+/// touch each other and the track's edge, so no click falls between them; their light is drawn
+/// inset from their edges. The chosen one stands on the track in its own colour with a small
+/// shadow; another lies on the track's accent while the pointer is over it, a press holds it or
+/// the arrow keys are on it (`lit`).
 #[derive(IntoElement)]
 pub struct Segmented {
     id: ElementId,
-    options: Vec<SharedString>,
+    /// Each choice's title, and the symbol it shows in place of it when it has one.
+    options: Vec<(SharedString, Option<SharedString>)>,
     selected: usize,
     size: ControlSize,
     fills: bool,
+    /// It lies in a dropdown, as round as the dropdown's corners.
+    compact: bool,
+    lit: Option<usize>,
     disabled: bool,
     on_select: Option<OnSelect>,
+    on_hover: Option<OnHover>,
 }
 
 impl Segmented {
     /// How far a choice's light stands from the track's border, and from the next one's.
-    pub const INSET: f32 = 4.;
+    pub const INSET: f32 = 2.;
     pub const BORDER: f32 = 1.;
+    /// The track of a compact one, whose choices' lights round to follow it.
+    const COMPACT_RADIUS: f32 = Radius::MD;
 
     pub fn new(id: impl Into<ElementId>, options: Vec<SharedString>, selected: usize) -> Self {
         Self {
             id: id.into(),
-            options,
+            options: options.into_iter().map(|title| (title, None)).collect(),
             selected,
             size: ControlSize::Regular,
             fills: false,
+            compact: false,
+            lit: None,
             disabled: false,
             on_select: None,
+            on_hover: None,
         }
+    }
+
+    /// Choices that are only their symbols, each named when the pointer rests on it.
+    pub fn symbols(id: impl Into<ElementId>, options: Vec<(SharedString, SharedString)>, selected: usize) -> Self {
+        let mut segmented = Self::new(id, Vec::new(), selected);
+        segmented.options = options.into_iter().map(|(title, symbol)| (title, Some(symbol))).collect();
+        segmented
     }
 
     pub fn size(mut self, size: ControlSize) -> Self {
@@ -1392,6 +1462,17 @@ impl Segmented {
         self
     }
 
+    pub fn compact(mut self, compact: bool) -> Self {
+        self.compact = compact;
+        self
+    }
+
+    /// The choice the arrow keys are on.
+    pub fn lit(mut self, lit: Option<usize>) -> Self {
+        self.lit = lit;
+        self
+    }
+
     pub fn disabled(mut self, disabled: bool) -> Self {
         self.disabled = disabled;
         self
@@ -1399,6 +1480,12 @@ impl Segmented {
 
     pub fn on_select(mut self, handler: impl Fn(usize, &mut Window, &mut App) + 'static) -> Self {
         self.on_select = Some(Rc::new(handler));
+        self
+    }
+
+    /// Told when the pointer comes onto a choice and leaves it.
+    pub fn on_hover(mut self, handler: impl Fn(usize, bool, &mut Window, &mut App) + 'static) -> Self {
+        self.on_hover = Some(Rc::new(handler));
         self
     }
 }
@@ -1419,7 +1506,12 @@ impl RenderOnce for Segmented {
         let size = self.size;
         let count = self.options.len();
         let on_select = self.on_select.filter(|_| !disabled);
+        let on_hover = self.on_hover;
         let half = Self::INSET / 2.;
+        let (track_radius, radius) = match self.compact {
+            true => (Self::COMPACT_RADIUS, Self::COMPACT_RADIUS - Self::INSET - Self::BORDER),
+            false => (size.radius() + Self::INSET + Self::BORDER, size.radius()),
+        };
         let group_of = |index: usize| SharedString::from(format!("segment-{:?}-{index}", self.id));
         div()
             .id(self.id.clone())
@@ -1427,12 +1519,12 @@ impl RenderOnce for Segmented {
             .when(self.fills, |track| track.w_full())
             .flex()
             .items_center()
-            .bg(c.background)
+            .bg(c.segment)
             .border_1()
             .border_color(c.border)
-            .rounded(px(size.radius() + Self::INSET + Self::BORDER))
+            .rounded(px(track_radius))
             .when(disabled, |track| track.opacity(c.opacity(Opacity::Disabled)))
-            .children(self.options.into_iter().enumerate().map(|(index, title)| {
+            .children(self.options.into_iter().enumerate().map(|(index, (title, symbol))| {
                 let selected = index == self.selected;
                 let on_select = on_select.clone();
                 let margin = crate::ui::edges(
@@ -1442,27 +1534,39 @@ impl RenderOnce for Segmented {
                     if index == count - 1 { Self::INSET } else { half },
                 );
                 let group = group_of(index);
-                let hovered = *hovers[index].read(cx) && !disabled;
+                let up = !disabled && (*hovers[index].read(cx) || self.lit == Some(index));
                 let light = lights[index];
+                let place = |light: Div| {
+                    light
+                        .absolute()
+                        .top(px(margin.top))
+                        .left(px(margin.left))
+                        .right(px(margin.right))
+                        .bottom(px(margin.bottom))
+                        .rounded(px(radius))
+                };
+                let accent = c.segment_accent;
+                let lit = place(div()).id("light").when(!selected && !disabled, |lit| {
+                    lit.when(self.lit == Some(index), |lit| lit.bg(accent))
+                        .group_hover(group.clone(), move |lit| lit.bg(accent))
+                        .group_active(group.clone(), move |lit| lit.bg(accent))
+                });
                 // The light of the one chosen fades from the last one chosen to it.
-                let hover = crate::ui::Highlight::new()
-                    .radius(size.radius())
-                    .inset(margin)
-                    .small(true)
-                    .enabled(!disabled && !selected);
-                let chosen = div()
-                    .absolute()
-                    .top(px(margin.top))
-                    .left(px(margin.left))
-                    .right(px(margin.right))
-                    .bottom(px(margin.bottom))
-                    .rounded(px(size.radius()))
-                    .bg(Surface::Background.layer(Layer::ControlLit, c))
+                let chosen = place(div())
+                    .bg(c.segment_selected)
+                    .shadow(c.shadow(crate::theme::ShadowSize::Sm, Opacity::Shadow))
                     .opacity(light);
-                let text = match (disabled, hovered) {
+                let text = match (disabled, up) {
                     (true, _) => c.muted_stronger_foreground,
                     (false, true) => c.foreground,
                     (false, false) => motion::mix(c.muted_foreground, c.foreground, light),
+                };
+                let hovered = hovers[index].clone();
+                let on_hover = on_hover.clone();
+                let named = symbol.is_some();
+                let words = match symbol {
+                    Some(symbol) => icons::symbol(symbol, size.symbol()).into_any_element(),
+                    None => title.clone().into_any_element(),
                 };
                 div()
                     .id(("segment", index))
@@ -1473,9 +1577,15 @@ impl RenderOnce for Segmented {
                     .pb(px(margin.bottom))
                     .pl(px(margin.left))
                     .pr(px(margin.right))
-                    .child(hover.render(group.clone(), cx))
+                    .child(lit)
                     .when(light > 0., |segment| segment.child(chosen))
-                    .on_hover(crate::ui::track_hover(&hovers[index]))
+                    .on_hover(move |inside, window, cx| {
+                        crate::ui::track_hover(&hovered)(inside, window, cx);
+                        if let Some(on_hover) = &on_hover {
+                            on_hover(index, *inside, window, cx);
+                        }
+                    })
+                    .when(named, |segment| segment.tooltip(tooltip(title.clone())))
                     .child(
                         div()
                             .relative()
@@ -1488,7 +1598,7 @@ impl RenderOnce for Segmented {
                             .font_weight(FontWeight::MEDIUM)
                             .whitespace_nowrap()
                             .text_color(text)
-                            .child(title),
+                            .child(words),
                     )
                     .when_some(on_select, |segment, on_select| {
                         segment.on_click(move |_, window, cx| {

@@ -4,10 +4,12 @@
 
 use std::cell::Cell;
 use std::collections::HashMap;
+use std::rc::Rc;
 
 use gpui_kit::prelude::*;
 use gpui_kit::*;
 
+use crate::models::ComposerPickerPart;
 use crate::panel::state::PanelTab;
 use crate::store::Store;
 use crate::store::shortcuts::KeyPress;
@@ -98,9 +100,20 @@ pub fn perform(store: &Entity<Store>, command: &str, window: &mut Window, cx: &m
             close(store, window.window_handle(), cx);
             true
         }
-        "modelPicker.toggle" | "composer.effort" | "composer.access" | "composer.workspace" => {
-            !store.read(cx).composer_away() && press(command, window, cx)
+        "composer.effort" | "composer.access" => {
+            if store.read(cx).composer_away() || shown("modelPicker.toggle", cx).is_none() {
+                return false;
+            }
+            let part =
+                if command == "composer.effort" { ComposerPickerPart::Effort } else { ComposerPickerPart::Access };
+            store.update(cx, |store, cx| {
+                store.composer_picker = (store.composer_picker != Some(part)).then_some(part);
+                store.composer_access_open = store.composer_picker == Some(ComposerPickerPart::Access);
+                cx.notify();
+            });
+            true
         }
+        "modelPicker.toggle" | "composer.workspace" => !store.read(cx).composer_away() && press(command, window, cx),
         "composer.server" if !store.read(cx).composer_away() && press(command, window, cx) => true,
         _ => store.update(cx, |store, cx| {
             let done = store.perform(command, cx);
@@ -244,21 +257,33 @@ fn watch_modifiers(store: &Entity<Store>, cx: &mut App) {
     .detach();
 }
 
-/// The controls a shortcut presses as a click would: the composer's menus, where they were drawn
-/// in the last frame.
+type Press = Rc<dyn Fn(&mut Window, &mut App)>;
+
+/// The controls a shortcut presses, where they were drawn in the last frame: the composer's
+/// menus. One that says what a press does is pressed by doing it; another by a click.
 #[derive(Default)]
 struct Targets {
-    drawing: HashMap<&'static str, Bounds<Pixels>>,
-    drawn: HashMap<&'static str, Bounds<Pixels>>,
+    drawing: HashMap<&'static str, (Bounds<Pixels>, Option<Press>)>,
+    drawn: HashMap<&'static str, (Bounds<Pixels>, Option<Press>)>,
 }
 
 impl Global for Targets {}
 
 /// Fills its parent, which makes the parent the control the command's shortcut presses.
 pub fn target(command: &'static str) -> impl IntoElement {
+    target_doing(command, None)
+}
+
+/// The same for a control whose press the shortcut does itself, so that the pointer, which
+/// may rest on another control, isn't moved.
+pub fn target_pressing(command: &'static str, press: impl Fn(&mut Window, &mut App) + 'static) -> impl IntoElement {
+    target_doing(command, Some(Rc::new(press)))
+}
+
+fn target_doing(command: &'static str, press: Option<Press>) -> impl IntoElement {
     canvas(
         move |bounds, _, cx| {
-            cx.default_global::<Targets>().drawing.insert(command, bounds);
+            cx.default_global::<Targets>().drawing.insert(command, (bounds, press));
         },
         |_, _, _, _| {},
     )
@@ -272,10 +297,22 @@ pub fn end_frame(cx: &mut App) {
     targets.drawn = std::mem::take(&mut targets.drawing);
 }
 
-/// Clicks the control of the command, if it is on screen, and puts the pointer back.
+/// Where the control of the command was drawn in the last frame, if it is on screen.
+fn shown(command: &str, cx: &App) -> Option<Bounds<Pixels>> {
+    let bounds = cx.try_global::<Targets>().and_then(|targets| targets.drawn.get(command).map(|(bounds, _)| *bounds));
+    bounds.filter(|bounds| bounds.size.width > px(0.))
+}
+
+/// Presses the control of the command, if it is on screen: does what it does, or clicks it and
+/// puts the pointer back.
 fn press(command: &str, window: &mut Window, cx: &mut App) -> bool {
-    let bounds = cx.try_global::<Targets>().and_then(|targets| targets.drawn.get(command).copied());
-    let Some(bounds) = bounds.filter(|bounds| bounds.size.width > px(0.)) else { return false };
+    let Some(bounds) = shown(command, cx) else { return false };
+    let does =
+        cx.try_global::<Targets>().and_then(|targets| targets.drawn.get(command).and_then(|(_, press)| press.clone()));
+    if let Some(does) = does {
+        window.defer(cx, move |window, cx| does(window, cx));
+        return true;
+    }
     let center = bounds.center();
     window.defer(cx, move |window, cx| {
         let back = window.mouse_position();
