@@ -82,7 +82,7 @@ struct SidebarView: View {
             // A table, which picks its rows up and moves them itself.
             RecycledList(
                 items: items, height: { height(of: $0, drafts: drafts.count) }, topInset: 4 - rowGap / 2, bottomInset: 4 - rowGap / 2,
-                scrollTarget: searching ? (results.indices.contains(highlighted.index) ? results[highlighted.index].id : nil) : store.revealedThreadID,
+                scrollTarget: searching ? highlighted.shown.flatMap { results.indices.contains($0) ? results[$0].id : nil } : store.revealedThreadID,
                 clicked: { item in
                     switch item {
                     case .active(let thread): store.select(.thread(thread.id))
@@ -101,7 +101,7 @@ struct SidebarView: View {
                     store.move(thread, to: index, among: items.map(\.activeThread))
                 },
                 pointed: { item, row, view in
-                    if case .result(let result) = item, let index = results.firstIndex(where: { $0.id == result.id }) { highlighted.index = index }
+                    if case .result(let result) = item, let index = results.firstIndex(where: { $0.id == result.id }) { highlighted.point(index) }
                     ThreadPeek.shared.point(at: item?.activeThread, row: row, in: view, store: store)
                 }
             ) { item in

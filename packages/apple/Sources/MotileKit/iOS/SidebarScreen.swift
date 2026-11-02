@@ -35,7 +35,7 @@ struct SidebarScreen: View {
             RecycledList(
                 items: items, bottomInset: 12,
                 scrollTarget: searching
-                    ? highlightedID.map { "result:\($0)" } : items.first { $0.thread?.id == store.revealedThreadID }?.id,
+                    ? highlighted.shown.flatMap { results.indices.contains($0) ? "result:\(results[$0].id)" : nil } : items.first { $0.thread?.id == store.revealedThreadID }?.id,
                 scrollsTargetToTop: done.contains { $0.id == store.revealedThreadID },
                 scrolled: { self.swiped = nil },
                 rowInset: UIEdgeInsets(top: rowMargin.top, left: rowMargin.leading, bottom: rowMargin.bottom, right: rowMargin.trailing),
@@ -53,7 +53,7 @@ struct SidebarScreen: View {
                     return store.rowActions(for: thread, rename: beginRename, delete: { deleting = $0 })
                 },
                 pointed: { item, row, view in
-                    if case .result(let result) = item, let index = results.firstIndex(where: { $0.id == result.id }) { highlighted.index = index }
+                    if case .result(let result) = item, let index = results.firstIndex(where: { $0.id == result.id }) { highlighted.point(index) }
                     ThreadPeek.shared.point(at: item?.thread, row: row, in: view, store: store)
                 }
             ) { item in

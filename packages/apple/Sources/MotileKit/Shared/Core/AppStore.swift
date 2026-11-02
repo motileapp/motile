@@ -230,7 +230,7 @@ final class AppStore {
     private(set) var composerFocus = 0
     /// The skills that fit the word being typed in the composer, and the one lit.
     var skillMenu: SkillMenu?
-    var skillHighlight = 0
+    let skillHighlight = Highlight()
     /// The skill the composer's text puts in place of the word typed, once.
     var skillPick: SkillPick?
     /// The menu's skills are asked for and haven't come in a moment, the first time on a server.

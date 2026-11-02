@@ -39,22 +39,23 @@ struct SkillMenuStrip: View {
                 VStack(spacing: 0) {
                     ForEach(Array(menu.rows.enumerated()), id: \.element.id) { index, row in
                         SkillMenuRow(row: row)
-                            .button(.highlight(radius: Radius.md, lit: index == store.skillHighlight, inset: Self.rowInset)) {
+                            .button(.highlight(radius: Radius.md, lit: index == store.skillHighlight.index, inset: Self.rowInset)) {
                                 store.pickSkill(row)
                             }
-                            .onHover { if $0 { store.skillHighlight = index } }
+                            .onHover { if $0 { store.skillHighlight.point(index) } }
                             .id(row.id)
                     }
                 }
                 .padding(.vertical, Self.inset)
             }
             .scrollIndicators(.never)
+            .fadesHiddenEdges()
             .frame(height: shown(of: menu.rows.count) * Self.rowHeight + Self.inset * 2)
             // Liquid Glass doesn't clip a scroll view, whose rows would scroll out over the thread.
             .clipShape(StripShape(edge: .top))
-            .onChange(of: store.skillHighlight) {
-                guard menu.rows.indices.contains(store.skillHighlight) else { return }
-                scroller.scrollTo(menu.rows[store.skillHighlight].id)
+            .onChange(of: store.skillHighlight.shown) { _, shown in
+                guard let shown, menu.rows.indices.contains(shown) else { return }
+                scroller.scrollTo(menu.rows[shown].id)
             }
         }
     }
