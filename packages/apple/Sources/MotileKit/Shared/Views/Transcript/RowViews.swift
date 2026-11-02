@@ -1603,17 +1603,24 @@ final class RemovedRowView: RowView {
             guard let self else { return }
             self.owner?.rowWillSelect(self)
         }
-        let button = { (title: String, tooltip: String, primary: Bool, action: @escaping () -> Void) in
+        // The gap between the two is theirs, half each, so that a click in it lands on one.
+        let half = ControlSize.regular.gap / 2
+        let button = { (title: String, tooltip: String, primary: Bool, insets: PlatformEdgeInsets, action: @escaping () -> Void) in
             RowButton(
                 title: title, tooltip: tooltip, radius: RowButton.metrics.radius, bordered: true, primary: primary,
-                hover: Theme.border, rest: Theme.background, insets: PlatformEdgeInsets(top: 0, left: 0, bottom: 0, right: 0),
-                action: action
+                hover: Theme.border, rest: Theme.background, insets: insets, action: action
             )
         }
-        continueButton = button("Continue Thread", "Start a thread on another server with everything that happened here", true) {
+        continueButton = button(
+            "Continue Thread", "Start a thread on another server with everything that happened here", true,
+            PlatformEdgeInsets(top: 0, left: half, bottom: 0, right: 0)
+        ) {
             [weak self] in self?.owner?.continueElsewhere()
         }
-        settingsButton = button("Open Settings", "Unlinked servers are deleted with their threads in settings", false) {
+        settingsButton = button(
+            "Open Settings", "Unlinked servers are deleted with their threads in settings", false,
+            PlatformEdgeInsets(top: 0, left: 0, bottom: 0, right: half)
+        ) {
             [weak self] in self?.owner?.openServerSettings()
         }
         surface.addSubview(continueButton)
@@ -1644,13 +1651,15 @@ final class RemovedRowView: RowView {
         let buttonsY = text.frame.maxY + Self.buttonsGap
         let gap = ControlSize.regular.gap
         let buttonHeight = RowButton.metrics.height
-        // Narrow, each takes half the row; wide, they keep their size at its end.
+        // Narrow, each takes half the row; wide, they keep their size at its end. Each width holds
+        // its half of the gap.
+        let halfRow = ((inner - gap) / 2).rounded(.down) + gap / 2
         let (settingsWidth, continueWidth) = inner < Self.halvesBelow
-            ? (((inner - gap) / 2).rounded(.down), ((inner - gap) / 2).rounded(.down))
+            ? (halfRow, halfRow)
             : (settingsButton.width, continueButton.width)
         let end = Self.padding + inner
         continueButton.frame = CGRect(x: end - continueWidth, y: buttonsY, width: continueWidth, height: buttonHeight)
-        settingsButton.frame = CGRect(x: continueButton.frame.minX - gap - settingsWidth, y: buttonsY, width: settingsWidth, height: buttonHeight)
+        settingsButton.frame = CGRect(x: continueButton.frame.minX - settingsWidth, y: buttonsY, width: settingsWidth, height: buttonHeight)
         return height
     }
 

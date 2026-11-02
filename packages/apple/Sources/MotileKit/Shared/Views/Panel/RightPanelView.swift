@@ -116,6 +116,10 @@ struct PanelLoading: View {
     }
 }
 
+/// The room between what a panel bar holds. Buttons side by side are put in a row of their own
+/// that gives it to them, so that it only looks empty.
+let panelBarGap: CGFloat = 4
+
 /// The strip under the tabs with what the open tab is about and its buttons, on one row or two.
 struct PanelBar<Content: View, Second: View>: View {
     private let content: Content
@@ -142,7 +146,7 @@ struct PanelBar<Content: View, Second: View>: View {
     }
 
     private func row<Row: View>(@ViewBuilder _ row: () -> Row) -> some View {
-        HStack(spacing: 4) { row() }
+        HStack(spacing: panelBarGap) { row() }
             .padding(.leading, 12)
             .padding(.trailing, 4)
             .frame(height: pressable(36))
@@ -439,13 +443,18 @@ struct DiffSurface: View {
                         .help(page.canReviewLines ? "Click a line's number to comment on it" : "")
                 }
                 Spacer(minLength: 4)
-                if let document = panel.diff.value, document.files.count > 1 {
-                    let allClosed = panel.collapsed.count >= document.files.count
-                    ActionButton(icon: allClosed ? .unfoldVertical : .foldVertical, help: allClosed ? "Open every file" : "Close every file") {
-                        panel.setAllCollapsed(!allClosed)
+                HStack(spacing: 0) {
+                    if let document = panel.diff.value, document.files.count > 1 {
+                        let allClosed = panel.collapsed.count >= document.files.count
+                        ActionButton(
+                            icon: allClosed ? .unfoldVertical : .foldVertical, help: allClosed ? "Open every file" : "Close every file",
+                            margin: .beside(trailing: panelBarGap)
+                        ) {
+                            panel.setAllCollapsed(!allClosed)
+                        }
                     }
+                    ActionButton(icon: .rotateCw, help: "Read the changes again", pending: panel.reading.contains(.diff)) { asked += 1 }
                 }
-                ActionButton(icon: .rotateCw, help: "Read the changes again", pending: panel.reading.contains(.diff)) { asked += 1 }
             }
             if !target.repository {
                 NoRepositoryMessage(projectID: target.projectID)
@@ -673,8 +682,10 @@ struct FileSurface: View {
                     .lineLimit(1)
                     .truncationMode(.head)
                 Spacer(minLength: 4)
-                CopyButton(help: "Copy the path") { Platform.copy(path) }
-                ActionButton(icon: .rotateCw, help: "Read the file again", pending: panel.reading.contains(.file(path))) { asked += 1 }
+                HStack(spacing: 0) {
+                    CopyButton(help: "Copy the path", margin: .beside(trailing: panelBarGap)) { Platform.copy(path) }
+                    ActionButton(icon: .rotateCw, help: "Read the file again", pending: panel.reading.contains(.file(path))) { asked += 1 }
+                }
             }
             switch panel.contents[.file(path)] {
             case nil, .loading:

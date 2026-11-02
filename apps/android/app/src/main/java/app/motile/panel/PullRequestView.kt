@@ -58,6 +58,8 @@ import app.motile.theme.SurfaceBox
 import app.motile.theme.Theme
 import app.motile.ui.ActionButton
 import app.motile.ui.ActionMenu
+import app.motile.ui.beside
+import app.motile.ui.reaching
 import app.motile.ui.Answer
 import app.motile.ui.Asking
 import app.motile.ui.ButtonVariant
@@ -130,14 +132,21 @@ private fun androidx.compose.foundation.layout.RowScope.PullRequestBar(page: Pul
         Text("Pull Request", size = 12.5f, weight = FontWeight.Medium, color = palette.foreground)
     }
     Spacer(Modifier.weight(1f).widthIn(min = 4.dp))
-    if (page != null && page.url.isNotEmpty()) {
-        ActionButton(icon = Symbol.SquareArrowOutUpRight, help = "Open on GitHub") { Platform.open(page.url) }
-    }
-    if (shown != null && store.pullRequestsUnavailable == null) {
-        ActionButton(
-            icon = Symbol.RotateCw, help = "Read the pull request again",
-            pending = PanelTab.PullRequest in store.rightPanel.pullRequests.reading, onClick = ask,
-        )
+    val opens = page != null && page.url.isNotEmpty()
+    val reads = shown != null && store.pullRequestsUnavailable == null
+    if (!opens && !reads) return
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        if (page != null && page.url.isNotEmpty()) {
+            ActionButton(
+                icon = Symbol.SquareArrowOutUpRight, help = "Open on GitHub", margin = beside(end = if (reads) panelBarGap else 0.dp),
+            ) { Platform.open(page.url) }
+        }
+        if (reads) {
+            ActionButton(
+                icon = Symbol.RotateCw, help = "Read the pull request again",
+                pending = PanelTab.PullRequest in store.rightPanel.pullRequests.reading, onClick = ask,
+            )
+        }
     }
 }
 
@@ -154,13 +163,14 @@ private fun NoPullRequest(target: PanelTarget) {
     ) {
         Icon(Symbol.GitPullRequest, IconSize.Xxl, color = palette.mutedStrongerForeground)
         Text("This branch has no pull request yet.", size = 13f, color = palette.mutedForeground)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row {
             val project = store.gitProject
             val create = project?.gitControl?.menu?.firstOrNull { it.action == "create_pr" }
+            val lists = store.pullRequestsExtended
             if (project != null && create != null && create.reason == null) {
-                ActionButton("Create PR", variant = ButtonVariant.Primary) { store.chooseGit(create, project) }
+                ActionButton("Create PR", variant = ButtonVariant.Primary, margin = beside(end = if (lists) 8.dp else 0.dp)) { store.chooseGit(create, project) }
             }
-            if (store.pullRequestsExtended) {
+            if (lists) {
                 ActionButton("Show All Pull Requests") { store.rightPanel.open(PanelTab.PullRequests) }
             }
         }
@@ -376,9 +386,9 @@ private fun androidx.compose.foundation.layout.RowScope.TitleEditor(page: PullRe
             "Title", editing, { setTitle(it) }, Modifier.fillMaxWidth().onEscape { setTitle(null) },
             size = ControlSize.Large, focusRequester = focus, onSubmit = save,
         )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row {
             Spacer(Modifier.weight(1f))
-            ActionButton("Cancel", disabled = working) { setTitle(null) }
+            ActionButton("Cancel", disabled = working, margin = beside(end = 8.dp)) { setTitle(null) }
             ActionButton(
                 "Save", variant = ButtonVariant.Primary, pending = working,
                 disabled = working || editing.isBlank() || editing == page.title, onClick = save,
@@ -523,27 +533,25 @@ private fun CommentBox(page: PullRequestPage, target: PanelTarget, number: Int, 
             if (pending.isEmpty()) "Leave a comment" else "Say something with your review (optional)", comment, setComment,
             Modifier.fillMaxWidth(), lines = 4,
         )
-        FlowRow(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
+        val gap = 8.dp
+        val margin = PaddingValues(start = gap, bottom = gap)
+        FlowRow(Modifier.fillMaxWidth().reaching(start = gap, bottom = gap), horizontalArrangement = Arrangement.End) {
             val close = page.withComment
             if (close != null && pending.isEmpty()) {
-                ActionButton(close.label, pending = work?.key == "close", disabled = busy || written.isEmpty()) { choose(close, "close") }
+                ActionButton(close.label, pending = work?.key == "close", disabled = busy || written.isEmpty(), margin = margin) { choose(close, "close") }
             }
             for (verdict in page.verdicts) {
                 val key = verdict.action
                 ActionButton(
                     verdict.label, pending = work?.key == key,
-                    disabled = busy || (verdict.action == "request_changes" && written.isEmpty() && pending.isEmpty()),
+                    disabled = busy || (verdict.action == "request_changes" && written.isEmpty() && pending.isEmpty()), margin = margin,
                 ) {
                     if (pending.isEmpty()) choose(verdict, key) else state.review(key, written, key, target, number) { setComment("") }
                 }
             }
             ActionButton(
                 if (pending.isEmpty()) "Comment" else "Send Review", variant = ButtonVariant.Primary, pending = work?.key == "comment",
-                disabled = busy || (written.isEmpty() && pending.isEmpty()),
+                disabled = busy || (written.isEmpty() && pending.isEmpty()), margin = margin,
             ) {
                 if (pending.isEmpty()) {
                     state.act("comment", text = written, key = "comment", target = target, number = number) { setComment("") }
@@ -634,10 +642,11 @@ private fun MergeBox(page: PullRequestPage, target: PanelTarget, working: PullRe
                 Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
                     val chooses = page.methods.isNotEmpty() && (primary.action == "merge" || primary.action == "enable_auto_merge")
                     val variant = buttonVariant(primary.style)
-                    Row(horizontalArrangement = Arrangement.spacedBy(1.dp)) {
+                    Row {
                         ActionButton(
                             primary.label, variant = variant, pending = working?.key == primary.key, pendingTitle = primary.pendingLabel,
                             joined = if (chooses) setOf(HorizontalEdge.Trailing) else emptySet(), disabled = working != null,
+                            margin = beside(end = if (chooses) 1.dp else 0.dp),
                         ) { run(primary) }
                         if (chooses) MethodMenu(page, target, variant, working != null)
                     }
@@ -701,9 +710,12 @@ private fun StatusRow(status: PullRequestPage.Status, working: PullRequestWork?,
             }
             status.detail?.let { Text(it, size = 12f, color = palette.mutedForeground) }
             if (status.buttons.isNotEmpty()) {
-                Row(Modifier.padding(top = 5.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    for (button in status.buttons) {
-                        ActionButton(button.label, variant = buttonVariant(button.style), pending = working?.key == button.key, disabled = working != null) {
+                Row(Modifier.padding(top = 5.dp)) {
+                    status.buttons.forEachIndexed { index, button ->
+                        ActionButton(
+                            button.label, variant = buttonVariant(button.style), pending = working?.key == button.key, disabled = working != null,
+                            margin = beside(end = if (index < status.buttons.lastIndex) 6.dp else 0.dp),
+                        ) {
                             run(button)
                         }
                     }
@@ -730,11 +742,17 @@ private fun CheckRow(check: PullRequestPage.Check) {
         check.workflow?.let { Text(it, Modifier.weight(1f, fill = false), size = 12f, color = palette.mutedStrongerForeground, maxLines = 1) }
         Spacer(Modifier.weight(0.001f).widthIn(min = 6.dp))
         Text(check.label, size = 12f, color = if (check.tone == Tone.Neutral) palette.mutedStrongerForeground else check.tone.color, maxLines = 1)
-        check.fix?.let { fix ->
-            ActionButton("Fix", help = "Have the agent fix it", variant = ButtonVariant.Link, size = ControlSize.Small) { store.handOff(fix) }
-        }
-        check.url?.let { url ->
-            ActionButton(icon = Symbol.SquareArrowOutUpRight, help = "Show its details", size = ControlSize.Small) { Platform.open(url) }
+        val fix = check.fix
+        val url = check.url
+        if (fix == null && url == null) return@Row
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (fix != null) {
+                ActionButton(
+                    "Fix", help = "Have the agent fix it", variant = ButtonVariant.Link, size = ControlSize.Small,
+                    margin = beside(end = if (url == null) 0.dp else 8.dp),
+                ) { store.handOff(fix) }
+            }
+            if (url != null) ActionButton(icon = Symbol.SquareArrowOutUpRight, help = "Show its details", size = ControlSize.Small) { Platform.open(url) }
         }
     }
 }

@@ -2,6 +2,7 @@ package app.motile.usage
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -36,11 +37,11 @@ fun UsageModel.serverChecks(all: List<Server>): List<Check> =
 
 /** The servers counted, as a menu that picks them. */
 @Composable
-fun UsageServersMenu(model: UsageModel) {
+fun UsageServersMenu(model: UsageModel, margin: PaddingValues = PaddingValues(0.dp)) {
     val servers = LocalStore.current.usageServers
     CheckMenu(
         model.serversLabel(servers), help = "The servers counted", checks = model.serverChecks(servers), icon = Symbol.Server,
-        variant = ButtonVariant.Secondary,
+        variant = ButtonVariant.Secondary, margin = margin,
     )
 }
 

@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -26,7 +27,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.staticCompositionLocalOf
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -169,15 +169,13 @@ fun ConfirmationDialog(confirmation: Confirmation, onDismiss: () -> Unit) {
                 if (confirmation.message.isNotEmpty()) {
                     Text(confirmation.message, Modifier.padding(top = 6.dp), size = 13f, color = palette.mutedForeground)
                 }
-                FlowRow(
-                    Modifier.fillMaxWidth().padding(top = 22.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
+                val gap = 8.dp
+                val margin = PaddingValues(start = gap, bottom = gap)
+                FlowRow(Modifier.fillMaxWidth().padding(top = 22.dp).reaching(start = gap, bottom = gap), horizontalArrangement = Arrangement.End) {
                     val dismissal = if (confirmation.answers.isEmpty()) ButtonVariant.Primary else ButtonVariant.Secondary
-                    ActionButton(confirmation.dismissal, variant = dismissal, size = app.motile.theme.ControlSize.Large, onClick = onDismiss)
+                    ActionButton(confirmation.dismissal, variant = dismissal, size = app.motile.theme.ControlSize.Large, margin = margin, onClick = onDismiss)
                     for (each in confirmation.answers) {
-                        ActionButton(each.title, variant = each.variant, size = app.motile.theme.ControlSize.Large) { answer(each) }
+                        ActionButton(each.title, variant = each.variant, size = app.motile.theme.ControlSize.Large, margin = margin) { answer(each) }
                     }
                 }
             }

@@ -14,7 +14,7 @@ use crate::theme::{ControlSize, Layer, Radius, Surface, colors};
 use crate::ui::logos::{pull_request_color, pull_request_symbol};
 use crate::ui::menu::{Anchor, Menu, MenuIcon};
 use crate::ui::modal::{Answer, Confirmation, Modal, confirmation, modal};
-use crate::ui::{ActionButton, PickMark, TextArea, Variant, text_area_state};
+use crate::ui::{ActionButton, PickMark, TextArea, Variant, beside, text_area_state};
 
 /// What leaves the room under the button that the composer's menus leave over theirs.
 const MENU_GAP: f32 = 16.;
@@ -330,11 +330,13 @@ impl CommitSheet {
             )
     }
 
-    fn row(&self, index: usize, file: &ChangedFile, cx: &mut Context<Self>) -> Div {
+    /// While editing all of the row toggles its file, so that no click falls between two marks.
+    fn row(&self, index: usize, file: &ChangedFile, cx: &mut Context<Self>) -> Stateful<Div> {
         let c = colors(cx);
         let excluded = self.excluded.contains(&file.path);
         let path = file.path.clone();
         div()
+            .id(("commit-file", index))
             .w_full()
             .h(px(ROW_HEIGHT))
             .flex()
@@ -342,14 +344,12 @@ impl CommitSheet {
             .gap(px(8.))
             .text_size(px(12.5))
             .when(self.editing, |row| {
-                row.child(div().id(("commit-file", index)).child(PickMark::new("pick", !excluded, true)).on_click(
-                    cx.listener(move |this, _, _, cx| {
-                        if !this.excluded.remove(&path) {
-                            this.excluded.insert(path.clone());
-                        }
-                        cx.notify();
-                    }),
-                ))
+                row.child(PickMark::new("pick", !excluded, true)).on_click(cx.listener(move |this, _, _, cx| {
+                    if !this.excluded.remove(&path) {
+                        this.excluded.insert(path.clone());
+                    }
+                    cx.notify();
+                }))
             })
             .child(
                 div()
@@ -446,18 +446,23 @@ impl Render for CommitSheet {
             .child(
                 div()
                     .flex()
-                    .gap(px(8.))
                     .child(div().flex_1())
-                    .child(button("commit-cancel", "Cancel").on_click(cx.listener(|this, _, _, cx| this.dismiss(cx))))
+                    .child(
+                        button("commit-cancel", "Cancel")
+                            .margin(beside(0., 4.))
+                            .on_click(cx.listener(|this, _, _, cx| this.dismiss(cx))),
+                    )
                     .child(
                         button("commit-new-branch", "Commit on New Branch")
                             .disabled(nothing)
+                            .margin(beside(4., 4.))
                             .on_click(cx.listener(|this, _, _, cx| this.commit(true, cx))),
                     )
                     .child(
                         button("commit", "Commit")
                             .primary()
                             .disabled(nothing)
+                            .margin(beside(4., 0.))
                             .on_click(cx.listener(|this, _, _, cx| this.commit(false, cx))),
                     ),
             );

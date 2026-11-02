@@ -236,21 +236,16 @@ impl Store {
         });
     }
 
-    /// Starts signing an account of the agent in, and opens its page once the proxy gives it.
+    /// Starts signing an account of the agent in. Its sheet shows the page to open.
     pub fn start_proxy_sign_in(&mut self, agent: Agent) {
         self.proxy.signing_in = Some(SigningIn { agent, error: None, started: false });
-        self.ask(Command::ProxySignIn { agent }, move |store, result, cx| {
+        self.ask(Command::ProxySignIn { agent }, move |store, result, _| {
             let Some(signing_in) = &mut store.proxy.signing_in else { return };
             if signing_in.agent != agent {
                 return;
             }
-            match result {
-                Ok(value) => {
-                    if let Some(url) = value["url"].as_str().filter(|url| !url.is_empty()) {
-                        cx.open_url(url);
-                    }
-                }
-                Err(error) => signing_in.error = Some(error.message),
+            if let Err(error) = result {
+                signing_in.error = Some(error.message);
             }
         });
     }

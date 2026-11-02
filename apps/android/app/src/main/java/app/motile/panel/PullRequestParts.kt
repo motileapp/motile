@@ -6,6 +6,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -58,6 +59,8 @@ import app.motile.theme.SurfaceBox
 import app.motile.theme.Theme
 import app.motile.theme.wash
 import app.motile.ui.ActionButton
+import app.motile.ui.beside
+import app.motile.ui.sharing
 import app.motile.ui.ActionMenu
 import app.motile.ui.ButtonVariant
 import app.motile.ui.Chip
@@ -111,21 +114,29 @@ fun ReviewerChip(reviewer: PullRequestPage.Reviewer) {
 /** The reactions to a comment or a review, each one a toggle, and a menu to add another. */
 @Composable
 fun ReactionBar(reactions: List<PullRequestPage.Reaction>, react: (String, Boolean) -> Unit) {
-    Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-        for (reaction in reactions) {
+    val gap = 4.dp
+    val count = reactions.size + 1
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        reactions.forEachIndexed { index, reaction ->
             ActionButton(
                 "${reaction.emoji} ${reaction.count}", help = if (reaction.mine) "Take your reaction back" else "React so too",
                 variant = if (reaction.mine) ButtonVariant.Accent else ButtonVariant.Secondary, size = ControlSize.Small, round = true,
+                margin = sharing(gap, index, count),
             ) { react(reaction.kind, !reaction.mine) }
         }
-        ReactionPicker(reactions, ControlSize.Small, react)
+        ReactionPicker(reactions, ControlSize.Small, margin = sharing(gap, count - 1, count), react = react)
     }
 }
 
 /** The menu of GitHub's reactions, to add one or take it back. */
 @Composable
-fun ReactionPicker(reactions: List<PullRequestPage.Reaction>, size: ControlSize = ControlSize.Regular, react: (String, Boolean) -> Unit) {
-    ActionMenu(icon = Symbol.SmilePlus, help = "Add a reaction", size = size) {
+fun ReactionPicker(
+    reactions: List<PullRequestPage.Reaction>,
+    size: ControlSize = ControlSize.Regular,
+    margin: PaddingValues = PaddingValues(0.dp),
+    react: (String, Boolean) -> Unit,
+) {
+    ActionMenu(icon = Symbol.SmilePlus, help = "Add a reaction", size = size, margin = margin) {
         for ((kind, emoji) in PullRequestPage.Reaction.all) {
             val mine = reactions.firstOrNull { it.kind == kind }?.mine ?: false
             item("$emoji  ${if (mine) "Take Back" else "React"}") { react(kind, !mine) }
@@ -151,8 +162,10 @@ fun PullRequestNoticeBar(notice: PullRequestNotice) {
             SelectionContainer(Modifier.weight(1f).heightIn(min = line)) {
                 Text(notice.text, size = 12.5f, color = palette.foreground)
             }
-            Row(Modifier.height(line), horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
-                notice.url?.let { url -> ActionButton("Open", variant = ButtonVariant.Link, size = ControlSize.Small) { Platform.open(url) } }
+            Row(Modifier.height(line), verticalAlignment = Alignment.CenterVertically) {
+                notice.url?.let { url ->
+                    ActionButton("Open", variant = ButtonVariant.Link, size = ControlSize.Small, margin = beside(end = 2.dp)) { Platform.open(url) }
+                }
                 ActionButton(icon = Symbol.X, help = "Close", size = ControlSize.Small) { store.rightPanel.pullRequests.dismissNotice() }
             }
         }
@@ -267,9 +280,9 @@ fun DescriptionEditor(original: String, save: (String) -> Unit) {
         } else {
             TextArea("Say what this changes and why", text, { text = it }, Modifier.weight(1f).fillMaxWidth(), lines = 4, fills = true)
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row {
             Spacer(Modifier.weight(1f))
-            ActionButton("Cancel") { close() }
+            ActionButton("Cancel", margin = beside(end = 8.dp)) { close() }
             ActionButton("Save", variant = ButtonVariant.Primary, disabled = text == original) {
                 save(text)
                 close()

@@ -74,24 +74,26 @@ struct ProxySettings: View {
         }
     }
 
-    /// An agent's accounts, a card each with its limits, and the way to add another.
+    /// The way to add an agent's account, and its accounts, a card each with its limits.
     private func accounts(of agent: Agent, in proxy: ProxyState) -> some View {
         let accounts = proxy.accounts(of: agent)
         return SettingsGroup(ProxyState.accountsID(of: agent), ProxyText.accounts(of: agent), carded: false) {
-            ForEach(accounts) { account in
-                card(account, count: accounts.count)
-            }
             ActionButton(ProxyText.addAccount(of: agent), icon: .plus, variant: .outline, size: .large, pending: store.proxySignInStarting == agent) {
                 store.startProxySignIn(agent)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+            ForEach(accounts) { account in
+                card(account, count: accounts.count)
+            }
         }
     }
 
     private func card(_ account: ProxyAccount, count: Int) -> some View {
         VStack(spacing: 0) {
             SettingsRow {
+                // As far from the card's top as its limits' numbers are from theirs.
                 ProxyAccountLabel(account: account)
+                    .padding(.vertical, 6)
             } trailing: {
                 if account.status == .signInAgain {
                     ActionButton("Sign In Again", variant: .outline, size: .large, pending: store.proxySignInStarting == account.agent) {
@@ -128,12 +130,14 @@ struct ProxySettings: View {
             SettingsRow {
                 SettingsLabel(proxy.capture.text)
             } trailing: {
-                if proxy.capture.on {
-                    ActionButton("Stop", variant: .outline, size: .large) { store.setProxyCapture(.off) }
-                }
-                ActionMenu("Capture", variant: .outline, size: .large) {
-                    Button("Capture the Next \(ProxyText.captureNext) Requests") { store.setProxyCapture(.next(ProxyText.captureNext)) }
-                    Menu("Capture a Thread") { ProxyCaptureThreads() }
+                HStack(spacing: 0) {
+                    if proxy.capture.on {
+                        ActionButton("Stop", variant: .outline, size: .large, margin: .beside(trailing: settingsHalfGap)) { store.setProxyCapture(.off) }
+                    }
+                    ActionMenu("Capture", variant: .outline, size: .large, margin: .beside(leading: proxy.capture.on ? settingsHalfGap : 0)) {
+                        Button("Capture the Next \(ProxyText.captureNext) Requests") { store.setProxyCapture(.next(ProxyText.captureNext)) }
+                        Menu("Capture a Thread") { ProxyCaptureThreads() }
+                    }
                 }
             }
             .card()
@@ -202,11 +206,11 @@ private struct ProxyRenameSheet: View {
                 .font(.ui(size: 15, weight: .semibold))
             InputField("Work", text: $name, focus: $focused)
                 .onSubmit(save)
-            HStack(spacing: 8) {
+            HStack(spacing: 0) {
                 Spacer()
-                ActionButton("Cancel") { close() }
+                ActionButton("Cancel", margin: .beside(trailing: 4)) { close() }
                     .keyboardShortcut(.cancelAction)
-                ActionButton("Save", variant: .primary, action: save)
+                ActionButton("Save", variant: .primary, margin: .beside(leading: 4), action: save)
                     .keyboardShortcut(.defaultAction)
                     .disabled(trimmed.isEmpty)
             }

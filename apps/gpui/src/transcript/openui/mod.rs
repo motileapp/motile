@@ -62,6 +62,8 @@ pub struct UiCx {
     pub streaming: bool,
     /// What is painted under the node where it isn't its surface's own colour.
     pub ground: Option<Hsla>,
+    /// The node lies in a control that is pressed as a whole, whose cursor its text keeps.
+    pub in_control: bool,
     pub sink: Sink,
     pub store: Option<Entity<Store>>,
     /// The transcript the row lies in, which a web view over the row keeps clear of.
@@ -94,6 +96,11 @@ impl UiCx {
     pub fn over(&self, ground: Option<Hsla>) -> Self {
         Self { ground: ground.or(self.ground), ..self.clone() }
     }
+
+    /// Inside a control that is pressed as a whole.
+    pub fn in_control(&self) -> Self {
+        Self { in_control: true, ..self.clone() }
+    }
 }
 
 /// A program's row: its tree, and what keeps it from running under it.
@@ -121,6 +128,7 @@ pub fn ui_row(model: &RowModel, ctx: &RowContext, window: &mut Window, cx: &mut 
         surface: Surface::Background,
         streaming: !ui.complete,
         ground: None,
+        in_control: false,
         sink,
         store: Some(ctx.store.clone()),
         transcript: Some(ctx.view.clone()),

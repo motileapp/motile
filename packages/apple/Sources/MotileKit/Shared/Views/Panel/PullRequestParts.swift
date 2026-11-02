@@ -37,18 +37,23 @@ struct ReactionBar: View {
     /// Has the user react so, or take it back.
     let react: (String, Bool) -> Void
 
+    private static let gap: CGFloat = 4
+
     var body: some View {
-        HStack(spacing: 4) {
-            ForEach(reactions) { reaction in
+        HStack(spacing: 0) {
+            ForEach(Array(reactions.enumerated()), id: \.element.id) { index, reaction in
                 ActionButton(
                     "\(reaction.emoji) \(reaction.count)", help: reaction.mine ? "Take your reaction back" : "React so too",
-                    variant: reaction.mine ? .accent : .secondary, size: .small, round: true
+                    variant: reaction.mine ? .accent : .secondary, size: .small, round: true,
+                    margin: .sharing(Self.gap, at: index, of: reactions.count + 1)
                 ) {
                     react(reaction.kind, !reaction.mine)
                 }
                 .monospacedDigit()
             }
-            ReactionPicker(reactions: reactions, size: .small, react: react)
+            ReactionPicker(
+                reactions: reactions, size: .small, margin: .sharing(Self.gap, at: reactions.count, of: reactions.count + 1), react: react
+            )
         }
     }
 }
@@ -57,10 +62,11 @@ struct ReactionBar: View {
 struct ReactionPicker: View {
     let reactions: [PullRequestPage.Reaction]
     var size = ControlSize.regular
+    var margin = EdgeInsets()
     let react: (String, Bool) -> Void
 
     var body: some View {
-        ActionMenu(icon: .smilePlus, help: "Add a reaction", size: size) {
+        ActionMenu(icon: .smilePlus, help: "Add a reaction", size: size, margin: margin) {
             ForEach(PullRequestPage.Reaction.all, id: \.kind) { choice in
                 let mine = reactions.first { $0.kind == choice.kind }?.mine ?? false
                 Button("\(choice.emoji)  \(mine ? "Take Back" : "React")") { react(choice.kind, !mine) }
@@ -89,9 +95,9 @@ struct PullRequestNoticeBar: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(minHeight: Self.lineHeight)
                 Spacer(minLength: 4)
-                HStack(spacing: 2) {
+                HStack(spacing: 0) {
                     if let url = notice.url {
-                        ActionButton("Open", variant: .link, size: .small) { Platform.open(url) }
+                        ActionButton("Open", variant: .link, size: .small, margin: .beside(trailing: 2)) { Platform.open(url) }
                     }
                     ActionButton(icon: .x, help: "Close", size: .small) { store.rightPanel.dismissPullRequestNotice() }
                 }
@@ -162,11 +168,11 @@ struct DescriptionEditor: View {
             } else {
                 TextArea("Say what this changes and why", text: $text, lines: 4, fills: true)
             }
-            HStack(spacing: 8) {
+            HStack(spacing: 0) {
                 Spacer()
-                ActionButton("Cancel") { close() }
+                ActionButton("Cancel", margin: .beside(trailing: 4)) { close() }
                     .keyboardShortcut(.cancelAction)
-                ActionButton("Save", variant: .primary) {
+                ActionButton("Save", variant: .primary, margin: .beside(leading: 4)) {
                     save(text)
                     close()
                 }

@@ -431,7 +431,7 @@ fn popover(
     let ink = if lit { c.muted_foreground } else { c.foreground };
     let parts = window
         .with_text_style(Some(TextStyleRefinement { color: Some(ink), ..Default::default() }), |window| {
-            slot(trigger, &format!("{id}/trigger"), ink, cx, window, app)
+            slot(trigger, &format!("{id}/trigger"), ink, &cx.in_control(), window, app)
         });
     let (node_id, toggles) = (id.to_string(), cx.clone());
     let focus = window.use_keyed_state(cx.id(id, "focus"), app, |_, cx| cx.focus_handle()).read(app).clone();

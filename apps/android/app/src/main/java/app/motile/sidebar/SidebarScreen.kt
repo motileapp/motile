@@ -82,6 +82,7 @@ import app.motile.theme.Theme
 import app.motile.theme.opacity
 import app.motile.theme.shadow
 import app.motile.ui.AccountMenu
+import app.motile.ui.beside
 import app.motile.ui.ActionButton
 import app.motile.ui.CloseModal
 import app.motile.ui.InputField
@@ -633,8 +634,8 @@ private fun RenameDialog(thread: ThreadInfo, onDismiss: () -> Unit) {
                     "Title", title, { title = it }, Modifier.fillMaxWidth(), size = ControlSize.Large, focusRequester = field,
                     onSubmit = ::rename,
                 )
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
-                    ActionButton("Cancel", size = ControlSize.Large, onClick = onDismiss)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    ActionButton("Cancel", size = ControlSize.Large, margin = beside(end = 8.dp), onClick = onDismiss)
                     ActionButton("Rename", variant = ButtonVariant.Primary, size = ControlSize.Large, disabled = title.isBlank(), onClick = ::rename)
                 }
             }

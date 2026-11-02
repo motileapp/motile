@@ -43,6 +43,7 @@ import app.motile.theme.SurfaceBox
 import app.motile.theme.Theme
 import app.motile.theme.wash
 import app.motile.ui.ActionButton
+import app.motile.ui.beside
 import app.motile.ui.ButtonVariant
 import app.motile.ui.Chip
 import app.motile.ui.HighlightButton
@@ -204,9 +205,9 @@ private fun ConversationFooter(thread: PullRequestPage.Thread, actions: PullRequ
     if (replying) {
         Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             TextArea("Reply", reply, { reply = it }, Modifier.fillMaxWidth())
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row {
                 Spacer(Modifier.weight(1f))
-                ActionButton("Cancel") {
+                ActionButton("Cancel", margin = beside(end = 8.dp)) {
                     replying = false
                     reply = ""
                 }
@@ -224,8 +225,11 @@ private fun ConversationFooter(thread: PullRequestPage.Thread, actions: PullRequ
         return
     }
     Row(Modifier.padding(10.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-        ActionButton("Reply") { replying = true }
-        thread.fix?.let { fix -> ActionButton("Fix", help = "Have the agent do what it asks") { actions.handOff(fix) } }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            val fix = thread.fix
+            ActionButton("Reply", margin = beside(end = if (fix == null) 0.dp else 6.dp)) { replying = true }
+            if (fix != null) ActionButton("Fix", help = "Have the agent do what it asks") { actions.handOff(fix) }
+        }
         Spacer(Modifier.weight(1f))
         if (thread.canResolve) {
             ActionButton(

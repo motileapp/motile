@@ -207,6 +207,7 @@ private fun SliderControl(
                 )
                 if (enabled) setProgress { set(it.toDouble()); true } else disabled()
             }
+            .arrowPointer()
             .then(input)
             .hoverable(interaction, enabled)
             .focusable(enabled, interaction)

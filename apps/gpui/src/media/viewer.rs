@@ -13,10 +13,12 @@ use crate::models::{MediaSource, ViewedMedia};
 use crate::store::Store;
 use crate::theme::{ControlSize, Radius, colors};
 use crate::ui::parts::CopyButton;
-use crate::ui::{ActionButton, Spinner, Variant};
+use crate::ui::{ActionButton, Spinner, Variant, beside};
 
 /// The room the picture leaves around it when it fits the window.
 pub const MARGIN: (f32, f32) = (64., 52.);
+/// The room between the corner's buttons' lights, which their clicks share.
+const CORNER_GAP: f32 = 8.;
 /// A small image is enlarged to fit the window, up to twice its size.
 const LARGEST_FIT: f32 = 2.;
 
@@ -219,6 +221,7 @@ impl MediaViewer {
         id: &'static str,
         symbol: &'static str,
         help: impl Into<SharedString>,
+        margin: Edges<f32>,
         on_click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
     ) -> Div {
         div().on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation()).child(
@@ -227,6 +230,7 @@ impl MediaViewer {
                 .large()
                 .round(true)
                 .symbol_size(ControlSize::Large.small_symbol())
+                .margin(margin)
                 .on_click(on_click),
         )
     }
@@ -306,7 +310,6 @@ impl Render for MediaViewer {
             .top(px(crate::theme::TOP_BAR + 10.))
             .right(px(10.))
             .flex()
-            .gap(px(8.))
             .when(self.file.is_some(), |corner| {
                 let copy = cx.entity().downgrade();
                 corner
@@ -323,13 +326,15 @@ impl Render for MediaViewer {
                             .size(ControlSize::Large)
                             .symbol_size(ControlSize::Large.small_symbol())
                             .round(true)
-                            .copies(self.copies),
+                            .copies(self.copies)
+                            .margin(beside(0., CORNER_GAP / 2.)),
                         ),
                     )
                     .child(Self::round_button(
                         "save-viewed",
                         "download",
                         format!("Save As ({save_keys})"),
+                        beside(CORNER_GAP / 2., CORNER_GAP / 2.),
                         cx.listener(|this, _, _, cx| this.save(cx)),
                     ))
             })
@@ -337,6 +342,7 @@ impl Render for MediaViewer {
                 "close-viewer",
                 "x",
                 "Close (Esc)",
+                beside(if self.file.is_some() { CORNER_GAP / 2. } else { 0. }, 0.),
                 cx.listener(|this, _, _, cx| this.close(cx)),
             ));
 
@@ -383,12 +389,14 @@ impl Render for MediaViewer {
                                     "previous",
                                     "chevron-left",
                                     "Previous (←)",
+                                    Edges::default(),
                                     cx.listener(|this, _, _, cx| this.step(-1, cx)),
                                 ))
                                 .child(Self::round_button(
                                     "next",
                                     "chevron-right",
                                     "Next (→)",
+                                    Edges::default(),
                                     cx.listener(|this, _, _, cx| this.step(1, cx)),
                                 )),
                         )

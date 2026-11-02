@@ -927,6 +927,7 @@ impl Render for Composer {
             .flex()
             .flex_col()
             // The wide shadow the box and its strips cast together, from their outlines behind them all.
+            // The outlines keep the transcript under them from taking the pointer.
             .child(
                 div()
                     .absolute()
@@ -941,10 +942,18 @@ impl Render for Composer {
                                 .mx(px(RADIUS))
                                 .rounded_t(px(top_radius))
                                 .bg(c.composer)
-                                .shadow(shadow.clone()),
+                                .shadow(shadow.clone())
+                                .block_mouse_except_scroll(),
                         )
                     })
-                    .child(div().flex_1().rounded(px(RADIUS)).bg(c.composer).shadow(shadow.clone()))
+                    .child(
+                        div()
+                            .flex_1()
+                            .rounded(px(RADIUS))
+                            .bg(c.composer)
+                            .shadow(shadow.clone())
+                            .block_mouse_except_scroll(),
+                    )
                     .when(shown_bottom, |outline| {
                         outline.child(
                             div()
@@ -953,7 +962,8 @@ impl Render for Composer {
                                 .mx(px(RADIUS))
                                 .rounded_b(px(strips::STRIP_RADIUS))
                                 .bg(c.composer)
-                                .shadow(shadow),
+                                .shadow(shadow)
+                                .block_mouse_except_scroll(),
                         )
                     }),
             )

@@ -100,9 +100,16 @@ pub fn from_claude_usage(usage: &Value) -> Reading {
         ]
         .iter()
         .filter_map(|(key, label, secs)| claude_window(&usage[key], label, *secs, "utilization"))
+        .chain(usage["model_scoped"].as_array().into_iter().flatten().filter_map(claude_model_window))
         .collect(),
     };
     Reading { windows, reset_credits: None, whole: true }
+}
+
+/// A model's own week, which some accounts are told apart from the list they aren't given.
+fn claude_model_window(limit: &Value) -> Option<LimitWindow> {
+    let label = format!("Weekly · {}", limit["display_name"].as_str()?);
+    claude_window(limit, &label, WEEK_SECS, "utilization")
 }
 
 fn claude_listed_window(limit: &Value) -> Option<LimitWindow> {
@@ -264,6 +271,12 @@ mod tests {
                            "seven_day": {"utilization": 45.0, "resets_at": null}, "seven_day_opus": null});
         let labels: Vec<_> = from_claude_usage(&older).windows.into_iter().map(|window| window.label).collect();
         assert_eq!(labels, ["Session", "Weekly"]);
+
+        let apart = json!({"five_hour": {"utilization": 90, "resets_at": null}, "seven_day": {"utilization": 0, "resets_at": null},
+                           "model_scoped": [{"display_name": "Fable", "utilization": 12, "resets_at": null}]});
+        let windows: Vec<_> =
+            from_claude_usage(&apart).windows.into_iter().map(|window| (window.label, window.used_percent)).collect();
+        assert_eq!(windows, [("Session".into(), 90.0), ("Weekly".into(), 0.0), ("Weekly · Fable".to_string(), 12.0)]);
     }
 
     #[test]

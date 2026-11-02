@@ -191,10 +191,16 @@ class FlippedView: NSView {
         onHover?(nil)
     }
 
+    /// The cursor of a view that takes clicks.
+    var cursor: NSCursor? {
+        guard onPress != nil else { return nil }
+        return pointer == .hand ? .pointingHand : .arrow
+    }
+
     /// A view that takes clicks keeps its cursor, also when it floats over text.
     override func resetCursorRects() {
-        guard onPress != nil else { return }
-        addCursorRect(bounds, cursor: pointer == .hand ? .pointingHand : .arrow)
+        guard let cursor else { return }
+        addCursorRect(bounds, cursor: cursor)
     }
 
     override func menu(for event: NSEvent) -> NSMenu? {
@@ -496,9 +502,85 @@ final class IconButton: NSButton {
     }
 }
 
+extension NSView {
+    /// Whether the view, and not something that lies over it, is under the pointer.
+    func isUnderPointer(_ event: NSEvent) -> Bool {
+        window?.contentView?.hitTest(event.locationInWindow)?.isDescendant(of: self) ?? false
+    }
+}
+
+/// Keeps text's I-beam to where the text is the view under the pointer, not a control inside it
+/// or what lies over it. AppKit's text sets it anywhere in its visible rect, also under a menu.
+struct TextCursor {
+    private var covered = false
+
+    /// Whether the text sets the cursor for the event. As the pointer moves onto what covers
+    /// the text, an I-beam left there turns to that view's cursor.
+    mutating func owns(_ event: NSEvent, in text: NSView) -> Bool {
+        let hit = text.window?.contentView?.hitTest(event.locationInWindow)
+        let owns = hit.map { $0 === text || !($0 is FlippedView || $0 is NSControl) && $0.isDescendant(of: text) } ?? false
+        defer { covered = !owns }
+        guard !owns else { return true }
+        guard !covered || event.type == .cursorUpdate, NSCursor.current == NSCursor.iBeam else { return false }
+        Self.cursor(over: hit)?.set()
+        return false
+    }
+
+    /// The cursor of what covers text; none over other text, which sets its own.
+    private static func cursor(over view: NSView?) -> NSCursor? {
+        switch view {
+        case let view as FlippedView: view.cursor ?? .arrow
+        case is NSText: nil
+        case let field as NSTextField: field.isEditable || field.isSelectable ? nil : .arrow
+        default: .arrow
+        }
+    }
+}
+
+/// A text view whose I-beam only shows where nothing lies over it.
+class PointerTextView: NSTextView {
+    private var pointer = TextCursor()
+
+    override func mouseMoved(with event: NSEvent) {
+        guard pointer.owns(event, in: self) else { return }
+        super.mouseMoved(with: event)
+    }
+
+    override func cursorUpdate(with event: NSEvent) {
+        guard pointer.owns(event, in: self) else { return }
+        super.cursorUpdate(with: event)
+    }
+}
+
+/// A field whose I-beam only shows where nothing lies over it.
+final class PointerTextField: NSTextField {
+    private var pointer = TextCursor()
+    private var tracking: NSTrackingArea?
+
+    override func resetCursorRects() {}
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        guard tracking == nil else { return }
+        let area = NSTrackingArea(rect: .zero, options: [.cursorUpdate, .mouseMoved, .activeInKeyWindow, .inVisibleRect], owner: self)
+        addTrackingArea(area)
+        tracking = area
+    }
+
+    override func cursorUpdate(with event: NSEvent) {
+        guard pointer.owns(event, in: self) else { return }
+        (isEnabled ? NSCursor.iBeam : NSCursor.arrow).set()
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        guard pointer.owns(event, in: self), isEnabled else { return super.mouseMoved(with: event) }
+        NSCursor.iBeam.set()
+    }
+}
+
 /// A read-only text view that the transcript sizes itself. It never scrolls; wheel events go on
 /// to the transcript.
-final class RowTextView: NSTextView {
+final class RowTextView: PointerTextView {
     /// Called when the user starts selecting here, so other rows can let go of their selection.
     var onSelect: (() -> Void)?
     private var system: TextSystem!
@@ -572,21 +654,6 @@ final class RowTextView: NSTextView {
 
     override func scrollWheel(with event: NSEvent) {
         nextResponder?.scrollWheel(with: event)
-    }
-
-    // What floats over the text, like the jump button, keeps its own cursor.
-    override func mouseMoved(with event: NSEvent) {
-        guard isUnderPointer(event) else { return }
-        super.mouseMoved(with: event)
-    }
-
-    override func cursorUpdate(with event: NSEvent) {
-        guard isUnderPointer(event) else { return }
-        super.cursorUpdate(with: event)
-    }
-
-    private func isUnderPointer(_ event: NSEvent) -> Bool {
-        window?.contentView?.hitTest(event.locationInWindow)?.isDescendant(of: self) ?? false
     }
 
     // The transcript decides the size; the text view must not grow itself to fit.

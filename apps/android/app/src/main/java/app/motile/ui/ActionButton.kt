@@ -361,6 +361,27 @@ fun dotted(text: String, muted: Color): AnnotatedString = buildAnnotatedString {
 }
 
 /**
+ * Room beside a control that is its own: the gap to the control after it, so that the gap is only
+ * seen and a press in it lands on one of them. The whole gap goes to one, as halves would each be
+ * rounded to pixels apart and could draw it a pixel off.
+ */
+fun beside(start: Dp = 0.dp, end: Dp = 0.dp): PaddingValues = PaddingValues(start = start, end = end)
+
+/** The room of the control at `index` of `count` side by side, whose lights stand `gap` apart. */
+fun sharing(gap: Dp, index: Int, count: Int): PaddingValues = beside(end = if (index < count - 1) gap else 0.dp)
+
+/**
+ * Lays out what holds controls with margins that far past its sides, as a flow of them that each
+ * take the whole gap after them, so that their lights stand where they would without.
+ */
+fun Modifier.reaching(start: Dp = 0.dp, top: Dp = 0.dp, end: Dp = 0.dp, bottom: Dp = 0.dp): Modifier = layout { measurable, constraints ->
+    val (left, up) = start.roundToPx() to top.roundToPx()
+    val (width, height) = left + end.roundToPx() to up + bottom.roundToPx()
+    val placeable = measurable.measure(constraints.offset(horizontal = width, vertical = height))
+    layout((placeable.width - width).coerceAtLeast(0), (placeable.height - height).coerceAtLeast(0)) { placeable.placeRelative(-left, -up) }
+}
+
+/**
  * A control's press and look around any label: the button's look for what draws its own label, as
  * SwiftUI's `.control()` button style. `margin` is room around it that is its own, so that
  * neighbours leave no gap to miss. A control shorter than a finger needs takes presses as far as
@@ -396,6 +417,7 @@ fun ControlButton(
             .then(if (stretches) Modifier.fillMaxWidth() else Modifier)
             .opacity(Opacity.Disabled, on = !enabled && !pending)
             .semantics { if (help != null) contentDescription = help }
+            .arrowPointer()
             .combinedClickable(
                 interactionSource = interaction,
                 indication = null,

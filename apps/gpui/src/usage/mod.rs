@@ -14,13 +14,15 @@ use crate::store::usage::{UsagePeriod, UsageTab};
 use crate::theme::{self, ControlSize, colors};
 use crate::ui::menu::Menu;
 use crate::ui::parts::{Check, CheckMenu};
-use crate::ui::{ActionButton, ActionMenu, Segmented, Spinner, Variant, text_width};
+use crate::ui::{ActionButton, ActionMenu, Segmented, Spinner, Variant, beside, text_width};
 
 /// How wide the content is at most.
 const CONTENT_WIDTH: f32 = 880.;
 const MARGIN: f32 = 24.;
 const TOP: f32 = 36.;
 const TRAILING: f32 = 14.;
+/// The room between the controls' lights, which a button beside them takes as its own.
+const CONTROL_GAP: f32 = 8.;
 
 pub struct UsageRoute {
     store: Entity<Store>,
@@ -110,10 +112,10 @@ impl UsageRoute {
             >= segmented_width(&["Cost", "Tokens", "Limits"], window)
                 + segmented_width(&periods, window)
                 + ControlSize::Regular.height()
-                + 2. * 8.;
+                + 2. * CONTROL_GAP;
         let picker = if fits {
             let handle = self.store.clone();
-            Segmented::new(
+            let picker = Segmented::new(
                 "usage-period",
                 periods.iter().map(|label| SharedString::from(*label)).collect(),
                 UsagePeriod::ALL.iter().position(|shown| *shown == period).unwrap_or(0),
@@ -124,8 +126,8 @@ impl UsageRoute {
                     store.set_usage_period(UsagePeriod::ALL[index]);
                     cx.notify();
                 })
-            })
-            .into_any_element()
+            });
+            div().pl(px(CONTROL_GAP)).child(picker).into_any_element()
         } else {
             let handle = self.store.clone();
             ActionMenu::new("usage-period-menu", period.label(), move |_, _| {
@@ -139,19 +141,21 @@ impl UsageRoute {
                     })
                 })
             })
+            .margin(beside(CONTROL_GAP, 0.))
             .button(|button| button.variant(Variant::Secondary).disabled(tab == UsageTab::Limits))
             .into_any_element()
         };
         let handle = self.store.clone();
         let refresh = ActionButton::icon("usage-refresh", "refresh-cw", "Refresh")
             .pending(store.usage.refreshing)
+            .margin(beside(CONTROL_GAP, 0.))
             .on_click(move |_, _, cx| {
                 handle.update(cx, |store, cx| {
                     store.refresh_usage();
                     cx.notify();
                 })
             });
-        div().flex().items_center().gap(px(8.)).child(tabs).child(picker).child(refresh)
+        div().flex().items_center().child(tabs).child(picker).child(refresh)
     }
 
     fn content(&self, content_width: f32, cx: &mut Context<Self>) -> AnyElement {

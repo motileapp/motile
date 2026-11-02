@@ -174,13 +174,13 @@ struct ConversationCard: View {
         if replying {
             VStack(alignment: .leading, spacing: 8) {
                 TextArea("Reply", text: $reply)
-                HStack(spacing: 8) {
+                HStack(spacing: 0) {
                     Spacer()
-                    ActionButton("Cancel") {
+                    ActionButton("Cancel", margin: .beside(trailing: 4)) {
                         replying = false
                         reply = ""
                     }
-                    ActionButton("Reply", variant: .primary, pending: actions.working?.key == "reply:\(thread.id)") {
+                    ActionButton("Reply", variant: .primary, pending: actions.working?.key == "reply:\(thread.id)", margin: .beside(leading: 4)) {
                         actions.reply(thread.id, reply.trimmingCharacters(in: .whitespacesAndNewlines)) {
                             replying = false
                             reply = ""
@@ -191,14 +191,16 @@ struct ConversationCard: View {
             }
             .padding(10)
         } else {
-            HStack(spacing: 6) {
-                ActionButton("Reply") { replying = true }
+            HStack(spacing: 0) {
+                ActionButton("Reply", margin: .beside(trailing: thread.fix == nil ? 6 : 3)) { replying = true }
                 if let fix = thread.fix {
-                    ActionButton("Fix", help: "Have the agent do what it asks") { actions.handOff(fix) }
+                    ActionButton("Fix", help: "Have the agent do what it asks", margin: .beside(leading: 3, trailing: 6)) { actions.handOff(fix) }
                 }
                 Spacer(minLength: 0)
                 if thread.canResolve {
-                    ActionButton(thread.resolved ? "Unresolve" : "Resolve", pending: actions.working?.key == "resolve:\(thread.id)") {
+                    ActionButton(
+                        thread.resolved ? "Unresolve" : "Resolve", pending: actions.working?.key == "resolve:\(thread.id)", margin: .beside(leading: 6)
+                    ) {
                         actions.resolve(thread.id, !thread.resolved)
                     }
                     .disabled(busy)

@@ -32,6 +32,8 @@ pub struct RichText {
     skills: Vec<Range<usize>>,
     /// The transcript row it is in.
     row: Option<u64>,
+    /// It lies in a control, whose cursor it keeps in place of the I-beam.
+    in_control: bool,
     /// Where it comes in the window's text, which a copied selection keeps to.
     order: u64,
 }
@@ -172,6 +174,7 @@ impl RichText {
             tint_glyphs: None,
             skills: Vec::new(),
             row: None,
+            in_control: false,
             order: 0,
         }
     }
@@ -179,6 +182,12 @@ impl RichText {
     /// The transcript row it is in, which a selection keeps to.
     pub fn row(mut self, row: u64) -> Self {
         self.row = Some(row);
+        self
+    }
+
+    /// Keeps the cursor of the control it lies in, which would show the I-beam over it.
+    pub fn in_control(mut self, inside: bool) -> Self {
+        self.in_control = inside;
         self
     }
 
@@ -413,7 +422,9 @@ impl Element for RichText {
         let layout = self.styled.layout().clone();
         let projection =
             kept.handle.update_runs(&[TextSelectionRun::new(self.text.clone(), layout.clone(), bounds)], cx);
-        window.set_cursor_style(CursorStyle::IBeam, hitbox);
+        if !self.in_control {
+            window.set_cursor_style(CursorStyle::IBeam, hitbox);
+        }
         self.listen_for_presses(&kept.handle, hitbox, bounds, window);
         let glyphs =
             self.tint_glyphs.unwrap_or_else(|| window.text_style().font_size.to_pixels(window.rem_size()) * 1.22);

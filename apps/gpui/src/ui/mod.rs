@@ -391,6 +391,17 @@ pub fn even(all: f32) -> Edges<f32> {
     edges(all, all, all, all)
 }
 
+/// Room beside a control that is its own: its half of the gap to the control before it and to
+/// the one after it, so that the gap is only seen and a click in it lands on one of them.
+pub fn beside(left: f32, right: f32) -> Edges<f32> {
+    edges(0., left, 0., right)
+}
+
+/// The room of the control at `index` of `count` side by side, whose lights stand `gap` apart.
+pub fn sharing(gap: f32, index: usize, count: usize) -> Edges<f32> {
+    beside(if index > 0 { gap / 2. } else { 0. }, if index + 1 < count { gap / 2. } else { 0. })
+}
+
 /// The tooltip that says `text`. It isn't shown once a menu, a dropdown, a modal, a popover, the
 /// viewer or the command panel has opened over what it belongs to, nor when that was pressed while
 /// it waited to show, as the system's tooltips aren't.

@@ -4,6 +4,7 @@ import android.content.Intent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -35,6 +36,7 @@ import app.motile.theme.ControlSize
 import app.motile.theme.LocalPalette
 import app.motile.theme.Theme
 import app.motile.ui.ActionButton
+import app.motile.ui.beside
 import app.motile.ui.ButtonVariant
 import app.motile.ui.InputField
 import app.motile.ui.HoldsModal
@@ -255,12 +257,14 @@ private fun VariableRow(edited: EditedVariable, kept: Boolean, server: Server, r
                     )
             }
         }
-        ActionButton(
-            icon = if (variable.sensitive) Symbol.EyeOff else Symbol.Eye,
-            help = if (variable.sensitive) "Sensitive: hidden and kept on ${server.name}" else "Shown: mark it sensitive",
-            selected = variable.sensitive,
-        ) { edited.variable = variable.copy(sensitive = !variable.sensitive) }
-        ActionButton(icon = Symbol.X, help = "Remove the variable", onClick = remove)
+        Row {
+            ActionButton(
+                icon = if (variable.sensitive) Symbol.EyeOff else Symbol.Eye,
+                help = if (variable.sensitive) "Sensitive: hidden and kept on ${server.name}" else "Shown: mark it sensitive",
+                selected = variable.sensitive, margin = beside(end = 12.dp),
+            ) { edited.variable = variable.copy(sensitive = !variable.sensitive) }
+            ActionButton(icon = Symbol.X, help = "Remove the variable", onClick = remove)
+        }
     }
 }
 

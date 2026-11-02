@@ -71,13 +71,19 @@ extension UIView {
 
 /// A view that can take taps, say where a finger or the pointer is on it and open a menu. The
 /// Mac's twin has its origin at the top left as every view has here, which is what it is named for.
-class FlippedView: UIView, UIContextMenuInteractionDelegate, UIGestureRecognizerDelegate {
+class FlippedView: UIView, UIContextMenuInteractionDelegate, UIGestureRecognizerDelegate, UIPointerInteractionDelegate {
     enum Pointer {
         case arrow, hand
     }
 
     /// Called with where the view was tapped. A view with one takes the taps on what is inside it.
-    var onPress: ((CGPoint) -> Void)?
+    var onPress: ((CGPoint) -> Void)? {
+        didSet {
+            guard onPress != nil, !hasPointer else { return }
+            hasPointer = true
+            addInteraction(UIPointerInteraction(delegate: self))
+        }
+    }
     /// Called with where a finger or the pointer is on the view, and with nothing when it leaves.
     var onHover: ((CGPoint?) -> Void)? {
         didSet {
@@ -117,6 +123,7 @@ class FlippedView: UIView, UIContextMenuInteractionDelegate, UIGestureRecognizer
     private var hover: UIHoverGestureRecognizer?
     private var drag: UIPanGestureRecognizer?
     private var hasMenu = false
+    private var hasPointer = false
     private var pressing = false
 
     /// Where the focus ring goes, and its corners.
@@ -236,6 +243,16 @@ class FlippedView: UIView, UIContextMenuInteractionDelegate, UIGestureRecognizer
         case .began, .changed: onHover?(recognizer.location(in: self))
         default: onHover?(nil)
         }
+    }
+
+    /// A view that takes taps keeps the system's pointer, also when it lies in text.
+    func pointerInteraction(_ interaction: UIPointerInteraction, regionFor request: UIPointerRegionRequest, defaultRegion: UIPointerRegion) -> UIPointerRegion? {
+        guard onPress != nil, takesPress(at: request.location) else { return nil }
+        return defaultRegion
+    }
+
+    func pointerInteraction(_ interaction: UIPointerInteraction, styleFor region: UIPointerRegion) -> UIPointerStyle? {
+        .system()
     }
 
     func contextMenuInteraction(_ interaction: UIContextMenuInteraction, configurationForMenuAtLocation location: CGPoint) -> UIContextMenuConfiguration? {
@@ -472,6 +489,9 @@ final class IconButton: UIButton {
         accessibilityLabel = tooltip
         set(symbol: symbol, title: title)
         addAction(UIAction { _ in action() }, for: .touchUpInside)
+        // The system's pointer, also over text, whose I-beam would show through it.
+        isPointerInteractionEnabled = true
+        pointerStyleProvider = { _, _, _ in .system() }
     }
 
     func set(symbol: Symbol, title: String = "") {

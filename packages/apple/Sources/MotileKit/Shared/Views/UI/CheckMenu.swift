@@ -20,11 +20,13 @@ struct CheckMenu: View {
     private let size: ControlSize
     private let tint: Color?
     private let checks: [Check]
+    /// Room around it that takes its presses, as a button's `margin`.
+    private let margin: EdgeInsets
     @State private var open = false
 
     init(
         _ title: String, icon: Symbol? = nil, help: String, variant: ButtonVariant = .ghost, size: ControlSize = .regular,
-        tint: Color? = nil, checks: [Check]
+        tint: Color? = nil, margin: EdgeInsets = EdgeInsets(), checks: [Check]
     ) {
         self.title = title
         self.icon = icon
@@ -32,16 +34,21 @@ struct CheckMenu: View {
         self.variant = variant
         self.size = size
         self.tint = tint
+        self.margin = margin
         self.checks = checks
     }
 
     var body: some View {
-        ActionButton(title, icon: icon, help: help, variant: variant, size: size, selected: open, opens: true, tint: tint) {
+        ActionButton(title, icon: icon, help: help, variant: variant, size: size, selected: open, opens: true, tint: tint, margin: margin) {
             show(true)
         }
-        .anchorPreference(key: OpenDropdown.self, value: .bounds) { anchor in
-            guard open else { return nil }
-            return OpenDropdown.Shown(anchor: anchor, content: AnyView(card)) { show(false) }
+        .background {
+            Color.clear
+                .padding(margin)
+                .anchorPreference(key: OpenDropdown.self, value: .bounds) { anchor in
+                    guard open else { return nil }
+                    return OpenDropdown.Shown(anchor: anchor, content: AnyView(card)) { show(false) }
+                }
         }
     }
 
@@ -144,6 +151,7 @@ extension View {
                     .shadow(.md)
             }
             .overlay { shape.strokeBorder(Color.themeBorderPopover, lineWidth: 1) }
+            .arrowPointer()
             .environment(\.surface, .popover)
     }
 }
@@ -175,6 +183,7 @@ private struct DropdownLayer: View {
                 Color.clear
                     .contentShape(Rectangle())
                     .onTapGesture(perform: open.close)
+                    .arrowPointer()
                 // One that would have too little room under its button, as the strip under the
                 // composer at the window's bottom, opens above it.
                 let below = proxy.size.height - button.maxY

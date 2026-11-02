@@ -116,6 +116,7 @@ fn rich_text(id: ElementId, text: &Rich, look: Look, cx: &UiCx, app: &App) -> Ri
     let tint = cx.surface.layer(Layer::Control, colors(app));
     RichText::with_runs(id, set.text, set.runs)
         .row(cx.key)
+        .in_control(cx.in_control)
         .links(set.links, open_link)
         .tinted(set.code, tint)
         .tint_size(px(crate::fonts::inline_code_size(look.ty.size)))

@@ -71,26 +71,42 @@ pub enum Pace {
     Under,
 }
 
-/// The sections, Claude Code's first, an account several servers share once. The proxy's `accounts`
+/// The sections, Claude Code's first, each account once however many servers have it: the same
+/// email, or, where a server couldn't say who is signed in, the same name. The proxy's `accounts`
 /// come after the servers' of their agent, each once: one a server has too is that server's section,
-/// marked as the proxy's. While they are known, what the servers' Proxy accounts said is left out.
+/// marked as the proxy's. The servers' Proxy accounts have none: they are the proxy's accounts.
 pub fn sections(reads: Vec<Read>, accounts: &[ProxyAccount], now: f64) -> Vec<Section> {
     let mut sections: Vec<Section> = Vec::new();
-    let mut reads: Vec<Read> = reads.into_iter().filter(|read| !read.proxy || accounts.is_empty()).collect();
+    let mut failed: Vec<Vec<String>> = Vec::new();
+    let mut reads: Vec<Read> = reads.into_iter().filter(|read| !read.proxy).collect();
     reads.sort_by_key(|read| {
         (read.limits.agent != Agent::Claude, read.limits.error.is_some(), read.limits.windows.is_empty())
     });
-    for Read { server, limits, proxy } in reads {
-        let known = limits.account.as_ref().and_then(|account| {
-            sections
-                .iter_mut()
-                .find(|section| section.agent == limits.agent && section.account.as_ref() == Some(account))
+    for Read { server, limits, .. } in reads {
+        let unread = limits.error.is_some() || (limits.windows.is_empty() && limits.plan.is_some());
+        let same = sections.iter().position(|section| {
+            section.agent == limits.agent
+                && match (&limits.account, &section.account) {
+                    (Some(account), Some(theirs)) => account == theirs,
+                    _ => section.name.as_ref().is_some_and(|name| name.eq_ignore_ascii_case(&limits.account_name)),
+                }
         });
-        if let Some(section) = known {
-            section.servers.push(server);
+        let Some(index) = same else {
+            failed.push(if unread { vec![server.clone()] } else { Vec::new() });
+            sections.push(section(server, limits, now));
             continue;
+        };
+        if !sections[index].servers.contains(&server) {
+            sections[index].servers.push(server.clone());
         }
-        sections.push(Section { proxy, ..section(server, limits, now) });
+        if unread {
+            failed[index].push(server);
+        }
+    }
+    for (section, failed) in sections.iter_mut().zip(&failed) {
+        if section.windows.is_empty() && failed.len() > 1 {
+            section.note = Some(format!("Couldn't read the limits on {}.", listed(failed)));
+        }
     }
     for account in accounts {
         let windows: Vec<Row> = account.windows.iter().map(|window| row(window, account.reset_credits, now)).collect();
@@ -120,6 +136,15 @@ pub fn sections(reads: Vec<Read>, accounts: &[ProxyAccount], now: f64) -> Vec<Se
     }
     sections.sort_by_key(|section| section.agent != Agent::Claude);
     sections
+}
+
+/// "vibe", "vibe and ymac", "vibe, ymac and studio".
+fn listed(names: &[String]) -> String {
+    match names {
+        [] => String::new(),
+        [one] => one.clone(),
+        [rest @ .., last] => format!("{} and {last}", rest.join(", ")),
+    }
 }
 
 fn section(server: String, limits: AgentLimits, now: f64) -> Section {
@@ -733,8 +758,48 @@ mod tests {
         );
 
         let unknown = sections(reads(), &[], 1000.0);
-        let proxy: Vec<_> = unknown.iter().map(|section| (section.name.as_deref(), section.proxy)).collect();
-        assert_eq!(proxy, [(None, false), (Some("Proxy"), true), (None, false)]);
+        let accounts: Vec<_> = unknown.iter().map(|section| section.account.as_deref().unwrap()).collect();
+        assert_eq!(accounts, ["a@b.c", "x@b.c"], "a server's Proxy account is the proxy's, not an account of its own");
+    }
+
+    #[test]
+    fn an_account_on_several_servers_is_one_section_even_where_it_couldnt_be_read() {
+        let mut unread = read("ymac", Agent::Claude, None, vec![]);
+        unread.limits.account_name = "work".into();
+        unread.limits.error = Some("Claude Code didn't answer.".into());
+        let mut read_too = read("vibe", Agent::Claude, Some("w@b.c"), vec![session(20.0, HOUR)]);
+        read_too.limits.account_name = "Work".into();
+        let shown = sections(vec![unread, read_too], &[], 1000.0);
+        assert_eq!(shown.len(), 1);
+        assert_eq!(
+            (shown[0].servers.clone(), shown[0].windows.len()),
+            (vec!["vibe".to_string(), "ymac".to_string()], 1)
+        );
+
+        let failing = |server: &str| {
+            let mut failing = read(server, Agent::Claude, None, vec![]);
+            failing.limits.account_name = "Bbedward".into();
+            failing.limits.error = Some("Claude Code didn't answer.".into());
+            failing
+        };
+        let shown = sections(vec![failing("vibe"), failing("ymac")], &[], 1000.0);
+        let notes: Vec<_> = shown.iter().map(|section| section.note.as_deref()).collect();
+        assert_eq!(notes, [Some("Couldn't read the limits on vibe and ymac.")]);
+    }
+
+    #[test]
+    fn the_servers_proxy_accounts_that_read_nothing_are_left_out_rather_than_repeated() {
+        let empty = |server: &str| {
+            let mut through_proxy = read(server, Agent::Codex, None, vec![]);
+            through_proxy.limits.account_name = "Proxy".into();
+            through_proxy.limits.error = Some("Your proxy has no Codex account that takes threads.".into());
+            through_proxy.proxy = true;
+            through_proxy
+        };
+        let reads =
+            vec![read("vibe", Agent::Claude, Some("a@b.c"), vec![session(20.0, HOUR)]), empty("vibe"), empty("ymac")];
+        let shown: Vec<_> = sections(reads, &[], 1000.0).into_iter().map(|section| section.account).collect();
+        assert_eq!(shown, [Some("a@b.c".to_string())]);
     }
 
     #[test]

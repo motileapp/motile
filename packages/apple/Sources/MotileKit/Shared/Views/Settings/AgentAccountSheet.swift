@@ -105,15 +105,15 @@ struct AgentAccountSheet: View {
             Text(title)
                 .font(.ui(size: 15, weight: .semibold))
             form
-            HStack {
+            HStack(spacing: 0) {
                 Spacer()
                 if savedAsIs {
                     ActionButton("Done", variant: .primary) { close() }
                         .keyboardShortcut(.defaultAction)
                 } else {
-                    ActionButton("Cancel") { close() }
+                    ActionButton("Cancel", margin: .beside(trailing: 4)) { close() }
                         .keyboardShortcut(.cancelAction)
-                    ActionButton("Save", variant: .primary, pending: saving) { save() }
+                    ActionButton("Save", variant: .primary, pending: saving, margin: .beside(leading: 4)) { save() }
                         .keyboardShortcut(.defaultAction)
                         .disabled(!canSave)
                 }
@@ -406,14 +406,16 @@ struct AgentAccountSheet: View {
             InputField("NAME", text: edited.variable.name, size: .small, monospaced: true)
                 .frame(width: 150)
             InputField(kept ? "••••••••" : "value", text: edited.variable.value, size: .small, monospaced: true, secure: variable.sensitive)
-            ActionButton(
-                icon: variable.sensitive ? .eyeOff : .eye, help: variable.sensitive ? "Sensitive: hidden and kept on \(server.name)" : "Shown: mark it sensitive",
-                size: .small, selected: variable.sensitive
-            ) {
-                edited.wrappedValue.variable.sensitive.toggle()
-            }
-            ActionButton(icon: .x, help: "Remove the variable", size: .small) {
-                variables.removeAll { $0.id == edited.wrappedValue.id }
+            HStack(spacing: 0) {
+                ActionButton(
+                    icon: variable.sensitive ? .eyeOff : .eye, help: variable.sensitive ? "Sensitive: hidden and kept on \(server.name)" : "Shown: mark it sensitive",
+                    size: .small, selected: variable.sensitive, margin: .beside(trailing: 3)
+                ) {
+                    edited.wrappedValue.variable.sensitive.toggle()
+                }
+                ActionButton(icon: .x, help: "Remove the variable", size: .small, margin: .beside(leading: 3)) {
+                    variables.removeAll { $0.id == edited.wrappedValue.id }
+                }
             }
         }
     }

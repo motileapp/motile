@@ -584,7 +584,7 @@ fn pressable(element: Stateful<Div>, item: &UiNode, cx: &UiCx, window: &mut Wind
         (None, _) => transparent_black(),
     };
     let ground = (fill.is_some() || *selected == Some(true)).then_some(rest);
-    let inner_cx = cx.on(inner).over(ground).within(cx.width - 2. * padding);
+    let inner_cx = cx.on(inner).over(ground).within(cx.width - 2. * padding).in_control();
     let laid: Vec<AnyElement> = children
         .iter()
         .map(|child| {

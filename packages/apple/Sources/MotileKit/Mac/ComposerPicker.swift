@@ -103,6 +103,7 @@ private struct ComposerPicker: View {
     private static let padding: CGFloat = 4
     /// The room between two rows' lights: only drawn, so that the rows' clicks meet.
     private static let rowLight = EdgeInsets(top: 1, leading: 0, bottom: 1, trailing: 0)
+    private static let railLight = EdgeInsets(top: 2, leading: 0, bottom: 2, trailing: 0)
 
     @Environment(AppStore.self) private var store
     let part: ComposerPickerPart
@@ -244,11 +245,11 @@ private struct ComposerPicker: View {
 
     /// The agents to pick the models of. While a search goes through all of them, none is picked.
     private var rail: some View {
-        VStack(spacing: 4) {
+        VStack(spacing: 0) {
             ForEach(agents, id: \.self) { shown in
                 AgentIcon(agent: shown, size: .lg)
-                    .frame(width: Self.railWidth - 2 * Self.padding, height: Self.railWidth - 2 * Self.padding)
-                    .button(.highlight(radius: Radius.sm, selected: query.isEmpty && agent == shown)) {
+                    .frame(width: Self.railWidth - 2 * Self.padding, height: Self.railWidth - 2 * Self.padding + 4)
+                    .button(.highlight(radius: Radius.sm, selected: query.isEmpty && agent == shown, inset: Self.railLight)) {
                         agent = shown
                         query = ""
                         column = .model
@@ -259,7 +260,8 @@ private struct ComposerPicker: View {
             }
             Spacer(minLength: 0)
         }
-        .padding(Self.padding)
+        .padding(.horizontal, Self.padding)
+        .padding(.vertical, Self.padding - 2)
     }
 
     private func search(rows: [Row], settings: [Setting]) -> some View {

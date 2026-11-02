@@ -19,7 +19,7 @@ fun Switch(isOn: Boolean, onChange: (Boolean) -> Unit, modifier: Modifier = Modi
     SystemSwitch(
         checked = isOn,
         onCheckedChange = onChange,
-        modifier = modifier,
+        modifier = modifier.arrowPointer(),
         enabled = enabled && LocalEnabled.current,
         colors = SwitchDefaults.colors(
             checkedThumbColor = palette.primaryForeground,

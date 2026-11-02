@@ -127,6 +127,7 @@ fn drawn(
                 surface: crate::theme::Surface::Background,
                 streaming: false,
                 ground: None,
+                in_control: false,
                 sink: Rc::new(|_, _, _| {}),
                 store: None,
                 transcript: None,

@@ -69,6 +69,7 @@ fun OptionCard(
             .focusRing(focused, radius)
             .background(fill, shape)
             .border(1.dp, edge, shape)
+            .arrowPointer()
             .hoverable(interaction, enabled)
             .selectable(selected, interaction, indication = null, enabled = enabled, role = Role.RadioButton, onClick = onPress)
             .padding(horizontal = 16.dp, vertical = 14.dp),

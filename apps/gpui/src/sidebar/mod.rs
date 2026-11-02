@@ -31,7 +31,7 @@ use crate::store::{ListedDraft, SearchResult, Store, UndoNotice};
 use crate::theme::{self, ControlSize, Layer, colors};
 use crate::ui::menu::Menu;
 use crate::ui::modal::{Answer, Confirmation, confirmation, modal, presented};
-use crate::ui::{ActionButton, InputField, InputVariant, TOOLBAR_SYMBOL, divider, edges};
+use crate::ui::{ActionButton, InputField, InputVariant, TOOLBAR_SYMBOL, beside, divider, edges};
 
 /// The space between the rows' highlights, and around each one: it looks empty but is the row's.
 const ROW_GAP: f32 = 2.;
@@ -676,16 +676,19 @@ impl Sidebar {
                         div()
                             .flex()
                             .justify_end()
-                            .gap(px(8.))
-                            .child(ActionButton::new("rename-cancel", "Cancel").on_click({
+                            .child(ActionButton::new("rename-cancel", "Cancel").margin(beside(0., 4.)).on_click({
                                 let cancel = cancel.clone();
                                 move |_, window, cx| cancel(window, cx)
                             }))
-                            .child(ActionButton::new("rename", "Rename").primary().disabled(blank).on_click(
-                                move |_, _, cx| {
-                                    let _ = rename.update(cx, |this, cx| this.finish_rename(cx));
-                                },
-                            )),
+                            .child(
+                                ActionButton::new("rename", "Rename")
+                                    .primary()
+                                    .disabled(blank)
+                                    .margin(beside(4., 0.))
+                                    .on_click(move |_, _, cx| {
+                                        let _ = rename.update(cx, |this, cx| this.finish_rename(cx));
+                                    }),
+                            ),
                     );
                 modal("rename", content, cancel)
                     .width(400.)

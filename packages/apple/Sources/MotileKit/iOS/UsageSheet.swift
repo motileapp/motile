@@ -17,12 +17,13 @@ struct UsageSheet: View {
                 VStack(spacing: 8) {
                     UsageTabs(model: model, fills: true)
                     if picksServers || model.tab != .limits {
-                        HStack(spacing: 8) {
+                        let both = picksServers && model.tab != .limits
+                        HStack(spacing: 0) {
                             if picksServers {
-                                UsageServersMenu(model: model)
+                                UsageServersMenu(model: model, margin: .beside(trailing: both ? 4 : 0))
                             }
                             if model.tab != .limits {
-                                UsagePeriodMenu(model: model)
+                                UsagePeriodMenu(model: model, margin: .beside(leading: both ? 4 : 0))
                             }
                             Spacer(minLength: 0)
                         }

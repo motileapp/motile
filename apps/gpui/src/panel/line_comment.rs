@@ -16,7 +16,7 @@ use crate::store::pull_requests::Thread;
 use crate::theme::{self, IconSize, Layer, Radius, Surface, colors};
 use crate::ui::icons;
 use crate::ui::modal::{modal, present_sheet};
-use crate::ui::{ActionButton, TextArea, text_area_state};
+use crate::ui::{ActionButton, TextArea, beside, text_area_state};
 
 impl From<super::code_view::CommentedLine> for CommentedLine {
     fn from(line: super::code_view::CommentedLine) -> Self {
@@ -232,7 +232,6 @@ impl Render for LineCommentSheet {
                     .w_full()
                     .flex()
                     .items_center()
-                    .gap(px(8.))
                     .child(
                         ActionButton::new("line-comment-ask", "Ask the Agent")
                             .help("Put this line and what you wrote in the composer")
@@ -242,12 +241,14 @@ impl Render for LineCommentSheet {
                     .child(div().flex_1())
                     .child(
                         ActionButton::new("line-comment-cancel", "Cancel")
+                            .margin(beside(0., 4.))
                             .on_click(cx.listener(|this, _, _, cx| this.dismiss(cx))),
                     )
                     .when_some(last, |row, thread| {
                         row.child(
                             ActionButton::new("line-comment-reply", "Reply")
                                 .disabled(empty)
+                                .margin(beside(4., 4.))
                                 .on_click(cx.listener(move |this, _, _, cx| this.reply_to(thread.clone(), cx))),
                         )
                     })
@@ -255,6 +256,7 @@ impl Render for LineCommentSheet {
                         ActionButton::new("line-comment-add", "Add to Review")
                             .primary()
                             .disabled(empty)
+                            .margin(beside(4., 0.))
                             .on_click(cx.listener(|this, _, _, cx| this.add_to_review(cx))),
                     ),
             );

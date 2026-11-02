@@ -61,11 +61,19 @@ struct PullRequestSurface: View {
                 .foregroundStyle(Color.themeForeground)
         }
         Spacer(minLength: 4)
-        if let page, let url = page.url {
-            ActionButton(icon: .squareArrowOutUpRight, help: "Open on GitHub") { Platform.open(url) }
-        }
-        if shown != nil, store.pullRequestsUnavailable == nil {
-            ActionButton(icon: .rotateCw, help: "Read the pull request again", pending: store.rightPanel.reading.contains(.pullRequest)) { asked += 1 }
+        let url = page?.url
+        let reads = shown != nil && store.pullRequestsUnavailable == nil
+        if url != nil || reads {
+            HStack(spacing: 0) {
+                if let url {
+                    ActionButton(icon: .squareArrowOutUpRight, help: "Open on GitHub", margin: .beside(trailing: reads ? panelBarGap : 0)) { Platform.open(url) }
+                }
+                if reads {
+                    ActionButton(icon: .rotateCw, help: "Read the pull request again", pending: store.rightPanel.reading.contains(.pullRequest)) {
+                        asked += 1
+                    }
+                }
+            }
         }
     }
 
@@ -89,6 +97,11 @@ private struct NoPullRequest: View {
     let target: PanelTarget
     @State private var linking = ""
 
+    private var creating: GitMenuItem? {
+        guard let create = store.gitProject?.gitControl?.menu.first(where: { $0.action == "create_pr" }), create.reason == nil else { return nil }
+        return create
+    }
+
     var body: some View {
         VStack(spacing: 14) {
             Image(.gitPullRequest, size: .xxl)
@@ -96,14 +109,14 @@ private struct NoPullRequest: View {
             Text("This branch has no pull request yet.")
                 .font(.ui(size: 13))
                 .foregroundStyle(Color.themeMutedForeground)
-            HStack(spacing: 8) {
-                if let project = store.gitProject, let create = project.gitControl?.menu.first(where: { $0.action == "create_pr" }),
-                    create.reason == nil
-                {
-                    ActionButton("Create PR", variant: .primary) { store.chooseGit(create, in: project) }
+            HStack(spacing: 0) {
+                if let project = store.gitProject, let create = creating {
+                    ActionButton("Create PR", variant: .primary, margin: .beside(trailing: store.pullRequestsExtended ? 4 : 0)) {
+                        store.chooseGit(create, in: project)
+                    }
                 }
                 if store.pullRequestsExtended {
-                    ActionButton("Show All Pull Requests") { store.rightPanel.open(.pullRequests) }
+                    ActionButton("Show All Pull Requests", margin: .beside(leading: creating == nil ? 0 : 4)) { store.rightPanel.open(.pullRequests) }
                 }
             }
             if store.pullRequestsExtended, let thread = store.selectedThread {
@@ -310,11 +323,11 @@ private struct PullRequestPageView: View {
                 .onSubmit(saveTitle)
                 .onAppear { titleFocused = true }
                 .onEscape { title = nil }
-            HStack(spacing: 8) {
+            HStack(spacing: 0) {
                 Spacer()
-                ActionButton("Cancel") { title = nil }
+                ActionButton("Cancel", margin: .beside(trailing: 4)) { title = nil }
                     .disabled(working)
-                ActionButton("Save", variant: .primary, pending: working, action: saveTitle)
+                ActionButton("Save", variant: .primary, pending: working, margin: .beside(leading: 4), action: saveTitle)
                     .disabled(working || editing.trimmingCharacters(in: .whitespaces).isEmpty || editing == page.title)
             }
         }
@@ -420,15 +433,15 @@ private struct PullRequestPageView: View {
                 PendingComments(comments: pending) { panel.removePending($0, from: number) }
             }
             TextArea(pending.isEmpty ? "Leave a comment" : "Say something with your review (optional)", text: $comment, lines: 4)
-            HStack(spacing: 8) {
+            HStack(spacing: 0) {
                 if let close = page.withComment, pending.isEmpty {
-                    ActionButton(close.label, pending: work?.key == "close") { choose(close, key: "close") }
+                    ActionButton(close.label, pending: work?.key == "close", margin: .beside(trailing: 8)) { choose(close, key: "close") }
                     .disabled(busy || written.isEmpty)
                 }
                 Spacer(minLength: 0)
-                ForEach(page.verdicts) { verdict in
+                ForEach(Array(page.verdicts.enumerated()), id: \.element.id) { index, verdict in
                     let key = verdict.action
-                    ActionButton(verdict.label, pending: work?.key == key) {
+                    ActionButton(verdict.label, pending: work?.key == key, margin: .beside(leading: index == 0 ? 8 : 4, trailing: 4)) {
                         if pending.isEmpty {
                             choose(verdict, key: key)
                         } else {
@@ -437,7 +450,10 @@ private struct PullRequestPageView: View {
                     }
                     .disabled(busy || (verdict.action == "request_changes" && written.isEmpty && pending.isEmpty))
                 }
-                ActionButton(pending.isEmpty ? "Comment" : "Send Review", variant: .primary, pending: work?.key == "comment") {
+                ActionButton(
+                    pending.isEmpty ? "Comment" : "Send Review", variant: .primary, pending: work?.key == "comment",
+                    margin: .beside(leading: page.verdicts.isEmpty ? 8 : 4)
+                ) {
                     if pending.isEmpty {
                         panel.act("comment", text: written, key: "comment", on: target, number: number) { comment = "" }
                     } else {
@@ -701,10 +717,11 @@ private struct MergeBox: View {
     private var actions: some View {
         HStack(spacing: 8) {
             if let primary = page.primary {
-                HStack(spacing: 1) {
+                HStack(spacing: 0) {
                     ActionButton(
                         primary.label, variant: ButtonVariant(style: primary.style), pending: working?.key == primary.key,
-                        pendingTitle: primary.pendingLabel, joined: chooses(primary) ? .trailing : []
+                        pendingTitle: primary.pendingLabel, joined: chooses(primary) ? .trailing : [],
+                        margin: .beside(trailing: chooses(primary) ? 0.5 : 0)
                     ) { run(primary) }
                     if chooses(primary) {
                         methodMenu(ButtonVariant(style: primary.style))
@@ -723,7 +740,7 @@ private struct MergeBox: View {
     }
 
     private func methodMenu(_ variant: ButtonVariant) -> some View {
-        ActionMenu(nil, help: "Choose how it merges", variant: variant, joined: .leading) {
+        ActionMenu(nil, help: "Choose how it merges", variant: variant, joined: .leading, margin: .beside(leading: 0.5)) {
             ForEach(page.methods) { choice in
                 Toggle(choice.label, isOn: Binding { choice.method == page.method } set: { _ in
                     guard let method = choice.method, let target = store.panelTarget else { return }
@@ -762,9 +779,12 @@ private struct StatusRow: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 if !status.buttons.isEmpty {
-                    HStack(spacing: 6) {
-                        ForEach(status.buttons) { button in
-                            ActionButton(button.label, variant: ButtonVariant(style: button.style), pending: working?.key == button.key) {
+                    HStack(spacing: 0) {
+                        ForEach(Array(status.buttons.enumerated()), id: \.element.id) { index, button in
+                            ActionButton(
+                                button.label, variant: ButtonVariant(style: button.style), pending: working?.key == button.key,
+                                margin: .sharing(6, at: index, of: status.buttons.count)
+                            ) {
                                 run(button)
                             }
                             .disabled(working != nil)
@@ -821,11 +841,19 @@ private struct CheckRow: View {
             Text(check.label)
                 .font(.ui(size: 12))
                 .foregroundStyle(check.tone == .neutral ? Color.themeMutedStrongerForeground : check.tone.color)
-            if let fix = check.fix {
-                ActionButton("Fix", help: "Have the agent fix it", variant: .link, size: .small) { store.handOff(fix) }
-            }
-            if let url = check.url {
-                ActionButton(icon: .squareArrowOutUpRight, help: "Show its details", size: .small) { Platform.open(url) }
+            if check.fix != nil || check.url != nil {
+                HStack(spacing: 0) {
+                    if let fix = check.fix {
+                        ActionButton("Fix", help: "Have the agent fix it", variant: .link, size: .small, margin: .beside(trailing: check.url == nil ? 0 : 4)) {
+                            store.handOff(fix)
+                        }
+                    }
+                    if let url = check.url {
+                        ActionButton(
+                            icon: .squareArrowOutUpRight, help: "Show its details", size: .small, margin: .beside(leading: check.fix == nil ? 0 : 4)
+                        ) { Platform.open(url) }
+                    }
+                }
             }
         }
         .padding(.leading, 12)

@@ -97,7 +97,7 @@ private fun Segment(title: String, selected: Boolean, size: ControlSize, margin:
         else -> palette.mutedForeground
     }
     Box(
-        modifier.clickable(interactionSource = interaction, indication = null, enabled = enabled, role = Role.Button, onClick = onClick),
+        modifier.arrowPointer().clickable(interactionSource = interaction, indication = null, enabled = enabled, role = Role.Button, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         when {

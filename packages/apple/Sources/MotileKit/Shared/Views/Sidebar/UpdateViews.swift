@@ -108,6 +108,8 @@ struct ServerUpdateStatus<Otherwise: View>: View {
     let server: Server
     var variant: ButtonVariant = .secondary
     var size: ControlSize = .small
+    /// Room around its button that takes its presses, and around what it says in place of one.
+    var margin = EdgeInsets()
     @ViewBuilder let otherwise: () -> Otherwise
 
     var body: some View {
@@ -118,7 +120,7 @@ struct ServerUpdateStatus<Otherwise: View>: View {
                     .foregroundStyle(Color.themeMutedForeground)
                 ActionButton(
                     "Restart Now", help: "Stop the agents on \(server.name) and restart it. Their threads continue once it is back.",
-                    variant: variant, size: size
+                    variant: variant, size: size, margin: margin
                 ) {
                     store.update(server, when: .now)
                 }
@@ -133,16 +135,17 @@ struct ServerUpdateStatus<Otherwise: View>: View {
                 Spinner(size: size.symbol)
                     .foregroundStyle(Color.themeMutedForeground)
             }
+            .padding(margin)
         } else if store.isOutdated(server), store.isBusy(server), store.canChooseRestart(server) {
             ActionMenu(
                 "Update", help: "Agents are working on \(server.name). Update it once they finish, or now: they stop and continue once it is back.",
-                variant: variant, size: size
+                variant: variant, size: size, margin: margin
             ) {
                 Button("Update when agents finish") { store.update(server, when: .idle) }
                 Button("Update now and auto-resume agents") { store.update(server, when: .now) }
             }
         } else if store.isOutdated(server) {
-            ActionButton("Update", help: updateHelp, variant: variant, size: size) {
+            ActionButton("Update", help: updateHelp, variant: variant, size: size, margin: margin) {
                 store.update(server)
             }
         } else {

@@ -126,6 +126,7 @@ private struct SegmentStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         SegmentBody(label: configuration.label, pressed: configuration.isPressed, selected: selected, lit: lit, radius: radius, margin: margin)
+            .arrowPointer()
     }
 }
 

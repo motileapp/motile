@@ -44,16 +44,14 @@ struct NoticeView: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
-                if url != nil || notice.nextLabel != nil || notice.projectID != nil {
-                    HStack(spacing: 8) {
-                        if let url {
-                            action("View PR", prominent: notice.nextLabel == nil) { store.showPullRequest(url) }
-                        }
-                        if let next = notice.nextLabel {
-                            action(next, prominent: true) { store.runNextGit() }
-                        }
-                        if notice.projectID != nil {
-                            action("Open project", prominent: true) { store.openNoticeProject() }
+                let buttons = actions(url: url)
+                if !buttons.isEmpty {
+                    HStack(spacing: 0) {
+                        ForEach(Array(buttons.enumerated()), id: \.offset) { index, button in
+                            ActionButton(
+                                button.title, variant: button.prominent ? .primary : .secondary,
+                                margin: .sharing(Self.actionGap, at: index, of: buttons.count), action: button.run
+                            )
                         }
                     }
                     .padding(.top, 6)
@@ -80,8 +78,21 @@ struct NoticeView: View {
         .environment(\.surface, .popover)
     }
 
-    private func action(_ title: String, prominent: Bool, run: @escaping () -> Void) -> some View {
-        ActionButton(title, variant: prominent ? .primary : .secondary, action: run)
+    /// The room between the buttons' lights, which their presses share.
+    private static let actionGap: CGFloat = 8
+
+    private func actions(url: URL?) -> [(title: String, prominent: Bool, run: () -> Void)] {
+        var actions: [(title: String, prominent: Bool, run: () -> Void)] = []
+        if let url {
+            actions.append(("View PR", notice.nextLabel == nil, { store.showPullRequest(url) }))
+        }
+        if let next = notice.nextLabel {
+            actions.append((next, true, { store.runNextGit() }))
+        }
+        if notice.projectID != nil {
+            actions.append(("Open project", true, { store.openNoticeProject() }))
+        }
+        return actions
     }
 
     private static let outputFont = PlatformFont.uiMono(11.5)

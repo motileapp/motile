@@ -146,10 +146,14 @@ fn claude_limits(account: &Value, usage: Result<Value, String>) -> AgentLimits {
 fn claude_windows(limits: &Value) -> Vec<LimitWindow> {
     let Some(listed) = limits["limits"].as_array() else {
         let windows = [("five_hour", "Session", SESSION_SECS), ("seven_day", "Weekly", WEEK_SECS)];
-        return windows
-            .iter()
-            .filter_map(|(key, label, secs)| claude_window(&limits[key], label, *secs, "utilization"))
-            .collect();
+        let windows =
+            windows.iter().filter_map(|(key, label, secs)| claude_window(&limits[key], label, *secs, "utilization"));
+        // Some accounts are told a model's own week apart from the list, which they aren't given.
+        let models = limits["model_scoped"].as_array().into_iter().flatten().filter_map(|limit| {
+            let label = format!("Weekly · {}", limit["display_name"].as_str()?);
+            claude_window(limit, &label, WEEK_SECS, "utilization")
+        });
+        return windows.chain(models).collect();
     };
     listed
         .iter()
@@ -310,6 +314,19 @@ mod tests {
         assert_eq!(limits.plan.as_deref(), Some("Pro"));
         let labels: Vec<_> = limits.windows.iter().map(|window| (window.label.as_str(), window.used_percent)).collect();
         assert_eq!(labels, [("Session", 8.0), ("Weekly", 45.0)]);
+    }
+
+    #[test]
+    fn claude_code_without_its_list_has_its_models_own_weeks_too() {
+        let usage = json!({"subscription_type": "team", "rate_limits": {
+            "five_hour": {"utilization": 90, "resets_at": "2026-11-02T20:30:00+00:00"},
+            "seven_day": {"utilization": 0, "resets_at": "2026-11-03T07:00:00+00:00"},
+            "model_scoped": [{"display_name": "Fable", "utilization": 12, "resets_at": "2026-11-03T07:00:00+00:00"}]
+        }});
+        let limits = claude_limits(&Value::Null, Ok(usage));
+        let labels: Vec<_> = limits.windows.iter().map(|window| (window.label.as_str(), window.used_percent)).collect();
+        assert_eq!(labels, [("Session", 90.0), ("Weekly", 0.0), ("Weekly · Fable", 12.0)]);
+        assert_eq!(limits.windows[2].resets_at, Some(1793689200.0));
     }
 
     #[test]

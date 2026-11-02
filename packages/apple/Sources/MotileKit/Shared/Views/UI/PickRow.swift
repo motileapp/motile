@@ -89,6 +89,7 @@ private struct OptionCardStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         OptionCardBody(label: configuration.label, selected: selected, pressed: configuration.isPressed)
+            .arrowPointer()
     }
 }
 

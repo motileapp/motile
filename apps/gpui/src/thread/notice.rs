@@ -6,7 +6,7 @@ use gpui_kit::*;
 use crate::store::{Notice, Store};
 use crate::theme::{ControlSize, IconSize, Layer, Opacity, Radius, ShadowSize, Surface, colors};
 use crate::ui::rich_text::RichText;
-use crate::ui::{ActionButton, FadingScroll, Spinner, Variant, icons};
+use crate::ui::{ActionButton, FadingScroll, Spinner, Variant, icons, sharing};
 
 const NOTICE_RADIUS: f32 = Radius::LG;
 const NOTICE_PADDING: f32 = 14.;
@@ -19,6 +19,8 @@ const TRAILING: f32 = CLOSE_MARGIN + CLOSE_SIZE + 4.;
 const OUTPUT_LINES: f32 = 8.;
 const OUTPUT_LINE_HEIGHT: f32 = 16.;
 const OUTPUT_PADDING: f32 = 8.;
+/// The room between the notice's buttons' lights, which their clicks share.
+const BUTTON_GAP: f32 = 8.;
 
 /// What follows is one click away: the push after a commit, the pull request after a push, the
 /// thread in a project that was cloned.
@@ -31,6 +33,9 @@ pub fn notice_view(store: &Entity<Store>, notice: &Notice, cx: &App) -> impl Int
     let url = notice.url.clone();
     let next_label = notice.next_label();
     let opens_project = notice.project_id.is_some();
+    let count = [url.is_some(), next_label.is_some(), opens_project].into_iter().filter(|shown| *shown).count();
+    let next_index = usize::from(url.is_some());
+    let project_index = next_index + usize::from(next_label.is_some());
     let description = notice.description.clone().map(|description| {
         let text = RichText::new(SharedString::from(format!("notice-{}", notice.serial)), description);
         if !notice.failed {
@@ -71,6 +76,7 @@ pub fn notice_view(store: &Entity<Store>, notice: &Notice, cx: &App) -> impl Int
         .border_1()
         .border_color(c.border_popover)
         .shadow(c.shadow(ShadowSize::Lg, Opacity::ShadowStronger))
+        .block_mouse_except_scroll()
         .flex()
         .items_start()
         .gap(px(10.))
@@ -102,18 +108,18 @@ pub fn notice_view(store: &Entity<Store>, notice: &Notice, cx: &App) -> impl Int
                         .child(notice.title.clone()),
                 )
                 .children(description)
-                .when(url.is_some() || next_label.is_some() || opens_project, |column| {
+                .when(count > 0, |column| {
                     column.child(
                         div()
                             .pt(px(6.))
                             .flex()
-                            .gap(px(8.))
                             .when_some(url, |row, url| {
                                 let variant = if next_label.is_none() { Variant::Primary } else { Variant::Secondary };
                                 row.child(
                                     ActionButton::new("notice-pr", "View PR")
                                         .variant(variant)
                                         .surface(Surface::Popover)
+                                        .margin(sharing(BUTTON_GAP, 0, count))
                                         .on_click(move |_, _, cx| {
                                             view.update(cx, |store, cx| {
                                                 store.show_pull_request(&url, cx);
@@ -127,6 +133,7 @@ pub fn notice_view(store: &Entity<Store>, notice: &Notice, cx: &App) -> impl Int
                                     ActionButton::new("notice-next", label)
                                         .primary()
                                         .surface(Surface::Popover)
+                                        .margin(sharing(BUTTON_GAP, next_index, count))
                                         .on_click(move |_, _, cx| {
                                             next.update(cx, |store, cx| {
                                                 store.run_next_git(cx);
@@ -140,6 +147,7 @@ pub fn notice_view(store: &Entity<Store>, notice: &Notice, cx: &App) -> impl Int
                                     ActionButton::new("notice-project", "Open project")
                                         .primary()
                                         .surface(Surface::Popover)
+                                        .margin(sharing(BUTTON_GAP, project_index, count))
                                         .on_click(move |_, _, cx| {
                                             open.update(cx, |store, cx| {
                                                 store.open_notice_project(cx);

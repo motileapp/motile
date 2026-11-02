@@ -14,7 +14,7 @@ use motile_core::proxy::{AccountRow, AccountState, View};
 use motile_protocol::proxy_wire::{AccountChange, Capture};
 use motile_protocol::wire::Agent;
 
-use super::layout::{CONTENT_WIDTH, Cut, INSET, PAGE_PADDING, footed_label, group, label, more, row};
+use super::layout::{CONTENT_WIDTH, Cut, INSET, PAGE_PADDING, TRAILING_GAP, footed_label, group, label, more, row};
 use crate::models::{agent_name, now};
 use crate::panel::code_view::{CodeActions, CodeSnapshot, CodeView};
 use crate::panel::state::{CodeDocument, CodeMarks, Loaded};
@@ -25,7 +25,7 @@ use crate::theme::{ControlSize, IconSize, Layer, Opacity, Surface, colors};
 use crate::ui::menu::Menu;
 use crate::ui::modal::{Answer, Confirmation, confirmation, modal, present_sheet, presented};
 use crate::ui::{
-    ActionButton, ActionMenu, Chip, CommandBox, CopyButton, InputField, Segmented, Spinner, Switch, Variant,
+    ActionButton, ActionMenu, Chip, CommandBox, CopyButton, InputField, Segmented, Spinner, Switch, Variant, beside,
     card_default, divider_on, icons, logos,
 };
 use crate::usage::limits::{BESIDE_WIDTH, limit_row};
@@ -140,7 +140,7 @@ impl ProxyPage {
                     .map(|(index, account)| self.account_card(place * 1000 + index, account, accounts.len(), width, cx))
                     .collect();
                 let store = self.store.clone();
-                let add = ActionButton::new(("add-account", place), format!("Add a {} Account", agent_name(agent)))
+                let add = ActionButton::new(("add-account", place), format!("Add {} Account", agent_name(agent)))
                     .symbol("plus")
                     .variant(Variant::Outline)
                     .size(ControlSize::Large)
@@ -150,7 +150,7 @@ impl ProxyPage {
                             cx.notify();
                         })
                     });
-                cards.push(div().flex().child(add).into_any_element());
+                cards.insert(0, div().flex().child(add).into_any_element());
                 let id = match agent {
                     Agent::Claude => "proxy-accounts",
                     Agent::Codex => "proxy-accounts-codex",
@@ -178,24 +178,25 @@ impl ProxyPage {
                 cx.notify();
             })
         });
-        let mut trailing = Vec::new();
-        if account.status == AccountState::SignInAgain {
+        let signs_in_again = account.status == AccountState::SignInAgain;
+        let sign_in_again = signs_in_again.then(|| {
             let (store, agent) = (self.store.clone(), account.agent);
-            trailing.push(
-                large(("account-sign-in", index), "Sign In Again")
-                    .on_click(move |_, _, cx| {
-                        store.update(cx, |store, cx| {
-                            store.start_proxy_sign_in(agent);
-                            cx.notify();
-                        })
+            large(("account-sign-in", index), "Sign In Again").margin(beside(0., TRAILING_GAP / 2.)).on_click(
+                move |_, _, cx| {
+                    store.update(cx, |store, cx| {
+                        store.start_proxy_sign_in(agent);
+                        cx.notify();
                     })
-                    .into_any_element(),
-            );
-        }
-        trailing.push(switch.into_any_element());
-        trailing.push(self.account_menu(index, account, count, cx).into_any_element());
-        let leading = vec![account_label(account, cx)];
-        let mut rows = vec![row(leading, trailing).into_any_element()];
+                },
+            )
+        });
+        let switch = switch.margin(beside(if signs_in_again { TRAILING_GAP / 2. } else { 0. }, TRAILING_GAP / 2.));
+        let menu = self.account_menu(index, account, count, cx).margin(beside(TRAILING_GAP / 2., 0.));
+        let trailing = div().flex().items_center().children(sign_in_again).child(switch).child(menu);
+        // As far from the card's top as its limits' numbers are from theirs.
+        let leading =
+            vec![div().flex_1().min_w_0().flex().py(px(6.)).child(account_label(account, cx)).into_any_element()];
+        let mut rows = vec![row(leading, vec![trailing.into_any_element()]).into_any_element()];
         let beside = width >= BESIDE_WIDTH;
         let windows = account.windows.iter().enumerate().map(|(place, window)| {
             let window = LimitWindow::from(window);
@@ -310,24 +311,20 @@ impl ProxyPage {
                 .item(format!("Capture the Next {CAPTURE_NEXT} Requests"), next)
                 .submenu("Capture a Thread", picked)
         })
-        .button(outline);
-        let mut trailing = Vec::new();
-        if view.capture.on {
+        .button(outline)
+        .margin(beside(if view.capture.on { TRAILING_GAP / 2. } else { 0. }, 0.));
+        let stop = view.capture.on.then(|| {
             let handle = self.store.clone();
-            trailing.push(
-                large("proxy-capture-stop", "Stop")
-                    .on_click(move |_, _, cx| {
-                        handle.update(cx, |store, cx| {
-                            store.capture_proxy(Capture::Off);
-                            cx.notify();
-                        })
-                    })
-                    .into_any_element(),
-            );
-        }
-        trailing.push(capture.into_any_element());
+            large("proxy-capture-stop", "Stop").margin(beside(0., TRAILING_GAP / 2.)).on_click(move |_, _, cx| {
+                handle.update(cx, |store, cx| {
+                    store.capture_proxy(Capture::Off);
+                    cx.notify();
+                })
+            })
+        });
+        let trailing = div().flex().items_center().children(stop).child(capture).into_any_element();
         let leading = label(view.capture.text.clone(), None, None, Cut::Wraps, cx);
-        let capture_card = card_default(div().flex().flex_col(), cx).child(row(vec![leading], trailing));
+        let capture_card = card_default(div().flex().flex_col(), cx).child(row(vec![leading], vec![trailing]));
 
         let handle = self.store.clone();
         let filter = Segmented::new("proxy-log-filter", vec!["All".into(), "Errors".into()], usize::from(errors_only))
@@ -452,7 +449,7 @@ impl ProxyPage {
             return row.into_any_element();
         }
         let (store, entry) = (self.store.clone(), entry.id);
-        row.cursor_pointer()
+        row.cursor_default()
             .hover(|row| row.bg(Surface::Card.layer(Layer::Row, c)))
             .child(
                 div()
@@ -635,27 +632,33 @@ fn account_label(account: &AccountRow, cx: &App) -> AnyElement {
         .flex()
         .flex_col()
         .gap(px(4.))
-        .child(div().flex().items_center().gap(px(6.)).child(logos::agent_icon(account.agent, IconSize::Md, cx)).child(
-            div().min_w_0().truncate().text_size(px(13.)).font_weight(FontWeight::MEDIUM).child(account.name.clone()),
-        ))
         .child(
             div()
                 .flex()
                 .items_center()
                 .gap(px(6.))
+                .child(logos::agent_icon(account.agent, IconSize::Md, cx))
+                .child(
+                    div()
+                        .min_w_0()
+                        .truncate()
+                        .text_size(px(13.))
+                        .font_weight(FontWeight::MEDIUM)
+                        .child(account.name.clone()),
+                )
                 .children(status.map(|chip| chip.surface(Surface::Card)))
-                .when(account.next, |line| line.child(Chip::new("Next").tone(c.primary)))
-                .when(!description.is_empty(), |line| {
-                    line.child(
-                        div()
-                            .min_w_0()
-                            .text_size(px(11.5))
-                            .text_color(c.muted_foreground)
-                            .truncate()
-                            .child(description.join(" · ")),
-                    )
-                }),
+                .when(account.next, |line| line.child(Chip::new("Next").tone(c.primary))),
         )
+        .when(!description.is_empty(), |label| {
+            label.child(
+                div()
+                    .min_w_0()
+                    .text_size(px(11.5))
+                    .text_color(c.muted_foreground)
+                    .truncate()
+                    .child(description.join(" · ")),
+            )
+        })
         .into_any_element()
 }
 
@@ -905,20 +908,22 @@ impl Render for SignInSheet {
         let footer = div()
             .flex()
             .justify_end()
-            .gap(px(8.))
             .child(
                 ActionButton::new("proxy-sign-in-cancel", "Cancel")
+                    .margin(beside(0., if start_again { 4. } else { 0. }))
                     .on_click(cx.listener(|this, _, _, cx| this.close(cx))),
             )
             .when(start_again, |footer| {
-                footer.child(ActionButton::new("proxy-sign-in-again", "Start Again").primary().on_click(
-                    move |_, _, cx| {
-                        store.update(cx, |store, cx| {
-                            store.start_proxy_sign_in(agent);
-                            cx.notify();
-                        })
-                    },
-                ))
+                footer.child(
+                    ActionButton::new("proxy-sign-in-again", "Start Again").primary().margin(beside(4., 0.)).on_click(
+                        move |_, _, cx| {
+                            store.update(cx, |store, cx| {
+                                store.start_proxy_sign_in(agent);
+                                cx.notify();
+                            })
+                        },
+                    ),
+                )
             });
         let content = div()
             .p(px(20.))
@@ -1008,15 +1013,16 @@ impl Render for RenameSheet {
                 div()
                     .flex()
                     .justify_end()
-                    .gap(px(8.))
                     .child(
                         ActionButton::new("rename-cancel", "Cancel")
+                            .margin(beside(0., 4.))
                             .on_click(cx.listener(|this, _, _, cx| this.close(cx))),
                     )
                     .child(
                         ActionButton::new("rename-save", "Save")
                             .primary()
                             .disabled(!can_save)
+                            .margin(beside(4., 0.))
                             .on_click(cx.listener(|this, _, _, cx| this.save(cx))),
                     ),
             );

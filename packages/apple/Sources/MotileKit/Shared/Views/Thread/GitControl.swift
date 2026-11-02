@@ -323,24 +323,28 @@ struct CommitSheet: View {
                 TextArea("Leave empty to have one written", text: $message, lines: 4)
             }
             #if os(macOS)
-            HStack(spacing: 8) {
+            HStack(spacing: 0) {
                 Spacer()
-                ActionButton("Cancel") { close() }
+                ActionButton("Cancel", margin: .sharing(8, at: 0, of: 3)) { close() }
                     .keyboardShortcut(.cancelAction)
-                ActionButton("Commit on New Branch") { commit(onNewBranch: true) }
+                ActionButton("Commit on New Branch", margin: .sharing(8, at: 1, of: 3)) { commit(onNewBranch: true) }
                     .disabled(included.isEmpty)
-                ActionButton("Commit", variant: .primary) { commit(onNewBranch: false) }
+                ActionButton("Commit", variant: .primary, margin: .sharing(8, at: 2, of: 3)) { commit(onNewBranch: false) }
                     .keyboardShortcut(.defaultAction)
                     .disabled(included.isEmpty)
             }
             #else
-            VStack(spacing: 8) {
-                ActionButton("Commit", variant: .primary, size: .large, fills: true) { commit(onNewBranch: false) }
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(included.isEmpty)
-                ActionButton("Commit on New Branch", size: .large, fills: true) { commit(onNewBranch: true) }
-                    .disabled(included.isEmpty)
-                ActionButton("Cancel", variant: .ghost, size: .large, fills: true) { close() }
+            VStack(spacing: 0) {
+                ActionButton("Commit", variant: .primary, size: .large, fills: true, margin: .sharing(8, at: 0, of: 3, along: .vertical)) {
+                    commit(onNewBranch: false)
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(included.isEmpty)
+                ActionButton("Commit on New Branch", size: .large, fills: true, margin: .sharing(8, at: 1, of: 3, along: .vertical)) {
+                    commit(onNewBranch: true)
+                }
+                .disabled(included.isEmpty)
+                ActionButton("Cancel", variant: .ghost, size: .large, fills: true, margin: .sharing(8, at: 2, of: 3, along: .vertical)) { close() }
             }
             #endif
         }
@@ -426,6 +430,12 @@ struct CommitSheet: View {
         }
         .font(.ui(size: 12.5))
         .frame(height: Self.rowHeight)
+        // While editing all of the row toggles its file, so no click falls between two marks.
+        .contentShape(Rectangle())
+        .onTapGesture {
+            guard editing else { return }
+            includes(file.path).wrappedValue.toggle()
+        }
     }
 
     private func includes(_ path: String) -> Binding<Bool> {

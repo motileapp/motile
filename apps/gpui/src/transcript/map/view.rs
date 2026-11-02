@@ -22,8 +22,10 @@ use crate::theme::{ControlSize, Opacity, Radius, ShadowSize, Surface, colors};
 use crate::transcript::kit::paint_corners;
 use crate::ui::control::{ActionButton, ActionMenu, Variant};
 use crate::ui::menu::Menu;
-use crate::ui::motion;
+use crate::ui::{beside, edges, motion};
 
+/// The room between the map's buttons' lights, which their clicks share.
+const CONTROL_GAP: f32 = 8.;
 /// The framed key is set this long after the fly starts, as `map.tsx`'s timer does.
 const FRAMED_MS: u64 = FLY_MS as u64 + 40;
 const ZOOM_MS: u64 = 250;
@@ -648,13 +650,17 @@ impl MapView {
                 }
                 menu
             })
+            .margin(beside(0., CONTROL_GAP / 2.))
             .button(|button| glass(button).size(ControlSize::Large).help("Filter places"))
         });
+        let filters = filter.is_some();
         let recenter = glass(ActionButton::icon(("map-recenter", self.id), "locate-fixed", "Show every place"))
             .size(ControlSize::Large)
+            .margin(beside(if filters { CONTROL_GAP / 2. } else { 0. }, CONTROL_GAP / 2.))
             .on_click(cx.listener(|map, _, _, cx| map.recenter(cx)));
         let info = glass(ActionButton::icon(("map-info", self.id), "info", "About this map"))
             .size(ControlSize::Large)
+            .margin(beside(CONTROL_GAP / 2., 0.))
             .selected(self.info_open)
             .on_click(cx.listener(|map, _, _, cx| {
                 map.info_open = !map.info_open;
@@ -676,9 +682,10 @@ impl MapView {
             window,
             cx,
         );
-        let zoom = |id: &'static str, symbol: &'static str, help: &'static str, by: f64| {
+        let zoom = |id: &'static str, symbol: &'static str, help: &'static str, by: f64, margin: Edges<f32>| {
             glass(ActionButton::icon((id, self.id), symbol, help))
                 .size(ControlSize::Regular)
+                .margin(margin)
                 .on_click(cx.listener(move |map, _, _, cx| map.zoom_by(by, None, true, cx)))
         };
         let popover = |text: SharedString| {
@@ -702,7 +709,7 @@ impl MapView {
             .absolute()
             .inset_0()
             .child(
-                pressable(div().absolute().top(px(12.)).left(px(12.)).flex().items_center().gap(px(8.)))
+                pressable(div().absolute().top(px(12.)).left(px(12.)).flex().items_center())
                     .children(filter)
                     .child(recenter)
                     .child(info),
@@ -713,10 +720,9 @@ impl MapView {
                     pressable(div().absolute().bottom(px(12.)).right(px(12.)))
                         .flex()
                         .flex_col()
-                        .gap(px(8.))
                         .opacity(shown)
-                        .child(zoom("map-zoom-in", "plus", "Zoom in", 1.))
-                        .child(zoom("map-zoom-out", "minus", "Zoom out", -1.)),
+                        .child(zoom("map-zoom-in", "plus", "Zoom in", 1., edges(0., 0., CONTROL_GAP / 2., 0.)))
+                        .child(zoom("map-zoom-out", "minus", "Zoom out", -1., edges(CONTROL_GAP / 2., 0., 0., 0.))),
                 )
             })
             .when(self.info_open, |controls| controls.child(popover(self.node.note.clone().into()).top(px(56.))))

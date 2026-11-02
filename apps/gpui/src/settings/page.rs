@@ -12,8 +12,8 @@ use motile_protocol::wire::{Agent, AgentAccount, ContinueSettings, PullRequestSe
 use super::account_sheet::AccountSheet;
 use super::keybindings::KeybindingsPage;
 use super::layout::{
-    Cut, END_ROOM, GROUP_GAP, INSET, PAGE_PADDING, Targets, column, footed_label, group, label, large_outset, more,
-    note, row, switch_row, target,
+    Cut, END_ROOM, GROUP_GAP, INSET, PAGE_PADDING, TRAILING_GAP, Targets, column, footed_label, group, label,
+    large_outset, more, note, row, switch_row, target,
 };
 use super::proxy::ProxyPage;
 use crate::format;
@@ -27,7 +27,8 @@ use crate::ui::menu::Menu;
 use crate::ui::modal::{Answer, Confirmation, confirmation, modal, present_sheet, presented};
 use crate::ui::motion::{SPRING, Tween, spring};
 use crate::ui::{
-    ActionButton, ActionMenu, Spinner, Switch, TextArea, Variant, divider_on, icons, logos, text_area_state, tooltip,
+    ActionButton, ActionMenu, Spinner, Switch, TextArea, Variant, beside, divider_on, icons, logos, text_area_state,
+    tooltip,
 };
 use crate::updater::UpdateState;
 
@@ -320,7 +321,8 @@ impl SettingsPage {
             let status = ServerUpdateStatus::new(&self.store, server)
                 .variant(Variant::Outline)
                 .size(ControlSize::Large)
-                .surface(Surface::Card);
+                .surface(Surface::Card)
+                .margin(beside(0., TRAILING_GAP / 2.));
             let remove = Self::ask_removal(&page, Removal::Server(Box::new(server.clone())));
             let delete = Self::ask_removal(&page, Removal::ServerCompletely(Box::new(server.clone())));
             let menu = more(("server-menu", index), format!("What to do with {}", server.name), move |_, _| {
@@ -328,11 +330,13 @@ impl SettingsPage {
                 Menu::new()
                     .danger_symbol_item("Unlink Server", "unlink", move |window, cx| remove(window, cx))
                     .danger_symbol_item("Delete", "trash-2", move |window, cx| delete(window, cx))
-            });
+            })
+            .margin(beside(TRAILING_GAP / 2., 0.));
             let sync = server.sync.as_ref().map(|sync| sync_line(sync, cx));
             let leading =
                 footed_label(server.name.clone(), Some(description(server)), Some("server"), Cut::End, sync, cx);
-            rows.push(row(vec![leading], vec![status.into_any_element(), menu.into_any_element()]).into_any_element());
+            let trailing = div().flex().items_center().child(status).child(menu).into_any_element();
+            rows.push(row(vec![leading], vec![trailing]).into_any_element());
             rows.push(divider_on(Surface::Card, cx).into_any_element());
         }
         let store = self.store.clone();
@@ -1041,8 +1045,7 @@ impl Render for BranchInstructions {
             div()
                 .flex()
                 .justify_end()
-                .gap(px(8.))
-                .child(large("branch-reset", "Reset").disabled(unchanged).on_click(cx.listener(
+                .child(large("branch-reset", "Reset").disabled(unchanged).margin(beside(0., 4.)).on_click(cx.listener(
                     |this, _, window, cx| {
                         let default = this.server.default_branch_instructions.clone();
                         this.text.update(cx, |text, cx| text.set_value(default, window, cx));
@@ -1050,12 +1053,12 @@ impl Render for BranchInstructions {
                         this.store.update(cx, |store, _| store.set_branch_instructions(None, &id));
                     },
                 )))
-                .child(large("branch-save", "Save").primary().disabled(!changed).on_click(cx.listener(
-                    |this, _, _, cx| {
+                .child(large("branch-save", "Save").primary().disabled(!changed).margin(beside(4., 0.)).on_click(
+                    cx.listener(|this, _, _, cx| {
                         let (text, id) = (this.text.read(cx).value().to_string(), this.server.id.clone());
                         this.store.update(cx, |store, _| store.set_branch_instructions(Some(text), &id));
-                    },
-                ))),
+                    }),
+                )),
         )
     }
 }
@@ -1125,11 +1128,15 @@ impl Render for SetupSheet {
                 div()
                     .flex()
                     .justify_end()
-                    .gap(px(8.))
-                    .child(ActionButton::new("setup-cancel", "Cancel").on_click(cx.listener(|this, _, _, cx| this.close(cx))))
+                    .child(
+                        ActionButton::new("setup-cancel", "Cancel")
+                            .margin(beside(0., 4.))
+                            .on_click(cx.listener(|this, _, _, cx| this.close(cx))),
+                    )
                     .child(
                         ActionButton::new("setup-save", "Save")
                             .primary()
+                            .margin(beside(4., 0.))
                             .on_click(cx.listener(|this, _, _, cx| this.save(cx))),
                     ),
             );

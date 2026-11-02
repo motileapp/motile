@@ -1,6 +1,7 @@
 package app.motile.panel
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -11,6 +12,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.semantics.contentDescription
@@ -23,6 +25,7 @@ import app.motile.platform.Symbol
 import app.motile.theme.LocalPalette
 import app.motile.ui.ActionButton
 import app.motile.ui.ActionMenu
+import app.motile.ui.beside
 import app.motile.ui.Modal
 import app.motile.ui.Text
 
@@ -52,14 +55,17 @@ fun DiffSurface(target: PanelTarget) {
                 )
             }
             Spacer(Modifier.weight(1f))
-            if (document != null && document.files.size > 1) {
-                val allClosed = content.collapsed.size >= document.files.size
-                ActionButton(
-                    icon = if (allClosed) Symbol.UnfoldVertical else Symbol.FoldVertical,
-                    help = if (allClosed) "Open every file" else "Close every file",
-                ) { content.setAllCollapsed(!allClosed) }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (document != null && document.files.size > 1) {
+                    val allClosed = content.collapsed.size >= document.files.size
+                    ActionButton(
+                        icon = if (allClosed) Symbol.UnfoldVertical else Symbol.FoldVertical,
+                        help = if (allClosed) "Open every file" else "Close every file",
+                        margin = beside(end = panelBarGap),
+                    ) { content.setAllCollapsed(!allClosed) }
+                }
+                ActionButton(icon = Symbol.RotateCw, help = "Read the changes again", pending = PanelTab.Diff in content.reading) { asked += 1 }
             }
-            ActionButton(icon = Symbol.RotateCw, help = "Read the changes again", pending = PanelTab.Diff in content.reading) { asked += 1 }
         }
         when {
             !target.repository -> NoRepositoryMessage(target.projectID)

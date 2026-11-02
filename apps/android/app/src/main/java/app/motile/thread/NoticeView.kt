@@ -38,6 +38,7 @@ import app.motile.theme.SurfaceBox
 import app.motile.theme.Theme
 import app.motile.theme.shadow
 import app.motile.ui.ActionButton
+import app.motile.ui.sharing
 import app.motile.ui.ButtonVariant
 import app.motile.ui.FadingScroll
 import app.motile.ui.Icon
@@ -124,18 +125,24 @@ private fun Actions(notice: Notice) {
     val store = LocalStore.current
     val url = notice.url
     val next = notice.nextLabel
-    if (url == null && next == null && notice.projectID == null) return
-    Row(Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        if (url != null) Action("View PR", prominent = next == null) { store.showPullRequest(url) }
-        if (next != null) Action(next, prominent = true) { store.runNextGit() }
-        if (notice.projectID != null) Action("Open project", prominent = true) { store.openNoticeProject() }
+    val actions = buildList<Triple<String, Boolean, () -> Unit>> {
+        if (url != null) add(Triple("View PR", next == null) { store.showPullRequest(url) })
+        if (next != null) add(Triple(next, true) { store.runNextGit() })
+        if (notice.projectID != null) add(Triple("Open project", true) { store.openNoticeProject() })
+    }
+    if (actions.isEmpty()) return
+    Row(Modifier.padding(top = 6.dp)) {
+        actions.forEachIndexed { index, (title, prominent, run) ->
+            ActionButton(
+                title, variant = if (prominent) ButtonVariant.Primary else ButtonVariant.Secondary,
+                margin = sharing(actionGap, index, actions.size), onClick = run,
+            )
+        }
     }
 }
 
-@Composable
-private fun Action(title: String, prominent: Boolean, run: () -> Unit) {
-    ActionButton(title, variant = if (prominent) ButtonVariant.Primary else ButtonVariant.Secondary, onClick = run)
-}
+/** The room between the actions' lights, which their presses share. */
+private val actionGap = 8.dp
 
 /** What git printed, scrolled to its end, where a hook says what it found. */
 @Composable

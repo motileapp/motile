@@ -450,6 +450,7 @@ pub fn file_row(model: &RowModel, ctx: &RowContext, window: &mut Window, cx: &mu
                         )
                         .bordered()
                         .hover(c.background_secondary_accent)
+                        .rest(c.background)
                         .on_click(move |_, _, cx| cx.reveal_path(&revealed)),
                     ),
             )

@@ -121,6 +121,7 @@ pub fn agent_bar(store: &Entity<Store>, agent: &AgentView, cx: &App) -> impl Int
         .border_1()
         .border_color(c.border_composer)
         .shadow(c.shadow(theme::ShadowSize::Lg, theme::Opacity::Shadow))
+        .block_mouse_except_scroll()
         .child(AgentAvatar::new(agent.agent).state(agent.state))
         .child(
             div()

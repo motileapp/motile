@@ -28,7 +28,7 @@ use crate::theme::{self, Colors, ControlSize, IconSize, Layer, Radius, Surface, 
 use crate::transcript::kit::dashed_outline;
 use crate::ui::agent_avatar::{AgentAvatar, state_color};
 use crate::ui::menu::Menu;
-use crate::ui::{ActionButton, ActionMenu, Highlight, KeyCaps, Spinner, TOOLBAR_WIDTH, Variant, edges, icons};
+use crate::ui::{ActionButton, ActionMenu, Highlight, KeyCaps, Spinner, TOOLBAR_WIDTH, Variant, beside, edges, icons};
 
 /// How far the tabs keep from the strip's ends.
 const TAB_EDGE: f32 = 8.;
@@ -37,6 +37,8 @@ const TAB_EDGE: f32 = 8.;
 const TAB_MARGIN: f32 = 1.;
 /// The space between two launcher rows' lights, which is the rows' own, so that it takes a click.
 const LAUNCHER_GAP: f32 = 2.;
+/// The room between what a bar holds. Buttons side by side share it, so that it only looks empty.
+const BAR_GAP: f32 = 4.;
 
 /// What makes a tab ask its server again: another folder or scope, a turn that ended there, or
 /// the button that asks.
@@ -407,7 +409,7 @@ impl RightPanelView {
             .flex_shrink_0()
             .flex()
             .flex_col()
-            .child(div().h(px(36.)).pl(px(12.)).pr(px(4.)).flex().items_center().gap(px(4.)).child(content))
+            .child(div().h(px(36.)).pl(px(12.)).pr(px(4.)).flex().items_center().gap(px(BAR_GAP)).child(content))
             .child(crate::ui::divider(cx))
     }
 
@@ -719,17 +721,23 @@ impl RightPanelView {
                     )
                 })
                 .child(div().flex_1().min_w(px(4.)))
-                .when(several, |bar| {
-                    bar.child(
-                        ActionButton::icon(
-                            "collapse-all",
-                            if all_closed { "unfold-vertical" } else { "fold-vertical" },
-                            if all_closed { "Open every file" } else { "Close every file" },
-                        )
-                        .on_click(act(&self.store, move |store, _| store.set_all_collapsed(!all_closed))),
-                    )
-                })
-                .child(self.refresh_button("refresh-diff", "Read the changes again", &PanelTab::Diff, cx)),
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .when(several, |tools| {
+                            tools.child(
+                                ActionButton::icon(
+                                    "collapse-all",
+                                    if all_closed { "unfold-vertical" } else { "fold-vertical" },
+                                    if all_closed { "Open every file" } else { "Close every file" },
+                                )
+                                .margin(beside(0., BAR_GAP))
+                                .on_click(act(&self.store, move |store, _| store.set_all_collapsed(!all_closed))),
+                            )
+                        })
+                        .child(self.refresh_button("refresh-diff", "Read the changes again", &PanelTab::Diff, cx)),
+                ),
             cx,
         );
         let body: AnyElement = if !target.repository {
@@ -1035,28 +1043,33 @@ impl RightPanelView {
                 })
                 .child(div().flex_1().min_w(px(4.)))
                 .child(
-                    ActionButton::icon("copy-path", if copied { "check" } else { "copy" }, "Copy the path").on_click(
-                        move |_, _, cx| {
-                            cx.write_to_clipboard(ClipboardItem::new_string(copy_path.clone()));
-                            let copied_tab = copied_tab.clone();
-                            let _ = this.update(cx, |this, cx| {
-                                this.copied = Some(copied_tab.clone());
-                                cx.notify();
-                                cx.spawn(async move |this, cx| {
-                                    cx.background_executor().timer(Duration::from_millis(1200)).await;
+                    div()
+                        .flex()
+                        .items_center()
+                        .child(
+                            ActionButton::icon("copy-path", if copied { "check" } else { "copy" }, "Copy the path")
+                                .margin(beside(0., BAR_GAP))
+                                .on_click(move |_, _, cx| {
+                                    cx.write_to_clipboard(ClipboardItem::new_string(copy_path.clone()));
+                                    let copied_tab = copied_tab.clone();
                                     let _ = this.update(cx, |this, cx| {
-                                        if this.copied.as_ref() == Some(&copied_tab) {
-                                            this.copied = None;
-                                            cx.notify();
-                                        }
+                                        this.copied = Some(copied_tab.clone());
+                                        cx.notify();
+                                        cx.spawn(async move |this, cx| {
+                                            cx.background_executor().timer(Duration::from_millis(1200)).await;
+                                            let _ = this.update(cx, |this, cx| {
+                                                if this.copied.as_ref() == Some(&copied_tab) {
+                                                    this.copied = None;
+                                                    cx.notify();
+                                                }
+                                            });
+                                        })
+                                        .detach();
                                     });
-                                })
-                                .detach();
-                            });
-                        },
-                    ),
-                )
-                .child(self.refresh_button("refresh-file", "Read the file again", &tab, cx)),
+                                }),
+                        )
+                        .child(self.refresh_button("refresh-file", "Read the file again", &tab, cx)),
+                ),
             cx,
         );
         let content = self.store.read(cx).right_panel.contents.get(&tab).cloned();

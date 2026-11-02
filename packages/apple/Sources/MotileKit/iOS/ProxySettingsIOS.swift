@@ -113,17 +113,9 @@ struct ProxySettings: View {
         .id("proxy")
     }
 
-    /// An agent's accounts, a group each with its limits, and the way to add another.
+    /// The way to add an agent's account, and its accounts, a group each with its limits.
     @ViewBuilder private func accounts(of agent: Agent, in proxy: ProxyState) -> some View {
         let accounts = proxy.accounts(of: agent)
-        ForEach(Array(accounts.enumerated()), id: \.element.id) { index, account in
-            Section {
-                rows(of: account, count: accounts.count)
-            } header: {
-                if index == 0 { Text(ProxyText.accounts(of: agent)) }
-            }
-            .id(index == 0 ? ProxyState.accountsID(of: agent) : "proxy-account/\(account.id)")
-        }
         Section {
             Button { store.startProxySignIn(agent) } label: {
                 HStack {
@@ -134,9 +126,15 @@ struct ProxySettings: View {
             }
             .disabled(store.proxySignInStarting != nil)
         } header: {
-            if accounts.isEmpty { Text(ProxyText.accounts(of: agent)) }
+            Text(ProxyText.accounts(of: agent))
         }
-        .id(accounts.isEmpty ? ProxyState.accountsID(of: agent) : "proxy-add/\(agent.rawValue)")
+        .id(ProxyState.accountsID(of: agent))
+        ForEach(accounts) { account in
+            Section {
+                rows(of: account, count: accounts.count)
+            }
+            .id("proxy-account/\(account.id)")
+        }
     }
 
     @ViewBuilder private func rows(of account: ProxyAccount, count: Int) -> some View {

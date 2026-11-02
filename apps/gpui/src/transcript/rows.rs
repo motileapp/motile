@@ -21,7 +21,7 @@ use crate::models::{AttachedFile, duration, elapsed};
 use crate::store::Store;
 use crate::store::settings::SettingsSection;
 use crate::theme::{self, Colors, ControlSize, IconSize, Radius, Surface, colors};
-use crate::ui::{ActionButton, Highlight, edges, icons};
+use crate::ui::{ActionButton, Highlight, beside, edges, icons};
 
 /// The room a prose row has around its text, which is what keeps two rows apart.
 pub const PROSE_GAP: f32 = 9.;
@@ -1776,7 +1776,7 @@ pub fn started_by(end: bool, parent: &str, ctx: &RowContext, cx: &App) -> AnyEle
         .border_color(c.border_accent)
         .hover(|pill| pill.bg(c.border_accent))
         .active(|pill| pill.bg(c.border_accent))
-        .cursor_pointer()
+        .cursor_default()
         // The arrow stands on the baseline, lower than the caps' middle it is raised to. Its
         // square leaves room around its ink, so it needs little more from the words.
         .child(
@@ -1963,13 +1963,13 @@ fn removed_row(model: &RowModel, title: &str, message: &str, ctx: &RowContext, c
                         .mt(px(14.))
                         .flex()
                         .justify_end()
-                        .gap(px(ControlSize::Regular.gap()))
                         .child(
                             button(
                                 "open-server-settings",
                                 "Open Settings",
                                 "Unlinked servers are deleted with their threads in settings",
                             )
+                            .insets(beside(0., ControlSize::Regular.gap() / 2.))
                             .on_click(move |_, _, cx| {
                                 settings.update(cx, |store, cx| {
                                     store.open_settings(SettingsSection::Servers, None);
@@ -1984,6 +1984,7 @@ fn removed_row(model: &RowModel, title: &str, message: &str, ctx: &RowContext, c
                                 "Start a thread on another server with everything that happened here",
                             )
                             .primary()
+                            .insets(beside(ControlSize::Regular.gap() / 2., 0.))
                             .on_click(move |_, _, cx| {
                                 elsewhere.update(cx, |store, cx| {
                                     store.continue_on_another_server(cx);

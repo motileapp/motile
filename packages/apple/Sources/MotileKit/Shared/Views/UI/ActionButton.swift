@@ -291,6 +291,27 @@ struct ControlReach {
     }
 }
 
+extension EdgeInsets {
+    /// Room beside a control that is its own: its half of the gap to the control before it and
+    /// to the one after it, so that the gap is only seen and a press in it lands on one of them.
+    static func beside(leading: CGFloat = 0, trailing: CGFloat = 0) -> EdgeInsets {
+        EdgeInsets(top: 0, leading: leading, bottom: 0, trailing: trailing)
+    }
+
+    /// The room of the control at `index` of `count` side by side, whose lights stand `gap` apart.
+    static func sharing(_ gap: CGFloat, at index: Int, of count: Int, along axis: Axis = .horizontal) -> EdgeInsets {
+        let before = index > 0 ? gap / 2 : 0
+        let after = index < count - 1 ? gap / 2 : 0
+        guard axis == .vertical else { return beside(leading: before, trailing: after) }
+        return EdgeInsets(top: before, leading: 0, bottom: after, trailing: 0)
+    }
+
+    /// Half of `gap` on every side, for a control among others that wrap into rows.
+    static func around(_ gap: CGFloat) -> EdgeInsets {
+        EdgeInsets(top: gap / 2, leading: gap / 2, bottom: gap / 2, trailing: gap / 2)
+    }
+}
+
 struct ControlButtonStyle: ButtonStyle {
     let look: ControlLook
     var pending = false
@@ -323,12 +344,18 @@ private struct ControlBody<Label: View>: View {
             .contentShape(Rectangle())
             .opacity(.disabled, when: !enabled && !pending)
             .onHover { hovering = $0 }
-            .background { ArrowPointer() }
+            .arrowPointer()
     }
 }
 
-/// Keeps the arrow over a control that lies on what shows the cursor of text, also while the
-/// control is disabled.
+extension View {
+    /// Keeps the arrow over a control or a card that lies on what shows the cursor of text, also
+    /// while it is disabled.
+    func arrowPointer() -> some View {
+        background { ArrowPointer() }
+    }
+}
+
 private struct ArrowPointer: View {
     var body: some View {
         #if os(macOS)
@@ -558,6 +585,8 @@ struct ActionMenu<Content: View>: View {
         .menuOrder(.fixed)
         #if os(iOS)
         .buttonStyle(PressedMenuLabel(look: look, enabled: enabled && !pending, margin: reach.around))
+        // Its items' symbols are in the foreground wherever it lies, a settings list's tint or not.
+        .tint(Color.themeForeground)
         #else
         .buttonStyle(.plain)
         #endif
@@ -568,6 +597,7 @@ struct ActionMenu<Content: View>: View {
         #endif
         .opacity(.disabled, when: !enabled && !pending)
         .onHover { hovering = $0 }
+        .arrowPointer()
         .padding(reach.outset)
         .allowsHitTesting(!pending)
         .help(help ?? "")

@@ -11,7 +11,7 @@ use crate::models::{AgentAccountExt, Server, agent_name};
 use crate::store::Store;
 use crate::theme::{ControlSize, colors};
 use crate::ui::modal::modal;
-use crate::ui::{ActionButton, CommandBox, InputField, Segmented, Switch};
+use crate::ui::{ActionButton, CommandBox, InputField, Segmented, Switch, beside};
 
 /// A variable as the sheet edits it.
 struct EditedVariable {
@@ -430,23 +430,25 @@ impl AccountSheet {
             .w_full()
             .flex()
             .items_center()
-            .gap(px(6.))
             .child(
                 div()
                     .w(px(150.))
                     .flex_shrink_0()
+                    .mr(px(6.))
                     .child(InputField::new(&edited.name).size(ControlSize::Small).monospaced(true)),
             )
             .child(
                 div()
                     .flex_1()
                     .min_w_0()
+                    .mr(px(6.))
                     .child(InputField::new(&edited.value).size(ControlSize::Small).monospaced(true).secure(sensitive)),
             )
             .child(
                 ActionButton::icon(("sensitive", index), if sensitive { "eye-off" } else { "eye" }, help)
                     .small()
                     .selected(sensitive)
+                    .margin(beside(0., 3.))
                     .on_click(cx.listener(move |this, _, _, cx| {
                         if let Some(edited) = this.variables.iter_mut().find(|edited| edited.id == id) {
                             edited.sensitive = !edited.sensitive;
@@ -454,12 +456,15 @@ impl AccountSheet {
                         cx.notify();
                     })),
             )
-            .child(ActionButton::icon(("remove-variable", index), "x", "Remove the variable").small().on_click(
-                cx.listener(move |this, _, _, cx| {
-                    this.variables.retain(|edited| edited.id != id);
-                    cx.notify();
-                }),
-            ))
+            .child(
+                ActionButton::icon(("remove-variable", index), "x", "Remove the variable")
+                    .small()
+                    .margin(beside(3., 0.))
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        this.variables.retain(|edited| edited.id != id);
+                        cx.notify();
+                    })),
+            )
             .into_any_element()
     }
 }
@@ -590,14 +595,16 @@ impl Render for AccountSheet {
                 .on_click(cx.listener(|this, _, _, cx| this.close(cx)));
             div().flex().justify_end().child(done)
         } else {
-            let cancel =
-                ActionButton::new("account-cancel", "Cancel").on_click(cx.listener(|this, _, _, cx| this.close(cx)));
+            let cancel = ActionButton::new("account-cancel", "Cancel")
+                .margin(beside(0., 4.))
+                .on_click(cx.listener(|this, _, _, cx| this.close(cx)));
             let save = ActionButton::new("account-save", "Save")
                 .primary()
                 .pending(self.saving)
                 .disabled(!can_save)
+                .margin(beside(4., 0.))
                 .on_click(cx.listener(|this, _, _, cx| this.save(cx)));
-            div().flex().justify_end().gap(px(8.)).child(cancel).child(save)
+            div().flex().justify_end().child(cancel).child(save)
         };
         let content = div()
             .p(px(20.))

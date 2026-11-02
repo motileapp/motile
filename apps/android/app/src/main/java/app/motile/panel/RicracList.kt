@@ -33,6 +33,7 @@ import app.motile.theme.ControlSize
 import app.motile.theme.LocalPalette
 import app.motile.theme.Radius
 import app.motile.ui.ActionButton
+import app.motile.ui.beside
 import app.motile.ui.Chip
 import app.motile.ui.Choice
 import app.motile.ui.HighlightButton
@@ -144,15 +145,19 @@ private fun IssueRow(
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                ActionButton(
-                    icon = row.prioritySymbol, help = row.priorityLabel, size = ControlSize.Small,
-                    tint = if (row.priority == 1) palette.warning else null,
-                ) {
-                    offer(RicracRow.priorities.map { (value, name) -> Choice(name, RicracRow.symbol(value), value == row.priority) { change(row, mapOf("priority" to value)) } })
-                }
-                ActionButton(icon = entry.state.symbol, help = "Status: ${entry.state.name}", size = ControlSize.Small, tint = entry.state.color, pending = pending) {
-                    if (pending) return@ActionButton
-                    offer(entry.states.map { status -> Choice(status.name, status.symbol, status.id == entry.state.id) { change(row, mapOf("state" to status.id)) } })
+                Row {
+                    ActionButton(
+                        icon = row.prioritySymbol, help = row.priorityLabel, size = ControlSize.Small,
+                        tint = if (row.priority == 1) palette.warning else null, margin = beside(end = 4.dp),
+                    ) {
+                        offer(RicracRow.priorities.map { (value, name) -> Choice(name, RicracRow.symbol(value), value == row.priority) { change(row, mapOf("priority" to value)) } })
+                    }
+                    ActionButton(
+                        icon = entry.state.symbol, help = "Status: ${entry.state.name}", size = ControlSize.Small, tint = entry.state.color, pending = pending,
+                    ) {
+                        if (pending) return@ActionButton
+                        offer(entry.states.map { status -> Choice(status.name, status.symbol, status.id == entry.state.id) { change(row, mapOf("state" to status.id)) } })
+                    }
                 }
                 Spacer(Modifier.width(4.dp))
                 Text(row.identifier, size = 11.5f, color = palette.mutedStrongerForeground, maxLines = 1)

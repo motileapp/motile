@@ -203,11 +203,14 @@ struct ConfirmationView: View {
     }
 
     private var buttons: some View {
-        HStack(spacing: 8) {
-            ActionButton(confirmation.dismissal, variant: confirmation.answers.isEmpty ? .primary : .secondary) { close() }
-                .keyboardShortcut(confirmation.answers.isEmpty ? .defaultAction : .cancelAction)
+        let count = confirmation.answers.count + 1
+        return HStack(spacing: 0) {
+            ActionButton(
+                confirmation.dismissal, variant: confirmation.answers.isEmpty ? .primary : .secondary, margin: .sharing(8, at: 0, of: count)
+            ) { close() }
+            .keyboardShortcut(confirmation.answers.isEmpty ? .defaultAction : .cancelAction)
             ForEach(Array(confirmation.answers.enumerated()), id: \.offset) { index, answer in
-                let button = ActionButton(answer.title, variant: answer.variant) {
+                let button = ActionButton(answer.title, variant: answer.variant, margin: .sharing(8, at: index + 1, of: count)) {
                     close()
                     answer.action()
                 }

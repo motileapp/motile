@@ -2,6 +2,7 @@ package app.motile.ui
 
 import android.content.Intent
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -26,9 +27,13 @@ import app.motile.theme.SurfaceBox
 import app.motile.theme.Theme
 import kotlin.math.roundToInt
 
+/** The room between the buttons' lights, which their presses share. */
+private val buttonGap = 4.dp
+
 /**
  * A command to run in a terminal, in the theme's code colours, with the buttons that share and copy
- * it. Without a command yet it says what it waits for.
+ * it. Without a command yet it says what it waits for. A link is shown on one line, cut short, with
+ * the buttons that open and copy it.
  */
 @Composable
 fun CommandBox(
@@ -37,13 +42,23 @@ fun CommandBox(
     /** What `Theme.syntax` colours each stretch: its start, its length and the colour, in threes. */
     spans: List<Int> = emptyList(),
     placeholder: String = "Preparing the command…",
+    link: String? = null,
+    /** Opens the link, in the browser unless the caller has a better place for it. */
+    open: (String) -> Unit = Platform::open,
 ) {
+    val noun = if (link == null) "command" else "link"
     val palette = LocalPalette.current
     val density = LocalDensity.current
     val style = Theme.uiMono(12.5f).copy(lineHeight = Theme.codeLineHeight)
     // Puts the first line of the command level with the middle of the buttons.
     val textInset = with(density) { ((ControlSize.Regular.height.toPx() - Theme.codeLineHeight.toPx()) / 2).roundToInt().toDp() }
-    val shown = remember(command, spans, palette) { command?.let { highlighted(it, spans, palette) } ?: AnnotatedString(placeholder) }
+    val shown = remember(command, spans, palette, link) {
+        when {
+            command == null -> AnnotatedString(placeholder)
+            link != null -> AnnotatedString(command)
+            else -> highlighted(command, spans, palette)
+        }
+    }
     SurfaceBox(RoundedCornerShape(Radius.lg), modifier, bordered = true) {
         Row(Modifier.padding(scaled(4f).dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Top) {
             Text(
@@ -51,11 +66,19 @@ fun CommandBox(
                 Modifier.weight(1f).padding(start = textInset, top = textInset, bottom = textInset),
                 style = style,
                 color = if (command == null) palette.mutedStrongerForeground else palette.foreground,
+                maxLines = if (link == null) Int.MAX_VALUE else 1,
             )
             Disabled(command == null) {
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    ActionButton(icon = Symbol.Share, help = "Share the command") { command?.let(::shareText) }
-                    CopyButton(help = "Copy the command") { command?.let(Platform::copy) }
+                Row {
+                    link?.let { url ->
+                        ActionButton("Open", icon = Symbol.SquareArrowOutUpRight, variant = ButtonVariant.Ghost, margin = PaddingValues(end = buttonGap)) {
+                            open(url)
+                        }
+                    }
+                    if (link == null) {
+                        ActionButton(icon = Symbol.Share, help = "Share the command", margin = PaddingValues(end = buttonGap)) { command?.let(::shareText) }
+                    }
+                    CopyButton(help = "Copy the $noun") { command?.let(Platform::copy) }
                 }
             }
         }

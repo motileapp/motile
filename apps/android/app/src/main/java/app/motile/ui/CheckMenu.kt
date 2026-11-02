@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -44,10 +45,11 @@ fun CheckMenu(
     variant: ButtonVariant = ButtonVariant.Ghost,
     size: ControlSize = ControlSize.Regular,
     tint: Color? = null,
+    margin: PaddingValues = PaddingValues(0.dp),
 ) {
     var open by remember { mutableStateOf(false) }
     Box(modifier) {
-        ActionButton(title, icon, help = help, variant = variant, size = size, selected = open, opens = true, tint = tint) { open = true }
+        ActionButton(title, icon, help = help, variant = variant, size = size, selected = open, opens = true, tint = tint, margin = margin) { open = true }
         Dropdown(open, onDismiss = { open = false }) {
             DropdownCard(Modifier.width(IntrinsicSize.Max).widthIn(min = 160.dp)) {
                 Column(Modifier.verticalScroll(rememberScrollState()).padding(4.dp)) {

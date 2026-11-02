@@ -9,12 +9,13 @@ struct CopyButton: View {
     var symbolSize: IconSize?
     var round = false
     var copies = 0
+    var margin = EdgeInsets()
     let copy: () -> Void
     @State private var copied = false
     @State private var shown = 0
 
     var body: some View {
-        ActionButton(icon: copied ? .check : .copy, help: help, variant: variant, size: size, symbolSize: symbolSize, round: round) {
+        ActionButton(icon: copied ? .check : .copy, help: help, variant: variant, size: size, symbolSize: symbolSize, round: round, margin: margin) {
             copy()
             showCopied()
         }

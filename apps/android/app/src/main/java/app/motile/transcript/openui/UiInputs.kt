@@ -72,6 +72,7 @@ import app.motile.ui.Select
 import app.motile.ui.Slider
 import app.motile.ui.Text
 import app.motile.ui.TextArea
+import app.motile.ui.arrowPointer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -191,6 +192,7 @@ fun UiPressable(node: UiNode, kind: UiKind.Pressable) {
             .clip(shape)
             .then(if (background != null) Modifier.background(background, shape) else Modifier)
             .background(if (background == null) light else Color.Transparent, shape)
+            .arrowPointer()
             .hoverable(interaction, enabled)
             .then(press)
             .semantics { if (label != null) contentDescription = label }

@@ -59,15 +59,18 @@ struct MediaViewer: View {
             .padding(.horizontal, 80)
         }
         .overlay(alignment: .topTrailing) {
-            HStack(spacing: 8) {
+            let count = file == nil ? 1 : 3
+            HStack(spacing: 0) {
                 if let file {
                     CopyButton(
                         help: item.video ? "Copy Video (⌘C)" : "Copy Image (⌘C)", variant: .overlay, size: .large,
-                        symbolSize: ControlSize.large.smallSymbol, round: true, copies: copies
+                        symbolSize: ControlSize.large.smallSymbol, round: true, copies: copies, margin: .sharing(Self.buttonGap, at: 0, of: count)
                     ) { MediaFiles.copy(file, video: item.video, named: item.name) }
-                    roundButton(.download, help: "Save As (⌘S)") { MediaFiles.save(file, named: item.name) }
+                    roundButton(.download, help: "Save As (⌘S)", margin: .sharing(Self.buttonGap, at: 1, of: count)) {
+                        MediaFiles.save(file, named: item.name)
+                    }
                 }
-                roundButton(.x, help: "Close (Esc)") { store.closeViewer() }
+                roundButton(.x, help: "Close (Esc)", margin: .sharing(Self.buttonGap, at: count - 1, of: count)) { store.closeViewer() }
             }
             .padding(10)
         }
@@ -125,10 +128,13 @@ struct MediaViewer: View {
         }
     }
 
-    private func roundButton(_ symbol: Symbol, help: String, action: @escaping () -> Void) -> some View {
+    /// The room between the round buttons' lights, which their presses share.
+    private static let buttonGap: CGFloat = 8
+
+    private func roundButton(_ symbol: Symbol, help: String, margin: EdgeInsets = EdgeInsets(), action: @escaping () -> Void) -> some View {
         ActionButton(
             icon: symbol, help: help, variant: .overlay, size: .large, symbolSize: ControlSize.large.smallSymbol, round: true,
-            action: action
+            margin: margin, action: action
         )
     }
 

@@ -51,6 +51,7 @@ fun Modifier.floatingSurface(shape: Shape): Modifier {
     return clip(shape)
         .background(palette.composer, shape)
         .border(1.dp, palette.borderComposer, shape)
+        .arrowPointer()
 }
 
 /** Glass shapes side by side. */

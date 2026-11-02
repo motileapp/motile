@@ -3,6 +3,8 @@ package app.motile.settings
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -59,6 +61,7 @@ import app.motile.theme.shadow
 import app.motile.theme.wash
 import app.motile.ui.ActionButton
 import app.motile.ui.ActionMenu
+import app.motile.ui.beside
 import app.motile.ui.AgentIcon
 import app.motile.ui.Answer
 import app.motile.ui.Asking
@@ -184,9 +187,11 @@ private fun Header(view: ProxyView, add: () -> Unit, remove: () -> Unit) {
 /** An agent's accounts, a card each with its limits, and the way to add another. */
 private fun SettingsGroups.accounts(agent: Agent, view: ProxyView, proxy: Proxy, rename: (ProxyAccount) -> Unit, remove: (ProxyAccount) -> Unit) {
     val accounts = view.accounts(agent)
-    val header: @Composable () -> Unit = { AgentHeader(agent) }
-    accounts.forEachIndexed { index, account ->
-        group("proxy-account/${account.id}", headerContent = header.takeIf { index == 0 }) {
+    group("proxy-add/${agent.raw}", headerContent = { AgentHeader(agent) }) {
+        row { SignInRow("Add ${agent.title} Account", agent, proxy, Symbol.Plus) }
+    }
+    accounts.forEach { account ->
+        group("proxy-account/${account.id}") {
             row { AccountRow(account, accounts.size, proxy, rename = { rename(account) }) { remove(account) } }
             if (account.status == ProxyAccount.Status.SignInAgain) row { SignInRow("Sign In Again", agent, proxy, Symbol.CircleUser) }
             for (window in account.windows) row {
@@ -194,9 +199,6 @@ private fun SettingsGroups.accounts(agent: Agent, view: ProxyView, proxy: Proxy,
             }
             account.note?.let { note -> row { SettingsRow { RowText(note, color = LocalPalette.current.mutedForeground) } } }
         }
-    }
-    group("proxy-add/${agent.raw}", headerContent = header.takeIf { accounts.isEmpty() }) {
-        row { SignInRow("Add a ${agent.title} Account", agent, proxy, Symbol.Plus) }
     }
 }
 
@@ -224,18 +226,8 @@ private fun SignInRow(title: String, agent: Agent, proxy: Proxy, symbol: Symbol)
 private fun AccountRow(account: ProxyAccount, count: Int, proxy: Proxy, rename: () -> Unit, remove: () -> Unit) {
     val palette = LocalPalette.current
     SettingsRow {
-        Column(Modifier.weight(1f).padding(vertical = 2.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                AgentIcon(account.agent, size = iconSize(text = ROW_TEXT))
-                RowText(account.name, color = palette.foreground, maxLines = 1)
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                account.statusText?.let { Chip(it, tone = account.status.tone()) }
-                if (account.next) Chip("Next", tone = palette.primary)
-                val who = listOfNotNull(account.email, account.plan, account.threadsText).joinToString(" · ")
-                if (who.isNotEmpty()) Text(who, size = NOTE_TEXT, color = palette.mutedForeground, maxLines = 1)
-            }
-        }
+        // As far from the card's top as its limits' numbers are from theirs.
+        AccountLines(account, Modifier.weight(1f).padding(vertical = 8.dp))
         Switch(account.enabled, { proxy.setEnabled(account, it) })
         ActionMenu(icon = Symbol.Ellipsis, help = "More") {
             item("Rename Account", Symbol.Pencil, run = rename)
@@ -248,6 +240,42 @@ private fun AccountRow(account: ProxyAccount, count: Int, proxy: Proxy, rename: 
             divider()
             item("Remove Account", Symbol.Trash2, destructive = true, run = remove)
         }
+    }
+}
+
+/** The account's name with its badges beside it, or after who is signed in under it where that would cut the name short. */
+@Composable
+private fun AccountLines(account: ProxyAccount, modifier: Modifier) {
+    val palette = LocalPalette.current
+    val tone = account.status.tone()
+    val name: @Composable () -> Unit = {
+        AgentIcon(account.agent, size = iconSize(text = ROW_TEXT))
+        RowText(account.name, color = palette.foreground, maxLines = 1)
+    }
+    val badges: @Composable () -> Unit = {
+        account.statusText?.let { Chip(it, tone = tone) }
+        if (account.next) Chip("Next", tone = palette.primary)
+    }
+    val line = Arrangement.spacedBy(6.dp)
+    SubcomposeLayout(modifier) { constraints ->
+        val together = subcompose("together") {
+            Row(horizontalArrangement = line, verticalAlignment = Alignment.CenterVertically) { name(); badges() }
+        }.first().measure(Constraints())
+        val beside = together.width <= constraints.maxWidth
+        val lines = subcompose("lines") {
+            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Row(horizontalArrangement = line, verticalAlignment = Alignment.CenterVertically) {
+                    name()
+                    if (beside) badges()
+                }
+                val who = listOfNotNull(account.email, account.plan, account.threadsText).joinToString(" · ")
+                Row(horizontalArrangement = line, verticalAlignment = Alignment.CenterVertically) {
+                    if (who.isNotEmpty()) Text(who, Modifier.weight(1f, fill = false), size = NOTE_TEXT, color = palette.mutedForeground, maxLines = 1)
+                    if (!beside) badges()
+                }
+            }
+        }.first().measure(constraints.copy(minWidth = 0))
+        layout(constraints.maxWidth, lines.height) { lines.place(0, 0) }
     }
 }
 
@@ -287,8 +315,8 @@ private fun RenameAccountDialog(account: ProxyAccount, onDismiss: () -> Unit) {
             ) {
                 Text("Rename Account", size = 15f, weight = FontWeight.SemiBold)
                 InputField("Name", name, { name = it }, Modifier.fillMaxWidth(), size = ControlSize.Large, focusRequester = field, onSubmit = ::rename)
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
-                    ActionButton("Cancel", size = ControlSize.Large, onClick = onDismiss)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    ActionButton("Cancel", size = ControlSize.Large, margin = beside(end = 8.dp), onClick = onDismiss)
                     ActionButton("Save", variant = ButtonVariant.Primary, size = ControlSize.Large, disabled = name.isBlank(), onClick = ::rename)
                 }
             }
@@ -386,7 +414,7 @@ private fun SignInSheet(signIn: ProxySignIn) {
         SettingsList(Modifier.weight(1f)) {
             if (signIn.needsCode) {
                 group(footer = signIn.text, failure = signIn.error) {
-                    row { SettingsPressRow({ proxy.openPage(signIn.url) }) { SettingsActionLabel("Open the Sign-In Page", Symbol.SquareArrowOutUpRight) } }
+                    row { CommandBox(signIn.url, Modifier.fillMaxWidth(), link = signIn.url, open = proxy::openPage) }
                     row {
                         SettingsRow {
                             Box(Modifier.weight(1f).height(ControlSize.Large.height)) {
@@ -418,7 +446,7 @@ private fun SignInSheet(signIn: ProxySignIn) {
                         RowText("Waiting for you to approve it", color = palette.mutedForeground)
                     }
                 }
-                row { SettingsPressRow({ proxy.openPage(signIn.url) }) { SettingsActionLabel("Open the Sign-In Page", Symbol.SquareArrowOutUpRight) } }
+                row { CommandBox(signIn.url, Modifier.fillMaxWidth(), link = signIn.url, open = proxy::openPage) }
                 if (signIn.error != null) row { SignInRow("Start Again", signIn.agent, proxy, Symbol.RotateCw) }
             }
         }

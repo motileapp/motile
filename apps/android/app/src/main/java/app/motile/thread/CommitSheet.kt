@@ -1,7 +1,9 @@
 package app.motile.thread
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -86,11 +88,12 @@ fun CommitSheet(project: Project) {
             Text("Commit message (optional)", size = 12.5f, weight = FontWeight.Medium)
             TextArea("Leave empty to have one written", message, { message = it }, Modifier.fillMaxWidth(), lines = 4)
         }
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            ActionButton("Commit", variant = ButtonVariant.Primary, size = ControlSize.Large, fills = true, disabled = included.isEmpty()) {
+        val below = PaddingValues(bottom = 8.dp)
+        Column {
+            ActionButton("Commit", variant = ButtonVariant.Primary, size = ControlSize.Large, fills = true, disabled = included.isEmpty(), margin = below) {
                 commit(onNewBranch = false)
             }
-            ActionButton("Commit on New Branch", size = ControlSize.Large, fills = true, disabled = included.isEmpty()) {
+            ActionButton("Commit on New Branch", size = ControlSize.Large, fills = true, disabled = included.isEmpty(), margin = below) {
                 commit(onNewBranch = true)
             }
             ActionButton("Cancel", variant = ButtonVariant.Ghost, size = ControlSize.Large, fills = true) { close() }
@@ -134,7 +137,9 @@ private fun FileList(files: List<ChangedFile>, excluded: Set<String>, setExclude
 @Composable
 private fun FileRow(file: ChangedFile, isExcluded: Boolean, editing: Boolean, toggle: () -> Unit) {
     val palette = Theme.colors
-    Row(Modifier.fillMaxWidth().height(rowHeight), verticalAlignment = Alignment.CenterVertically) {
+    // While editing all of the row toggles its file, so that no press falls between two marks.
+    val toggles = if (editing) Modifier.clickable(interactionSource = null, indication = null, onClick = toggle) else Modifier
+    Row(Modifier.fillMaxWidth().height(rowHeight).then(toggles), verticalAlignment = Alignment.CenterVertically) {
         if (editing) {
             ActionButton(
                 icon = if (isExcluded) Symbol.Circle else Symbol.CircleCheck, help = if (isExcluded) "Include" else "Leave out", size = ControlSize.Small,

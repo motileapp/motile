@@ -12,6 +12,8 @@ struct QuestionsView: View {
 
     /// How far past its text an option's light and the room to press it reach.
     private static let optionReach: CGFloat = 8
+    /// The room between two options' lights: only drawn, so that their presses meet.
+    private static let optionLight = EdgeInsets(top: 1, leading: 0, bottom: 1, trailing: 0)
     private static let markGap: CGFloat = 10
 
     private var question: Question { approval.questions[min(index, approval.questions.count - 1)] }
@@ -34,20 +36,21 @@ struct QuestionsView: View {
                         .foregroundStyle(Color.themeMutedForeground)
                 }
             }
-            VStack(spacing: 2) {
+            VStack(spacing: 0) {
                 ForEach(question.options) { option in
                     row(option)
                 }
                 somethingElse
             }
             .padding(.horizontal, -Self.optionReach)
-            HStack(spacing: 8) {
+            .padding(.vertical, -Self.optionLight.top)
+            HStack(spacing: 0) {
                 if index > 0 {
-                    ActionButton("Back", icon: .chevronLeft, variant: .ghost, size: .small) { index -= 1 }
+                    ActionButton("Back", icon: .chevronLeft, variant: .ghost, size: .small, margin: .beside(trailing: 8)) { index -= 1 }
                 }
                 Spacer()
-                ActionButton(approval.refuseLabel, size: .small) { store.answer(approval, allow: false) }
-                ActionButton(isLast ? approval.allowLabel : "Next", variant: .primary, size: .small, action: goOn)
+                ActionButton(approval.refuseLabel, size: .small, margin: .beside(leading: 8, trailing: 4)) { store.answer(approval, allow: false) }
+                ActionButton(isLast ? approval.allowLabel : "Next", variant: .primary, size: .small, margin: .beside(leading: 4), action: goOn)
                     .disabled(!canGoOn)
             }
         }
@@ -78,8 +81,9 @@ struct QuestionsView: View {
             .multilineTextAlignment(.leading)
             .padding(.vertical, 8)
             .padding(.horizontal, Self.optionReach)
+            .padding(Self.optionLight)
         }
-        .buttonStyle(.highlight(radius: Radius.md, lit: picked))
+        .buttonStyle(.highlight(radius: Radius.md, lit: picked, inset: Self.optionLight))
     }
 
     /// The last row, which takes an answer typed in place of the options.
@@ -94,9 +98,10 @@ struct QuestionsView: View {
         }
         .padding(.vertical, 8)
         .padding(.horizontal, Self.optionReach)
+        .padding(Self.optionLight)
         .contentShape(Rectangle())
         .onTapGesture { typing = true }
-        .hoverHighlight(radius: Radius.md, lit: written || typing)
+        .hoverHighlight(radius: Radius.md, lit: written || typing, inset: Self.optionLight)
     }
 
     private var canGoOn: Bool {

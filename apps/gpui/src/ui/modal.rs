@@ -340,6 +340,8 @@ impl Confirmation {
 
 /// How wide a confirmation's text is at least. Its buttons widen it when they need more.
 const TEXT_WIDTH: f32 = 360.;
+/// The room between a confirmation's buttons' lights, which their clicks share.
+const BUTTON_GAP: f32 = 8.;
 
 /// A confirmation as a modal: its title and message, the button that lets it go, then its
 /// answers. The button that lets it go is the primary one when there are no answers.
@@ -352,10 +354,12 @@ pub fn confirmation(
     let c = colors(cx);
     let close: Run = Rc::new(on_close);
     let lone = confirmation.answers.is_empty();
+    let count = confirmation.answers.len() + 1;
     let dismiss = close.clone();
     let mut buttons = vec![
         ActionButton::new("dismissal", confirmation.dismissal)
             .variant(if lone { Variant::Primary } else { Variant::Secondary })
+            .margin(crate::ui::sharing(BUTTON_GAP, 0, count))
             .on_click(move |_, window, cx| dismiss(window, cx))
             .into_any_element(),
     ];
@@ -371,6 +375,7 @@ pub fn confirmation(
         buttons.push(
             ActionButton::new(("answer", index), answer.title)
                 .variant(answer.variant)
+                .margin(crate::ui::sharing(BUTTON_GAP, index + 1, count))
                 .on_click(move |_, window, cx| run(window, cx))
                 .into_any_element(),
         );
@@ -403,7 +408,7 @@ pub fn confirmation(
                     .child(confirmation.message),
             )
         })
-        .child(div().pt(px(22.)).flex().justify_end().gap(px(8.)).children(buttons));
+        .child(div().pt(px(22.)).flex().justify_end().children(buttons));
     let on_close = close.clone();
     modal(id, content, move |window, cx| on_close(window, cx)).on_return(move |window, cx| on_return(window, cx))
 }

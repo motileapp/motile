@@ -10,7 +10,7 @@ use crate::store::Store;
 use crate::theme::{ControlSize, IconSize, Radius, Surface, colors};
 use crate::ui::control::turning_symbol;
 use crate::ui::menu::Menu;
-use crate::ui::{ActionButton, ActionMenu, Spinner, Variant, tabular_numbers, tooltip};
+use crate::ui::{ActionButton, ActionMenu, Spinner, Variant, beside, tabular_numbers, tooltip};
 use crate::updater::UpdateState;
 
 /// What an update is at, after its symbol.
@@ -222,6 +222,7 @@ pub struct ServerUpdateStatus {
     size: ControlSize,
     surface: Surface,
     otherwise: Option<AnyElement>,
+    margin: Edges<f32>,
 }
 
 impl ServerUpdateStatus {
@@ -233,7 +234,14 @@ impl ServerUpdateStatus {
             size: ControlSize::Small,
             surface: Surface::Background,
             otherwise: None,
+            margin: Edges::default(),
         }
+    }
+
+    /// Room beside what it shows, which its button takes as its own.
+    pub fn margin(mut self, margin: Edges<f32>) -> Self {
+        self.margin = margin;
+        self
     }
 
     pub fn variant(mut self, variant: Variant) -> Self {
@@ -284,6 +292,7 @@ impl RenderOnce for ServerUpdateStatus {
         let server = &self.server;
         let id = |name: &str| SharedString::from(format!("{name}-{}", server.id));
         let update = store.server_update(server).cloned();
+        let margin = self.margin;
         if update.as_ref().is_some_and(|update| update.waiting && !update.restarting) {
             let restart = self.update(RestartWhen::Now);
             return div()
@@ -291,6 +300,7 @@ impl RenderOnce for ServerUpdateStatus {
                 .flex()
                 .items_center()
                 .gap(px(6.))
+                .pl(px(margin.left))
                 .child(div().text_size(px(11.)).text_color(c.muted_foreground).child("Waiting"))
                 .child(
                     ActionButton::new(id("restart-now"), "Restart Now")
@@ -301,6 +311,7 @@ impl RenderOnce for ServerUpdateStatus {
                         .variant(self.variant)
                         .size(self.size)
                         .surface(self.surface)
+                        .margin(beside(0., margin.right))
                         .on_click(move |_, window, cx| restart(window, cx)),
                 )
                 .tooltip(tooltip(format!("{} restarts once its agents have finished", server.name)))
@@ -311,13 +322,19 @@ impl RenderOnce for ServerUpdateStatus {
                 .flex()
                 .items_center()
                 .gap(px(6.))
+                .pl(px(margin.left))
+                .pr(px(margin.right))
                 .text_color(c.muted_foreground)
                 .child(div().text_size(px(11.)).font_features(tabular_numbers()).child(progress(&update)))
                 .child(Spinner::new(self.size.symbol()).render(cx))
                 .into_any_element();
         }
         if !store.is_outdated(server) {
-            return self.otherwise.unwrap_or_else(|| div().into_any_element());
+            let otherwise = self.otherwise.unwrap_or_else(|| div().into_any_element());
+            if margin == Edges::default() {
+                return otherwise;
+            }
+            return div().flex().pl(px(margin.left)).pr(px(margin.right)).child(otherwise).into_any_element();
         }
         let version = store.updater.latest.clone().unwrap_or_default();
         if store.is_busy(server) && server.can_choose_restart() {
@@ -330,6 +347,7 @@ impl RenderOnce for ServerUpdateStatus {
                     .item("Update when agents finish", move |window, cx| later(window, cx))
                     .item("Update now and auto-resume agents", move |window, cx| now(window, cx))
             })
+            .margin(beside(margin.left, margin.right))
             .button(|button| {
                 button
                     .help(format!(
@@ -353,6 +371,7 @@ impl RenderOnce for ServerUpdateStatus {
             .variant(self.variant)
             .size(self.size)
             .surface(self.surface)
+            .margin(beside(margin.left, margin.right))
             .on_click(move |_, window, cx| update(window, cx))
             .into_any_element()
     }

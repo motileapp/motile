@@ -3,6 +3,7 @@ package app.motile.composer
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -33,6 +34,7 @@ import app.motile.theme.LocalForeground
 import app.motile.theme.Radius
 import app.motile.theme.Theme
 import app.motile.ui.ActionButton
+import app.motile.ui.beside
 import app.motile.ui.ButtonVariant
 import app.motile.ui.Disabled
 import app.motile.ui.HighlightButton
@@ -47,6 +49,8 @@ import kotlinx.coroutines.launch
 /** How far past its text an option's light and the room to press it reach. */
 private val optionReach = 8.dp
 private val markGap = 10.dp
+/** The room between two options' lights, under each but the last: only drawn, so that their presses meet. */
+private val optionLight = PaddingValues(bottom = 2.dp)
 
 /**
  * The questions an agent asks with a tool call, one at a time. Each takes one of its options,
@@ -123,11 +127,16 @@ fun QuestionsView(approval: Approval, modifier: Modifier = Modifier) {
             Text(question.text, size = 13.5f, weight = FontWeight.Medium, style = Theme.ui(13.5f, FontWeight.Medium).copy(lineHeight = Theme.ui(13.5f).fontSize * 1.35f))
             if (question.multiple) Text("Choose any that apply", size = 12.5f, color = palette.mutedForeground)
         }
-        Column(Modifier.overhang(horizontal = optionReach), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Column(Modifier.overhang(horizontal = optionReach)) {
             for (option in question.options) {
                 val picked = isChosen(option)
-                HighlightButton({ choose(option) }, Modifier.fillMaxWidth(), radius = Radius.md, lit = picked, fill = palette.borderComposer) {
-                    Row(Modifier.padding(horizontal = optionReach, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(markGap)) {
+                HighlightButton(
+                    { choose(option) }, Modifier.fillMaxWidth(), radius = Radius.md, lit = picked, inset = optionLight, fill = palette.borderComposer,
+                ) {
+                    Row(
+                        Modifier.padding(optionLight).padding(horizontal = optionReach, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(markGap),
+                    ) {
                         PickMark(picked, question.multiple, Modifier.padding(top = 2.dp))
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             Text(option.label, size = 13f, weight = FontWeight.Medium, color = palette.foreground)
@@ -159,9 +168,11 @@ fun QuestionsView(approval: Approval, modifier: Modifier = Modifier) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             if (index > 0) ActionButton("Back", Symbol.ChevronLeft, variant = ButtonVariant.Ghost, size = ControlSize.Small) { index -= 1 }
             Spacer(Modifier.weight(1f))
-            ActionButton(approval.refuseLabel, size = ControlSize.Small) { store.answer(approval, allow = false) }
-            Disabled(!canGoOn()) {
-                ActionButton(if (isLast) approval.allowLabel else "Next", variant = ButtonVariant.Primary, size = ControlSize.Small, onClick = ::goOn)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                ActionButton(approval.refuseLabel, size = ControlSize.Small, margin = beside(end = 8.dp)) { store.answer(approval, allow = false) }
+                Disabled(!canGoOn()) {
+                    ActionButton(if (isLast) approval.allowLabel else "Next", variant = ButtonVariant.Primary, size = ControlSize.Small, onClick = ::goOn)
+                }
             }
         }
     }

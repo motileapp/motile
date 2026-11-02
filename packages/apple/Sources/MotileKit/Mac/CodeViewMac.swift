@@ -277,7 +277,7 @@ private final class CodeCanvas: NSView, NSMenuItemValidation {
         owner?.pointerMoved()
         let point = convert(event.locationInWindow, from: nil)
         var hovered: (file: Int, line: Int)?
-        if sheet.marks.commentable, sheet.inGutter(point.x - visibleRect.minX), let block = sheet.block(at: point.y),
+        if isUnderPointer(event), sheet.marks.commentable, sheet.inGutter(point.x - visibleRect.minX), let block = sheet.block(at: point.y),
             point.y >= block.linesTop, let place = sheet.place(at: point), sheet.commentable(place) != nil
         {
             hovered = (place.file, place.line)

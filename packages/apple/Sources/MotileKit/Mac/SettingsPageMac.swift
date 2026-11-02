@@ -136,10 +136,12 @@ struct SettingsPage: View {
                         if let sync = server.sync { ServerSyncLine(sync: sync).padding(.top, 2) }
                     }
                 } trailing: {
-                    ServerUpdateStatus(server: server, variant: .outline, size: .large) { EmptyView() }
-                    more("What to do with \(server.name)") {
-                        item("Unlink Server", symbol: .unlink, role: .destructive) { removal = .server(server) }
-                        item("Delete", symbol: .trash2, role: .destructive) { removal = .serverCompletely(server) }
+                    HStack(spacing: 0) {
+                        ServerUpdateStatus(server: server, variant: .outline, size: .large, margin: .beside(trailing: settingsHalfGap)) { EmptyView() }
+                        more("What to do with \(server.name)", margin: .beside(leading: settingsHalfGap)) {
+                            item("Unlink Server", symbol: .unlink, role: .destructive) { removal = .server(server) }
+                            item("Delete", symbol: .trash2, role: .destructive) { removal = .serverCompletely(server) }
+                        }
                     }
                 }
                 ThemeDivider()
@@ -402,8 +404,8 @@ struct SettingsPage: View {
     }
 
     /// The row's other actions, under its three dots.
-    private func more<Items: View>(_ help: String, @ViewBuilder items: () -> Items) -> some View {
-        ActionMenu(icon: .ellipsis, help: help, size: .large, content: items)
+    private func more<Items: View>(_ help: String, margin: EdgeInsets = EdgeInsets(), @ViewBuilder items: () -> Items) -> some View {
+        ActionMenu(icon: .ellipsis, help: help, size: .large, margin: margin, content: items)
     }
 
     private func item(_ title: String, symbol: Symbol, role: ButtonRole? = nil, action: @escaping () -> Void) -> some View {
@@ -419,11 +421,16 @@ struct SettingsPage: View {
 
 let settingsInset: CGFloat = 14
 let settingsRowHeight: CGFloat = scaled(48)
+private let settingsRowSpacing: CGFloat = 10
 
 /// What stands a control this tall as far from its row's right as from its top and bottom.
 func rowOutset(for height: CGFloat) -> CGFloat {
     settingsInset - (settingsRowHeight - height) / 2
 }
+
+/// Half the room between the lights of two large controls side by side at a row's end, which
+/// each takes as its own.
+let settingsHalfGap = (settingsRowSpacing - rowOutset(for: ControlSize.large.height)) / 2
 
 /// How a server's writer is told to name the branches it makes, to change and to put back.
 private struct BranchInstructionsEditor: View {
@@ -436,14 +443,14 @@ private struct BranchInstructionsEditor: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             TextArea("How to name a branch", text: $text, maxLines: 16)
-            HStack(spacing: 8) {
+            HStack(spacing: 0) {
                 Spacer()
-                ActionButton("Reset", variant: .outline, size: .large) {
+                ActionButton("Reset", variant: .outline, size: .large, margin: .beside(trailing: 4)) {
                     text = server.defaultBranchInstructions
                     store.setBranchInstructions(nil, on: server)
                 }
                 .disabled(server.branchInstructions == server.defaultBranchInstructions && !changed)
-                ActionButton("Save", variant: .primary, size: .large) { store.setBranchInstructions(text, on: server) }
+                ActionButton("Save", variant: .primary, size: .large, margin: .beside(leading: 4)) { store.setBranchInstructions(text, on: server) }
                     .disabled(!changed)
             }
         }
@@ -469,11 +476,11 @@ private struct SetupSheet: View {
                 .foregroundStyle(Color.themeMutedForeground)
                 .fixedSize(horizontal: false, vertical: true)
             TextArea("cp \"$MOTILE_PROJECT/.env\" . && pnpm install", text: $script, monospaced: true, lines: 5, maxLines: 14)
-            HStack {
+            HStack(spacing: 0) {
                 Spacer()
-                ActionButton("Cancel") { close() }
+                ActionButton("Cancel", margin: .beside(trailing: 4)) { close() }
                     .keyboardShortcut(.cancelAction)
-                ActionButton("Save", variant: .primary) {
+                ActionButton("Save", variant: .primary, margin: .beside(leading: 4)) {
                     store.setSetup(of: project, to: script)
                     close()
                 }
@@ -607,7 +614,7 @@ struct SettingsRow<Leading: View, Trailing: View>: View {
     @ViewBuilder let trailing: Trailing
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: settingsRowSpacing) {
             leading
                 .padding(.vertical, scaled(8))
             Spacer(minLength: 12)

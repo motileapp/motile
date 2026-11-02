@@ -230,7 +230,7 @@ final class ComposerScrollView: NSScrollView {
     }
 }
 
-final class ComposerNSTextView: NSTextView {
+final class ComposerNSTextView: PointerTextView {
     var onSubmit: (() -> Void)?
     var onFiles: (([URL]) -> Void)?
     var onFileDrag: ((Bool) -> Void)?

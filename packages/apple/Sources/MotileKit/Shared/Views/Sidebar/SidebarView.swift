@@ -215,10 +215,10 @@ private struct RenameThread: View {
             Text("Rename Thread")
                 .font(.ui(size: 15, weight: .semibold))
             InputField("Title", text: $title)
-            HStack(spacing: 8) {
+            HStack(spacing: 0) {
                 Spacer()
-                ActionButton("Cancel") { close() }
-                ActionButton("Rename", variant: .primary) {
+                ActionButton("Cancel", margin: .beside(trailing: 4)) { close() }
+                ActionButton("Rename", variant: .primary, margin: .beside(leading: 4)) {
                     store.rename(thread, to: title)
                     close()
                 }

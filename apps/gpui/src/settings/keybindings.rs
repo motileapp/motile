@@ -19,7 +19,8 @@ use crate::ui::control::Look;
 use crate::ui::menu::{Anchor, Menu};
 use crate::ui::motion;
 use crate::ui::{
-    ActionButton, ActionMenu, Chip, InputField, KeyCaps, Variant, card_default, card_slice, edges, icons, tooltip,
+    ActionButton, ActionMenu, Chip, InputField, KeyCaps, Variant, beside, card_default, card_slice, edges, icons,
+    tooltip,
 };
 
 /// The field the new shortcut records its keys in.
@@ -240,11 +241,11 @@ impl KeybindingsPage {
         let controls = div()
             .flex()
             .items_center()
-            .gap(px(8.))
             .child(
                 div()
                     .flex_1()
                     .min_w_0()
+                    .mr(px(8.))
                     .child(InputField::new(&self.query).icon("search").size(ControlSize::Large).clearable(true)),
             )
             .child(
@@ -253,12 +254,14 @@ impl KeybindingsPage {
                     .outline()
                     .large()
                     .disabled(adding)
+                    .margin(beside(0., 4.))
                     .on_click(cx.listener(|this, _, _, cx| this.start_adding(None, cx))),
             )
             .child(
                 ActionButton::icon("open-keybindings", "file-braces", "Open keybindings.json")
                     .outline()
                     .large()
+                    .margin(beside(4., 0.))
                     .on_click(move |_, _, cx| store.update(cx, |store, _| store.open_shortcuts_file())),
             )
             .into_any_element();
@@ -909,18 +912,19 @@ impl Render for ConditionEditor {
                 div()
                     .flex()
                     .items_center()
-                    .gap(px(8.))
                     .child(add)
                     .child(div().flex_1())
                     .child(
                         ActionButton::new("condition-cancel", "Cancel")
                             .surface(Surface::Popover)
+                            .margin(beside(0., 4.))
                             .on_click(cx.listener(|this, _, _, cx| this.cancel(cx))),
                     )
                     .child(
                         ActionButton::new("condition-save", "Save")
                             .primary()
                             .disabled(self.check.when_error.is_some())
+                            .margin(beside(4., 0.))
                             .on_click(cx.listener(|this, _, _, cx| this.save(cx))),
                     ),
             )

@@ -374,7 +374,7 @@ impl ComposerPicker {
     fn rail(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let searching = !self.query.read(cx).value().is_empty();
         let side = RAIL_WIDTH - 2. * PADDING;
-        div().w(px(RAIL_WIDTH)).flex_shrink_0().p(px(PADDING)).flex().flex_col().gap(px(4.)).children(
+        div().w(px(RAIL_WIDTH)).flex_shrink_0().px(px(PADDING)).py(px(PADDING - 2.)).flex().flex_col().children(
             self.agents(cx).into_iter().map(|agent| {
                 let group = SharedString::from(format!("picker-agent-{agent:?}"));
                 let selected = !searching && self.agent == Some(agent);
@@ -382,13 +382,15 @@ impl ComposerPicker {
                     .id(group.clone())
                     .group(group.clone())
                     .relative()
-                    .size(px(side))
+                    .w(px(side))
+                    .h(px(side + 4.))
                     .flex()
                     .items_center()
                     .justify_center()
                     .child(
                         Highlight::new()
                             .radius(Radius::SM)
+                            .inset(edges(2., 0., 2., 0.))
                             .surface(Surface::Popover)
                             .selected(selected)
                             .render(group, cx),

@@ -122,6 +122,9 @@ fun PanelLoading() {
     }
 }
 
+/** The room between what a panel bar holds. Buttons side by side are put in a row of their own that gives it to them, so that it only looks empty. */
+val panelBarGap = 4.dp
+
 /** The strip under the tabs with what the open tab is about and its buttons, on one row or two. */
 @Composable
 fun PanelBar(second: (@Composable RowScope.() -> Unit)? = null, content: @Composable RowScope.() -> Unit) {
@@ -136,7 +139,7 @@ fun PanelBar(second: (@Composable RowScope.() -> Unit)? = null, content: @Compos
 private fun PanelBarRow(content: @Composable RowScope.() -> Unit) {
     Row(
         Modifier.fillMaxWidth().height(pressable(36f)).padding(start = 12.dp, end = 4.dp),
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        horizontalArrangement = Arrangement.spacedBy(panelBarGap),
         verticalAlignment = Alignment.CenterVertically,
         content = content,
     )

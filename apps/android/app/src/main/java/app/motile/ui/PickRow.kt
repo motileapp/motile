@@ -54,7 +54,7 @@ fun PickRow(
         Modifier.selectable(picked, interaction, indication = null, enabled = enabled, role = Role.RadioButton, onClick = onPress)
     }
     Row(
-        modifier.fillMaxWidth().heightIn(min = size.height).opacity(Opacity.Disabled, on = !enabled).then(press),
+        modifier.fillMaxWidth().heightIn(min = size.height).opacity(Opacity.Disabled, on = !enabled).arrowPointer().then(press),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

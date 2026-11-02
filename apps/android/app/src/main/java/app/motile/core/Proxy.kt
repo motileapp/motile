@@ -327,13 +327,12 @@ class Proxy {
 
     // Accounts
 
-    /** Starts an account's sign-in and opens its page; the sheet follows it from the view's `signIn`. */
+    /** Starts an account's sign-in; the sheet follows it from the view's `signIn` and shows the page to open. */
     fun signIn(agent: Agent) {
         if (startingSignIn != null) return
         startingSignIn = agent
         send("proxy_sign_in", mapOf("agent" to agent.raw)) { result ->
             startingSignIn = null
-            result.onSuccess { openPage(it.string("url")) }
             alert(result)
         }
     }

@@ -998,6 +998,7 @@ pub struct ActionMenu {
     anchor: Anchor,
     build: BuildMenu,
     shortcut: Option<&'static str>,
+    margin: Edges<f32>,
 }
 
 impl ActionMenu {
@@ -1008,7 +1009,7 @@ impl ActionMenu {
     ) -> Self {
         let mut button = ActionButton::new(id, title).variant(Variant::Ghost).opens(true);
         button.menu = true;
-        Self { button, anchor: Anchor::default(), build: Rc::new(build), shortcut: None }
+        Self { button, anchor: Anchor::default(), build: Rc::new(build), shortcut: None, margin: Edges::default() }
     }
 
     pub fn icon(
@@ -1022,7 +1023,15 @@ impl ActionMenu {
             anchor: Anchor::default(),
             build: Rc::new(build),
             shortcut: None,
+            margin: Edges::default(),
         }
+    }
+
+    /// Room around its button that takes its presses, while the menu opens under its light.
+    pub fn margin(mut self, margin: Edges<f32>) -> Self {
+        self.button = self.button.margin(margin);
+        self.margin = margin;
+        self
     }
 
     /// Changes the button the menu opens from.
@@ -1049,12 +1058,21 @@ impl RenderOnce for ActionMenu {
         let opens = self.anchor.clone();
         let build = self.build;
         let fills = self.button.label.fills;
+        let margin = self.margin;
         let _ = window;
         div()
             .relative()
             .flex_shrink_0()
             .when(fills, |menu| menu.w_full())
-            .child(anchor.track())
+            .child(
+                div()
+                    .absolute()
+                    .top(px(margin.top))
+                    .left(px(margin.left))
+                    .bottom(px(margin.bottom))
+                    .right(px(margin.right))
+                    .child(anchor.track()),
+            )
             .children(self.shortcut.map(crate::keyboard::target))
             .child(self.button.on_click(move |_, window, cx| {
                 let menu = build(window, cx);
@@ -1333,6 +1351,7 @@ pub struct Switch {
     on: bool,
     disabled: bool,
     on_change: Option<OnChange>,
+    margin: Edges<f32>,
 }
 
 impl Switch {
@@ -1344,7 +1363,13 @@ impl Switch {
     const SLIDE: std::time::Duration = std::time::Duration::from_millis(200);
 
     pub fn new(id: impl Into<ElementId>, on: bool) -> Self {
-        Self { id: id.into(), on, disabled: false, on_change: None }
+        Self { id: id.into(), on, disabled: false, on_change: None, margin: Edges::default() }
+    }
+
+    /// Room around its track that takes its clicks, as `ActionButton::margin`.
+    pub fn margin(mut self, margin: Edges<f32>) -> Self {
+        self.margin = margin;
+        self
     }
 
     pub fn disabled(mut self, disabled: bool) -> Self {
@@ -1370,25 +1395,29 @@ impl RenderOnce for Switch {
         let off_knob = if c.dark { c.at(c.primary_foreground, Opacity::Lit) } else { c.primary_foreground };
         let knob = motion::mix(off_knob, c.primary_foreground, shown);
         let travel = Self::WIDTH - Self::KNOB_WIDTH - 2. * Self::INSET;
+        let margin = self.margin;
         div()
             .id(self.id)
             .flex_shrink_0()
-            .w(px(Self::WIDTH))
-            .h(px(Self::HEIGHT))
-            .rounded_full()
-            .bg(track)
-            .relative()
+            .flex()
+            .cursor_default()
+            .pt(px(margin.top))
+            .pl(px(margin.left))
+            .pb(px(margin.bottom))
+            .pr(px(margin.right))
             .when(disabled, |switch| switch.opacity(c.opacity(Opacity::Disabled)))
             .child(
-                div()
-                    .absolute()
-                    .top(px(Self::INSET))
-                    .left(px(Self::INSET + travel * shown))
-                    .w(px(Self::KNOB_WIDTH))
-                    .h(px(Self::HEIGHT - 2. * Self::INSET))
-                    .rounded_full()
-                    .bg(knob)
-                    .shadow(c.shadow(crate::theme::ShadowSize::Sm, Opacity::Shadow)),
+                div().w(px(Self::WIDTH)).h(px(Self::HEIGHT)).rounded_full().bg(track).relative().child(
+                    div()
+                        .absolute()
+                        .top(px(Self::INSET))
+                        .left(px(Self::INSET + travel * shown))
+                        .w(px(Self::KNOB_WIDTH))
+                        .h(px(Self::HEIGHT - 2. * Self::INSET))
+                        .rounded_full()
+                        .bg(knob)
+                        .shadow(c.shadow(crate::theme::ShadowSize::Sm, Opacity::Shadow)),
+                ),
             )
             .when_some(self.on_change.filter(|_| !disabled), |switch, on_change| {
                 switch.on_click(move |_, window, cx| {
@@ -1523,6 +1552,7 @@ impl RenderOnce for Segmented {
             .border_1()
             .border_color(c.border)
             .rounded(px(track_radius))
+            .cursor_default()
             .when(disabled, |track| track.opacity(c.opacity(Opacity::Disabled)))
             .children(self.options.into_iter().enumerate().map(|(index, (title, symbol))| {
                 let selected = index == self.selected;

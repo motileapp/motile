@@ -19,6 +19,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -91,7 +93,7 @@ fun HighlightButton(
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val tracked by interaction.collectIsHoveredAsState()
-    val pressing = modifier.combinedClickable(
+    val pressing = modifier.arrowPointer().combinedClickable(
         interactionSource = interaction,
         indication = null,
         enabled = usable,
@@ -159,12 +161,19 @@ fun DimButton(
     val lit = Opacity.Lit.value(LocalDark.current)
     Box(
         modifier
+            .arrowPointer()
             .combinedClickable(interactionSource = interaction, indication = null, enabled = enabled && LocalEnabled.current, onLongClick = onLongClick, onClick = onClick)
             .alpha(if (pressed) lit else 1f),
         contentAlignment = contentAlignment,
         content = content,
     )
 }
+
+/**
+ * Keeps the arrow over a control, or over what floats on the client, where the text under it or
+ * around it would show the cursor of text. Disabled, it keeps it too.
+ */
+fun Modifier.arrowPointer(): Modifier = pointerHoverIcon(PointerIcon.Default)
 
 /** As tall as it is on the Mac, and where fingers press it at least as tall as a finger needs. */
 fun pressable(height: Float): Dp = max(scaled(height), Platform.minimumPress).dp

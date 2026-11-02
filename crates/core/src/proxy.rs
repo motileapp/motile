@@ -465,8 +465,8 @@ fn sign_in_view(sign_in: &SignIn) -> SignInView {
     let started = &sign_in.started;
     let needs_code = started.agent == Agent::Claude;
     let text = match needs_code {
-        true => "Paste the code the page shows.",
-        false => "Enter this code on the page.",
+        true => "Open the link, sign in, and paste the code it gives you.",
+        false => "Open the link, sign in, and enter this code.",
     };
     SignInView {
         agent: started.agent,

@@ -13,7 +13,7 @@ use gpui_kit::*;
 use crate::theme::{ControlSize, IconSize, Layer, Opacity, Radius, ShadowSize, Surface, colors};
 use crate::ui::control::{ActionButton, Variant};
 use crate::ui::menu::Anchor;
-use crate::ui::{icons, motion};
+use crate::ui::{edges, icons, motion};
 
 type Run = Rc<dyn Fn(&mut Window, &mut App)>;
 
@@ -87,6 +87,7 @@ pub struct CopyButton {
     surface: Surface,
     row: Option<Layer>,
     disabled: bool,
+    margin: Edges<f32>,
     copy: Run,
 }
 
@@ -107,6 +108,7 @@ impl CopyButton {
             surface: Surface::Background,
             row: None,
             disabled: false,
+            margin: Edges::default(),
             copy: Rc::new(copy),
         }
     }
@@ -151,6 +153,11 @@ impl CopyButton {
         self.disabled = disabled;
         self
     }
+
+    pub fn margin(mut self, margin: Edges<f32>) -> Self {
+        self.margin = margin;
+        self
+    }
 }
 
 /// Draws the window again once a copy's check mark is to go.
@@ -180,6 +187,7 @@ impl RenderOnce for CopyButton {
             .surface(self.surface)
             .row(self.row)
             .disabled(self.disabled)
+            .margin(self.margin)
             .on_click(move |_, window, cx| {
                 copy(window, cx);
                 state.update(cx, |copied, _| copied.at = Some(Instant::now()));
@@ -206,6 +214,9 @@ pub struct CommandBox {
     surface: Surface,
     link: Option<SharedString>,
 }
+
+/// The room between a command box's buttons' lights, which their presses share.
+const BUTTON_GAP: f32 = 4.;
 
 impl CommandBox {
     const TEXT_SIZE: f32 = 12.5;
@@ -285,6 +296,7 @@ impl RenderOnce for CommandBox {
                 .symbol("square-arrow-out-up-right")
                 .ghost()
                 .surface(inside)
+                .margin(edges(0., 0., 0., BUTTON_GAP / 2.))
                 .on_click(move |_, _, cx| cx.open_url(&link))
         });
         let copied = self.command.clone();
@@ -312,7 +324,7 @@ impl RenderOnce for CommandBox {
                     .child(text),
             )
             .child(
-                div().flex().gap(px(4.)).children(open).child(
+                div().flex().children(open).child(
                     CopyButton::new(
                         SharedString::from(format!("copy-{:?}", self.id)),
                         format!("Copy the {noun}"),
@@ -322,6 +334,7 @@ impl RenderOnce for CommandBox {
                         },
                     )
                     .surface(inside)
+                    .margin(edges(0., if self.link.is_some() { BUTTON_GAP / 2. } else { 0. }, 0., 0.))
                     .disabled(self.command.is_none()),
                 ),
             )

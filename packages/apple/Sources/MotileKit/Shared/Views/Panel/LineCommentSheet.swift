@@ -74,31 +74,37 @@ struct LineCommentSheet: View {
             }
             TextArea(threads.isEmpty ? "Comment on this line" : "Reply, or say something new", text: $text, lines: 5)
             #if os(macOS)
-            HStack(spacing: 8) {
-                ActionButton("Ask the Agent", help: "Put this line and what you wrote in the composer", action: askAgent)
+            HStack(spacing: 0) {
+                ActionButton("Ask the Agent", help: "Put this line and what you wrote in the composer", margin: .beside(trailing: 8), action: askAgent)
                     .disabled(written.isEmpty)
                 Spacer()
-                ActionButton("Cancel") { close() }
+                ActionButton("Cancel", margin: .beside(leading: 8, trailing: 4)) { close() }
                     .keyboardShortcut(.cancelAction)
                 if let thread = threads.last {
-                    ActionButton("Reply") { replyTo(thread) }
+                    ActionButton("Reply", margin: .beside(leading: 4, trailing: 4)) { replyTo(thread) }
                         .disabled(written.isEmpty)
                 }
-                ActionButton("Add to Review", variant: .primary, action: addToReview)
+                ActionButton("Add to Review", variant: .primary, margin: .beside(leading: 4), action: addToReview)
                     .keyboardShortcut(.defaultAction)
                     .disabled(written.isEmpty)
             }
             #else
-            VStack(spacing: 8) {
-                ActionButton("Add to Review", variant: .primary, size: .large, fills: true, action: addToReview)
-                    .disabled(written.isEmpty)
+            let count = threads.isEmpty ? 3 : 4
+            VStack(spacing: 0) {
+                ActionButton(
+                    "Add to Review", variant: .primary, size: .large, fills: true, margin: .sharing(8, at: 0, of: count, along: .vertical),
+                    action: addToReview
+                )
+                .disabled(written.isEmpty)
                 if let thread = threads.last {
-                    ActionButton("Reply", size: .large, fills: true) { replyTo(thread) }
+                    ActionButton("Reply", size: .large, fills: true, margin: .sharing(8, at: 1, of: count, along: .vertical)) { replyTo(thread) }
                         .disabled(written.isEmpty)
                 }
-                ActionButton("Ask the Agent", size: .large, fills: true, action: askAgent)
+                ActionButton("Ask the Agent", size: .large, fills: true, margin: .sharing(8, at: count - 2, of: count, along: .vertical), action: askAgent)
                     .disabled(written.isEmpty)
-                ActionButton("Cancel", variant: .ghost, size: .large, fills: true) { close() }
+                ActionButton("Cancel", variant: .ghost, size: .large, fills: true, margin: .sharing(8, at: count - 1, of: count, along: .vertical)) {
+                    close()
+                }
             }
             #endif
         }

@@ -78,6 +78,7 @@ fun DateField(
             .opacity(Opacity.Disabled, on = !enabled)
             .focusRing(focused, size.radius)
             .fieldFrame(size)
+            .arrowPointer()
             .clickable(interactionSource = interaction, indication = null, enabled = enabled, role = Role.Button) { open() }
             .clearAndSetSemantics {
                 role = Role.Button

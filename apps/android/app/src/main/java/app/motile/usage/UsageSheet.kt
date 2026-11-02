@@ -14,6 +14,7 @@ import app.motile.LocalStore
 import app.motile.core.UsageModel
 import app.motile.platform.Symbol
 import app.motile.ui.GlassButton
+import app.motile.ui.beside
 import app.motile.ui.SheetBar
 import app.motile.ui.SheetCloseButton
 
@@ -38,8 +39,8 @@ fun UsageSheet() {
         Column(Modifier.fillMaxWidth().padding(horizontal = margin, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             UsageTabs(model, fills = true)
             if (picksServers || model.tab != UsageModel.Tab.Limits) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (picksServers) UsageServersMenu(model)
+                Row {
+                    if (picksServers) UsageServersMenu(model, beside(end = if (model.tab != UsageModel.Tab.Limits) 8.dp else 0.dp))
                     if (model.tab != UsageModel.Tab.Limits) UsagePeriodMenu(model)
                 }
             }

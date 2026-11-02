@@ -138,25 +138,27 @@ private struct RicracIssues: View {
         let connected = ricrac.connected(target.serverID)
         let workspace = connected.first { $0.id == choice.workspace }
         let teams = ricrac.teams[choice.workspace ?? ""] ?? []
-        ActionMenu(workspace?.workspace ?? "Ricrac", help: "Which workspace to show") {
-            ForEach(connected) { connection in
-                Toggle(connection.workspace, isOn: Binding { connection.id == choice.workspace } set: { _ in
-                    ricrac.pick(connection.id, for: target)
-                })
+        HStack(spacing: 0) {
+            ActionMenu(workspace?.workspace ?? "Ricrac", help: "Which workspace to show", margin: .beside(trailing: panelBarGap)) {
+                ForEach(connected) { connection in
+                    Toggle(connection.workspace, isOn: Binding { connection.id == choice.workspace } set: { _ in
+                        ricrac.pick(connection.id, for: target)
+                    })
+                }
+                Divider()
+                Button("Add Workspace") { ricrac.connect(target.serverID) }
+                if let workspace {
+                    Button("Disconnect \(workspace.workspace)", role: .destructive) { ricrac.disconnect(workspace.id, on: target.serverID) }
+                }
             }
-            Divider()
-            Button("Add Workspace") { ricrac.connect(target.serverID) }
-            if let workspace {
-                Button("Disconnect \(workspace.workspace)", role: .destructive) { ricrac.disconnect(workspace.id, on: target.serverID) }
-            }
-        }
-        .padding(.leading, -8)
-        ActionMenu(teams.first { $0.id == choice.team }?.name ?? "All Teams", help: "Which team's issues to show") {
-            Toggle("All Teams", isOn: Binding { choice.team == nil } set: { _ in ricrac.pick(choice.workspace, for: target) })
-            ForEach(teams) { team in
-                Toggle(team.name, isOn: Binding { choice.team == team.id } set: { _ in
-                    ricrac.pick(choice.workspace, team: team.id, for: target)
-                })
+            .padding(.leading, -8)
+            ActionMenu(teams.first { $0.id == choice.team }?.name ?? "All Teams", help: "Which team's issues to show") {
+                Toggle("All Teams", isOn: Binding { choice.team == nil } set: { _ in ricrac.pick(choice.workspace, for: target) })
+                ForEach(teams) { team in
+                    Toggle(team.name, isOn: Binding { choice.team == team.id } set: { _ in
+                        ricrac.pick(choice.workspace, team: team.id, for: target)
+                    })
+                }
             }
         }
     }
@@ -166,20 +168,24 @@ private struct RicracIssues: View {
         let ricrac = store.ricrac
         InputField("Search", text: search, icon: .search, clearable: true)
             .frame(maxWidth: narrow ? .infinity : 180)
-        ActionMenu(icon: .listFilter, help: "Which issues to show") {
-            Toggle("Assigned to Me", isOn: Binding { choice.mine } set: { mine in ricrac.changeFilter { $0.mine = mine } })
-            Divider()
-            ForEach(RicracState.kinds, id: \.kind) { kind in
-                Toggle(kind.name, isOn: Binding { choice.states.contains(kind.kind) } set: { listed in
-                    ricrac.changeFilter { filter in
-                        filter.states.removeAll { $0 == kind.kind }
-                        if listed { filter.states.append(kind.kind) }
-                    }
-                })
+        HStack(spacing: 0) {
+            ActionMenu(icon: .listFilter, help: "Which issues to show", margin: .beside(trailing: panelBarGap)) {
+                Toggle("Assigned to Me", isOn: Binding { choice.mine } set: { mine in ricrac.changeFilter { $0.mine = mine } })
+                Divider()
+                ForEach(RicracState.kinds, id: \.kind) { kind in
+                    Toggle(kind.name, isOn: Binding { choice.states.contains(kind.kind) } set: { listed in
+                        ricrac.changeFilter { filter in
+                            filter.states.removeAll { $0 == kind.kind }
+                            if listed { filter.states.append(kind.kind) }
+                        }
+                    })
+                }
             }
+            ActionButton(
+                icon: .rotateCw, help: "Read the issues again", pending: ricrac.working.contains("issues"), margin: .beside(trailing: panelBarGap)
+            ) { asked += 1 }
+            ActionButton(icon: .plus, help: "New Issue") { filing = true }
         }
-        ActionButton(icon: .rotateCw, help: "Read the issues again", pending: ricrac.working.contains("issues")) { asked += 1 }
-        ActionButton(icon: .plus, help: "New Issue") { filing = true }
     }
 
     @ViewBuilder
@@ -280,10 +286,12 @@ struct RicracIssueSurface: View {
                     .font(.ui(size: 12.5, weight: .medium))
                     .foregroundStyle(Color.themeMutedForeground)
                 Spacer(minLength: 4)
-                if let url = page.value?.row.url {
-                    ActionButton(icon: .squareArrowOutUpRight, help: "Open in Ricrac") { Platform.open(url) }
+                HStack(spacing: 0) {
+                    if let url = page.value?.row.url {
+                        ActionButton(icon: .squareArrowOutUpRight, help: "Open in Ricrac", margin: .beside(trailing: panelBarGap)) { Platform.open(url) }
+                    }
+                    ActionButton(icon: .rotateCw, help: "Read the issue again", pending: ricrac.working.contains("read:\(id)")) { asked += 1 }
                 }
-                ActionButton(icon: .rotateCw, help: "Read the issue again", pending: ricrac.working.contains("read:\(id)")) { asked += 1 }
             }
             if let error = ricrac.error {
                 PanelNote(text: error)
@@ -310,8 +318,8 @@ struct RicracIssueSurface: View {
                     .foregroundStyle(Color.themeForeground)
                     .textSelection(.enabled)
                 ViewThatFits(in: .horizontal) {
-                    HStack(spacing: 6) { properties(page) }
-                    VStack(alignment: .leading, spacing: 6) { properties(page) }
+                    HStack(spacing: 0) { properties(page, along: .horizontal) }
+                    VStack(alignment: .leading, spacing: 0) { properties(page, along: .vertical) }
                 }
                 if !page.row.labels.isEmpty {
                     HStack(spacing: 6) {
@@ -353,21 +361,27 @@ struct RicracIssueSurface: View {
     }
 
     @ViewBuilder
-    private func properties(_ page: RicracPage) -> some View {
+    private func properties(_ page: RicracPage, along axis: Axis) -> some View {
         let ricrac = store.ricrac
         let states = ricrac.teams[workspace]?.first { $0.id == page.row.team }?.states ?? []
         let change = { (change: JSON) in ricrac.change(id, change, of: workspace, on: target.serverID) }
         let status = AnyView(Image(page.state.symbol, size: ControlSize.small.symbol).foregroundStyle(page.state.color))
-        ActionMenu(page.state.name, picture: status, help: "Status", variant: .secondary, size: .small, pending: ricrac.working.contains(id)) {
+        ActionMenu(
+            page.state.name, picture: status, help: "Status", variant: .secondary, size: .small, pending: ricrac.working.contains(id),
+            margin: .sharing(6, at: 0, of: 3, along: axis)
+        ) {
             RicracChoices.states(states, current: page.state.id) { change(["state": $0.id]) }
         }
         ActionMenu(
             RicracRow.priorities.first { $0.value == page.row.priority }?.name, icon: page.row.prioritySymbol, help: "Priority",
-            variant: .secondary, size: .small
+            variant: .secondary, size: .small, margin: .sharing(6, at: 1, of: 3, along: axis)
         ) {
             RicracChoices.priorities(current: page.row.priority) { change(["priority": $0]) }
         }
-        ActionMenu(page.row.assignee ?? "Unassigned", icon: .circleUser, help: "Assignee", variant: .secondary, size: .small) {
+        ActionMenu(
+            page.row.assignee ?? "Unassigned", icon: .circleUser, help: "Assignee", variant: .secondary, size: .small,
+            margin: .sharing(6, at: 2, of: 3, along: axis)
+        ) {
             RicracChoices.assignees(ricrac.users[workspace] ?? [], current: page.row.assigneeID) { change(["assignee": $0 ?? ""]) }
         }
     }
@@ -412,17 +426,18 @@ private struct RicracNewIssue: View {
                 .font(.ui(size: 15, weight: .semibold))
             InputField("Title", text: $title)
             TextArea("Add a description", text: $description, lines: 4, fills: true)
-            FlowRow { properties(teams: teams, picked: picked, states: states, state: state, users: users) }
+            FlowRow(spacing: 0) { properties(teams: teams, picked: picked, states: states, state: state, users: users) }
+                .padding(-3)
             if let error = ricrac.error {
                 Text(error)
                     .font(.ui(size: 12.5))
                     .foregroundStyle(Color.themeDestructive)
             }
-            HStack(spacing: 8) {
+            HStack(spacing: 0) {
                 Spacer()
-                ActionButton("Cancel") { close() }
+                ActionButton("Cancel", margin: .beside(trailing: 4)) { close() }
                     .keyboardShortcut(.cancelAction)
-                ActionButton("Create Issue", variant: .primary, pending: ricrac.working.contains("create")) {
+                ActionButton("Create Issue", variant: .primary, pending: ricrac.working.contains("create"), margin: .beside(leading: 4)) {
                     guard let picked else { return }
                     var issue: JSON = ["team": picked.id, "title": title, "description": description, "priority": priority]
                     if let state { issue["state"] = state.id }
@@ -447,7 +462,7 @@ private struct RicracNewIssue: View {
 
     @ViewBuilder
     private func properties(teams: [RicracTeam], picked: RicracTeam?, states: [RicracState], state: RicracState?, users: [RicracUser]) -> some View {
-        ActionMenu(picked?.name ?? "Team", help: "Team", variant: .secondary, size: .small) {
+        ActionMenu(picked?.name ?? "Team", help: "Team", variant: .secondary, size: .small, margin: .around(6)) {
             ForEach(teams) { team in
                 Toggle(team.name, isOn: Binding { team.id == picked?.id } set: { _ in
                     teamID = team.id
@@ -455,16 +470,19 @@ private struct RicracNewIssue: View {
                 })
             }
         }
-        ActionMenu(state?.name ?? "Status", icon: state?.symbol, help: "Status", variant: .secondary, size: .small) {
+        ActionMenu(state?.name ?? "Status", icon: state?.symbol, help: "Status", variant: .secondary, size: .small, margin: .around(6)) {
             RicracChoices.states(states, current: state?.id) { stateID = $0.id }
         }
         ActionMenu(
             RicracRow.priorities.first { $0.value == priority }?.name, icon: RicracRow.symbol(priority: priority), help: "Priority",
-            variant: .secondary, size: .small
+            variant: .secondary, size: .small, margin: .around(6)
         ) {
             RicracChoices.priorities(current: priority) { priority = $0 }
         }
-        ActionMenu(users.first { $0.id == assigneeID }?.name ?? "Unassigned", icon: .circleUser, help: "Assignee", variant: .secondary, size: .small) {
+        ActionMenu(
+            users.first { $0.id == assigneeID }?.name ?? "Unassigned", icon: .circleUser, help: "Assignee", variant: .secondary, size: .small,
+            margin: .around(6)
+        ) {
             RicracChoices.assignees(users, current: assigneeID) { assigneeID = $0 }
         }
     }

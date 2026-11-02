@@ -7,6 +7,7 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import app.motile.ui.edgeFade
 import app.motile.ui.ButtonVariant
 import app.motile.ui.ActionButton
+import app.motile.ui.beside
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.horizontalScroll
@@ -746,15 +747,23 @@ private fun RemovedRow(removed: RemovedContent) {
                 SelectionContainer(Modifier.padding(top = RemovedRow.textGap)) {
                     Text(removed.message, style = Theme.ui(13f).copy(lineHeight = (13f * Platform.scale * 1.2f + 5).sp), color = palette.mutedForeground)
                 }
-                Row(
-                    Modifier.fillMaxWidth().padding(top = RemovedRow.buttonsGap),
-                    horizontalArrangement = Arrangement.spacedBy(ControlSize.Regular.gap, Alignment.End),
-                ) {
+                Row(Modifier.fillMaxWidth().padding(top = RemovedRow.buttonsGap), horizontalArrangement = Arrangement.End) {
                     val half = if (halves) Modifier.weight(1f) else Modifier
-                    RowButton("Open Settings", "Unlinked servers are deleted with their threads in settings", half, bordered = true, hover = palette.border, fills = halves) {
+                    // The gap is the buttons', split in whole pixels, so that each half of the row is as wide as before.
+                    val (before, after) = with(LocalDensity.current) {
+                        val gap = ControlSize.Regular.gap.roundToPx()
+                        (gap / 2).toDp() to (gap - gap / 2).toDp()
+                    }
+                    RowButton(
+                        "Open Settings", "Unlinked servers are deleted with their threads in settings", half, bordered = true, hover = palette.border,
+                        fills = halves, margin = beside(end = before),
+                    ) {
                         actions.store.openSettings(SettingsSection.Servers)
                     }
-                    RowButton("Continue Thread", "Start a thread on another server with everything that happened here", half, primary = true, fills = halves) {
+                    RowButton(
+                        "Continue Thread", "Start a thread on another server with everything that happened here", half, primary = true, fills = halves,
+                        margin = beside(start = after),
+                    ) {
                         actions.store.continueOnAnotherServer()
                     }
                 }

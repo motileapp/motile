@@ -9,7 +9,7 @@ enum ProxyText {
     static let captureThreads = 12
 
     static func accounts(of agent: Agent) -> String { "\(agent.name) Accounts" }
-    static func addAccount(of agent: Agent) -> String { "Add a \(agent.name) Account" }
+    static func addAccount(of agent: Agent) -> String { "Add \(agent.name) Account" }
 }
 
 extension ProxyAccount.Status {
@@ -34,15 +34,26 @@ extension ProxyState {
 struct ProxyAccountLabel: View {
     let account: ProxyAccount
 
+    /// The badges stand beside the name, or after the plan under it where that would cut the name short.
     var body: some View {
+        ViewThatFits(in: .horizontal) {
+            lines(badgesBeside: true)
+            lines(badgesBeside: false)
+        }
+    }
+
+    private func lines(badgesBeside: Bool) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 6) {
                 AgentIcon(agent: account.agent, size: .md)
                 name
+                if badgesBeside { chips }
             }
             HStack(spacing: 6) {
-                chips
+                // Its length never decides where the badges go: it is cut short instead.
                 description
+                    .frame(minWidth: 0, idealWidth: 0, alignment: .leading)
+                if !badgesBeside { chips }
             }
         }
     }
@@ -97,10 +108,15 @@ struct ProxyMenuItem: View {
 
     var body: some View {
         Button(role: role, action: action) {
-            Label {
-                Text(title)
-            } icon: {
-                Image(platform: .symbol(symbol, size: .md))
+            if role == .destructive {
+                // Red like its words, as every destructive item is.
+                Label {
+                    Text(title)
+                } icon: {
+                    Image(platform: TintedSymbol.image(symbol, size: .md, color: Theme.destructive))
+                }
+            } else {
+                Label(title, symbol: symbol)
             }
         }
     }
@@ -124,11 +140,7 @@ struct ProxyAccountActions: View {
                 })
             }
         } label: {
-            Label {
-                Text(account.priorityText)
-            } icon: {
-                Image(platform: .symbol(.listFilter, size: .md))
-            }
+            Label(account.priorityText, symbol: .listFilter)
         }
         ProxyMenuItem("Sign In Again", symbol: .circleUser) { store.startProxySignIn(account.agent) }
         Divider()
@@ -459,45 +471,50 @@ struct ProxySignInSheet: View {
         .foregroundStyle(Color.themeMutedForeground)
     }
 
+    /// What to do, the link, and the code: the same on every system.
+    @ViewBuilder private func steps(_ signIn: ProxySignIn) -> some View {
+        Text(signIn.text)
+            .font(.ui(size: 13))
+            .foregroundStyle(Color.themeMutedForeground)
+            .fixedSize(horizontal: false, vertical: true)
+        if let url = signIn.url {
+            CommandBox(command: url.absoluteString, link: url)
+        }
+        if let user = signIn.userCode {
+            userCode(user).padding(.vertical, 6)
+        }
+        if signIn.needsCode {
+            HStack(spacing: 6) {
+                InputField("Paste the code", text: $code, monospaced: true, focus: $codeFocused)
+                    .onSubmit(finish)
+                    .onAppear { codeFocused = true }
+                ActionButton("Sign In", variant: .primary, pending: signIn.waiting, action: finish)
+                    .disabled(!canFinish && !signIn.waiting)
+            }
+        } else if signIn.waiting && signIn.error == nil {
+            waiting
+        }
+        if let error = signIn.error {
+            Text(error)
+                .font(.ui(size: 12))
+                .foregroundStyle(Color.themeDestructive)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
     #if os(macOS)
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             if let signIn = store.proxy.signIn {
                 Text("Sign In to \(signIn.agent.name)")
                     .font(.ui(size: 15, weight: .semibold))
-                Text(signIn.text)
-                    .font(.ui(size: 13))
-                    .foregroundStyle(Color.themeMutedForeground)
-                    .fixedSize(horizontal: false, vertical: true)
-                if let url = signIn.url {
-                    CommandBox(command: url.absoluteString, link: url)
-                }
-                if let user = signIn.userCode {
-                    userCode(user).padding(.vertical, 6)
-                }
-                if signIn.needsCode {
-                    HStack(spacing: 6) {
-                        InputField("Paste the code", text: $code, monospaced: true, focus: $codeFocused)
-                            .onSubmit(finish)
-                            .onAppear { codeFocused = true }
-                        ActionButton("Sign In", variant: .primary, pending: signIn.waiting, action: finish)
-                            .disabled(!canFinish && !signIn.waiting)
-                    }
-                } else if signIn.waiting && signIn.error == nil {
-                    waiting
-                }
-                if let error = signIn.error {
-                    Text(error)
-                        .font(.ui(size: 12))
-                        .foregroundStyle(Color.themeDestructive)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                HStack(spacing: 8) {
+                steps(signIn)
+                HStack(spacing: 0) {
                     Spacer()
-                    ActionButton("Cancel") { close() }
+                    ActionButton("Cancel", margin: .beside(trailing: startsAgain(signIn) ? 4 : 0)) { close() }
                         .keyboardShortcut(.cancelAction)
                     if startsAgain(signIn) {
-                        ActionButton("Start Again", variant: .primary, pending: store.proxySignInStarting != nil) {
+                        ActionButton("Start Again", variant: .primary, pending: store.proxySignInStarting != nil, margin: .beside(leading: 4)) {
                             store.startProxySignIn(signIn.agent)
                         }
                     }
@@ -510,45 +527,18 @@ struct ProxySignInSheet: View {
     #else
     var body: some View {
         NavigationStack {
-            SettingsList {
-                if let signIn = store.proxy.signIn {
-                    if let user = signIn.userCode {
-                        Section {
-                            userCode(user)
-                                .listRowBackground(Color.clear)
-                        }
-                    }
-                    Section {
-                        if let url = signIn.url {
-                            Button { Platform.open(url) } label: {
-                                SettingsActionLabel("Open the Sign-In Page", symbol: .squareArrowOutUpRight)
-                            }
-                        }
-                        if signIn.needsCode {
-                            HStack(spacing: 10) {
-                                TextField("Paste the code", text: $code)
-                                    .font(.system(.body, design: .monospaced))
-                                    .textInputAutocapitalization(.never)
-                                    .autocorrectionDisabled()
-                                    .focused($codeFocused)
-                                    .onSubmit(finish)
-                                ActionButton("Sign In", variant: .primary, pending: signIn.waiting, action: finish)
-                                    .disabled(!canFinish && !signIn.waiting)
-                            }
-                        } else if signIn.waiting && signIn.error == nil {
-                            waiting
-                        }
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    if let signIn = store.proxy.signIn {
+                        steps(signIn)
                         if startsAgain(signIn) {
-                            Button { store.startProxySignIn(signIn.agent) } label: {
-                                SettingsActionLabel("Start Again", symbol: .rotateCw)
+                            ActionButton("Start Again", variant: .primary, pending: store.proxySignInStarting != nil, fills: true) {
+                                store.startProxySignIn(signIn.agent)
                             }
-                            .disabled(store.proxySignInStarting != nil)
                         }
-                    } footer: {
-                        Text(signIn.error ?? signIn.text)
-                            .foregroundStyle(signIn.error == nil ? Color.themeMutedForeground : Color.themeDestructive)
                     }
                 }
+                .padding(20)
             }
             .navigationTitle("Sign In to \(store.proxy.signIn?.agent.name ?? "")")
             .navigationBarTitleDisplayMode(.inline)

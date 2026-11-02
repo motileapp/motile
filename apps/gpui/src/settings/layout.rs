@@ -23,6 +23,8 @@ pub const END_ROOM: f32 = 80.;
 pub const GROUP_GAP: f32 = 22.;
 /// The room between a group's title and its rows.
 pub const TITLE_GAP: f32 = 12.;
+/// The room between a row's controls, which buttons side by side share as their margins.
+pub const TRAILING_GAP: f32 = 10.;
 
 /// What stands a control this tall as far from its row's right as from its top and bottom.
 pub fn row_outset(height: f32) -> f32 {
@@ -143,7 +145,9 @@ fn row_with(leading: Vec<AnyElement>, trailing: Vec<AnyElement>, outset: f32) ->
             })
         }))
         .when(!trailing.is_empty(), |row| {
-            row.child(div().flex_shrink_0().mr(px(-outset)).flex().items_center().gap(px(10.)).children(trailing))
+            row.child(
+                div().flex_shrink_0().mr(px(-outset)).flex().items_center().gap(px(TRAILING_GAP)).children(trailing),
+            )
         })
 }
 

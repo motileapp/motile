@@ -30,6 +30,7 @@ import app.motile.theme.Palette
 import app.motile.theme.Radius
 import app.motile.theme.Theme
 import app.motile.ui.ActionButton
+import app.motile.ui.beside
 import app.motile.ui.ButtonVariant
 import app.motile.ui.FadingScroll
 import app.motile.ui.Icon
@@ -71,8 +72,10 @@ private fun Call(approval: Approval, count: Int) {
             CompositionLocalProvider(LocalForeground provides palette.warning) {
                 WaitingTitle(approval.title, approval.symbol, if (count > 1) "1 of $count" else null, Modifier.weight(1f))
             }
-            ActionButton(approval.refuseLabel, size = ControlSize.Small) { store.answer(approval, allow = false) }
-            ActionButton(approval.allowLabel, variant = ButtonVariant.Warning, size = ControlSize.Small) { store.answer(approval, allow = true) }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                ActionButton(approval.refuseLabel, size = ControlSize.Small, margin = beside(end = 8.dp)) { store.answer(approval, allow = false) }
+                ActionButton(approval.allowLabel, variant = ButtonVariant.Warning, size = ControlSize.Small) { store.answer(approval, allow = true) }
+            }
         }
         if (approval.target.isNotEmpty()) {
             val typeset = remember(approval, palette) { typesetTarget(approval, palette) }

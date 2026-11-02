@@ -1,5 +1,6 @@
 package app.motile.ui
 
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -8,6 +9,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import app.motile.platform.Symbol
 import app.motile.theme.IconSize
 import app.motile.theme.ControlSize
@@ -27,6 +29,7 @@ fun CopyButton(
     round: Boolean = false,
     quiet: Boolean = false,
     copies: Int = 0,
+    margin: PaddingValues = PaddingValues(0.dp),
     copy: () -> Unit,
 ) {
     var copied by remember { mutableStateOf(false) }
@@ -45,7 +48,7 @@ fun CopyButton(
     }
     ActionButton(
         icon = if (copied) Symbol.Check else Symbol.Copy, help = help, modifier = modifier, variant = variant, size = size,
-        symbolSize = symbolSize, round = round, quiet = quiet,
+        symbolSize = symbolSize, round = round, quiet = quiet, margin = margin,
     ) {
         copy()
         copied = true

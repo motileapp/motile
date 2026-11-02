@@ -133,7 +133,7 @@ fn flashcard(
             true => UiCx { row: format!("{}~ghost", cx.row).into(), ..cx.within(face_width) },
             false => cx.within(face_width),
         };
-        let face_cx = if back { face_cx.on(cx.surface.in_box()) } else { face_cx };
+        let face_cx = if back { face_cx.on(cx.surface.in_box()) } else { face_cx }.in_control();
         let fill = if back { cx.surface.layer(Layer::Box, c) } else { cx.surface.color(c) };
         let part = if back { "back" } else { "front" };
         let parts = window

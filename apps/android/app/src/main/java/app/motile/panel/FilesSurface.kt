@@ -56,6 +56,7 @@ import app.motile.theme.IconSize
 import app.motile.theme.LocalPalette
 import app.motile.theme.Radius
 import app.motile.ui.ActionButton
+import app.motile.ui.beside
 import app.motile.ui.CopyButton
 import app.motile.ui.HighlightButton
 import app.motile.ui.Icon
@@ -148,8 +149,10 @@ fun FileSurface(target: PanelTarget, path: String) {
                 withStyle(SpanStyle(color = palette.foreground)) { append(path.substringAfterLast('/')) }
             }
             Text(title, Modifier.weight(1f), size = 12.5f, weight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.StartEllipsis)
-            CopyButton("Copy the path") { Platform.copy(path) }
-            ActionButton(icon = Symbol.RotateCw, help = "Read the file again", pending = tab in content.reading) { asked += 1 }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                CopyButton("Copy the path", margin = beside(end = panelBarGap)) { Platform.copy(path) }
+                ActionButton(icon = Symbol.RotateCw, help = "Read the file again", pending = tab in content.reading) { asked += 1 }
+            }
         }
         when (val loaded = content.contents[tab]) {
             null, Loaded.Loading -> PanelLoading()

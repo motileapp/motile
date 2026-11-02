@@ -2,7 +2,7 @@ import SwiftUI
 
 /// A command to run in a terminal, in the theme's code colours, with the button that copies it
 /// and, on iOS, the one that shares it. Without a command yet it says what it waits for. A link
-/// is shown on one line, cut short, with the button that opens it.
+/// is shown on one line, cut short, with the buttons that open and copy it.
 struct CommandBox: View {
     @Environment(\.surface) private var surface
     let command: String?
@@ -12,6 +12,17 @@ struct CommandBox: View {
     var link: URL?
 
     private var noun: String { link == nil ? "command" : "link" }
+
+    /// The room between the buttons' lights, which their presses share.
+    private static let buttonGap: CGFloat = 4
+
+    private var copyMargin: EdgeInsets {
+        #if os(iOS)
+        return .beside(leading: Self.buttonGap / 2)
+        #else
+        return .beside(leading: link == nil ? 0 : Self.buttonGap / 2)
+        #endif
+    }
 
     /// Puts the first line of the command level with the middle of the buttons.
     private static let textInset = ((ControlSize.regular.height - PlatformFont.uiMono(12.5).textLineHeight) / 2).rounded()
@@ -26,18 +37,24 @@ struct CommandBox: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding([.vertical, .leading], Self.textInset)
-            HStack(spacing: 4) {
+            HStack(spacing: 0) {
                 if let link {
-                    ActionButton("Open", icon: .squareArrowOutUpRight, variant: .ghost) { Platform.open(link) }
+                    ActionButton("Open", icon: .squareArrowOutUpRight, variant: .ghost, margin: .beside(trailing: Self.buttonGap / 2)) {
+                        Platform.open(link)
+                    }
                 }
                 #if os(iOS)
-                ShareLink(item: command ?? "") {
-                    ControlLabel(title: nil, icon: .symbol(.share), size: .regular)
+                if link == nil {
+                    let shared = EdgeInsets.beside(trailing: Self.buttonGap / 2)
+                    ShareLink(item: command ?? "") {
+                        ControlLabel(title: nil, icon: .symbol(.share), size: .regular)
+                            .padding(shared)
+                    }
+                    .buttonStyle(ControlButtonStyle(look: ControlLook(variant: .ghost, size: .regular), margin: shared))
+                    .accessibilityLabel("Share the command")
                 }
-                .buttonStyle(.control())
-                .accessibilityLabel("Share the \(noun)")
                 #endif
-                CopyButton(help: "Copy the \(noun)") {
+                CopyButton(help: "Copy the \(noun)", margin: copyMargin) {
                     guard let command else { return }
                     Platform.copy(command)
                 }

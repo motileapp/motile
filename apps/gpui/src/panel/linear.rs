@@ -24,7 +24,8 @@ use crate::ui::control::Spinner;
 use crate::ui::menu::{Menu, MenuIcon};
 use crate::ui::modal::{modal, present_sheet};
 use crate::ui::{
-    ActionButton, ActionMenu, Chip, InputField, TextArea, Variant, divider, icons, text_area_state, tooltip,
+    ActionButton, ActionMenu, Chip, InputField, TextArea, Variant, beside, divider, even, icons, text_area_state,
+    tooltip,
 };
 
 /// Under this the bar is two rows.
@@ -293,7 +294,8 @@ impl LinearView {
             }
         })
         .button(|button| button.help("Which team's issues to show"));
-        vec![div().ml(px(-8.)).child(workspaces).into_any_element(), team_menu.into_any_element()]
+        let workspaces = workspaces.margin(beside(0., BAR_GAP));
+        vec![div().flex().items_center().child(div().ml(px(-8.)).child(workspaces)).child(team_menu).into_any_element()]
     }
 
     fn tools(&self, target: &PanelTarget, choice: &LinearChoice, narrow: bool, cx: &Context<Self>) -> Vec<AnyElement> {
@@ -336,8 +338,10 @@ impl LinearView {
                 menu
             }
         });
-        let refresh =
-            ActionButton::icon("linear-refresh", "rotate-cw", "Read the issues again").pending(reading).on_click({
+        let refresh = ActionButton::icon("linear-refresh", "rotate-cw", "Read the issues again")
+            .pending(reading)
+            .margin(beside(0., BAR_GAP))
+            .on_click({
                 let this = this.clone();
                 move |_, _, cx| {
                     let _ = this.update(cx, |this, cx| this.refresh(cx));
@@ -351,7 +355,9 @@ impl LinearView {
                 let _ = this.update(cx, |this, cx| this.file(target, workspace, team, window, cx));
             }
         });
-        vec![search.into_any_element(), filter.into_any_element(), refresh.into_any_element(), file.into_any_element()]
+        let filter = filter.margin(beside(0., BAR_GAP));
+        let buttons = div().flex().items_center().child(filter).child(refresh).child(file);
+        vec![search.into_any_element(), buttons.into_any_element()]
     }
 
     /// Opens the sheet that files an issue.
@@ -588,17 +594,25 @@ impl LinearView {
                     .child(identifier),
             )
             .child(div().flex_1().min_w(px(4.)))
-            .when_some(url, |bar, url| {
-                bar.child(
-                    ActionButton::icon("linear-open", "square-arrow-out-up-right", "Open in Linear")
-                        .on_click(move |_, _, cx| cx.open_url(&url)),
-                )
-            })
-            .child(ActionButton::icon("linear-reread", "rotate-cw", "Read the issue again").pending(reading).on_click(
-                move |_, _, cx| {
-                    let _ = this.update(cx, |this, cx| this.refresh(cx));
-                },
-            ));
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .when_some(url, |bar, url| {
+                        bar.child(
+                            ActionButton::icon("linear-open", "square-arrow-out-up-right", "Open in Linear")
+                                .margin(beside(0., BAR_GAP))
+                                .on_click(move |_, _, cx| cx.open_url(&url)),
+                        )
+                    })
+                    .child(
+                        ActionButton::icon("linear-reread", "rotate-cw", "Read the issue again")
+                            .pending(reading)
+                            .on_click(move |_, _, cx| {
+                                let _ = this.update(cx, |this, cx| this.refresh(cx));
+                            }),
+                    ),
+            );
         let content = match &page {
             Loaded::Loading => loading(cx),
             Loaded::Failed(reason) => message(reason.clone(), true, cx),
@@ -792,7 +806,15 @@ impl LinearView {
                             .text_color(c.foreground)
                             .child(crate::ui::rich_text::RichText::new("issue-title", page.row.title.clone())),
                     )
-                    .child(div().flex().flex_wrap().gap(px(6.)).child(status).child(priority).child(assignee))
+                    .child(
+                        div()
+                            .m(px(-PROPERTY_GAP / 2.))
+                            .flex()
+                            .flex_wrap()
+                            .child(status.margin(even(PROPERTY_GAP / 2.)))
+                            .child(priority.margin(even(PROPERTY_GAP / 2.)))
+                            .child(assignee.margin(even(PROPERTY_GAP / 2.))),
+                    )
                     .when(!page.row.labels.is_empty(), |column| {
                         column.child(
                             div().flex().flex_wrap().gap(px(6.)).children(
@@ -1081,18 +1103,20 @@ impl Render for NewIssue {
             .child(div().flex_1().min_h_0().child(TextArea::new(&self.description).fills(true)))
             .child(
                 div()
+                    .m(px(-PROPERTY_GAP / 2.))
                     .flex()
                     .flex_wrap()
-                    .gap(px(6.))
-                    .child(team_menu)
-                    .child(state_menu)
-                    .child(priority_menu)
-                    .child(assignee_menu),
+                    .child(team_menu.margin(even(PROPERTY_GAP / 2.)))
+                    .child(state_menu.margin(even(PROPERTY_GAP / 2.)))
+                    .child(priority_menu.margin(even(PROPERTY_GAP / 2.)))
+                    .child(assignee_menu.margin(even(PROPERTY_GAP / 2.))),
             )
             .when_some(error, |column, error| {
                 column.child(div().text_size(px(12.5)).text_color(c.destructive).child(error))
             })
-            .child(div().flex().justify_end().gap(px(8.)).child(cancel).child(create));
+            .child(
+                div().flex().justify_end().child(cancel.margin(beside(0., 4.))).child(create.margin(beside(4., 0.))),
+            );
         let close = cx.entity().downgrade();
         modal("linear-new-issue", content, move |_, cx| {
             close.update(cx, |this, cx| this.close(cx)).ok();
@@ -1150,43 +1174,47 @@ struct ListPlace {
 fn header(state: &LinearState, count: usize, folded: bool, place: &ListPlace, cx: &App) -> AnyElement {
     let c = colors(cx);
     let (view, id) = (place.view.clone(), state.id.clone());
+    let group = SharedString::from(format!("linear-header-{}", state.id));
+    let light =
+        div()
+            .h(px(30.))
+            .w_full()
+            .rounded(px(Radius::MD))
+            .bg(c.background_secondary)
+            .group_hover(group.clone(), |header| header.bg(c.background_secondary_accent))
+            .flex()
+            .items_center()
+            .px(px(10.))
+            .gap(px(8.))
+            .child(
+                div().w(px(IconSize::Sm.side())).flex().justify_center().child(
+                    icons::symbol(state_symbol(state.kind), IconSize::Sm).text_color(hex_color(&state.color, c)),
+                ),
+            )
+            .child(
+                div()
+                    .text_size(px(12.))
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .text_color(c.foreground)
+                    .child(state.name.clone()),
+            )
+            .child(div().text_size(px(12.)).text_color(c.muted_stronger_foreground).child(count.to_string()))
+            .child(div().flex_1())
+            .child(
+                div()
+                    .w(px(IconSize::Sm.side()))
+                    .flex()
+                    .justify_center()
+                    .text_color(c.muted_stronger_foreground)
+                    .child(icons::symbol(if folded { "chevron-right" } else { "chevron-down" }, IconSize::Xs)),
+            );
     div()
-        .id(SharedString::from(format!("linear-header-{}", state.id)))
-        .mt(px(6. + ROW_GAP / 2.))
-        .mb(px(ROW_GAP / 2.))
-        .h(px(30.))
+        .id(group.clone())
+        .group(group)
         .w_full()
-        .rounded(px(Radius::MD))
-        .bg(c.background_secondary)
-        .hover(|header| header.bg(c.background_secondary_accent))
-        .flex()
-        .items_center()
-        .px(px(10.))
-        .gap(px(8.))
-        .child(
-            div()
-                .w(px(IconSize::Sm.side()))
-                .flex()
-                .justify_center()
-                .child(icons::symbol(state_symbol(state.kind), IconSize::Sm).text_color(hex_color(&state.color, c))),
-        )
-        .child(
-            div()
-                .text_size(px(12.))
-                .font_weight(FontWeight::SEMIBOLD)
-                .text_color(c.foreground)
-                .child(state.name.clone()),
-        )
-        .child(div().text_size(px(12.)).text_color(c.muted_stronger_foreground).child(count.to_string()))
-        .child(div().flex_1())
-        .child(
-            div()
-                .w(px(IconSize::Sm.side()))
-                .flex()
-                .justify_center()
-                .text_color(c.muted_stronger_foreground)
-                .child(icons::symbol(if folded { "chevron-right" } else { "chevron-down" }, IconSize::Xs)),
-        )
+        .pt(px(6. + ROW_GAP / 2.))
+        .pb(px(ROW_GAP / 2.))
+        .child(light)
         .on_click(move |_, _, cx| {
             let id = id.clone();
             let Some(store) = view.upgrade().map(|view| view.read(cx).store.clone()) else { return };
@@ -1271,14 +1299,11 @@ fn issue_row(row: &Row, state: &LinearState, states: &[LinearState], place: &Lis
         }
     };
     let lit = Surface::Background.layer(Layer::Row, c);
-    div()
-        .id(group.clone())
-        .group(group.clone())
-        .my(px(ROW_GAP / 2.))
+    let light = div()
         .h(px(34.))
         .w_full()
         .rounded(px(Radius::MD))
-        .hover(move |row| row.bg(lit))
+        .group_hover(group.clone(), move |row| row.bg(lit))
         .flex()
         .items_center()
         .pl(px(6.))
@@ -1316,7 +1341,13 @@ fn issue_row(row: &Row, state: &LinearState, states: &[LinearState], place: &Lis
                 .children(labels)
                 .when_some(initials, |side, (initials, name)| side.child(initials_disc(initials, name, cx)))
                 .child(div().text_size(px(11.5)).text_color(c.muted_stronger_foreground).child(ago(row.updated_at))),
-        )
+        );
+    div()
+        .id(group.clone())
+        .group(group)
+        .w_full()
+        .py(px(ROW_GAP / 2.))
+        .child(light)
         .on_click(open)
         .on_mouse_down(MouseButton::Right, actions)
         .into_any_element()
@@ -1500,8 +1531,13 @@ fn initials_disc(initials: String, name: String, cx: &App) -> impl IntoElement {
 }
 
 /// A row of the strip under the tabs with what the open tab is about and its buttons.
+/// The room between what a bar holds. Buttons side by side share it, so that it only looks empty.
+const BAR_GAP: f32 = 4.;
+/// The room between an issue's property menus, which they share.
+const PROPERTY_GAP: f32 = 6.;
+
 fn bar_row(_: &App) -> Div {
-    div().h(px(36.)).pl(px(12.)).pr(px(4.)).flex().items_center().gap(px(4.))
+    div().h(px(36.)).pl(px(12.)).pr(px(4.)).flex().items_center().gap(px(BAR_GAP))
 }
 
 fn message(text: impl Into<SharedString>, failed: bool, cx: &App) -> AnyElement {

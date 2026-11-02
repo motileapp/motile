@@ -2,6 +2,7 @@ package app.motile.panel
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -103,15 +104,19 @@ fun LineCommentSheet(target: PanelTarget, page: PullRequestPage, commented: Comm
             if (threads.isEmpty()) "Comment on this line" else "Reply, or say something new", text, { text = it },
             Modifier.fillMaxWidth(), lines = 5,
         )
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            ActionButton("Add to Review", variant = ButtonVariant.Primary, size = ControlSize.Large, fills = true, disabled = written.isEmpty(), onClick = addToReview)
+        val below = PaddingValues(bottom = 8.dp)
+        Column {
+            ActionButton(
+                "Add to Review", variant = ButtonVariant.Primary, size = ControlSize.Large, fills = true, disabled = written.isEmpty(), margin = below,
+                onClick = addToReview,
+            )
             threads.lastOrNull()?.let { thread ->
-                ActionButton("Reply", size = ControlSize.Large, fills = true, disabled = written.isEmpty()) {
+                ActionButton("Reply", size = ControlSize.Large, fills = true, disabled = written.isEmpty(), margin = below) {
                     state.edit(mapOf("kind" to "reply", "thread" to thread.id, "body" to written), target = target, number = page.number)
                     close()
                 }
             }
-            ActionButton("Ask the Agent", size = ControlSize.Large, fills = true, disabled = written.isEmpty(), onClick = askAgent)
+            ActionButton("Ask the Agent", size = ControlSize.Large, fills = true, disabled = written.isEmpty(), margin = below, onClick = askAgent)
             ActionButton("Cancel", variant = ButtonVariant.Ghost, size = ControlSize.Large, fills = true) { close() }
         }
     }

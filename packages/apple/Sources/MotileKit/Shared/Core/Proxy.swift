@@ -368,19 +368,14 @@ extension AppStore {
         proxyCommand("remove_proxy")
     }
 
-    /// Starts signing an account in on the proxy, and opens the page it signs in on.
+    /// Starts signing an account in on the proxy. Its sheet shows the page to open.
     func startProxySignIn(_ agent: Agent) {
         guard proxySignInStarting == nil else { return }
         proxySignInStarting = agent
         core.send("proxy_sign_in", ["agent": agent.rawValue]) { [weak self] result in
             self?.proxySignInStarting = nil
-            switch result {
-            case .success(let value):
-                guard let url = URL(string: value.string("url")) else { return }
-                Platform.open(url)
-            case .failure(let error):
-                self?.alert(error)
-            }
+            guard case .failure(let error) = result else { return }
+            self?.alert(error)
         }
     }
 

@@ -12,11 +12,13 @@ use motile_core::render::rows::{Question, Waiting};
 use crate::composer::strips::waiting_title;
 use crate::store::Store;
 use crate::theme::{ControlSize, Layer, Radius, Surface, colors};
-use crate::ui::{ActionButton, InputField, InputVariant, PickMark, Variant};
+use crate::ui::{ActionButton, InputField, InputVariant, PickMark, Variant, beside};
 
 /// How far past its text an option's light and the room to press it reach.
 const OPTION_REACH: f32 = 8.;
 const MARK_GAP: f32 = 10.;
+/// The room between two options' lights: only drawn, so that their presses meet.
+const OPTION_LIGHT: f32 = 1.;
 
 pub struct Questions {
     store: Entity<Store>,
@@ -151,10 +153,9 @@ impl Questions {
     }
 
     /// The light of a row: under the pointer, and while it is the answer.
-    fn light(id: SharedString, lit: bool, cx: &App) -> Stateful<Div> {
+    fn light(group: SharedString, lit: bool, cx: &App) -> Div {
         let fill = Surface::Composer.layer(Layer::Row, colors(cx));
         div()
-            .id(id)
             .w_full()
             .py(px(8.))
             .px(px(OPTION_REACH))
@@ -162,14 +163,20 @@ impl Questions {
             .flex()
             .gap(px(MARK_GAP))
             .when(lit, |row| row.bg(fill))
-            .when(!lit, |row| row.hover(move |row| row.bg(fill)))
+            .when(!lit, |row| row.group_hover(group, move |row| row.bg(fill)))
+    }
+
+    /// A row that takes the presses up to its neighbours', its light `OPTION_LIGHT` in from them.
+    fn pressed_row(id: SharedString, light: Div) -> Stateful<Div> {
+        div().id(id.clone()).group(id).w_full().py(px(OPTION_LIGHT)).child(light)
     }
 
     fn option_row(&self, option_index: usize, label: String, detail: String, cx: &mut Context<Self>) -> Stateful<Div> {
         let c = colors(cx);
         let picked = self.is_chosen(&label, cx);
         let multiple = self.question().multiple;
-        Self::light(SharedString::from(format!("option-{option_index}")), picked, cx)
+        let id = SharedString::from(format!("option-{option_index}"));
+        let light = Self::light(id.clone(), picked, cx)
             .items_start()
             .child(div().h(px(18.)).flex().items_center().child(PickMark::new(
                 SharedString::from(format!("pick-{}-{option_index}", self.index)),
@@ -196,7 +203,8 @@ impl Questions {
                             div().text_size(px(12.)).line_height(px(16.)).text_color(c.muted_foreground).child(detail),
                         )
                     }),
-            )
+            );
+        Self::pressed_row(id, light)
             .on_click(cx.listener(move |this, _, window, cx| this.choose(label.clone(), window, cx)))
     }
 
@@ -206,7 +214,8 @@ impl Questions {
         let written = !self.written(self.index, cx).is_empty();
         let typing = field.read(cx).focus_handle(cx).is_focused(window);
         let focus = field.clone();
-        Self::light("something-else".into(), written || typing, cx)
+        let id = SharedString::from("something-else");
+        let light = Self::light(id.clone(), written || typing, cx)
             .items_center()
             .child(PickMark::new(
                 SharedString::from(format!("pick-{}-else", self.index)),
@@ -227,7 +236,8 @@ impl Questions {
                             .size(ControlSize::Large)
                             .surface(Surface::Composer),
                     ),
-            )
+            );
+        Self::pressed_row(id, light)
             .on_click(move |_, window, cx| focus.update(cx, |field, cx| field.focus(window, cx)))
     }
 }
@@ -268,9 +278,9 @@ impl Render for Questions {
             .child(
                 div()
                     .mx(px(-OPTION_REACH))
+                    .my(px(-OPTION_LIGHT))
                     .flex()
                     .flex_col()
-                    .gap(px(2.))
                     .children(
                         question.options.iter().enumerate().map(|(index, option)| {
                             self.option_row(index, option.label.clone(), option.detail.clone(), cx)
@@ -282,7 +292,6 @@ impl Render for Questions {
                 div()
                     .flex()
                     .items_center()
-                    .gap(px(8.))
                     .when(self.index > 0, |row| {
                         row.child(
                             ActionButton::new("back", "Back")
@@ -301,6 +310,7 @@ impl Render for Questions {
                         ActionButton::new("refuse-questions", self.approval.refuse)
                             .small()
                             .surface(Surface::Composer)
+                            .margin(beside(0., 4.))
                             .on_click(move |_, _, cx| {
                                 refuse.update(cx, |store, cx| {
                                     store.answer(&refuse_id, false, HashMap::new());
@@ -314,6 +324,7 @@ impl Render for Questions {
                             .small()
                             .surface(Surface::Composer)
                             .disabled(!can_go_on)
+                            .margin(beside(4., 0.))
                             .on_click(cx.listener(|this, _, _, cx| this.go_on(cx))),
                     ),
             )

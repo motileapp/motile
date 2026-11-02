@@ -38,6 +38,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import app.motile.LocalStore
+import app.motile.ui.reaching
 import app.motile.core.Loaded
 import app.motile.core.LinearChoice
 import app.motile.core.LinearPage
@@ -53,6 +54,7 @@ import app.motile.theme.ControlSize
 import app.motile.theme.LocalPalette
 import app.motile.ui.ActionButton
 import app.motile.ui.ActionMenu
+import app.motile.ui.beside
 import app.motile.ui.ButtonVariant
 import app.motile.ui.Chip
 import app.motile.ui.Choice
@@ -100,6 +102,10 @@ private fun LinearConnect(target: PanelTarget) {
 
 /** Under this the bar is two rows, and the labels beside the titles go. */
 private val wraps = (520 * Platform.scale).dp
+
+/** The room between the lights of an issue's menus, which their presses share. */
+private val propertyGap = 6.dp
+private val propertyMargin = PaddingValues(top = propertyGap, end = propertyGap)
 
 /** A workspace's issues under their statuses, with what chooses them over the list. */
 @Composable
@@ -149,15 +155,17 @@ private fun Pickers(target: PanelTarget, choice: LinearChoice) {
     val connected = linear.connected(target.serverID)
     val workspace = connected.firstOrNull { it.id == choice.workspace }
     val teams = linear.teams[choice.workspace ?: ""] ?: emptyList()
-    ActionMenu(workspace?.workspace ?: "Linear", modifier = Modifier.offset(x = (-8).dp), help = "Which workspace to show") {
-        for (connection in connected) toggle(connection.workspace, connection.id == choice.workspace) { linear.pick(connection.id, target = target) }
-        divider()
-        item("Add Workspace") { linear.connect(target.serverID) }
-        if (workspace != null) item("Disconnect ${workspace.workspace}", destructive = true) { linear.disconnect(workspace.id, target.serverID) }
-    }
-    ActionMenu(teams.firstOrNull { it.id == choice.team }?.name ?: "All Teams", modifier = Modifier.offset(x = (-8).dp), help = "Which team's issues to show") {
-        toggle("All Teams", choice.team == null) { linear.pick(choice.workspace, target = target) }
-        for (team in teams) toggle(team.name, choice.team == team.id) { linear.pick(choice.workspace, team.id, target) }
+    Row(Modifier.offset(x = (-8).dp), verticalAlignment = Alignment.CenterVertically) {
+        ActionMenu(workspace?.workspace ?: "Linear", help = "Which workspace to show", margin = beside(end = panelBarGap)) {
+            for (connection in connected) toggle(connection.workspace, connection.id == choice.workspace) { linear.pick(connection.id, target = target) }
+            divider()
+            item("Add Workspace") { linear.connect(target.serverID) }
+            if (workspace != null) item("Disconnect ${workspace.workspace}", destructive = true) { linear.disconnect(workspace.id, target.serverID) }
+        }
+        ActionMenu(teams.firstOrNull { it.id == choice.team }?.name ?: "All Teams", help = "Which team's issues to show") {
+            toggle("All Teams", choice.team == null) { linear.pick(choice.workspace, target = target) }
+            for (team in teams) toggle(team.name, choice.team == team.id) { linear.pick(choice.workspace, team.id, target) }
+        }
     }
 }
 
@@ -173,17 +181,22 @@ private fun androidx.compose.foundation.layout.RowScope.Tools(target: PanelTarge
         (if (narrow) Modifier.weight(1f) else Modifier.weight(1f, fill = false).widthIn(max = 180.dp)),
         icon = Symbol.Search, clearable = true, focusRequester = focus,
     )
-    ActionMenu(icon = Symbol.ListFilter, help = "Which issues to show") {
-        toggle("Assigned to Me", choice.mine) { mine -> linear.changeFilter { it.copy(mine = mine) } }
-        divider()
-        for ((kind, name) in LinearState.kinds) {
-            toggle(name, kind in choice.states) { listed ->
-                linear.changeFilter { filter -> filter.copy(states = filter.states.filter { it != kind } + if (listed) listOf(kind) else emptyList()) }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        ActionMenu(icon = Symbol.ListFilter, help = "Which issues to show", margin = beside(end = panelBarGap)) {
+            toggle("Assigned to Me", choice.mine) { mine -> linear.changeFilter { it.copy(mine = mine) } }
+            divider()
+            for ((kind, name) in LinearState.kinds) {
+                toggle(name, kind in choice.states) { listed ->
+                    linear.changeFilter { filter -> filter.copy(states = filter.states.filter { it != kind } + if (listed) listOf(kind) else emptyList()) }
+                }
             }
         }
+        ActionButton(
+            icon = Symbol.RotateCw, help = "Read the issues again", pending = "issues" in linear.working, margin = beside(end = panelBarGap),
+            onClick = asked,
+        )
+        ActionButton(icon = Symbol.Plus, help = "New Issue", onClick = file)
     }
-    ActionButton(icon = Symbol.RotateCw, help = "Read the issues again", pending = "issues" in linear.working, onClick = asked)
-    ActionButton(icon = Symbol.Plus, help = "New Issue", onClick = file)
 }
 
 @Composable
@@ -260,8 +273,11 @@ fun LinearIssueSurface(target: PanelTarget, workspace: String, id: String) {
         PanelBar {
             Text(page.value?.row?.identifier ?: "", size = 12.5f, weight = FontWeight.Medium, color = palette.mutedForeground)
             Spacer(Modifier.weight(1f).widthIn(min = 4.dp))
-            page.value?.row?.url?.let { url -> ActionButton(icon = Symbol.SquareArrowOutUpRight, help = "Open in Linear") { Platform.open(url) } }
-            ActionButton(icon = Symbol.RotateCw, help = "Read the issue again", pending = "read:$id" in linear.working) { asked += 1 }
+            val url = page.value?.row?.url
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (url != null) ActionButton(icon = Symbol.SquareArrowOutUpRight, help = "Open in Linear", margin = beside(end = panelBarGap)) { Platform.open(url) }
+                ActionButton(icon = Symbol.RotateCw, help = "Read the issue again", pending = "read:$id" in linear.working) { asked += 1 }
+            }
         }
         linear.error?.let { PanelNote(it) }
         LaunchedEffect(target.serverID, asked) {
@@ -288,7 +304,7 @@ private fun IssuePage(page: LinearPage, target: PanelTarget, workspace: String, 
             SelectionContainer { Text(page.row.title, size = 17f, weight = FontWeight.SemiBold, color = palette.foreground) }
         }
         item("properties") {
-            FlowRow(Modifier.padding(top = 16.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            FlowRow(Modifier.padding(top = 16.dp).reaching(top = propertyGap, end = propertyGap)) {
                 Properties(page, target, workspace, id)
             }
         }
@@ -344,17 +360,20 @@ private fun Properties(page: LinearPage, target: PanelTarget, workspace: String,
     val stateColor = page.state.color
     ActionMenu(
         page.state.name, picture = { Icon(page.state.symbol, ControlSize.Small.symbol, color = stateColor) }, help = "Status",
-        variant = ButtonVariant.Secondary, size = ControlSize.Small, pending = id in linear.working,
+        variant = ButtonVariant.Secondary, size = ControlSize.Small, margin = propertyMargin, pending = id in linear.working,
     ) {
         LinearChoices.states(this, states, page.state.id) { change(mapOf("state" to it.id)) }
     }
     ActionMenu(
         LinearRow.priorities.firstOrNull { it.first == page.row.priority }?.second, icon = page.row.prioritySymbol, help = "Priority",
-        variant = ButtonVariant.Secondary, size = ControlSize.Small,
+        variant = ButtonVariant.Secondary, size = ControlSize.Small, margin = propertyMargin,
     ) {
         LinearChoices.priorities(this, page.row.priority) { change(mapOf("priority" to it)) }
     }
-    ActionMenu(page.row.assignee ?: "Unassigned", icon = Symbol.CircleUser, help = "Assignee", variant = ButtonVariant.Secondary, size = ControlSize.Small) {
+    ActionMenu(
+        page.row.assignee ?: "Unassigned", icon = Symbol.CircleUser, help = "Assignee", variant = ButtonVariant.Secondary, size = ControlSize.Small,
+        margin = propertyMargin,
+    ) {
         LinearChoices.assignees(this, linear.users[workspace] ?: emptyList(), page.row.assigneeID) { change(mapOf("assignee" to (it ?: ""))) }
     }
 }
@@ -383,8 +402,8 @@ private fun LinearNewIssue(target: PanelTarget, workspace: String, team: String?
         Text("New Issue", size = 15f, weight = FontWeight.SemiBold)
         InputField("Title", title, { title = it }, Modifier.fillMaxWidth())
         TextArea("Add a description", description, { description = it }, Modifier.weight(1f).fillMaxWidth(), lines = 4, fills = true)
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            ActionMenu(picked?.name ?: "Team", help = "Team", variant = ButtonVariant.Secondary, size = ControlSize.Small) {
+        FlowRow(Modifier.reaching(top = propertyGap, end = propertyGap)) {
+            ActionMenu(picked?.name ?: "Team", help = "Team", variant = ButtonVariant.Secondary, size = ControlSize.Small, margin = propertyMargin) {
                 for (each in teams) {
                     toggle(each.name, each.id == picked?.id) {
                         teamID = each.id
@@ -392,26 +411,29 @@ private fun LinearNewIssue(target: PanelTarget, workspace: String, team: String?
                     }
                 }
             }
-            ActionMenu(state?.name ?: "Status", icon = state?.symbol, help = "Status", variant = ButtonVariant.Secondary, size = ControlSize.Small) {
+            ActionMenu(
+                state?.name ?: "Status", icon = state?.symbol, help = "Status", variant = ButtonVariant.Secondary, size = ControlSize.Small,
+                margin = propertyMargin,
+            ) {
                 LinearChoices.states(this, states, state?.id) { stateID = it.id }
             }
             ActionMenu(
                 LinearRow.priorities.firstOrNull { it.first == priority }?.second, icon = LinearRow.symbol(priority), help = "Priority",
-                variant = ButtonVariant.Secondary, size = ControlSize.Small,
+                variant = ButtonVariant.Secondary, size = ControlSize.Small, margin = propertyMargin,
             ) {
                 LinearChoices.priorities(this, priority) { priority = it }
             }
             ActionMenu(
                 users.firstOrNull { it.id == assigneeID }?.name ?: "Unassigned", icon = Symbol.CircleUser, help = "Assignee",
-                variant = ButtonVariant.Secondary, size = ControlSize.Small,
+                variant = ButtonVariant.Secondary, size = ControlSize.Small, margin = propertyMargin,
             ) {
                 LinearChoices.assignees(this, users, assigneeID) { assigneeID = it }
             }
         }
         linear.error?.let { Text(it, size = 12.5f, color = palette.destructive) }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row {
             Spacer(Modifier.weight(1f))
-            ActionButton("Cancel") { close() }
+            ActionButton("Cancel", margin = beside(end = 8.dp)) { close() }
             ActionButton(
                 "Create Issue", variant = ButtonVariant.Primary, pending = "create" in linear.working,
                 disabled = picked == null || title.isBlank(),

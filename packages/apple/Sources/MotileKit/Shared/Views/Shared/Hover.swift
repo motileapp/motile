@@ -94,6 +94,7 @@ struct HighlightButtonStyle: ButtonStyle {
                 radius: radius, selected: selected, lit: lit || configuration.isPressed, inset: inset, faded: faded, hovered: hovered,
                 small: small, opaque: opaque
             )
+            .arrowPointer()
     }
 }
 
@@ -104,6 +105,7 @@ struct DimButtonStyle: ButtonStyle {
         configuration.label
             .contentShape(Rectangle())
             .opacity(.lit, when: configuration.isPressed)
+            .arrowPointer()
     }
 }
 

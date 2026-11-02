@@ -25,12 +25,14 @@ use crate::theme::{self, ControlSize, IconSize, Radius, Surface, colors};
 use crate::ui::menu::Menu;
 use crate::ui::modal::{Answer, Confirmation, confirmation, modal, present_sheet, presented};
 use crate::ui::{
-    ActionButton, ActionMenu, Chip, Highlight, InputField, Segmented, TextArea, Variant, divider, edges, highlight,
-    icons, spinner, text_area_state,
+    ActionButton, ActionMenu, Chip, Highlight, InputField, Segmented, TextArea, Variant, beside, divider, edges,
+    highlight, icons, sharing, spinner, text_area_state,
 };
 
 /// The height of a line of the panel's text, which the buttons beside it centre on.
 const LINE: f32 = 17.;
+/// The room between what a bar holds. Buttons side by side share it, so that it only looks empty.
+const BAR_GAP: f32 = 4.;
 
 // MARK: Pieces every pull request view uses
 
@@ -75,7 +77,7 @@ pub fn panel_bar(content: impl IntoElement, cx: &App) -> Div {
         .flex_shrink_0()
         .flex()
         .flex_col()
-        .child(div().h(px(36.)).pl(px(12.)).pr(px(4.)).flex().items_center().gap(px(4.)).child(content))
+        .child(div().h(px(36.)).pl(px(12.)).pr(px(4.)).flex().items_center().gap(px(BAR_GAP)).child(content))
         .child(divider(cx))
 }
 
@@ -214,12 +216,12 @@ pub fn notice_bar(notice: &Notice, store: &Entity<Store>, cx: &App) -> Div {
                         .h(px(LINE))
                         .flex()
                         .items_center()
-                        .gap(px(2.))
                         .when_some(url, |row, url| {
                             row.child(
                                 ActionButton::new("pr-notice-open", "Open")
                                     .link()
                                     .small()
+                                    .margin(beside(0., 2.))
                                     .on_click(move |_, _, cx| cx.open_url(&url)),
                             )
                         })
@@ -265,11 +267,12 @@ pub fn reaction_picker(
 
 /// The reactions to a comment or a review, each one a toggle, and a menu to add another.
 pub fn reaction_bar(id: &str, reactions: &[Reaction], surface: Surface, react: React) -> Div {
+    const GAP: f32 = 4.;
+    let count = reactions.len() + 1;
     div()
         .flex()
         .items_center()
-        .gap(px(4.))
-        .children(reactions.iter().map(|reaction| {
+        .children(reactions.iter().enumerate().map(|(index, reaction)| {
             let (kind, mine) = (reaction.kind, reaction.mine);
             let react = react.clone();
             ActionButton::new(
@@ -281,10 +284,14 @@ pub fn reaction_bar(id: &str, reactions: &[Reaction], surface: Surface, react: R
             .round(true)
             .monospaced_digits()
             .surface(surface)
+            .margin(sharing(GAP, index, count))
             .help(if mine { "Take your reaction back" } else { "React so too" })
             .on_click(move |_, window, cx| react(kind, !mine, window, cx))
         }))
-        .child(reaction_picker(SharedString::from(format!("{id}-add")), reactions, ControlSize::Small, surface, react))
+        .child(
+            reaction_picker(SharedString::from(format!("{id}-add")), reactions, ControlSize::Small, surface, react)
+                .button(move |button| button.margin(sharing(GAP, count - 1, count))),
+        )
 }
 
 // MARK: The tab
@@ -603,12 +610,13 @@ impl PullRequestView {
         let watching = store.selected_thread().is_some_and(|thread| thread.watching)
             && page.is_some_and(|page| Some(page.number) == target.and_then(|target| target.pull_request));
         let url = page.map(|page| page.url.clone()).filter(|url| !url.is_empty());
+        let refreshes = shown.is_some() && !unavailable;
         let this = cx.entity().downgrade();
         div()
             .flex()
             .items_center()
             .w_full()
-            .gap(px(4.))
+            .gap(px(BAR_GAP))
             .when_some(page, |bar, page| {
                 bar.child(icons::symbol(page.state.symbol(), IconSize::Sm).text_color(page.state.color(c)))
                     .child(
@@ -633,18 +641,26 @@ impl PullRequestView {
                 bar.child(label("Pull Request", 12.5, c.foreground).font_weight(FontWeight::MEDIUM))
             })
             .child(div().flex_1().min_w(px(4.)))
-            .when_some(url, |bar, url| {
+            .when(url.is_some() || refreshes, |bar| {
                 bar.child(
-                    ActionButton::icon("pr-open-github", "square-arrow-out-up-right", "Open on GitHub")
-                        .on_click(move |_, _, cx| cx.open_url(&url)),
-                )
-            })
-            .when(shown.is_some() && !unavailable, |bar| {
-                bar.child(
-                    ActionButton::icon("pr-refresh", "rotate-cw", "Read the pull request again")
-                        .pending(reading)
-                        .on_click(move |_, _, cx| {
-                            let _ = this.update(cx, |this, cx| this.refresh(cx));
+                    div()
+                        .flex()
+                        .items_center()
+                        .when_some(url, |tools, url| {
+                            tools.child(
+                                ActionButton::icon("pr-open-github", "square-arrow-out-up-right", "Open on GitHub")
+                                    .margin(beside(0., if refreshes { BAR_GAP } else { 0. }))
+                                    .on_click(move |_, _, cx| cx.open_url(&url)),
+                            )
+                        })
+                        .when(refreshes, |tools| {
+                            tools.child(
+                                ActionButton::icon("pr-refresh", "rotate-cw", "Read the pull request again")
+                                    .pending(reading)
+                                    .on_click(move |_, _, cx| {
+                                        let _ = this.update(cx, |this, cx| this.refresh(cx));
+                                    }),
+                            )
                         }),
                 )
             })
@@ -666,6 +682,7 @@ impl PullRequestView {
                 .clone();
             Some((item, project))
         });
+        let creates = create.is_some();
         let (create_store, list_store) = (self.store.clone(), self.store.clone());
         let this = cx.entity().downgrade();
         div()
@@ -682,24 +699,30 @@ impl PullRequestView {
                 div()
                     .flex()
                     .items_center()
-                    .gap(px(8.))
                     .when_some(create, |row, (item, project)| {
-                        row.child(ActionButton::new("pr-create", "Create PR").primary().on_click(move |_, _, cx| {
-                            create_store.update(cx, |store, cx| {
-                                store.choose_git(&item, &project, cx);
-                                cx.notify();
-                            })
-                        }))
+                        row.child(
+                            ActionButton::new("pr-create", "Create PR")
+                                .primary()
+                                .margin(beside(0., if extended { 4. } else { 0. }))
+                                .on_click(move |_, _, cx| {
+                                    create_store.update(cx, |store, cx| {
+                                        store.choose_git(&item, &project, cx);
+                                        cx.notify();
+                                    })
+                                }),
+                        )
                     })
                     .when(extended, |row| {
-                        row.child(ActionButton::new("pr-show-all", "Show All Pull Requests").on_click(
-                            move |_, _, cx| {
-                                list_store.update(cx, |store, cx| {
-                                    store.open_tab(PanelTab::PullRequests);
-                                    cx.notify();
-                                })
-                            },
-                        ))
+                        row.child(
+                            ActionButton::new("pr-show-all", "Show All Pull Requests")
+                                .margin(beside(if creates { 4. } else { 0. }, 0.))
+                                .on_click(move |_, _, cx| {
+                                    list_store.update(cx, |store, cx| {
+                                        store.open_tab(PanelTab::PullRequests);
+                                        cx.notify();
+                                    })
+                                }),
+                        )
                     }),
             )
             .when(extended && has_thread, |column| {
@@ -943,18 +966,21 @@ impl PullRequestView {
                     .w_full()
                     .flex()
                     .justify_end()
-                    .gap(px(8.))
-                    .child(ActionButton::new("pr-title-cancel", "Cancel").disabled(working).on_click(cx.listener(
-                        |this, _, _, cx| {
-                            this.title = None;
-                            cx.notify();
-                        },
-                    )))
+                    .child(
+                        ActionButton::new("pr-title-cancel", "Cancel")
+                            .disabled(working)
+                            .margin(beside(0., 4.))
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.title = None;
+                                cx.notify();
+                            })),
+                    )
                     .child(
                         ActionButton::new("pr-title-save", "Save")
                             .primary()
                             .pending(working)
                             .disabled(working || unchanged)
+                            .margin(beside(4., 0.))
                             .on_click(cx.listener(|this, _, _, cx| this.save_title(cx))),
                     ),
             )
@@ -1330,7 +1356,8 @@ impl PullRequestView {
                         column.child(label(detail, 12., c.muted_foreground))
                     })
                     .when(!status.buttons.is_empty(), |column| {
-                        column.child(div().pt(px(5.)).flex().items_center().gap(px(6.)).children(
+                        let count = status.buttons.len();
+                        column.child(div().pt(px(5.)).flex().items_center().children(
                             status.buttons.iter().enumerate().map(|(button_index, button)| {
                                 let pending = working == Some(button.key().as_str());
                                 let (run, target) = (button.clone(), target.clone());
@@ -1339,6 +1366,7 @@ impl PullRequestView {
                                     .surface(Surface::Secondary)
                                     .pending(pending)
                                     .disabled(busy)
+                                    .margin(sharing(6., button_index, count))
                                     .on_click(cx.listener(move |this, _, _, cx| {
                                         this.run(run.clone(), false, &target, number, cx)
                                     }))
@@ -1382,6 +1410,8 @@ impl PullRequestView {
         let store = self.store.clone();
         let fix = check.fix.clone();
         let url = check.url.clone();
+        let opens = url.is_some();
+        let fixes = fix.is_some();
         div()
             .w_full()
             .pl(px(12.))
@@ -1426,27 +1456,40 @@ impl PullRequestView {
                 12.,
                 if check.tone == Tone::Neutral { c.muted_stronger_foreground } else { check.tone.color(c) },
             ))
-            .when_some(fix, |row, fix| {
+            .when(fix.is_some() || opens, |row| {
                 row.child(
-                    ActionButton::new(("pr-check-fix", index), "Fix")
-                        .link()
-                        .small()
-                        .surface(Surface::Secondary)
-                        .help("Have the agent fix it")
-                        .on_click(move |_, _, cx| {
-                            store.update(cx, |store, cx| {
-                                store.hand_off(fix.clone());
-                                cx.notify();
-                            })
+                    div()
+                        .flex()
+                        .items_center()
+                        .when_some(fix, |buttons, fix| {
+                            buttons.child(
+                                ActionButton::new(("pr-check-fix", index), "Fix")
+                                    .link()
+                                    .small()
+                                    .surface(Surface::Secondary)
+                                    .help("Have the agent fix it")
+                                    .margin(beside(0., if opens { 4. } else { 0. }))
+                                    .on_click(move |_, _, cx| {
+                                        store.update(cx, |store, cx| {
+                                            store.hand_off(fix.clone());
+                                            cx.notify();
+                                        })
+                                    }),
+                            )
+                        })
+                        .when_some(url, |buttons, url| {
+                            buttons.child(
+                                ActionButton::icon(
+                                    ("pr-check-open", index),
+                                    "square-arrow-out-up-right",
+                                    "Show its details",
+                                )
+                                .small()
+                                .surface(Surface::Secondary)
+                                .margin(beside(if fixes { 4. } else { 0. }, 0.))
+                                .on_click(move |_, _, cx| cx.open_url(&url)),
+                            )
                         }),
-                )
-            })
-            .when_some(url, |row, url| {
-                row.child(
-                    ActionButton::icon(("pr-check-open", index), "square-arrow-out-up-right", "Show its details")
-                        .small()
-                        .surface(Surface::Secondary)
-                        .on_click(move |_, _, cx| cx.open_url(&url)),
                 )
             })
     }
@@ -1478,32 +1521,35 @@ impl PullRequestView {
         let (store, methods, chosen, method_target) =
             (self.store.clone(), page.methods.clone(), page.method, target.clone());
         div().w_full().p(px(10.)).flex().items_center().gap(px(8.)).child(
-            div().flex().items_center().gap(px(1.)).child(button).when(chooses, |split| {
-                split.child(
-                    ActionMenu::new("pr-method", "", move |_, _| {
-                        let mut menu = Menu::new();
-                        for choice in &methods {
-                            let Some(method) = choice.method else { continue };
-                            let (store, target) = (store.clone(), method_target.clone());
-                            menu = menu.checked(Some(method) == chosen, choice.label.clone(), move |_, cx| {
-                                store.update(cx, |store, cx| {
-                                    store.choose_merge_method(method, &target, number);
-                                    cx.notify();
-                                })
-                            });
-                        }
-                        menu
-                    })
-                    .button(move |button| {
-                        button
-                            .variant(variant)
-                            .surface(Surface::Secondary)
-                            .joined(true, false)
-                            .help("Choose how it merges")
-                            .disabled(busy)
-                    }),
-                )
-            }),
+            div().flex().items_center().child(button.margin(beside(0., if chooses { 1. } else { 0. }))).when(
+                chooses,
+                |split| {
+                    split.child(
+                        ActionMenu::new("pr-method", "", move |_, _| {
+                            let mut menu = Menu::new();
+                            for choice in &methods {
+                                let Some(method) = choice.method else { continue };
+                                let (store, target) = (store.clone(), method_target.clone());
+                                menu = menu.checked(Some(method) == chosen, choice.label.clone(), move |_, cx| {
+                                    store.update(cx, |store, cx| {
+                                        store.choose_merge_method(method, &target, number);
+                                        cx.notify();
+                                    })
+                                });
+                            }
+                            menu
+                        })
+                        .button(move |button| {
+                            button
+                                .variant(variant)
+                                .surface(Surface::Secondary)
+                                .joined(true, false)
+                                .help("Choose how it merges")
+                                .disabled(busy)
+                        }),
+                    )
+                },
+            ),
         )
     }
 
@@ -1874,18 +1920,21 @@ impl PullRequestView {
                         .w_full()
                         .flex()
                         .justify_end()
-                        .gap(px(8.))
-                        .child(ActionButton::new("pr-reply-cancel", "Cancel").surface(Surface::Secondary).on_click(
-                            cx.listener(|this, _, _, cx| {
-                                this.reply = None;
-                                cx.notify();
-                            }),
-                        ))
+                        .child(
+                            ActionButton::new("pr-reply-cancel", "Cancel")
+                                .surface(Surface::Secondary)
+                                .margin(beside(0., 4.))
+                                .on_click(cx.listener(|this, _, _, cx| {
+                                    this.reply = None;
+                                    cx.notify();
+                                })),
+                        )
                         .child(
                             ActionButton::new("pr-reply-send", "Reply")
                                 .primary()
                                 .pending(pending)
                                 .disabled(busy || written.is_empty())
+                                .margin(beside(4., 0.))
                                 .on_click(move |_, _, cx| {
                                     let edit =
                                         PullRequestEdit::Reply { thread: thread_id.clone(), body: written.clone() };
@@ -1897,31 +1946,35 @@ impl PullRequestView {
         let (resolve, resolve_id, resolved) = (actions.clone(), thread.id.clone(), thread.resolved);
         let (fix_actions, fix) = (actions.clone(), thread.fix.clone());
         let thread_id = thread.id.clone();
+        let fixes = fix.is_some();
         div()
             .w_full()
             .p(px(10.))
             .flex()
             .items_center()
-            .gap(px(6.))
-            .child(ActionButton::new("pr-reply", "Reply").surface(Surface::Secondary).on_click(cx.listener(
-                move |this, _, window, cx| {
-                    let reply = text_area_state("Reply", 3, 12, window, cx);
-                    cx.subscribe(&reply, |_, _, event: &InputEvent, cx| {
-                        if matches!(event, InputEvent::Change) {
-                            cx.notify();
-                        }
-                    })
-                    .detach();
-                    reply.update(cx, |reply, cx| reply.focus(window, cx));
-                    this.reply = Some((thread_id.clone(), reply));
-                    cx.notify();
-                },
-            )))
+            .child(
+                ActionButton::new("pr-reply", "Reply")
+                    .surface(Surface::Secondary)
+                    .margin(beside(0., if fixes { 3. } else { 0. }))
+                    .on_click(cx.listener(move |this, _, window, cx| {
+                        let reply = text_area_state("Reply", 3, 12, window, cx);
+                        cx.subscribe(&reply, |_, _, event: &InputEvent, cx| {
+                            if matches!(event, InputEvent::Change) {
+                                cx.notify();
+                            }
+                        })
+                        .detach();
+                        reply.update(cx, |reply, cx| reply.focus(window, cx));
+                        this.reply = Some((thread_id.clone(), reply));
+                        cx.notify();
+                    })),
+            )
             .when_some(fix, |row, fix| {
                 row.child(
                     ActionButton::new("pr-thread-fix", "Fix")
                         .surface(Surface::Secondary)
                         .help("Have the agent do what it asks")
+                        .margin(beside(3., 0.))
                         .on_click(move |_, _, cx| fix_actions.hand_off(fix.clone(), cx)),
                 )
             })
@@ -1955,6 +2008,7 @@ impl PullRequestView {
         let number = page.number;
         let with_comment = page.with_comment.clone().filter(|_| pending.is_empty());
         let verdicts: Vec<Choice> = page.verdicts.clone();
+        let sending = verdicts.len() + 1;
         let reviewing = !pending.is_empty();
         let (comment_target, review_target) = (target.clone(), target.clone());
         let written_now = written.clone();
@@ -1971,7 +2025,6 @@ impl PullRequestView {
                     .w_full()
                     .flex()
                     .items_center()
-                    .gap(px(8.))
                     .when_some(with_comment, |row, close| {
                         let target = target.clone();
                         row.child(
@@ -1992,6 +2045,7 @@ impl PullRequestView {
                         ActionButton::new(("pr-verdict", index), verdict.label.clone())
                             .pending(working == Some(key.as_str()))
                             .disabled(busy || asks_for_words)
+                            .margin(sharing(8., index, sending))
                             .on_click(cx.listener(move |this, _, _, cx| {
                                 if !reviewing {
                                     return this.choose(&verdict, key.clone(), &target, number, cx);
@@ -2009,6 +2063,7 @@ impl PullRequestView {
                             .primary()
                             .pending(working == Some("comment"))
                             .disabled(busy || (written_now.is_empty() && !reviewing))
+                            .margin(sharing(8., sending - 1, sending))
                             .on_click(cx.listener(move |this, _, _, cx| {
                                 if reviewing {
                                     return this.review(
@@ -2363,15 +2418,16 @@ impl Render for DescriptionEditor {
                     .w_full()
                     .flex()
                     .justify_end()
-                    .gap(px(8.))
                     .child(
                         ActionButton::new("pr-description-cancel", "Cancel")
+                            .margin(beside(0., 4.))
                             .on_click(cx.listener(|this, _, _, cx| this.dismiss(cx))),
                     )
                     .child(
                         ActionButton::new("pr-description-save", "Save")
                             .primary()
                             .disabled(unchanged)
+                            .margin(beside(4., 0.))
                             .on_click(cx.listener(|this, _, _, cx| this.save(cx))),
                     ),
             );

@@ -26,7 +26,7 @@ use crate::ui::menu::Anchor;
 use crate::ui::parts::{hidden_edges, with_edge_fades};
 use crate::ui::rich_text::RichText;
 use crate::ui::{
-    ActionButton, ChoiceDropdown, DropdownChoice, FadingScroll, Variant, edges, icons, logos, tabular_numbers,
+    ActionButton, ChoiceDropdown, DropdownChoice, FadingScroll, Variant, beside, edges, icons, logos, tabular_numbers,
     tabular_text_width, text_width,
 };
 
@@ -374,25 +374,35 @@ fn waiting_call(store: &Entity<Store>, approval: &Waiting, count: usize, cx: &Ap
                         .text_color(c.warning),
                 )
                 .child(div().flex_1().min_w(px(8.)))
-                .child(ActionButton::new("refuse", approval.refuse).small().surface(Surface::Composer).on_click(
-                    move |_, _, cx| {
-                        refuse.update(cx, |store, cx| {
-                            store.answer(&refuse_id, false, Default::default());
-                            cx.notify();
-                        })
-                    },
-                ))
                 .child(
-                    ActionButton::new("allow", approval.allow)
-                        .variant(Variant::Warning)
-                        .small()
-                        .surface(Surface::Composer)
-                        .on_click(move |_, _, cx| {
-                            allow.update(cx, |store, cx| {
-                                store.answer(&allow_id, true, Default::default());
-                                cx.notify();
-                            })
-                        }),
+                    div()
+                        .flex()
+                        .items_center()
+                        .child(
+                            ActionButton::new("refuse", approval.refuse)
+                                .small()
+                                .surface(Surface::Composer)
+                                .margin(beside(0., 4.))
+                                .on_click(move |_, _, cx| {
+                                    refuse.update(cx, |store, cx| {
+                                        store.answer(&refuse_id, false, Default::default());
+                                        cx.notify();
+                                    })
+                                }),
+                        )
+                        .child(
+                            ActionButton::new("allow", approval.allow)
+                                .variant(Variant::Warning)
+                                .small()
+                                .surface(Surface::Composer)
+                                .margin(beside(4., 0.))
+                                .on_click(move |_, _, cx| {
+                                    allow.update(cx, |store, cx| {
+                                        store.answer(&allow_id, true, Default::default());
+                                        cx.notify();
+                                    })
+                                }),
+                        ),
                 ),
         )
         .when(has_target, |call| {

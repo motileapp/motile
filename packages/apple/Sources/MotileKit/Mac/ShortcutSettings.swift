@@ -17,9 +17,13 @@ struct ShortcutSettings: View {
         ) {
             HStack(spacing: 8) {
                 InputField("Search shortcuts", text: $query, icon: .search, size: .large, clearable: true)
-                ActionButton("Add Shortcut", icon: .plus, variant: .outline, size: .large) { adding = .some(nil) }
-                    .disabled(adding != nil)
-                ActionButton(icon: .fileBraces, help: "Open keybindings.json", variant: .outline, size: .large) { store.openShortcutsFile() }
+                HStack(spacing: 0) {
+                    ActionButton("Add Shortcut", icon: .plus, variant: .outline, size: .large, margin: .beside(trailing: 4)) { adding = .some(nil) }
+                        .disabled(adding != nil)
+                    ActionButton(icon: .fileBraces, help: "Open keybindings.json", variant: .outline, size: .large, margin: .beside(leading: 4)) {
+                        store.openShortcutsFile()
+                    }
+                }
             }
         }
         if !shortcuts.issues.isEmpty {
@@ -301,8 +305,8 @@ private struct ConditionEditor: View {
             } else if !check.unknown.isEmpty {
                 note("Motile doesn't know \(check.unknown.joined(separator: ", ")), which never holds.", symbol: .triangleAlert, color: .themeWarning)
             }
-            HStack(spacing: 8) {
-                ActionMenu("Add", icon: .plus, variant: .outline) {
+            HStack(spacing: 0) {
+                ActionMenu("Add", icon: .plus, variant: .outline, margin: .beside(trailing: 8)) {
                     Section("While") {
                         ForEach(store.shortcuts.conditions, id: \.self) { name in
                             Button(name) { add(name) }
@@ -315,9 +319,9 @@ private struct ConditionEditor: View {
                     }
                 }
                 Spacer()
-                ActionButton("Cancel", action: cancel)
+                ActionButton("Cancel", margin: .beside(leading: 8, trailing: 4), action: cancel)
                     .keyboardShortcut(.cancelAction)
-                ActionButton("Save", variant: .primary) { save(when.trimmingCharacters(in: .whitespaces)) }
+                ActionButton("Save", variant: .primary, margin: .beside(leading: 4)) { save(when.trimmingCharacters(in: .whitespaces)) }
                     .keyboardShortcut(.defaultAction)
                     .disabled(check.whenError != nil)
             }

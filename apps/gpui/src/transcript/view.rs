@@ -614,6 +614,7 @@ impl Render for TranscriptView {
                             .rounded_full()
                             .bg(c.popover)
                             .hover(|button| button.bg(c.border_popover))
+                            .cursor_default()
                             .border_1()
                             .border_color(c.border_popover)
                             .shadow(c.shadow(theme::ShadowSize::Md, theme::Opacity::Shadow))

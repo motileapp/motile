@@ -26,7 +26,7 @@ final class FieldView: FlippedView, NSTextFieldDelegate {
     var editing: Bool { field.currentEditor() != nil }
 
     private let frameView = SurfaceView()
-    private let field = NSTextField()
+    private let field = PointerTextField()
 
     /// A `numeric` field asks for the keypad of numbers where there is one.
     init(placeholder: String, size: ControlSize = .regular, numeric: Bool = false, onChange: @escaping (String) -> Void) {
@@ -121,7 +121,7 @@ final class TextAreaView: FlippedView, NSTextViewDelegate {
         storage.addLayoutManager(layout)
         let container = NSTextContainer(size: NSSize(width: 100, height: CGFloat.greatestFiniteMagnitude))
         layout.addTextContainer(container)
-        textView = NSTextView(frame: .zero, textContainer: container)
+        textView = PointerTextView(frame: .zero, textContainer: container)
         super.init(frame: .zero)
         frameView.radius = size.radius
         frameView.fill = fieldFill(surface)

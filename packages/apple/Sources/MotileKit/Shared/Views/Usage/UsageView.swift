@@ -190,10 +190,11 @@ struct UsageTitle: View {
 struct UsageServersMenu: View {
     @Environment(AppStore.self) private var store
     let model: UsageModel
+    var margin = EdgeInsets()
 
     var body: some View {
         CheckMenu(
-            model.serversLabel(among: store.usageServers), icon: .server, help: "The servers counted", variant: .secondary,
+            model.serversLabel(among: store.usageServers), icon: .server, help: "The servers counted", variant: .secondary, margin: margin,
             checks: model.serverChecks(among: store.usageServers)
         )
     }
@@ -213,8 +214,10 @@ struct UsageControls: View {
             }
             HStack(spacing: 8) {
                 UsageTabs(model: model)
-                UsagePeriodMenu(model: model)
-                UsageRefreshButton(model: model)
+                HStack(spacing: 0) {
+                    UsagePeriodMenu(model: model, margin: .beside(trailing: 4))
+                    UsageRefreshButton(model: model, margin: .beside(leading: 4))
+                }
             }
         }
     }
@@ -231,9 +234,10 @@ struct UsageTabs: View {
 
 struct UsagePeriodMenu: View {
     @Bindable var model: UsageModel
+    var margin = EdgeInsets()
 
     var body: some View {
-        ActionMenu(model.period.label, variant: .secondary) {
+        ActionMenu(model.period.label, variant: .secondary, margin: margin) {
             Picker("Period", selection: $model.period) {
                 ForEach(UsageModel.Period.allCases) { Text($0.label).tag($0) }
             }
@@ -245,9 +249,10 @@ struct UsagePeriodMenu: View {
 
 struct UsageRefreshButton: View {
     let model: UsageModel
+    var margin = EdgeInsets()
 
     var body: some View {
-        ActionButton(icon: .refreshCw, help: "Refresh", pending: model.refreshing) { model.refresh() }
+        ActionButton(icon: .refreshCw, help: "Refresh", pending: model.refreshing, margin: margin) { model.refresh() }
     }
 }
 

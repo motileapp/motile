@@ -35,8 +35,10 @@ struct WaitingStrip: View {
                 WaitingTitle(approval.title, symbol: approval.symbol, place: count > 1 ? "1 of \(count)" : nil)
                     .foregroundStyle(Color.themeWarning)
                 Spacer(minLength: 8)
-                ActionButton(approval.refuseLabel, size: .small) { store.answer(approval, allow: false) }
-                ActionButton(approval.allowLabel, variant: .warning, size: .small) { store.answer(approval, allow: true) }
+                HStack(spacing: 0) {
+                    ActionButton(approval.refuseLabel, size: .small, margin: .beside(trailing: 4)) { store.answer(approval, allow: false) }
+                    ActionButton(approval.allowLabel, variant: .warning, size: .small, margin: .beside(leading: 4)) { store.answer(approval, allow: true) }
+                }
             }
             .padding([.top, .horizontal], Self.padding)
             .padding(.bottom, approval.target.isEmpty ? Self.padding : 8)
