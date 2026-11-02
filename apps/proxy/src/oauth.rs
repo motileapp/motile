@@ -143,13 +143,15 @@ impl SignIns {
                     }
                 };
                 let tokens = claude_tokens(&answer, None)?;
-                let id = answer["organization"]["uuid"].as_str().context("Claude didn't say which organisation.")?;
+                let organization =
+                    answer["organization"]["uuid"].as_str().context("Claude didn't say which organisation.")?;
+                let id = seat(answer["account"]["uuid"].as_str(), organization);
                 let (email, plan) = claude_profile(http, upstreams, &tokens.access).await.unwrap_or_else(|error| {
                     tracing::warn!("couldn't read the Claude account's profile: {error:#}");
                     (None, None)
                 });
                 let email = email.or_else(|| answer["account"]["email_address"].as_str().map(String::from));
-                Ok(Signed { id: id.to_string(), agent: Agent::Claude, email, plan, tokens })
+                Ok(Signed { id, agent: Agent::Claude, email, plan, tokens })
             }
             Pending::Codex { device_auth_id, user_code, interval } => {
                 let deadline = started + SIGN_IN_WAITS;
@@ -310,6 +312,14 @@ pub async fn claude_profile(
     Ok((email, claude_plan(&profile["organization"])))
 }
 
+/// An account is a person in an organisation: the seats of a team share the organisation.
+fn seat(person: Option<&str>, organization: &str) -> String {
+    match person {
+        Some(person) => format!("{person}/{organization}"),
+        None => organization.to_string(),
+    }
+}
+
 fn claude_plan(organization: &Value) -> Option<String> {
     let kind = organization["organization_type"].as_str()?;
     let tier = organization["rate_limit_tier"].as_str().unwrap_or_default();
@@ -334,8 +344,9 @@ fn codex_signed(answer: &Value, before: Option<&Tokens>) -> anyhow::Result<Signe
         .context("OpenAI didn't say which ChatGPT account signed in.")?;
     let email = claims["email"].as_str().or(claims["https://api.openai.com/profile"]["email"].as_str());
     let expires_at = jwt_claims(&access).and_then(|claims| claims["exp"].as_f64());
+    let user = auth["chatgpt_user_id"].as_str().or(claims["sub"].as_str());
     Ok(Signed {
-        id: chatgpt_account.clone(),
+        id: seat(user, &chatgpt_account),
         agent: Agent::Codex,
         email: email.map(String::from),
         plan: auth["chatgpt_plan_type"].as_str().map(codex_plan),
@@ -390,6 +401,15 @@ mod tests {
 
         let renewed = codex_signed(&json!({"access_token": "x.e30.y"}), Some(&signed.tokens)).unwrap();
         assert_eq!((renewed.tokens.refresh.as_str(), renewed.id.as_str()), ("r", "acct-1"));
+
+        let seat = |user: &str| {
+            let id_token = jwt(json!({"https://api.openai.com/auth": {
+                "chatgpt_account_id": "workspace", "chatgpt_user_id": user}}));
+            codex_signed(&json!({"id_token": id_token, "access_token": "x.e30.y", "refresh_token": "r"}), None)
+                .unwrap()
+                .id
+        };
+        assert_eq!((seat("ann"), seat("bob")), ("ann/workspace".into(), "bob/workspace".into()));
     }
 
     #[test]

@@ -118,12 +118,14 @@ async fn claude_token(State(fake): Shared, Json(body): Json<Value>) -> Response 
         _ => return StatusCode::BAD_REQUEST.into_response(),
     };
     let generation = fake.renewals.load(Ordering::SeqCst);
+    let (person, organization) =
+        org.split_once('.').map_or((None, org.as_str()), |(person, team)| (Some(person), team));
     Json(json!({
         "access_token": format!("claude-{org}-{generation}"),
         "refresh_token": format!("refresh-{org}"),
         "expires_in": lifetime,
-        "account": {"uuid": "account", "email_address": format!("{org}@example.com")},
-        "organization": {"uuid": org, "name": "Org"},
+        "account": {"uuid": person, "email_address": format!("{org}@example.com")},
+        "organization": {"uuid": organization, "name": "Org"},
     }))
     .into_response()
 }
@@ -466,6 +468,17 @@ async fn http_pinned(
     let head: ProxyReply = tokio::time::timeout(TIMEOUT, read_frame(&mut recv)).await.unwrap().unwrap().unwrap();
     let body = tokio::time::timeout(TIMEOUT, recv.read_to_end(1 << 24)).await.unwrap().unwrap_or_default();
     (head, String::from_utf8_lossy(&body).into_owned())
+}
+
+#[tokio::test]
+async fn two_seats_of_one_team_are_two_accounts() {
+    let harness = Harness::start().await;
+    harness.sign_in_claude("ann.team").await;
+    let state = harness.sign_in_claude("bob.team").await;
+    let mut seats: Vec<_> =
+        state.accounts.iter().map(|account| (account.id.as_str(), account.email.as_deref().unwrap())).collect();
+    seats.sort();
+    assert_eq!(seats, [("ann/team", "ann.team@example.com"), ("bob/team", "bob.team@example.com")]);
 }
 
 #[tokio::test]
