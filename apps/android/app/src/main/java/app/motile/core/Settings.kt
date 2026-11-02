@@ -5,7 +5,7 @@ import app.motile.platform.Symbol
 /** A page of the settings, listed in the settings' sidebar. */
 enum class SettingsSection(val raw: String) {
     // In the order they are reached for: what the client is, then what it works with, and the keys last.
-    General("general"), Accounts("accounts"), Servers("servers"), Projects("projects"),
+    General("general"), Accounts("accounts"), Proxy("proxy"), Servers("servers"), Projects("projects"),
     PullRequests("pullRequests"), TextGeneration("textGeneration"), Integrations("integrations"), Keyboard("keyboard");
 
     val title: String
@@ -14,6 +14,7 @@ enum class SettingsSection(val raw: String) {
             Keyboard -> "Keybindings"
             Servers -> "Servers"
             Accounts -> "Providers"
+            Proxy -> "Proxy"
             Projects -> "Projects"
             TextGeneration -> "Text Generation"
             PullRequests -> "Pull Requests"
@@ -26,6 +27,7 @@ enum class SettingsSection(val raw: String) {
             Keyboard -> Symbol.Keyboard
             Servers -> Symbol.Server
             Accounts -> Symbol.Bot
+            Proxy -> Symbol.Waypoints
             Projects -> Symbol.Folder
             TextGeneration -> Symbol.PencilLine
             PullRequests -> Symbol.GitPullRequest
@@ -39,7 +41,7 @@ enum class SettingsSection(val raw: String) {
 }
 
 /** What managing new threads does, said under its switch. */
-const val managesNewThreadsDescription = "Starts new threads on the account with the most limits left."
+const val managesNewThreadsDescription = "Picks the account for each new thread."
 
 /** What automatically pulling does, said under its switch. */
 const val pullDefaultBranchCaption = "Keeps each project's folder current while it is on its default branch with no changes or commits of its own."
@@ -60,7 +62,9 @@ data class SettingsEntry(
             SettingsEntry("messages", "Sent while the agent works", SettingsSection.General, "messages queue steer interrupt"),
             SettingsEntry("manage-new-threads", "Manage new threads automatically", SettingsSection.General, "provider limits usage accounts switch quota rate"),
             SettingsEntry("storage", "Images and videos", SettingsSection.General, "storage cache clear media disk"),
-            SettingsEntry("agent-accounts", "Provider Accounts", SettingsSection.Accounts, "agents claude codex sign in login folder subscription plan api key router"),
+            SettingsEntry("agent-accounts", "Provider Accounts", SettingsSection.Accounts, "agents claude codex sign in account folder subscription plan api key router"),
+            SettingsEntry("proxy", "Proxy", SettingsSection.Proxy, "accounts pool claude codex add remove priority limits"),
+            SettingsEntry("proxy-requests", "Requests", SettingsSection.Proxy, "proxy log capture errors"),
             SettingsEntry("servers", "Servers", SettingsSection.Servers, "add remove unlink unlinked delete copies machine agents connected"),
             SettingsEntry("continue-limits", "Continue after usage limits", SettingsSection.Servers, "rate limit reset resume quota wait"),
             SettingsEntry("continue-restarts", "Continue after restarts", SettingsSection.Servers, "restart update crash resume interrupted"),

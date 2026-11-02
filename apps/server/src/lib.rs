@@ -16,6 +16,7 @@ pub mod mcp;
 pub mod media;
 pub mod pacing;
 pub mod pricing;
+pub mod proxy;
 pub mod pull_requests;
 pub mod ricrac;
 pub mod serve;

@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["apps/auth", "apps/server", "crates/protocol", "crates/core", "crates/openui", "apps/android/core"]
+members = ["apps/auth", "apps/server", "apps/proxy", "crates/protocol", "crates/core", "crates/openui", "apps/android/core"]
 
 [workspace.package]
 version = "0.1.267"

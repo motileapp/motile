@@ -264,7 +264,11 @@ struct UsageContent: View {
         ScrollView {
             Group {
                 switch model.tab {
-                case .limits: limits
+                case .limits:
+                    // The proxy's accounts are among the limits while it is followed.
+                    VStack(alignment: .leading, spacing: 0) { limits }
+                        .onAppear { store.watchProxy(true) }
+                        .onDisappear { store.watchProxy(false) }
                 case .cost: spending(.cost)
                 case .tokens: spending(.tokens)
                 }

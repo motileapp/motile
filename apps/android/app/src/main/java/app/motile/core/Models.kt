@@ -110,6 +110,8 @@ data class AgentAccount(
     /** Who is signed in, as the agent's CLI last said. */
     val email: String?,
     val plan: String?,
+    /** The server's account for the account's proxy, which serves its turns from the proxy's accounts. It can't be edited or removed. */
+    val proxy: Boolean = false,
 ) {
     data class Variable(
         val name: String,
@@ -127,6 +129,7 @@ data class AgentAccount(
         variables = json.objects("variables").map { Variable(it.string("name"), it.string("value"), it.bool("sensitive")) },
         email = json.optionalString("email"),
         plan = json.optionalString("plan"),
+        proxy = json.bool("proxy"),
     )
 
     val json: Map<String, Any?>
@@ -199,7 +202,7 @@ data class Server(
     val roomierAccounts: Map<String, Map<String, String>>,
     /** What each agent account has used of its limits, by account id. */
     val accountLimits: Map<String, List<LimitsReport.Window>> = emptyMap(),
-    /** Its agents' accounts' ids, the one with the most room left in its limits first. */
+    /** Its agents' accounts' ids, the one a new thread would start on first. */
     val accountsByRoom: List<String> = emptyList(),
     /** Whether the server has ever told us about itself. */
     val known: Boolean,
@@ -1472,7 +1475,7 @@ data class UsageReport(
     }
 }
 
-/** How much of their plans the agents' logins have used: a section for each login, a row for each of its windows, and what kept a server from saying. */
+/** How much of their plans the agents' accounts have used: a section for each account, a row for each of its windows, and what kept a server from saying. */
 data class LimitsReport(
     val sections: List<Section>,
     val notes: List<String>,
@@ -1490,6 +1493,8 @@ data class LimitsReport(
         val windows: List<Window>,
         /** Why there are no windows. */
         val note: String?,
+        /** One of the proxy's accounts. */
+        val proxy: Boolean = false,
     ) {
         val id: String get() = "${agent.raw}/${name ?: ""}/${account ?: servers.joinToString(",")}/${note ?: ""}"
     }
@@ -1531,6 +1536,7 @@ data class LimitsReport(
                     servers = section.strings("servers"),
                     windows = section.objects("windows").map(::Window),
                     note = section.optionalString("note"),
+                    proxy = section.bool("proxy"),
                 )
             },
             notes = json.strings("notes"),

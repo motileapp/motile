@@ -1,6 +1,7 @@
 //! The agents' accounts on this server. An agent's CLI keeps its sign-in in a folder, so each
 //! account is a folder: `CLAUDE_CONFIG_DIR` for Claude Code, `CODEX_HOME` for Codex, or none for
-//! the CLI's usual one. An agent's first account is its default.
+//! the CLI's usual one. An agent's first account is its default. While the server's account has a
+//! proxy, each agent also has a Proxy account, which the server makes and keeps as it is.
 
 use std::path::{Path, PathBuf};
 
@@ -18,6 +19,9 @@ const LOCAL: [&str; 3] = ["log", "memories", "tmp"];
 /// Made in the shared folder first, so that a new account shares them from the start.
 const SHARED: [&str; 9] =
     ["sessions", "archived_sessions", "sqlite", "shell_snapshots", "worktrees", "skills", "plugins", "cache", "logs"];
+
+/// What the Proxy accounts are called.
+pub const PROXY_NAME: &str = "Proxy";
 
 /// The id of the account a server starts with, in the CLI's usual folder.
 pub fn usual_id(agent: Agent) -> &'static str {
@@ -38,7 +42,49 @@ pub fn usual_account(agent: Agent) -> AgentAccount {
         variables: vec![],
         email: None,
         plan: None,
+        proxy: false,
     }
+}
+
+/// The id of the agent's Proxy account.
+pub fn proxy_id(agent: Agent) -> &'static str {
+    match agent {
+        Agent::Claude => "proxy-claude",
+        Agent::Codex => "proxy-codex",
+    }
+}
+
+/// The account through which the server's account's proxy serves the agent, which keeps its
+/// things in a folder of its own in `folder`.
+pub fn proxy_account(agent: Agent, folder: &Path) -> AgentAccount {
+    AgentAccount {
+        id: proxy_id(agent).to_string(),
+        agent,
+        name: PROXY_NAME.to_string(),
+        folder: folder.join(usual_id(agent)).to_string_lossy().into_owned(),
+        shares_sessions: false,
+        variables: vec![],
+        email: None,
+        plan: None,
+        proxy: true,
+    }
+}
+
+/// The accounts with a Proxy account for each agent while the server's account has a proxy, whose
+/// accounts keep their folders in `folder`, and without them when it has none.
+pub fn with_proxy(mut accounts: Vec<AgentAccount>, folder: Option<&Path>) -> Vec<AgentAccount> {
+    let Some(folder) = folder else {
+        accounts.retain(|account| !account.proxy);
+        return with_every_agent(accounts);
+    };
+    for agent in [Agent::Claude, Agent::Codex] {
+        let made = proxy_account(agent, folder);
+        match accounts.iter_mut().find(|account| account.id == made.id) {
+            Some(kept) => *kept = made,
+            None => accounts.push(made),
+        }
+    }
+    accounts
 }
 
 /// The accounts kept in the settings, with the usual one for an agent that has none.
@@ -80,6 +126,9 @@ pub fn checked(mut account: AgentAccount, accounts: &[AgentAccount]) -> anyhow::
     let existing = accounts.iter().find(|kept| kept.id == account.id && !account.id.is_empty());
     if !account.id.is_empty() && existing.is_none() {
         bail!("That account is no longer on your server.");
+    }
+    if account.proxy || existing.is_some_and(|existing| existing.proxy) {
+        bail!("Your proxy's account can't be changed.");
     }
     keep_sensitive_values(&mut account, existing)?;
     if existing.is_some_and(|existing| existing.agent != account.agent) {
@@ -146,6 +195,9 @@ pub fn signing_in(mut account: AgentAccount, accounts: &[AgentAccount]) -> anyho
         variable.name = variable.name.trim().to_string();
     }
     let existing = accounts.iter().find(|kept| kept.id == account.id && !account.id.is_empty());
+    if account.proxy || existing.is_some_and(|existing| existing.proxy) {
+        bail!("Your proxy signs its own accounts in.");
+    }
     keep_sensitive_values(&mut account, existing)?;
     if !account.folder.is_empty() && !account.folder.starts_with('/') && !account.folder.starts_with("~/") {
         bail!("Give the account a full folder first, like ~/.claude-personal.");
@@ -277,6 +329,7 @@ mod tests {
             variables: vec![],
             email: None,
             plan: None,
+            proxy: false,
         }
     }
 
@@ -311,6 +364,38 @@ mod tests {
         assert_eq!(default_of(&accounts, Agent::Codex).id, "codex");
         assert_eq!(ids(&made_default(accounts.clone(), "codex").unwrap()), ["work", "claude", "codex"]);
         assert!(made_default(accounts, "gone").is_err());
+    }
+
+    #[test]
+    fn the_proxy_accounts_are_there_while_the_account_has_a_proxy_and_keep_their_place() {
+        let folder = Path::new("/data/proxy");
+        let work = account("work", Agent::Claude, "Work", "~/.claude-work");
+        let accounts = with_proxy(with_every_agent(vec![work]), Some(folder));
+        assert_eq!(ids(&accounts), ["work", "codex", "proxy-claude", "proxy-codex"]);
+        assert_eq!(accounts[2].folder, "/data/proxy/claude");
+        assert_eq!(accounts[3].folder, "/data/proxy/codex");
+        assert!(accounts[2].proxy && accounts[2].name == "Proxy");
+
+        let accounts = made_default(accounts, "proxy-codex").unwrap();
+        assert_eq!(ids(&with_proxy(accounts.clone(), Some(folder))), ["work", "proxy-codex", "codex", "proxy-claude"]);
+        assert_eq!(ids(&with_proxy(accounts, None)), ["work", "codex"]);
+
+        let only_proxy = vec![proxy_account(Agent::Claude, folder), proxy_account(Agent::Codex, folder)];
+        assert_eq!(ids(&with_proxy(only_proxy, None)), ["claude", "codex"]);
+    }
+
+    #[test]
+    fn a_proxy_account_is_never_changed_signed_in_or_made_by_a_client() {
+        let accounts = with_proxy(with_every_agent(vec![]), Some(Path::new("/data/proxy")));
+        let mut renamed = accounts[2].clone();
+        renamed.name = "Mine".into();
+        assert!(checked(renamed.clone(), &accounts).is_err());
+        renamed.proxy = false;
+        assert!(checked(renamed.clone(), &accounts).is_err());
+        assert!(signing_in(renamed, &accounts).is_err());
+        let mut new = account("", Agent::Claude, "Another", "~/.claude-another");
+        new.proxy = true;
+        assert!(checked(new, &accounts).is_err());
     }
 
     #[test]

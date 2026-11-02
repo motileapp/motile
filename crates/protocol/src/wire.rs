@@ -1133,6 +1133,10 @@ pub struct AgentAccount {
     pub email: Option<String>,
     #[serde(default)]
     pub plan: Option<String>,
+    /// The account's proxy serves this account's turns from its pool of logins. The server makes it
+    /// while the account has a proxy; it can't be edited or removed.
+    #[serde(default)]
+    pub proxy: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]

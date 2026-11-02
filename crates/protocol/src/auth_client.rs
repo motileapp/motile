@@ -8,8 +8,8 @@ use serde::Serialize;
 use serde::de::DeserializeOwned;
 
 use crate::auth_api::{
-    ApiError, DevLoginRequest, DevLoginResponse, EnrollRequest, EnrollResponse, EnrollToken, ExchangeRequest, Me,
-    enroll_message, link_message,
+    ApiError, DevLoginRequest, DevLoginResponse, DeviceKind, EnrollRequest, EnrollResponse, EnrollToken,
+    ExchangeRequest, Me, enroll_message, link_message,
 };
 use crate::identity::{DeviceKey, sha256_hex, sign_request};
 use crate::{APP_REDIRECT, now};
@@ -117,7 +117,19 @@ impl AuthClient {
         token: &str,
         device: &DeviceDescription<'_>,
     ) -> anyhow::Result<EnrollResponse> {
+        self.enroll_as(key, token, device, DeviceKind::Server).await
+    }
+
+    /// Links a server or the account's proxy with the code a client made.
+    pub async fn enroll_as(
+        &self,
+        key: &DeviceKey,
+        token: &str,
+        device: &DeviceDescription<'_>,
+        kind: DeviceKind,
+    ) -> anyhow::Result<EnrollResponse> {
         let request = EnrollRequest {
+            kind,
             token: token.to_string(),
             public_key: key.public(),
             name: device.name.to_string(),

@@ -162,8 +162,8 @@ pub async fn create_enroll_token(
         Caller::Web(user) => user,
         Caller::Device(public_key) => {
             let user = linked_user(&state, &public_key).await?;
-            // A server can't add more servers; only someone signed in can, in a client or on the web.
-            if db::device_kind(&state.db, &public_key).await?.as_deref() != Some(db::kind_text(DeviceKind::Client)) {
+            // A server or the proxy can't add devices; only someone signed in can, in a client or on the web.
+            if db::device_kind(&state.db, &public_key).await? != Some(DeviceKind::Client) {
                 return Err(AppError::new(StatusCode::FORBIDDEN, "Servers are added from a client."));
             }
             user
@@ -197,6 +197,9 @@ pub async fn enroll(
             "Too many install commands failed from this address. Try again in 15 minutes.",
         ));
     }
+    if request.kind == DeviceKind::Client {
+        return Err(AppError::bad_request("A client links by signing in, not with an install command."));
+    }
     if !is_public_key(&request.public_key) {
         return Err(AppError::bad_request("That isn't a device key."));
     }
@@ -216,9 +219,9 @@ pub async fn enroll(
     };
     let user = db::user_by_id(&state.db, user_id).await?.ok_or_else(expired)?;
 
-    let name = clean(&request.name, "Server");
+    let name = clean(&request.name, if request.kind == DeviceKind::Proxy { "Proxy" } else { "Server" });
     let platform = clean(&request.platform, "unknown");
-    if !db::link_device(&state.db, user.id, &request.public_key, DeviceKind::Server, &name, &platform).await? {
+    if !db::link_device(&state.db, user.id, &request.public_key, request.kind, &name, &platform).await? {
         return Err(AppError::new(StatusCode::CONFLICT, "This machine can't be linked to the account."));
     }
     Ok(Json(EnrollResponse { email: user.email }))
@@ -258,7 +261,7 @@ pub async fn delete_server_completely(
         Caller::Web(user) => user,
         Caller::Device(public_key) => {
             let user = linked_user(&state, &public_key).await?;
-            if db::device_kind(&state.db, &public_key).await?.as_deref() != Some(db::kind_text(DeviceKind::Client)) {
+            if db::device_kind(&state.db, &public_key).await? != Some(DeviceKind::Client) {
                 return Err(AppError::new(StatusCode::FORBIDDEN, "Servers are deleted from a client."));
             }
             user

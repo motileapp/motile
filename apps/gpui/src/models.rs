@@ -63,7 +63,7 @@ pub struct Server {
     pub roomier_accounts: HashMap<String, HashMap<String, String>>,
     /// What each agent account has used of its limits, by account id.
     pub account_limits: HashMap<String, Vec<motile_core::limits::Row>>,
-    /// Its agents' accounts' ids, the one with the most room left in its limits first.
+    /// Its agents' accounts' ids, the one a new thread would start on first.
     pub accounts_by_room: Vec<String>,
     /// Whether the server has ever told us about itself.
     pub known: bool,
@@ -145,6 +145,7 @@ fn default_account(agent: Agent) -> AgentAccount {
         variables: Vec::new(),
         email: None,
         plan: None,
+        proxy: false,
     }
 }
 
@@ -159,6 +160,7 @@ pub fn new_account(agent: Agent) -> AgentAccount {
         variables: Vec::new(),
         email: None,
         plan: None,
+        proxy: false,
     }
 }
 
@@ -179,6 +181,9 @@ pub trait AgentAccountExt {
 
 impl AgentAccountExt for AgentAccount {
     fn settings_description(&self) -> String {
+        if self.proxy {
+            return "Works with your proxy's logins".into();
+        }
         let signed_in = self.email.as_ref().map(|email| match &self.plan {
             Some(plan) => format!("{email} · {plan}"),
             None => email.clone(),

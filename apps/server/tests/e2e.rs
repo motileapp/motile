@@ -3,12 +3,16 @@
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::Duration;
 
+use futures_util::{SinkExt, StreamExt};
 use motile_core::connection::{Connection, Follow, ServerAddr, bind};
 use motile_core::link::{Link, LinkEvent, State};
 use motile_core::sync::{self as relay, Origin};
+use motile_protocol::frame::{read_frame, write_frame};
 use motile_protocol::identity::DeviceKey;
+use motile_protocol::proxy_wire::{ProxyReply, ProxyRequest, WsMessage};
 use motile_protocol::wire::{
     Access as AgentAccess, Agent, AgentAccount, AgentLimits, Approval, Ask, CONTINUE_PROMPT, Change, CheckStatus,
     CopiedThread, DiffScope, EventKind, FileKind, GitAction, GitHubState, GitStage, GitStatus, Interruption, Item,
@@ -20,10 +24,14 @@ use motile_protocol::wire::{
 use motile_server::access::Access;
 use motile_server::agents::environment::Environment;
 use motile_server::hub::Hub;
+use motile_server::mcp;
+use motile_server::proxy;
 use motile_server::serve::{BindOptions, Server};
 use motile_server::store::Store;
 use serde_json::json;
 use tokio::sync::mpsc;
+use tokio_tungstenite::tungstenite::Message as WebSocketMessage;
+use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 
 const TIMEOUT: Duration = Duration::from_secs(30);
 
@@ -37,6 +45,8 @@ struct Harness {
     app_key: DeviceKey,
     address: ServerAddr,
     endpoint: Option<iroh::Endpoint>,
+    hub: Arc<Hub>,
+    access: Arc<Access>,
     variables: HashMap<String, String>,
 }
 
@@ -92,8 +102,8 @@ impl Harness {
             variables.insert(name.to_string(), value);
         }
         let server_key = DeviceKey::generate();
-        let (endpoint, address) = serve(&dir, &server_key, &app_key, &variables, None).await;
-        Self { dir, server_key, app_key, address, endpoint: Some(endpoint), variables }
+        let (endpoint, address, hub, access) = serve(&dir, &server_key, &app_key, &variables, None).await;
+        Self { dir, server_key, app_key, address, endpoint: Some(endpoint), hub, access, variables }
     }
 
     /// Stops the server and starts it again on the same data and the same address.
@@ -102,13 +112,23 @@ impl Harness {
             endpoint.close().await;
         }
         let port = self.address.direct.map(|address| address.port());
-        let (endpoint, address) = serve(&self.dir, &self.server_key, &self.app_key, &self.variables, port).await;
+        let (endpoint, address, hub, access) =
+            serve(&self.dir, &self.server_key, &self.app_key, &self.variables, port).await;
         self.endpoint = Some(endpoint);
         self.address = address;
+        self.hub = hub;
+        self.access = access;
     }
 
     async fn connect(&self) -> Connection {
         self.connect_as(&self.app_key).await
+    }
+
+    /// Serves the way to the account's proxy, as the server does, with the Proxy accounts' folders
+    /// in `proxy`.
+    async fn serve_proxy(&self) {
+        let endpoint = self.endpoint.clone().unwrap();
+        self.hub.serve_proxy(endpoint, self.access.watch_proxy(), self.dir.path().join("proxy")).await.unwrap();
     }
 
     async fn connect_as(&self, key: &DeviceKey) -> Connection {
@@ -192,7 +212,7 @@ async fn serve(
     app_key: &DeviceKey,
     variables: &HashMap<String, String>,
     port: Option<u16>,
-) -> (iroh::Endpoint, ServerAddr) {
+) -> (iroh::Endpoint, ServerAddr, Arc<Hub>, Arc<Access>) {
     let fake_agent = repo_file("scripts/fake-agent");
     let executables = HashMap::from([(Agent::Claude, fake_agent.clone()), (Agent::Codex, fake_agent)]);
     let environment = Environment::fixed(variables.clone(), executables);
@@ -229,9 +249,9 @@ async fn serve(
     let address = format!("{}@127.0.0.1:{port}", server_key.public()).parse().unwrap();
 
     let access = Access::new(vec![app_key.public()], None);
-    let server = Server { hub, access, attachments: dir.path().join("attachments") };
+    let server = Server { hub: hub.clone(), access: access.clone(), attachments: dir.path().join("attachments") };
     tokio::spawn(server.run(endpoint.clone()));
-    (endpoint, address)
+    (endpoint, address, hub, access)
 }
 
 /// What the agent replays for a prompt it has no script for.
@@ -1706,6 +1726,7 @@ async fn a_thread_works_with_the_account_it_was_started_with_and_moves_to_anothe
         variables: vec![Variable { name: "FAKE_AGENT_ARGUMENTS_FILE".into(), value: recorded, sensitive: true }],
         email: None,
         plan: None,
+        proxy: false,
     };
     let saved = connection.request(&Request::SaveAgentAccount { account: personal }).await.unwrap();
     assert_eq!(saved, Message::Ok);
@@ -1795,6 +1816,7 @@ async fn an_account_signs_in_with_the_code_its_page_showed_and_is_saved() {
         variables: vec![],
         email: None,
         plan: None,
+        proxy: false,
     };
     let start = async || connection.request(&Request::StartSignIn { account: work.clone() }).await;
     let finish = async |id: &str, code: &str, account: &AgentAccount| {
@@ -1881,7 +1903,7 @@ async fn projects_are_added_and_removed_and_show_their_branch() {
 }
 
 /// Stands in for a GitHub login with two repositories, once `signed-in` is next to it.
-const FAKE_GH_LOGIN: &str = r#"#!/bin/sh
+const FAKE_GH_ACCOUNT: &str = r#"#!/bin/sh
 case "$1 $2" in
 "auth token")
     [ -f "$(dirname "$0")/signed-in" ] || { echo "no oauth token found for github.com" >&2; exit 1; }
@@ -1905,7 +1927,7 @@ async fn a_project_is_started_from_a_name_or_cloned_from_github() {
     let connection = harness.connect().await;
     let bin = harness.dir.path().join("bin");
     std::fs::create_dir_all(&bin).unwrap();
-    std::fs::write(bin.join("gh"), FAKE_GH_LOGIN).unwrap();
+    std::fs::write(bin.join("gh"), FAKE_GH_ACCOUNT).unwrap();
     std::fs::set_permissions(bin.join("gh"), std::fs::Permissions::from_mode(0o755)).unwrap();
     let added = |answer: Message| match answer {
         Message::ProjectAdded { project_id } => project_id,
@@ -3419,7 +3441,7 @@ async fn written(connection: &Connection, agent: Agent) -> Vec<UsageBucket> {
 }
 
 #[tokio::test]
-async fn the_agents_say_what_their_logins_have_used_of_their_plans() {
+async fn the_agents_say_what_their_accounts_have_used_of_their_plans() {
     let harness = Harness::start("fixtures/read-and-bash.jsonl", "0").await;
     let connection = harness.connect().await;
     let Message::Limits { agents } = connection.request(&Request::Limits).await.unwrap() else {
@@ -4479,4 +4501,214 @@ async fn a_programs_tools_read_the_threads_folder_and_run_only_what_its_access_a
             result: json!({ "exit_code": 0, "stdout": "Hello\n", "stderr": "", "truncated": false })
         }
     );
+}
+
+/// The ids of the server's accounts once the clients are told they are `wanted`, and the server.
+async fn accounts_until(list: &mut Follow, wanted: &[&str]) -> ServerInfo {
+    loop {
+        if let Message::Server { server } | Message::Welcome { server, .. } = next(list).await {
+            let ids: Vec<&str> = server.agent_accounts.iter().map(|account| account.id.as_str()).collect();
+            if ids == wanted {
+                return server;
+            }
+        }
+    }
+}
+
+#[tokio::test]
+async fn the_proxy_accounts_are_there_while_the_account_has_a_proxy() {
+    let harness = Harness::start("fixtures/read-and-bash.jsonl", "0").await;
+    harness.serve_proxy().await;
+    let connection = harness.connect().await;
+    let project = harness.project(&connection).await;
+    let mut list = connection.follow(&Request::Subscribe).await.unwrap();
+    accounts_until(&mut list, &["claude", "codex"]).await;
+
+    harness.access.set_proxy(Some(DeviceKey::generate().public()));
+    let server = accounts_until(&mut list, &["claude", "codex", "proxy-claude", "proxy-codex"]).await;
+    let proxy = &server.agent_accounts[2];
+    assert!(proxy.proxy && proxy.name == "Proxy" && proxy.folder.ends_with("proxy/claude"), "{proxy:?}");
+    let config = std::fs::read_to_string(harness.dir.path().join("proxy/codex/config.toml")).unwrap();
+    assert!(config.contains("model_provider = \"motile\""), "{config}");
+
+    let removed = connection.request(&Request::RemoveAgentAccount { id: "proxy-claude".into() }).await.unwrap();
+    assert!(matches!(removed, Message::Error { .. }), "{removed:?}");
+    let renamed = AgentAccount { name: "Mine".into(), ..proxy.clone() };
+    let saved = connection.request(&Request::SaveAgentAccount { account: renamed }).await.unwrap();
+    assert!(matches!(saved, Message::Error { .. }), "{saved:?}");
+    let made = connection.request(&Request::MakeAgentAccountDefault { id: "proxy-claude".into() }).await.unwrap();
+    assert_eq!(made, Message::Ok);
+    accounts_until(&mut list, &["proxy-claude", "claude", "codex", "proxy-codex"]).await;
+
+    let new_thread = NewThread {
+        id: None,
+        project_id: project.id,
+        agent: Agent::Claude,
+        agent_account: None,
+        model: None,
+        effort: None,
+        access: AgentAccess::Full,
+        worktree: None,
+        from: None,
+    };
+    let thread_id = send(&connection, None, Some(new_thread), "Say hello").await;
+    finished_transcript(&connection, &thread_id).await;
+    let thread = loop {
+        if let Message::ThreadUpsert { thread } = next(&mut list).await
+            && thread.id == thread_id
+        {
+            break thread;
+        }
+    };
+    assert_eq!(thread.agent_account, "proxy-claude", "a new thread starts on the default account");
+
+    harness.access.set_proxy(None);
+    let (mut listed, mut moved) = (false, false);
+    while !listed || !moved {
+        match next(&mut list).await {
+            Message::Server { server } => {
+                let ids: Vec<String> = server.agent_accounts.into_iter().map(|account| account.id).collect();
+                listed = ids == ["claude", "codex"];
+            }
+            Message::ThreadUpsert { thread } if thread.id == thread_id => moved = thread.agent_account == "claude",
+            _ => {}
+        }
+    }
+}
+
+/// What the fake proxy was asked, with the body of each HTTP request.
+type Asked = mpsc::UnboundedReceiver<(ProxyRequest, Vec<u8>)>;
+
+/// A proxy that answers an HTTP request with two pieces of a stream, the second once `release`
+/// is notified, echoes a WebSocket's texts, and says its pool's limits.
+async fn fake_proxy(release: Arc<tokio::sync::Notify>) -> (iroh::Endpoint, Asked) {
+    let endpoint = iroh::Endpoint::builder(iroh::endpoint::presets::Minimal)
+        .alpns(vec![motile_protocol::PROXY_ALPN.to_vec()])
+        .bind()
+        .await
+        .unwrap();
+    let (asked, asks) = mpsc::unbounded_channel();
+    let accepting = endpoint.clone();
+    tokio::spawn(async move {
+        while let Some(incoming) = accepting.accept().await {
+            let Ok(connection) = incoming.await else { continue };
+            let (asked, release) = (asked.clone(), release.clone());
+            tokio::spawn(async move {
+                while let Ok((send, recv)) = connection.accept_bi().await {
+                    tokio::spawn(answer_as_proxy(send, recv, asked.clone(), release.clone()));
+                }
+            });
+        }
+    });
+    (endpoint, asks)
+}
+
+async fn answer_as_proxy(
+    mut send: iroh::endpoint::SendStream,
+    mut recv: iroh::endpoint::RecvStream,
+    asked: mpsc::UnboundedSender<(ProxyRequest, Vec<u8>)>,
+    release: Arc<tokio::sync::Notify>,
+) {
+    let request: ProxyRequest = read_frame(&mut recv).await.unwrap().unwrap();
+    match &request {
+        ProxyRequest::Http { .. } => {
+            let body = recv.read_to_end(1 << 20).await.unwrap();
+            asked.send((request, body)).unwrap();
+            let head = vec![("content-type".to_string(), "text/event-stream".to_string())];
+            write_frame(&mut send, &ProxyReply::HttpHead { status: 200, headers: head }).await.unwrap();
+            send.write_all(b"data: first\n\n").await.unwrap();
+            release.notified().await;
+            send.write_all(b"data: second\n\n").await.unwrap();
+            send.finish().unwrap();
+        }
+        ProxyRequest::WebSocket { .. } => {
+            asked.send((request, vec![])).unwrap();
+            write_frame(&mut send, &ProxyReply::WebSocketOpen { headers: vec![] }).await.unwrap();
+            while let Ok(Some(message)) = read_frame::<_, WsMessage>(&mut recv).await {
+                let WsMessage::Text { text } = message else { break };
+                write_frame(&mut send, &WsMessage::Text { text: format!("echo {text}") }).await.unwrap();
+            }
+            let _ = send.finish();
+        }
+        ProxyRequest::Pool { agent } => {
+            let limits = AgentLimits {
+                agent: *agent,
+                account_name: "work".into(),
+                account: Some("work@example.com".into()),
+                plan: Some("Pro".into()),
+                windows: vec![],
+                reset_credits: 0,
+                error: None,
+            };
+            write_frame(&mut send, &ProxyReply::Pool { limits: Some(limits) }).await.unwrap();
+            send.finish().unwrap();
+        }
+        ProxyRequest::Manage { .. } => panic!("a server never manages the proxy"),
+    }
+}
+
+#[tokio::test]
+async fn an_agents_request_reaches_the_proxy_as_its_threads_and_streams_back() {
+    let release = Arc::new(tokio::sync::Notify::new());
+    let (proxy_endpoint, mut asked) = fake_proxy(release.clone()).await;
+    let proxy_port = proxy_endpoint.bound_sockets().iter().find(|address| address.is_ipv4()).unwrap().port();
+    let options = BindOptions { local_only: true, port: None };
+    let endpoint = motile_server::serve::bind(&DeviceKey::generate(), &options).await.unwrap();
+    let lookup = iroh::address_lookup::MemoryLookup::new();
+    lookup.add_endpoint_info(
+        iroh::EndpointAddr::new(proxy_endpoint.id()).with_ip_addr(([127, 0, 0, 1], proxy_port).into()),
+    );
+    endpoint.address_lookup().unwrap().add(lookup);
+
+    let (proxy_key, key) = tokio::sync::watch::channel(Some(proxy_endpoint.id().to_string()));
+    let tunnel = proxy::Tunnel::new(endpoint, key);
+    let tokens = Arc::new(mcp::Tokens::default());
+    let token = tokens.mint("thread-1");
+    let port = proxy::serve(tunnel.clone(), tokens, "own".to_string()).await.unwrap();
+
+    motile_protocol::tls::install();
+    let client = reqwest::Client::new();
+    let url = format!("http://127.0.0.1:{port}/claude/v1/messages?beta=true");
+    let post = || client.post(&url).header("anthropic-version", "2023-06-01").body(r#"{"model":"claude-opus-5-5"}"#);
+    let mut response = tokio::time::timeout(TIMEOUT, post().bearer_auth(&token).send()).await.unwrap().unwrap();
+    assert_eq!(response.status(), 200);
+    assert_eq!(response.headers()["content-type"], "text/event-stream");
+    let first = tokio::time::timeout(TIMEOUT, response.chunk()).await.unwrap().unwrap();
+    assert_eq!(first.as_deref(), Some(&b"data: first\n\n"[..]), "the first piece arrives before the second is sent");
+    release.notify_one();
+    let mut rest = Vec::new();
+    while let Some(chunk) = tokio::time::timeout(TIMEOUT, response.chunk()).await.unwrap().unwrap() {
+        rest.extend_from_slice(&chunk);
+    }
+    assert_eq!(rest, b"data: second\n\n");
+    let (request, body) = asked.recv().await.unwrap();
+    let ProxyRequest::Http { thread, agent, method, path, headers } = request else { panic!("{request:?}") };
+    assert_eq!((thread.as_str(), agent, method.as_str()), ("thread-1", Agent::Claude, "POST"));
+    assert_eq!(path, "/v1/messages?beta=true");
+    assert!(headers.contains(&("anthropic-version".to_string(), "2023-06-01".to_string())), "{headers:?}");
+    assert!(!headers.iter().any(|(name, _)| name == "authorization"), "the token stays on the server: {headers:?}");
+    assert_eq!(body, br#"{"model":"claude-opus-5-5"}"#);
+
+    let refused = post().bearer_auth("not-a-thread").send().await.unwrap();
+    assert_eq!(refused.status(), 401);
+
+    let mut request = format!("ws://127.0.0.1:{port}/codex/responses").into_client_request().unwrap();
+    request.headers_mut().insert("authorization", format!("Bearer {token}").parse().unwrap());
+    let (mut socket, _) =
+        tokio::time::timeout(TIMEOUT, tokio_tungstenite::connect_async(request)).await.unwrap().unwrap();
+    socket.send(WebSocketMessage::Text("hello".into())).await.unwrap();
+    let echoed = tokio::time::timeout(TIMEOUT, socket.next()).await.unwrap().unwrap().unwrap();
+    assert_eq!(echoed, WebSocketMessage::Text("echo hello".into()));
+    socket.close(None).await.unwrap();
+    let (request, _) = asked.recv().await.unwrap();
+    let ProxyRequest::WebSocket { thread, agent, path, .. } = request else { panic!("{request:?}") };
+    assert_eq!((thread.as_str(), agent, path.as_str()), ("thread-1", Agent::Codex, "/responses"));
+
+    let pool = tunnel.pool(Agent::Codex).await.unwrap().unwrap();
+    assert_eq!(pool.account.as_deref(), Some("work@example.com"));
+
+    proxy_key.send(None).unwrap();
+    let without = post().bearer_auth(&token).send().await.unwrap();
+    assert_eq!(without.status(), 503);
+    assert!(without.text().await.unwrap().contains("no proxy"));
 }

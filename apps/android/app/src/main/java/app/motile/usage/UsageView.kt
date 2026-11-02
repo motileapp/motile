@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
@@ -63,10 +64,13 @@ fun UsageContent(model: UsageModel, modifier: Modifier = Modifier, margin: Dp = 
     Box(modifier.fillMaxWidth().verticalScroll(rememberScrollState()), contentAlignment = Alignment.TopCenter) {
         Column(Modifier.widthIn(max = 880.dp).fillMaxWidth().padding(start = margin, end = margin, top = top, bottom = 80.dp)) {
             when (model.tab) {
-                UsageModel.Tab.Limits -> when (val limits = model.limits) {
-                    Loaded.Loading -> UsageLoading()
-                    is Loaded.Failed -> UsageNote(limits.message)
-                    is Loaded.Ready -> LimitsView(limits.value)
+                UsageModel.Tab.Limits -> {
+                    WatchesProxy()
+                    when (val limits = model.limits) {
+                        Loaded.Loading -> UsageLoading()
+                        is Loaded.Failed -> UsageNote(limits.message)
+                        is Loaded.Ready -> LimitsView(limits.value)
+                    }
                 }
                 UsageModel.Tab.Cost, UsageModel.Tab.Tokens -> when (val spending = model.spending) {
                     Loaded.Loading -> UsageLoading()
@@ -77,6 +81,16 @@ fun UsageContent(model: UsageModel, modifier: Modifier = Modifier, margin: Dp = 
                 }
             }
         }
+    }
+}
+
+/** Keeps the core following the account's proxy while the view shows, so that its accounts are known. */
+@Composable
+fun WatchesProxy() {
+    val proxy = LocalStore.current.proxy
+    DisposableEffect(proxy) {
+        proxy.watch(true)
+        onDispose { proxy.watch(false) }
     }
 }
 

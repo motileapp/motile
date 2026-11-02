@@ -14,6 +14,7 @@ use motile_protocol::identity::DeviceKey;
 use motile_protocol::wire::{FileKind, Message, Request};
 use motile_protocol::{ALPN, media};
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 /// More than a server sends of any file.
@@ -108,9 +109,14 @@ pub struct Connection {
 
 impl Connection {
     pub async fn dial(endpoint: &Endpoint, server: &ServerAddr) -> anyhow::Result<Self> {
+        Self::dial_on(endpoint, server, ALPN).await
+    }
+
+    /// Dials the device speaking `alpn`.
+    pub async fn dial_on(endpoint: &Endpoint, server: &ServerAddr, alpn: &[u8]) -> anyhow::Result<Self> {
         let dialed = Instant::now();
         let inner =
-            endpoint.connect(server.endpoint_addr()?, ALPN).await.map_err(|error| anyhow::anyhow!("{error:#}"))?;
+            endpoint.connect(server.endpoint_addr()?, alpn).await.map_err(|error| anyhow::anyhow!("{error:#}"))?;
         Ok(Self { inner, _endpoint: endpoint.clone(), dialed, connect_time: dialed.elapsed() })
     }
 
@@ -146,10 +152,16 @@ impl Connection {
     }
 
     pub async fn request(&self, request: &Request) -> anyhow::Result<Message> {
+        self.ask(request).await?.context("Your server didn't answer. Try again.")
+    }
+
+    /// Sends one message on a stream of its own and reads the one that answers it. `None` when the
+    /// stream ended without one.
+    pub async fn ask<Q: Serialize, A: DeserializeOwned>(&self, request: &Q) -> anyhow::Result<Option<A>> {
         let (mut send, mut recv) = self.inner.open_bi().await.map_err(lost)?;
         write_frame(&mut send, request).await.map_err(lost_on_the_way)?;
         send.finish().map_err(lost)?;
-        read_frame(&mut recv).await.map_err(lost_on_the_way)?.context("Your server didn't answer. Try again.")
+        read_frame(&mut recv).await.map_err(lost_on_the_way)
     }
 
     /// For `Subscribe` and `Open`: every message until the stream is dropped.

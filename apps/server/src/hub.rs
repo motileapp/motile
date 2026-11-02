@@ -45,7 +45,7 @@ use crate::ricrac::Ricrac;
 use crate::sign_in::SignIns;
 use crate::store::{Continuation, Purpose, Session, Store, StoredProject, StoredThread, StoredWorktree, TitleSource};
 use crate::ui_lookups::Lookups;
-use crate::{agent_accounts, drafts, files, git, github, icons, limits, pacing, pull_requests, title, ui};
+use crate::{agent_accounts, drafts, files, git, github, icons, limits, pacing, proxy, pull_requests, title, ui};
 
 mod children;
 
@@ -89,7 +89,7 @@ const RESTING_PROCESS_STAYS: Duration = Duration::from_secs(10 * 60);
 const MCP_WAIT: Duration = Duration::from_secs(5);
 const MCP_ASK_EVERY: Duration = Duration::from_millis(250);
 const PRICES: &str = "prices";
-/// How often what the agents' logins have used is read.
+/// How often what the agents' accounts have used is read.
 const LIMITS_READ_EVERY: Duration = Duration::from_secs(5 * 60);
 const PRICES_STALE: Duration = Duration::from_secs(24 * 3600);
 const PRICES_RETRY: Duration = Duration::from_secs(3600);
@@ -159,7 +159,7 @@ pub struct Hub {
     update: std::sync::Mutex<Option<ServerUpdate>>,
     /// What the models cost at the API's prices, as last fetched.
     prices: std::sync::Mutex<Prices>,
-    /// What the agents' logins had used of their plans, and when that was read.
+    /// What the agents' accounts had used of their plans, and when that was read.
     limits: Mutex<Option<Vec<AgentLimits>>>,
     /// What was last seen of each watched thread's pull request, by thread.
     watched: std::sync::Mutex<HashMap<String, Seen>>,
@@ -170,6 +170,8 @@ pub struct Hub {
     /// once that is served.
     mcp_tokens: Arc<mcp::Tokens>,
     mcp_port: std::sync::OnceLock<u16>,
+    /// The way the Proxy accounts' agents reach the account's proxy, once that is served.
+    proxy: std::sync::OnceLock<ProxyWay>,
     sign_ins: Arc<SignIns>,
     /// The threads agents started whose parents have news to hear, and where that is read.
     children_changed: mpsc::UnboundedSender<String>,
@@ -180,6 +182,15 @@ pub struct Hub {
     waiting_on: std::sync::Mutex<HashMap<String, usize>>,
     /// The threads agents started, by the thread that started each and the id it gave the request.
     started: std::sync::Mutex<HashMap<(String, String), String>>,
+}
+
+struct ProxyWay {
+    tunnel: Arc<proxy::Tunnel>,
+    port: u16,
+    /// What the server's own calls through the proxy are made with.
+    token: String,
+    /// Where the Proxy accounts keep their folders.
+    folder: PathBuf,
 }
 
 /// A thread with the lock its work takes.
@@ -427,6 +438,7 @@ impl Hub {
             list_updates,
             mcp_tokens: Arc::default(),
             mcp_port: std::sync::OnceLock::new(),
+            proxy: std::sync::OnceLock::new(),
             sign_ins: Arc::default(),
         }))
     }
@@ -442,8 +454,69 @@ impl Hub {
     /// Where the thread's agent reads threads, with the token of the thread.
     fn mcp_access(&self, live: &mut Live) -> Option<McpAccess> {
         let port = self.mcp_port.get()?;
-        let token = live.mcp_token.get_or_insert_with(|| self.mcp_tokens.mint(&live.stored.thread.id));
-        Some(McpAccess { url: format!("http://127.0.0.1:{port}/mcp"), token: token.clone() })
+        Some(McpAccess { url: format!("http://127.0.0.1:{port}/mcp"), token: self.thread_token(live) })
+    }
+
+    /// What the thread's agent reads threads and reaches the proxy with.
+    fn thread_token(&self, live: &mut Live) -> String {
+        live.mcp_token.get_or_insert_with(|| self.mcp_tokens.mint(&live.stored.thread.id)).clone()
+    }
+
+    /// Serves the way the Proxy accounts' agents reach the account's proxy over `endpoint`, and
+    /// offers those accounts, which keep their folders in `folder`, while `key` says the account
+    /// has a proxy.
+    pub async fn serve_proxy(
+        self: &Arc<Self>,
+        endpoint: iroh::Endpoint,
+        mut key: watch::Receiver<Option<String>>,
+        folder: PathBuf,
+    ) -> anyhow::Result<()> {
+        let tunnel = proxy::Tunnel::new(endpoint, key.clone());
+        let token = hex::encode(rand::random::<[u8; 32]>());
+        let port = proxy::serve(tunnel.clone(), self.mcp_tokens.clone(), token.clone()).await?;
+        std::fs::create_dir_all(folder.join(agent_accounts::usual_id(Agent::Claude)))?;
+        proxy::write_codex_config(&folder.join(agent_accounts::usual_id(Agent::Codex)), port)?;
+        if self.proxy.set(ProxyWay { tunnel, port, token, folder }).is_err() {
+            bail!("The way to the proxy is served already.");
+        }
+        let has_proxy = key.borrow_and_update().is_some();
+        self.offer_proxy(has_proxy).await?;
+        let hub = Arc::downgrade(self);
+        tokio::spawn(async move {
+            while key.changed().await.is_ok() {
+                let has_proxy = key.borrow_and_update().is_some();
+                let Some(hub) = hub.upgrade() else { return };
+                if let Err(error) = hub.offer_proxy(has_proxy).await {
+                    tracing::warn!("couldn't change the Proxy accounts: {error:#}");
+                }
+            }
+        });
+        Ok(())
+    }
+
+    /// Offers the Proxy accounts while the account has a proxy, and takes them away when it no
+    /// longer has one, as a removed account is: their threads go on with their agents' defaults.
+    async fn offer_proxy(self: &Arc<Self>, has_proxy: bool) -> anyhow::Result<()> {
+        let Some(way) = self.proxy.get() else { return Ok(()) };
+        let mut threads = self.every_thread().await;
+        let accounts = self.agent_accounts();
+        let offered = agent_accounts::with_proxy(accounts.clone(), has_proxy.then_some(way.folder.as_path()));
+        if offered == accounts {
+            return Ok(());
+        }
+        let gone: Vec<&AgentAccount> =
+            accounts.iter().filter(|account| !offered.iter().any(|kept| kept.id == account.id)).collect();
+        for account in &gone {
+            let_go_of_account(&mut threads, &account.id);
+        }
+        self.keep_agent_accounts(offered.clone())?;
+        for account in gone {
+            let default = agent_accounts::default_of(&offered, account.agent);
+            self.reload_sessions(&mut threads, &account.id, Some(&default))?;
+        }
+        drop(threads);
+        self.refresh_limits();
+        Ok(())
     }
 
     pub fn environment(&self) -> &Environment {
@@ -579,7 +652,11 @@ impl Hub {
     }
 
     fn account_environment(&self, account: &AgentAccount) -> Environment {
-        agent_accounts::environment(&self.environment, account)
+        let environment = agent_accounts::environment(&self.environment, account);
+        match self.proxy.get().filter(|_| account.proxy) {
+            Some(way) => environment.with(proxy::variables(account.agent, way.port, &way.token)),
+            None => environment,
+        }
     }
 
     fn shares_sessions(&self, one: &AgentAccount, other: &AgentAccount) -> bool {
@@ -754,6 +831,9 @@ impl Hub {
         let mut accounts = self.agent_accounts();
         let account =
             accounts.iter().find(|account| account.id == id).context("That account is no longer on your server.")?;
+        if account.proxy {
+            bail!("The Proxy account goes when your proxy does.");
+        }
         let agent = account.agent;
         if !accounts.iter().any(|other| other.agent == agent && other.id != id) {
             bail!(
@@ -818,7 +898,7 @@ impl Hub {
         let kept = {
             let mut accounts = self.lock_agent_accounts();
             let mut changed = false;
-            for account in accounts.iter_mut() {
+            for account in accounts.iter_mut().filter(|account| !account.proxy) {
                 let found =
                     read.iter().find(|limits| limits.agent == account.agent && limits.account_name == account.name);
                 let Some(limits) = found else { continue };
@@ -2231,14 +2311,34 @@ impl Hub {
     /// keeps what it said last time, beside why.
     async fn read_limits(&self) -> Vec<AgentLimits> {
         let mut kept = self.limits.lock().await;
-        let accounts = self.agent_accounts().into_iter().map(|account| {
+        let (pooled, own): (Vec<_>, Vec<_>) = self.agent_accounts().into_iter().partition(|account| account.proxy);
+        let own = own.into_iter().map(|account| {
             let environment = self.account_environment(&account);
             (account, environment)
         });
-        let agents = limits::kept(limits::read(accounts.collect()).await, kept.as_deref().unwrap_or_default());
+        let (mut read, pools) = tokio::join!(limits::read(own.collect()), self.read_pools(pooled));
+        read.extend(pools);
+        let agents = limits::kept(read, kept.as_deref().unwrap_or_default());
         self.note_signed_in(&agents);
         *kept = Some(agents.clone());
         agents
+    }
+
+    /// What the proxy's accounts that new threads of the Proxy accounts would start on have used.
+    async fn read_pools(&self, accounts: Vec<AgentAccount>) -> Vec<AgentLimits> {
+        let Some(way) = self.proxy.get() else { return vec![] };
+        let reads: Vec<_> = accounts
+            .into_iter()
+            .map(|account| {
+                let tunnel = way.tunnel.clone();
+                tokio::spawn(async move { limits::pooled(&account, tunnel.pool(account.agent).await) })
+            })
+            .collect();
+        let mut read = Vec::new();
+        for task in reads {
+            read.extend(task.await.ok());
+        }
+        read
     }
 
     /// Looks at the watched pull requests every so often and tells their threads' agents what
@@ -3038,6 +3138,7 @@ impl Hub {
             live.let_go();
         }
         let mcp = self.mcp_access(live);
+        let token = self.thread_token(live);
         let thread = &live.stored.thread;
         let continuation = self.continuation(thread);
         let sessions = self.store.sessions(&thread.id)?;
@@ -3084,7 +3185,7 @@ impl Hub {
             handoff: handoff.as_ref(),
             mcp: mcp.as_ref(),
         };
-        let child = match self.spawn(&turn, &thread.cwd, &account) {
+        let child = match self.spawn(&turn, &thread.cwd, &account, &token) {
             Ok(child) => child,
             Err(error) => return self.end_without_agent(live, Some(error.to_string())),
         };
@@ -3224,7 +3325,8 @@ impl Hub {
         });
     }
 
-    fn spawn(&self, turn: &Turn, cwd: &str, account: &AgentAccount) -> anyhow::Result<Child> {
+    /// Starts the agent of a turn of the thread whose token is `token`.
+    fn spawn(&self, turn: &Turn, cwd: &str, account: &AgentAccount, token: &str) -> anyhow::Result<Child> {
         let name = executable_name(turn.agent);
         let executable = self
             .environment
@@ -3252,6 +3354,9 @@ impl Hub {
         if let Some(mcp) = turn.mcp {
             command.env(mcp::AUTHORIZATION_VARIABLE, format!("Bearer {}", mcp.token));
             command.env("MCP_TOOL_TIMEOUT", (mcp::TOOL_TIMEOUT_SECS * 1000).to_string());
+        }
+        if account.proxy {
+            command.env(proxy::token_variable(account.agent), token);
         }
         command.spawn().with_context(|| format!("{name} couldn't be started."))
     }

@@ -1,0 +1,132 @@
+#!/usr/bin/env python3
+"""Stand-in for Anthropic and OpenAI, for the proxy of the dev apps.
+
+    scripts/fake-upstream <port>
+
+It signs in any Claude Code account with the code pasted, as the organisation of that name, but a
+code with "wrong" in it, and approves a Codex account at once. Each account reads a session and a weekly
+window, and Messages and Codex's responses answer with a short stream and the headers of a limit.
+"""
+
+import base64
+import json
+import sys
+import time
+from datetime import datetime, timezone
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+HOUR = 3600
+DAY = 24 * HOUR
+codex_accounts = [0]
+
+
+def iso(at):
+    return datetime.fromtimestamp(at, timezone.utc).isoformat()
+
+
+def jwt(claims):
+    return "e30." + base64.urlsafe_b64encode(json.dumps(claims).encode()).decode().rstrip("=") + ".sig"
+
+
+def used(name):
+    """An account's session and weekly use, the same for a name every run."""
+    seed = sum(name.encode())
+    return 10 + seed % 80, 20 + seed * 7 % 70
+
+
+class Handler(BaseHTTPRequestHandler):
+    def log_message(self, *args):
+        pass
+
+    def body(self):
+        length = int(self.headers.get("content-length") or 0)
+        return self.rfile.read(length) if length else b""
+
+    def send(self, status, payload, headers=(), kind="application/json"):
+        data = payload if isinstance(payload, str) else json.dumps(payload)
+        data = data.encode()
+        self.send_response(status)
+        self.send_header("content-type", kind)
+        for name, value in headers:
+            self.send_header(name, value)
+        self.send_header("content-length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
+    def account(self):
+        token = (self.headers.get("authorization") or "").removeprefix("Bearer ")
+        return token.split("-")[1] if token.startswith("claude-") else "codex"
+
+    def do_GET(self):
+        now = time.time()
+        path = self.path.split("?")[0]
+        if path == "/prices":
+            return self.send(200, {"claude-opus-4-5": {"litellm_provider": "anthropic", "input_cost_per_token": 5e-6,
+                                                       "output_cost_per_token": 2.5e-5}})
+        if path == "/api/oauth/profile":
+            org = self.account()
+            return self.send(200, {"account": {"email": f"{org}@example.com"}, "organization": {
+                "uuid": org, "organization_type": "claude_max", "rate_limit_tier": "default_claude_max_20x"}})
+        if path == "/api/oauth/usage":
+            session, weekly = used(self.account())
+            return self.send(200, {"limits": [
+                {"kind": "session", "group": "session", "percent": session, "resets_at": iso(now + 2.5 * HOUR),
+                 "severity": "normal"},
+                {"kind": "weekly", "group": "weekly", "percent": weekly, "resets_at": iso(now + 4 * DAY),
+                 "severity": "warning" if weekly > 80 else "normal"},
+            ]})
+        if path == "/backend-api/wham/usage":
+            session, weekly = used("codex")
+            return self.send(200, {"plan_type": "pro", "rate_limit": {
+                "primary_window": {"used_percent": session, "limit_window_seconds": 5 * HOUR,
+                                   "reset_at": int(now + 3 * HOUR)},
+                "secondary_window": {"used_percent": weekly, "limit_window_seconds": 7 * DAY,
+                                     "reset_at": int(now + 3 * DAY)}},
+                "rate_limit_reset_credits": {"available_count": 1}})
+        self.send(404, {"error": f"No {path} here."})
+
+    def do_POST(self):
+        now = time.time()
+        path = self.path.split("?")[0]
+        raw = self.body()
+        if path == "/v1/oauth/token":
+            body = json.loads(raw)
+            org = body.get("code") or body.get("refresh_token", "").removeprefix("refresh-")
+            if "wrong" in org:
+                return self.send(400, {"error": "invalid_grant"})
+            return self.send(200, {
+                "access_token": f"claude-{org}-0", "refresh_token": f"refresh-{org}", "expires_in": 8 * HOUR,
+                "account": {"uuid": "account", "email_address": f"{org}@example.com"},
+                "organization": {"uuid": org, "name": org.title()}})
+        if path == "/api/accounts/deviceauth/usercode":
+            return self.send(200, {"device_auth_id": "device", "user_code": "MOTI-LE42", "interval": "1"})
+        if path == "/api/accounts/deviceauth/token":
+            return self.send(200, {"authorization_code": "code", "code_verifier": "verifier", "code_challenge": "c"})
+        if path == "/oauth/token":
+            codex_accounts[0] += 1
+            claims = {"email": "demo@motile.app", "https://api.openai.com/auth": {
+                "chatgpt_account_id": f"codex-{codex_accounts[0]}", "chatgpt_plan_type": "pro"}}
+            return self.send(200, {"id_token": jwt(claims), "access_token": jwt({"exp": now + 5 * DAY}),
+                                   "refresh_token": "codex-refresh"})
+        if path == "/v1/messages":
+            start = {"type": "message_start", "message": {"model": "claude-opus-4-5", "usage": {
+                "input_tokens": 1200, "cache_creation_input_tokens": 2000, "cache_read_input_tokens": 80000,
+                "output_tokens": 1}}}
+            delta = {"type": "message_delta", "delta": {"stop_reason": "end_turn"}, "usage": {"output_tokens": 980}}
+            session, weekly = used(self.account())
+            headers = [("anthropic-ratelimit-unified-5h-utilization", str(session / 100)),
+                       ("anthropic-ratelimit-unified-5h-reset", str(int(now + 2.5 * HOUR))),
+                       ("anthropic-ratelimit-unified-7d-utilization", str(weekly / 100))]
+            stream = f"event: message_start\ndata: {json.dumps(start)}\n\nevent: message_delta\ndata: {json.dumps(delta)}\n\n"
+            return self.send(200, stream, headers, kind="text/event-stream")
+        if path == "/backend-api/codex/responses":
+            completed = {"type": "response.completed", "response": {"model": "gpt-5", "usage": {
+                "input_tokens": 500, "input_tokens_details": {"cached_tokens": 400}, "output_tokens": 20}}}
+            session, _ = used("codex")
+            headers = [("x-codex-primary-used-percent", str(session)), ("x-codex-primary-window-minutes", "300")]
+            return self.send(200, f"event: response.completed\ndata: {json.dumps(completed)}\n\n", headers,
+                             kind="text/event-stream")
+        self.send(404, {"error": f"No {path} here."})
+
+
+ThreadingHTTPServer(("127.0.0.1", int(sys.argv[1])), Handler).serve_forever()

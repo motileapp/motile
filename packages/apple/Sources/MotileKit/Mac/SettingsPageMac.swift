@@ -22,6 +22,7 @@ struct SettingsPage: View {
                     switch section {
                     case .general: general
                     case .servers: servers
+                    case .proxy: ProxySettings()
                     case .accounts: agentAccounts
                     case .projects: projects
                     case .textGeneration: textGeneration
@@ -336,13 +337,19 @@ struct SettingsPage: View {
                     AgentIcon(agent: account.agent, size: .md)
                     SettingsLabel("\(account.agent.name) · \(account.name)", description: account.settingsDescription(isDefault: server.isDefault(account)))
                 } trailing: {
-                    more("What to do with the account") {
-                        item("Edit", symbol: .pencil) { editedAccount = EditedAccount(server: server, account: account) }
-                        if !server.isDefault(account) {
-                            item("Make Default", symbol: .circleCheck) { store.makeAgentAccountDefault(account, on: server) }
+                    if !account.proxy || !server.isDefault(account) {
+                        more("What to do with the account") {
+                            if !account.proxy {
+                                item("Edit", symbol: .pencil) { editedAccount = EditedAccount(server: server, account: account) }
+                            }
+                            if !server.isDefault(account) {
+                                item("Make Default", symbol: .circleCheck) { store.makeAgentAccountDefault(account, on: server) }
+                            }
+                            if !account.proxy {
+                                Divider()
+                                item("Remove Account", symbol: .trash2, role: .destructive) { removal = .account(account, on: server) }
+                            }
                         }
-                        Divider()
-                        item("Remove Account", symbol: .trash2, role: .destructive) { removal = .account(account, on: server) }
                     }
                 }
                 ThemeDivider()

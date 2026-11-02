@@ -4,7 +4,7 @@ import SwiftUI
 /// The settings' sections in groups, each pushing its page, or selected beside it on a wide
 /// sheet. While a search is typed, the groups it finds take their place.
 struct SettingsSections: View {
-    private static let groups: [[SettingsSection]] = [[.general], [.accounts, .servers, .projects], [.pullRequests, .textGeneration], [.integrations]]
+    private static let groups: [[SettingsSection]] = [[.general], [.accounts, .servers, .proxy, .projects], [.pullRequests, .textGeneration], [.integrations]]
 
     @Environment(AppStore.self) private var store
     /// The section shown beside the list, on a wide sheet, lit in it. Without one, each pushes.
@@ -96,7 +96,7 @@ struct SettingsPage: View {
                 case .projects: projects
                 case .textGeneration: textGeneration
                 case .pullRequests: pullRequests
-                case .keyboard: EmptyView()
+                case .keyboard, .proxy: EmptyView()
                 case .integrations: integrations
                 }
             }
@@ -258,6 +258,7 @@ struct SettingsPage: View {
             let installed = Agent.allCases.filter { server.agents[$0] != nil }
             ForEach(server.agentAccounts.filter { installed.contains($0.agent) }) { account in
                 Button {
+                    guard !account.proxy else { return store.openSettings(.proxy) }
                     editedAccount = EditedAccount(server: server, account: account)
                 } label: {
                     SettingsItem("\(account.agent.name) · \(account.name)", description: account.settingsDescription(isDefault: server.isDefault(account))) {
@@ -266,16 +267,22 @@ struct SettingsPage: View {
                     }
                 }
                 .swipeActions {
-                    Button("Remove", role: .destructive) { removal = .account(account, on: server) }
-                        .tint(Color.themeDestructive)
+                    if !account.proxy {
+                        Button("Remove", role: .destructive) { removal = .account(account, on: server) }
+                            .tint(Color.themeDestructive)
+                    }
                 }
                 .contextMenu {
-                    Button("Edit") { editedAccount = EditedAccount(server: server, account: account) }
+                    if !account.proxy {
+                        Button("Edit") { editedAccount = EditedAccount(server: server, account: account) }
+                    }
                     if !server.isDefault(account) {
                         Button("Make Default") { store.makeAgentAccountDefault(account, on: server) }
                     }
-                    Divider()
-                    Button("Remove Account", role: .destructive) { removal = .account(account, on: server) }
+                    if !account.proxy {
+                        Divider()
+                        Button("Remove Account", role: .destructive) { removal = .account(account, on: server) }
+                    }
                 }
             }
             Button {

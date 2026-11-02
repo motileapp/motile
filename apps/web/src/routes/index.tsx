@@ -64,6 +64,15 @@ function Account() {
             <RemovedServerList servers={account.removed} />
           )}
         </section>
+        {account.proxy && (
+          <section className="flex flex-col gap-4">
+            <Heading
+              title="Proxy"
+              description="Shares your agents' logins with every server."
+            />
+            <DeviceList devices={[account.proxy]} />
+          </section>
+        )}
         <section className="flex flex-col gap-4">
           <Heading
             title="Clients"

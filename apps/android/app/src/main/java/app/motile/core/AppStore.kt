@@ -412,6 +412,7 @@ class AppStore(private val context: Context) {
     val history = PageHistory()
     val linear = Linear()
     val ricrac = Ricrac()
+    val proxy = Proxy()
     var integrations by mutableStateOf(Integration.kept())
         private set
     val core = CoreBridge()
@@ -435,6 +436,7 @@ class AppStore(private val context: Context) {
         rightPanel.store = this
         linear.store = this
         ricrac.store = this
+        proxy.store = this
         updater.onFound = { asked -> showServerUpdates(asked) }
         AppUpdater.shared = updater
     }
@@ -453,6 +455,10 @@ class AppStore(private val context: Context) {
             put("platform", Platform.name)
             put("local_only", environment["MOTILE_LOCAL"] == "1")
             environment["MOTILE_SERVER_ADDR"]?.let { put("direct_addr", it) }
+            // `key=address,…`: each device at an address of its own, as the dev stack's proxy is.
+            environment["MOTILE_SERVER_ADDRS"]?.let { addresses ->
+                put("direct_addrs", addresses.split(",").mapNotNull { pair -> pair.split("=", limit = 2).takeIf { it.size == 2 }?.let { it[0] to it[1] } }.toMap())
+            }
             // A phone has less room for the images and videos it keeps than a Mac.
             put("media_limit", 500_000_000)
         }
@@ -667,6 +673,10 @@ class AppStore(private val context: Context) {
             "copy" -> {
                 val text = event.string("text")
                 return { Platform.copy(text) }
+            }
+            "proxy" -> {
+                val view = ProxyView.of(event.obj("proxy") ?: EmptyJSON)
+                return { proxy.apply(view) }
             }
             else -> return null
         }
@@ -1104,7 +1114,7 @@ class AppStore(private val context: Context) {
         return (server.models.firstOrNull { it.named(draft.model) } ?: server.models.firstOrNull())?.agent
     }
 
-    /** The accounts the composer offers the models of, each agent's with the most room left in its limits first, as a new thread would start on it. */
+    /** The accounts the composer offers the models of, each agent's that a new thread would start on first. */
     val composerAccounts: List<AgentAccount>
         get() {
             val agents = composerModels.map { it.agent }.toSet()
@@ -1973,7 +1983,7 @@ class AppStore(private val context: Context) {
         core.send("usage", command, read = { UsageReport(it) }, reply = reply)
     }
 
-    /** How much of their plans the agents' logins on the connected `servers`, or all of them, have used. `refresh` has the servers read it anew, `kept` answers at once with what was last read. */
+    /** How much of their plans the agents' accounts on the connected `servers`, or all of them, have used. `refresh` has the servers read it anew, `kept` answers at once with what was last read. */
     fun loadLimits(refresh: Boolean, kept: Boolean, servers: Set<String>?, reply: (Result<LimitsReport>) -> Unit) {
         val command = buildMap<String, Any?> {
             put("refresh", refresh)
