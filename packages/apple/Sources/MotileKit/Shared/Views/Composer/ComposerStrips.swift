@@ -335,11 +335,11 @@ struct BranchPicker: View {
                     .focused($searching)
                     .onSubmit { choose(choices, at: highlighted.index) }
                     .onKeyPress(.downArrow) {
-                        highlighted.index = min(highlighted.index + 1, max(0, choices.count - 1))
+                        highlighted.key(min(highlighted.index + 1, max(0, choices.count - 1)))
                         return .handled
                     }
                     .onKeyPress(.upArrow) {
-                        highlighted.index = max(highlighted.index - 1, 0)
+                        highlighted.key(max(highlighted.index - 1, 0))
                         return .handled
                     }
                     .onKeyPress(.escape) {
@@ -381,7 +381,7 @@ struct BranchPicker: View {
         .textInputAutocapitalization(.never)
         .autocorrectionDisabled()
         #endif
-        .onChange(of: query) { highlighted.index = 0 }
+        .onChange(of: query) { highlighted.key(0) }
     }
 
     @ViewBuilder private func list(_ choices: [Choice]) -> some View {
@@ -415,19 +415,20 @@ struct BranchPicker: View {
                         ForEach(Array(choices.enumerated()), id: \.element.id) { index, choice in
                             row(choice, index: index)
                                 .button(.highlight(radius: Radius.md, lit: index == highlighted.index)) { choose(choices, at: index) }
-                                .onHover { if $0 { highlighted.index = index } }
+                                .onHover { if $0 { highlighted.point(index) } }
                                 .id(choice.id)
                         }
                     }
                     .padding(Self.listPadding)
                     .padding(.bottom, Platform.scale > 1 ? 24 : 0)
                 }
+                .fadesHiddenEdges()
                 #if os(macOS)
                 .frame(height: listHeight)
                 #endif
-                .onChange(of: highlighted.index) {
-                    guard choices.indices.contains(highlighted.index) else { return }
-                    proxy.scrollTo(choices[highlighted.index].id)
+                .onChange(of: highlighted.shown) { _, shown in
+                    guard let shown, choices.indices.contains(shown) else { return }
+                    proxy.scrollTo(choices[shown].id)
                 }
             }
         }

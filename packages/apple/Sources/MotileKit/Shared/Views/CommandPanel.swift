@@ -39,7 +39,7 @@ struct CommandPanel: View {
     var body: some View {
         panel
             .onChange(of: query) {
-                highlighted.index = startIndex(page)
+                highlighted.key(startIndex(page))
                 if store.panelNotice != nil { store.panelNotice = nil }
                 browse()
             }
@@ -170,7 +170,7 @@ struct CommandPanel: View {
 
     private func steer(_ step: Int) -> KeyPress.Result {
         let count = sections(page).flatMap(\.items).filter(\.selectable).count
-        highlighted.index = steered ? min(max(highlighted.index + step, 0), max(0, count - 1)) : startIndex(page)
+        highlighted.key(steered ? min(max(highlighted.index + step, 0), max(0, count - 1)) : startIndex(page))
         steered = true
         return .handled
     }
@@ -258,7 +258,7 @@ struct CommandPanel: View {
                                 .button(.highlight(
                                     radius: PanelRow.radius, lit: steered && item.selectable && item.index == highlighted.index, inset: PanelRow.margin
                                 )) { run(item) }
-                                .onHover { if $0, item.index >= 0 { highlighted.index = item.index } }
+                                .onHover { if $0, item.index >= 0 { highlighted.point(item.index) } }
                         }
                     }
                     if let refused {
@@ -272,14 +272,15 @@ struct CommandPanel: View {
                 }
                 .padding(.bottom, Platform.scale > 1 ? 32 : 8)
             }
+            .fadesHiddenEdges()
             #if os(macOS)
             .frame(height: height(page, sections, notice: refused))
             #else
             .frame(maxHeight: .infinity)
             .scrollDismissesKeyboard(.interactively)
             #endif
-            .onChange(of: highlighted.index) {
-                guard let item = sections.flatMap(\.items).first(where: { $0.index == highlighted.index }) else { return }
+            .onChange(of: highlighted.shown) { _, shown in
+                guard let item = sections.flatMap(\.items).first(where: { $0.index == shown }) else { return }
                 scroller.scrollTo(item.id)
             }
         }
@@ -746,7 +747,7 @@ struct CommandPanel: View {
     }
 
     private func arrive() {
-        highlighted.index = startIndex(page)
+        highlighted.key(startIndex(page))
         store.panelNotice = nil
         copied = false
         listing = nil
@@ -825,9 +826,9 @@ struct CommandPanel: View {
         case 53:
             close()
         case 125:
-            highlighted.index = min(highlighted.index + 1, max(0, items.filter(\.selectable).count - 1))
+            highlighted.key(min(highlighted.index + 1, max(0, items.filter(\.selectable).count - 1)))
         case 126:
-            highlighted.index = max(highlighted.index - 1, 0)
+            highlighted.key(max(highlighted.index - 1, 0))
         case 36, 76:
             guard let item = items.first(where: { $0.index == highlighted.index }) else { return true }
             guard command, let alternate = item.alternate else {

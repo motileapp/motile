@@ -17,6 +17,7 @@ use crate::models::{
 use crate::store::settings::SettingsSection;
 use crate::store::{AddingProject, PanelPage, Selection, Store};
 use crate::theme::{Colors, ControlSize, IconSize, Layer, Opacity, Radius, ShadowSize, Surface, colors};
+use crate::ui::parts::with_edge_fades;
 use crate::ui::{ActionButton, InputField, InputVariant, KeyCaps, Spinner, icons, logos};
 
 const WIDTH: f32 = 620.;
@@ -1576,6 +1577,9 @@ impl Render for CommandPanel {
         self.follow_entries(&sections, notice, cx);
         let results =
             list(self.list.clone(), cx.processor(|this, index, _, cx| this.entry(index, cx))).h(px(height)).w_full();
+        let above = (-self.list.scroll_px_offset_for_scrollbar().y).max(px(0.));
+        let below = (self.list.max_offset_for_scrollbar().y - above).max(px(0.));
+        let results = with_edge_fades(div().relative().w_full().child(results), (above, below), SURFACE.color(c));
         let size = crate::window_frame::content_size(window);
         // The card is there at once; its scrim is the window's, which stays from page to page.
         let card = div()

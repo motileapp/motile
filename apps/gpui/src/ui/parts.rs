@@ -390,6 +390,21 @@ pub fn edge_fade(top: bool, hidden: f32, color: Hsla) -> Div {
         .bg(linear_gradient(180., linear_color_stop(from, 0.), linear_color_stop(to, 1.)))
 }
 
+/// How much of a scroll's content its handle hides above it and below it.
+pub fn hidden_edges(handle: &ScrollHandle) -> (Pixels, Pixels) {
+    let above = (-handle.offset().y).max(px(0.));
+    (above, (handle.max_offset().y - above).max(px(0.)))
+}
+
+/// Lays an `edge_fade` over each edge of `scroll` that hides some of its content, into `fill`,
+/// and draws them again as it scrolls. `scroll` is what holds the scroll, positioned.
+pub fn with_edge_fades(scroll: Div, (above, below): (Pixels, Pixels), fill: Hsla) -> Div {
+    scroll
+        .on_scroll_wheel(|_, window, _| window.refresh())
+        .when(above > px(0.), |scroll| scroll.child(edge_fade(true, f32::from(above), fill)))
+        .when(below > px(0.), |scroll| scroll.child(edge_fade(false, f32::from(below), fill)))
+}
+
 /// Content as tall as it is up to `max_height`, past which it scrolls, fading out at an edge
 /// with more behind it. `padding` insets the content inside the scrolling edges.
 #[derive(IntoElement)]
@@ -441,28 +456,18 @@ impl RenderOnce for FadingScroll {
             state.update(cx, |state, _| state.1 = false);
             handle.scroll_to_bottom();
         }
-        let above = (-handle.offset().y).max(px(0.));
-        let below = (handle.max_offset().y - above).max(px(0.));
         let fill = self.fill.unwrap_or(colors(cx).background);
-        div()
-            .relative()
-            .w_full()
-            .max_h(px(self.max_height))
-            .flex()
-            .flex_col()
-            .child(
-                div()
-                    .id(self.id)
-                    .w_full()
-                    .max_h(px(self.max_height))
-                    .overflow_y_scroll()
-                    .track_scroll(&handle)
-                    .p(px(self.padding))
-                    .on_scroll_wheel(|_, window, _| window.refresh())
-                    .children(self.children),
-            )
-            .when(above > px(0.), |scroll| scroll.child(edge_fade(true, f32::from(above), fill)))
-            .when(below > px(0.), |scroll| scroll.child(edge_fade(false, f32::from(below), fill)))
+        let scroll = div().relative().w_full().max_h(px(self.max_height)).flex().flex_col().child(
+            div()
+                .id(self.id)
+                .w_full()
+                .max_h(px(self.max_height))
+                .overflow_y_scroll()
+                .track_scroll(&handle)
+                .p(px(self.padding))
+                .children(self.children),
+        );
+        with_edge_fades(scroll, hidden_edges(&handle), fill)
     }
 }
 

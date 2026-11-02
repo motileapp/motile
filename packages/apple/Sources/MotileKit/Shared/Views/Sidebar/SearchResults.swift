@@ -79,14 +79,14 @@ private struct SearchKeys: ViewModifier {
             }
             .onChange(of: store.searchResults.map(\.id)) { old, new in
                 let kept = old.prefix(highlighted.index + 1)
-                highlighted.index = new.prefix(kept.count).elementsEqual(kept) ? highlighted.index : 0
+                highlighted.key(new.prefix(kept.count).elementsEqual(kept) ? highlighted.index : 0)
             }
     }
 
     private func steer(_ step: Int) -> KeyPress.Result {
         let count = store.searchResults.count
         guard count > 0 else { return .ignored }
-        highlighted.index = (highlighted.index + step + count) % count
+        highlighted.key((highlighted.index + step + count) % count)
         return .handled
     }
 }

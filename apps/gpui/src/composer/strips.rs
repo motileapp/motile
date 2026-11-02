@@ -23,6 +23,7 @@ use crate::theme::{self, ControlSize, IconSize, Radius, Surface, colors};
 use crate::ui::control::{ControlIcon, ControlLabel};
 use crate::ui::dropdown::{drop_from, light, over_content};
 use crate::ui::menu::Anchor;
+use crate::ui::parts::{hidden_edges, with_edge_fades};
 use crate::ui::rich_text::RichText;
 use crate::ui::{
     ActionButton, ChoiceDropdown, DropdownChoice, FadingScroll, Variant, edges, icons, logos, tabular_numbers,
@@ -1218,17 +1219,14 @@ impl Render for BranchPicker {
                 .track_scroll(&self.scroll)
                 .size_full()
                 .p(px(LIST_PADDING));
-                div()
-                    .relative()
-                    .h(px(list_height))
-                    .child(rows)
-                    .child(
-                        div()
-                            .absolute()
-                            .inset_0()
-                            .child(Scrollbar::vertical(&self.scroll).id("branches-scroller").viewport_from_layout()),
-                    )
-                    .into_any_element()
+                let hidden = hidden_edges(&self.scroll.0.borrow().base_handle);
+                let list = div().relative().h(px(list_height)).child(rows).child(
+                    div()
+                        .absolute()
+                        .inset_0()
+                        .child(Scrollbar::vertical(&self.scroll).id("branches-scroller").viewport_from_layout()),
+                );
+                with_edge_fades(list, hidden, c.popover).into_any_element()
             }
         };
         let button = self.button.clone();

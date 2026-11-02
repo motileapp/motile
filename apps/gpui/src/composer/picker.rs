@@ -16,6 +16,7 @@ use crate::models::{ACCESSES, AGENTS, ComposerPickerPart, ModelInfoExt, access_d
 use crate::store::Store;
 use crate::theme::{ControlSize, IconSize, Layer, Opacity, Radius, Surface, colors};
 use crate::ui::menu::Anchor;
+use crate::ui::parts::{hidden_edges, with_edge_fades};
 use crate::ui::{ActionButton, Chip, Highlight, KeyCaps, Segmented, divider_on, edges, icons, logos, tooltip};
 
 const RAIL_WIDTH: f32 = 44.;
@@ -69,6 +70,7 @@ pub struct ComposerPicker {
     shown_access: Option<Access>,
     access_open: bool,
     list: ScrollHandle,
+    settings_scroll: ScrollHandle,
     /// The button it opens from, whose presses are the button's to close it.
     button: Anchor,
     _subscriptions: Vec<Subscription>,
@@ -102,6 +104,7 @@ impl ComposerPicker {
             shown_access: None,
             access_open: false,
             list: ScrollHandle::new(),
+            settings_scroll: ScrollHandle::new(),
             button,
             _subscriptions: subscriptions,
         };
@@ -439,7 +442,7 @@ impl ComposerPicker {
                     .into_any_element(),
             );
         }
-        div()
+        let scroll = div()
             .id("picker-models")
             .flex_1()
             .min_h_0()
@@ -448,7 +451,9 @@ impl ComposerPicker {
             .p(px(PADDING))
             .flex()
             .flex_col()
-            .children(children)
+            .children(children);
+        let column = div().relative().flex_1().min_h_0().flex().flex_col().child(scroll);
+        with_edge_fades(column, hidden_edges(&self.list), c.popover)
     }
 
     fn model_row(&self, row: &ModelRow, cx: &mut Context<Self>) -> impl IntoElement {
@@ -529,15 +534,18 @@ impl ComposerPicker {
                     .into_any_element(),
             );
         }
-        div()
+        let scroll = div()
             .id("picker-settings")
-            .w(px(SETTINGS_WIDTH))
-            .flex_shrink_0()
+            .flex_1()
+            .min_h_0()
             .overflow_y_scroll()
+            .track_scroll(&self.settings_scroll)
             .p(px(PADDING))
             .flex()
             .flex_col()
-            .children(children)
+            .children(children);
+        let column = div().relative().w(px(SETTINGS_WIDTH)).flex_shrink_0().flex().flex_col().child(scroll);
+        with_edge_fades(column, hidden_edges(&self.settings_scroll), c.popover)
     }
 
     fn setting_row(

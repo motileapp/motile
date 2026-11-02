@@ -133,7 +133,7 @@ extension AppStore {
                 skillMenu = nil
                 return
             }
-            if menu.rows.map(\.name) != skillMenu?.rows.map(\.name) { skillHighlight = 0 }
+            if menu.rows.map(\.name) != skillMenu?.rows.map(\.name) { skillHighlight.key(0) }
             skillMenu = menu
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + Self.skillMenuPatience) { [weak self] in
@@ -159,12 +159,12 @@ extension AppStore {
 
     func moveSkillHighlight(by step: Int) {
         guard let count = skillMenu?.rows.count, count > 0 else { return }
-        skillHighlight = (skillHighlight + step + count) % count
+        skillHighlight.key((skillHighlight.index + step + count) % count)
     }
 
     /// Puts the skill, or the lit one, in place of the word typed.
     func pickSkill(_ row: SkillRow? = nil) {
-        guard let menu = skillMenu, let row = row ?? (menu.rows.indices.contains(skillHighlight) ? menu.rows[skillHighlight] : nil) else { return }
+        guard let menu = skillMenu, let row = row ?? (menu.rows.indices.contains(skillHighlight.index) ? menu.rows[skillHighlight.index] : nil) else { return }
         skillPick = SkillPick(id: (skillPick?.id ?? 0) + 1, name: row.name, label: row.label)
         closeSkillMenu()
     }

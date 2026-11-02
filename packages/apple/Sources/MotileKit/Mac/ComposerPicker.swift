@@ -116,6 +116,8 @@ private struct ComposerPicker: View {
     @State private var column = ComposerPickerPart.model
     @State private var lit: Int?
     @State private var shownAccess: Access?
+    /// The model row the list shows next. Only the keys and opening move the list, never the pointer.
+    @State private var scrollTarget: Int?
     @FocusState private var searching: Bool
 
     private struct Group: Identifiable {
@@ -178,11 +180,19 @@ private struct ComposerPicker: View {
         .onAppear {
             column = part
             lit = chosenIndex(in: part, rows: rows, settings: settings)
+            scrollTarget = lit
             searching = true
         }
+        .onChange(of: part) { _, part in
+            column = part
+            lit = chosenIndex(in: part, rows: rows, settings: settings)
+            scrollTarget = lit
+        }
         .onChange(of: store.composerAccessOpen) { _, open in
-            guard !open else { return }
             shownAccess = nil
+            guard open else { return }
+            column = .access
+            lit = chosenIndex(in: .access, rows: rows, settings: settings)
         }
         .onChange(of: store.composerPickerJump) { _, jump in
             guard let jump else { return }
@@ -303,8 +313,12 @@ private struct ComposerPicker: View {
                 }
                 .padding(Self.padding)
             }
-            .onChange(of: lit) { _, lit in
-                guard column == .model, let lit, let row = groups.flatMap(\.rows).first(where: { $0.index == lit }) else { return }
+            .scrollIndicators(.never)
+            .fadesHiddenEdges()
+            .onChange(of: scrollTarget) { _, target in
+                guard let target else { return }
+                scrollTarget = nil
+                guard column == .model, let row = groups.flatMap(\.rows).first(where: { $0.index == target }) else { return }
                 proxy.scrollTo(row.id)
             }
         }
@@ -379,6 +393,8 @@ private struct ComposerPicker: View {
         return ScrollView {
             settingsList(settings, model: model)
         }
+        .scrollIndicators(.never)
+        .fadesHiddenEdges()
     }
 
     private func settingsList(_ settings: [Setting], model: ModelInfo?) -> some View {
@@ -503,7 +519,7 @@ private struct ComposerPicker: View {
             Segmented(
                 symbols: Access.allCases.map { ($0.label, $0.symbol, $0) },
                 selection: Binding { current } set: { setAccess($0) },
-                fills: true, compact: true, lit: lit.map { Access.allCases[$0] }, hovered: $shownAccess
+                fills: true, compact: true, lit: litAccess, hovered: $shownAccess
             )
             VStack(alignment: .leading, spacing: 2) {
                 Text(shown.label)
@@ -519,6 +535,12 @@ private struct ComposerPicker: View {
         .padding(Self.accessMenuPadding)
         .frame(width: Self.accessMenuWidth)
         .dropdownCard()
+    }
+
+    /// `lit` counts the access modes only while the access column has the keys.
+    private var litAccess: Access? {
+        guard column == .access, let lit, Access.allCases.indices.contains(lit) else { return nil }
+        return Access.allCases[lit]
     }
 
     private func openAccess(_ open: Bool) {
@@ -560,13 +582,15 @@ private struct ComposerPicker: View {
         let count = count(of: column, rows: rows, settings: settings)
         guard count > 0 else { return .handled }
         lit = min(max((lit ?? -by) + by, 0), count - 1)
+        scrollTarget = lit
         return .handled
     }
 
     /// Left and right go between the columns, while there is no search whose text they move in.
     private func move(_ by: Int, rows: [Row], settings: [Setting]) -> KeyPress.Result {
         if store.composerAccessOpen {
-            lit = min(max((lit ?? 0) + by, 0), Access.allCases.count - 1)
+            lit = min(max((litAccess.flatMap(Access.allCases.firstIndex) ?? 0) + by, 0), Access.allCases.count - 1)
+            column = .access
             shownAccess = lit.map { Access.allCases[$0] }
             return .handled
         }
@@ -577,6 +601,7 @@ private struct ComposerPicker: View {
         guard next != column else { return .handled }
         column = next
         lit = chosenIndex(in: next, rows: rows, settings: settings) ?? 0
+        scrollTarget = lit
         return .handled
     }
 
@@ -591,7 +616,8 @@ private struct ComposerPicker: View {
             pick(settings[lit])
         case .access:
             guard store.composerAccessOpen else { return openAccess(true) }
-            setAccess(Access.allCases[lit])
+            guard let access = litAccess else { return }
+            setAccess(access)
         }
     }
 }

@@ -14,6 +14,7 @@ use gpui_kit::*;
 use super::{Composer, strips};
 use crate::store::skills::{SkillPick, SkillRow, SkillSpan, skill_word};
 use crate::theme::{self, IconSize, Layer, Radius, Surface, colors};
+use crate::ui::parts::{hidden_edges, with_edge_fades};
 use crate::ui::{Chip, Spinner, icons, skill_chip};
 
 const ROW_HEIGHT: f32 = 32.;
@@ -163,7 +164,7 @@ impl Composer {
     fn skill_list(&self, rows: Rc<Vec<SkillRow>>, highlight: usize, cx: &mut Context<Self>) -> AnyElement {
         let fitting = ((self.skills.room.get() - CLEARANCE - INSET * 2.) / ROW_HEIGHT - 0.5).floor() + 0.5;
         let shown = (rows.len() as f32).min(SHOWN_ROWS).min(fitting.max(FEWEST_ROWS));
-        uniform_list(
+        let list = uniform_list(
             "skill-menu",
             rows.len(),
             cx.processor(move |this, range: Range<usize>, _, cx| {
@@ -173,30 +174,33 @@ impl Composer {
         .track_scroll(&self.skills.scroll)
         .w_full()
         .h(px(shown * ROW_HEIGHT + INSET * 2.))
-        .py(px(INSET))
-        .into_any_element()
+        .py(px(INSET));
+        let hidden = hidden_edges(&self.skills.scroll.0.borrow().base_handle);
+        with_edge_fades(div().relative().w_full().child(list), hidden, colors(cx).composer).into_any_element()
     }
 
     fn skill_row(&self, index: usize, row: &SkillRow, lit: bool, cx: &mut Context<Self>) -> Stateful<Div> {
         let c = colors(cx);
-        let (hover, click) = (self.store.clone(), self.store.clone());
+        let click = self.store.clone();
         div()
             .id(("skill", index))
             .w_full()
             .h(px(ROW_HEIGHT))
             .px(px(INSET))
             .flex()
-            .on_hover(move |hovered, _, cx| {
+            .on_hover(cx.listener(move |this, hovered: &bool, _, cx| {
                 if !*hovered {
                     return;
                 }
-                hover.update(cx, |store, cx| {
+                // Lit already, so the list doesn't scroll to it: only the keys scroll it.
+                this.skills.lit = index;
+                this.store.update(cx, |store, cx| {
                     if store.skills.highlight != index {
                         store.skills.highlight = index;
                         cx.notify();
                     }
                 });
-            })
+            }))
             .on_click(move |_, _, cx| click.update(cx, |store, cx| store.pick_skill(Some(index), cx)))
             .child(
                 div()
