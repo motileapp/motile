@@ -51,7 +51,12 @@ pub fn kind_text(kind: DeviceKind) -> &'static str {
     match kind {
         DeviceKind::Server => "server",
         DeviceKind::Client => "client",
+        DeviceKind::Proxy => "proxy",
     }
+}
+
+fn kind_of(text: &str) -> Option<DeviceKind> {
+    [DeviceKind::Server, DeviceKind::Client, DeviceKind::Proxy].into_iter().find(|kind| kind_text(*kind) == text)
 }
 
 pub async fn upsert_user(db: &PgPool, identity: &Identity) -> Result<UserRow, sqlx::Error> {
@@ -84,8 +89,12 @@ pub async fn user_of_device(db: &PgPool, public_key: &str) -> Result<Option<User
     .await
 }
 
-pub async fn device_kind(db: &PgPool, public_key: &str) -> Result<Option<String>, sqlx::Error> {
-    sqlx::query_scalar("SELECT kind FROM devices WHERE public_key = $1").bind(public_key).fetch_optional(db).await
+pub async fn device_kind(db: &PgPool, public_key: &str) -> Result<Option<DeviceKind>, sqlx::Error> {
+    let kind: Option<String> = sqlx::query_scalar("SELECT kind FROM devices WHERE public_key = $1")
+        .bind(public_key)
+        .fetch_optional(db)
+        .await?;
+    Ok(kind.as_deref().and_then(kind_of))
 }
 
 pub async fn me(db: &PgPool, user: &UserRow) -> Result<Me, sqlx::Error> {
@@ -95,12 +104,14 @@ pub async fn me(db: &PgPool, user: &UserRow) -> Result<Me, sqlx::Error> {
     .bind(user.id)
     .fetch_all(db)
     .await?;
-    let devices = rows.into_iter().map(|row| Device {
-        public_key: row.public_key,
-        kind: if row.kind == "server" { DeviceKind::Server } else { DeviceKind::Client },
-        name: row.name,
-        platform: row.platform,
-        created_at: seconds(row.created_at),
+    let devices = rows.into_iter().filter_map(|row| {
+        Some(Device {
+            kind: kind_of(&row.kind)?,
+            public_key: row.public_key,
+            name: row.name,
+            platform: row.platform,
+            created_at: seconds(row.created_at),
+        })
     });
     let gone: Vec<RemovedRow> = sqlx::query_as(
         "SELECT public_key, name, platform, removed_at, deleted_at FROM removed_servers
@@ -130,7 +141,8 @@ fn seconds(at: DateTime<Utc>) -> f64 {
 }
 
 /// Links the device to the user, taking it from another account if it was linked there: the
-/// caller has proven it holds the key. `false` when it can't be linked.
+/// caller has proven it holds the key. A proxy replaces the account's previous one. `false` when it
+/// can't be linked.
 pub async fn link_device(
     db: &PgPool,
     user_id: Uuid,
@@ -139,8 +151,19 @@ pub async fn link_device(
     name: &str,
     platform: &str,
 ) -> Result<bool, sqlx::Error> {
-    let count: i64 =
-        sqlx::query_scalar("SELECT count(*) FROM devices WHERE user_id = $1").bind(user_id).fetch_one(db).await?;
+    let mut transaction = db.begin().await?;
+    if kind == DeviceKind::Proxy {
+        sqlx::query("DELETE FROM devices WHERE user_id = $1 AND kind = $2 AND public_key <> $3")
+            .bind(user_id)
+            .bind(kind_text(DeviceKind::Proxy))
+            .bind(public_key)
+            .execute(&mut *transaction)
+            .await?;
+    }
+    let count: i64 = sqlx::query_scalar("SELECT count(*) FROM devices WHERE user_id = $1")
+        .bind(user_id)
+        .fetch_one(&mut *transaction)
+        .await?;
     if count >= MAX_DEVICES_PER_USER {
         return Ok(false);
     }
@@ -157,7 +180,7 @@ pub async fn link_device(
     .bind(kind_text(kind))
     .bind(name)
     .bind(platform)
-    .execute(db)
+    .execute(&mut *transaction)
     .await?;
     if linked.rows_affected() != 1 {
         return Ok(false);
@@ -166,8 +189,9 @@ pub async fn link_device(
     sqlx::query("DELETE FROM removed_servers WHERE user_id = $1 AND public_key = $2")
         .bind(user_id)
         .bind(public_key)
-        .execute(db)
+        .execute(&mut *transaction)
         .await?;
+    transaction.commit().await?;
     Ok(true)
 }
 
@@ -206,7 +230,8 @@ pub async fn delete_server_completely(db: &PgPool, user_id: Uuid, public_key: &s
         .bind(user_id)
         .fetch_optional(db)
         .await?;
-    if kind.as_deref() == Some(kind_text(DeviceKind::Client)) {
+    let kind = kind.as_deref().and_then(kind_of);
+    if kind.is_some_and(|kind| kind != DeviceKind::Server) {
         return Ok(false);
     }
     if kind.is_some() {

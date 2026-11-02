@@ -19,15 +19,17 @@ pub enum SettingsSection {
     PullRequests,
     TextGeneration,
     Integrations,
+    Proxy,
     Keyboard,
 }
 
 impl SettingsSection {
     /// In the order they are reached for: what the client is, then what it works with, and the
     /// keys last.
-    pub const ALL: [SettingsSection; 8] = [
+    pub const ALL: [SettingsSection; 9] = [
         SettingsSection::General,
         SettingsSection::Accounts,
+        SettingsSection::Proxy,
         SettingsSection::Servers,
         SettingsSection::Projects,
         SettingsSection::PullRequests,
@@ -46,6 +48,7 @@ impl SettingsSection {
             SettingsSection::TextGeneration => "Text Generation",
             SettingsSection::PullRequests => "Pull Requests",
             SettingsSection::Integrations => "Integrations",
+            SettingsSection::Proxy => "Proxy",
         }
     }
 
@@ -59,6 +62,7 @@ impl SettingsSection {
             SettingsSection::TextGeneration => "pencil-line",
             SettingsSection::PullRequests => "git-pull-request",
             SettingsSection::Integrations => "blocks",
+            SettingsSection::Proxy => "network",
         }
     }
 }
@@ -77,7 +81,7 @@ pub struct SettingsEntry {
     pub keywords: &'static str,
 }
 
-const ENTRIES: [(&str, &str, SettingsSection, &str); 19] = [
+const ENTRIES: [(&str, &str, SettingsSection, &str); 22] = [
     ("account", "Account", SettingsSection::General, "signed in email sign out"),
     ("updates", "Updates", SettingsSection::General, "version check for updates release"),
     ("appearance", "Theme", SettingsSection::General, "appearance light dark system mode"),
@@ -93,8 +97,16 @@ const ENTRIES: [(&str, &str, SettingsSection, &str); 19] = [
         "agent-accounts",
         "Provider Accounts",
         SettingsSection::Accounts,
-        "agents claude codex sign in login folder subscription plan api key router",
+        "agents claude codex sign in account folder subscription plan api key router",
     ),
+    ("proxy", "Proxy", SettingsSection::Proxy, "add remove replace enroll docker unbind image version connected"),
+    (
+        "proxy-accounts",
+        "Accounts",
+        SettingsSection::Proxy,
+        "claude codex sign in accounts priority next limits pool rename turn off",
+    ),
+    ("proxy-log", "Log", SettingsSection::Proxy, "requests errors capture captured headers body latency tokens"),
     (
         "servers",
         "Servers",

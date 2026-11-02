@@ -140,6 +140,7 @@ enum class Symbol(val character: String?) {
     UnfoldVertical("\uE43E"),
     UserRound("\uE468"),
     Users("\uE1A4"),
+    Waypoints("\uE542"),
     Wrench("\uE1B1"),
     X("\uE1B2"),
     Zap("\uE1B4"),

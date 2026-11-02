@@ -11,7 +11,7 @@ import {
 
 export type Device = {
   public_key: string
-  kind: "server" | "client"
+  kind: "server" | "client" | "proxy"
   name: string
   platform: string
   created_at: number
@@ -21,6 +21,8 @@ export type Account = {
   user: { email: string; name: string | null; picture: string | null }
   servers: Array<Device>
   clients: Array<Device>
+  /** The account's proxy, which serves its agents' logins to every server. One at most. */
+  proxy: Device | null
   removed: Array<RemovedServer>
 }
 
@@ -54,6 +56,7 @@ export const getAccount = createServerFn().handler(
       user: me.user,
       servers: me.devices.filter((device) => device.kind === "server"),
       clients: me.devices.filter((device) => device.kind === "client"),
+      proxy: me.devices.find((device) => device.kind === "proxy") ?? null,
       removed: me.removed,
     }
   }

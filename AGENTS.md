@@ -20,10 +20,12 @@ These programs make it up, plus the code the clients share:
 | GPUI app (`apps/gpui`) | The user's Linux machines and Windows PCs | The Mac app again, in Rust with GPUI |
 | Android app (`apps/android`) | The user's Android phones and tablets | The iOS app again, in Kotlin with Jetpack Compose |
 | Core (`crates/core`) | Inside every client | Account, connections, sync, the local cache, rendering transcripts |
+| Proxy (`apps/proxy`, the `motile-proxy` image) | A machine of the user's that is always on, in Docker | Holds the account's Claude Code and Codex sign-ins and passes the agents' requests on with them |
 
 Every device is an ed25519 key, which is also its iroh address. The auth server only says which
 keys belong to one account; it never sees a thread. A server accepts connections only from its
-account's clients. The web app is not a device: it holds a session, which can manage the account
+account's clients. An account has at most one proxy, a device too, which serves only its account's
+servers and clients. The web app is not a device: it holds a session, which can manage the account
 but can never connect to a server. README.md covers how a user sets things up.
 
 Production is the `Motile` project on Unbind:
@@ -48,6 +50,11 @@ What the programs agree on.
 - `identity.rs`: the device key and request signing.
 - `media.rs`: names an image, a video or a file an agent sends by its contents.
 - `skills.rs`: how a message names the skills it starts, `$name` at the start of a word.
+- `proxy_wire.rs`: what servers and clients say to the account's proxy on `PROXY_ALPN`, a stream
+  for each request.
+- `select.rs`: which account a new thread starts on: of those that can carry it through the next
+  hours, the one whose spare quota lapses soonest. The proxy ranks its accounts with it, from what it
+  measures; the clients rank a server's own accounts with it.
 
 ### crates/openui
 
@@ -79,6 +86,8 @@ OpenUI Lang 1.0, the language of the programs agents show in their replies (thes
   then drops its copies. Linking the key again makes it an ordinary server. The clients call these
   "Unlink Server" and "Delete".
 - `config.rs`: builds the install command a token comes with.
+- A proxy enrolls with the code a server installs with, as a device of kind `proxy`, and takes the
+  place of the account's last one. It can't make codes or remove devices.
 - `pages.rs`: the page a failed sign-in ends on, drawn like the web app's with the colours of
   `packages/theme/tokens.css` and DM Sans from `assets/`.
 - `migrations/`: the schema.
@@ -86,6 +95,30 @@ OpenUI Lang 1.0, the language of the programs agents show in their replies (thes
   runs all three programs together.
 - `DEV_LOGIN=1` lets anyone sign in as anyone without Google. It is for tests, the demo and
   local work, and must never be set in production.
+
+### apps/proxy (Rust, the `motile-proxy` image)
+
+The account's proxy, which the user runs from `ghcr.io/motileapp/motile-proxy` on a machine that is
+always on, with a volume at `/data`. On its first start it links itself to the account with
+`MOTILE_ENROLL_CODE`, which a client's Settings → Proxy makes. It holds Claude Code's and Codex's
+accounts, signed in from the clients, and the agents of a server's Proxy accounts reach Anthropic and
+OpenAI through it with them. It translates nothing: a request passes through with an account's token in
+place of the agent's.
+
+- `serve.rs`, `access.rs`: the iroh endpoint, which takes the account's servers' traffic and its
+  clients' management, and nothing from anyone else.
+- `router.rs`: which account a thread's requests go to. A thread stays on its account until the account
+  runs out, is turned off, or the thread was idle longer than its cache lasts; then
+  `select::rank` places it again, from what the proxy measures of each account's windows.
+- `upstream.rs`, `websocket.rs`: the HTTP requests and Codex's WebSockets. A limit error before
+  anything streamed rests the account and tries the next; a response that streamed is never replayed.
+- `oauth.rs`: signing accounts in and renewing their tokens, as the CLIs do. `seal.rs` keeps the
+  tokens sealed under a key from the proxy's device key.
+- `limits.rs`, `usage.rs`, `pricing.rs`: the accounts' limits from every response's headers (and
+  asked of an idle one every minute), the tokens each response spent, and what they cost at the
+  API's prices.
+- `store.rs`: its SQLite on the volume, with the request log and the requests captured in full.
+- `tests/e2e.rs`: the proxy over real iroh connections, against fake upstreams.
 
 ### packages/theme
 
@@ -129,7 +162,8 @@ shadcn's own colours, opacities and radii are gone from the theme.
   (`CLAUDE_CONFIG_DIR`, `CODEX_HOME`, or none for the CLI's usual one) and the variables its agent
   is given. Every account is alike: an agent's first is its default, which any can be made, and
   any but an agent's last can be removed. A Codex account can share the usual folder but for its
-  sign-in. A thread works with one account and can move to another.
+  sign-in. A thread works with one account and can move to another. While the account has a
+  proxy, each agent also has a Proxy account, which the server keeps and nobody edits.
 - `sign_in.rs`: signs a Claude Code account in for a client: it runs `claude auth login` with the
   account's folder, the client opens the page it links to, and the code that page shows comes
   back to it.
@@ -218,8 +252,11 @@ shadcn's own colours, opacities and radii are gone from the theme.
 - `ui_lookups.rs`: a program's photos from Wikipedia and Wikimedia Commons, kept as the thread's
   media (`UiImages`), and street routes from OSRM (`UiRoute`), both kept in memory a while.
 - `icons.rs`: finds a project's icon in its folder.
-- `access.rs`: asks the auth server which clients belong to the account, and which servers it
-  deleted completely.
+- `access.rs`: asks the auth server which clients belong to the account, which servers it
+  deleted completely, and which device is its proxy.
+- `proxy.rs`: how the Proxy accounts' agents reach the proxy: an HTTP listener on the loopback
+  interface, called with the thread's token, and the iroh connection to the proxy that carries each
+  request. The token never leaves the server; the proxy is told the thread.
 - `sync.rs`: the server's change log and its copies of the account's other servers' logs. Triggers
   give each write to a project, a thread, an item or the usage the next number of the log
   (`migrations/0018_sync.sql`), and a delete leaves a tombstone. A client asks a server what changed
@@ -267,8 +304,13 @@ for tests.
   empties and fills again, and its excerpts come in parts that set off the match.
 - `usage.rs`: what the agents spent on every server, added up for the usage view: a series for
   each agent, and the models, projects and kinds of token.
-- `limits.rs`: the Limits tab of the usage view: a section for each login, shown once however
-  many servers share it, and a row for each window with when it starts over and its pace.
+- `limits.rs`: the Limits tab of the usage view: a section for each account, shown once however
+  many servers share it, and a row for each window with when it starts over and its pace. The
+  proxy's accounts are sections too. It ranks a server's accounts for new threads with
+  `select::rank`.
+- `proxy.rs`: the account's proxy, connected while Settings → Proxy or the Limits tab shows: its
+  accounts as the page draws them, their sign-ins, its request log and captured requests, and how to
+  add one.
 - `render/`: turns transcripts into rows ready to draw: `rows.rs` (the row list and its
   splices), `markdown.rs`, `highlight.rs`, `diff.rs`, `agents.rs`.
 - `render/openui/host.rs`: runs the programs of an open thread's rows (`RowKind::Ui`), each in a
@@ -685,10 +727,16 @@ server starts out connected to its workspace. It keeps its team, users and issue
 Linear the real one, to connect a workspace of your own. `scripts/fake-ricrac` does the same for
 Ricrac (`MOTILE_RICRAC_URL`, `build/dev/ricrac.json`, `MOTILE_DEV_RICRAC=real`).
 
+The dev stack runs the account's proxy too, linked the first time, whose Anthropic and OpenAI are
+`scripts/fake-upstream`: it signs in a Claude Code account with any code but one with "wrong" in it,
+approves a Codex account at once, and gives each account limits. Nothing looks the proxy up locally, so
+the clients are told its address in `MOTILE_SERVER_ADDRS` and the server in `MOTILE_PROXY_ADDR`.
+
 ## Releasing and deploying
 
-Every push to `main` that touches the server, the auth server, the Mac app, the GPUI app or the
-Android app is a release. The `Release` workflow publishes the server and the auth server for Linux,
+Every push to `main` that touches the server, the auth server, the proxy, the Mac app, the GPUI app or
+the Android app is a release. The `Release` workflow publishes the server, the auth server and the
+proxy for Linux,
 the server, the client and the GPUI app for Macs, the GPUI app for Linux and Windows, and the Android
 app (`Motile-android.apk`), as a GitHub release. Its
 version is the first two numbers of `version` in `Cargo.toml` and the number of commits as the third
@@ -696,7 +744,8 @@ version is the first two numbers of `version` in `Cargo.toml` and the number of 
 download button always fetch the latest release, and clients and servers compare their own version
 with it to offer an update. The Mac app in a release is signed with the Developer ID certificate
 and notarized, using the repository's `APPLE_*` secrets; running the `macOS` workflow by hand with
-`sign` does the same without a release.
+`sign` does the same without a release. Once the release exists, the proxy's binaries become its
+image, `ghcr.io/motileapp/motile-proxy` for amd64 and arm64, tagged `latest` and with the version.
 
 Every push and pull request that touches the Android app lints, tests and builds it (the `Android`
 workflow). Its release is built by `apps/android/scripts/release.sh` with the release's version, the
@@ -723,7 +772,7 @@ sentence describing the change:
     server | core | macos: Stream replies in finished blocks
 
 The parts are the folders in `apps`, `crates` and `packages`: `auth`, `marketing`, `web`, `server`,
-`macos`, `ios`, `android`, `apple`, `gpui`, `core`, `openui` and `protocol`. Use `ci` for the workflows and `docs` for README.md and AGENTS.md.
+`macos`, `ios`, `android`, `apple`, `gpui`, `proxy`, `core`, `openui` and `protocol`. Use `ci` for the workflows and `docs` for README.md and AGENTS.md.
 
 The title should be concise. Description should explain the work in more detail (only if
 required) while still being concise. Use simple language, do not try to sound smart.

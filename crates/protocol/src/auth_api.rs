@@ -10,6 +10,8 @@ pub enum DeviceKind {
     Server,
     /// A client that drives servers.
     Client,
+    /// The account's proxy, which serves its agents' logins to every server. One per account.
+    Proxy,
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
@@ -100,6 +102,13 @@ pub struct EnrollRequest {
     pub platform: String,
     /// The device key's signature over `enroll_message(token)`.
     pub signature: String,
+    /// What enrolls: a server, or the account's proxy. Missing from servers up to 0.1.267.
+    #[serde(default = "server_kind")]
+    pub kind: DeviceKind,
+}
+
+fn server_kind() -> DeviceKind {
+    DeviceKind::Server
 }
 
 pub fn enroll_message(token: &str) -> Vec<u8> {

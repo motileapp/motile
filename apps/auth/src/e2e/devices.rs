@@ -1,7 +1,9 @@
-use motile_protocol::auth_api::DeviceKind;
+use motile_protocol::auth_api::{DeviceKind, enroll_message};
+use motile_protocol::auth_client::DeviceDescription;
 use motile_protocol::identity::{DeviceKey, sign_request};
 use motile_protocol::now;
 use reqwest::StatusCode;
+use serde_json::json;
 use sqlx::PgPool;
 
 use super::{ANN, Auth, BOB, INSTALL_URL, LINUX, emails, names};
@@ -196,4 +198,114 @@ async fn a_request_is_accepted_only_as_its_device_signed_it(db: PgPool) {
     let stale = sign_request(&client, "GET", "/api/me", b"", now() - 3600.0);
     assert_eq!(get_me(stale).await.unwrap().status(), StatusCode::UNAUTHORIZED);
     assert_eq!(get_me("Motile nonsense".to_string()).await.unwrap().status(), StatusCode::UNAUTHORIZED);
+}
+
+const PROXY: DeviceDescription<'static> = DeviceDescription { name: "motile-proxy", platform: "linux" };
+
+fn kinds(me: &motile_protocol::auth_api::Me) -> Vec<DeviceKind> {
+    me.devices.iter().map(|device| device.kind).collect()
+}
+
+#[sqlx::test]
+async fn the_install_command_links_the_accounts_proxy(db: PgPool) {
+    let auth = Auth::start(db).await;
+    let (client, _) = auth.new_client(&ANN).await;
+    let server = DeviceKey::generate();
+    let token = auth.client.create_enroll_token(&client).await.unwrap();
+    auth.client.enroll(&server, &token.token, &LINUX).await.unwrap();
+    let proxy = DeviceKey::generate();
+
+    let token = auth.client.create_enroll_token(&client).await.unwrap();
+    let enrolled = auth.client.enroll_as(&proxy, &token.token, &PROXY, DeviceKind::Proxy).await.unwrap();
+    assert_eq!(enrolled.email, "ann@example.com");
+
+    let me = auth.client.me(&client).await.unwrap();
+    assert_eq!(names(&me), vec!["Ann's Mac", "build-box", "motile-proxy"]);
+    assert_eq!(kinds(&me), vec![DeviceKind::Client, DeviceKind::Server, DeviceKind::Proxy]);
+    // Servers and the proxy see the same account, which is how they find and accept each other.
+    assert_eq!(auth.client.me(&server).await.unwrap(), me);
+    assert_eq!(auth.client.me(&proxy).await.unwrap(), me);
+
+    // The code works for one machine, as a server's does.
+    let other = auth.client.enroll_as(&DeviceKey::generate(), &token.token, &PROXY, DeviceKind::Proxy).await;
+    assert!(other.unwrap_err().to_string().contains("expired or was used on another machine"));
+}
+
+#[sqlx::test]
+async fn a_new_proxy_replaces_the_accounts_previous_one(db: PgPool) {
+    let auth = Auth::start(db).await;
+    let (ann, _) = auth.new_client(&ANN).await;
+    let (bob, _) = auth.new_client(&BOB).await;
+    let (first, second, bobs) = (DeviceKey::generate(), DeviceKey::generate(), DeviceKey::generate());
+    for (owner, proxy) in [(&ann, &first), (&bob, &bobs), (&ann, &second)] {
+        let token = auth.client.create_enroll_token(owner).await.unwrap();
+        auth.client.enroll_as(proxy, &token.token, &PROXY, DeviceKind::Proxy).await.unwrap();
+    }
+
+    let me = auth.client.me(&ann).await.unwrap();
+    assert_eq!(kinds(&me), vec![DeviceKind::Client, DeviceKind::Proxy]);
+    assert_eq!(me.devices[1].public_key, second.public());
+    assert_eq!(auth.client.me(&first).await.unwrap().user, None);
+    // A proxy replaced or removed is gone, never kept as a removed server.
+    assert!(me.removed.is_empty());
+    auth.client.remove_device(&ann, &second.public()).await.unwrap();
+    let me = auth.client.me(&ann).await.unwrap();
+    assert_eq!(kinds(&me), vec![DeviceKind::Client]);
+    assert!(me.removed.is_empty() && me.deleted.is_empty());
+
+    assert_eq!(kinds(&auth.client.me(&bob).await.unwrap()), vec![DeviceKind::Client, DeviceKind::Proxy]);
+}
+
+#[sqlx::test]
+async fn a_proxy_adds_and_deletes_no_servers(db: PgPool) {
+    let auth = Auth::start(db).await;
+    let (client, _) = auth.new_client(&ANN).await;
+    let (server, proxy) = (DeviceKey::generate(), DeviceKey::generate());
+    let token = auth.client.create_enroll_token(&client).await.unwrap();
+    auth.client.enroll(&server, &token.token, &LINUX).await.unwrap();
+    let token = auth.client.create_enroll_token(&client).await.unwrap();
+    auth.client.enroll_as(&proxy, &token.token, &PROXY, DeviceKind::Proxy).await.unwrap();
+
+    let from_proxy = auth.client.create_enroll_token(&proxy).await;
+    assert_eq!(from_proxy.unwrap_err().to_string(), "Servers are added from a client.");
+    let deleting = auth.client.delete_server_completely(&proxy, &server.public()).await;
+    assert_eq!(deleting.unwrap_err().to_string(), "Servers are deleted from a client.");
+    // Nor is the proxy a server to delete completely.
+    assert!(auth.client.delete_server_completely(&client, &proxy.public()).await.is_err());
+    assert_eq!(auth.client.me(&client).await.unwrap().devices.len(), 3);
+}
+
+#[sqlx::test]
+async fn the_install_command_links_no_client(db: PgPool) {
+    let auth = Auth::start(db).await;
+    let (client, _) = auth.new_client(&ANN).await;
+    let token = auth.client.create_enroll_token(&client).await.unwrap();
+
+    let as_client = auth.client.enroll_as(&DeviceKey::generate(), &token.token, &LINUX, DeviceKind::Client).await;
+    assert_eq!(as_client.unwrap_err().to_string(), "A client links by signing in, not with an install command.");
+    // The code is still good for a server.
+    auth.client.enroll(&DeviceKey::generate(), &token.token, &LINUX).await.unwrap();
+}
+
+#[sqlx::test]
+async fn a_server_that_sends_no_kind_links_as_a_server(db: PgPool) {
+    let auth = Auth::start(db).await;
+    let (client, _) = auth.new_client(&ANN).await;
+    let token = auth.client.create_enroll_token(&client).await.unwrap();
+    let server = DeviceKey::generate();
+
+    let request = json!({
+        "token": token.token,
+        "public_key": server.public(),
+        "name": "old-box",
+        "platform": "linux",
+        "signature": server.sign(&enroll_message(&token.token)),
+    });
+    let response =
+        reqwest::Client::new().post(format!("{}/api/enroll", auth.base)).json(&request).send().await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let me = auth.client.me(&client).await.unwrap();
+    assert_eq!(names(&me), vec!["Ann's Mac", "old-box"]);
+    assert_eq!(me.devices[1].kind, DeviceKind::Server);
 }

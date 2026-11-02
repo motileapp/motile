@@ -152,6 +152,12 @@ final class AppStore {
     var signInError: String?
     private(set) var enrollToken: EnrollToken?
     private(set) var enrollTokenPending = false
+    /// The account's proxy, as the core last said.
+    private(set) var proxy = ProxyState()
+    /// How many views show the proxy, which the core stays connected to while any does.
+    @ObservationIgnored var proxyWatchers = 0
+    /// The agent whose account's sign-in the proxy is asked to start, until it answers.
+    var proxySignInStarting: Agent?
     var showsAddServer = false
     /// The section of the settings open over the client, while they are.
     var settings: SettingsSection? {
@@ -611,6 +617,12 @@ final class AppStore {
                 guard let self, self.transcript.threadID == threadID else { return }
                 if self.activity != activity { self.activity = activity }
                 self.transcript.setActivity(activity)
+            }
+        case "proxy":
+            let proxy = ProxyState(json: event.object("proxy") ?? [:])
+            return { [weak self] in
+                guard let self, self.proxy != proxy else { return }
+                self.proxy = proxy
             }
         case "thread_error":
             let message = event.string("message")
@@ -1081,8 +1093,8 @@ final class AppStore {
         return (server.models.first { $0.named(draft.model) } ?? server.models.first)?.agent
     }
 
-    /// The accounts the composer offers the models of, each agent's with the most room left in its
-    /// limits first, as a new thread would start on it.
+    /// The accounts the composer offers the models of, each agent's that a new thread
+    /// would start on first.
     var composerAccounts: [AgentAccount] {
         let agents = Set(composerModels.map(\.agent))
         let order = composerServer?.accountsByRoom ?? []
@@ -1999,7 +2011,7 @@ final class AppStore {
         core.send("usage", command, read: UsageReport.init, reply: reply)
     }
 
-    /// How much of their plans the agents' logins on the connected `servers`, or all of them,
+    /// How much of their plans the agents' accounts on the connected `servers`, or all of them,
     /// have used. `refresh` has the servers read it anew, `kept` answers at once with what was
     /// last read.
     func loadLimits(

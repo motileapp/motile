@@ -1,4 +1,4 @@
-//! How much of their plans the agents' logins have used: a section for each login, its windows in
+//! How much of their plans the agents' accounts have used: a section for each account, its windows in
 //! one card, each with a bar of what was used.
 
 use gpui_kit::prelude::*;
@@ -10,7 +10,7 @@ use crate::theme::{IconSize, Layer, Opacity, Radius, Surface, colors};
 use crate::ui::{Chip, card_default, divider_on, icons, logos, tabular_numbers, tooltip};
 
 /// Narrower than this, a window puts its bar under its numbers.
-const BESIDE_WIDTH: f32 = 520.;
+pub const BESIDE_WIDTH: f32 = 520.;
 const BAR_HEIGHT: f32 = 28.;
 const NUMBERS_WIDTH: f32 = 168.;
 
@@ -56,12 +56,9 @@ pub fn limits(report: &LimitsReport, width: f32, cx: &App) -> AnyElement {
 
 fn header(section: &LimitsSection, cx: &App) -> Div {
     let c = colors(cx);
-    let login = match (&section.name, &section.account) {
-        (Some(name), Some(account)) => Some(format!("{name} · {account}")),
-        (Some(name), None) => Some(name.clone()),
-        (None, Some(account)) => Some(account.clone()),
-        (None, None) => None,
-    };
+    let on_proxy = (section.proxy && section.servers.is_empty()).then_some("On your proxy".to_string());
+    let parts: Vec<String> = [section.name.clone(), section.account.clone(), on_proxy].into_iter().flatten().collect();
+    let account = (!parts.is_empty()).then(|| parts.join(" · "));
     div()
         .px(px(4.))
         .pb(px(2.))
@@ -78,7 +75,8 @@ fn header(section: &LimitsSection, cx: &App) -> Div {
                 .child(agent_name(section.agent)),
         )
         .when_some(section.plan.clone(), |header, plan| header.child(Chip::new(plan)))
-        .when_some(login, |header, login| {
+        .when(section.proxy, |header| header.child(Chip::new("Proxy").icon("network")))
+        .when_some(account, |header, account| {
             header.child(
                 div()
                     .min_w_0()
@@ -87,14 +85,14 @@ fn header(section: &LimitsSection, cx: &App) -> Div {
                     .whitespace_nowrap()
                     .overflow_hidden()
                     .text_ellipsis_middle()
-                    .child(crate::ui::control::dotted(login, c)),
+                    .child(crate::ui::control::dotted(account, c)),
             )
         })
 }
 
 /// One window of a plan: what was used of it, how that compares with the time passed, and a bar
 /// with when it starts over.
-fn limit_row(id: (usize, usize), window: &LimitWindow, beside: bool, cx: &App) -> AnyElement {
+pub fn limit_row(id: (usize, usize), window: &LimitWindow, beside: bool, cx: &App) -> AnyElement {
     let c = colors(cx);
     let tone = match window.tone {
         Tone::Success => c.success,
@@ -160,7 +158,7 @@ fn limit_row(id: (usize, usize), window: &LimitWindow, beside: bool, cx: &App) -
 }
 
 /// What was used of a window as the part of a bar it fills, and at its end when the window starts
-/// over and the resets the login may use.
+/// over and the resets the account may use.
 fn limit_bar(id: (usize, usize), window: &LimitWindow, tone: Hsla, cx: &App) -> Div {
     let c = colors(cx);
     let used = (window.used_percent / 100.).clamp(0., 1.) as f32;

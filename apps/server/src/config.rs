@@ -53,9 +53,14 @@ impl DataDir {
         self.0.join("media")
     }
 
-    /// The account's clients, as the auth server last listed them.
+    /// The account's clients and its proxy, as the auth server last listed them.
     pub fn account_keys(&self) -> PathBuf {
         self.0.join("account-keys.json")
+    }
+
+    /// The folders of the Proxy accounts, where their agents keep their things.
+    pub fn proxy_accounts(&self) -> PathBuf {
+        self.0.join("proxy")
     }
 
     pub fn device_key(&self) -> anyhow::Result<DeviceKey> {

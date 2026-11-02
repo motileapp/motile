@@ -13,10 +13,11 @@ motile-protocol = { workspace = true, features = ["auth-client"] }
 motile-openui.workspace = true
 reqwest.workspace = true
 anyhow.workspace = true
-axum = { version = "0.8", default-features = false, features = ["tokio", "http1"] }
+axum = { version = "0.8", default-features = false, features = ["tokio", "http1", "json", "ws"] }
 base64.workspace = true
 chrono = { version = "0.4", default-features = false, features = ["std"] }
 clap.workspace = true
+futures-lite.workspace = true
 hex.workspace = true
 imagesize = "0.15"
 iroh.workspace = true
@@ -36,5 +37,7 @@ uuid.workspace = true
 zstd = "0.13"
 
 [dev-dependencies]
+futures-util = { version = "0.3", default-features = false, features = ["sink"] }
 tempfile.workspace = true
+tokio-tungstenite = "0.29"
 motile-core.workspace = true

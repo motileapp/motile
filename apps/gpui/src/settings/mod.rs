@@ -7,6 +7,7 @@ mod account_sheet;
 mod keybindings;
 mod layout;
 mod page;
+mod proxy;
 mod sidebar;
 
 use std::cell::Cell;

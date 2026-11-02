@@ -46,7 +46,7 @@ import app.motile.ui.ThemeDivider
 /** Narrower than this, a window puts its bar under its numbers. */
 private val besideWidth = 520.dp
 
-/** How much of their plans the agents' logins have used: a section for each login, its windows in one card, each with a bar of what was used. */
+/** How much of their plans the agents' accounts have used: a section for each account, its windows in one card, each with a bar of what was used. */
 @Composable
 fun LimitsView(report: LimitsReport) {
     val palette = LocalPalette.current
@@ -56,7 +56,7 @@ fun LimitsView(report: LimitsReport) {
             if (report.sections.isEmpty() && report.notes.isEmpty()) UsageNote("No agent is installed on these servers.")
             for (section in report.sections) {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Header(section)
+                    Header(section, beside)
                     section.note?.let { note ->
                         Card(Modifier.fillMaxWidth()) {
                             Text(note, Modifier.fillMaxWidth().padding(16.dp), size = 12f, color = palette.mutedForeground)
@@ -77,24 +77,36 @@ fun LimitsView(report: LimitsReport) {
     }
 }
 
+/** The agent with the account's plan, and who is signed in beside it, or under it where they don't both fit. */
 @Composable
-private fun Header(section: LimitsReport.Section) {
+private fun Header(section: LimitsReport.Section, beside: Boolean) {
     val palette = LocalPalette.current
-    Row(
-        Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp, bottom = 2.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        AgentIcon(section.agent, size = iconSize(text = 14f))
-        Text(section.agent.title, size = 14f, weight = FontWeight.Medium, color = palette.foreground, maxLines = 1)
-        section.plan?.let { Chip(it) }
-        val login = buildAnnotatedString {
-            section.name?.let { append(it) }
-            if (section.name != null && section.account != null) withStyle(SpanStyle(color = palette.mutedStrongerForeground)) { append(" · ") }
-            section.account?.let { append(it) }
+    val parts = listOfNotNull(section.name, section.account, "On your proxy".takeIf { section.proxy && section.servers.isEmpty() })
+    val account = buildAnnotatedString {
+        parts.forEachIndexed { index, part ->
+            if (index > 0) withStyle(SpanStyle(color = palette.mutedStrongerForeground)) { append(" · ") }
+            append(part)
         }
-        Text(login, Modifier.weight(1f, fill = false), size = 12f, color = palette.mutedForeground, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
     }
+    val accountText = @Composable { modifier: Modifier ->
+        Text(account, modifier, size = 12f, color = palette.mutedForeground, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
+    }
+    Column(Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp, bottom = 2.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            AgentIcon(section.agent, size = iconSize(text = 14f))
+            Text(section.agent.title, size = 14f, weight = FontWeight.Medium, color = palette.foreground, maxLines = 1)
+            section.plan?.let { Chip(it) }
+            if (section.proxy) Chip("Proxy", icon = Symbol.Waypoints)
+            if (beside) accountText(Modifier.weight(1f, fill = false))
+        }
+        if (!beside) accountText(Modifier)
+    }
+}
+
+/** A window as the Limits tab draws it, its bar beside its numbers where the row is wide enough. */
+@Composable
+fun LimitWindowRow(window: LimitsReport.Window) {
+    BoxWithConstraints(Modifier.fillMaxWidth()) { LimitRow(window, maxWidth >= besideWidth) }
 }
 
 /** One window of a plan: what was used of it, how that compares with the time passed, and a bar with when it starts over. */
@@ -158,7 +170,7 @@ private val LimitsReport.Window.Pace.help: String
         LimitsReport.Window.Pace.Under -> "Room left for the rest of the window"
     }
 
-/** What was used of a window as the part of a bar it fills, and at its end when the window starts over and the resets the login may use. */
+/** What was used of a window as the part of a bar it fills, and at its end when the window starts over and the resets the account may use. */
 @Composable
 private fun LimitBar(window: LimitsReport.Window, color: Color, modifier: Modifier) {
     val palette = LocalPalette.current

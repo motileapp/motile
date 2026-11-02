@@ -4,10 +4,11 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 use motile_protocol::auth_api::User;
+use motile_protocol::proxy_wire::{AccountChange, Capture};
 use motile_protocol::wire::{
-    Activity, ContinueSettings, DiffScope, GitAction, GitStage, LinearStateKind, MergeMethod, NewThread, Project,
-    PullRequestAction, PullRequestEdit, PullRequestSettings, PullRequestState, Request, RestartWhen, RicracStateKind,
-    ServerInfo, Thread,
+    Activity, Agent, ContinueSettings, DiffScope, GitAction, GitStage, LinearStateKind, MergeMethod, NewThread,
+    Project, PullRequestAction, PullRequestEdit, PullRequestSettings, PullRequestState, Request, RestartWhen,
+    RicracStateKind, ServerInfo, Thread,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -17,6 +18,7 @@ use crate::git::Control;
 use crate::keybindings::{Rule, View as KeybindingsView};
 use crate::limits;
 use crate::link::State;
+use crate::proxy;
 use crate::render::agents::AgentView;
 use crate::render::highlight::Spans;
 use crate::render::openui::UiOp;
@@ -338,7 +340,7 @@ pub enum Command {
         #[serde(default)]
         kept: bool,
     },
-    /// How much of their plans the agents' logins on the connected `servers`, or all of them,
+    /// How much of their plans the agents' accounts on the connected `servers`, or all of them,
     /// have used, asked of the servers again with `refresh`: `sections`, each a `limits::Section`. `kept` answers
     /// at once with what was last read, `stale` when some of it is old or missing.
     Limits {
@@ -516,6 +518,52 @@ pub enum Command {
     },
     /// Answers with the `path` of `keybindings.json`, made if there was none.
     KeybindingsFile,
+    /// Whether a view that shows the account's proxy is open: the Proxy page or the Limits tab.
+    /// While one is, the core stays connected to the proxy and `proxy` events follow its state.
+    WatchProxy {
+        on: bool,
+    },
+    /// Makes the code a proxy joins the account with. Answers with a `proxy::Enroll`.
+    AddProxy,
+    /// Removes the proxy from the account. The servers' Proxy accounts go with it.
+    RemoveProxy,
+    /// Starts signing an account of `agent` in on the proxy. Answers with the `url` to open and, for
+    /// Codex, the `user_code` to enter there; the `proxy` event's `sign_in` follows it.
+    ProxySignIn {
+        agent: Agent,
+    },
+    /// Finishes Claude's sign-in with the code its page showed. Answers once the account is added.
+    ProxyFinishSignIn {
+        code: String,
+    },
+    /// Forgets the sign-in under way.
+    ProxyCancelSignIn,
+    /// Renames an account, sets its priority, or turns it on or off.
+    ProxyUpdateAccount {
+        account: String,
+        change: AccountChange,
+    },
+    ProxyRemoveAccount {
+        account: String,
+    },
+    /// A page of the proxy's request log, newest first, before the entry `before`, or only the
+    /// requests that failed. Answers with `rows`, each a `proxy::LogRow`, and `more` when there are
+    /// older ones.
+    ProxyLog {
+        #[serde(default)]
+        before: Option<i64>,
+        #[serde(default)]
+        errors_only: bool,
+    },
+    /// A captured request in full. Answers with `request`, a `proxy::CapturedView`, or null when the
+    /// proxy no longer has it.
+    ProxyCaptured {
+        entry: i64,
+    },
+    /// Starts or stops capturing requests in full: every request of one thread, or the next few.
+    ProxyCapture {
+        capture: Capture,
+    },
 }
 
 #[derive(Serialize, Clone, Debug)]
@@ -661,6 +709,10 @@ pub enum Event {
         thread_id: String,
         message: String,
     },
+    /// The account's proxy, as the Proxy page shows it, whenever that changes.
+    Proxy {
+        proxy: Box<proxy::View>,
+    },
     Reply {
         id: u64,
         ok: bool,
@@ -697,12 +749,12 @@ pub struct ServerView {
     pub info: Option<ServerInfo>,
     /// The names of its models that have a shorter one, by model id, for the model picker.
     pub short_model_names: HashMap<String, String>,
-    /// The account a new thread is better off starting on, by account id and model id: the one
-    /// of the same agent that runs the model and has used clearly less of its limits.
+    /// The account a new thread is better off starting on, by account id and model id: the one of
+    /// the same agent that runs the model and that `motile_protocol::select` ranks first.
     pub roomier_accounts: HashMap<String, HashMap<String, String>>,
     /// What each of its agents' accounts has used of its limits, by account id.
     pub account_limits: HashMap<String, Vec<limits::Row>>,
-    /// Its agents' accounts, the one with the most room left in its limits first.
+    /// Its agents' accounts, each agent's in the order a new thread would choose them.
     pub accounts_by_room: Vec<String>,
     /// How its copies of the account's other servers' threads stand. None for a removed server.
     pub sync: Option<SyncView>,
@@ -813,6 +865,27 @@ mod tests {
         let media: Envelope =
             serde_json::from_str(r#"{"id": 9, "type": "media", "server_id": "h", "media_id": "m.png"}"#).unwrap();
         assert!(matches!(media.command, Command::Media { media_id, .. } if media_id == "m.png"));
+    }
+
+    #[test]
+    fn proxy_commands_name_their_account_and_entry_apart_from_the_commands_id() {
+        let json = r#"{"id": 3, "type": "proxy_update_account", "account": "org-1",
+            "change": {"type": "priority", "priority": 2}}"#;
+        let envelope: Envelope = serde_json::from_str(json).unwrap();
+        let Command::ProxyUpdateAccount { account, change: AccountChange::Priority { priority } } = envelope.command
+        else {
+            panic!("expected an account's priority");
+        };
+        assert_eq!((envelope.id, account.as_str(), priority), (3, "org-1", 2));
+
+        let capture: Envelope = serde_json::from_str(
+            r#"{"id": 4, "type": "proxy_capture", "capture": {"type": "thread", "server": "s", "thread": "t"}}"#,
+        )
+        .unwrap();
+        assert!(matches!(capture.command, Command::ProxyCapture { capture: Capture::Thread { .. } }));
+
+        let captured: Envelope = serde_json::from_str(r#"{"id": 5, "type": "proxy_captured", "entry": 9}"#).unwrap();
+        assert!(matches!(captured.command, Command::ProxyCaptured { entry: 9 }));
     }
 
     #[test]

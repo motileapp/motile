@@ -1,10 +1,10 @@
 import SwiftUI
 
-/// How much of their plans the agents' logins have used: a section for each login, its windows
+/// How much of their plans the agents' accounts have used: a section for each account, its windows
 /// in one card, each with a bar of what was used.
 struct LimitsView: View {
     /// Narrower than this, a window puts its bar under its numbers.
-    private static let besideWidth: CGFloat = 520
+    static let besideWidth: CGFloat = 520
 
     let report: LimitsReport
     @State private var width: CGFloat = 0
@@ -48,44 +48,49 @@ struct LimitsView: View {
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
     }
 
+    /// The account beside the agent's name, or under it where they don't both fit.
     private func header(_ section: LimitsReport.Section) -> some View {
-        HStack(spacing: 8) {
-            AgentIcon(agent: section.agent, size: .md)
-            Text(section.agent.name)
-                .font(.ui(size: 14, weight: .medium))
-                .foregroundStyle(Color.themeForeground)
-            if let plan = section.plan {
-                Chip(plan)
+        let beside = width >= Self.besideWidth
+        return VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 8) {
+                AgentIcon(agent: section.agent, size: .md)
+                Text(section.agent.name)
+                    .font(.ui(size: 14, weight: .medium))
+                    .foregroundStyle(Color.themeForeground)
+                    .layoutPriority(1)
+                if let plan = section.plan {
+                    Chip(plan)
+                }
+                if section.proxy {
+                    Chip("Proxy", icon: .waypoints)
+                }
+                if beside { account(section) }
+                Spacer(minLength: 0)
             }
-            login(section)
-                .font(.ui(size: 12))
-                .foregroundStyle(Color.themeMutedForeground)
-                .truncationMode(.middle)
-            Spacer(minLength: 0)
+            if !beside { account(section) }
         }
         .lineLimit(1)
         .padding(.horizontal, 4)
         .padding(.bottom, 2)
     }
 
-    /// "Work · a@b.c", or whichever of the two is known.
-    private func login(_ section: LimitsReport.Section) -> Text {
-        switch (section.name, section.account) {
-        case let (name?, account?):
-            return Text(name) + Text(" · ").foregroundStyle(Color.themeMutedStrongerForeground) + Text(account)
-        case let (name?, nil):
-            return Text(name)
-        case let (nil, account?):
-            return Text(account)
-        case (nil, nil):
-            return Text("")
-        }
+    /// "Work · a@b.c", or whichever of the two is known, and "On your proxy" for an account no
+    /// server has.
+    private func account(_ section: LimitsReport.Section) -> some View {
+        let onProxy = section.proxy && section.servers.isEmpty ? "On your proxy" : nil
+        return Text(dotted: [section.name, section.account, onProxy].compactMap { $0 }.map { Text(verbatim: $0) })
+            .font(.ui(size: 12))
+            .foregroundStyle(Color.themeMutedForeground)
+            .truncationMode(.middle)
     }
 }
 
 /// One window of a plan: what was used of it, how that compares with the time passed, and a bar
 /// with when it starts over.
-private struct LimitRow: View {
+struct LimitRow: View {
+    /// How far its content stands from its sides.
+    static let inset: CGFloat = 16
+
     let window: LimitsReport.Window
     let beside: Bool
 
@@ -104,7 +109,7 @@ private struct LimitRow: View {
                 }
             }
         }
-        .padding(.horizontal, 16)
+        .padding(.horizontal, Self.inset)
         .padding(.vertical, 14)
     }
 
@@ -161,7 +166,7 @@ private struct LimitRow: View {
 }
 
 /// What was used of a window as the part of a bar it fills, and at its end when the window starts
-/// over and the resets the login may use.
+/// over and the resets the account may use.
 private struct LimitBar: View {
     private static let height: CGFloat = 28
 

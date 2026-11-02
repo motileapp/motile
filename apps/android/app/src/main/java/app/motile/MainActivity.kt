@@ -11,7 +11,7 @@ import app.motile.platform.Platform
 /**
  * The one activity. The dev scripts start a development build with the variables the Apple
  * clients read from their environment, as extras: `MOTILE_AUTH_URL`, `MOTILE_LOCAL`,
- * `MOTILE_SERVER_ADDR`, `MOTILE_DEMO_SIGN_IN`, `MOTILE_DEMO_SCRIPT` and `MOTILE_RELEASES_URL`.
+ * `MOTILE_SERVER_ADDR`, `MOTILE_SERVER_ADDRS`, `MOTILE_DEMO_SIGN_IN`, `MOTILE_DEMO_SCRIPT` and `MOTILE_RELEASES_URL`.
  */
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -53,7 +53,7 @@ class MainActivity : ComponentActivity() {
     companion object {
         private var started = false
         private val ENVIRONMENT = listOf(
-            "MOTILE_AUTH_URL", "MOTILE_LOCAL", "MOTILE_SERVER_ADDR", "MOTILE_DATA_DIR", "MOTILE_DEMO",
+            "MOTILE_AUTH_URL", "MOTILE_LOCAL", "MOTILE_SERVER_ADDR", "MOTILE_SERVER_ADDRS", "MOTILE_DATA_DIR", "MOTILE_DEMO",
             "MOTILE_DEMO_SIGN_IN", "MOTILE_DEMO_SCRIPT", "MOTILE_RELEASES_URL",
         )
     }

@@ -139,6 +139,9 @@ struct AgentAccount: Equatable, Identifiable {
     /// Who is signed in, as the agent's CLI last said.
     let email: String?
     let plan: String?
+    /// The server's account for its account's proxy, which serves its turns from the proxy's
+    /// accounts. It can't be changed, removed or signed in.
+    let proxy: Bool
 
     init(json: JSON) {
         id = json.string("id")
@@ -151,6 +154,7 @@ struct AgentAccount: Equatable, Identifiable {
         }
         email = json.optionalString("email")
         plan = json.optionalString("plan")
+        proxy = json.bool("proxy")
     }
 
     /// A new account of `agent`, until the server keeps it.
@@ -163,6 +167,7 @@ struct AgentAccount: Equatable, Identifiable {
         variables = []
         email = nil
         plan = nil
+        proxy = false
     }
 
     var json: JSON {
@@ -259,7 +264,7 @@ struct Server: Equatable, Identifiable {
     let roomierAccounts: [String: [String: String]]
     /// What each agent account has used of its limits, by account id.
     let accountLimits: [String: [LimitsReport.Window]]
-    /// Its agents' accounts' ids, the one with the most room left in its limits first.
+    /// Its agents' accounts' ids, the one a new thread would start on first.
     let accountsByRoom: [String]
     /// Whether the server has ever told us about itself.
     let known: Bool
@@ -1552,7 +1557,7 @@ struct UsageReport {
     }
 }
 
-/// How much of their plans the agents' logins have used: a section for each login, a row for
+/// How much of their plans the agents' accounts have used: a section for each account, a row for
 /// each of its windows, and what kept a server from saying.
 struct LimitsReport {
     struct Section: Identifiable {
@@ -1566,6 +1571,8 @@ struct LimitsReport {
         let windows: [Window]
         /// Why there are no windows.
         let note: String?
+        /// One of the proxy's accounts, which may be signed in on `servers` too.
+        let proxy: Bool
 
         var id: String { "\(agent.rawValue)/\(name ?? "")/\(account ?? servers.joined(separator: ","))/\(note ?? "")" }
     }
@@ -1613,7 +1620,7 @@ struct LimitsReport {
                 account: section.optionalString("account"),
                 plan: section.optionalString("plan"), servers: section.strings("servers"),
                 windows: section.objects("windows").map(Window.init(json:)),
-                note: section.optionalString("note"))
+                note: section.optionalString("note"), proxy: section.bool("proxy"))
         }
         notes = json.strings("notes")
         stale = json.bool("stale")

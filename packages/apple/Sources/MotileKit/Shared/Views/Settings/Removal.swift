@@ -1,12 +1,14 @@
 import SwiftUI
 
 /// What the settings take away once the user says so: a server, every copy of a server's threads,
-/// a project or an agent's account.
+/// a project, an agent's account, the account's proxy or one of its accounts.
 enum Removal: Identifiable {
     case server(Server)
     case serverCompletely(Server)
     case project(Project)
     case account(AgentAccount, on: Server)
+    case proxy(name: String)
+    case proxyAccount(ProxyAccount)
 
     var id: String {
         switch self {
@@ -14,6 +16,8 @@ enum Removal: Identifiable {
         case .serverCompletely(let server): "server-completely/\(server.id)"
         case .project(let project): "project/\(project.id)"
         case .account(let account, let server): "account/\(server.id)/\(account.id)"
+        case .proxy: "proxy"
+        case .proxyAccount(let account): "proxy-account/\(account.id)"
         }
     }
 
@@ -23,6 +27,8 @@ enum Removal: Identifiable {
         case .serverCompletely(let server): "Delete “\(server.name)”?"
         case .project(let project): "Remove “\(project.name)”?"
         case .account(let account, _): "Remove “\(account.agent.name) · \(account.name)”?"
+        case .proxy(let name): "Remove “\(name)”?"
+        case .proxyAccount(let account): "Remove “\(account.name)”?"
         }
     }
 
@@ -36,6 +42,10 @@ enum Removal: Identifiable {
             "\(project.name) leaves your clients. Its folder stays on \(store.server(project.serverID)?.name ?? "its server") with everything in it."
         case .account(_, let server):
             "Its threads move to the default account on \(server.name). Its folder and its sign-in stay there."
+        case .proxy:
+            "Its accounts go with it."
+        case .proxyAccount:
+            "Its threads move to your other accounts."
         }
     }
 
@@ -54,6 +64,8 @@ enum Removal: Identifiable {
         case .serverCompletely(let server): store.deleteServerCompletely(server)
         case .project(let project): store.removeProject(project)
         case .account(let account, let server): store.removeAgentAccount(account, on: server)
+        case .proxy: store.removeProxy()
+        case .proxyAccount(let account): store.removeProxyAccount(account)
         }
     }
 }

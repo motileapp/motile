@@ -4,7 +4,7 @@ import Foundation
 enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
     /// In the order they are reached for: what the client is, then what it works with, and the
     /// keys last.
-    case general, accounts, servers, projects, pullRequests, textGeneration, integrations, keyboard
+    case general, accounts, servers, proxy, projects, pullRequests, textGeneration, integrations, keyboard
 
     var id: String { rawValue }
 
@@ -18,6 +18,7 @@ enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
         case .general: "General"
         case .keyboard: "Keybindings"
         case .servers: "Servers"
+        case .proxy: "Proxy"
         case .accounts: "Providers"
         case .projects: "Projects"
         case .textGeneration: "Text Generation"
@@ -31,6 +32,7 @@ enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
         case .general: .slidersHorizontal
         case .keyboard: .keyboard
         case .servers: .server
+        case .proxy: .waypoints
         case .accounts: .bot
         case .projects: .folder
         case .textGeneration: .pencilLine
@@ -41,7 +43,7 @@ enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
 }
 
 /// What managing new threads does, said under its switch.
-let managesNewThreadsDescription = "Starts new threads on the account with the most limits left."
+let managesNewThreadsDescription = "Picks the account for each new thread."
 
 /// What automatically pulling does, said under its switch.
 let pullDefaultBranchCaption = "Keeps each project's folder current while it is on its default branch with no changes or commits of its own."
@@ -61,10 +63,13 @@ struct SettingsEntry: Identifiable, Hashable {
         SettingsEntry(id: "messages", title: "Sent while the agent works", section: .general, keywords: "messages queue steer interrupt"),
         SettingsEntry(id: "manage-new-threads", title: "Manage new threads automatically", section: .general, keywords: "provider limits usage accounts switch quota rate"),
         SettingsEntry(id: "storage", title: "Images and videos", section: .general, keywords: "storage cache clear media disk"),
-        SettingsEntry(id: "agent-accounts", title: "Provider Accounts", section: .accounts, keywords: "agents claude codex sign in login folder subscription plan api key router"),
+        SettingsEntry(id: "agent-accounts", title: "Provider Accounts", section: .accounts, keywords: "agents claude codex sign in account folder subscription plan api key router"),
         SettingsEntry(id: "servers", title: "Servers", section: .servers, keywords: "add remove unlink unlinked delete copies machine agents connected"),
         SettingsEntry(id: "continue-limits", title: "Continue after usage limits", section: .servers, keywords: "rate limit reset resume quota wait"),
         SettingsEntry(id: "continue-restarts", title: "Continue after restarts", section: .servers, keywords: "restart update crash resume interrupted"),
+        SettingsEntry(id: "proxy", title: "Proxy", section: .proxy, keywords: "add remove replace enroll docker unbind image volume code connected"),
+        SettingsEntry(id: "proxy-accounts", title: "Accounts", section: .proxy, keywords: "claude codex sign in priority accounts pool limits next"),
+        SettingsEntry(id: "proxy-log", title: "Log", section: .proxy, keywords: "requests errors capture captured headers body"),
         SettingsEntry(id: "projects", title: "Projects", section: .projects, keywords: "add remove folder icon setup worktree script"),
         SettingsEntry(id: "merged", title: "Mark the thread done after merge or close", section: .pullRequests, keywords: "merge close finished"),
         SettingsEntry(id: "worktrees", title: "Remove the thread's worktree after merge", section: .pullRequests, keywords: "merge pushed branch clean up"),

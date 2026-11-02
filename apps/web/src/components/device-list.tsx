@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { useRouter } from "@tanstack/react-router"
-import { LaptopIcon, ServerIcon } from "lucide-react"
+import { LaptopIcon, ServerIcon, WaypointsIcon } from "lucide-react"
 import { toast } from "sonner"
 import type { ComponentProps } from "react"
 import type { Device, RemovedServer } from "@/lib/account"
@@ -47,7 +47,7 @@ export function DeviceList({ devices }: { devices: Array<Device> }) {
       {devices.map((device) => (
         <Item key={device.public_key} variant="outline" role="listitem">
           <ItemMedia variant="icon">
-            {device.kind === "server" ? <ServerIcon /> : <LaptopIcon />}
+            <DeviceIcon kind={device.kind} />
           </ItemMedia>
           <ItemContent>
             <ItemTitle>{device.name}</ItemTitle>
@@ -100,6 +100,12 @@ export function RemovedServerList({
   )
 }
 
+function DeviceIcon({ kind }: { kind: Device["kind"] }) {
+  if (kind === "server") return <ServerIcon />
+  if (kind === "proxy") return <WaypointsIcon />
+  return <LaptopIcon />
+}
+
 function platformName(platform: string) {
   return PLATFORMS[platform] ?? platform
 }
@@ -111,6 +117,18 @@ function RemoveDevice({ device }: { device: Device }) {
         trigger="Remove"
         title={`Remove ${device.name}?`}
         message="This client is signed out and can no longer reach your servers."
+        confirm="Remove"
+        done={`${device.name} was removed.`}
+        action={() => removeDevice({ data: device.public_key })}
+      />
+    )
+  }
+  if (device.kind === "proxy") {
+    return (
+      <Confirm
+        trigger="Remove"
+        title={`Remove ${device.name}?`}
+        message={`Your servers can no longer send their agents through ${device.name}. What is on it stays there.`}
         confirm="Remove"
         done={`${device.name} was removed.`}
         action={() => removeDevice({ data: device.public_key })}

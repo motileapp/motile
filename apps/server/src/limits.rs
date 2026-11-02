@@ -38,6 +38,28 @@ pub fn kept(read: Vec<AgentLimits>, before: &[AgentLimits]) -> Vec<AgentLimits> 
         .collect()
 }
 
+/// What the proxy's pool has used, as the account a new thread of the Proxy account's agent would
+/// start on read it, under the account's name.
+pub fn pooled(account: &AgentAccount, read: anyhow::Result<Option<AgentLimits>>) -> AgentLimits {
+    let failed = |error: String| AgentLimits {
+        agent: account.agent,
+        account_name: account.name.clone(),
+        account: None,
+        plan: None,
+        windows: vec![],
+        reset_credits: 0,
+        error: Some(error),
+    };
+    match read {
+        Ok(Some(limits)) => AgentLimits { agent: account.agent, account_name: account.name.clone(), ..limits },
+        Ok(None) => failed(format!(
+            "Your proxy has no {} account that takes threads.",
+            crate::agent_accounts::agent_name(account.agent)
+        )),
+        Err(error) => failed(motile_protocol::error_text(&error)),
+    }
+}
+
 async fn read_account(account: &AgentAccount, environment: &Environment) -> Option<AgentLimits> {
     let agent = account.agent;
     environment.executable(agent)?;
@@ -206,6 +228,35 @@ fn capitalized(text: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_proxy_accounts_limits_are_the_next_proxy_accounts_under_its_own_name() {
+        let account = crate::agent_accounts::proxy_account(Agent::Codex, std::path::Path::new("/data/proxy"));
+        let window = LimitWindow {
+            label: "Session".into(),
+            used_percent: 30.0,
+            resets_at: None,
+            window_secs: Some(SESSION_SECS),
+            warning: false,
+        };
+        let next = AgentLimits {
+            agent: Agent::Codex,
+            account_name: "work@example.com".into(),
+            account: Some("work@example.com".into()),
+            plan: Some("Pro".into()),
+            windows: vec![window.clone()],
+            reset_credits: 1,
+            error: None,
+        };
+        let read = pooled(&account, Ok(Some(next)));
+        assert_eq!((read.account_name.as_str(), read.plan.as_deref()), ("Proxy", Some("Pro")));
+        assert_eq!(read.windows, [window]);
+        let none = pooled(&account, Ok(None));
+        assert_eq!(none.account_name, "Proxy");
+        assert!(none.error.unwrap().contains("no Codex account"));
+        let failed = pooled(&account, Err(anyhow::anyhow!("Your proxy didn't answer.")));
+        assert_eq!(failed.error.as_deref(), Some("Your proxy didn't answer."));
+    }
 
     #[test]
     fn claude_code_limits_are_read_from_its_list_with_a_model_s_own() {

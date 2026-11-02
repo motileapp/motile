@@ -37,7 +37,7 @@ xcrun simctl install "$SIM" "$APP"
 # The steps scripts/do.sh gives the client are read from here.
 : > "$DEV/ios.steps"
 SIMCTL_CHILD_MOTILE_AUTH_URL="$AUTH_URL" SIMCTL_CHILD_MOTILE_LOCAL=1 \
-    SIMCTL_CHILD_MOTILE_SERVER_ADDR="127.0.0.1:$SERVER_PORT" \
+    SIMCTL_CHILD_MOTILE_SERVER_ADDR="127.0.0.1:$SERVER_PORT" SIMCTL_CHILD_MOTILE_SERVER_ADDRS="$MOTILE_SERVER_ADDRS" \
     SIMCTL_CHILD_MOTILE_DEMO_SIGN_IN=demo@motile.app SIMCTL_CHILD_MOTILE_DEMO_SCRIPT="$DEV/ios.steps" \
     xcrun simctl launch --terminate-running-process "$SIM" "$BUNDLE" >/dev/null
 sleep 2

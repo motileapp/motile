@@ -9,6 +9,7 @@ mod history;
 pub mod integrations;
 pub mod linear;
 mod projects;
+pub mod proxy;
 pub mod pull_requests;
 pub mod ricrac;
 pub mod settings;
@@ -371,10 +372,12 @@ pub struct Store {
     /// The usage is open over the window, as a route of its own.
     pub shows_usage: bool,
     pub usage: usage::Usage,
+    pub proxy: proxy::Proxy,
     _events: Option<Task<()>>,
     /// The pages behind and ahead of this one, for Go Back and Go Forward.
     history: history::PageHistory,
     _page_watch: Subscription,
+    _proxy_views: Subscription,
 }
 
 impl Store {
@@ -483,9 +486,11 @@ impl Store {
             jump_hint_task: None,
             shows_usage: false,
             usage: usage::Usage::default(),
+            proxy: proxy::Proxy::default(),
             _events: None,
             history: history::PageHistory::default(),
             _page_watch: Self::watch_page(cx),
+            _proxy_views: cx.observe_self(|store, _| store.follow_proxy_views()),
         };
         store.load_preferences();
         store.show_sending_message(cx);
@@ -507,7 +512,7 @@ impl Store {
             platform: std::env::consts::OS.to_string(),
             local_only: std::env::var("MOTILE_LOCAL").as_deref() == Ok("1"),
             direct_addr: std::env::var("MOTILE_SERVER_ADDR").ok(),
-            direct_addrs: Default::default(),
+            direct_addrs: direct_addrs(),
             media_limit: None,
         };
         match Bridge::start(config) {
@@ -788,6 +793,7 @@ impl Store {
             Event::ThreadSearch { query, searching, matches } => {
                 self.apply_thread_search(sidebar::MessageSearch::new(query, searching, matches))
             }
+            Event::Proxy { proxy } => self.apply_proxy(*proxy),
         }
     }
 
@@ -1183,8 +1189,8 @@ impl Store {
     }
 
     /// What the model picker lists: each account with its agent's models, titled with the
-    /// account's name when its agent has more than one. Each agent's account with the most room
-    /// left in its limits comes first, as a new thread would start on it.
+    /// account's name when its agent has more than one. Each agent's account that a new thread
+    /// would start on comes first.
     pub fn composer_choices(&self) -> Vec<(String, AgentAccount, Vec<ModelInfo>)> {
         let Some(server) = self.composer_server() else { return Vec::new() };
         let models = self.composer_models();
@@ -1587,6 +1593,17 @@ fn device_name() -> String {
         .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_string())
         .filter(|name| !name.is_empty())
         .unwrap_or_else(|| "Computer".into())
+}
+
+/// `MOTILE_SERVER_ADDRS`, `key=address,…`: each device at an address of its own, as the dev
+/// stack's proxy is.
+fn direct_addrs() -> std::collections::HashMap<String, String> {
+    let addresses = std::env::var("MOTILE_SERVER_ADDRS").unwrap_or_default();
+    addresses
+        .split(',')
+        .filter_map(|pair| pair.split_once('='))
+        .map(|(key, address)| (key.to_string(), address.to_string()))
+        .collect()
 }
 
 #[cfg(test)]

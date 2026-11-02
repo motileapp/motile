@@ -51,6 +51,7 @@ val Server.textModelName: String
 
 val AgentAccount.settingsDescription: String
     get() {
+        if (proxy) return "Works through your proxy's accounts"
         val signedIn = email?.let { listOfNotNull(it, plan).joinToString(" · ") }
         val who = signedIn ?: if (variables.isEmpty()) "Not signed in" else "Signs in with its variables"
         return if (folder.isEmpty()) who else "$who · $folder"

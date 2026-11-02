@@ -1,7 +1,7 @@
 //! What the agents spent and what is left of their plans, in place of the thread: the title and
 //! the choices in the top bar over it, after the way back.
 
-mod limits;
+pub mod limits;
 mod spending;
 
 use gpui_kit::prelude::*;

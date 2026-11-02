@@ -3,6 +3,7 @@
 //! again.
 
 use motile_core::api::Command;
+use motile_core::limits;
 use motile_protocol::wire::Agent;
 use serde::{Deserialize, Serialize};
 
@@ -86,7 +87,7 @@ impl UsageReport {
     }
 }
 
-/// How much of their plans the agents' logins have used: `motile_core::limits`, read back.
+/// How much of their plans the agents' accounts have used: `motile_core::limits`, read back.
 #[derive(Clone, PartialEq, Debug, Deserialize, Default)]
 pub struct LimitsReport {
     pub sections: Vec<LimitsSection>,
@@ -111,6 +112,9 @@ pub struct LimitsSection {
     pub windows: Vec<LimitWindow>,
     /// Why there are no windows.
     pub note: Option<String>,
+    /// One of the proxy's accounts.
+    #[serde(default)]
+    pub proxy: bool,
 }
 
 #[derive(Clone, PartialEq, Debug, Deserialize)]
@@ -124,6 +128,28 @@ pub struct LimitWindow {
     pub tone: Tone,
     #[serde(default)]
     pub reset_credits: u32,
+}
+
+impl From<&limits::Row> for LimitWindow {
+    fn from(row: &limits::Row) -> Self {
+        Self {
+            label: row.label.clone(),
+            used_percent: row.used_percent,
+            used: row.used.clone(),
+            resets_in: row.resets_in.clone(),
+            pace: row.pace.map(|pace| match pace {
+                limits::Pace::Ahead => Pace::Ahead,
+                limits::Pace::On => Pace::On,
+                limits::Pace::Under => Pace::Under,
+            }),
+            tone: match row.tone {
+                limits::Tone::Success => Tone::Success,
+                limits::Tone::Pending => Tone::Pending,
+                limits::Tone::Warning => Tone::Warning,
+            },
+            reset_credits: row.reset_credits,
+        }
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Deserialize)]
@@ -322,6 +348,7 @@ impl Store {
     }
 
     fn load_usage(&mut self, refresh: bool) {
+        self.follow_proxy_views();
         self.usage.asked += 1;
         let number = self.usage.asked;
         self.usage.refreshing = true;
@@ -392,7 +419,7 @@ impl Store {
         self.ask_read(command, read::<UsageReport>, move |store, result, _| then(store, flatten(result)));
     }
 
-    /// How much of their plans the agents' logins have used. `refresh` has the servers read it
+    /// How much of their plans the agents' accounts have used. `refresh` has the servers read it
     /// anew, `kept` answers at once with what was last read.
     fn load_limits(
         &mut self,

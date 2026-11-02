@@ -67,9 +67,15 @@ struct SettingsSheet: View {
     }
 
     private func page(_ section: SettingsSection) -> some View {
-        SettingsPage(section: section)
-            .navigationTitle(section.title)
-            .navigationBarTitleDisplayMode(.inline)
+        Group {
+            if section == .proxy {
+                ProxySettings()
+            } else {
+                SettingsPage(section: section)
+            }
+        }
+        .navigationTitle(section.title)
+        .navigationBarTitleDisplayMode(.inline)
     }
 
     /// A narrow sheet opens the section the store was pointed at, unless that is only the list's

@@ -15,6 +15,7 @@ use super::layout::{
     Cut, END_ROOM, GROUP_GAP, INSET, PAGE_PADDING, Targets, column, footed_label, group, label, large_outset, more,
     note, row, switch_row, target,
 };
+use super::proxy::ProxyPage;
 use crate::format;
 use crate::models::{self, AgentAccountExt, Project, Server, agent_name, new_account};
 use crate::sidebar::{AppUpdateRow, ServerUpdateStatus};
@@ -105,6 +106,7 @@ pub struct SettingsPage {
     account: Option<Entity<AccountSheet>>,
     removal: Option<Removal>,
     keybindings: Option<Entity<KeybindingsPage>>,
+    proxy: Option<Entity<ProxyPage>>,
     scroll: ScrollHandle,
     /// Where the page scrolls on its way to what a search picked.
     scrolling: Option<Tween>,
@@ -125,6 +127,7 @@ impl SettingsPage {
             account: None,
             removal: None,
             keybindings: None,
+            proxy: None,
             scroll: ScrollHandle::new(),
             scrolling: None,
             _subscriptions: subscriptions,
@@ -276,7 +279,7 @@ impl SettingsPage {
                 cx.notify();
             })
         });
-        let description = "Starts new threads on the account with the most limits left.";
+        let description = "Picks the account for each new thread.";
         let leading = label("Manage new threads automatically", Some(description.into()), None, Cut::Wraps, cx);
         let rows = vec![switch_row(vec![leading], switch).into_any_element()];
         group("manage-new-threads", "Provider Limits", None, true, rows, cx)
@@ -496,15 +499,20 @@ impl SettingsPage {
             let is_default = server.is_default_account(account);
             let make_default = (!is_default).then(|| self.make_default(server, account));
             let remove = Self::ask_removal(&page, Removal::Account(Box::new((account.clone(), server.clone()))));
-            let menu = more(("account-menu", index * 1000 + place), "What to do with the account", move |_, _| {
-                let (edit, remove) = (edit.clone(), remove.clone());
-                Menu::new()
-                    .symbol_item("Edit", "pencil", move |window, cx| edit(window, cx))
-                    .when_some(make_default.clone(), |menu, make_default| {
-                        menu.symbol_item("Make Default", "circle-check", move |window, cx| make_default(window, cx))
-                    })
-                    .separator()
-                    .danger_symbol_item("Remove Account", "trash-2", move |window, cx| remove(window, cx))
+            let editable = !account.proxy;
+            let menu = (editable || make_default.is_some()).then(|| {
+                more(("account-menu", index * 1000 + place), "What to do with the account", move |_, _| {
+                    let (edit, remove) = (edit.clone(), remove.clone());
+                    Menu::new()
+                        .when(editable, |menu| menu.symbol_item("Edit", "pencil", move |window, cx| edit(window, cx)))
+                        .when_some(make_default.clone(), |menu, make_default| {
+                            menu.symbol_item("Make Default", "circle-check", move |window, cx| make_default(window, cx))
+                        })
+                        .when(editable, |menu| {
+                            menu.separator()
+                                .danger_symbol_item("Remove Account", "trash-2", move |window, cx| remove(window, cx))
+                        })
+                })
             });
             let title = format!("{} · {}", agent_name(account.agent), account.name);
             let description = account.settings_description();
@@ -513,7 +521,7 @@ impl SettingsPage {
                 logos::agent_icon(account.agent, IconSize::Md, cx).into_any_element(),
                 label(title, Some(description), None, Cut::Wraps, cx),
             ];
-            rows.push(row(leading, vec![menu.into_any_element()]).into_any_element());
+            rows.push(row(leading, menu.into_iter().map(IntoElement::into_any_element).collect()).into_any_element());
             rows.push(divider_on(Surface::Card, cx).into_any_element());
         }
         let first = installed.first().copied().unwrap_or(Agent::Claude);
@@ -725,6 +733,11 @@ impl SettingsPage {
         groups
     }
 
+    fn proxy(&mut self, cx: &mut Context<Self>) -> Entity<ProxyPage> {
+        let store = self.store.clone();
+        self.proxy.get_or_insert_with(|| cx.new(|cx| ProxyPage::new(store, cx))).clone()
+    }
+
     fn keybindings(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Entity<KeybindingsPage> {
         let store = self.store.clone();
         self.keybindings.get_or_insert_with(|| cx.new(|cx| KeybindingsPage::new(store, window, cx))).clone()
@@ -840,6 +853,7 @@ impl Render for SettingsPage {
             SettingsSection::TextGeneration => self.text_generation(cx),
             SettingsSection::PullRequests => self.pull_requests(cx),
             SettingsSection::Integrations => self.integrations(cx),
+            SettingsSection::Proxy => vec![self.proxy(cx).into_any_element()],
         };
         let keybindings = (section == SettingsSection::Keyboard).then(|| self.keybindings(window, cx));
         if let Some(target) = self.store.read(cx).settings.target.clone() {

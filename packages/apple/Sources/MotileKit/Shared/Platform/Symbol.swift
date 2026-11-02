@@ -138,6 +138,7 @@ enum Symbol: String {
     case unfoldVertical = "\u{e43e}"
     case userRound = "\u{e468}"
     case users = "\u{e1a4}"
+    case waypoints = "\u{e542}"
     case wrench = "\u{e1b1}"
     case x = "\u{e1b2}"
     case zap = "\u{e1b4}"

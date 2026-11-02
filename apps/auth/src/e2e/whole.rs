@@ -140,7 +140,8 @@ impl Client {
             | Event::UiConfirm { .. }
             | Event::OpenUrl { .. }
             | Event::Copy { .. }
-            | Event::UploadProgress { .. } => {}
+            | Event::UploadProgress { .. }
+            | Event::Proxy { .. } => {}
         }
     }
 
