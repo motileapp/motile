@@ -246,22 +246,6 @@ struct ServerSymbol: View {
     }
 }
 
-/// The menu that moves the open draft to another server that has its project.
-struct ServerMenuItems: View {
-    @Environment(AppStore.self) private var store
-    let copies: [Project]
-
-    var body: some View {
-        Section("Server") {
-            ForEach(copies) { copy in
-                Toggle(isOn: Binding(get: { store.selectedDraft?.projectID == copy.id }, set: { _ in store.setNewThreadProject(copy.id) })) {
-                    Text(store.server(copy.serverID)?.name ?? "")
-                }
-            }
-        }
-    }
-}
-
 extension Server {
     /// The colour of the server's state while it isn't connected.
     var stateTint: Color? {

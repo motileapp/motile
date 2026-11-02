@@ -34,6 +34,10 @@ extension AppStore {
     /// whatever else takes them.
     func perform(_ command: String) -> Bool {
         if let place = command.wholeMatch(of: #/thread\.jump\.([1-9])/#).flatMap({ Int($0.1) }) {
+            guard composerPicker == nil else {
+                composerPickerJump = place - 1
+                return true
+            }
             return showThread(at: place - 1)
         }
         if let action = usageCommands[command] {

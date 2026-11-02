@@ -291,96 +291,19 @@ struct ComposerView: View {
     }
 
     #if os(macOS)
-    /// The row under the text. When it is too narrow for all of it, the effort and the access
-    /// are only their icons, then the model too. The space between its controls and around them
+    /// The row under the text: attaching on one side, the settings by the send button on the
+    /// other. When it is too narrow for all of it, the effort and the access are only their
+    /// icons, then the model too. The space between its controls and around them
     /// is their margins, so each takes clicks up to the next one and to the composer's edges.
     private func controls(settingsLabels: Bool, modelLabel: Bool) -> some View {
         HStack(spacing: 0) {
-            modelMenu(labeled: modelLabel)
-            ComposerDivider()
-            effortMenu(labeled: settingsLabels)
-            accessMenu(labeled: settingsLabels)
+            ActionButton(icon: .plus, help: "Attach files", symbolSize: .lg, round: true, tint: .themeForeground, margin: Self.margin(leading: 8)) { chooseFiles() }
             typingArea
                 .frame(minWidth: 10, maxWidth: .infinity, maxHeight: .infinity)
-            ActionButton(icon: .paperclip, help: "Attach files", round: true, margin: Self.margin(trailing: 4)) { chooseFiles() }
+            ComposerSettings(labeled: settingsLabels, modelLabeled: modelLabel)
             ComposerSendButtons()
         }
         .fixedSize(horizontal: false, vertical: true)
-    }
-
-    /// A menu item with a check mark when it is the one in use.
-    private func choice(_ title: String, image: PlatformImage? = nil, chosen: Bool, choose: @escaping () -> Void) -> some View {
-        Toggle(isOn: Binding(get: { chosen }, set: { _ in choose() })) {
-            if let image {
-                Label {
-                    Text(title)
-                } icon: {
-                    Image(platform: image)
-                }
-            } else {
-                Text(title)
-            }
-        }
-    }
-
-    @ViewBuilder private func modelMenu(labeled: Bool) -> some View {
-        let current = store.composerModel
-        let account = store.composerAccount
-        let name = store.composerModelLabel
-        let margin = Self.margin(leading: 8, trailing: 4)
-        let logo = current.map { AnyView(AgentIcon(agent: $0.agent, size: ControlSize.regular.symbol)) }
-        ActionMenu(
-            labeled || current == nil ? name : nil, picture: logo, help: store.shortcuts.help(current?.name ?? name, "modelPicker.toggle"),
-            gap: 5, margin: margin
-        ) {
-            ForEach(store.composerChoices, id: \.account.id) { choices in
-                Section(choices.title) {
-                    ForEach(choices.models) { model in
-                        let chosen = model.id == current?.id && choices.account.id == account?.id
-                        choice(model.name, image: model.agent.menuLogo, chosen: chosen) {
-                            store.setModel(model, account: choices.account)
-                        }
-                    }
-                }
-            }
-        }
-        .disabled(store.composerModels.isEmpty)
-        .shortcutTarget("modelPicker.toggle")
-    }
-
-    @ViewBuilder private func effortMenu(labeled: Bool) -> some View {
-        if let model = store.composerModel, !model.efforts.isEmpty {
-            let current = store.composerEffort ?? ""
-            ActionMenu(
-                labeled ? Self.effortLabel(current) : nil, icon: Self.effortSymbol(current), help: store.shortcuts.help("Reasoning effort", "composer.effort"),
-                gap: 5, margin: Self.margin(leading: 4, trailing: 4)
-            ) {
-                ForEach(model.effortChoices, id: \.self) { effort in
-                    let image = PlatformImage.symbol(Self.effortSymbol(effort), size: .md)
-                    choice(Self.effortLabel(effort), image: image, chosen: effort == store.composerEffort) {
-                        store.setEffort(effort)
-                    }
-                }
-            }
-            .shortcutTarget("composer.effort")
-            ComposerDivider()
-        }
-    }
-
-    private func accessMenu(labeled: Bool) -> some View {
-        ActionMenu(
-            labeled ? store.composerAccess.label : nil, icon: store.composerAccess.symbol,
-            help: store.shortcuts.help(store.composerAccess.detail, "composer.access"),
-            gap: 5, margin: Self.margin(leading: 4)
-        ) {
-            ForEach(Access.allCases) { access in
-                choice(access.label, image: PlatformImage.symbol(access.symbol, size: .md), chosen: access == store.composerAccess) {
-                    store.setAccess(access)
-                }
-                .help(access.detail)
-            }
-        }
-        .shortcutTarget("composer.access")
     }
 
     private func chooseFiles() {
@@ -404,7 +327,7 @@ struct ComposerSendButtons: View {
         HStack(spacing: 0) {
             if running {
                 ActionButton(
-                    "", picture: AnyView(RoundedRectangle(cornerRadius: 2.5).frame(width: 10, height: 10)),
+                    "", picture: AnyView(RoundedRectangle(cornerRadius: 2.5).frame(width: 11, height: 11)),
                     help: store.shortcuts.help("Stop", "thread.stop"), variant: .danger, round: true,
                     margin: ComposerView.margin(leading: 4, trailing: sends ? 4 : 8)
                 ) {
@@ -414,7 +337,7 @@ struct ComposerSendButtons: View {
             }
             if sends {
                 ActionButton(
-                    icon: .arrowUp, help: store.attachmentsHold ?? (running ? whileRunning : "Send"), variant: .primary, round: true,
+                    icon: .arrowUp, help: store.attachmentsHold ?? (running ? whileRunning : "Send"), variant: .primary, symbolSize: .md, round: true,
                     margin: ComposerView.margin(leading: 4, trailing: 8)
                 ) {
                     store.send()

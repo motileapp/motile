@@ -11,7 +11,7 @@ use motile_core::search::MatchView;
 use motile_protocol::wire::{Agent, ThreadChange};
 
 use super::{ListedDraft, Selection, Store};
-use crate::models::{Server, ThreadInfo, now};
+use crate::models::{ModelInfoExt, Server, ThreadInfo, now};
 
 /// How long the offer to undo stays once the pointer isn't on it.
 const UNDO_FOR: Duration = Duration::from_secs(5);
@@ -181,7 +181,7 @@ impl Store {
     pub fn agent_of(&self, draft: &super::ThreadDraft) -> Option<Agent> {
         let project = self.project(draft.project_id.as_deref());
         let server = self.server(project.map(|project| project.server_id.as_str())).or(self.live_servers().next())?;
-        let model = server.models.iter().find(|model| Some(&model.id) == draft.model.as_ref());
+        let model = server.models.iter().find(|model| model.named(draft.model.as_deref()));
         model.or(server.models.first()).map(|model| model.agent)
     }
 

@@ -1137,6 +1137,16 @@ impl Core {
                 .as_ref()
                 .map(|info| limits::roomier(&info.agent_accounts, &info.models, &server.limits, now()))
                 .unwrap_or_default(),
+            account_limits: server
+                .info
+                .as_ref()
+                .map(|info| limits::by_account(&info.agent_accounts, &server.limits, now()))
+                .unwrap_or_default(),
+            accounts_by_room: server
+                .info
+                .as_ref()
+                .map(|info| limits::roomiest_first(&info.agent_accounts, &server.limits, now()))
+                .unwrap_or_default(),
             sync: self.sync_view(server),
         };
         self.emit(Event::Servers { servers: self.servers.iter().map(view).collect() });

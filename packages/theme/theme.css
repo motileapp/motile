@@ -53,9 +53,13 @@
   --color-border-input: var(--border-input);
   --color-border-popover: var(--border-popover);
   --color-input: var(--input);
+  --color-segment: var(--segment);
+  --color-segment-accent: var(--segment-accent);
+  --color-segment-selected: var(--segment-selected);
   --color-composer: var(--composer);
   --color-glass: var(--glass);
   --color-accent-with-opacity: var(--accent-with-opacity);
+  --color-accent-tinted: var(--accent-tinted);
   --color-border-composer: var(--border-composer);
   --color-border-accent: var(--border-accent);
   --color-ring: var(--ring);

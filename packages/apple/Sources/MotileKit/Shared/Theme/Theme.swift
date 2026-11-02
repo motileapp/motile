@@ -63,6 +63,8 @@ enum Theme {
     static let glassTint = thinned(glass, .glassTint)
     /// What is drawn on glass, which shows through it: the accent at its opacity.
     static let accentWithOpacityTint = thinned(accentWithOpacity, .accentOpacity)
+    /// What marks something quietly, like a default or the keys that pick a row.
+    static let accentTint = thinned(accentTinted, .accentTint)
 
     /// The colours code is highlighted with, by the core's palette index.
     static let syntax: [PlatformColor] = [

@@ -5,7 +5,8 @@ use std::collections::HashMap;
 use gpui_kit::prelude::*;
 use motile_core::api::Command;
 use motile_protocol::wire::{
-    Access, AgentAccount, CopiedThread, Interruption, ModelInfo, NewThread, NewWorktree, Request, ThreadChange,
+    Access, AgentAccount, CopiedThread, Interruption, ModelContext, ModelInfo, NewThread, NewWorktree, Request,
+    ThreadChange,
 };
 
 use super::{Continuation, PanelPage, Selection, SendingDraft, StopQuestion, Store, ThreadDraft, UndoNotice};
@@ -323,7 +324,7 @@ impl Store {
                 project_id: project.id.clone(),
                 agent: model.agent,
                 agent_account: account,
-                model: Some(model.id.clone()),
+                model: Some(self.composer_context().map_or(model.id.clone(), |context| context.model)),
                 effort: self.composer_effort(),
                 access: draft.access,
                 worktree,
@@ -637,9 +638,13 @@ impl Store {
 
     /// Has the thread or the draft work with `model` under `account`. A thread that moves to an
     /// account without its session goes on in a new one, which is told what was said.
+    /// The model's context window stays the one the composer had where the model offers it.
     pub fn set_model(&mut self, model: &ModelInfo, account: &AgentAccount) {
+        let label = self.composer_context().map(|context| context.label);
+        let same = model.contexts.iter().find(|context| Some(&context.label) == label.as_ref());
+        let id = same.or_else(|| model.context(None)).map_or(model.id.clone(), |context| context.model.clone());
         let Some(thread) = self.selected_thread().cloned() else {
-            let (id, account) = (model.id.clone(), account.id.clone());
+            let account = account.id.clone();
             self.update_draft(|draft| {
                 draft.model = Some(id);
                 draft.agent_account = Some(account);
@@ -648,18 +653,29 @@ impl Store {
         };
         let effort = thread.effort.clone().filter(|effort| model.efforts.contains(effort));
         let change = ThreadChange {
-            model: Some(model.id.clone()),
+            model: Some(id.clone()),
             effort: Some(effort.clone().unwrap_or_default()),
             agent_account: (account.id != thread.agent_account).then(|| account.id.clone()),
             ..Default::default()
         };
-        let (model, account) = (model.clone(), account.id.clone());
+        let (agent, account) = (model.agent, account.id.clone());
         self.update_thread(&thread, change, |thread| {
-            thread.thread.model = Some(model.id);
+            thread.thread.model = Some(id);
             thread.thread.effort = effort;
-            thread.thread.agent = model.agent;
+            thread.thread.agent = agent;
             thread.thread.agent_account = account;
         });
+    }
+
+    /// Has the thread or the draft run its model with the context window.
+    pub fn set_context(&mut self, context: &ModelContext) {
+        let id = context.model.clone();
+        let Some(thread) = self.selected_thread().cloned() else {
+            self.update_draft(|draft| draft.model = Some(id));
+            return;
+        };
+        let change = ThreadChange { model: Some(id.clone()), ..Default::default() };
+        self.update_thread(&thread, change, |thread| thread.thread.model = Some(id));
     }
 
     pub fn set_effort(&mut self, effort: &str) {

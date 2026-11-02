@@ -24,13 +24,15 @@ import app.motile.theme.LocalPalette
 import app.motile.theme.LocalSurface
 import app.motile.theme.Surface
 import app.motile.theme.Theme
+import app.motile.theme.accentTint
 import app.motile.theme.symbolSide
 import app.motile.theme.wash
 
 /**
  * A word or two that says what something is: a state, a label, a name. With a `tone` it is in that
  * colour on a wash of it; without, it is bordered. With a `dot` the colour is the dot's and the
- * words stay plain. Its symbol is a `Symbol`, or a Lucide `glyph` by its character.
+ * words stay plain. A `muted` one marks quietly, as a default does: its words muted on the accent's
+ * tint, with no line. Its symbol is a `Symbol`, or a Lucide `glyph` by its character.
  */
 object Chip {
     val height = scaled(20f).dp
@@ -45,12 +47,17 @@ fun Chip(
     dot: Color? = null,
     tone: Color? = null,
     monospaced: Boolean = false,
+    muted: Boolean = false,
 ) {
     val palette = LocalPalette.current
     val surface = LocalSurface.current
-    val fill = tone?.wash() ?: surface.color(Surface.Layer.Control)
-    val bordered = if (tone == null) Modifier.border(1.dp, surface.border, CircleShape) else Modifier
-    val foreground = if (dot == null) tone ?: palette.foreground else palette.foreground
+    val fill = tone?.wash() ?: if (muted) palette.accentTint else surface.color(Surface.Layer.Control)
+    val bordered = if (tone == null && !muted) Modifier.border(1.dp, surface.border, CircleShape) else Modifier
+    val foreground = when {
+        muted -> palette.mutedForeground
+        dot == null -> tone ?: palette.foreground
+        else -> palette.foreground
+    }
     CompositionLocalProvider(LocalForeground provides foreground) {
         Row(
             modifier.height(Chip.height).background(fill, CircleShape).then(bordered).padding(horizontal = 7.dp),

@@ -2,7 +2,6 @@
 //! outer corners and open where they meet the composer. They stand in from the composer's sides
 //! by its corner radius, so they meet its straight edge.
 
-use std::cell::Cell;
 use std::rc::Rc;
 
 use gpui_kit::component::input::{Input, InputEvent, InputState};
@@ -22,11 +21,12 @@ use crate::panel::state::PanelTab;
 use crate::store::Store;
 use crate::theme::{self, ControlSize, IconSize, Radius, Surface, colors};
 use crate::ui::control::{ControlIcon, ControlLabel};
-use crate::ui::menu::{Anchor, MenuIcon};
+use crate::ui::dropdown::{drop_from, light, over_content};
+use crate::ui::menu::Anchor;
 use crate::ui::rich_text::RichText;
 use crate::ui::{
-    ActionButton, ActionMenu, FadingScroll, Variant, edges, icons, logos, tabular_numbers, tabular_text_width,
-    text_width,
+    ActionButton, ChoiceDropdown, DropdownChoice, FadingScroll, Variant, edges, icons, logos, tabular_numbers,
+    tabular_text_width, text_width,
 };
 
 pub const STRIP_RADIUS: f32 = Radius::LG;
@@ -632,16 +632,28 @@ pub fn context_strip(
     });
     // The icons of the parts that only say where the thread works.
     let mark = ControlSize::Regular.symbol();
-    let copies: Vec<(String, String, bool)> = state
+    let copies: Vec<ServerCopy> = state
         .draft_project_copies()
         .into_iter()
         .map(|copy| {
-            let name = state.server(Some(&copy.server_id)).map(|server| server.name.clone()).unwrap_or_default();
-            (copy.id.clone(), name, copy.id == project.id)
+            let server = state.server(Some(&copy.server_id));
+            ServerCopy {
+                id: copy.id.clone(),
+                name: server.map(|server| server.name.clone()).unwrap_or_default(),
+                tint: server.and_then(|server| server.down_tint(&c)),
+                current: copy.id == project.id,
+            }
         })
         .collect();
     let server_help = state.shortcuts.help("The server the thread starts on", "composer.server");
 
+    /// The draft's project on one of the servers it is on.
+    struct ServerCopy {
+        id: String,
+        name: String,
+        tint: Option<Hsla>,
+        current: bool,
+    }
     /// Where the thread works, which is told and can't be changed here.
     struct Working {
         id: &'static str,
@@ -681,53 +693,62 @@ pub fn context_strip(
         None
     };
     let workspace_menu = |title: String| {
-        let choose = store.clone();
+        let (current, new) = (store.clone(), store.clone());
         let symbol = if in_worktree { "folder-git-2" } else { "folder" };
         let help = workspace_help.clone();
-        ActionMenu::new("workspace", title, move |_, _| {
-            let (current, new) = (choose.clone(), choose.clone());
-            crate::ui::menu::Menu::new()
-                .note("Workspace")
-                .choice(!in_worktree, "Current checkout", Some(MenuIcon::Symbol("folder")), None, move |_, cx| {
-                    current.update(cx, |store, cx| {
-                        store.set_draft_worktree(false, cx);
-                        cx.notify();
-                    })
+        let choices = vec![
+            DropdownChoice::new("Current checkout", !in_worktree, move |_, cx| {
+                current.update(cx, |store, cx| {
+                    store.set_draft_worktree(false, cx);
+                    cx.notify();
                 })
-                .choice(in_worktree, "New worktree", Some(MenuIcon::Symbol("folder-git-2")), None, move |_, cx| {
-                    new.update(cx, |store, cx| {
-                        store.set_draft_worktree(true, cx);
-                        cx.notify();
-                    })
+            })
+            .detail("In the project's folder")
+            .symbol("folder"),
+            DropdownChoice::new("New worktree", in_worktree, move |_, cx| {
+                new.update(cx, |store, cx| {
+                    store.set_draft_worktree(true, cx);
+                    cx.notify();
                 })
-        })
-        .button(|button| {
-            button.symbol(symbol).help(help).surface(Surface::Composer).margin(edges(INSET, 4., INSET, 4.))
-        })
-        .shortcut("composer.workspace")
+            })
+            .detail("In a folder and on a branch of its own")
+            .symbol("folder-git-2"),
+        ];
+        ChoiceDropdown::new("workspace", title, "Workspace", choices)
+            .button(|button| {
+                button.symbol(symbol).help(help).surface(Surface::Composer).margin(edges(INSET, 4., INSET, 4.))
+            })
+            .trailing()
+            .shortcut("composer.workspace")
+            .on_close(focus_composer(store))
     };
     // A draft whose project is on more than one server moves to another from here.
     let server_menu = |server: &Server, title: String| {
-        let (choose, copies, help) = (store.clone(), copies.clone(), server_help.clone());
+        let help = server_help.clone();
         let tint = server.down_tint(&c);
-        let symbol = icons::symbol("server", ControlSize::Regular.symbol())
-            .when_some(tint, |symbol, tint| symbol.text_color(tint));
-        ActionMenu::new("strip-server", title, move |_, _| {
-            copies.iter().fold(crate::ui::menu::Menu::new().note("Server"), |menu, (id, name, current)| {
-                let (store, id) = (choose.clone(), id.clone());
-                menu.choice(*current, name.clone(), None, None, move |_, cx| {
-                    store.update(cx, |store, cx| {
+        let symbol = icons::symbol("server", mark).when_some(tint, |symbol, tint| symbol.text_color(tint));
+        let choices = copies
+            .iter()
+            .map(|copy| {
+                let (choose, id) = (store.clone(), copy.id.clone());
+                let symbol = icons::symbol("server", mark).when_some(copy.tint, |symbol, tint| symbol.text_color(tint));
+                DropdownChoice::new(copy.name.clone(), copy.current, move |_, cx| {
+                    choose.update(cx, |store, cx| {
                         store.set_new_thread_project(Some(id.clone()), cx);
                         cx.notify();
                     })
                 })
+                .picture(symbol)
             })
-        })
-        .button(|button| {
-            button.picture(symbol).help(help).surface(Surface::Composer).margin(edges(INSET, 4., INSET, 4.))
-        })
-        .shortcut("composer.server")
+            .collect();
+        ChoiceDropdown::new("strip-server", title, "Server", choices)
+            .button(|button| {
+                button.picture(symbol).help(help).surface(Surface::Composer).margin(edges(INSET, 4., INSET, 4.))
+            })
+            .shortcut("composer.server")
+            .on_close(focus_composer(store))
     };
+    let shows_branches = state.shows_branches;
     let branch_button = |title: String| {
         let (open, project) = (store.clone(), project.clone());
         ActionButton::new("branch", title)
@@ -735,6 +756,7 @@ pub fn context_strip(
             .help(branch_help.clone().unwrap_or_default())
             .ghost()
             .opens(true)
+            .open(shows_branches)
             .surface(Surface::Composer)
             .margin(margin())
             .on_click(move |_, _, cx| {
@@ -846,7 +868,6 @@ pub fn context_strip(
     });
     let branch_part = branch_title.map(|title| {
         if switches {
-            let viewport = f32::from(crate::window_frame::content_bounds(window).bottom());
             return div()
                 .relative()
                 .flex_shrink_0()
@@ -854,16 +875,12 @@ pub fn context_strip(
                 .child(anchor.track())
                 .child(branch_button(title))
                 .when_some(picker, |button, picker| {
-                    let height = picker.read(cx).height(cx);
-                    button.child(
-                        deferred(
-                            anchored()
-                                .position(picker_origin(anchor, height, viewport))
-                                .snap_to_window_with_margin(px(WINDOW_MARGIN))
-                                .child(picker),
-                        )
-                        .with_priority(1),
-                    )
+                    let place = drop_from(light(anchor.bounds(), margin()), true, window);
+                    let content = crate::window_frame::content_bounds(window).size;
+                    button.child(over_content(
+                        div().w(content.width).h(content.height).child(place.child(picker)),
+                        window,
+                    ))
                 })
                 .into_any_element();
         }
@@ -895,28 +912,20 @@ pub fn context_strip(
         .children(branch_part.map(|part| div().flex_shrink_0().child(part)))
 }
 
+/// Gives the keys back to the composer, as a dropdown of its strip closes.
+fn focus_composer(store: &Entity<Store>) -> impl Fn(&mut Window, &mut App) + 'static {
+    let store = store.clone();
+    move |_, cx| {
+        store.update(cx, |store, cx| {
+            store.composer_focus += 1;
+            cx.notify();
+        })
+    }
+}
+
 /// The room before the server's menu, which stands nearer the strip's side than its label.
 const SERVER_MENU_LEAD: f32 = 2.;
 const PICKER_WIDTH: f32 = 300.;
-/// The room between the picker and its button.
-const PICKER_GAP: f32 = 6.;
-/// The least room between the picker and the window's edges.
-const WINDOW_MARGIN: f32 = 8.;
-
-/// Where the branch picker opens, as a popover does: centred under its button, or over it when
-/// there is no room under it, as under an open thread's composer; where neither has room, on the
-/// side with more.
-fn picker_origin(anchor: &Anchor, height: f32, viewport: f32) -> Point<Pixels> {
-    let bounds = anchor.bounds();
-    let x = bounds.center().x - px(PICKER_WIDTH / 2.);
-    let (top, bottom) = (f32::from(bounds.top()), f32::from(bounds.bottom()));
-    let below = viewport - WINDOW_MARGIN - (bottom + PICKER_GAP);
-    let above = top - PICKER_GAP - WINDOW_MARGIN;
-    if height <= below || below >= above {
-        return point(x, px(bottom + PICKER_GAP));
-    }
-    point(x, px(top - PICKER_GAP - height))
-}
 
 #[derive(Clone)]
 enum Choice {
@@ -937,8 +946,6 @@ pub struct BranchPicker {
     scroll: UniformListScrollHandle,
     /// The button it opens from, whose presses are the button's to close it.
     button: Anchor,
-    /// How tall it was last drawn, for where it opens.
-    drawn: Rc<Cell<Option<f32>>>,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -974,7 +981,6 @@ impl BranchPicker {
             switching: false,
             scroll: UniformListScrollHandle::new(),
             button,
-            drawn: Rc::default(),
             _subscriptions: subscriptions,
         }
     }
@@ -1008,21 +1014,6 @@ impl BranchPicker {
             Some(Err(_)) => 0,
         };
         MAX_LIST_HEIGHT.min(rows as f32 * ROW_HEIGHT + 2. * LIST_PADDING)
-    }
-
-    /// How tall the picker is drawn, for where it opens: as it was last drawn, or before that as
-    /// its list and a line of note would make it.
-    pub fn height(&self, cx: &App) -> f32 {
-        if let Some(drawn) = self.drawn.get() {
-            return drawn;
-        }
-        let list = match &self.store.read(cx).listed_branches {
-            Some(Ok(_)) if !self.choices(cx).is_empty() => self.list_height(cx),
-            None => self.list_height(cx),
-            _ => 50.,
-        };
-        let note = if self.note(cx).is_some() { 1. + 2. * 8. + 16. } else { 0. };
-        2. + SEARCH_HEIGHT + 1. + list + note
     }
 
     fn choices(&self, cx: &App) -> Vec<Choice> {
@@ -1240,30 +1231,14 @@ impl Render for BranchPicker {
                     .into_any_element()
             }
         };
-        let drawn = self.drawn.clone();
         let button = self.button.clone();
         crate::ui::dropdown_card(div(), cx)
             .id("branch-picker")
             .relative()
             .w(px(PICKER_WIDTH))
-            .rounded(px(Radius::LG))
             .occlude()
             .flex()
             .flex_col()
-            .child(
-                canvas(
-                    move |bounds, window, _| {
-                        let height = f32::from(bounds.size.height);
-                        if drawn.get().is_none_or(|drawn| (drawn - height).abs() > 0.5) {
-                            drawn.set(Some(height));
-                            window.refresh();
-                        }
-                    },
-                    |_, _, _, _| {},
-                )
-                .absolute()
-                .size_full(),
-            )
             .on_mouse_down_out(cx.listener(move |this, event: &MouseDownEvent, _, cx| {
                 if !button.bounds().contains(&event.position) {
                     this.close(cx);

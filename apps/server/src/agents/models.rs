@@ -2,7 +2,7 @@
 //! Claude Code is asked for what its model picker lists, which depends on who is signed in, and
 //! for the settings it would apply to each; `codex app-server` for its list and its config.
 
-use motile_protocol::wire::{Agent, ModelInfo};
+use motile_protocol::wire::{Agent, ModelContext, ModelInfo};
 use serde::Deserialize;
 use serde_json::{Value, json};
 
@@ -49,14 +49,30 @@ fn applied_effort(applied: &Value, efforts: &[String]) -> Option<String> {
     wanted.find(|effort| efforts.iter().any(|offered| offered == effort)).map(String::from)
 }
 
+/// Claude Code's suffix for a model with the larger context window.
+const LARGE_CONTEXT: &str = "[1m]";
+
+/// One model for each it lists under a name or two, `opus` and `opus[1m]`: the first it lists
+/// is the context window the model runs with by default.
 fn claude_list(models: Vec<ClaudeModel>) -> Vec<ModelInfo> {
     let mut listed: Vec<ModelInfo> = Vec::new();
     for model in models {
         if model.value == "default" {
             continue;
         }
-        let id = model.resolved_model.unwrap_or(model.value);
-        if listed.iter().any(|known| known.id == id) {
+        let large = model.value.ends_with(LARGE_CONTEXT);
+        let resolved = model.resolved_model.unwrap_or(model.value);
+        let id = resolved.strip_suffix(LARGE_CONTEXT).unwrap_or(&resolved).to_string();
+        let context = if large {
+            ModelContext { label: "1M".into(), model: format!("{id}{LARGE_CONTEXT}"), default: false }
+        } else {
+            ModelContext { label: "200k".into(), model: id.clone(), default: false }
+        };
+        if let Some(known) = listed.iter_mut().find(|known| known.id == id) {
+            if !known.contexts.iter().any(|offered| offered.model == context.model) {
+                known.contexts.push(context);
+                known.contexts.sort_by_key(|context| context.model.ends_with(LARGE_CONTEXT));
+            }
             continue;
         }
         let mut efforts = model.supported_effort_levels;
@@ -70,7 +86,13 @@ fn claude_list(models: Vec<ClaudeModel>) -> Vec<ModelInfo> {
             account: String::new(),
             efforts,
             default_effort: None,
+            contexts: vec![ModelContext { default: true, ..context }],
         });
+    }
+    for model in &mut listed {
+        if model.contexts.len() < 2 {
+            model.contexts.clear();
+        }
     }
     listed
 }
@@ -135,6 +157,7 @@ fn codex_list(models: Vec<CodexModel>, configured: Option<&str>) -> Vec<ModelInf
             account: String::new(),
             default_effort: configured.map(String::from).or(model.default_reasoning_effort),
             efforts,
+            contexts: Vec::new(),
         }
     });
     models.collect()
@@ -172,6 +195,26 @@ mod tests {
         assert_eq!(models[1].efforts, ["low", "xhigh", "max", "ultracode"]);
         assert!(models[2].efforts.is_empty());
         assert!(models.iter().all(|model| model.default_effort.is_none() && model.agent == Agent::Claude));
+    }
+
+    #[test]
+    fn a_model_listed_with_and_without_the_larger_context_offers_both() {
+        let listed = serde_json::from_value(json!([
+            {"value": "opus[1m]", "resolvedModel": "claude-opus-5-5[1m]", "displayName": "Opus (1M context)"},
+            {"value": "opus", "resolvedModel": "claude-opus-5-5", "displayName": "Opus"},
+            {"value": "claude-fable-5-1[1m]", "resolvedModel": "claude-fable-5-1", "displayName": "Fable"},
+        ]))
+        .unwrap();
+        let models = claude_list(listed);
+        let ids: Vec<&str> = models.iter().map(|model| model.id.as_str()).collect();
+        assert_eq!(ids, ["claude-opus-5-5", "claude-fable-5-1"]);
+        let contexts: Vec<_> = models[0]
+            .contexts
+            .iter()
+            .map(|context| (context.label.as_str(), context.model.as_str(), context.default))
+            .collect();
+        assert_eq!(contexts, [("200k", "claude-opus-5-5", false), ("1M", "claude-opus-5-5[1m]", true)]);
+        assert!(models[1].contexts.is_empty(), "one context window is no choice");
     }
 
     #[test]

@@ -100,12 +100,7 @@ private fun Header(section: LimitsReport.Section) {
 /** One window of a plan: what was used of it, how that compares with the time passed, and a bar with when it starts over. */
 @Composable
 private fun LimitRow(window: LimitsReport.Window, beside: Boolean) {
-    val palette = LocalPalette.current
-    val color = when (window.tone) {
-        LimitsReport.Window.Tone.Success -> palette.success
-        LimitsReport.Window.Tone.Pending -> palette.pending
-        LimitsReport.Window.Tone.Warning -> palette.warning
-    }
+    val color = window.color
     val padding = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp)
     if (beside) {
         Row(padding, horizontalArrangement = Arrangement.spacedBy(24.dp), verticalAlignment = Alignment.CenterVertically) {

@@ -724,7 +724,7 @@ impl RenderOnce for ShortcutField {
                 .child(self.placeholder)
                 .into_any_element()
         } else {
-            div().text_color(c.foreground).child(KeyCaps::new(self.caps).surface(Surface::Card)).into_any_element()
+            div().text_color(c.foreground).child(KeyCaps::new(self.caps)).into_any_element()
         };
         let group = SharedString::from(format!("shortcut-field-{}", self.id));
         let (start, stop, id) = (self.store.clone(), self.store.clone(), self.id.clone());

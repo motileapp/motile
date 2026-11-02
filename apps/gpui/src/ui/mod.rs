@@ -4,6 +4,7 @@
 pub mod agent_avatar;
 pub mod control;
 pub mod date_field;
+pub mod dropdown;
 pub mod icons;
 pub mod logos;
 pub mod menu;
@@ -27,6 +28,7 @@ pub use control::{
     card_default, card_slice, text_area_state,
 };
 pub use date_field::DateField;
+pub use dropdown::{ChoiceDropdown, DropdownChoice};
 pub use parts::{
     CommandBox, CopyButton, FadingScroll, GlassButton, KeyCaps, PickMark, anchored_popover, dropdown_card,
     popover_card, popover_panel, tracks_bounds,
@@ -109,11 +111,6 @@ impl Highlight {
 
     pub fn small(mut self, small: bool) -> Self {
         self.small = small;
-        self
-    }
-
-    pub fn enabled(mut self, enabled: bool) -> Self {
-        self.enabled = enabled;
         self
     }
 

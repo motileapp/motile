@@ -12,9 +12,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import app.motile.theme.LocalSurface
 import app.motile.theme.Radius
-import app.motile.theme.Surface
+import app.motile.theme.Theme
+import app.motile.theme.accentTint
 
 /** Keys to press, each on a cap of its own, or all on one when `joined`. */
 object KeyCaps {
@@ -24,7 +24,7 @@ object KeyCaps {
 @Composable
 fun KeyCaps(caps: List<String>, modifier: Modifier = Modifier, joined: Boolean = false) {
     val shown = if (joined) listOf(caps.joinToString("+")) else caps
-    val fill = LocalSurface.current.color(Surface.Layer.Control)
+    val fill = Theme.colors.accentTint
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) {
         for (cap in shown) {
             Box(
@@ -34,7 +34,7 @@ fun KeyCaps(caps: List<String>, modifier: Modifier = Modifier, joined: Boolean =
                     .padding(horizontal = 6.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                Text(cap, size = 11f, weight = FontWeight.Medium, maxLines = 1)
+                Text(cap, style = Theme.uiMono(11f, FontWeight.Medium), maxLines = 1)
             }
         }
     }

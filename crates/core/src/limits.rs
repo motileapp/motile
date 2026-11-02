@@ -35,7 +35,7 @@ pub struct Section {
     pub note: Option<String>,
 }
 
-#[derive(Serialize, Debug, PartialEq)]
+#[derive(Serialize, Clone, Debug, PartialEq)]
 pub struct Row {
     pub label: String,
     /// Between 0 and 100.
@@ -191,6 +191,55 @@ pub fn roomier(
     roomier
 }
 
+/// The windows of each account of a server, by account id, for the model picker.
+pub fn by_account(accounts: &[AgentAccount], limits: &[AgentLimits], now: f64) -> HashMap<String, Vec<Row>> {
+    accounts
+        .iter()
+        .filter_map(|account| {
+            let limits = read(account, limits)?;
+            let windows = limits.windows.iter().map(|window| row(window, limits.reset_credits, now)).collect();
+            Some((account.id.clone(), windows))
+        })
+        .collect()
+}
+
+/// The accounts' ids, the one with the most room left in the windows that count every model
+/// first, as a new thread is moved to it. One whose limits weren't read keeps its place after
+/// those that were.
+pub fn roomiest_first(accounts: &[AgentAccount], limits: &[AgentLimits], now: f64) -> Vec<String> {
+    let mut ordered: Vec<(usize, &AgentAccount, Option<f64>)> =
+        accounts.iter().enumerate().map(|(index, account)| (index, account, tightest(account, limits, now))).collect();
+    ordered.sort_by(|(a_index, _, a), (b_index, _, b)| {
+        let room = match (a, b) {
+            (Some(a), Some(b)) => a.total_cmp(b),
+            (Some(_), None) => std::cmp::Ordering::Less,
+            (None, Some(_)) => std::cmp::Ordering::Greater,
+            (None, None) => std::cmp::Ordering::Equal,
+        };
+        room.then(a_index.cmp(b_index))
+    });
+    ordered.into_iter().map(|(_, account, _)| account.id.clone()).collect()
+}
+
+/// How much of the account's tightest window that counts every model is used.
+fn tightest(account: &AgentAccount, limits: &[AgentLimits], now: f64) -> Option<f64> {
+    read(account, limits)?
+        .windows
+        .iter()
+        .filter(|window| !window.label.contains(" · "))
+        .map(|window| match window.resets_at {
+            Some(at) if at <= now => 0.0,
+            _ => window.used_percent.clamp(0.0, 100.0),
+        })
+        .max_by(f64::total_cmp)
+}
+
+fn read<'a>(account: &AgentAccount, limits: &'a [AgentLimits]) -> Option<&'a AgentLimits> {
+    limits
+        .iter()
+        .find(|limits| limits.agent == account.agent && limits.account_name == account.name && limits.error.is_none())
+}
+
 fn runs(account: &AgentAccount, model: &ModelInfo) -> bool {
     model.agent == account.agent && (model.account.is_empty() || model.account == account.id)
 }
@@ -198,10 +247,7 @@ fn runs(account: &AgentAccount, model: &ModelInfo) -> bool {
 /// How much of the account's tightest window that applies to the model is used: the session,
 /// the week, and the week of the model where the plan counts it apart.
 fn used(account: &AgentAccount, model: &ModelInfo, limits: &[AgentLimits], now: f64) -> Option<f64> {
-    let limits = limits.iter().find(|limits| {
-        limits.agent == account.agent && limits.account_name == account.name && limits.error.is_none()
-    })?;
-    limits
+    read(account, limits)?
         .windows
         .iter()
         .filter(|window| applies(window, model))
@@ -369,11 +415,57 @@ mod tests {
             account: account.into(),
             efforts: vec![],
             default_effort: None,
+            contexts: vec![],
         }
     }
 
     fn used_by(name: &str, agent: Agent, windows: Vec<LimitWindow>) -> AgentLimits {
         AgentLimits { account_name: name.into(), ..read("studio", agent, Some(name), windows).limits }
+    }
+
+    #[test]
+    fn each_account_has_the_windows_its_login_read_and_none_when_it_couldnt() {
+        let accounts =
+            [account("yekta", Agent::Claude), account("work", Agent::Claude), account("codex", Agent::Codex)];
+        let mut failed = used_by("work", Agent::Claude, vec![window("Session", 10.0, 60.0, 18000)]);
+        failed.error = Some("timed out".into());
+        let limits = [
+            used_by(
+                "yekta",
+                Agent::Claude,
+                vec![window("Session", 80.0, 60.0, 18000), window("Weekly", 20.0, 60.0, 604800)],
+            ),
+            failed,
+        ];
+        let windows = by_account(&accounts, &limits, 1000.0);
+        let yekta: Vec<_> =
+            windows["yekta"].iter().map(|row| (row.label.as_str(), row.used.as_str(), row.tone)).collect();
+        assert_eq!(yekta, [("Session", "80%", Tone::Warning), ("Weekly", "20%", Tone::Success)]);
+        assert!(!windows.contains_key("work") && !windows.contains_key("codex"));
+    }
+
+    #[test]
+    fn accounts_with_more_room_come_first_and_unread_ones_last() {
+        let accounts = [
+            account("yekta", Agent::Claude),
+            account("unread", Agent::Claude),
+            account("work", Agent::Claude),
+            account("spare", Agent::Claude),
+        ];
+        let limits = [
+            used_by(
+                "yekta",
+                Agent::Claude,
+                vec![window("Session", 70.0, 60.0, 18000), window("Weekly", 20.0, 60.0, 604800)],
+            ),
+            used_by(
+                "work",
+                Agent::Claude,
+                vec![window("Session", 10.0, 60.0, 18000), window("Weekly · Fable", 99.0, 60.0, 604800)],
+            ),
+            used_by("spare", Agent::Claude, vec![window("Session", 40.0, 60.0, 18000)]),
+        ];
+        assert_eq!(roomiest_first(&accounts, &limits, 1000.0), ["work", "spare", "yekta", "unread"]);
     }
 
     #[test]

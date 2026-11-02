@@ -5,10 +5,10 @@ import {
   FolderGit2Icon,
   FolderIcon,
   GitBranchIcon,
-  LockOpenIcon,
-  PaperclipIcon,
+  LockIcon,
+  PlusIcon,
   ServerIcon,
-  ShieldIcon,
+  ShieldOffIcon,
   SquareTerminalIcon,
 } from "lucide-react"
 import { Fragment, useRef, useState, type ReactNode } from "react"
@@ -128,38 +128,40 @@ export function Composer({
           }}
           className="flex cursor-text items-center px-1.5 py-2"
         >
-          <Control icon={<AgentIcon agent={thread.agent} size={14} />}>
-            <Dotted text={thread.model} />
-          </Control>
-          <span className="mx-1 h-3.5 w-px bg-border-composer" />
-          <Control icon={<EffortHighIcon />}>High</Control>
-          <span className="mx-1 h-3.5 w-px bg-border-composer" />
-          <Control
-            icon={
-              thread.approval ? (
-                <ShieldIcon className="size-3.5" />
-              ) : (
-                <LockOpenIcon className="size-3.5" />
-              )
-            }
-          >
-            {thread.approval ? "Supervised" : "Full access"}
-          </Control>
-          <span className="ml-auto flex size-7 cursor-default items-center justify-center rounded-full text-muted-foreground hover:bg-border-composer hover:text-foreground">
-            <PaperclipIcon className="size-3.5" />
+          <span className="mx-[3px] flex size-7 cursor-default items-center justify-center rounded-full text-foreground hover:bg-border-composer">
+            <PlusIcon className="size-[18px]" />
+          </span>
+          <span className="mr-0.5 ml-auto flex h-7 cursor-default items-center rounded-md px-[11px] text-[12px] font-medium text-muted-foreground hover:bg-border-composer hover:text-foreground">
+            <Setting icon={<AgentIcon agent={thread.agent} size={14} />}>
+              <Dotted text={thread.model} />
+            </Setting>
+            <SettingDivider />
+            <Setting icon={<EffortHighIcon />}>High</Setting>
+            <SettingDivider />
+            <Setting
+              icon={
+                thread.approval ? (
+                  <LockIcon className="size-3.5" />
+                ) : (
+                  <ShieldOffIcon className="size-3.5" />
+                )
+              }
+            >
+              {thread.approval ? "Supervised" : "Full access"}
+            </Setting>
           </span>
           <button
             type="button"
             onClick={send}
             aria-label="Send"
             className={cn(
-              "ml-1 flex size-7 cursor-default items-center justify-center rounded-full bg-primary text-primary-foreground",
+              "flex size-7 cursor-default items-center justify-center rounded-full bg-primary text-primary-foreground",
               text.trim()
                 ? "hover:bg-primary/(--opacity-lit)"
                 : "opacity-(--opacity-disabled)"
             )}
           >
-            <ArrowUpIcon className="size-3.5" />
+            <ArrowUpIcon className="size-4" />
           </button>
         </div>
       </div>
@@ -221,6 +223,21 @@ function Control({
       {!plain && <MenuChevron />}
     </span>
   )
+}
+
+/** A part of the button that picks the model, its effort and the access: one button, as on the Mac. */
+function Setting({ icon, children }: { icon: ReactNode; children: ReactNode }) {
+  return (
+    <span className="flex items-center gap-[5px]">
+      {icon}
+      {children}
+    </span>
+  )
+}
+
+/** The line between two of its parts, as far from the words before it as from the symbol after it. */
+function SettingDivider() {
+  return <span className="mr-[13px] ml-2 h-3.5 w-px bg-border-composer" />
 }
 
 /** A strip above or under the composer, narrower than it, with its outer corners rounded. */

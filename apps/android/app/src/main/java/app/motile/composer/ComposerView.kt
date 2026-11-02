@@ -46,6 +46,7 @@ import app.motile.platform.Symbol
 import app.motile.platform.scaled
 import app.motile.theme.iconSize
 import app.motile.theme.ControlSize
+import app.motile.theme.IconSize
 import app.motile.theme.LocalForeground
 import app.motile.theme.LocalSurface
 import app.motile.theme.Radius
@@ -283,7 +284,7 @@ fun ComposerSendButtons() {
         if (sends) {
             Disabled(!store.canSend) {
                 ActionButton(
-                    icon = Symbol.ArrowUp, help = "Send", variant = ButtonVariant.Primary, round = true,
+                    icon = Symbol.ArrowUp, help = "Send", variant = ButtonVariant.Primary, symbolSize = IconSize.Md, round = true,
                     margin = ComposerView.margin(leading = 4.dp, trailing = 8.dp),
                 ) { store.send() }
             }
@@ -294,5 +295,5 @@ fun ComposerSendButtons() {
 /** The square the button that stops shows. */
 @Composable
 private fun StopMark() {
-    Box(Modifier.size(scaled(10f).dp).background(LocalForeground.current, RoundedCornerShape(Radius.xs)))
+    Box(Modifier.size(scaled(11f).dp).background(LocalForeground.current, RoundedCornerShape(scaled(2.5f).dp)))
 }

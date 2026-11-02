@@ -11,15 +11,18 @@ struct Chip: View {
     var dot: Color?
     var tone: Color?
     var monospaced = false
+    /// It marks quietly, as a default does: its words muted on the accent's tint, with no line.
+    var muted = false
     @Environment(\.surface) private var surface
     @Environment(\.row) private var row
 
-    init(_ title: String, icon: Symbol? = nil, dot: Color? = nil, tone: Color? = nil, monospaced: Bool = false) {
+    init(_ title: String, icon: Symbol? = nil, dot: Color? = nil, tone: Color? = nil, monospaced: Bool = false, muted: Bool = false) {
         self.title = title
         self.icon = icon
         self.dot = dot
         self.tone = tone
         self.monospaced = monospaced
+        self.muted = muted
     }
 
     var body: some View {
@@ -36,15 +39,21 @@ struct Chip: View {
                 .font(.ui(size: 11.5, weight: .medium, design: monospaced ? .monospaced : .default))
                 .lineLimit(1)
         }
-        .foregroundStyle(dot == nil ? tone ?? Color.themeForeground : Color.themeForeground)
+        .foregroundStyle(muted ? Color.themeMutedForeground : dot == nil ? tone ?? Color.themeForeground : Color.themeForeground)
         .padding(.horizontal, 7)
         .frame(height: Self.height)
-        .background(tone.map { AnyShapeStyle($0.wash()) } ?? AnyShapeStyle(surface.color(layer)), in: Capsule())
+        .background(background, in: Capsule())
         .overlay {
-            if tone == nil && surface != .glass {
+            if tone == nil && !muted && surface != .glass {
                 Capsule().strokeBorder(surface.border, lineWidth: 1)
             }
         }
+    }
+
+    private var background: AnyShapeStyle {
+        if let tone { return AnyShapeStyle(tone.wash()) }
+        if muted { return AnyShapeStyle(Color(platform: Theme.accentTint)) }
+        return AnyShapeStyle(surface.color(layer))
     }
 
     private var layer: Surface.Layer {

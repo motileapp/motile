@@ -2014,6 +2014,21 @@ pub struct ModelInfo {
     /// The effort it runs at when the thread doesn't pick one: its own, or what the account's
     /// settings say. Missing when the agent couldn't say.
     pub default_effort: Option<String>,
+    /// The context windows it runs with, the smallest first. Empty when it has one.
+    #[serde(default)]
+    pub contexts: Vec<ModelContext>,
+}
+
+/// A context window a model runs with, and the model id that asks for it.
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct ModelContext {
+    /// "200k", "1M".
+    pub label: String,
+    /// What the agent is told to run: `claude-opus-5-5`, `claude-opus-5-5[1m]`.
+    pub model: String,
+    /// The one it runs with unless the thread picks another.
+    #[serde(default)]
+    pub default: bool,
 }
 
 /// A skill an agent's account can run in a project: a folder with a `SKILL.md`, or a command,

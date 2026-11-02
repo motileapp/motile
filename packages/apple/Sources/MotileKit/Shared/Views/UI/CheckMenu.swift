@@ -85,11 +85,16 @@ struct CheckMenu: View {
     }
 }
 
-/// The dropdown that is open: what it shows, the button it hangs from, and how to close it.
+/// The dropdown that is open: what it shows, the button it hangs from or stands on, and how to
+/// close it.
 struct OpenDropdown: PreferenceKey {
     struct Shown {
         let anchor: Anchor<CGRect>
         let content: AnyView
+        /// It opens above the button, as what the composer's buttons open does.
+        var up = false
+        /// It lines up with the button's trailing edge rather than its leading one.
+        var trailing = false
         let close: () -> Void
     }
 
@@ -112,6 +117,22 @@ extension View {
         }
     }
 
+    /// Drops `content` from it while `shown`, the button's light standing `inset` inside its
+    /// frame, lined up with its `trailing` edge or its leading one, and calls `close` when a click
+    /// lands elsewhere or Esc is pressed.
+    func dropdown(
+        _ shown: Bool, inset: EdgeInsets = EdgeInsets(), trailing: Bool = false, close: @escaping () -> Void,
+        @ViewBuilder content: @escaping () -> some View
+    ) -> some View {
+        background {
+            Color.clear
+                .padding(inset)
+                .anchorPreference(key: OpenDropdown.self, value: .bounds) { anchor in
+                    shown ? OpenDropdown.Shown(anchor: anchor, content: AnyView(content()), trailing: trailing, close: close) : nil
+                }
+        }
+    }
+
     /// The look of what drops from a button or lies over the window: the popover's colour, a line
     /// around it and a faint shadow under it.
     func dropdownCard() -> some View {
@@ -129,11 +150,23 @@ extension View {
 
 private struct DropdownLayer: View {
     private static let gap: CGFloat = 4
+    private static let roomBelow: CGFloat = 220
 
     let open: OpenDropdown.Shown
     #if os(macOS)
     @State private var escape: Any?
     #endif
+
+    @ViewBuilder private func lined(up button: CGRect) -> some View {
+        if open.trailing {
+            open.content
+                .frame(width: button.maxX, alignment: .trailing)
+        } else {
+            open.content
+                .offset(x: button.minX)
+        }
+    }
+
 
     var body: some View {
         GeometryReader { proxy in
@@ -142,9 +175,18 @@ private struct DropdownLayer: View {
                 Color.clear
                     .contentShape(Rectangle())
                     .onTapGesture(perform: open.close)
-                open.content
-                    .frame(maxHeight: max(0, proxy.size.height - button.maxY - 3 * Self.gap), alignment: .top)
-                    .offset(x: button.minX, y: button.maxY + Self.gap)
+                // One that would have too little room under its button, as the strip under the
+                // composer at the window's bottom, opens above it.
+                let below = proxy.size.height - button.maxY
+                if open.up || (below < Self.roomBelow && button.minY > below) {
+                    lined(up: button)
+                        .frame(maxHeight: max(0, button.minY - 3 * Self.gap), alignment: .bottom)
+                        .frame(height: max(0, button.minY - Self.gap), alignment: .bottom)
+                } else {
+                    lined(up: button)
+                        .frame(maxHeight: max(0, proxy.size.height - button.maxY - 3 * Self.gap), alignment: .top)
+                        .offset(y: button.maxY + Self.gap)
+                }
             }
         }
         #if os(macOS)

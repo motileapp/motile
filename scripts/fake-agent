@@ -268,6 +268,7 @@ def claude_models():
 
     return [
         model("default", "claude-opus-5-5", "Default (recommended)"),
+        model("opus[1m]", "claude-opus-5-5[1m]", "Opus (1M context)"),
         model("opus", "claude-opus-5-5", "Opus"),
         model("claude-fable-5-1[1m]", "claude-fable-5-1", "Fable"),
         model("sonnet", "claude-sonnet-5-5", "Sonnet"),

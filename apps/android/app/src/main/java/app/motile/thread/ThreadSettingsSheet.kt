@@ -36,6 +36,8 @@ import app.motile.LocalStore
 import app.motile.composer.BranchPicker
 import app.motile.core.Access
 import app.motile.core.AppStore
+import app.motile.core.ModelContext
+import app.motile.core.ModelInfo
 import app.motile.core.Preferences
 import app.motile.core.Project
 import app.motile.platform.Symbol
@@ -55,6 +57,7 @@ import app.motile.ui.SheetCloseButton
 import app.motile.ui.Text
 import app.motile.ui.ThemeDivider
 import app.motile.ui.pressable
+import app.motile.usage.LimitPills
 
 private const val rowText = 15f
 private const val noteText = 12f
@@ -148,21 +151,25 @@ private fun Models() {
         val turn by animateFloatAsState(if (open) 180f else 0f, label = "chevron")
         Column {
             DimButton(onClick = { listed = if (open) listed - id else listed + id }) {
-                Row(
+                Column(
                     Modifier.fillMaxWidth().heightIn(min = pressable(32f)).padding(horizontal = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
+                    verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically),
                 ) {
-                    AgentIcon(choices.account.agent, size = noteSymbol)
-                    Text(choices.title, Modifier.weight(1f), size = noteText, color = palette.mutedForeground, maxLines = 1)
-                    Icon(Symbol.ChevronDown, noteSymbol, Modifier.rotate(turn), color = palette.mutedForeground)
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        AgentIcon(choices.account.agent, size = noteSymbol)
+                        Text(choices.title, Modifier.weight(1f), size = noteText, color = palette.mutedForeground, maxLines = 1)
+                        Icon(Symbol.ChevronDown, noteSymbol, Modifier.rotate(turn), color = palette.mutedForeground)
+                    }
+                    store.composerServer?.accountLimits?.get(id)?.takeIf { it.isNotEmpty() }?.let { windows ->
+                        LimitPills(windows, Modifier.padding(bottom = 8.dp))
+                    }
                 }
             }
             AnimatedVisibility(open) {
                 Group(choices.models.map { model ->
                     {
                         ListRow({ store.setModel(model, choices.account) }) {
-                            Text(model.name, Modifier.weight(1f), size = rowText)
+                            Text(model.shortName, Modifier.weight(1f), size = rowText)
                             if (model.id == current?.id && id == account?.id) Icon(Symbol.Check, rowSymbol)
                         }
                     }
@@ -183,6 +190,8 @@ private fun Options(open: (SettingsPage) -> Unit) {
                 val effort = store.composerEffort ?: ""
                 add { Labeled("Reasoning", { open(SettingsPage.Reasoning) }) { SymbolValue(effortLabel(effort), effortSymbol(effort)) } }
             }
+            val context = store.composerContext
+            if (model != null && model.contexts.size > 1 && context != null) add { ContextPicker(model, context) }
             add { Labeled("Access", { open(SettingsPage.Access) }) { SymbolValue(access.label, access.symbol) } }
         })
     }
@@ -242,6 +251,26 @@ private fun ServerPicker(project: Project) {
         ) {
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(store.server(project.serverID)?.name ?: "", size = rowText, color = palette.primary)
+                Icon(Symbol.ChevronDown, rowChevron, color = palette.primary)
+            }
+        }
+    }
+}
+
+/** The context window the model runs with, where it offers more than one. */
+@Composable
+private fun ContextPicker(model: ModelInfo, chosen: ModelContext) {
+    val store = LocalStore.current
+    val palette = Theme.colors
+    ListRow {
+        Text("Context window", Modifier.weight(1f), size = rowText)
+        Menu(
+            items = {
+                model.contexts.forEach { context -> toggle(context.label, isOn = context.model == chosen.model) { store.setContext(context) } }
+            },
+        ) {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(chosen.label, size = rowText, color = palette.primary)
                 Icon(Symbol.ChevronDown, rowChevron, color = palette.primary)
             }
         }

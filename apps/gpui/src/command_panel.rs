@@ -1430,7 +1430,7 @@ impl CommandPanel {
                 .items_center()
                 .gap(px(5.))
                 .text_color(c.muted_foreground)
-                .child(KeyCaps::new(caps).surface(SURFACE))
+                .child(KeyCaps::new(caps))
                 .child(div().text_size(px(12.)).child(text.to_string()))
         };
         let folder = matches!(self.page(), PanelPage::Folder(_));

@@ -101,6 +101,10 @@ impl Store {
     /// whatever else takes them. What the window itself does is `keyboard::perform`'s.
     pub fn perform(&mut self, command: &str, cx: &mut Context<Self>) -> bool {
         if let Some(place) = command.strip_prefix("thread.jump.").and_then(|place| place.parse::<usize>().ok()) {
+            if self.composer_picker.is_some() {
+                self.composer_picker_jump = Some(place - 1);
+                return true;
+            }
             return (1..=9).contains(&place) && self.show_thread_at(place - 1, cx);
         }
         if let Some(change) = usage_command(command) {
@@ -341,7 +345,7 @@ impl Store {
     /// maximized right panel, or hides a right panel that only has its blank tab. Nothing while
     /// the command panel, the viewer or the branches have it. Whether it did anything.
     pub fn escape(&mut self) -> bool {
-        if self.panel.is_some() || self.viewing.is_some() || self.shows_branches {
+        if self.panel.is_some() || self.viewing.is_some() || self.shows_branches || self.composer_picker.is_some() {
             return false;
         }
         if self.settings.section.is_some() || self.shows_usage {

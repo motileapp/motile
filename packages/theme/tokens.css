@@ -41,9 +41,13 @@
   --border-input: #eaecf0;
   --border-popover: #e6e8eb;
   --input: #e8eaee;
+  --segment: #eaecf0;
+  --segment-accent: #dfe2e8;
+  --segment-selected: #ffffff;
   --composer: #ffffff;
   --glass: #ffffff;
   --accent-with-opacity: #22242b;
+  --accent-tinted: #22242b;
   --border-composer: #eaecf0;
   --border-accent: #d9dce5;
   --ring: #22242b;
@@ -93,6 +97,8 @@
   --opacity-color-tint: 12%;
   --opacity-color-tint-stronger: 20%;
   --opacity-color-tint-chart: 25%;
+  --opacity-color-tint-chart-stronger: 50%;
+  --opacity-color-tint-chart-strongest: 70%;
   --opacity-shimmer-band-edge: 12%;
   --opacity-shimmer-band-middle: 55%;
   --opacity-glow: 40%;
@@ -100,6 +106,7 @@
   --opacity-glow-bright: 50%;
   --opacity-glass-tint: 20%;
   --opacity-accent-opacity: 10%;
+  --opacity-accent-tint: 12%;
 }
 
 .dark {
@@ -142,9 +149,13 @@
   --border-input: #1a1b21;
   --border-popover: #222228;
   --input: #14151a;
+  --segment: #0a0b0f;
+  --segment-accent: #14151a;
+  --segment-selected: #212329;
   --composer: #111217;
   --glass: #0a0b0f;
   --accent-with-opacity: #d0d2d9;
+  --accent-tinted: #d0d2d9;
   --border-composer: #1a1b21;
   --border-accent: #25262c;
   --ring: #d0d2d9;
@@ -194,6 +205,8 @@
   --opacity-color-tint: 10%;
   --opacity-color-tint-stronger: 16%;
   --opacity-color-tint-chart: 20%;
+  --opacity-color-tint-chart-stronger: 45%;
+  --opacity-color-tint-chart-strongest: 65%;
   --opacity-shimmer-band-edge: 12%;
   --opacity-shimmer-band-middle: 55%;
   --opacity-glow: 40%;
@@ -201,6 +214,7 @@
   --opacity-glow-bright: 50%;
   --opacity-glass-tint: 50%;
   --opacity-accent-opacity: 10%;
+  --opacity-accent-tint: 8%;
 }
 
 :root {
