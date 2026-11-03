@@ -176,11 +176,15 @@ private struct ComposerPicker: View {
             ThemeDivider()
             footer
         }
+        .overlay {
+            // A press anywhere else in the picker closes the access menu only, as a menu open
+            // inside a menu does.
+            if store.composerAccessOpen {
+                PressCatcherView { openAccess(false) }
+            }
+        }
         .overlay(alignment: .bottomTrailing) {
             if store.composerAccessOpen {
-                // A press anywhere else in the picker closes the access menu only, as a menu open
-                // inside a menu does.
-                PressCatcherView { openAccess(false) }
                 accessMenu
                     .padding(.trailing, Self.padding)
                     .padding(.bottom, Self.accessMenuLift)
