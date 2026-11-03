@@ -84,9 +84,9 @@ struct ProxySettings: View {
                     }
                     Spacer(minLength: 8)
                     ActionMenu(icon: .ellipsis, help: "What to do with \(name)") {
-                        ProxyMenuItem("Replace with a New Proxy", symbol: .refreshCw) { adding = true }
+                        MenuItem("Replace with a New Proxy", symbol: .refreshCw) { adding = true }
                         Divider()
-                        ProxyMenuItem("Remove Proxy", symbol: .trash2, role: .destructive) { removal = .proxy(name: name) }
+                        MenuItem("Remove Proxy", symbol: .trash2, role: .destructive) { removal = .proxy(name: name) }
                     }
                 }
                 .padding(.vertical, 2)
