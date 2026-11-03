@@ -28,8 +28,9 @@ pub struct Known {
 }
 
 /// The MCPs that run remotely and sign in themselves, or need no login.
-const KNOWN: [(&str, &str, &str); 12] = [
+const KNOWN: [(&str, &str, &str); 14] = [
     ("Linear", "https://mcp.linear.app/mcp", "issues tracker projects"),
+    ("Ricrac", "https://ricrac.app/mcp", "issues tracker projects"),
     ("GitHub", "https://api.githubcopilot.com/mcp/", "code repositories pull requests issues"),
     ("Notion", "https://mcp.notion.com/mcp", "docs wiki pages notes"),
     ("Sentry", "https://mcp.sentry.dev/mcp", "errors crashes monitoring"),
@@ -40,6 +41,7 @@ const KNOWN: [(&str, &str, &str); 12] = [
     ("Figma", "https://mcp.figma.com/mcp", "design"),
     ("Hugging Face", "https://huggingface.co/mcp", "models datasets ml"),
     ("Context7", "https://mcp.context7.com/mcp", "docs libraries documentation"),
+    ("Cloudflare", "https://mcp.cloudflare.com/mcp", "workers dns hosting deployments"),
     ("Cloudflare Docs", "https://docs.mcp.cloudflare.com/mcp", "documentation workers"),
 ];
 
