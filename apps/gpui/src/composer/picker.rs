@@ -365,9 +365,10 @@ impl ComposerPicker {
     }
 
     /// A press around the picker closes its access menu when it is open, or else the picker.
+    /// A press around the picker closes it, and the access menu with it.
     fn press_around(&mut self, cx: &mut Context<Self>) {
         if self.access_open {
-            return self.open_access(false, cx);
+            self.open_access(false, cx);
         }
         self.close(cx);
     }
@@ -639,6 +640,31 @@ impl ComposerPicker {
         )
     }
 
+    /// Over the rest of the picker while the access menu is open: a press on it closes the access
+    /// menu only, as a menu open inside a menu does, and nothing under it is lit.
+    fn access_catcher(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        div()
+            .id("picker-access-catcher")
+            .absolute()
+            .inset_0()
+            .occlude()
+            .cursor_default()
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(|this, _, _, cx| {
+                    cx.stop_propagation();
+                    this.open_access(false, cx);
+                }),
+            )
+            .on_mouse_down(
+                MouseButton::Right,
+                cx.listener(|this, _, _, cx| {
+                    cx.stop_propagation();
+                    this.open_access(false, cx);
+                }),
+            )
+    }
+
     /// The access modes as one row of their symbols, the one under the pointer or the arrow keys
     /// named and told about under it.
     fn access_menu(&self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -894,7 +920,7 @@ impl Render for ComposerPicker {
             )
             .child(divider_on(Surface::Popover, cx))
             .child(self.footer(cx))
-            .when(self.access_open, |picker| picker.child(self.access_menu(cx)))
+            .when(self.access_open, |picker| picker.child(self.access_catcher(cx)).child(self.access_menu(cx)))
     }
 }
 

@@ -96,6 +96,60 @@ final class DropdownBackdrop: NSView {
     override func scrollWheel(with event: NSEvent) {}
 }
 
+/// What a menu open inside a dropdown lies on, over the rest of the dropdown: a press on it only
+/// closes that menu, and nothing under it is lit or given the cursor.
+final class PressCatcher: NSView {
+    var close: () -> Void = {}
+    private var tracking: NSTrackingArea?
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        guard tracking == nil else { return }
+        let area = NSTrackingArea(rect: .zero, options: [.cursorUpdate, .mouseMoved, .activeInKeyWindow, .inVisibleRect], owner: self)
+        addTrackingArea(area)
+        tracking = area
+    }
+
+    override func cursorUpdate(with event: NSEvent) {
+        NSCursor.arrow.set()
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        NSCursor.arrow.set()
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        close()
+    }
+
+    override func rightMouseDown(with event: NSEvent) {
+        close()
+    }
+
+    override func otherMouseDown(with event: NSEvent) {
+        close()
+    }
+
+    override func mouseDragged(with event: NSEvent) {}
+    override func mouseUp(with event: NSEvent) {}
+    override func rightMouseUp(with event: NSEvent) {}
+    override func otherMouseUp(with event: NSEvent) {}
+    override func scrollWheel(with event: NSEvent) {}
+}
+
+/// `PressCatcher` in SwiftUI.
+struct PressCatcherView: NSViewRepresentable {
+    let close: () -> Void
+
+    func makeNSView(context: Context) -> PressCatcher {
+        PressCatcher()
+    }
+
+    func updateNSView(_ catcher: PressCatcher, context: Context) {
+        catcher.close = close
+    }
+}
+
 /// SwiftUI that AppKit hosts on its own, as a list's row: under an open dropdown the pointer
 /// leaves it, so that nothing in it is lit.
 final class UncoveredHostingView<Content: View>: NSHostingView<Content> {

@@ -102,7 +102,10 @@ struct OpenDropdown: PreferenceKey {
         var up = false
         /// It lines up with the button's trailing edge rather than its leading one.
         var trailing = false
+        /// What Esc does: one level, as a menu open inside the dropdown.
         let close: () -> Void
+        /// What a press around the dropdown does, when it closes more than Esc does.
+        var closeAll: (() -> Void)?
     }
 
     static var defaultValue: Shown? { nil }
@@ -178,11 +181,11 @@ private struct DropdownLayer: View {
     /// Takes every press around the dropdown, which only closes it, as a menu does.
     @ViewBuilder private var backdrop: some View {
         #if os(macOS)
-        DropdownBackdropView(close: open.close)
+        DropdownBackdropView(close: open.closeAll ?? open.close)
         #else
         Color.clear
             .contentShape(Rectangle())
-            .onTapGesture(perform: open.close)
+            .onTapGesture(perform: open.closeAll ?? open.close)
         #endif
     }
 

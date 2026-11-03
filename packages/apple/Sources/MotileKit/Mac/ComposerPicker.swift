@@ -23,6 +23,9 @@ struct ComposerSettings: View {
                             return
                         }
                         store.composerPicker = nil
+                    } closeAll: {
+                        store.composerAccessOpen = false
+                        store.composerPicker = nil
                     }
                 }
                 .padding(reach.around)
@@ -175,6 +178,9 @@ private struct ComposerPicker: View {
         }
         .overlay(alignment: .bottomTrailing) {
             if store.composerAccessOpen {
+                // A press anywhere else in the picker closes the access menu only, as a menu open
+                // inside a menu does.
+                PressCatcherView { openAccess(false) }
                 accessMenu
                     .padding(.trailing, Self.padding)
                     .padding(.bottom, Self.accessMenuLift)
