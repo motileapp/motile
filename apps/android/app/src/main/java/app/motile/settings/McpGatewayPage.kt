@@ -58,6 +58,7 @@ import app.motile.ui.MenuBuilder
 import app.motile.ui.Modal
 import app.motile.ui.Segmented
 import app.motile.ui.Spinner
+import app.motile.ui.Switch
 import app.motile.ui.Text
 import app.motile.ui.dotted
 
@@ -200,7 +201,12 @@ private fun SettingsGroups.mcpServerGroup(
                 }
             }
         }
-        row { SettingsToggle("Agents get it", mcpServer.enabled) { mcpServers.setEnabled(mcpServer, it) } }
+        row {
+            SettingsRow {
+                SettingsItem("Active", "Agents can use its tools", lines = Int.MAX_VALUE)
+                Switch(mcpServer.enabled, { mcpServers.setEnabled(mcpServer, it) })
+            }
+        }
         if (mcpServer.state == McpServerRow.State.SignInAgain) row {
             SettingsPressRow({ mcpServers.signInAgain(mcpServer) }, enabled = mcpServers.signingIn == null) {
                 SettingsActionLabel("Sign In Again", Symbol.CircleUser)

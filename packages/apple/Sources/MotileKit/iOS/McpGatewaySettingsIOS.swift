@@ -144,8 +144,13 @@ struct McpGatewaySettings: View {
             .padding(.vertical, 2)
             .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
             HStack {
-                Text("Agents get it")
-                    .foregroundStyle(Color.themeForeground)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Active")
+                        .foregroundStyle(Color.themeForeground)
+                    Text("Agents can use its tools")
+                        .font(.footnote)
+                        .foregroundStyle(Color.themeMutedForeground)
+                }
                 Spacer()
                 Switch(isOn: Binding { mcpServer.enabled } set: { store.setMcpServer(mcpServer, enabled: $0) })
             }
