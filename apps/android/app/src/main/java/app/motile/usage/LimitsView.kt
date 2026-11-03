@@ -96,7 +96,7 @@ private fun Header(section: LimitsReport.Section, beside: Boolean) {
             AgentIcon(section.agent, size = iconSize(text = 14f))
             Text(section.agent.title, size = 14f, weight = FontWeight.Medium, color = palette.foreground, maxLines = 1)
             section.plan?.let { Chip(it) }
-            if (section.proxy) Chip("Proxy", icon = Symbol.Waypoints)
+            if (section.gateway) Chip("Gateway", icon = Symbol.Waypoints)
             if (beside) accountText(Modifier.weight(1f, fill = false))
         }
         if (!beside) accountText(Modifier)

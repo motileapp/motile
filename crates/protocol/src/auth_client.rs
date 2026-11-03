@@ -120,7 +120,7 @@ impl AuthClient {
         self.enroll_as(key, token, device, DeviceKind::Server).await
     }
 
-    /// Links a server or the account's proxy with the code a client made.
+    /// Links a server or the account's gateway with the code a client made.
     pub async fn enroll_as(
         &self,
         key: &DeviceKey,

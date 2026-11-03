@@ -1687,7 +1687,7 @@ impl AgentEntry {
                 agent.kind,
                 agent.detail,
                 agent.facts().unwrap_or_default(),
-                agent.proxy,
+                agent.gateway,
                 agent.parent.is_some()
             ),
         }
@@ -1895,7 +1895,7 @@ fn agent_row(
                         .when(agent.facts().is_some(), |text| {
                             let runs_on = agent.runs_on();
                             let usage = agent.usage().unwrap_or_default();
-                            let proxied = agent.proxy && runs_on.is_some();
+                            let proxied = agent.gateway && runs_on.is_some();
                             text.child(
                                 crate::ui::proxied_line(&runs_on.unwrap_or_default(), proxied, &usage, 11.)
                                     .text_color(c.muted_stronger_foreground),

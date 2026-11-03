@@ -1,5 +1,5 @@
 //! Which devices may connect: the clients linked to the server's account, as listed by the auth
-//! server, and the account's proxy, which the server's agents may reach. The list is kept on disk so
+//! server, and the account's gateway, which the server's agents may reach. The list is kept on disk so
 //! the server still accepts its clients while the auth server is unreachable.
 
 use std::collections::HashSet;
@@ -22,8 +22,8 @@ pub struct Access {
     linked: RwLock<HashSet<String>>,
     /// The servers the account deleted completely, whose copies this server drops.
     deleted: RwLock<HashSet<String>>,
-    /// The key of the account's proxy, while it has one.
-    proxy: watch::Sender<Option<String>>,
+    /// The key of the account's gateway, while it has one.
+    gateway: watch::Sender<Option<String>>,
     account: Option<AccountAccess>,
 }
 
@@ -54,7 +54,7 @@ impl Access {
             fixed: fixed.into_iter().collect(),
             linked: RwLock::new(cached.clients),
             deleted: RwLock::default(),
-            proxy: watch::Sender::new(cached.proxy),
+            gateway: watch::Sender::new(cached.gateway),
             account,
         })
     }
@@ -85,17 +85,17 @@ impl Access {
         self.deleted.read().await.contains(public_key)
     }
 
-    pub fn proxy(&self) -> Option<String> {
-        self.proxy.borrow().clone()
+    pub fn gateway(&self) -> Option<String> {
+        self.gateway.borrow().clone()
     }
 
-    /// Follows the key of the account's proxy.
-    pub fn watch_proxy(&self) -> watch::Receiver<Option<String>> {
-        self.proxy.subscribe()
+    /// Follows the key of the account's gateway.
+    pub fn watch_gateway(&self) -> watch::Receiver<Option<String>> {
+        self.gateway.subscribe()
     }
 
-    pub fn set_proxy(&self, key: Option<String>) {
-        self.proxy.send_if_modified(|kept| {
+    pub fn set_gateway(&self, key: Option<String>) {
+        self.gateway.send_if_modified(|kept| {
             let changed = *kept != key;
             *kept = key;
             changed
@@ -107,7 +107,7 @@ impl Access {
         account.last_refresh.lock().await.is_some_and(|at| at.elapsed() < MIN_REFRESH_GAP)
     }
 
-    /// Asks the auth server which clients and which proxy belong to the account.
+    /// Asks the auth server which clients and which gateway belong to the account.
     pub async fn refresh(&self) {
         let Some(account) = &self.account else { return };
         *account.last_refresh.lock().await = Some(Instant::now());
@@ -128,12 +128,12 @@ impl Access {
             devices.map(|device| device.public_key.clone())
         };
         let listed =
-            Listed { clients: keys_of(DeviceKind::Client).collect(), proxy: keys_of(DeviceKind::Proxy).next() };
+            Listed { clients: keys_of(DeviceKind::Client).collect(), gateway: keys_of(DeviceKind::Gateway).next() };
         if let Ok(text) = serde_json::to_string(&listed) {
             let _ = std::fs::write(&account.cache, text);
         }
         *self.linked.write().await = listed.clients;
-        self.set_proxy(listed.proxy);
+        self.set_gateway(listed.gateway);
     }
 
     pub fn keep_fresh(self: &Arc<Self>) {
@@ -154,7 +154,7 @@ impl Access {
 #[derive(Serialize, Deserialize, Default, PartialEq, Debug)]
 struct Listed {
     clients: HashSet<String>,
-    proxy: Option<String>,
+    gateway: Option<String>,
 }
 
 fn read_listed(file: &std::path::Path) -> Listed {
@@ -163,7 +163,7 @@ fn read_listed(file: &std::path::Path) -> Listed {
         return listed;
     }
     // Up to 0.1.267 the file only listed the clients.
-    Listed { clients: serde_json::from_str(&text).unwrap_or_default(), proxy: None }
+    Listed { clients: serde_json::from_str(&text).unwrap_or_default(), gateway: None }
 }
 
 #[cfg(test)]
@@ -171,13 +171,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_kept_list_is_read_with_its_proxy_and_from_before_it_had_one() {
+    fn the_kept_list_is_read_with_its_gateway_and_from_before_it_had_one() {
         let folder = tempfile::tempdir().unwrap();
         let file = folder.path().join("account-keys.json");
         std::fs::write(&file, r#"["client-a"]"#).unwrap();
-        assert_eq!(read_listed(&file), Listed { clients: HashSet::from(["client-a".into()]), proxy: None });
-        std::fs::write(&file, r#"{"clients":["client-a"],"proxy":"proxy-key"}"#).unwrap();
-        assert_eq!(read_listed(&file).proxy.as_deref(), Some("proxy-key"));
+        assert_eq!(read_listed(&file), Listed { clients: HashSet::from(["client-a".into()]), gateway: None });
+        std::fs::write(&file, r#"{"clients":["client-a"],"gateway":"gateway-key"}"#).unwrap();
+        assert_eq!(read_listed(&file).gateway.as_deref(), Some("gateway-key"));
         assert_eq!(read_listed(&folder.path().join("missing.json")), Listed::default());
     }
 }

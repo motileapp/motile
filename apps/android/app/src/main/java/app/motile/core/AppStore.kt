@@ -178,6 +178,8 @@ class AppStore(private val context: Context) {
     var settingsTarget by mutableStateOf<String?>(null)
     /** What is typed in the settings' search. */
     var settingsQuery by mutableStateOf("")
+    /** A step of `do.sh`'s for the MCP Gateway page, which it takes as a finger would. */
+    var mcpStep by mutableStateOf<String?>(null)
     /** The thread's settings are open over the client, where they aren't around the composer. */
     var showsThreadSettings by mutableStateOf(false)
     /** Files are being dragged over the thread. */
@@ -412,7 +414,7 @@ class AppStore(private val context: Context) {
     val history = PageHistory()
     val linear = Linear()
     val ricrac = Ricrac()
-    val proxy = Proxy()
+    val gateway = Gateway()
     var integrations by mutableStateOf(Integration.kept())
         private set
     val core = CoreBridge()
@@ -436,7 +438,7 @@ class AppStore(private val context: Context) {
         rightPanel.store = this
         linear.store = this
         ricrac.store = this
-        proxy.store = this
+        gateway.store = this
         updater.onFound = { asked -> showServerUpdates(asked) }
         AppUpdater.shared = updater
     }
@@ -455,7 +457,7 @@ class AppStore(private val context: Context) {
             put("platform", Platform.name)
             put("local_only", environment["MOTILE_LOCAL"] == "1")
             environment["MOTILE_SERVER_ADDR"]?.let { put("direct_addr", it) }
-            // `key=address,…`: each device at an address of its own, as the dev stack's proxy is.
+            // `key=address,…`: each device at an address of its own, as the dev stack's gateway is.
             environment["MOTILE_SERVER_ADDRS"]?.let { addresses ->
                 put("direct_addrs", addresses.split(",").mapNotNull { pair -> pair.split("=", limit = 2).takeIf { it.size == 2 }?.let { it[0] to it[1] } }.toMap())
             }
@@ -674,9 +676,9 @@ class AppStore(private val context: Context) {
                 val text = event.string("text")
                 return { Platform.copy(text) }
             }
-            "proxy" -> {
-                val view = ProxyView.of(event.obj("proxy") ?: EmptyJSON)
-                return { proxy.apply(view) }
+            "gateway" -> {
+                val view = GatewayView.of(event.obj("gateway") ?: EmptyJSON)
+                return { gateway.apply(view) }
             }
             else -> return null
         }
@@ -1139,16 +1141,16 @@ class AppStore(private val context: Context) {
             return composerServer?.label(model, accountID) ?: model.shortName
         }
 
-    /** The composer's model runs through the proxy. */
+    /** The composer's model runs through the gateway. */
     val composerProxied: Boolean
         get() {
             val model = composerModel ?: return false
             val accountID = selectedThread?.agentAccount ?: selectedDraft?.agentAccount
-            return composerServer?.runsThroughProxy(accountID, model.agent) ?: false
+            return composerServer?.runsThroughGateway(accountID, model.agent) ?: false
         }
 
-    /** Whether the thread's model runs through the proxy. */
-    fun modelProxied(thread: ThreadInfo): Boolean = server(thread.serverID)?.runsThroughProxy(thread.agentAccount, thread.agent) ?: false
+    /** Whether the thread's model runs through the gateway. */
+    fun modelProxied(thread: ThreadInfo): Boolean = server(thread.serverID)?.runsThroughGateway(thread.agentAccount, thread.agent) ?: false
 
     /** The thread's model as the composer shows it, with the account when its agent has more than one. */
     fun modelLabel(thread: ThreadInfo): String {
@@ -1164,13 +1166,13 @@ class AppStore(private val context: Context) {
 
     /**
      * What the composer's model menu lists: each account with its agent's models, titled with the
-     * account's name when its agent has more than one. The Proxy account's title is its agent's
-     * alone, which the proxy's symbol follows.
+     * account's name when its agent has more than one. The Gateway account's title is its agent's
+     * alone, which the gateway's symbol follows.
      */
     val composerChoices: List<ModelChoice>
         get() = composerAccounts.map { account ->
             val several = (composerServer?.accounts(account.agent)?.size ?: 0) > 1
-            val title = if (several && !account.proxy) "${account.agent.title} · ${account.name}" else account.agent.title
+            val title = if (several && !account.gateway) "${account.agent.title} · ${account.name}" else account.agent.title
             ModelChoice(title, account, composerModels.filter { it.runs(account) })
         }
 

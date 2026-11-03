@@ -49,7 +49,7 @@ import app.motile.ui.AgentAvatar
 import app.motile.ui.HighlightButton
 import app.motile.ui.Icon
 import app.motile.ui.MenuPopup
-import app.motile.ui.ProxyMark
+import app.motile.ui.GatewayMark
 import app.motile.ui.Text
 import app.motile.ui.color
 import app.motile.ui.pressPosition
@@ -179,10 +179,10 @@ private fun AgentRow(agent: AgentInfo) {
         store.rightPanel.visit(agent.id)
         if (threadID != null) store.openStartedThread(threadID) else store.rightPanel.showAgent(agent.id)
     }
-    // "6.1-Sol · work · 3 tools · 21k tokens", as far as each is known, with the proxy's symbol after the account of one that runs through the proxy.
+    // "6.1-Sol · work · 3 tools · 21k tokens", as far as each is known, with the gateway's symbol after the account of one that runs through the gateway.
     val runsOn = listOfNotNull(agent.model, agent.account).joinToString(" · ")
     val facts = buildAnnotatedString {
-        append(AnnotatedString(runsOn).proxied(agent.proxy && runsOn.isNotEmpty()))
+        append(AnnotatedString(runsOn).proxied(agent.gateway && runsOn.isNotEmpty()))
         agent.usage?.let { append(if (runsOn.isEmpty()) it else " · $it") }
     }.takeIf { it.isNotEmpty() }
     Box(Modifier.fillMaxWidth().pressPosition(menu)) {
@@ -218,7 +218,7 @@ private fun AgentRow(agent: AgentInfo) {
                     val color = if (agent.status == ToolStatus.Failed) palette.destructive else palette.mutedForeground
                     Text(agent.detail, size = 12f, color = color, maxLines = 1)
                     facts?.let {
-                        Text(it, size = 11f, color = palette.mutedStrongerForeground, maxLines = 1, inlineContent = ProxyMark.content(palette.mutedStrongerForeground, 11f))
+                        Text(it, size = 11f, color = palette.mutedStrongerForeground, maxLines = 1, inlineContent = GatewayMark.content(palette.mutedStrongerForeground, 11f))
                     }
                 }
             }

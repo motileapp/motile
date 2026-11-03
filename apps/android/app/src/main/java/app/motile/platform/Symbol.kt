@@ -80,6 +80,7 @@ enum class Symbol(val character: String?) {
     Image("\uE0F6"),
     Images("\uE5C4"),
     Info("\uE0F9"),
+    KeyRound("\uE4A3"),
     Keyboard("\uE284"),
     Layers("\uE529"),
     /** Linear's logo, which Lucide doesn't have. */
@@ -105,6 +106,7 @@ enum class Symbol(val character: String?) {
     Pencil("\uE1F9"),
     PencilLine("\uE4F0"),
     Play("\uE13C"),
+    Plug("\uE37F"),
     Plus("\uE13D"),
     RefreshCw("\uE145"),
     /** Ricrac's logo, which Lucide doesn't have. */

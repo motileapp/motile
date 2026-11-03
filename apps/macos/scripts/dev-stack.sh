@@ -1,7 +1,7 @@
 # The account the dev apps are signed in to, which only exists on this Mac: PostgreSQL, an auth
 # server with the dev login, and a server whose agent is scripts/fake-agent, whose GitHub is
 # scripts/fake-gh, whose Linear is scripts/fake-linear and whose Ricrac is scripts/fake-ricrac, with
-# a project and a few threads, and the account's proxy, whose Anthropic and OpenAI are
+# a project and a few threads, and the account's gateway, whose Anthropic and OpenAI are
 # scripts/fake-upstream. MOTILE_DEV_LINEAR=real leaves Linear the real one, and
 # MOTILE_DEV_RICRAC=real Ricrac, to connect a workspace of yours; it takes hold when the server
 # starts, so stop the stack first. It lives in apps/macos/build/dev and is left
@@ -27,14 +27,14 @@ source "$STACK_HOME/scripts/claims.sh"
 # claimed them; then the stack restarts on new ones.
 # shellcheck disable=SC1091
 [ ! -f "$DEV/ports" ] || source "$DEV/ports"
-KEPT="PG_PORT=${PG_PORT:-} AUTH_PORT=${AUTH_PORT:-} SERVER_PORT=${SERVER_PORT:-} LINEAR_PORT=${LINEAR_PORT:-} RICRAC_PORT=${RICRAC_PORT:-} PROXY_PORT=${PROXY_PORT:-} UPSTREAM_PORT=${UPSTREAM_PORT:-}"
-PORTS="PG_PORT=$(claim_port TCP "${PG_PORT:-5436}") AUTH_PORT=$(claim_port TCP "${AUTH_PORT:-3112}") SERVER_PORT=$(claim_port UDP "${SERVER_PORT:-47614}") LINEAR_PORT=$(claim_port TCP "${LINEAR_PORT:-3212}") RICRAC_PORT=$(claim_port TCP "${RICRAC_PORT:-3213}") PROXY_PORT=$(claim_port UDP "${PROXY_PORT:-47714}") UPSTREAM_PORT=$(claim_port TCP "${UPSTREAM_PORT:-3214}")"
+KEPT="PG_PORT=${PG_PORT:-} AUTH_PORT=${AUTH_PORT:-} SERVER_PORT=${SERVER_PORT:-} LINEAR_PORT=${LINEAR_PORT:-} RICRAC_PORT=${RICRAC_PORT:-} GATEWAY_PORT=${GATEWAY_PORT:-} UPSTREAM_PORT=${UPSTREAM_PORT:-}"
+PORTS="PG_PORT=$(claim_port TCP "${PG_PORT:-5436}") AUTH_PORT=$(claim_port TCP "${AUTH_PORT:-3112}") SERVER_PORT=$(claim_port UDP "${SERVER_PORT:-47614}") LINEAR_PORT=$(claim_port TCP "${LINEAR_PORT:-3212}") RICRAC_PORT=$(claim_port TCP "${RICRAC_PORT:-3213}") GATEWAY_PORT=$(claim_port UDP "${GATEWAY_PORT:-47714}") UPSTREAM_PORT=$(claim_port TCP "${UPSTREAM_PORT:-3214}")"
 PORTS_MOVED=0
 if [ -n "${PG_PORT:-}" ] && [ "$PORTS" != "$KEPT" ]; then PORTS_MOVED=1; fi
 echo "$PORTS" > "$DEV/ports"
 # shellcheck disable=SC1091
 source "$DEV/ports"
-release_ports "$PG_PORT" "$AUTH_PORT" "$SERVER_PORT" "$LINEAR_PORT" "$RICRAC_PORT" "$PROXY_PORT" "$UPSTREAM_PORT"
+release_ports "$PG_PORT" "$AUTH_PORT" "$SERVER_PORT" "$LINEAR_PORT" "$RICRAC_PORT" "$GATEWAY_PORT" "$UPSTREAM_PORT"
 AUTH_URL="http://127.0.0.1:$AUTH_PORT"
 
 # A pid file holds the process and the version of the program it runs.
@@ -74,45 +74,50 @@ dev_session() {
     post /api/sessions -d "{\"code\":\"$code\",\"verifier\":\"$verifier\"}" | field token
 }
 
-# The account's proxy, on scripts/fake-upstream, linked the first time by `motile-proxy setup`. The
+# The account's gateway, on scripts/fake-upstream, linked the first time by `motile-gateway setup`. The
 # clients and the server are told where it is, since nothing looks it up here.
-start_proxy() {
+start_gateway() {
     local upstream="http://127.0.0.1:$UPSTREAM_PORT" code=""
     if ! current upstream "$ROOT/scripts/fake-upstream"; then
         stop upstream
         nohup "$ROOT/scripts/fake-upstream" "$UPSTREAM_PORT" > "$DEV/upstream.log" 2>&1 &
         started upstream $! "$ROOT/scripts/fake-upstream"
     fi
-    if [ ! -f "$DEV/proxy.key" ]; then
-        echo "▸ Setting up the proxy…"
+    # The proxy before it was the gateway is set up again as the gateway.
+    if [ -e "$DEV/proxy" ] || [ -e "$DEV/proxy.key" ]; then
         stop proxy
-        rm -rf "$DEV/proxy"
+        rm -rf "$DEV/proxy" "$DEV/proxy.key" "$DEV/proxy.log"
+    fi
+    if [ ! -f "$DEV/gateway.key" ]; then
+        echo "▸ Setting up the gateway…"
+        stop gateway
+        rm -rf "$DEV/gateway"
         code="$(post /api/enroll-tokens -X POST -H "authorization: Bearer $(dev_session)" | field token)"
     fi
-    if [ -n "$code" ] || ! current proxy "$BIN/motile-proxy"; then
-        stop proxy
-        [ -z "$code" ] || DATA_DIR="$DEV/proxy" "$BIN/motile-proxy" setup "$code" >/dev/null
-        DATA_DIR="$DEV/proxy" MOTILE_PROXY_PORT="$PROXY_PORT" \
+    if [ -n "$code" ] || ! current gateway "$BIN/motile-gateway"; then
+        stop gateway
+        [ -z "$code" ] || DATA_DIR="$DEV/gateway" "$BIN/motile-gateway" setup "$code" >/dev/null
+        DATA_DIR="$DEV/gateway" MOTILE_GATEWAY_PORT="$GATEWAY_PORT" \
             MOTILE_ANTHROPIC_URL="$upstream" MOTILE_CLAUDE_AUTHORIZE_URL="$upstream/oauth/authorize" \
             MOTILE_CLAUDE_TOKEN_URL="$upstream/v1/oauth/token" MOTILE_CHATGPT_URL="$upstream/backend-api" \
             MOTILE_OPENAI_AUTH_URL="$upstream" MOTILE_PRICES_URL="$upstream/prices" NO_COLOR=1 \
-            nohup "$BIN/motile-proxy" > "$DEV/proxy.log" 2>&1 &
-        started proxy $! "$BIN/motile-proxy"
+            nohup "$BIN/motile-gateway" > "$DEV/gateway.log" 2>&1 &
+        started gateway $! "$BIN/motile-gateway"
     fi
     if [ -n "$code" ]; then
         for _ in $(seq 1 100); do
-            sed -n 's/.*serving its account key="\([0-9a-f]*\)".*/\1/p' "$DEV/proxy.log" | grep . > "$DEV/proxy.key" && break
-            rm -f "$DEV/proxy.key"
+            sed -n 's/.*serving its account key="\([0-9a-f]*\)".*/\1/p' "$DEV/gateway.log" | grep . > "$DEV/gateway.key" && break
+            rm -f "$DEV/gateway.key"
             sleep 0.2
         done
     fi
-    export MOTILE_PROXY_ADDR="127.0.0.1:$PROXY_PORT"
-    export MOTILE_SERVER_ADDRS="$(cat "$DEV/proxy.key" 2>/dev/null)=$MOTILE_PROXY_ADDR"
+    export MOTILE_GATEWAY_ADDR="127.0.0.1:$GATEWAY_PORT"
+    export MOTILE_SERVER_ADDRS="$(cat "$DEV/gateway.key" 2>/dev/null)=$MOTILE_GATEWAY_ADDR"
 }
 
 stop_stack() {
     stop server
-    stop proxy
+    stop gateway
     stop upstream
     stop linear
     stop ricrac
@@ -128,7 +133,7 @@ start_stack() {
     fi
 
     echo "▸ Building the servers…"
-    (cd "$ROOT" && cargo build --release -p motile-server -p motile-auth -p motile-proxy)
+    (cd "$ROOT" && cargo build --release -p motile-server -p motile-auth -p motile-gateway)
 
     if ! pg_ctl -D "$DEV/pg" status >/dev/null 2>&1; then
         echo "▸ Starting PostgreSQL…"
@@ -159,7 +164,7 @@ start_stack() {
         mv "$DEV/server.new" "$DEV/server"
     fi
 
-    start_proxy
+    start_gateway
 
     local linear_url=""
     if [ "${MOTILE_DEV_LINEAR:-}" != real ]; then

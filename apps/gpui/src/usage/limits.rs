@@ -74,7 +74,7 @@ fn header(section: &LimitsSection, cx: &App) -> Div {
                 .child(agent_name(section.agent)),
         )
         .when_some(section.plan.clone(), |header, plan| header.child(Chip::new(plan)))
-        .when(section.proxy, |header| header.child(Chip::new("Proxy").icon("waypoints")))
+        .when(section.gateway, |header| header.child(Chip::new("Gateway").icon("waypoints")))
         .when_some(account, |header, account| {
             header.child(
                 div()

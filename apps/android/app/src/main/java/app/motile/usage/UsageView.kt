@@ -66,7 +66,7 @@ fun UsageContent(model: UsageModel, modifier: Modifier = Modifier, margin: Dp = 
         Column(Modifier.widthIn(max = 880.dp).fillMaxWidth().padding(start = margin, end = margin, top = top, bottom = 80.dp)) {
             when (model.tab) {
                 UsageModel.Tab.Limits -> {
-                    WatchesProxy()
+                    WatchesGateway()
                     when (val limits = model.limits) {
                         Loaded.Loading -> UsageLoading()
                         is Loaded.Failed -> UsageNote(limits.message)
@@ -85,13 +85,13 @@ fun UsageContent(model: UsageModel, modifier: Modifier = Modifier, margin: Dp = 
     }
 }
 
-/** Keeps the core following the account's proxy while the view shows, so that its accounts are known. */
+/** Keeps the core following the account's gateway while the view shows, so that its accounts are known. */
 @Composable
-fun WatchesProxy() {
-    val proxy = LocalStore.current.proxy
-    DisposableEffect(proxy) {
-        proxy.watch(true)
-        onDispose { proxy.watch(false) }
+fun WatchesGateway() {
+    val gateway = LocalStore.current.gateway
+    DisposableEffect(gateway) {
+        gateway.watch(true)
+        onDispose { gateway.watch(false) }
     }
 }
 

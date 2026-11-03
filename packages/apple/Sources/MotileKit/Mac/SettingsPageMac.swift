@@ -22,7 +22,8 @@ struct SettingsPage: View {
                     switch section {
                     case .general: general
                     case .servers: servers
-                    case .proxy: ProxySettings()
+                    case .agentGateway: AgentGatewaySettings()
+                    case .mcpGateway: McpGatewaySettings()
                     case .accounts: agentAccounts
                     case .projects: projects
                     case .textGeneration: textGeneration
@@ -338,18 +339,18 @@ struct SettingsPage: View {
                 SettingsRow {
                     AgentIcon(agent: account.agent, size: .md)
                     SettingsLabel(
-                        account.settingsTitle, description: account.settingsDescription(isDefault: server.isDefault(account)), proxied: account.proxy
+                        account.settingsTitle, description: account.settingsDescription(isDefault: server.isDefault(account)), proxied: account.gateway
                     )
                 } trailing: {
-                    if !account.proxy || !server.isDefault(account) {
+                    if !account.gateway || !server.isDefault(account) {
                         more("What to do with the account") {
-                            if !account.proxy {
+                            if !account.gateway {
                                 item("Edit", symbol: .pencil) { editedAccount = EditedAccount(server: server, account: account) }
                             }
                             if !server.isDefault(account) {
                                 item("Make Default", symbol: .circleCheck) { store.makeAgentAccountDefault(account, on: server) }
                             }
-                            if !account.proxy {
+                            if !account.gateway {
                                 Divider()
                                 item("Remove Account", symbol: .trash2, role: .destructive) { removal = .account(account, on: server) }
                             }
@@ -567,7 +568,7 @@ struct SettingsLabel<Footer: View>: View {
     var icon: Symbol?
     /// A description that is cut on one line instead of wrapped: a path at its start, a sentence at its end.
     var truncates: Text.TruncationMode?
-    /// What the title names runs through the proxy, which its symbol after it says.
+    /// What the title names runs through the gateway, which its symbol after it says.
     var proxied = false
     /// What stands under the description.
     @ViewBuilder var footer: Footer
@@ -592,7 +593,7 @@ struct SettingsLabel<Footer: View>: View {
             }
             VStack(alignment: .leading, spacing: 2) {
                 Text(verbatim: title)
-                    .proxyMarked(proxied, fontSize: 13)
+                    .gatewayMarked(proxied, fontSize: 13)
                     .font(.ui(size: 13, weight: .medium))
                 if let description {
                     Text(description)

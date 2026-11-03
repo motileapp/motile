@@ -14,9 +14,9 @@ use iroh::Endpoint;
 use motile_openui::ToolError;
 use motile_protocol::auth_api::{Device, DeviceKind, Me};
 use motile_protocol::auth_client::{AuthClient, DeviceDescription};
+use motile_protocol::gateway_wire::{GatewayReply, GatewaySignIn, GatewayState, Manage, McpAdding, McpChange};
 use motile_protocol::identity::{DeviceKey, random_token};
 use motile_protocol::now;
-use motile_protocol::proxy_wire::{Manage, ProxyReply, ProxySignIn, ProxyState};
 use motile_protocol::wire::{
     Access, AccountSkills, Activity, Agent, AgentLimits, ContinueSettings, FileKind, Item, ItemKind, Media, Message,
     Project, PullRequestSettings, Request, ServerInfo, Skill, Thread, ThreadMatch, ToolStatus, Worktree,
@@ -33,13 +33,14 @@ use crate::browse;
 use crate::cache::{Cache, Page};
 use crate::connection::{NOT_CONNECTED, ServerAddr, bind, offline};
 use crate::follow::{self, Followed};
+use crate::gateway::{self, GatewayEvent, GatewayLink};
 use crate::git;
 use crate::keybindings::Keybindings;
 use crate::limits;
 use crate::linear;
 use crate::link::{Link, LinkEvent, State, Status};
+use crate::mcp_servers;
 use crate::media::{self, MediaCache};
-use crate::proxy::{self, ProxyEvent, ProxyLink};
 use crate::pull_request;
 use crate::render::agents::{self, ThreadState};
 use crate::render::diff;
@@ -87,8 +88,8 @@ const SKILLS_FRESH: Duration = Duration::from_secs(30);
 const SEARCH_DELAY: Duration = Duration::from_millis(200);
 /// How long a search waits for a server.
 const SEARCH_TIMEOUT: Duration = Duration::from_secs(5);
-/// How long the Limits tab waits for the proxy's accounts.
-const PROXY_LIMITS_WAIT: Duration = Duration::from_secs(5);
+/// How long the Limits tab waits for the gateway's accounts.
+const GATEWAY_LIMITS_WAIT: Duration = Duration::from_secs(5);
 /// What a server said of its agents' accounts is read again once it is this old.
 const LIMITS_STALE: Duration = Duration::from_secs(5 * 60);
 /// An endpoint that didn't run for this long isn't trusted to reach anything anymore.
@@ -232,21 +233,21 @@ enum Input {
         language: String,
         code: String,
     },
-    /// From the link to the proxy with that key.
-    Proxy {
+    /// From the link to the gateway with that key.
+    Gateway {
         key: String,
-        event: ProxyEvent,
+        event: GatewayEvent,
     },
-    /// What the proxy answered the command `id` with, other than its state.
-    ProxyAnswered {
+    /// What the gateway answered the command `id` with, other than its state.
+    GatewayAnswered {
         id: u64,
-        answer: ProxyReply,
+        answer: GatewayReply,
     },
-    /// The proxy finished the sign-in, or couldn't; for the command `reply_to`, when one waits.
-    ProxySignInEnded {
+    /// The gateway finished the sign-in, or couldn't; for the command `reply_to`, when one waits.
+    GatewaySignInEnded {
         sign_in: String,
         reply_to: Option<u64>,
-        result: Result<ProxyState, String>,
+        result: Result<GatewayState, String>,
     },
     Render,
     Tick,
@@ -401,19 +402,19 @@ struct Core {
     keybindings: Keybindings,
     search: Search,
     relay: Relay,
-    proxy: Proxy,
+    gateway: Gateway,
 }
 
-/// The account's proxy, as far as the client knows it.
+/// The account's gateway, as far as the client knows it.
 #[derive(Default)]
-struct Proxy {
+struct Gateway {
     /// A view that shows it is open.
     watching: bool,
-    link: Option<Arc<ProxyLink>>,
-    status: proxy::Status,
+    link: Option<Arc<GatewayLink>>,
+    status: gateway::Status,
     /// Its last state, with its key.
-    state: Option<(String, ProxyState)>,
-    sign_in: Option<proxy::SignIn>,
+    state: Option<(String, GatewayState)>,
+    sign_in: Option<gateway::SignIn>,
 }
 
 /// The rounds that copy the servers' threads between them.
@@ -515,7 +516,7 @@ pub fn start(config: Config, sink: EventSink) -> anyhow::Result<Handle> {
         icons_asked: HashSet::new(),
         search: Search::default(),
         relay: Relay::default(),
-        proxy: Proxy::default(),
+        gateway: Gateway::default(),
     };
     // Loading the syntax definitions takes a moment; better now than at the first code block.
     tokio::task::spawn_blocking(|| highlight::highlight("rust", "fn main() {}"));
@@ -738,10 +739,10 @@ impl Core {
             Input::UiHighlighted { thread_id, language, code } => {
                 self.with_programs(&thread_id, |programs| programs.highlighted(&language, &code))
             }
-            Input::Proxy { key, event } => self.proxy_event(&key, event),
-            Input::ProxyAnswered { id, answer } => self.proxy_answered(id, answer),
-            Input::ProxySignInEnded { sign_in, reply_to, result } => {
-                self.proxy_sign_in_ended(&sign_in, reply_to, result)
+            Input::Gateway { key, event } => self.gateway_event(&key, event),
+            Input::GatewayAnswered { id, answer } => self.gateway_answered(id, answer),
+            Input::GatewaySignInEnded { sign_in, reply_to, result } => {
+                self.gateway_sign_in_ended(&sign_in, reply_to, result)
             }
             Input::Render => self.render(),
             Input::Stop => {}
@@ -782,7 +783,7 @@ impl Core {
                 link.shutdown();
             }
         }
-        if let Some(link) = self.proxy.link.take() {
+        if let Some(link) = self.gateway.link.take() {
             link.shutdown();
         }
         if let Some(timer) = self.relay.timer.take() {
@@ -971,7 +972,7 @@ impl Core {
         for link in self.servers.iter().filter_map(|server| server.link.as_ref()) {
             link.retry_now();
         }
-        if let Some(link) = &self.proxy.link {
+        if let Some(link) = &self.gateway.link {
             link.retry_now();
         }
     }
@@ -1022,14 +1023,14 @@ impl Core {
                 for link in self.servers.iter().filter_map(|server| server.link.as_ref()) {
                     link.redial_on(endpoint.clone());
                 }
-                if let Some(link) = &self.proxy.link {
+                if let Some(link) = &self.gateway.link {
                     link.redial_on(endpoint.clone());
                 }
                 if let Some(stale) = self.endpoint.replace(endpoint) {
                     tokio::spawn(async move { stale.close().await });
                 }
                 self.connect_servers();
-                self.sync_proxy();
+                self.sync_gateway();
             }
             Err(error) => tracing::error!("the network endpoint couldn't be opened: {error}"),
         }
@@ -1130,141 +1131,183 @@ impl Core {
             self.mark_removed(&server_id);
         }
         self.schedule_relay(RELAY_SOON);
-        self.sync_proxy();
+        self.sync_gateway();
     }
 
-    // ---- proxy ----
+    // ---- gateway ----
 
-    fn proxy_device(&self) -> Option<&Device> {
-        self.me.devices.iter().find(|device| device.kind == DeviceKind::Proxy)
+    fn gateway_device(&self) -> Option<&Device> {
+        self.me.devices.iter().find(|device| device.kind == DeviceKind::Gateway)
     }
 
-    /// Connects to the account's proxy while a view shows it, and lets go of it otherwise or once
+    /// Connects to the account's gateway while a view shows it, and lets go of it otherwise or once
     /// it is another.
-    fn sync_proxy(&mut self) {
-        let key = self.proxy_device().map(|device| device.public_key.clone());
-        if self.proxy.state.is_none() {
-            self.proxy.state = self.cache.kept::<(String, ProxyState)>("proxy");
+    fn sync_gateway(&mut self) {
+        let key = self.gateway_device().map(|device| device.public_key.clone());
+        if self.gateway.state.is_none() {
+            self.gateway.state = self.cache.kept::<(String, GatewayState)>("gateway");
         }
-        if self.proxy.state.as_ref().is_some_and(|(kept, _)| Some(kept) != key.as_ref()) {
-            self.proxy.state = None;
-            self.proxy.sign_in = None;
+        if self.gateway.state.as_ref().is_some_and(|(kept, _)| Some(kept) != key.as_ref()) {
+            self.gateway.state = None;
+            self.gateway.sign_in = None;
         }
-        let wanted = key.filter(|_| self.proxy.watching);
-        let linked = self.proxy.link.as_ref().map(|link| link.key.clone());
-        if wanted != linked || self.proxy.link.is_some() && self.endpoint.is_none() {
-            if let Some(link) = self.proxy.link.take() {
+        let wanted = key.filter(|_| self.gateway.watching);
+        let linked = self.gateway.link.as_ref().map(|link| link.key.clone());
+        if wanted != linked || self.gateway.link.is_some() && self.endpoint.is_none() {
+            if let Some(link) = self.gateway.link.take() {
                 link.shutdown();
             }
-            self.proxy.status = proxy::Status::default();
+            self.gateway.status = gateway::Status::default();
             if let (Some(key), Some(endpoint)) = (wanted, self.endpoint.clone()) {
                 let direct = self.config.direct_addrs.get(&key).or(self.config.direct_addr.as_ref());
                 let address = ServerAddr { key: key.clone(), direct: direct.and_then(|address| address.parse().ok()) };
                 let inputs = self.inputs.clone();
-                let emit: proxy::Emit = Arc::new(move |event| {
-                    let _ = inputs.send(Input::Proxy { key: key.clone(), event });
+                let emit: gateway::Emit = Arc::new(move |event| {
+                    let _ = inputs.send(Input::Gateway { key: key.clone(), event });
                 });
-                self.proxy.link = Some(ProxyLink::connect(endpoint, address, emit));
+                self.gateway.link = Some(GatewayLink::connect(endpoint, address, emit));
             }
         }
-        self.emit_proxy();
+        self.emit_gateway();
     }
 
-    fn emit_proxy(&self) {
-        let shown = proxy::Shown {
-            device: self.proxy_device(),
-            status: self.proxy.link.as_ref().map(|_| &self.proxy.status),
-            state: self.proxy.state.as_ref().map(|(_, state)| state),
-            sign_in: self.proxy.sign_in.as_ref(),
+    fn emit_gateway(&self) {
+        let shown = gateway::Shown {
+            device: self.gateway_device(),
+            status: self.gateway.link.as_ref().map(|_| &self.gateway.status),
+            state: self.gateway.state.as_ref().map(|(_, state)| state),
+            sign_in: self.gateway.sign_in.as_ref(),
             now: now(),
             utc_offset_secs: utc_offset_secs(),
         };
-        let view = proxy::view(shown, &Names(&self.servers));
-        self.emit(Event::Proxy { proxy: Box::new(view) });
+        let view = gateway::view(shown, &Names(&self.servers));
+        self.emit(Event::Gateway { gateway: Box::new(view) });
     }
 
-    fn proxy_event(&mut self, key: &str, event: ProxyEvent) {
-        if self.proxy.link.as_ref().is_none_or(|link| link.key != key) {
+    fn gateway_event(&mut self, key: &str, event: GatewayEvent) {
+        if self.gateway.link.as_ref().is_none_or(|link| link.key != key) {
             return;
         }
         match event {
-            ProxyEvent::Status(status) => self.proxy.status = status,
-            ProxyEvent::State(state) => {
-                if self.proxy.state.as_ref().is_some_and(|(_, known)| *known == state) {
+            GatewayEvent::Status(status) => self.gateway.status = status,
+            GatewayEvent::State(state) => {
+                if self.gateway.state.as_ref().is_some_and(|(_, known)| *known == state) {
                     return;
                 }
                 let kept = (key.to_string(), state);
-                self.cache.keep("proxy", &kept);
-                self.proxy.state = Some(kept);
+                self.cache.keep("gateway", &kept);
+                self.gateway.state = Some(kept);
             }
         }
-        self.emit_proxy();
+        self.emit_gateway();
     }
 
-    /// Sends a command to the proxy. The state it answers with is taken in and the command answered
-    /// with nothing; any other answer goes to `proxy_answered`.
-    fn proxy_manage(&self, id: u64, command: Manage) {
-        let Some(link) = self.proxy.link.clone() else {
-            return self.reply(id, Err("Open your proxy's settings first.".to_string()));
+    /// Sends a command to the gateway. The state it answers with is taken in and the command answered
+    /// with nothing; any other answer goes to `gateway_answered`.
+    fn gateway_manage(&self, id: u64, command: Manage) {
+        let Some(link) = self.gateway.link.clone() else {
+            return self.reply(id, Err("Open your gateway's settings first.".to_string()));
         };
         let (sink, inputs) = (self.sink.clone(), self.inputs.clone());
         tokio::spawn(async move {
             match link.manage(command).await {
-                Ok(ProxyReply::State { state }) => {
-                    let _ = inputs.send(Input::Proxy { key: link.key.clone(), event: ProxyEvent::State(state) });
+                Ok(GatewayReply::State { state }) => {
+                    let _ = inputs.send(Input::Gateway { key: link.key.clone(), event: GatewayEvent::State(state) });
                     reply(&sink, id, Ok(json!({})));
                 }
-                Ok(ProxyReply::Captured { request: Some(request) }) => {
-                    let request = tokio::task::spawn_blocking(move || proxy::readable_request(request)).await;
-                    let answer = request.map(|request| ProxyReply::Captured { request: Some(request) });
-                    let _ = inputs.send(Input::ProxyAnswered { id, answer: answer.unwrap_or(ProxyReply::Ok) });
+                Ok(GatewayReply::Captured { request: Some(request) }) => {
+                    let request = tokio::task::spawn_blocking(move || gateway::readable_request(request)).await;
+                    let answer = request.map(|request| GatewayReply::Captured { request: Some(request) });
+                    let _ = inputs.send(Input::GatewayAnswered { id, answer: answer.unwrap_or(GatewayReply::Ok) });
                 }
                 Ok(answer) => {
-                    let _ = inputs.send(Input::ProxyAnswered { id, answer });
+                    let _ = inputs.send(Input::GatewayAnswered { id, answer });
                 }
                 Err(error) => reply(&sink, id, Err(error_text(error))),
             }
         });
     }
 
-    fn proxy_answered(&mut self, id: u64, answer: ProxyReply) {
-        let accounts = self.proxy.state.as_ref().map(|(_, state)| state.accounts.as_slice()).unwrap_or_default();
+    /// The input schema of an MCP server's tool, as the gateway last said it.
+    fn mcp_server_tool_schema(&self, mcp_server: &str, tool: &str) -> Option<serde_json::Value> {
+        let (_, state) = self.gateway.state.as_ref()?;
+        let mcp_server = state.mcp_servers.as_ref()?.iter().find(|kept| kept.id == mcp_server)?;
+        Some(mcp_server.tools.iter().find(|kept| kept.name == tool)?.input_schema.clone())
+    }
+
+    fn gateway_answered(&mut self, id: u64, answer: GatewayReply) {
+        let accounts = self.gateway.state.as_ref().map(|(_, state)| state.accounts.as_slice()).unwrap_or_default();
+        let kept_mcp_servers =
+            self.gateway.state.as_ref().and_then(|(_, state)| state.mcp_servers.as_deref()).unwrap_or_default();
         let names = Names(&self.servers);
-        let rows = |entries: &[_]| proxy::log_rows(entries, accounts, &names, now(), utc_offset_secs());
+        let rows = |entries: &[_]| gateway::log_rows(entries, accounts, &names, now(), utc_offset_secs());
+        let call_rows = |calls: &[_]| mcp_servers::call_rows(calls, kept_mcp_servers, &names, now(), utc_offset_secs());
         match answer {
-            ProxyReply::SignInStarted { sign_in } => self.proxy_sign_in_started(id, sign_in),
-            ProxyReply::Log { entries } => {
-                let more = entries.len() as u32 >= proxy::LOG_PAGE;
+            GatewayReply::McpAdding { adding } => {
+                let answer = match adding {
+                    McpAdding::Added { id } => json!({ "added": id }),
+                    McpAdding::SignIn { state, url } => json!({ "sign_in": { "state": state, "url": url } }),
+                    McpAdding::NeedsKey => json!({ "needs_key": true }),
+                };
+                self.reply(id, Ok(answer));
+                if let Some(link) = self.gateway.link.clone() {
+                    let inputs = self.inputs.clone();
+                    tokio::spawn(async move {
+                        if let Ok(GatewayReply::State { state }) = link.manage(Manage::State).await {
+                            let _ = inputs
+                                .send(Input::Gateway { key: link.key.clone(), event: GatewayEvent::State(state) });
+                        }
+                    });
+                }
+            }
+            GatewayReply::McpCalls { calls } => {
+                let more = calls.len() as u32 >= mcp_servers::CALLS_PAGE;
+                self.reply(id, Ok(json!({ "rows": call_rows(&calls), "more": more })));
+            }
+            GatewayReply::McpCall { call } => {
+                let view = call.map(|detail| {
+                    let row = call_rows(std::slice::from_ref(&detail.call)).remove(0);
+                    mcp_servers::call_view(detail, row)
+                });
+                self.reply(id, Ok(json!({ "call": view })));
+            }
+            GatewayReply::ToolResult { result } => {
+                let answered = mcp_servers::answered(&result.result, result.error);
+                self.reply(id, Ok(serde_json::to_value(answered).unwrap_or_default()));
+            }
+            GatewayReply::SignInStarted { sign_in } => self.gateway_sign_in_started(id, sign_in),
+            GatewayReply::Log { entries } => {
+                let more = entries.len() as u32 >= gateway::LOG_PAGE;
                 self.reply(id, Ok(json!({ "rows": rows(&entries), "more": more })));
             }
-            ProxyReply::Captured { request } => {
+            GatewayReply::Captured { request } => {
                 let view = request.map(|request| {
                     let row = rows(std::slice::from_ref(&request.entry)).remove(0);
-                    proxy::captured_view(request, row)
+                    gateway::captured_view(request, row)
                 });
                 self.reply(id, Ok(json!({ "request": view })));
             }
-            ProxyReply::Ok => self.reply(id, Ok(json!({}))),
-            other => self.reply(id, Err(proxy::unexpected(&other))),
+            GatewayReply::Ok => self.reply(id, Ok(json!({}))),
+            other => self.reply(id, Err(gateway::unexpected(&other))),
         }
     }
 
-    /// Codex's sign-in is finished at once: the proxy answers once the user approved it.
-    fn proxy_sign_in_started(&mut self, id: u64, started: ProxySignIn) {
+    /// Codex's sign-in is finished at once: the gateway answers once the user approved it.
+    fn gateway_sign_in_started(&mut self, id: u64, started: GatewaySignIn) {
         self.reply(id, Ok(json!({ "url": started.url, "user_code": started.user_code })));
         let codex = started.agent == Agent::Codex;
         let sign_in_id = started.id.clone();
-        self.proxy.sign_in = Some(proxy::SignIn { started, waiting: codex, error: None, task: None });
+        self.gateway.sign_in = Some(gateway::SignIn { started, waiting: codex, error: None, task: None });
         if codex {
-            self.proxy_finish_sign_in(sign_in_id, None, None);
+            self.gateway_finish_sign_in(sign_in_id, None, None);
         }
-        self.emit_proxy();
+        self.emit_gateway();
     }
 
-    fn proxy_finish_sign_in(&mut self, sign_in: String, code: Option<String>, reply_to: Option<u64>) {
-        let Some(link) = self.proxy.link.clone() else {
+    fn gateway_finish_sign_in(&mut self, sign_in: String, code: Option<String>, reply_to: Option<u64>) {
+        let Some(link) = self.gateway.link.clone() else {
             if let Some(id) = reply_to {
-                self.reply(id, Err("Open your proxy's settings first.".to_string()));
+                self.reply(id, Err("Open your gateway's settings first.".to_string()));
             }
             return;
         };
@@ -1272,33 +1315,33 @@ impl Core {
         let command = Manage::FinishSignIn { id: sign_in.clone(), code };
         let task = tokio::spawn(async move {
             let result = match link.manage(command).await {
-                Ok(ProxyReply::State { state }) => Ok(state),
-                Ok(other) => Err(proxy::unexpected(&other)),
+                Ok(GatewayReply::State { state }) => Ok(state),
+                Ok(other) => Err(gateway::unexpected(&other)),
                 Err(error) => Err(error_text(error)),
             };
-            let _ = inputs.send(Input::ProxySignInEnded { sign_in, reply_to, result });
+            let _ = inputs.send(Input::GatewaySignInEnded { sign_in, reply_to, result });
         });
-        if let Some(sign_in) = &mut self.proxy.sign_in {
+        if let Some(sign_in) = &mut self.gateway.sign_in {
             sign_in.waiting = true;
             sign_in.error = None;
             sign_in.task = Some(task.abort_handle());
         }
     }
 
-    fn proxy_sign_in_ended(&mut self, sign_in: &str, reply_to: Option<u64>, result: Result<ProxyState, String>) {
+    fn gateway_sign_in_ended(&mut self, sign_in: &str, reply_to: Option<u64>, result: Result<GatewayState, String>) {
         if let Some(id) = reply_to {
             self.reply(id, result.as_ref().map(|_| json!({})).map_err(Clone::clone));
         }
-        let Some(current) = self.proxy.sign_in.as_mut().filter(|current| current.started.id == sign_in) else {
+        let Some(current) = self.gateway.sign_in.as_mut().filter(|current| current.started.id == sign_in) else {
             return;
         };
         current.task = None;
         match result {
             Ok(state) => {
-                self.proxy.sign_in = None;
-                if let Some(link) = &self.proxy.link {
+                self.gateway.sign_in = None;
+                if let Some(link) = &self.gateway.link {
                     let key = link.key.clone();
-                    return self.proxy_event(&key, ProxyEvent::State(state));
+                    return self.gateway_event(&key, GatewayEvent::State(state));
                 }
             }
             Err(error) => {
@@ -1306,7 +1349,7 @@ impl Core {
                 current.error = Some(error);
             }
         }
-        self.emit_proxy();
+        self.emit_gateway();
     }
 
     /// Ends the open threads of the server with the row that says it was removed, or takes the row
@@ -2537,63 +2580,106 @@ impl Core {
                     reply(&sink, id, deleted.map(|_| json!({})));
                 });
             }
-            Command::WatchProxy { on } => {
-                self.proxy.watching = on;
-                self.sync_proxy();
+            Command::WatchGateway { on } => {
+                self.gateway.watching = on;
+                self.sync_gateway();
                 self.reply(id, Ok(json!({})));
             }
-            Command::AddProxy => {
+            Command::AddGateway => {
                 let (auth, key, sink) = (self.auth.clone(), self.key.clone(), self.sink.clone());
                 let auth_url =
                     Some(self.config.auth_url.clone()).filter(|url| url != motile_protocol::DEFAULT_AUTH_URL);
                 tokio::spawn(async move {
                     let token = auth.create_enroll_token(&key).await.map_err(error_text);
                     let enroll = token.and_then(|token| {
-                        let enroll = proxy::enroll(token.token, token.expires_at, auth_url.as_deref(), now());
+                        let enroll = gateway::enroll(token.token, token.expires_at, auth_url.as_deref(), now());
                         serde_json::to_value(enroll).map_err(|error| error.to_string())
                     });
                     reply(&sink, id, enroll);
                 });
             }
-            Command::RemoveProxy => {
-                let Some(proxy_key) = self.proxy_device().map(|device| device.public_key.clone()) else {
+            Command::RemoveGateway => {
+                let Some(gateway_key) = self.gateway_device().map(|device| device.public_key.clone()) else {
                     return self.reply(id, Ok(json!({})));
                 };
                 let (auth, key, sink, inputs) =
                     (self.auth.clone(), self.key.clone(), self.sink.clone(), self.inputs.clone());
                 tokio::spawn(async move {
-                    let removed = auth.remove_device(&key, &proxy_key).await.map_err(error_text);
+                    let removed = auth.remove_device(&key, &gateway_key).await.map_err(error_text);
                     let result = auth.me(&key).await.map_err(error_text);
                     let _ = inputs.send(Input::AccountChecked { key: key.public(), result });
                     reply(&sink, id, removed.map(|_| json!({})));
                 });
             }
-            Command::ProxySignIn { agent } => {
-                self.proxy.sign_in = None;
-                self.proxy_manage(id, Manage::SignIn { agent });
-                self.emit_proxy();
+            Command::GatewaySignIn { agent } => {
+                self.gateway.sign_in = None;
+                self.gateway_manage(id, Manage::SignIn { agent });
+                self.emit_gateway();
             }
-            Command::ProxyFinishSignIn { code } => {
-                let Some(sign_in) = self.proxy.sign_in.as_ref().map(|sign_in| sign_in.started.id.clone()) else {
+            Command::GatewayFinishSignIn { code } => {
+                let Some(sign_in) = self.gateway.sign_in.as_ref().map(|sign_in| sign_in.started.id.clone()) else {
                     return self.reply(id, Err("That sign-in is over. Start it again.".to_string()));
                 };
-                self.proxy_finish_sign_in(sign_in, Some(code.trim().to_string()), Some(id));
-                self.emit_proxy();
+                self.gateway_finish_sign_in(sign_in, Some(code.trim().to_string()), Some(id));
+                self.emit_gateway();
             }
-            Command::ProxyCancelSignIn => {
-                self.proxy.sign_in = None;
-                self.emit_proxy();
+            Command::GatewayCancelSignIn => {
+                self.gateway.sign_in = None;
+                self.emit_gateway();
                 self.reply(id, Ok(json!({})));
             }
-            Command::ProxyUpdateAccount { account, change } => {
-                self.proxy_manage(id, Manage::UpdateAccount { id: account, change })
+            Command::GatewayUpdateAccount { account, change } => {
+                self.gateway_manage(id, Manage::UpdateAccount { id: account, change })
             }
-            Command::ProxyRemoveAccount { account } => self.proxy_manage(id, Manage::RemoveAccount { id: account }),
-            Command::ProxyLog { before, errors_only } => {
-                self.proxy_manage(id, Manage::Log { before, errors_only, limit: proxy::LOG_PAGE })
+            Command::GatewayRemoveAccount { account } => self.gateway_manage(id, Manage::RemoveAccount { id: account }),
+            Command::GatewayLog { before, errors_only } => {
+                self.gateway_manage(id, Manage::Log { before, errors_only, limit: gateway::LOG_PAGE })
             }
-            Command::ProxyCaptured { entry } => self.proxy_manage(id, Manage::Captured { id: entry }),
-            Command::ProxyCapture { capture } => self.proxy_manage(id, Manage::Capture { capture }),
+            Command::GatewayCaptured { entry } => self.gateway_manage(id, Manage::Captured { id: entry }),
+            Command::GatewayCapture { capture } => self.gateway_manage(id, Manage::Capture { capture }),
+            Command::McpServerAdd { url, name, header, key } => {
+                let key = mcp_servers::key(&header, &key);
+                self.gateway_manage(id, Manage::AddMcpServer { url: url.trim().to_string(), name, key })
+            }
+            Command::McpServerSignIn { mcp_server } => {
+                self.gateway_manage(id, Manage::SignInMcpServer { id: mcp_server })
+            }
+            Command::McpServerFinishSignIn { address } => match mcp_servers::sent_back(&address) {
+                Ok((state, code)) => self.gateway_manage(id, Manage::FinishMcpSignIn { state, code }),
+                Err(error) => self.reply(id, Err(error)),
+            },
+            Command::McpServerUpdate { mcp_server, change } => {
+                self.gateway_manage(id, Manage::UpdateMcpServer { id: mcp_server, change })
+            }
+            Command::McpServerKey { mcp_server, header, key } => match mcp_servers::key(&header, &key) {
+                Some(key) => {
+                    self.gateway_manage(id, Manage::UpdateMcpServer { id: mcp_server, change: McpChange::Key { key } })
+                }
+                None => self.reply(id, Err("Paste the key first.".to_string())),
+            },
+            Command::McpServerRefresh { mcp_server } => {
+                self.gateway_manage(id, Manage::RefreshMcpServer { id: mcp_server })
+            }
+            Command::McpServerRemove { mcp_server } => {
+                self.gateway_manage(id, Manage::RemoveMcpServer { id: mcp_server })
+            }
+            Command::McpServerCalls { before, errors_only } => {
+                self.gateway_manage(id, Manage::McpCalls { before, errors_only, limit: mcp_servers::CALLS_PAGE })
+            }
+            Command::McpServerCall { call } => self.gateway_manage(id, Manage::McpCall { id: call }),
+            Command::McpServerFields { mcp_server, tool } => match self.mcp_server_tool_schema(&mcp_server, &tool) {
+                Some(schema) => self.reply(id, Ok(json!({ "fields": mcp_servers::fields(&schema) }))),
+                None => self.reply(id, Err("That tool is gone.".to_string())),
+            },
+            Command::McpServerTry { mcp_server, tool, values } => {
+                let Some(schema) = self.mcp_server_tool_schema(&mcp_server, &tool) else {
+                    return self.reply(id, Err("That tool is gone.".to_string()));
+                };
+                match mcp_servers::arguments(&schema, &values) {
+                    Ok(arguments) => self.gateway_manage(id, Manage::TryTool { id: mcp_server, tool, arguments }),
+                    Err(error) => self.reply(id, Err(error)),
+                }
+            }
             Command::SetMetered { metered } => {
                 let was = std::mem::replace(&mut self.relay.metered, metered);
                 if was && !metered {
@@ -3078,7 +3164,7 @@ impl Core {
                     }
                     server_names.insert(server_id.clone(), server.device.name.clone());
                     let proxies =
-                        server.info.iter().flat_map(|info| &info.agent_accounts).filter(|account| account.proxy);
+                        server.info.iter().flat_map(|info| &info.agent_accounts).filter(|account| account.gateway);
                     for account in proxies {
                         proxied.insert((server_id.clone(), account.agent, account.name.clone()), account.pin.is_some());
                     }
@@ -3150,7 +3236,7 @@ impl Core {
                 for server in chosen {
                     let Some(info) = server.info.as_ref() else { continue };
                     let name = server.device.name.clone();
-                    let proxies = info.agent_accounts.iter().filter(|account| account.proxy);
+                    let proxies = info.agent_accounts.iter().filter(|account| account.gateway);
                     proxied.extend(proxies.map(|account| (name.clone(), account.agent, account.name.clone())));
                     if info.protocol < LIMITS_PROTOCOL {
                         notes.push(format!("Update {name} to see its limits."));
@@ -3169,16 +3255,16 @@ impl Core {
                     asked.spawn(async move { (server_id, name, link.request(&Request::Limits).await) });
                 }
                 let kept_accounts =
-                    self.proxy.state.as_ref().map(|(_, state)| state.accounts.clone()).unwrap_or_default();
-                let proxy_link = self.proxy.link.clone().filter(|_| !kept && self.proxy_device().is_some());
+                    self.gateway.state.as_ref().map(|(_, state)| state.accounts.clone()).unwrap_or_default();
+                let gateway_link = self.gateway.link.clone().filter(|_| !kept && self.gateway_device().is_some());
                 let (sink, inputs) = (self.sink.clone(), self.inputs.clone());
                 let told = inputs.clone();
-                let asked_proxy = tokio::spawn(async move {
-                    let link = proxy_link?;
-                    let answer = tokio::time::timeout(PROXY_LIMITS_WAIT, link.manage(Manage::State)).await;
-                    let Ok(Ok(ProxyReply::State { state })) = answer else { return None };
+                let asked_gateway = tokio::spawn(async move {
+                    let link = gateway_link?;
+                    let answer = tokio::time::timeout(GATEWAY_LIMITS_WAIT, link.manage(Manage::State)).await;
+                    let Ok(Ok(GatewayReply::State { state })) = answer else { return None };
                     let accounts = state.accounts.clone();
-                    let _ = told.send(Input::Proxy { key: link.key.clone(), event: ProxyEvent::State(state) });
+                    let _ = told.send(Input::Gateway { key: link.key.clone(), event: GatewayEvent::State(state) });
                     Some(accounts)
                 });
                 tokio::spawn(async move {
@@ -3197,12 +3283,13 @@ impl Core {
                         let _ = inputs.send(keep_limits(&server_id, &agents));
                         reads.extend(agents.into_iter().map(|limits| (server.clone(), limits)));
                     }
-                    let accounts = asked_proxy.await.ok().flatten().unwrap_or(kept_accounts);
+                    let accounts = asked_gateway.await.ok().flatten().unwrap_or(kept_accounts);
                     let mut reads: Vec<limits::Read> = reads
                         .into_iter()
                         .map(|(server, limits)| {
-                            let proxy = proxied.contains(&(server.clone(), limits.agent, limits.account_name.clone()));
-                            limits::Read { server, limits, proxy }
+                            let gateway =
+                                proxied.contains(&(server.clone(), limits.agent, limits.account_name.clone()));
+                            limits::Read { server, limits, gateway }
                         })
                         .collect();
                     reads.sort_by(|a, b| a.server.cmp(&b.server));
@@ -3816,10 +3903,10 @@ fn working(server: &Server, info: &ServerInfo) -> HashMap<String, u32> {
     working
 }
 
-/// Names servers and their threads for what the proxy shows.
+/// Names servers and their threads for what the gateway shows.
 struct Names<'a>(&'a [Server]);
 
-impl proxy::Naming for Names<'_> {
+impl gateway::Naming for Names<'_> {
     fn server(&self, key: &str) -> Option<String> {
         self.0.iter().find(|server| server.device.public_key == key).map(|server| server.device.name.clone())
     }

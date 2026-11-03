@@ -172,7 +172,7 @@ pub fn label(
     footed_label(title, description, icon, cut, None, cx)
 }
 
-/// A label whose title names what runs through the proxy where `proxied`, which its symbol after
+/// A label whose title names what runs through the gateway where `proxied`, which its symbol after
 /// the title says. Such a title is cut on its line rather than wrapped.
 pub fn proxied_label(title: String, description: Option<String>, proxied: bool, cx: &App) -> AnyElement {
     let title =

@@ -188,7 +188,7 @@ struct ControlLabel: View {
     /// Words after the title in a colour of their own, as "working" after "2 agents", which
     /// leave the title in the foreground.
     var tinted: (words: String, color: Color)?
-    /// What the words name runs through the proxy, which its symbol after them says.
+    /// What the words name runs through the gateway, which its symbol after them says.
     var proxied = false
 
     private var wordless: Bool { title == nil && !chevron }
@@ -633,25 +633,25 @@ extension Text {
         self.init(dotted: text.components(separatedBy: " · ").map { Text(verbatim: $0) })
     }
 
-    /// The proxy's symbol beside words of `fontSize` that stand alone, centred on their line. It
+    /// The gateway's symbol beside words of `fontSize` that stand alone, centred on their line. It
     /// stands outside the line, which a symbol moved off the baseline would make taller.
-    func proxyMarked(_ proxied: Bool, fontSize: CGFloat) -> some View {
-        HStack(spacing: (fontSize / 4).rounded() + ProxyMark.gap) {
+    func gatewayMarked(_ proxied: Bool, fontSize: CGFloat) -> some View {
+        HStack(spacing: (fontSize / 4).rounded() + GatewayMark.gap) {
             self
             if proxied {
-                Image(.waypoints, size: ProxyMark.size(for: fontSize))
+                Image(.waypoints, size: GatewayMark.size(for: fontSize))
             }
         }
     }
 
-    /// The proxy's symbol after words of `fontSize` inside a line of fixed height, which says what
-    /// they name runs through the proxy: centred on their capitals rather than standing on their
+    /// The gateway's symbol after words of `fontSize` inside a line of fixed height, which says what
+    /// they name runs through the gateway: centred on their capitals rather than standing on their
     /// baseline.
     func proxied(_ proxied: Bool, fontSize: CGFloat) -> Text {
         guard proxied else { return self }
-        let size = ProxyMark.size(for: fontSize)
+        let size = GatewayMark.size(for: fontSize)
         let rise = ((PlatformFont.ui(fontSize).capHeight - PlatformImage.symbolSide(size)) / 2).rounded()
-        return Text("\(self)\(Text(verbatim: " ").kerning(ProxyMark.gap))\(Text(Image(.waypoints, size: size)).baselineOffset(rise))")
+        return Text("\(self)\(Text(verbatim: " ").kerning(GatewayMark.gap))\(Text(Image(.waypoints, size: size)).baselineOffset(rise))")
     }
 
     init(dotted parts: [Text]) {

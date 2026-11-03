@@ -1,14 +1,15 @@
 import SwiftUI
 
 /// What the settings take away once the user says so: a server, every copy of a server's threads,
-/// a project, an agent's account, the account's proxy or one of its accounts.
+/// a project, an agent's account, the account's gateway, one of its accounts or one of its MCP servers.
 enum Removal: Identifiable {
     case server(Server)
     case serverCompletely(Server)
     case project(Project)
     case account(AgentAccount, on: Server)
-    case proxy(name: String)
-    case proxyAccount(ProxyAccount)
+    case gateway(name: String)
+    case gatewayAccount(GatewayAccount)
+    case mcpServer(McpServerRow)
 
     var id: String {
         switch self {
@@ -16,8 +17,9 @@ enum Removal: Identifiable {
         case .serverCompletely(let server): "server-completely/\(server.id)"
         case .project(let project): "project/\(project.id)"
         case .account(let account, let server): "account/\(server.id)/\(account.id)"
-        case .proxy: "proxy"
-        case .proxyAccount(let account): "proxy-account/\(account.id)"
+        case .gateway: "gateway"
+        case .gatewayAccount(let account): "gateway-account/\(account.id)"
+        case .mcpServer(let mcpServer): "mcp-server/\(mcpServer.id)"
         }
     }
 
@@ -27,8 +29,9 @@ enum Removal: Identifiable {
         case .serverCompletely(let server): "Delete “\(server.name)”?"
         case .project(let project): "Remove “\(project.name)”?"
         case .account(let account, _): "Remove “\(account.agent.name) · \(account.name)”?"
-        case .proxy(let name): "Remove “\(name)”?"
-        case .proxyAccount(let account): "Remove “\(account.name)”?"
+        case .gateway: "Remove Your Gateway?"
+        case .gatewayAccount(let account): "Remove “\(account.name)” from Your Gateway?"
+        case .mcpServer(let mcpServer): "Remove the “\(mcpServer.name)” MCP Server?"
         }
     }
 
@@ -42,10 +45,12 @@ enum Removal: Identifiable {
             "\(project.name) leaves your clients. Its folder stays on \(store.server(project.serverID)?.name ?? "its server") with everything in it."
         case .account(_, let server):
             "Its threads move to the default account on \(server.name). Its folder and its sign-in stay there."
-        case .proxy:
-            "Its accounts go with it."
-        case .proxyAccount:
-            "Its threads move to your other accounts."
+        case .gateway(let name):
+            "“\(name)” leaves your account, and your servers stop using it. Its threads move to your default accounts."
+        case .gatewayAccount:
+            "Your gateway forgets its sign-in, and its threads move to your other accounts."
+        case .mcpServer:
+            "Agents won't get its tools anymore, and your gateway forgets its login."
         }
     }
 
@@ -64,8 +69,9 @@ enum Removal: Identifiable {
         case .serverCompletely(let server): store.deleteServerCompletely(server)
         case .project(let project): store.removeProject(project)
         case .account(let account, let server): store.removeAgentAccount(account, on: server)
-        case .proxy: store.removeProxy()
-        case .proxyAccount(let account): store.removeProxyAccount(account)
+        case .gateway: store.removeGateway()
+        case .gatewayAccount(let account): store.removeGatewayAccount(account)
+        case .mcpServer(let mcpServer): store.removeMcpServer(mcpServer)
         }
     }
 }
@@ -87,9 +93,10 @@ private struct RemovalConfirmation: ViewModifier {
             Confirmation(title: removal.title, message: removal.message(store), answers: [Answer(title: removal.answer, variant: .danger) { removal.run(store) }])
         }
         #else
-        content.confirmationDialog(
+        content.alert(
             removal?.title ?? "", isPresented: Binding { removal != nil } set: { if !$0 { removal = nil } }, presenting: removal
         ) { removal in
+            Button("Cancel", role: .cancel) {}
             Button(removal.answer, role: .destructive) { removal.run(store) }
         } message: { removal in
             Text(removal.message(store))

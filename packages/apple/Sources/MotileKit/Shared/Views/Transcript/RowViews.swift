@@ -1507,7 +1507,7 @@ final class HandoffRowView: RowView {
     override func layout(width: CGFloat) -> CGFloat { Self.height }
 
     /// The model, and the account after a muted dot, as the model picker shows them, then the
-    /// proxy's symbol where the account runs through it.
+    /// gateway's symbol where the account runs through it.
     private static func label(_ end: HandoffContent.End) -> NSAttributedString {
         let text = { (string: String, color: PlatformColor) in
             NSAttributedString(string: string, attributes: [.font: Theme.smallFont, .foregroundColor: color])
@@ -1517,8 +1517,8 @@ final class HandoffRowView: RowView {
             label.append(text(" · ", Theme.mutedStrongerForeground))
             label.append(text(account, Theme.foreground))
         }
-        guard end.proxy else { return label }
-        ProxyMark.append(to: label, font: Theme.smallFont, color: Theme.foreground)
+        guard end.gateway else { return label }
+        GatewayMark.append(to: label, font: Theme.smallFont, color: Theme.foreground)
         return label
     }
 

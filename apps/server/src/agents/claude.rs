@@ -58,10 +58,15 @@ pub fn arguments(turn: &Turn) -> Vec<String> {
     if let Some(mcp) = turn.mcp {
         // The token is read from the environment, so that it never shows among the arguments.
         let headers = json!({"Authorization": format!("${{{}}}", crate::mcp::AUTHORIZATION_VARIABLE)});
-        let server = json!({"type": "http", "url": mcp.url, "headers": headers});
+        let server = |url: &str| json!({"type": "http", "url": url, "headers": headers});
+        let mut servers = serde_json::Map::new();
+        for (slug, url) in &mcp.mcp_servers {
+            servers.insert(slug.clone(), server(url));
+        }
+        servers.insert(crate::mcp::SERVER_NAME.to_string(), server(&mcp.url));
         arguments.extend([
             "--mcp-config".to_string(),
-            json!({"mcpServers": {crate::mcp::SERVER_NAME: server}}).to_string(),
+            json!({"mcpServers": servers}).to_string(),
             "--allowedTools".to_string(),
             crate::mcp::TOOLS.join(","),
         ]);
@@ -940,7 +945,8 @@ mod tests {
 
     #[test]
     fn the_thread_is_read_through_motiles_tool_with_a_token_from_the_environment() {
-        let mcp = crate::mcp::McpAccess { url: "http://127.0.0.1:9/mcp".into(), token: "secret".into() };
+        let mcp_servers = vec![("linear".to_string(), "http://127.0.0.1:8/mcp/linear".to_string())];
+        let mcp = crate::mcp::McpAccess { url: "http://127.0.0.1:9/mcp".into(), token: "secret".into(), mcp_servers };
         let turn = Turn {
             agent: motile_protocol::wire::Agent::Claude,
             model: None,
@@ -956,16 +962,24 @@ mod tests {
         let server = &config["mcpServers"]["motile"];
         assert_eq!((&server["type"], &server["url"]), (&json!("http"), &json!("http://127.0.0.1:9/mcp")));
         assert_eq!(server["headers"]["Authorization"], "${MOTILE_MCP_AUTHORIZATION}");
+        let linear = &config["mcpServers"]["linear"];
+        assert_eq!(linear["url"], "http://127.0.0.1:8/mcp/linear");
+        assert_eq!(linear["headers"]["Authorization"], "${MOTILE_MCP_AUTHORIZATION}");
         assert_eq!(arguments[at + 2], "--allowedTools");
         let allowed: Vec<&str> = arguments[at + 3].split(',').collect();
         assert_eq!(allowed[..2], ["mcp__motile__read_thread", "mcp__motile__list_accounts"]);
         assert!(allowed.contains(&"mcp__motile__start_agent"), "{allowed:?}");
+        assert!(
+            !allowed.iter().any(|tool| tool.starts_with("mcp__linear")),
+            "an MCP server's tools ask under supervision"
+        );
         assert!(!arguments.iter().any(|argument| argument.contains("secret")));
     }
 
     #[test]
     fn the_instructions_point_to_the_guide_and_teach_programs_without_it() {
-        let mcp = crate::mcp::McpAccess { url: "http://127.0.0.1:9/mcp".into(), token: "secret".into() };
+        let mcp =
+            crate::mcp::McpAccess { url: "http://127.0.0.1:9/mcp".into(), token: "secret".into(), mcp_servers: vec![] };
         let turn = |mcp| Turn {
             agent: motile_protocol::wire::Agent::Claude,
             model: None,

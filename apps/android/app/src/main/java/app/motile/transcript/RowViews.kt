@@ -82,7 +82,7 @@ import app.motile.ui.AgentIcon
 import app.motile.ui.CopyButton
 import app.motile.ui.HighlightButton
 import app.motile.ui.Icon
-import app.motile.ui.ProxyMark
+import app.motile.ui.GatewayMark
 import app.motile.ui.proxied
 import app.motile.ui.Text
 import app.motile.ui.color
@@ -505,7 +505,7 @@ private fun AgentRow(row: RowModel, content: AgentContent) {
                             }
                         }
                         val color = if (content.state == AgentState.Failed) palette.destructive else palette.mutedForeground
-                        Text(content.line, Modifier.padding(top = 1.dp), size = 12f, color = color, maxLines = 1, inlineContent = ProxyMark.content(color, 12f))
+                        Text(content.line, Modifier.padding(top = 1.dp), size = 12f, color = color, maxLines = 1, inlineContent = GatewayMark.content(color, 12f))
                     }
                     if (time.isNotEmpty()) Text(time, Modifier.padding(start = 12.dp), style = Theme.uiDigits(12f), color = palette.mutedStrongerForeground, maxLines = 1)
                     AgentRowChevron(open = false)
@@ -718,8 +718,8 @@ private fun HandoffRow(handoff: HandoffContent) {
                 withStyle(SpanStyle(color = palette.mutedStrongerForeground)) { append(" · ") }
                 append(account)
             }
-        }.proxied(end.proxy)
-        Text(label, style = Theme.smallFont, color = palette.foreground, maxLines = 1, inlineContent = ProxyMark.content(palette.foreground, 12f))
+        }.proxied(end.gateway)
+        Text(label, style = Theme.smallFont, color = palette.foreground, maxLines = 1, inlineContent = GatewayMark.content(palette.foreground, 12f))
     }
     Row(Modifier.fillMaxWidth().height(ControlSize.Large.height), verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.weight(1f).height(1.dp).background(palette.border))

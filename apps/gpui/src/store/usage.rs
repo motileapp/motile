@@ -61,9 +61,9 @@ pub struct UsageLine {
     #[serde(default)]
     pub cost_usd: Option<f64>,
     pub share: f64,
-    /// An account that runs through the proxy, which its symbol after the name says.
+    /// An account that runs through the gateway, which its symbol after the name says.
     #[serde(default)]
-    pub proxy: bool,
+    pub gateway: bool,
 }
 
 impl UsageReport {
@@ -84,7 +84,7 @@ impl UsageReport {
                     tokens: kind.tokens,
                     cost_usd: Some(kind.cost_usd),
                     share,
-                    proxy: false,
+                    gateway: false,
                 }
             })
             .collect()
@@ -116,9 +116,9 @@ pub struct LimitsSection {
     pub windows: Vec<LimitWindow>,
     /// Why there are no windows.
     pub note: Option<String>,
-    /// One of the proxy's accounts.
+    /// One of the gateway's accounts.
     #[serde(default)]
-    pub proxy: bool,
+    pub gateway: bool,
 }
 
 #[derive(Clone, PartialEq, Debug, Deserialize)]
@@ -352,7 +352,7 @@ impl Store {
     }
 
     fn load_usage(&mut self, refresh: bool) {
-        self.follow_proxy_views();
+        self.follow_gateway_views();
         self.usage.asked += 1;
         let number = self.usage.asked;
         self.usage.refreshing = true;

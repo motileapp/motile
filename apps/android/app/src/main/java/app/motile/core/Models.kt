@@ -110,9 +110,9 @@ data class AgentAccount(
     /** Who is signed in, as the agent's CLI last said. */
     val email: String?,
     val plan: String?,
-    /** The server's account for the account's proxy, which serves its turns from the proxy's accounts. It can't be edited or removed. */
-    val proxy: Boolean = false,
-    /** The one of the proxy's accounts its threads are pinned to, which only agents pick. */
+    /** The server's account for the account's gateway, which serves its turns from the gateway's accounts. It can't be edited or removed. */
+    val gateway: Boolean = false,
+    /** The one of the gateway's accounts its threads are pinned to, which only agents pick. */
     val pin: String? = null,
 ) {
     data class Variable(
@@ -131,7 +131,7 @@ data class AgentAccount(
         variables = json.objects("variables").map { Variable(it.string("name"), it.string("value"), it.bool("sensitive")) },
         email = json.optionalString("email"),
         plan = json.optionalString("plan"),
-        proxy = json.bool("proxy"),
+        gateway = json.bool("gateway"),
         pin = json.optionalString("pin"),
     )
 
@@ -205,7 +205,7 @@ data class Server(
     val roomierAccounts: Map<String, Map<String, String>>,
     /** What each agent account has used of its limits, by account id. */
     val accountLimits: Map<String, List<LimitsReport.Window>> = emptyMap(),
-    /** The name of the proxy's account whose limits a Proxy account's are, by account id. */
+    /** The name of the gateway's account whose limits a Gateway account's are, by account id. */
     val nextAccounts: Map<String, String> = emptyMap(),
     /** Its agents' accounts' ids, the one a new thread would start on first. */
     val accountsByRoom: List<String> = emptyList(),
@@ -239,7 +239,7 @@ data class Server(
     /** Whether the server can keep its projects' folders pulled on their default branch. */
     val pullsDefaultBranch: Boolean get() = protocolVersion >= 25
 
-    /** The agent's accounts a person picks from: all but those pinned to one of the proxy's accounts, which only agents pick. */
+    /** The agent's accounts a person picks from: all but those pinned to one of the gateway's accounts, which only agents pick. */
     fun accounts(of: Agent): List<AgentAccount> = agentAccounts.filter { it.agent == of && it.pin == null }
 
     /** Whether the account is its agent's default: the first of its agent's accounts. */
@@ -265,18 +265,18 @@ data class Server(
     }
 
     /**
-     * The model's name, with the account's when its agent has more than one. The Proxy account,
-     * whose threads the proxy places, has no name of its own to show: the proxy's symbol says it.
+     * The model's name, with the account's when its agent has more than one. The Gateway account,
+     * whose threads the gateway places, has no name of its own to show: the gateway's symbol says it.
      */
     fun label(of: ModelInfo, account: String?): String {
         if (accounts(of.agent).size <= 1) return of.shortName
         val found = account(account, of.agent) ?: return of.shortName
-        if (found.proxy && found.pin == null) return of.shortName
+        if (found.gateway && found.pin == null) return of.shortName
         return "${of.shortName} · ${found.name}"
     }
 
-    /** Whether the account runs through the proxy, which the proxy's symbol after its name says. */
-    fun runsThroughProxy(account: String?, of: Agent): Boolean = account(account, of)?.proxy ?: false
+    /** Whether the account runs through the gateway, which the gateway's symbol after its name says. */
+    fun runsThroughGateway(account: String?, of: Agent): Boolean = account(account, of)?.gateway ?: false
 
     companion object {
         operator fun invoke(json: JSON): Server {
@@ -1046,8 +1046,8 @@ data class AgentInfo(
     val model: String? = null,
     /** The account's name, when its agent has more than one. */
     val account: String? = null,
-    /** It runs through the account's proxy. */
-    val proxy: Boolean = false,
+    /** It runs through the account's gateway. */
+    val gateway: Boolean = false,
 ) {
     constructor(json: JSON) : this(
         id = json.string("id"),
@@ -1067,7 +1067,7 @@ data class AgentInfo(
         agent = Agent.of(json.optionalString("agent")),
         model = json.optionalString("model"),
         account = json.optionalString("account"),
-        proxy = json.bool("proxy"),
+        gateway = json.bool("gateway"),
     )
 
     val working: Boolean get() = status == ToolStatus.Running
@@ -1447,8 +1447,8 @@ data class UsageReport(
         val tokens: Long,
         val costUSD: Double?,
         val share: Double,
-        /** An account that runs through the proxy, which its symbol after the name says. */
-        val proxy: Boolean = false,
+        /** An account that runs through the gateway, which its symbol after the name says. */
+        val gateway: Boolean = false,
     ) {
         val id: String get() = "${agent?.raw ?: ""}/${server ?: ""}/$name"
     }
@@ -1464,7 +1464,7 @@ data class UsageReport(
                 tokens = line.long("tokens"),
                 costUSD = line.optionalDouble("cost_usd"),
                 share = share ?: line.double("share"),
-                proxy = line.bool("proxy"),
+                gateway = line.bool("gateway"),
             )
             return UsageReport(
                 costUSD = cost,
@@ -1511,8 +1511,8 @@ data class LimitsReport(
         val windows: List<Window>,
         /** Why there are no windows. */
         val note: String?,
-        /** One of the proxy's accounts. */
-        val proxy: Boolean = false,
+        /** One of the gateway's accounts. */
+        val gateway: Boolean = false,
     ) {
         val id: String get() = "${agent.raw}/${name ?: ""}/${account ?: servers.joinToString(",")}/${note ?: ""}"
     }
@@ -1554,7 +1554,7 @@ data class LimitsReport(
                     servers = section.strings("servers"),
                     windows = section.objects("windows").map(::Window),
                     note = section.optionalString("note"),
-                    proxy = section.bool("proxy"),
+                    gateway = section.bool("gateway"),
                 )
             },
             notes = json.strings("notes"),

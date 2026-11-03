@@ -30,7 +30,7 @@ import app.motile.platform.Symbol
 import app.motile.theme.Palette
 import app.motile.theme.Theme
 import app.motile.transcript.openui.UiContent
-import app.motile.ui.ProxyMark
+import app.motile.ui.GatewayMark
 import java.util.concurrent.Executors
 import android.os.Handler
 import android.os.Looper
@@ -429,8 +429,8 @@ data class AgentContent(
     val agent: Agent?,
     /** "Opus 5.5 · work". */
     val runsOn: String,
-    /** It runs through the account's proxy, which the proxy's symbol after `runsOn` says. */
-    val proxy: Boolean,
+    /** It runs through the account's gateway, which the gateway's symbol after `runsOn` says. */
+    val gateway: Boolean,
     val startedAt: Double,
     val durationMs: Int?,
     /** When the thread's agent was told, for what it was told. */
@@ -451,7 +451,7 @@ data class AgentContent(
         detail = json.string("detail"),
         agent = Agent.of(json.optionalString("agent")),
         runsOn = json.string("runs_on"),
-        proxy = json.bool("proxy"),
+        gateway = json.bool("gateway"),
         startedAt = json.double("started_at"),
         durationMs = json.optionalInt("duration_ms"),
         at = json.optionalDouble("at"),
@@ -462,15 +462,15 @@ data class AgentContent(
     /** What the second line says after what it runs on: what it does or said. */
     val said: String get() = if (detail.isEmpty() && runsOn.isEmpty()) label else detail
 
-    /** The second line: what it runs on, with the proxy's symbol after it where it runs through the proxy, then what it does or said. */
+    /** The second line: what it runs on, with the gateway's symbol after it where it runs through the gateway, then what it does or said. */
     val line: AnnotatedString
         get() = buildAnnotatedString {
             append(runsOn)
-            if (proxy) {
+            if (gateway) {
                 if (runsOn.isNotEmpty()) append(" ")
-                with(ProxyMark) { appendMark() }
+                with(GatewayMark) { appendMark() }
             }
-            if (said.isNotEmpty()) append(if (runsOn.isEmpty() && !proxy) said else " · $said")
+            if (said.isNotEmpty()) append(if (runsOn.isEmpty() && !gateway) said else " · $said")
         }
 }
 
@@ -501,8 +501,8 @@ class HandoffContent(json: JSON) {
         val agent = Agent.of(json?.string("agent")) ?: Agent.Claude
         val label = json?.string("label") ?: ""
         val account = json?.optionalString("account")
-        /** The account runs through the proxy, which its symbol after the label says. */
-        val proxy = json?.bool("proxy") ?: false
+        /** The account runs through the gateway, which its symbol after the label says. */
+        val gateway = json?.bool("gateway") ?: false
     }
 
     val from = End(json.obj("from"))

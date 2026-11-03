@@ -102,7 +102,7 @@ export function RemovedServerList({
 
 function DeviceIcon({ kind }: { kind: Device["kind"] }) {
   if (kind === "server") return <ServerIcon />
-  if (kind === "proxy") return <WaypointsIcon />
+  if (kind === "gateway") return <WaypointsIcon />
   return <LaptopIcon />
 }
 
@@ -123,12 +123,12 @@ function RemoveDevice({ device }: { device: Device }) {
       />
     )
   }
-  if (device.kind === "proxy") {
+  if (device.kind === "gateway") {
     return (
       <Confirm
         trigger="Remove"
-        title={`Remove ${device.name}?`}
-        message={`Your servers can no longer send their agents through ${device.name}. What is on it stays there.`}
+        title="Remove Your Gateway?"
+        message={`${device.name} leaves your account, and your servers stop using it.`}
         confirm="Remove"
         done={`${device.name} was removed.`}
         action={() => removeDevice({ data: device.public_key })}

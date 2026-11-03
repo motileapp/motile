@@ -90,11 +90,11 @@ struct SidebarScreen: View {
             }
             Button("Cancel", role: .cancel) { renaming = nil }
         }
-        .confirmationDialog(
+        .alert(
             "Delete “\(deleting?.title ?? "")”?",
-            isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }),
-            titleVisibility: .visible
+            isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } })
         ) {
+            Button("Cancel", role: .cancel) { deleting = nil }
             Button("Delete", role: .destructive) {
                 if let thread = deleting { store.delete(thread) }
                 deleting = nil

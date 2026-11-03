@@ -152,12 +152,15 @@ final class AppStore {
     var signInError: String?
     private(set) var enrollToken: EnrollToken?
     private(set) var enrollTokenPending = false
-    /// The account's proxy, as the core last said.
-    private(set) var proxy = ProxyState()
-    /// How many views show the proxy, which the core stays connected to while any does.
-    @ObservationIgnored var proxyWatchers = 0
-    /// The agent whose account's sign-in the proxy is asked to start, until it answers.
-    var proxySignInStarting: Agent?
+    /// The account's gateway, as the core last said.
+    private(set) var gateway = GatewayState()
+    /// How many views show the gateway, which the core stays connected to while any does.
+    @ObservationIgnored var gatewayWatchers = 0
+    /// The agent whose account's sign-in the gateway is asked to start, until it answers.
+    var gatewaySignInStarting: Agent?
+    /// The MCP server signing in again, whose card shows it pending.
+    var mcpServerSigningIn: String?
+    @ObservationIgnored var mcpServerSession: SignInSession?
     var showsAddServer = false
     /// The section of the settings open over the client, while they are.
     var settings: SettingsSection? {
@@ -173,6 +176,9 @@ final class AppStore {
     var settingsTarget: String?
     /// What is typed in the settings' search.
     var settingsQuery = ""
+    /// A step `do.sh` gave the MCP Servers page on iOS: "add", "add <address>", "unfold <name>",
+    /// "try <name>", "rename <name>", "key <name>", "remove <name>", "activity", "call".
+    var mcpStep: String?
     /// The thread's settings are open over the client, where they aren't around the composer.
     /// The composer's picker on the Mac while it is open: the part of the composer it opened from.
     /// Closing it gives the keys back to the composer, which it opens from.
@@ -632,11 +638,11 @@ final class AppStore {
                 if self.activity != activity { self.activity = activity }
                 self.transcript.setActivity(activity)
             }
-        case "proxy":
-            let proxy = ProxyState(json: event.object("proxy") ?? [:])
+        case "gateway":
+            let gateway = GatewayState(json: event.object("gateway") ?? [:])
             return { [weak self] in
-                guard let self, self.proxy != proxy else { return }
-                self.proxy = proxy
+                guard let self, self.gateway != gateway else { return }
+                self.gateway = gateway
             }
         case "thread_error":
             let message = event.string("message")
@@ -1134,11 +1140,11 @@ final class AppStore {
         return composerServer?.label(of: model, account: accountID) ?? model.shortName
     }
 
-    /// The composer's model runs through the proxy.
+    /// The composer's model runs through the gateway.
     var composerProxied: Bool {
         guard let model = composerModel else { return false }
         let accountID = selectedThread.map { $0.agentAccount } ?? selectedDraft?.agentAccount
-        return composerServer?.runsThroughProxy(accountID, of: model.agent) ?? false
+        return composerServer?.runsThroughGateway(accountID, of: model.agent) ?? false
     }
 
     /// The thread's model as the composer shows it, with the account when its agent has more than one.
@@ -1153,11 +1159,11 @@ final class AppStore {
 
     /// What the composer's model menu lists: each account with its agent's models, titled with
     /// the account's name when its agent has more than one.
-    /// The Proxy account's title is its agent's alone, which the proxy's symbol follows.
+    /// The Gateway account's title is its agent's alone, which the gateway's symbol follows.
     var composerChoices: [(title: String, account: AgentAccount, models: [ModelInfo])] {
         composerAccounts.map { account in
             let several = (composerServer?.accounts(of: account.agent).count ?? 0) > 1
-            let title = several && !account.proxy ? "\(account.agent.name) · \(account.name)" : account.agent.name
+            let title = several && !account.gateway ? "\(account.agent.name) · \(account.name)" : account.agent.name
             return (title, account, composerModels.filter { $0.runs(under: account) })
         }
     }

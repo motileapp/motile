@@ -42,6 +42,10 @@ import java.util.concurrent.Executors
  *     settings <section>|search <text>|pick <group>|close
  *     appearance light|dark|system
  *     answer <allow|refuse>             answers the first approval
+ *     gateway sign-in claude|codex      starts signing an account in on the gateway
+ *     gateway code <code>               finishes Claude's sign-in with the code
+ *     mcp add [search]|activity|call    has the MCP Gateway page add an MCP server, open its activity or its latest call
+ *     mcp unfold|try|rename|key|remove <name>   has it do that to the MCP server with that name
  *     view                              opens the thread's images in the viewer
  *     branches                          opens the branch picker in the thread's settings
  *     top                               scrolls the transcript to its start
@@ -210,6 +214,14 @@ object DemoDriver {
                 store.answer(approval, allow = rest == "allow")
             }
             "done" -> store.toggleDone()
+            "mcp" -> store.mcpStep = rest
+            "gateway" -> {
+                val argument = rest.substringAfter(' ', "")
+                when (rest.substringBefore(' ')) {
+                    "sign-in" -> store.gateway.signIn(Agent.of(argument) ?: Agent.Claude)
+                    "code" -> store.gateway.finishSignIn(argument)
+                }
+            }
             "tmpaccount" -> {
                 val server = store.servers.firstOrNull() ?: return
                 val account = AgentAccount.new(Agent.Claude).copy(name = rest, folder = "/tmp/claude-${rest.lowercase()}-9de1015d")

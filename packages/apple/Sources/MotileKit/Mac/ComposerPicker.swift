@@ -130,7 +130,7 @@ private struct ComposerPicker: View {
         let title: String
         let account: AgentAccount
         let windows: [LimitsReport.Window]
-        /// The proxy's account whose limits `windows` are, for the Proxy account.
+        /// The gateway's account whose limits `windows` are, for the Gateway account.
         let next: String?
         let rows: [Row]
         var id: String { account.id }
@@ -352,10 +352,10 @@ private struct ComposerPicker: View {
 
     private func header(_ group: Group) -> some View {
         VStack(alignment: .leading, spacing: Self.headerGap) {
-            // "Claude Code", the proxy's symbol, then the account its bars are from, a step quieter.
+            // "Claude Code", the gateway's symbol, then the account its bars are from, a step quieter.
             HStack(spacing: 0) {
                 Text(verbatim: group.title)
-                    .proxyMarked(group.account.proxy, fontSize: 11.5)
+                    .gatewayMarked(group.account.gateway, fontSize: 11.5)
                     .foregroundStyle(Color.themeMutedForeground)
                     .layoutPriority(1)
                 if let next = group.next {

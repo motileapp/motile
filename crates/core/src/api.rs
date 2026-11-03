@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 use motile_protocol::auth_api::User;
-use motile_protocol::proxy_wire::{AccountChange, Capture};
+use motile_protocol::gateway_wire::{AccountChange, Capture, McpChange};
 use motile_protocol::wire::{
     Activity, Agent, ContinueSettings, DiffScope, GitAction, GitStage, LinearStateKind, MergeMethod, NewThread,
     Project, PullRequestAction, PullRequestEdit, PullRequestSettings, PullRequestState, Request, RestartWhen,
@@ -14,11 +14,11 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::connection::PathKind;
+use crate::gateway;
 use crate::git::Control;
 use crate::keybindings::{Rule, View as KeybindingsView};
 use crate::limits;
 use crate::link::State;
-use crate::proxy;
 use crate::render::agents::AgentView;
 use crate::render::highlight::Spans;
 use crate::render::openui::UiOp;
@@ -518,51 +518,115 @@ pub enum Command {
     },
     /// Answers with the `path` of `keybindings.json`, made if there was none.
     KeybindingsFile,
-    /// Whether a view that shows the account's proxy is open: the Proxy page or the Limits tab.
-    /// While one is, the core stays connected to the proxy and `proxy` events follow its state.
-    WatchProxy {
+    /// Whether a view that shows the account's gateway is open: the Gateway page or the Limits tab.
+    /// While one is, the core stays connected to the gateway and `gateway` events follow its state.
+    WatchGateway {
         on: bool,
     },
-    /// Makes the code a proxy joins the account with. Answers with a `proxy::Enroll`.
-    AddProxy,
-    /// Removes the proxy from the account. The servers' Proxy accounts go with it.
-    RemoveProxy,
-    /// Starts signing an account of `agent` in on the proxy. Answers with the `url` to open and, for
-    /// Codex, the `user_code` to enter there; the `proxy` event's `sign_in` follows it.
-    ProxySignIn {
+    /// Makes the code a gateway joins the account with. Answers with a `gateway::Enroll`.
+    AddGateway,
+    /// Removes the gateway from the account. The servers' Gateway accounts go with it.
+    RemoveGateway,
+    /// Starts signing an account of `agent` in on the gateway. Answers with the `url` to open and, for
+    /// Codex, the `user_code` to enter there; the `gateway` event's `sign_in` follows it.
+    GatewaySignIn {
         agent: Agent,
     },
     /// Finishes Claude's sign-in with the code its page showed. Answers once the account is added.
-    ProxyFinishSignIn {
+    GatewayFinishSignIn {
         code: String,
     },
     /// Forgets the sign-in under way.
-    ProxyCancelSignIn,
+    GatewayCancelSignIn,
     /// Renames an account, sets its priority, or turns it on or off.
-    ProxyUpdateAccount {
+    GatewayUpdateAccount {
         account: String,
         change: AccountChange,
     },
-    ProxyRemoveAccount {
+    GatewayRemoveAccount {
         account: String,
     },
-    /// A page of the proxy's request log, newest first, before the entry `before`, or only the
-    /// requests that failed. Answers with `rows`, each a `proxy::LogRow`, and `more` when there are
+    /// A page of the gateway's request log, newest first, before the entry `before`, or only the
+    /// requests that failed. Answers with `rows`, each a `gateway::LogRow`, and `more` when there are
     /// older ones.
-    ProxyLog {
+    GatewayLog {
         #[serde(default)]
         before: Option<i64>,
         #[serde(default)]
         errors_only: bool,
     },
-    /// A captured request in full. Answers with `request`, a `proxy::CapturedView`, or null when the
-    /// proxy no longer has it.
-    ProxyCaptured {
+    /// A captured request in full. Answers with `request`, a `gateway::CapturedView`, or null when the
+    /// gateway no longer has it.
+    GatewayCaptured {
         entry: i64,
     },
     /// Starts or stops capturing requests in full: every request of one thread, or the next few.
-    ProxyCapture {
+    GatewayCapture {
         capture: Capture,
+    },
+    /// Adds the MCP at `url` to the gateway, with a key when `key` holds one (`header` empty for
+    /// `Authorization`). Answers with `added`, the MCP server's id; or `sign_in`, the `url` to open
+    /// and the `state` to finish with; or `needs_key` when it takes a key.
+    McpServerAdd {
+        url: String,
+        #[serde(default)]
+        name: Option<String>,
+        #[serde(default)]
+        header: String,
+        #[serde(default)]
+        key: String,
+    },
+    /// Signs an MCP server in again. Answers as `ConnectorAdd` does.
+    McpServerSignIn {
+        mcp_server: String,
+    },
+    /// Finishes a sign-in with the `motile://mcp` address it came back to. Answers with
+    /// `added`.
+    McpServerFinishSignIn {
+        address: String,
+    },
+    /// Renames an MCP server, changes its slug or key, turns it or one of its tools on or off.
+    McpServerUpdate {
+        mcp_server: String,
+        change: McpChange,
+    },
+    /// Gives an MCP server a new key.
+    McpServerKey {
+        mcp_server: String,
+        #[serde(default)]
+        header: String,
+        key: String,
+    },
+    /// Asks an MCP server for its tools again.
+    McpServerRefresh {
+        mcp_server: String,
+    },
+    McpServerRemove {
+        mcp_server: String,
+    },
+    /// A page of the calls agents made, newest first, before the call `before`, or only the ones
+    /// that failed. Answers with `rows`, each a `MCP servers::CallRow`, and `more`.
+    McpServerCalls {
+        #[serde(default)]
+        before: Option<i64>,
+        #[serde(default)]
+        errors_only: bool,
+    },
+    /// A call with its arguments and result. Answers with `call`, a `MCP servers::CallView`, or null.
+    McpServerCall {
+        call: i64,
+    },
+    /// The fields a tool is tried with. Answers with `fields`, each a `MCP servers::Field`.
+    McpServerFields {
+        mcp_server: String,
+        tool: String,
+    },
+    /// Calls a tool with what its fields hold, by name. Answers with a `MCP servers::Answered`.
+    McpServerTry {
+        mcp_server: String,
+        tool: String,
+        #[serde(default)]
+        values: serde_json::Map<String, serde_json::Value>,
     },
 }
 
@@ -709,9 +773,9 @@ pub enum Event {
         thread_id: String,
         message: String,
     },
-    /// The account's proxy, as the Proxy page shows it, whenever that changes.
-    Proxy {
-        proxy: Box<proxy::View>,
+    /// The account's gateway, as the Gateway page shows it, whenever that changes.
+    Gateway {
+        gateway: Box<gateway::View>,
     },
     Reply {
         id: u64,
@@ -754,7 +818,7 @@ pub struct ServerView {
     pub roomier_accounts: HashMap<String, HashMap<String, String>>,
     /// What each of its agents' accounts has used of its limits, by account id.
     pub account_limits: HashMap<String, Vec<limits::Row>>,
-    /// The name of the proxy's account whose limits a Proxy account's are: the one a new thread
+    /// The name of the gateway's account whose limits a Gateway account's are: the one a new thread
     /// would start on, by account id.
     pub next_accounts: HashMap<String, String>,
     /// Its agents' accounts, each agent's in the order a new thread would choose them.
@@ -871,24 +935,24 @@ mod tests {
     }
 
     #[test]
-    fn proxy_commands_name_their_account_and_entry_apart_from_the_commands_id() {
-        let json = r#"{"id": 3, "type": "proxy_update_account", "account": "org-1",
+    fn gateway_commands_name_their_account_and_entry_apart_from_the_commands_id() {
+        let json = r#"{"id": 3, "type": "gateway_update_account", "account": "org-1",
             "change": {"type": "priority", "priority": 2}}"#;
         let envelope: Envelope = serde_json::from_str(json).unwrap();
-        let Command::ProxyUpdateAccount { account, change: AccountChange::Priority { priority } } = envelope.command
+        let Command::GatewayUpdateAccount { account, change: AccountChange::Priority { priority } } = envelope.command
         else {
             panic!("expected an account's priority");
         };
         assert_eq!((envelope.id, account.as_str(), priority), (3, "org-1", 2));
 
         let capture: Envelope = serde_json::from_str(
-            r#"{"id": 4, "type": "proxy_capture", "capture": {"type": "thread", "server": "s", "thread": "t"}}"#,
+            r#"{"id": 4, "type": "gateway_capture", "capture": {"type": "thread", "server": "s", "thread": "t"}}"#,
         )
         .unwrap();
-        assert!(matches!(capture.command, Command::ProxyCapture { capture: Capture::Thread { .. } }));
+        assert!(matches!(capture.command, Command::GatewayCapture { capture: Capture::Thread { .. } }));
 
-        let captured: Envelope = serde_json::from_str(r#"{"id": 5, "type": "proxy_captured", "entry": 9}"#).unwrap();
-        assert!(matches!(captured.command, Command::ProxyCaptured { entry: 9 }));
+        let captured: Envelope = serde_json::from_str(r#"{"id": 5, "type": "gateway_captured", "entry": 9}"#).unwrap();
+        assert!(matches!(captured.command, Command::GatewayCaptured { entry: 9 }));
     }
 
     #[test]

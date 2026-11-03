@@ -34,7 +34,7 @@ echo "▸ Opening the client in ${AVD}…"
 # The emulator reaches the Mac at 10.0.2.2.
 "$ADB" -s "$SERIAL" shell am start -n "$PACKAGE/app.motile.MainActivity" \
     --es MOTILE_AUTH_URL "http://10.0.2.2:$AUTH_PORT" --es MOTILE_LOCAL 1 \
-    --es MOTILE_SERVER_ADDR "10.0.2.2:$SERVER_PORT" --es MOTILE_SERVER_ADDRS "${MOTILE_SERVER_ADDRS%=*}=10.0.2.2:$PROXY_PORT" \
+    --es MOTILE_SERVER_ADDR "10.0.2.2:$SERVER_PORT" --es MOTILE_SERVER_ADDRS "${MOTILE_SERVER_ADDRS%=*}=10.0.2.2:$GATEWAY_PORT" \
     --es MOTILE_DEMO_SIGN_IN demo@motile.app \
     --es MOTILE_DEMO_SCRIPT "$STEPS" >/dev/null
 sleep 2

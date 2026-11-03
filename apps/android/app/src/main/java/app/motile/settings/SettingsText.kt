@@ -49,13 +49,13 @@ val Server.accountsUnavailable: String?
 val Server.textModelName: String
     get() = models.firstOrNull { it.id == textModel }?.name ?: "Automatic"
 
-/** "Claude Code · Work". The Proxy account has no name of its own to show: the proxy's symbol after its agent's says it. */
+/** "Claude Code · Work". The Gateway account has no name of its own to show: the gateway's symbol after its agent's says it. */
 val AgentAccount.settingsTitle: String
-    get() = if (proxy) agent.title else "${agent.title} · $name"
+    get() = if (gateway) agent.title else "${agent.title} · $name"
 
 val AgentAccount.settingsDescription: String
     get() {
-        if (proxy) return "Works through your proxy's accounts"
+        if (gateway) return "Works through your gateway's accounts"
         val signedIn = email?.let { listOfNotNull(it, plan).joinToString(" · ") }
         val who = signedIn ?: if (variables.isEmpty()) "Not signed in" else "Signs in with its variables"
         return if (folder.isEmpty()) who else "$who · $folder"

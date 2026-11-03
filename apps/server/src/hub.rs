@@ -17,7 +17,7 @@ use std::time::{Duration, Instant};
 use anyhow::{Context, bail};
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64;
-use motile_protocol::proxy_wire::ProxyAccount;
+use motile_protocol::gateway_wire::GatewayAccount;
 use motile_protocol::wire::{
     AccountSkills, Activity, Agent, AgentAccount, AgentLimits, AgentNotice, Approval, BranchInstructions,
     CONTINUE_PROMPT, ChangedFile, ContinueSettings, CopiedThread, DiffScope, FileKind, GitAction, GitHubState,
@@ -46,7 +46,7 @@ use crate::ricrac::Ricrac;
 use crate::sign_in::SignIns;
 use crate::store::{Continuation, Purpose, Session, Store, StoredProject, StoredThread, StoredWorktree, TitleSource};
 use crate::ui_lookups::Lookups;
-use crate::{agent_accounts, drafts, files, git, github, icons, limits, pacing, proxy, pull_requests, title, ui};
+use crate::{agent_accounts, drafts, files, gateway, git, github, icons, limits, pacing, pull_requests, title, ui};
 
 mod children;
 
@@ -90,8 +90,8 @@ const RESTING_PROCESS_STAYS: Duration = Duration::from_secs(10 * 60);
 const MCP_WAIT: Duration = Duration::from_secs(5);
 const MCP_ASK_EVERY: Duration = Duration::from_millis(250);
 const PRICES: &str = "prices";
-/// How often the proxy is asked what accounts it has, which Proxy accounts are pinned to.
-const PROXY_ACCOUNTS_EVERY: Duration = Duration::from_secs(60);
+/// How often the gateway is asked what accounts it has, which Gateway accounts are pinned to.
+const GATEWAY_ACCOUNTS_EVERY: Duration = Duration::from_secs(60);
 /// How often what the agents' accounts have used is read.
 const LIMITS_READ_EVERY: Duration = Duration::from_secs(5 * 60);
 const PRICES_STALE: Duration = Duration::from_secs(24 * 3600);
@@ -173,8 +173,8 @@ pub struct Hub {
     /// once that is served.
     mcp_tokens: Arc<mcp::Tokens>,
     mcp_port: std::sync::OnceLock<u16>,
-    /// The way the Proxy accounts' agents reach the account's proxy, once that is served.
-    proxy: std::sync::OnceLock<ProxyWay>,
+    /// The way the Gateway accounts' agents reach the account's gateway, once that is served.
+    gateway: std::sync::OnceLock<GatewayWay>,
     sign_ins: Arc<SignIns>,
     /// The threads agents started whose parents have news to hear, and where that is read.
     children_changed: mpsc::UnboundedSender<String>,
@@ -187,19 +187,22 @@ pub struct Hub {
     started: std::sync::Mutex<HashMap<(String, String), String>>,
 }
 
-struct ProxyWay {
-    tunnel: Arc<proxy::Tunnel>,
+struct GatewayWay {
+    tunnel: Arc<gateway::Tunnel>,
     port: u16,
-    /// What the server's own calls through the proxy are made with.
+    /// What the server's own calls through the gateway are made with.
     token: String,
-    /// Where the Proxy accounts keep their folders.
+    /// Where the Gateway accounts keep their folders.
     folder: PathBuf,
-    /// The proxy's accounts as it last listed them, which Proxy accounts are pinned to.
-    pool: std::sync::Mutex<Vec<ProxyAccount>>,
+    /// The gateway's accounts as it last listed them, which Gateway accounts are pinned to.
+    pool: std::sync::Mutex<Vec<GatewayAccount>>,
+    /// The slugs of the gateway's MCP servers that are on, as it last listed them, which every agent is
+    /// given.
+    mcp_servers: std::sync::Mutex<Vec<String>>,
 }
 
-impl ProxyWay {
-    fn pool(&self) -> Vec<ProxyAccount> {
+impl GatewayWay {
+    fn pool(&self) -> Vec<GatewayAccount> {
         self.pool.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).clone()
     }
 }
@@ -449,7 +452,7 @@ impl Hub {
             list_updates,
             mcp_tokens: Arc::default(),
             mcp_port: std::sync::OnceLock::new(),
-            proxy: std::sync::OnceLock::new(),
+            gateway: std::sync::OnceLock::new(),
             sign_ins: Arc::default(),
         }))
     }
@@ -462,79 +465,109 @@ impl Hub {
         Ok(())
     }
 
-    /// Where the thread's agent reads threads, with the token of the thread.
+    /// Where the thread's agent reads threads and reaches the gateway's MCP servers, with the token of
+    /// the thread.
     fn mcp_access(&self, live: &mut Live) -> Option<McpAccess> {
         let port = self.mcp_port.get()?;
-        Some(McpAccess { url: format!("http://127.0.0.1:{port}/mcp"), token: self.thread_token(live) })
+        let mcp_servers = match self.gateway.get().filter(|way| way.tunnel.has_gateway()) {
+            Some(way) => {
+                let slugs = way.mcp_servers.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).clone();
+                slugs
+                    .into_iter()
+                    .map(|slug| {
+                        let url = gateway::mcp_server_url(way.port, &slug);
+                        (slug, url)
+                    })
+                    .collect()
+            }
+            None => vec![],
+        };
+        Some(McpAccess { url: format!("http://127.0.0.1:{port}/mcp"), token: self.thread_token(live), mcp_servers })
     }
 
-    /// What the thread's agent reads threads and reaches the proxy with.
+    /// What the thread's agent reads threads and reaches the gateway with.
     fn thread_token(&self, live: &mut Live) -> String {
         live.mcp_token.get_or_insert_with(|| self.mcp_tokens.mint(&live.stored.thread.id)).clone()
     }
 
-    /// Serves the way the Proxy accounts' agents reach the account's proxy over `endpoint`, and
+    /// Serves the way the Gateway accounts' agents reach the account's gateway over `endpoint`, and
     /// offers those accounts, which keep their folders in `folder`, while `key` says the account
-    /// has a proxy.
-    pub async fn serve_proxy(
+    /// has a gateway.
+    pub async fn serve_gateway(
         self: &Arc<Self>,
         endpoint: iroh::Endpoint,
         mut key: watch::Receiver<Option<String>>,
         folder: PathBuf,
     ) -> anyhow::Result<()> {
-        let tunnel = proxy::Tunnel::new(endpoint, key.clone());
+        let tunnel = gateway::Tunnel::new(endpoint, key.clone());
         let token = hex::encode(rand::random::<[u8; 32]>());
-        let port = proxy::serve(tunnel.clone(), self.mcp_tokens.clone(), token.clone()).await?;
+        let port = gateway::serve(tunnel.clone(), self.mcp_tokens.clone(), token.clone()).await?;
         std::fs::create_dir_all(folder.join(agent_accounts::usual_id(Agent::Claude)))?;
-        proxy::write_codex_config(&folder.join(agent_accounts::usual_id(Agent::Codex)), port)?;
-        let way = ProxyWay { tunnel, port, token, folder, pool: std::sync::Mutex::default() };
-        if self.proxy.set(way).is_err() {
-            bail!("The way to the proxy is served already.");
+        gateway::write_codex_config(&folder.join(agent_accounts::usual_id(Agent::Codex)), port)?;
+        let way = GatewayWay {
+            tunnel,
+            port,
+            token,
+            folder,
+            pool: std::sync::Mutex::default(),
+            mcp_servers: std::sync::Mutex::default(),
+        };
+        if self.gateway.set(way).is_err() {
+            bail!("The way to the gateway is served already.");
         }
-        let has_proxy = key.borrow_and_update().is_some();
-        self.offer_proxy(has_proxy).await?;
+        let has_gateway = key.borrow_and_update().is_some();
+        self.offer_gateway(has_gateway).await?;
         let hub = Arc::downgrade(self);
         tokio::spawn(async move {
-            let mut every = tokio::time::interval(PROXY_ACCOUNTS_EVERY);
+            let mut every = tokio::time::interval(GATEWAY_ACCOUNTS_EVERY);
             loop {
                 tokio::select! {
                     changed = key.changed() => if changed.is_err() { return },
                     _ = every.tick() => {}
                 }
-                let has_proxy = key.borrow_and_update().is_some();
+                let has_gateway = key.borrow_and_update().is_some();
                 let Some(hub) = hub.upgrade() else { return };
-                if let Err(error) = hub.offer_proxy(has_proxy).await {
-                    tracing::warn!("couldn't change the Proxy accounts: {error:#}");
+                if let Err(error) = hub.offer_gateway(has_gateway).await {
+                    tracing::warn!("couldn't change the Gateway accounts: {error:#}");
                 }
             }
         });
         Ok(())
     }
 
-    /// Offers the Proxy accounts as the proxy's accounts are now, before an agent picks one.
-    pub async fn follow_proxy(self: &Arc<Self>) {
-        let Some(way) = self.proxy.get() else { return };
-        if let Err(error) = self.offer_proxy(way.tunnel.has_proxy()).await {
-            tracing::warn!("couldn't change the Proxy accounts: {error:#}");
+    /// Offers the Gateway accounts as the gateway's accounts are now, before an agent picks one.
+    pub async fn follow_gateway(self: &Arc<Self>) {
+        let Some(way) = self.gateway.get() else { return };
+        if let Err(error) = self.offer_gateway(way.tunnel.has_gateway()).await {
+            tracing::warn!("couldn't change the Gateway accounts: {error:#}");
         }
     }
 
-    /// Offers the Proxy accounts while the account has a proxy, one pinned to each of its accounts
+    /// Offers the Gateway accounts while the account has a gateway, one pinned to each of its accounts
     /// too, and takes them away when it no longer has one, or no longer has the account, as a removed
-    /// account is: their threads go on with their agents' defaults. The proxy's accounts stay as
+    /// account is: their threads go on with their agents' defaults. The gateway's accounts stay as
     /// they were while it can't be asked.
-    async fn offer_proxy(self: &Arc<Self>, has_proxy: bool) -> anyhow::Result<()> {
-        let Some(way) = self.proxy.get() else { return Ok(()) };
-        if has_proxy {
+    async fn offer_gateway(self: &Arc<Self>, has_gateway: bool) -> anyhow::Result<()> {
+        let Some(way) = self.gateway.get() else { return Ok(()) };
+        if has_gateway {
             match way.tunnel.accounts().await {
                 Ok(pool) => *way.pool.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = pool,
-                Err(error) => tracing::debug!("couldn't ask the proxy for its accounts: {error:#}"),
+                Err(error) => tracing::debug!("couldn't ask the gateway for its accounts: {error:#}"),
             }
         }
+        let mcp_servers = match has_gateway {
+            true => way.tunnel.mcp_servers().await.unwrap_or_else(|error| {
+                tracing::debug!("couldn't ask the gateway for its MCP servers: {error:#}");
+                vec![]
+            }),
+            false => vec![],
+        };
+        *way.mcp_servers.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = mcp_servers;
         let pool = way.pool();
         let mut threads = self.every_thread().await;
         let accounts = self.agent_accounts();
-        let offered = agent_accounts::with_proxy(accounts.clone(), has_proxy.then_some((way.folder.as_path(), &pool)));
+        let offered =
+            agent_accounts::with_gateway(accounts.clone(), has_gateway.then_some((way.folder.as_path(), &pool)));
         if offered == accounts {
             return Ok(());
         }
@@ -687,8 +720,8 @@ impl Hub {
 
     fn account_environment(&self, account: &AgentAccount) -> Environment {
         let environment = agent_accounts::environment(&self.environment, account);
-        match self.proxy.get().filter(|_| account.proxy) {
-            Some(way) => environment.with(proxy::variables(account.agent, way.port, &way.token)),
+        match self.gateway.get().filter(|_| account.gateway) {
+            Some(way) => environment.with(gateway::variables(account.agent, way.port, &way.token)),
             None => environment,
         }
     }
@@ -770,7 +803,7 @@ impl Hub {
         let pinned_models: Vec<ModelInfo> = pinned
             .iter()
             .flat_map(|account| {
-                let placing = agent_accounts::proxy_id(account.agent);
+                let placing = agent_accounts::gateway_id(account.agent);
                 let models = listed.iter().filter(move |model| model.account == placing);
                 models.map(|model| ModelInfo { account: account.id.clone(), ..model.clone() })
             })
@@ -875,8 +908,8 @@ impl Hub {
         let mut accounts = self.agent_accounts();
         let account =
             accounts.iter().find(|account| account.id == id).context("That account is no longer on your server.")?;
-        if account.proxy {
-            bail!("The Proxy account goes when your proxy does.");
+        if account.gateway {
+            bail!("The Gateway account goes when your gateway does.");
         }
         let agent = account.agent;
         if !accounts.iter().any(|other| other.agent == agent && other.id != id) {
@@ -942,7 +975,7 @@ impl Hub {
         let kept = {
             let mut accounts = self.lock_agent_accounts();
             let mut changed = false;
-            for account in accounts.iter_mut().filter(|account| !account.proxy) {
+            for account in accounts.iter_mut().filter(|account| !account.gateway) {
                 let found =
                     read.iter().find(|limits| limits.agent == account.agent && limits.account_name == account.name);
                 let Some(limits) = found else { continue };
@@ -2355,7 +2388,7 @@ impl Hub {
     /// keeps what it said last time, beside why.
     async fn read_limits(&self) -> Vec<AgentLimits> {
         let mut kept = self.limits.lock().await;
-        let (pooled, own): (Vec<_>, Vec<_>) = self.agent_accounts().into_iter().partition(|account| account.proxy);
+        let (pooled, own): (Vec<_>, Vec<_>) = self.agent_accounts().into_iter().partition(|account| account.gateway);
         let own = own.into_iter().map(|account| {
             let environment = self.account_environment(&account);
             (account, environment)
@@ -2368,10 +2401,10 @@ impl Hub {
         agents
     }
 
-    /// What the proxy's accounts that new threads of the Proxy accounts would start on have used,
+    /// What the gateway's accounts that new threads of the Gateway accounts would start on have used,
     /// and for each one pinned to an account, what that account has.
     async fn read_pools(&self, accounts: Vec<AgentAccount>) -> Vec<AgentLimits> {
-        let Some(way) = self.proxy.get() else { return vec![] };
+        let Some(way) = self.gateway.get() else { return vec![] };
         let pool = way.pool();
         let (pinned, placing): (Vec<_>, Vec<_>) = accounts.into_iter().partition(|account| account.pin.is_some());
         let pinned = pinned.into_iter().map(|account| {
@@ -3406,9 +3439,9 @@ impl Hub {
             command.env(mcp::AUTHORIZATION_VARIABLE, format!("Bearer {}", mcp.token));
             command.env("MCP_TOOL_TIMEOUT", (mcp::TOOL_TIMEOUT_SECS * 1000).to_string());
         }
-        if account.proxy {
-            command.env(proxy::token_variable(account.agent), token);
-            if let (Some(way), Some(thread)) = (self.proxy.get(), self.mcp_tokens.thread_of(token)) {
+        if account.gateway {
+            command.env(gateway::token_variable(account.agent), token);
+            if let (Some(way), Some(thread)) = (self.gateway.get(), self.mcp_tokens.thread_of(token)) {
                 way.tunnel.pin(&thread, account.pin.as_deref());
             }
         }
@@ -3851,9 +3884,9 @@ impl Hub {
         let name = model.as_deref().and_then(|model| self.model_name(agent, model));
         let accounts = self.agent_accounts().into_iter().filter(|kept| kept.agent == agent).collect::<Vec<_>>();
         let used = accounts.iter().find(|kept| Some(kept.id.as_str()) == account);
-        let proxy = used.is_some_and(|used| used.proxy);
-        let named = used.filter(|used| accounts.len() > 1 && (!used.proxy || used.pin.is_some()));
-        HandoffEnd { agent, model, name, account: named.map(|kept| kept.name.clone()), proxy }
+        let gateway = used.is_some_and(|used| used.gateway);
+        let named = used.filter(|used| accounts.len() > 1 && (!used.gateway || used.pin.is_some()));
+        HandoffEnd { agent, model, name, account: named.map(|kept| kept.name.clone()), gateway }
     }
 
     /// The model's name as the picker lists it. An agent names a model it runs with its whole id,
@@ -3886,8 +3919,8 @@ impl Hub {
             None => thread.model.clone().or_else(|| live.session_model.clone()),
         };
         let model = model.map(|model| self.model_name(thread.agent, &model).unwrap_or(model));
-        let (shown, proxy) = self.shown_account(&thread.id, &account);
-        RunsOn { agent: thread.agent, model, account: shown, proxy, thread_id: None }
+        let (shown, gateway) = self.shown_account(&thread.id, &account);
+        RunsOn { agent: thread.agent, model, account: shown, gateway, thread_id: None }
     }
 
     /// Gives the handoff that waited for it the model the new session runs.
@@ -3896,7 +3929,7 @@ impl Hub {
         let Some(mut item) = self.store.item(&live.stored.thread.id, &item_id)? else { return Ok(()) };
         let ItemKind::Handoff { to, .. } = &mut item.kind else { return Ok(()) };
         let named = self.handoff_end(to.agent, Some(model.to_string()), None);
-        *to = HandoffEnd { account: to.account.take(), proxy: to.proxy, ..named };
+        *to = HandoffEnd { account: to.account.take(), gateway: to.gateway, ..named };
         item.rev = live.next_rev();
         live.save(&self.store, item)
     }

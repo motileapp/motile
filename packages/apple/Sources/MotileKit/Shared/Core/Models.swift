@@ -139,10 +139,10 @@ struct AgentAccount: Equatable, Identifiable {
     /// Who is signed in, as the agent's CLI last said.
     let email: String?
     let plan: String?
-    /// The server's account for its account's proxy, which serves its turns from the proxy's
+    /// The server's account for its account's gateway, which serves its turns from the gateway's
     /// accounts. It can't be changed, removed or signed in.
-    let proxy: Bool
-    /// The one of the proxy's accounts its threads are pinned to, which only agents pick.
+    let gateway: Bool
+    /// The one of the gateway's accounts its threads are pinned to, which only agents pick.
     let pin: String?
 
     init(json: JSON) {
@@ -156,7 +156,7 @@ struct AgentAccount: Equatable, Identifiable {
         }
         email = json.optionalString("email")
         plan = json.optionalString("plan")
-        proxy = json.bool("proxy")
+        gateway = json.bool("gateway")
         pin = json.optionalString("pin")
     }
 
@@ -170,7 +170,7 @@ struct AgentAccount: Equatable, Identifiable {
         variables = []
         email = nil
         plan = nil
-        proxy = false
+        gateway = false
         pin = nil
     }
 
@@ -268,7 +268,7 @@ struct Server: Equatable, Identifiable {
     let roomierAccounts: [String: [String: String]]
     /// What each agent account has used of its limits, by account id.
     let accountLimits: [String: [LimitsReport.Window]]
-    /// The name of the proxy's account whose limits a Proxy account's are, by account id.
+    /// The name of the gateway's account whose limits a Gateway account's are, by account id.
     let nextAccounts: [String: String]
     /// Its agents' accounts' ids, the one a new thread would start on first.
     let accountsByRoom: [String]
@@ -346,7 +346,7 @@ struct Server: Equatable, Identifiable {
     /// Whether the server can keep its projects' folders pulled on their default branch.
     var pullsDefaultBranch: Bool { protocolVersion >= 25 }
 
-    /// The agent's accounts a person picks from: all but those pinned to one of the proxy's
+    /// The agent's accounts a person picks from: all but those pinned to one of the gateway's
     /// accounts, which only agents pick.
     func accounts(of agent: Agent) -> [AgentAccount] {
         agentAccounts.filter { $0.agent == agent && $0.pin == nil }
@@ -383,17 +383,17 @@ struct Server: Equatable, Identifiable {
         return (roomier, model.id)
     }
 
-    /// The model's name, with the account's when its agent has more than one. The Proxy account,
-    /// whose threads the proxy places, has no name of its own to show: the proxy's symbol says it.
+    /// The model's name, with the account's when its agent has more than one. The Gateway account,
+    /// whose threads the gateway places, has no name of its own to show: the gateway's symbol says it.
     func label(of model: ModelInfo, account id: String?) -> String {
         guard accounts(of: model.agent).count > 1, let account = account(id, of: model.agent) else { return model.shortName }
-        guard !account.proxy || account.pin != nil else { return model.shortName }
+        guard !account.gateway || account.pin != nil else { return model.shortName }
         return "\(model.shortName) · \(account.name)"
     }
 
-    /// Whether the account runs through the proxy, which the proxy's symbol after its name says.
-    func runsThroughProxy(_ id: String?, of agent: Agent) -> Bool {
-        account(id, of: agent)?.proxy ?? false
+    /// Whether the account runs through the gateway, which the gateway's symbol after its name says.
+    func runsThroughGateway(_ id: String?, of agent: Agent) -> Bool {
+        account(id, of: agent)?.gateway ?? false
     }
 }
 
@@ -1133,8 +1133,8 @@ struct AgentInfo: Equatable, Identifiable {
     let model: String?
     /// The account's name, when its agent has more than one.
     let account: String?
-    /// It runs through the account's proxy.
-    let proxy: Bool
+    /// It runs through the account's gateway.
+    let gateway: Bool
 
     init(json: JSON) {
         let number = { (key: String) in (json[key] as? NSNumber)?.intValue }
@@ -1155,7 +1155,7 @@ struct AgentInfo: Equatable, Identifiable {
         agent = json.optionalString("agent").flatMap(Agent.init(rawValue:))
         model = json.optionalString("model")
         account = json.optionalString("account")
-        proxy = json.bool("proxy")
+        gateway = json.bool("gateway")
     }
 
     var working: Bool { status == .running }
@@ -1523,8 +1523,8 @@ struct UsageReport {
         let tokens: Int
         let costUSD: Double?
         let share: Double
-        /// An account that runs through the proxy, which its symbol after the name says.
-        let proxy: Bool
+        /// An account that runs through the gateway, which its symbol after the name says.
+        let gateway: Bool
 
         var id: String { "\(agent?.rawValue ?? "")/\(server ?? "")/\(name)" }
     }
@@ -1563,7 +1563,7 @@ struct UsageReport {
             Line(
                 name: line.string("name"), agent: line.optionalString("agent").flatMap(Agent.init(rawValue:)),
                 server: line.optionalString("server"), tokens: line.int("tokens"), costUSD: line.optionalDouble("cost_usd"),
-                share: share ?? line.double("share"), proxy: line.bool("proxy"))
+                share: share ?? line.double("share"), gateway: line.bool("gateway"))
         }
         let (cost, tokens) = (costUSD, tokens)
         kinds = json.objects("kinds").map { kind in
@@ -1591,8 +1591,8 @@ struct LimitsReport {
         let windows: [Window]
         /// Why there are no windows.
         let note: String?
-        /// One of the proxy's accounts, which may be signed in on `servers` too.
-        let proxy: Bool
+        /// One of the gateway's accounts, which may be signed in on `servers` too.
+        let gateway: Bool
 
         var id: String { "\(agent.rawValue)/\(name ?? "")/\(account ?? servers.joined(separator: ","))/\(note ?? "")" }
     }
@@ -1640,7 +1640,7 @@ struct LimitsReport {
                 account: section.optionalString("account"),
                 plan: section.optionalString("plan"), servers: section.strings("servers"),
                 windows: section.objects("windows").map(Window.init(json:)),
-                note: section.optionalString("note"), proxy: section.bool("proxy"))
+                note: section.optionalString("note"), gateway: section.bool("gateway"))
         }
         notes = json.strings("notes")
         stale = json.bool("stale")

@@ -4,10 +4,11 @@
 //! the close command's keys take it too.
 
 mod account_sheet;
+mod agent_gateway;
 mod keybindings;
 mod layout;
+mod mcp_gateway;
 mod page;
-mod proxy;
 mod sidebar;
 
 use std::cell::Cell;

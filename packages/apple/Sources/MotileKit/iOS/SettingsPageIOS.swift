@@ -4,7 +4,7 @@ import SwiftUI
 /// The settings' sections in groups, each pushing its page, or selected beside it on a wide
 /// sheet. While a search is typed, the groups it finds take their place.
 struct SettingsSections: View {
-    private static let groups: [[SettingsSection]] = [[.general], [.accounts, .servers, .proxy, .projects], [.pullRequests, .textGeneration], [.integrations]]
+    private static let groups: [[SettingsSection]] = [[.general], [.accounts, .servers, .agentGateway, .mcpGateway, .projects], [.pullRequests, .textGeneration], [.integrations]]
 
     @Environment(AppStore.self) private var store
     /// The section shown beside the list, on a wide sheet, lit in it. Without one, each pushes.
@@ -96,7 +96,7 @@ struct SettingsPage: View {
                 case .projects: projects
                 case .textGeneration: textGeneration
                 case .pullRequests: pullRequests
-                case .keyboard, .proxy: EmptyView()
+                case .keyboard, .agentGateway, .mcpGateway: EmptyView()
                 case .integrations: integrations
                 }
             }
@@ -258,30 +258,30 @@ struct SettingsPage: View {
             let installed = Agent.allCases.filter { server.agents[$0] != nil }
             ForEach(server.agentAccounts.filter { installed.contains($0.agent) && $0.pin == nil }) { account in
                 Button {
-                    guard !account.proxy else { return store.openSettings(.proxy) }
+                    guard !account.gateway else { return store.openSettings(.agentGateway) }
                     editedAccount = EditedAccount(server: server, account: account)
                 } label: {
                     SettingsItem(
-                        account.settingsTitle, description: account.settingsDescription(isDefault: server.isDefault(account)), proxied: account.proxy
+                        account.settingsTitle, description: account.settingsDescription(isDefault: server.isDefault(account)), proxied: account.gateway
                     ) {
                         AgentIcon(agent: account.agent, size: SettingsTile.symbolSize)
                             .frame(width: SettingsTile.size, height: SettingsTile.size)
                     }
                 }
                 .swipeActions {
-                    if !account.proxy {
+                    if !account.gateway {
                         Button("Remove", role: .destructive) { removal = .account(account, on: server) }
                             .tint(Color.themeDestructive)
                     }
                 }
                 .contextMenu {
-                    if !account.proxy {
+                    if !account.gateway {
                         Button("Edit") { editedAccount = EditedAccount(server: server, account: account) }
                     }
                     if !server.isDefault(account) {
                         Button("Make Default") { store.makeAgentAccountDefault(account, on: server) }
                     }
-                    if !account.proxy {
+                    if !account.gateway {
                         Divider()
                         Button("Remove Account", role: .destructive) { removal = .account(account, on: server) }
                     }
@@ -701,7 +701,7 @@ private struct SettingsItem<Picture: View, Footer: View>: View {
     let title: String
     let description: String
     var truncates: Text.TruncationMode = .tail
-    /// What the title names runs through the proxy, which its symbol after it says.
+    /// What the title names runs through the gateway, which its symbol after it says.
     var proxied = false
     @ViewBuilder let picture: Picture
     /// What stands under the description.
@@ -724,7 +724,7 @@ private struct SettingsItem<Picture: View, Footer: View>: View {
             picture
             VStack(alignment: .leading, spacing: 2) {
                 Text(verbatim: title)
-                    .proxyMarked(proxied, fontSize: UIFont.preferredFont(forTextStyle: .body).pointSize)
+                    .gatewayMarked(proxied, fontSize: UIFont.preferredFont(forTextStyle: .body).pointSize)
                     .foregroundStyle(Color.themeForeground)
                 Text(description)
                     .font(.footnote)

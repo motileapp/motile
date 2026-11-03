@@ -10,8 +10,10 @@ pub enum DeviceKind {
     Server,
     /// A client that drives servers.
     Client,
-    /// The account's proxy, which serves its agents' logins to every server. One per account.
-    Proxy,
+    /// The account's gateway, which serves its agents' logins and its MCP servers to every server.
+    /// One per account. Up to 0.1.770 it was called the proxy.
+    #[serde(alias = "proxy")]
+    Gateway,
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
@@ -102,7 +104,7 @@ pub struct EnrollRequest {
     pub platform: String,
     /// The device key's signature over `enroll_message(token)`.
     pub signature: String,
-    /// What enrolls: a server, or the account's proxy. Missing from servers up to 0.1.267.
+    /// What enrolls: a server, or the account's gateway. Missing from servers up to 0.1.267.
     #[serde(default = "server_kind")]
     pub kind: DeviceKind,
 }

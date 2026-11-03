@@ -2,7 +2,7 @@
 //! answers `account/read` and `account/rateLimits/read`, and Claude Code answers the `initialize`
 //! and `get_usage` control requests. Neither spends tokens.
 
-use motile_protocol::proxy_wire::ProxyAccount;
+use motile_protocol::gateway_wire::GatewayAccount;
 use motile_protocol::wire::{Agent, AgentAccount, AgentLimits, LimitWindow};
 use serde_json::{Value, json};
 
@@ -39,7 +39,7 @@ pub fn kept(read: Vec<AgentLimits>, before: &[AgentLimits]) -> Vec<AgentLimits> 
         .collect()
 }
 
-/// What the proxy's pool has used, as the account a new thread of the Proxy account's agent would
+/// What the gateway's pool has used, as the account a new thread of the Gateway account's agent would
 /// start on read it, under the account's name.
 pub fn pooled(account: &AgentAccount, read: anyhow::Result<Option<AgentLimits>>) -> AgentLimits {
     let failed = |error: String| AgentLimits {
@@ -55,15 +55,15 @@ pub fn pooled(account: &AgentAccount, read: anyhow::Result<Option<AgentLimits>>)
     match read {
         Ok(Some(limits)) => AgentLimits { agent: account.agent, account_name: account.name.clone(), ..limits },
         Ok(None) => failed(format!(
-            "Your proxy has no {} account that takes threads.",
+            "Your gateway has no {} account that takes threads.",
             crate::agent_accounts::agent_name(account.agent)
         )),
         Err(error) => failed(motile_protocol::error_text(&error)),
     }
 }
 
-/// What the proxy's account a Proxy account is pinned to has used, as the proxy last listed it.
-pub fn pinned(account: &AgentAccount, pooled: Option<&ProxyAccount>) -> AgentLimits {
+/// What the gateway's account a Gateway account is pinned to has used, as the gateway last listed it.
+pub fn pinned(account: &AgentAccount, pooled: Option<&GatewayAccount>) -> AgentLimits {
     let read = pooled.map(|pooled| AgentLimits {
         agent: account.agent,
         account_name: account.name.clone(),
@@ -81,7 +81,7 @@ pub fn pinned(account: &AgentAccount, pooled: Option<&ProxyAccount>) -> AgentLim
         plan: None,
         windows: vec![],
         reset_credits: 0,
-        error: Some("This account is no longer on your proxy.".to_string()),
+        error: Some("This account is no longer on your gateway.".to_string()),
         next_account: None,
     })
 }
@@ -263,8 +263,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_proxy_accounts_limits_are_the_next_proxy_accounts_under_its_own_name() {
-        let account = crate::agent_accounts::proxy_account(Agent::Codex, std::path::Path::new("/data/proxy"));
+    fn the_gateway_accounts_limits_are_the_next_gateway_accounts_under_its_own_name() {
+        let account = crate::agent_accounts::gateway_account(Agent::Codex, std::path::Path::new("/data/gateway"));
         let window = LimitWindow {
             label: "Session".into(),
             used_percent: 30.0,
@@ -283,13 +283,13 @@ mod tests {
             next_account: None,
         };
         let read = pooled(&account, Ok(Some(next)));
-        assert_eq!((read.account_name.as_str(), read.plan.as_deref()), ("Proxy", Some("Pro")));
+        assert_eq!((read.account_name.as_str(), read.plan.as_deref()), ("Gateway", Some("Pro")));
         assert_eq!(read.windows, [window]);
         let none = pooled(&account, Ok(None));
-        assert_eq!(none.account_name, "Proxy");
+        assert_eq!(none.account_name, "Gateway");
         assert!(none.error.unwrap().contains("no Codex account"));
-        let failed = pooled(&account, Err(anyhow::anyhow!("Your proxy didn't answer.")));
-        assert_eq!(failed.error.as_deref(), Some("Your proxy didn't answer."));
+        let failed = pooled(&account, Err(anyhow::anyhow!("Your gateway didn't answer.")));
+        assert_eq!(failed.error.as_deref(), Some("Your gateway didn't answer."));
     }
 
     #[test]

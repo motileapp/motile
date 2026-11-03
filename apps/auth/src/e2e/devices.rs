@@ -200,78 +200,78 @@ async fn a_request_is_accepted_only_as_its_device_signed_it(db: PgPool) {
     assert_eq!(get_me("Motile nonsense".to_string()).await.unwrap().status(), StatusCode::UNAUTHORIZED);
 }
 
-const PROXY: DeviceDescription<'static> = DeviceDescription { name: "motile-proxy", platform: "linux" };
+const GATEWAY: DeviceDescription<'static> = DeviceDescription { name: "motile-gateway", platform: "linux" };
 
 fn kinds(me: &motile_protocol::auth_api::Me) -> Vec<DeviceKind> {
     me.devices.iter().map(|device| device.kind).collect()
 }
 
 #[sqlx::test]
-async fn the_install_command_links_the_accounts_proxy(db: PgPool) {
+async fn the_install_command_links_the_accounts_gateway(db: PgPool) {
     let auth = Auth::start(db).await;
     let (client, _) = auth.new_client(&ANN).await;
     let server = DeviceKey::generate();
     let token = auth.client.create_enroll_token(&client).await.unwrap();
     auth.client.enroll(&server, &token.token, &LINUX).await.unwrap();
-    let proxy = DeviceKey::generate();
+    let gateway = DeviceKey::generate();
 
     let token = auth.client.create_enroll_token(&client).await.unwrap();
-    let enrolled = auth.client.enroll_as(&proxy, &token.token, &PROXY, DeviceKind::Proxy).await.unwrap();
+    let enrolled = auth.client.enroll_as(&gateway, &token.token, &GATEWAY, DeviceKind::Gateway).await.unwrap();
     assert_eq!(enrolled.email, "ann@example.com");
 
     let me = auth.client.me(&client).await.unwrap();
-    assert_eq!(names(&me), vec!["Ann's Mac", "build-box", "motile-proxy"]);
-    assert_eq!(kinds(&me), vec![DeviceKind::Client, DeviceKind::Server, DeviceKind::Proxy]);
-    // Servers and the proxy see the same account, which is how they find and accept each other.
+    assert_eq!(names(&me), vec!["Ann's Mac", "build-box", "motile-gateway"]);
+    assert_eq!(kinds(&me), vec![DeviceKind::Client, DeviceKind::Server, DeviceKind::Gateway]);
+    // Servers and the gateway see the same account, which is how they find and accept each other.
     assert_eq!(auth.client.me(&server).await.unwrap(), me);
-    assert_eq!(auth.client.me(&proxy).await.unwrap(), me);
+    assert_eq!(auth.client.me(&gateway).await.unwrap(), me);
 
     // The code works for one machine, as a server's does.
-    let other = auth.client.enroll_as(&DeviceKey::generate(), &token.token, &PROXY, DeviceKind::Proxy).await;
+    let other = auth.client.enroll_as(&DeviceKey::generate(), &token.token, &GATEWAY, DeviceKind::Gateway).await;
     assert!(other.unwrap_err().to_string().contains("expired or was used on another machine"));
 }
 
 #[sqlx::test]
-async fn a_new_proxy_replaces_the_accounts_previous_one(db: PgPool) {
+async fn a_new_gateway_replaces_the_accounts_previous_one(db: PgPool) {
     let auth = Auth::start(db).await;
     let (ann, _) = auth.new_client(&ANN).await;
     let (bob, _) = auth.new_client(&BOB).await;
     let (first, second, bobs) = (DeviceKey::generate(), DeviceKey::generate(), DeviceKey::generate());
-    for (owner, proxy) in [(&ann, &first), (&bob, &bobs), (&ann, &second)] {
+    for (owner, gateway) in [(&ann, &first), (&bob, &bobs), (&ann, &second)] {
         let token = auth.client.create_enroll_token(owner).await.unwrap();
-        auth.client.enroll_as(proxy, &token.token, &PROXY, DeviceKind::Proxy).await.unwrap();
+        auth.client.enroll_as(gateway, &token.token, &GATEWAY, DeviceKind::Gateway).await.unwrap();
     }
 
     let me = auth.client.me(&ann).await.unwrap();
-    assert_eq!(kinds(&me), vec![DeviceKind::Client, DeviceKind::Proxy]);
+    assert_eq!(kinds(&me), vec![DeviceKind::Client, DeviceKind::Gateway]);
     assert_eq!(me.devices[1].public_key, second.public());
     assert_eq!(auth.client.me(&first).await.unwrap().user, None);
-    // A proxy replaced or removed is gone, never kept as a removed server.
+    // A gateway replaced or removed is gone, never kept as a removed server.
     assert!(me.removed.is_empty());
     auth.client.remove_device(&ann, &second.public()).await.unwrap();
     let me = auth.client.me(&ann).await.unwrap();
     assert_eq!(kinds(&me), vec![DeviceKind::Client]);
     assert!(me.removed.is_empty() && me.deleted.is_empty());
 
-    assert_eq!(kinds(&auth.client.me(&bob).await.unwrap()), vec![DeviceKind::Client, DeviceKind::Proxy]);
+    assert_eq!(kinds(&auth.client.me(&bob).await.unwrap()), vec![DeviceKind::Client, DeviceKind::Gateway]);
 }
 
 #[sqlx::test]
-async fn a_proxy_adds_and_deletes_no_servers(db: PgPool) {
+async fn a_gateway_adds_and_deletes_no_servers(db: PgPool) {
     let auth = Auth::start(db).await;
     let (client, _) = auth.new_client(&ANN).await;
-    let (server, proxy) = (DeviceKey::generate(), DeviceKey::generate());
+    let (server, gateway) = (DeviceKey::generate(), DeviceKey::generate());
     let token = auth.client.create_enroll_token(&client).await.unwrap();
     auth.client.enroll(&server, &token.token, &LINUX).await.unwrap();
     let token = auth.client.create_enroll_token(&client).await.unwrap();
-    auth.client.enroll_as(&proxy, &token.token, &PROXY, DeviceKind::Proxy).await.unwrap();
+    auth.client.enroll_as(&gateway, &token.token, &GATEWAY, DeviceKind::Gateway).await.unwrap();
 
-    let from_proxy = auth.client.create_enroll_token(&proxy).await;
-    assert_eq!(from_proxy.unwrap_err().to_string(), "Servers are added from a client.");
-    let deleting = auth.client.delete_server_completely(&proxy, &server.public()).await;
+    let from_gateway = auth.client.create_enroll_token(&gateway).await;
+    assert_eq!(from_gateway.unwrap_err().to_string(), "Servers are added from a client.");
+    let deleting = auth.client.delete_server_completely(&gateway, &server.public()).await;
     assert_eq!(deleting.unwrap_err().to_string(), "Servers are deleted from a client.");
-    // Nor is the proxy a server to delete completely.
-    assert!(auth.client.delete_server_completely(&client, &proxy.public()).await.is_err());
+    // Nor is the gateway a server to delete completely.
+    assert!(auth.client.delete_server_completely(&client, &gateway.public()).await.is_err());
     assert_eq!(auth.client.me(&client).await.unwrap().devices.len(), 3);
 }
 

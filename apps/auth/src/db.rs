@@ -51,12 +51,12 @@ pub fn kind_text(kind: DeviceKind) -> &'static str {
     match kind {
         DeviceKind::Server => "server",
         DeviceKind::Client => "client",
-        DeviceKind::Proxy => "proxy",
+        DeviceKind::Gateway => "gateway",
     }
 }
 
 fn kind_of(text: &str) -> Option<DeviceKind> {
-    [DeviceKind::Server, DeviceKind::Client, DeviceKind::Proxy].into_iter().find(|kind| kind_text(*kind) == text)
+    [DeviceKind::Server, DeviceKind::Client, DeviceKind::Gateway].into_iter().find(|kind| kind_text(*kind) == text)
 }
 
 pub async fn upsert_user(db: &PgPool, identity: &Identity) -> Result<UserRow, sqlx::Error> {
@@ -141,7 +141,7 @@ fn seconds(at: DateTime<Utc>) -> f64 {
 }
 
 /// Links the device to the user, taking it from another account if it was linked there: the
-/// caller has proven it holds the key. A proxy replaces the account's previous one. `false` when it
+/// caller has proven it holds the key. A gateway replaces the account's previous one. `false` when it
 /// can't be linked.
 pub async fn link_device(
     db: &PgPool,
@@ -152,10 +152,10 @@ pub async fn link_device(
     platform: &str,
 ) -> Result<bool, sqlx::Error> {
     let mut transaction = db.begin().await?;
-    if kind == DeviceKind::Proxy {
+    if kind == DeviceKind::Gateway {
         sqlx::query("DELETE FROM devices WHERE user_id = $1 AND kind = $2 AND public_key <> $3")
             .bind(user_id)
-            .bind(kind_text(DeviceKind::Proxy))
+            .bind(kind_text(DeviceKind::Gateway))
             .bind(public_key)
             .execute(&mut *transaction)
             .await?;

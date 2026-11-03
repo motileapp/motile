@@ -78,10 +78,10 @@ struct ThreadSettingsSheet: View {
                         VStack(alignment: .leading, spacing: 12) {
                             HStack(spacing: Self.titleGap) {
                                 AgentIcon(agent: choices.account.agent, size: .sm)
-                                // "Claude Code", the proxy's symbol, then the account its bars are from, a step quieter.
+                                // "Claude Code", the gateway's symbol, then the account its bars are from, a step quieter.
                                 HStack(spacing: 0) {
                                     Text(verbatim: choices.title)
-                                        .proxyMarked(choices.account.proxy, fontSize: UIFont.preferredFont(forTextStyle: .body).pointSize)
+                                        .gatewayMarked(choices.account.gateway, fontSize: UIFont.preferredFont(forTextStyle: .body).pointSize)
                                         .layoutPriority(1)
                                     if let next = store.composerServer?.nextAccounts[id] {
                                         Text(verbatim: " · ")

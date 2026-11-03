@@ -141,7 +141,7 @@ impl Client {
             | Event::OpenUrl { .. }
             | Event::Copy { .. }
             | Event::UploadProgress { .. }
-            | Event::Proxy { .. } => {}
+            | Event::Gateway { .. } => {}
         }
     }
 

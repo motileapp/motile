@@ -413,8 +413,8 @@ final class ProgressRingView: LayerView {
 }
 
 /// Symbols drawn in a colour that follows the appearance.
-/// The proxy's symbol in a line of text, as tall as the line's capitals and centred on them.
-enum ProxyMark {
+/// The gateway's symbol in a line of text, as tall as the line's capitals and centred on them.
+enum GatewayMark {
     /// What the symbol stands from the words before it beyond a space.
     static let gap: CGFloat = 1
 

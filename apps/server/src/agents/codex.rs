@@ -198,9 +198,13 @@ impl Parser {
         }
         if let Some(mcp) = turn.mcp {
             let headers = json!({"Authorization": format!("Bearer {}", mcp.token)});
-            let server =
-                json!({"url": mcp.url, "http_headers": headers, "tool_timeout_sec": crate::mcp::TOOL_TIMEOUT_SECS});
-            thread["config"] = json!({"mcp_servers": {crate::mcp::SERVER_NAME: server}});
+            let server = |url: &str| json!({"url": url, "http_headers": headers, "tool_timeout_sec": crate::mcp::TOOL_TIMEOUT_SECS});
+            let mut servers = serde_json::Map::new();
+            for (slug, url) in &mcp.mcp_servers {
+                servers.insert(slug.clone(), server(url));
+            }
+            servers.insert(crate::mcp::SERVER_NAME.to_string(), server(&mcp.url));
+            thread["config"] = json!({"mcp_servers": servers});
         }
         Self {
             thread,
@@ -840,7 +844,8 @@ mod tests {
     #[test]
     fn what_the_thread_said_before_is_injected_before_the_first_turn() {
         let handoff = handoff();
-        let mcp = crate::mcp::McpAccess { url: "http://127.0.0.1:9/mcp".into(), token: "secret".into() };
+        let mcp_servers = vec![("linear".to_string(), "http://127.0.0.1:8/mcp/linear".to_string())];
+        let mcp = crate::mcp::McpAccess { url: "http://127.0.0.1:9/mcp".into(), token: "secret".into(), mcp_servers };
         let mut parser = parser(Turn { handoff: Some(&handoff), mcp: Some(&mcp), ..turn(Access::Full) });
         let asked = written(&parser.parse(r#"{"id":1,"result":{}}"#));
         let server = &asked[1]["params"]["config"]["mcp_servers"]["motile"];
@@ -849,6 +854,9 @@ mod tests {
             &json!({"url": "http://127.0.0.1:9/mcp", "http_headers": {"Authorization": "Bearer secret"},
                     "tool_timeout_sec": 3900})
         );
+        let linear = &asked[1]["params"]["config"]["mcp_servers"]["linear"];
+        assert_eq!(linear["url"], "http://127.0.0.1:8/mcp/linear");
+        assert_eq!(linear["http_headers"]["Authorization"], "Bearer secret");
 
         let events = parser.parse(r#"{"id":2,"result":{"thread":{"id":"t1"},"model":"gpt-6"}}"#);
         let inject = &written(&events)[0];

@@ -44,7 +44,7 @@ struct Group {
     title: String,
     account: AgentAccount,
     windows: Vec<limits::Row>,
-    /// The proxy's account whose limits `windows` are, for the Proxy account.
+    /// The gateway's account whose limits `windows` are, for the Gateway account.
     next: Option<String>,
     rows: Vec<ModelRow>,
 }
@@ -797,7 +797,7 @@ fn header(group: &Group, cx: &App) -> Div {
         .flex()
         .flex_col()
         .gap(px(HEADER_GAP))
-        // "Claude Code", the proxy's symbol, then the account its bars are from, a step quieter.
+        // "Claude Code", the gateway's symbol, then the account its bars are from, a step quieter.
         .child(
             div()
                 .min_w_0()
@@ -806,7 +806,7 @@ fn header(group: &Group, cx: &App) -> Div {
                 .text_size(px(11.5))
                 .font_weight(FontWeight::MEDIUM)
                 .text_color(c.muted_foreground)
-                .child(crate::ui::proxied(group.title.clone(), group.account.proxy, 11.5).flex_none())
+                .child(crate::ui::proxied(group.title.clone(), group.account.gateway, 11.5).flex_none())
                 .when_some(group.next.clone(), |title, next| {
                     title
                         .child(

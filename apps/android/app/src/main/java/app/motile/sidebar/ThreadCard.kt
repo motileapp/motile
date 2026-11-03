@@ -48,7 +48,7 @@ import app.motile.ui.AgentIcon
 import app.motile.ui.DropdownCard
 import app.motile.ui.Icon
 import app.motile.ui.ProjectIcon
-import app.motile.ui.ProxyMark
+import app.motile.ui.GatewayMark
 import app.motile.ui.Text
 import app.motile.ui.ThemeDivider
 import app.motile.ui.color
@@ -109,7 +109,7 @@ private fun CardLine(text: String, middle: Boolean = false, proxied: Boolean = f
             Text(
                 dotted(text, palette.mutedStrongerForeground).proxied(proxied), size = 12f, maxLines = 1,
                 overflow = if (middle) TextOverflow.MiddleEllipsis else TextOverflow.Ellipsis,
-                inlineContent = if (proxied) ProxyMark.content(palette.mutedForeground, 12f) else emptyMap(),
+                inlineContent = if (proxied) GatewayMark.content(palette.mutedForeground, 12f) else emptyMap(),
             )
         }
     }

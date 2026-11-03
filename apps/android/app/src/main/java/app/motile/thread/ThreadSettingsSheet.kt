@@ -57,7 +57,7 @@ import app.motile.ui.GlassButton
 import app.motile.ui.HighlightButton
 import app.motile.ui.Icon
 import app.motile.ui.Menu
-import app.motile.ui.ProxyMark
+import app.motile.ui.GatewayMark
 import app.motile.ui.SheetCloseButton
 import app.motile.ui.Text
 import app.motile.ui.ThemeDivider
@@ -164,10 +164,10 @@ private fun Models() {
                 ) {
                     Row(horizontalArrangement = Arrangement.spacedBy(titleGap), verticalAlignment = Alignment.CenterVertically) {
                         AgentIcon(choices.account.agent, size = noteSymbol)
-                        // "Claude Code", the proxy's symbol, then the account its bars are from, a step quieter.
+                        // "Claude Code", the gateway's symbol, then the account its bars are from, a step quieter.
                         val next = store.composerServer?.nextAccounts?.get(id)
                         val title = buildAnnotatedString {
-                            append(AnnotatedString(choices.title).proxied(choices.account.proxy))
+                            append(AnnotatedString(choices.title).proxied(choices.account.gateway))
                             if (next != null) {
                                 withStyle(SpanStyle(color = palette.mutedStrongestForeground)) { append(" · ") }
                                 withStyle(SpanStyle(color = palette.mutedStrongerForeground)) { append(next) }
@@ -175,7 +175,7 @@ private fun Models() {
                         }
                         Text(
                             title, Modifier.weight(1f), size = noteText,
-                            color = palette.mutedForeground, maxLines = 1, inlineContent = ProxyMark.content(palette.mutedForeground, noteText),
+                            color = palette.mutedForeground, maxLines = 1, inlineContent = GatewayMark.content(palette.mutedForeground, noteText),
                         )
                         Icon(Symbol.ChevronDown, noteSymbol, Modifier.rotate(turn), color = palette.mutedForeground)
                     }
