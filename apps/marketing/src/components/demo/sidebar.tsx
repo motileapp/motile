@@ -57,14 +57,16 @@ export function Sidebar({
     if (next === query) return
     setHighlighted(0)
     setFound((found) =>
-      next.length < 2 ? [] : found.filter((one) => contains(one.excerpt, next))
+      searchable(next)
+        ? found.filter((one) => hasWords(one.excerpt, next))
+        : []
     )
-    setSearching(next.length >= 2)
+    setSearching(searchable(next))
   }
 
   // As the server would: a moment after the search stops changing, the messages are searched.
   useEffect(() => {
-    if (query.length < 2) return
+    if (!searchable(query)) return
     const timer = setTimeout(() => {
       setFound(searchMessages(threads, query))
       setSearching(false)
@@ -125,7 +127,7 @@ export function Sidebar({
               }}
             />
           ))}
-        {query && results.length === 0 && (
+        {query && (results.length === 0 || searching) && (
           <p className="flex items-center gap-1.5 px-[18px] py-[7px] text-[12px] text-muted-stronger-foreground">
             {searching && <LoaderIcon className="size-3 animate-spin" />}
             {searching ? "Searching messages" : "No threads found"}
@@ -278,6 +280,15 @@ const normalized = (search: string) => search.trim().split(/\s+/).join(" ")
 const contains = (text: string, query: string) =>
   query !== "" && text.toLowerCase().includes(query.toLowerCase())
 
+const words = (query: string) => query.toLowerCase().split(" ").filter(Boolean)
+
+/** The servers search messages for a search with a word of three letters or more. */
+const searchable = (query: string) => words(query).some((word) => word.length >= 3)
+
+/** Every word of the search is in the text, in any order. */
+const hasWords = (text: string, query: string) =>
+  words(query).every((word) => text.toLowerCase().includes(word))
+
 /** The threads found by their title, project or pull request, active before done, then the ones
  * found by a message. */
 function searchResults(
@@ -315,7 +326,7 @@ function searchMessages(threads: Thread[], query: string): Found[] {
   return threads.flatMap((thread) => {
     const messages = thread.items.flatMap((item) =>
       (item.kind === "user" || item.kind === "text") &&
-      contains(item.text, query)
+      hasWords(item.text, query)
         ? [{ byUser: item.kind === "user", text: item.text }]
         : []
     )
@@ -334,7 +345,8 @@ function searchMessages(threads: Thread[], query: string): Found[] {
 
 function excerpt(text: string, query: string) {
   const line = text.split(/\s+/).join(" ").trim()
-  const found = Math.max(0, line.toLowerCase().indexOf(query.toLowerCase()))
+  const places = words(query).map((word) => line.toLowerCase().indexOf(word))
+  const found = Math.max(0, Math.min(...places))
   let start = Math.max(0, found - 24)
   if (start > 0) {
     const space = line.slice(start, found).indexOf(" ")
@@ -343,11 +355,11 @@ function excerpt(text: string, query: string) {
   return (start > 0 ? "…" : "") + line.slice(start)
 }
 
-/** The excerpt with each match set off. */
+/** The excerpt with each word of the search set off. */
 function Excerpt({ text, query }: { text: string; query: string }) {
-  const pieces = text.split(
-    new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`, "i")
-  )
+  const long = words(query).filter((word) => word.length >= 3)
+  const escaped = long.map((word) => word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+  const pieces = text.split(new RegExp(`(${escaped.join("|")})`, "i"))
   return pieces.map((piece, index) =>
     index % 2 === 1 ? (
       <span key={index} className="font-semibold text-foreground">

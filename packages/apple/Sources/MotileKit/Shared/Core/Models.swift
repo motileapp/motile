@@ -1653,6 +1653,8 @@ struct MessageSearch: Equatable {
     /// Some server may still answer.
     var searching = false
     var matches: [String: MessageMatch] = [:]
+    /// The threads found, best first, then what servers that answered later found.
+    var order: [String] = []
 }
 
 extension MessageSearch {
@@ -1661,6 +1663,8 @@ extension MessageSearch {
         searching = json.bool("searching")
         let found = json.objects("matches").map { ($0.string("thread_id"), MessageMatch(json: $0)) }
         matches = Dictionary(found, uniquingKeysWith: { first, _ in first })
+        var seen = Set<String>()
+        order = found.map(\.0).filter { seen.insert($0).inserted }
     }
 }
 

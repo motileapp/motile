@@ -496,10 +496,10 @@ impl Sidebar {
         let active = store.active_threads();
         let mut items: Vec<Item> = Vec::new();
         if searching {
-            if results.is_empty() {
+            items.extend((0..results.len()).map(Item::Result));
+            if results.is_empty() || store.sidebar.message_search.searching {
                 items.push(Item::Empty);
             }
-            items.extend((0..results.len()).map(Item::Result));
         } else {
             if !drafts.is_empty() {
                 items.push(Item::Drafts);

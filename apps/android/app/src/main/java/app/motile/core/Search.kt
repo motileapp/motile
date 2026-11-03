@@ -53,7 +53,8 @@ val AppStore.searchResults: List<SearchResult>
         val named = threads.filter { matches(it, search) }
         val namedIDs = named.map { it.id }.toSet()
         val found = messageSearch.matches
-        val byMessage = threads.filter { it.id !in namedIDs && found[it.id] != null }
+        val byID = threads.associateBy { it.id }
+        val byMessage = messageSearch.order.filter { it !in namedIDs }.mapNotNull { byID[it] }
         return searched(listedDrafts, search).map { SearchResult.Draft(it) } +
             named.map { SearchResult.Thread(it, null) } +
             byMessage.map { SearchResult.Thread(it, found[it.id]) }

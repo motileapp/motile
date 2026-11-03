@@ -36,15 +36,21 @@ pub struct MessageSearch {
     /// Some server may still answer.
     pub searching: bool,
     pub matches: HashMap<String, MatchView>,
+    /// The threads found, best first, then what servers that answered later found.
+    pub order: Vec<String>,
 }
 
 impl MessageSearch {
     pub fn new(query: String, searching: bool, matches: Vec<MatchView>) -> Self {
         let mut found = HashMap::new();
+        let mut order = Vec::new();
         for matched in matches {
-            found.entry(matched.thread_id.clone()).or_insert(matched);
+            if !found.contains_key(&matched.thread_id) {
+                order.push(matched.thread_id.clone());
+                found.insert(matched.thread_id.clone(), matched);
+            }
         }
-        Self { query, searching, matches: found }
+        Self { query, searching, matches: found, order }
     }
 }
 
@@ -149,9 +155,14 @@ impl Store {
         }
         let threads = || self.active_threads().iter().chain(self.done_threads());
         let named: Vec<&ThreadInfo> = threads().filter(|thread| self.matches(thread, search)).collect();
-        let found = &self.sidebar.message_search.matches;
-        let by_message = threads()
-            .filter(|thread| found.contains_key(&thread.id) && !named.iter().any(|named| named.id == thread.id));
+        let message_search = &self.sidebar.message_search;
+        let found = &message_search.matches;
+        let by_id: HashMap<&str, &ThreadInfo> = threads().map(|thread| (thread.id.as_str(), thread)).collect();
+        let by_message = message_search
+            .order
+            .iter()
+            .filter(|id| !named.iter().any(|named| &named.id == *id))
+            .filter_map(|id| by_id.get(id.as_str()).copied());
         let mut results: Vec<SearchResult> =
             self.searched(self.listed_drafts(), search).into_iter().map(SearchResult::Draft).collect();
         results.extend(named.iter().map(|thread| SearchResult::Thread(Box::new((*thread).clone()), None)));
