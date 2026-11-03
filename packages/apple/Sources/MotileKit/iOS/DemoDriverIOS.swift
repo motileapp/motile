@@ -176,6 +176,9 @@ enum DemoDriver {
             let words = rest.split(separator: " ", maxSplits: 1).map(String.init)
             switch words.first {
             case "sign-in": store.startGatewaySignIn(Agent(rawValue: words.count > 1 ? words[1] : "") ?? .claude)
+            case "sign-in-again":
+                guard let account = store.gateway.accounts.first else { break }
+                store.startGatewaySignIn(account.agent, again: account.id)
             case "code": store.finishGatewaySignIn(code: words.count > 1 ? words[1] : "")
             default: break
             }

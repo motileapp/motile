@@ -64,7 +64,7 @@ struct AgentGatewaySettings: View {
             } trailing: {
                 if account.status == .signInAgain {
                     ActionButton("Sign In Again", variant: .outline, size: .large, pending: store.gatewaySignInStarting == account.agent) {
-                        store.startGatewaySignIn(account.agent)
+                        store.startGatewaySignIn(account.agent, again: account.id)
                     }
                 }
                 Switch(isOn: Binding { account.enabled } set: { store.setGatewayAccount(account, enabled: $0) })

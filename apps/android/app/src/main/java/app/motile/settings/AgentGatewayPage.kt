@@ -167,7 +167,7 @@ private fun SettingsGroups.accounts(agent: Agent, view: GatewayView, gateway: Ga
         group("gateway-account/${account.id}") {
             row { AccountRow(account, accounts.size, gateway, rename = { rename(account) }) { remove(account) } }
             row { SwitchRow(account, gateway) }
-            if (account.status == GatewayAccount.Status.SignInAgain) row { SignInRow("Sign In Again", agent, gateway, Symbol.CircleUser) }
+            if (account.status == GatewayAccount.Status.SignInAgain) row { SignInRow("Sign In Again", agent, gateway, Symbol.CircleUser, again = account.id) }
             for (window in account.windows) row {
                 Box(Modifier.opacity(Opacity.Disabled, on = !account.enabled)) { LimitWindowRow(window) }
             }
@@ -187,8 +187,8 @@ private fun AgentHeader(agent: Agent) {
 
 /** Starts a sign-in of the agent on the gateway, waiting while it starts. */
 @Composable
-private fun SignInRow(title: String, agent: Agent, gateway: Gateway, symbol: Symbol) {
-    SettingsPressRow({ gateway.signIn(agent) }, enabled = gateway.startingSignIn == null) {
+private fun SignInRow(title: String, agent: Agent, gateway: Gateway, symbol: Symbol, again: String? = null) {
+    SettingsPressRow({ gateway.signIn(agent, again) }, enabled = gateway.startingSignIn == null) {
         SettingsActionLabel(title, symbol)
         Spacer(Modifier.weight(1f))
         if (gateway.startingSignIn == agent) Spinner(IconSize.Xl)
@@ -209,7 +209,7 @@ private fun AccountRow(account: GatewayAccount, count: Int, gateway: Gateway, re
                     item("Priority $number", checked = account.priority == number - 1) { gateway.setPriority(account, number - 1) }
                 }
             }
-            item("Sign In Again", Symbol.CircleUser) { gateway.signIn(account.agent) }
+            item("Sign In Again", Symbol.CircleUser) { gateway.signIn(account.agent, account.id) }
             divider()
             item("Remove Account", Symbol.Trash2, destructive = true, run = remove)
         }
@@ -310,9 +310,9 @@ private fun RenameAccountDialog(account: GatewayAccount, onDismiss: () -> Unit) 
 
 /** A sheet's bar with the way to close it. */
 @Composable
-internal fun SheetTitle(title: String) {
+internal fun SheetTitle(title: String, subtitle: String? = null) {
     val close = LocalCloseModal.current
-    CompositionLocalProvider(LocalBarLeading provides BarLeading.Close { close() }) { SettingsBar(title) }
+    CompositionLocalProvider(LocalBarLeading provides BarLeading.Close { close() }) { SettingsBar(title, subtitle = subtitle) }
 }
 
 /**
@@ -392,7 +392,7 @@ private fun SignInSheet(signIn: GatewaySignIn) {
         gateway.finishSignIn(code)
     }
     Column(Modifier.fillMaxSize()) {
-        SheetTitle("Sign In to ${signIn.agent.title}")
+        SheetTitle(signIn.title, signIn.account)
         SettingsList(Modifier.weight(1f)) {
             if (signIn.needsCode) {
                 group(footer = signIn.text, failure = signIn.error) {
@@ -429,7 +429,7 @@ private fun SignInSheet(signIn: GatewaySignIn) {
                     }
                 }
                 row { CommandBox(signIn.url, Modifier.fillMaxWidth(), link = signIn.url, open = gateway::openPage) }
-                if (signIn.error != null) row { SignInRow("Start Again", signIn.agent, gateway, Symbol.RotateCw) }
+                if (signIn.error != null) row { SignInRow("Start Again", signIn.agent, gateway, Symbol.RotateCw, again = signIn.again) }
             }
         }
     }

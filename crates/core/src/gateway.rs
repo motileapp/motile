@@ -246,6 +246,8 @@ pub fn unexpected(reply: &GatewayReply) -> String {
 /// A sign-in of an account that the gateway started.
 pub struct SignIn {
     pub started: GatewaySignIn,
+    /// The account it signs in again.
+    pub again: Option<String>,
     /// The gateway is finishing it: Codex's waits until the user approved it in the browser.
     pub waiting: bool,
     pub error: Option<String>,
@@ -351,6 +353,12 @@ pub struct CaptureView {
 #[derive(Serialize, Clone, Debug, PartialEq)]
 pub struct SignInView {
     pub agent: Agent,
+    /// "Sign In to Claude Code", "Sign In to Claude Code Again".
+    pub title: String,
+    /// The id of the account it signs in again, for starting it over.
+    pub again: Option<String>,
+    /// Who signs in again: the account's email, or its name.
+    pub account: Option<String>,
     /// The page to open.
     pub url: String,
     /// The code to enter on that page (Codex).
@@ -395,6 +403,7 @@ pub fn view(shown: Shown<'_>, names: &dyn Naming) -> View {
     let mut accounts: Vec<&GatewayAccount> = state.map(|state| state.accounts.iter().collect()).unwrap_or_default();
     accounts.sort_by_key(|account| (account.agent != Agent::Claude, account.priority));
     let capture = state.map(|state| state.capture.clone()).unwrap_or_default();
+    let sign_in = sign_in.map(|sign_in| sign_in_view(sign_in, &accounts));
     View {
         exists: device.is_some(),
         name: device.map(|device| device.name.clone()),
@@ -410,7 +419,7 @@ pub fn view(shown: Shown<'_>, names: &dyn Naming) -> View {
             text: capture_text(&capture, state.and_then(|state| state.capture_until), names, now, utc_offset_secs),
             capture,
         },
-        sign_in: sign_in.map(sign_in_view),
+        sign_in,
         log_head: state.and_then(|state| state.log_head),
         mcp_servers: state.and_then(|state| state.mcp_servers.as_deref()).map(mcp_servers::rows),
         calls_head: state.and_then(|state| state.calls_head),
@@ -471,8 +480,13 @@ fn capture_text(capture: &Capture, until: Option<f64>, names: &dyn Naming, now: 
     }
 }
 
-fn sign_in_view(sign_in: &SignIn) -> SignInView {
+fn sign_in_view(sign_in: &SignIn, accounts: &[&GatewayAccount]) -> SignInView {
     let started = &sign_in.started;
+    let again = sign_in.again.as_ref().and_then(|id| accounts.iter().find(|account| account.id == *id));
+    let title = match again {
+        Some(_) => format!("Sign In to {} Again", crate::usage::agent_name(started.agent)),
+        None => format!("Sign In to {}", crate::usage::agent_name(started.agent)),
+    };
     let needs_code = started.agent == Agent::Claude;
     let text = match needs_code {
         true => "Open the link, sign in, and paste the code it gives you.",
@@ -480,6 +494,9 @@ fn sign_in_view(sign_in: &SignIn) -> SignInView {
     };
     SignInView {
         agent: started.agent,
+        title,
+        again: again.map(|account| account.id.clone()),
+        account: again.map(|account| account.email.clone().unwrap_or_else(|| account.name.clone())),
         url: started.url.clone(),
         user_code: started.user_code.clone(),
         needs_code,
@@ -836,6 +853,42 @@ mod tests {
         assert_eq!(view.accounts[4].note.as_deref(), Some("Sign in again to see its limits."));
         assert_eq!(view.accounts[1].note.as_deref(), Some("No limits read yet."));
         assert_eq!((view.status_text.as_str(), view.version.as_deref()), ("Connected", Some("0.1.300")));
+    }
+
+    #[test]
+    fn signing_an_account_in_again_names_it_under_the_title() {
+        let mut dead = account("dead", Agent::Claude, 0);
+        dead.status = AccountStatus::SignInAgain;
+        let state = state(vec![dead]);
+        let titled = |again: Option<&str>| {
+            let sign_in = SignIn {
+                started: GatewaySignIn {
+                    id: "s".into(),
+                    agent: Agent::Claude,
+                    url: "https://a".into(),
+                    user_code: None,
+                },
+                again: again.map(String::from),
+                waiting: false,
+                error: None,
+                task: None,
+            };
+            let shown = Shown {
+                device: Some(&device()),
+                status: None,
+                state: Some(&state),
+                sign_in: Some(&sign_in),
+                now: NOW,
+                utc_offset_secs: 0,
+            };
+            let view = view(shown, &Names).sign_in.unwrap();
+            (view.title, view.again, view.account)
+        };
+        assert_eq!(titled(None), ("Sign In to Claude Code".to_string(), None, None));
+        assert_eq!(
+            titled(Some("dead")),
+            ("Sign In to Claude Code Again".to_string(), Some("dead".to_string()), Some("dead@b.c".to_string()))
+        );
     }
 
     #[test]

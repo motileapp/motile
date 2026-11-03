@@ -1,6 +1,7 @@
 package app.motile.ui
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -13,25 +14,23 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import app.motile.platform.Symbol
+import app.motile.theme.LocalPalette
 
 /** A sheet's bar, as iOS's inline navigation bar: the title in the middle, a glass button at each side. */
 @Composable
 fun SheetBar(
     title: String,
     modifier: Modifier = Modifier,
+    subtitle: String? = null,
     leading: (@Composable () -> Unit)? = null,
     trailing: (@Composable () -> Unit)? = null,
 ) {
     Box(modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).height(GlassButton.side)) {
         leading?.let { Box(Modifier.align(Alignment.CenterStart)) { it() } }
-        Text(
-            title,
-            Modifier.align(Alignment.Center).padding(horizontal = GlassButton.side + 8.dp).semantics { heading() },
-            size = 15f,
-            weight = FontWeight.SemiBold,
-            maxLines = 1,
-            align = TextAlign.Center,
-        )
+        Column(Modifier.align(Alignment.Center).padding(horizontal = GlassButton.side + 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(title, Modifier.semantics { heading() }, size = 15f, weight = FontWeight.SemiBold, maxLines = 1, align = TextAlign.Center)
+            subtitle?.let { Text(it, size = 12f, color = LocalPalette.current.mutedForeground, maxLines = 1, align = TextAlign.Center) }
+        }
         trailing?.let { Box(Modifier.align(Alignment.CenterEnd)) { it() } }
     }
 }

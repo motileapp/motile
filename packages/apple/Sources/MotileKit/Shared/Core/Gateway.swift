@@ -143,6 +143,12 @@ struct GatewayCapture: Equatable {
 /// An account's sign-in under way on the gateway.
 struct GatewaySignIn: Equatable, Identifiable {
     let agent: Agent
+    /// "Sign In to Claude Code", "Sign In to Claude Code Again".
+    let title: String
+    /// The id of the account it signs in again.
+    let again: String?
+    /// Who signs in again: the account's email, or its name.
+    let account: String?
     let url: URL?
     /// The code to enter on the page (Codex).
     let userCode: String?
@@ -155,6 +161,9 @@ struct GatewaySignIn: Equatable, Identifiable {
 
     init(json: JSON) {
         agent = Agent(rawValue: json.string("agent")) ?? .claude
+        title = json.string("title")
+        again = json.optionalString("again")
+        account = json.optionalString("account")
         url = URL(string: json.string("url"))
         userCode = json.optionalString("user_code")
         needsCode = json.bool("needs_code")
@@ -378,10 +387,12 @@ extension AppStore {
     }
 
     /// Starts signing an account in on the gateway. Its sheet shows the page to open.
-    func startGatewaySignIn(_ agent: Agent) {
+    func startGatewaySignIn(_ agent: Agent, again account: String? = nil) {
         guard gatewaySignInStarting == nil else { return }
         gatewaySignInStarting = agent
-        core.send("gateway_sign_in", ["agent": agent.rawValue]) { [weak self] result in
+        var fields: [String: Any] = ["agent": agent.rawValue]
+        fields["account"] = account
+        core.send("gateway_sign_in", fields) { [weak self] result in
             self?.gatewaySignInStarting = nil
             guard case .failure(let error) = result else { return }
             self?.alert(error)
