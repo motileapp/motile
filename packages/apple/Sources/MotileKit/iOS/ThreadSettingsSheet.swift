@@ -76,23 +76,25 @@ struct ThreadSettingsSheet: View {
                         withAnimation { _ = listed.remove(id) ?? listed.insert(id).memberAfterInsert }
                     } label: {
                         VStack(alignment: .leading, spacing: 12) {
-                            VStack(alignment: .leading, spacing: 2) {
-                                HStack(spacing: Self.titleGap) {
-                                    AgentIcon(agent: choices.account.agent, size: .sm)
+                            HStack(spacing: Self.titleGap) {
+                                AgentIcon(agent: choices.account.agent, size: .sm)
+                                // "Claude Code", the proxy's symbol, then the account its bars are from, a step quieter.
+                                HStack(spacing: 0) {
                                     Text(verbatim: choices.title)
                                         .proxyMarked(choices.account.proxy, fontSize: UIFont.preferredFont(forTextStyle: .body).pointSize)
-                                    Spacer()
-                                    Image(.chevronDown, size: .sm)
-                                        .rotationEffect(.degrees(listed.contains(id) ? 180 : 0))
+                                        .layoutPriority(1)
+                                    if let next = store.composerServer?.nextAccounts[id] {
+                                        Text(verbatim: " · ")
+                                            .foregroundStyle(Color.themeMutedStrongerForeground)
+                                        Text(verbatim: next)
+                                            .foregroundStyle(Color.themeMutedForeground)
+                                            .truncationMode(.middle)
+                                    }
                                 }
-                                if let next = store.composerServer?.nextAccounts[id] {
-                                    Text(verbatim: next)
-                                        .font(.footnote)
-                                        .foregroundStyle(Color.themeMutedForeground)
-                                        .lineLimit(1)
-                                        .truncationMode(.middle)
-                                        .padding(.leading, PlatformImage.symbolSide(.sm) + Self.titleGap)
-                                }
+                                .lineLimit(1)
+                                Spacer()
+                                Image(.chevronDown, size: .sm)
+                                    .rotationEffect(.degrees(listed.contains(id) ? 180 : 0))
                             }
                             if let windows = store.composerServer?.accountLimits[id], !windows.isEmpty {
                                 LimitPills(windows: windows)

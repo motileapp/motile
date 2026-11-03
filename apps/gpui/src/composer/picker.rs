@@ -724,10 +724,9 @@ impl ComposerPicker {
                     .child(div().text_size(px(13.)).text_color(c.foreground).child(access_label(shown)))
                     .child(
                         div()
-                            .h(px(2. * DETAIL_LINE))
                             .text_size(px(12.))
                             .line_height(px(DETAIL_LINE))
-                            .line_clamp(2)
+                            .truncate()
                             .text_color(c.muted_foreground)
                             .child(access_detail(shown)),
                     ),
@@ -735,7 +734,7 @@ impl ComposerPicker {
     }
 }
 
-/// The line height of the access menu's description, which keeps room for two lines.
+/// The line height of the access menu's description.
 const DETAIL_LINE: f32 = 15.;
 
 /// The light of a row, drawn a point in from its top and bottom so that two lit rows look apart
@@ -798,25 +797,22 @@ fn header(group: &Group, cx: &App) -> Div {
         .flex()
         .flex_col()
         .gap(px(HEADER_GAP))
+        // "Claude Code", the proxy's symbol, then the account its bars are from, a step quieter.
         .child(
             div()
+                .min_w_0()
                 .flex()
-                .flex_col()
-                .gap(px(2.))
-                .child(
-                    div()
-                        .text_size(px(11.5))
-                        .font_weight(FontWeight::MEDIUM)
-                        .text_color(c.muted_foreground)
-                        .child(crate::ui::proxied(group.title.clone(), group.account.proxy, 11.5)),
-                )
+                .items_center()
+                .text_size(px(11.5))
+                .font_weight(FontWeight::MEDIUM)
+                .text_color(c.muted_foreground)
+                .child(crate::ui::proxied(group.title.clone(), group.account.proxy, 11.5).flex_none())
                 .when_some(group.next.clone(), |title, next| {
-                    title.child(
-                        div()
-                            .text_size(px(11.5))
-                            .text_color(c.muted_stronger_foreground)
-                            .child(crate::ui::middle_truncated(next)),
-                    )
+                    title
+                        .child(
+                            div().flex_none().whitespace_nowrap().text_color(c.muted_strongest_foreground).child(" · "),
+                        )
+                        .child(crate::ui::middle_truncated(next).text_color(c.muted_stronger_foreground))
                 }),
         )
         .when(!group.windows.is_empty(), |header| header.child(limit_pills(&group.account.id, &group.windows, cx)))

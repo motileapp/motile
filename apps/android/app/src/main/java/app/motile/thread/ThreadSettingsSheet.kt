@@ -30,8 +30,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.motile.LocalCloseSheet
 import app.motile.LocalStore
@@ -45,7 +47,6 @@ import app.motile.core.Project
 import app.motile.platform.Symbol
 import app.motile.theme.IconSize
 import app.motile.theme.iconSize
-import app.motile.theme.symbolSide
 import app.motile.theme.LocalForeground
 import app.motile.theme.Radius
 import app.motile.theme.SurfaceBox
@@ -161,21 +162,22 @@ private fun Models() {
                     Modifier.fillMaxWidth().heightIn(min = pressable(32f)).padding(horizontal = 4.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically),
                 ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(titleGap), verticalAlignment = Alignment.CenterVertically) {
-                            AgentIcon(choices.account.agent, size = noteSymbol)
-                            Text(
-                                AnnotatedString(choices.title).proxied(choices.account.proxy), Modifier.weight(1f), size = noteText,
-                                color = palette.mutedForeground, maxLines = 1, inlineContent = ProxyMark.content(palette.mutedForeground, noteText),
-                            )
-                            Icon(Symbol.ChevronDown, noteSymbol, Modifier.rotate(turn), color = palette.mutedForeground)
+                    Row(horizontalArrangement = Arrangement.spacedBy(titleGap), verticalAlignment = Alignment.CenterVertically) {
+                        AgentIcon(choices.account.agent, size = noteSymbol)
+                        // "Claude Code", the proxy's symbol, then the account its bars are from, a step quieter.
+                        val next = store.composerServer?.nextAccounts?.get(id)
+                        val title = buildAnnotatedString {
+                            append(AnnotatedString(choices.title).proxied(choices.account.proxy))
+                            if (next != null) {
+                                withStyle(SpanStyle(color = palette.mutedStrongestForeground)) { append(" · ") }
+                                withStyle(SpanStyle(color = palette.mutedStrongerForeground)) { append(next) }
+                            }
                         }
-                        store.composerServer?.nextAccounts?.get(id)?.let { next ->
-                            Text(
-                                next, Modifier.padding(start = symbolSide(noteSymbol) + titleGap), size = noteText,
-                                color = palette.mutedStrongerForeground, maxLines = 1, overflow = TextOverflow.MiddleEllipsis,
-                            )
-                        }
+                        Text(
+                            title, Modifier.weight(1f), size = noteText,
+                            color = palette.mutedForeground, maxLines = 1, inlineContent = ProxyMark.content(palette.mutedForeground, noteText),
+                        )
+                        Icon(Symbol.ChevronDown, noteSymbol, Modifier.rotate(turn), color = palette.mutedForeground)
                     }
                     store.composerServer?.accountLimits?.get(id)?.takeIf { it.isNotEmpty() }?.let { windows ->
                         LimitPills(windows, Modifier.padding(bottom = 8.dp))

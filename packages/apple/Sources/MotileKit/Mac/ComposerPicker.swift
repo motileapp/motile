@@ -348,19 +348,22 @@ private struct ComposerPicker: View {
 
     private func header(_ group: Group) -> some View {
         VStack(alignment: .leading, spacing: Self.headerGap) {
-            VStack(alignment: .leading, spacing: 2) {
+            // "Claude Code", the proxy's symbol, then the account its bars are from, a step quieter.
+            HStack(spacing: 0) {
                 Text(verbatim: group.title)
                     .proxyMarked(group.account.proxy, fontSize: 11.5)
-                    .font(.ui(size: 11.5, weight: .medium))
                     .foregroundStyle(Color.themeMutedForeground)
+                    .layoutPriority(1)
                 if let next = group.next {
+                    Text(verbatim: " · ")
+                        .foregroundStyle(Color.themeMutedStrongestForeground)
                     Text(verbatim: next)
-                        .font(.ui(size: 11.5))
                         .foregroundStyle(Color.themeMutedStrongerForeground)
-                        .lineLimit(1)
                         .truncationMode(.middle)
                 }
             }
+            .font(.ui(size: 11.5, weight: .medium))
+            .lineLimit(1)
             if !group.windows.isEmpty {
                 LimitPills(windows: group.windows)
             }
@@ -552,8 +555,7 @@ private struct ComposerPicker: View {
                 Text(shown.detail)
                     .font(.ui(size: 12))
                     .foregroundStyle(Color.themeMutedForeground)
-                    .lineLimit(2, reservesSpace: true)
-                    .fixedSize(horizontal: false, vertical: true)
+                    .lineLimit(1)
             }
         }
         .padding(Self.accessMenuPadding)
