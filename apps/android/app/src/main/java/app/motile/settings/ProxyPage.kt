@@ -247,7 +247,7 @@ private fun AccountRow(account: ProxyAccount, count: Int, proxy: Proxy, rename: 
 @Composable
 private fun SwitchRow(account: ProxyAccount, proxy: Proxy) {
     SettingsRow {
-        RowText("Takes threads", Modifier.weight(1f))
+        RowText("Use this account", Modifier.weight(1f))
         Switch(account.enabled, { proxy.setEnabled(account, it) })
     }
 }
