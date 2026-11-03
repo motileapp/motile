@@ -26,13 +26,14 @@ pub fn proxy_mark_size(font_size: f32) -> IconSize {
     }
 }
 
-/// How much wider the proxy's symbol makes words of `font_size`: a space of DM Sans, and itself.
+/// How much wider the proxy's symbol makes words of `font_size`: its gap, and itself.
 pub fn proxy_mark_width(font_size: f32) -> f32 {
     proxy_gap(font_size) + proxy_mark_size(font_size).side()
 }
 
+/// A space of DM Sans, and a point more.
 fn proxy_gap(font_size: f32) -> f32 {
-    font_size * 0.266
+    font_size * 0.266 + 1.
 }
 
 /// The proxy's symbol after words of `font_size`, which says what they name runs through the
@@ -711,11 +712,13 @@ impl CheckMenu {
     }
 }
 
-/// Whether a `CheckMenu` is open, where its button was drawn, and what has the keys while it is.
+/// Whether a `CheckMenu` is open, where its button was drawn, what has the keys while it is, and
+/// what had them before, which gets them back.
 struct Dropdown {
     open: bool,
     anchor: Anchor,
     focus: FocusHandle,
+    returns: Option<FocusHandle>,
 }
 
 impl RenderOnce for CheckMenu {
@@ -724,6 +727,7 @@ impl RenderOnce for CheckMenu {
             open: false,
             anchor: Anchor::default(),
             focus: cx.focus_handle(),
+            returns: None,
         });
         let (open, anchor, focus) = {
             let dropdown = state.read(cx);
@@ -732,11 +736,20 @@ impl RenderOnce for CheckMenu {
         let show = {
             let state = state.clone();
             move |shown: bool, window: &mut Window, cx: &mut App| {
-                state.update(cx, |dropdown, _| dropdown.open = shown);
+                let had = window.focused(cx);
+                let (focus, returns) = state.update(cx, |dropdown, _| {
+                    dropdown.open = shown;
+                    let returns = dropdown.returns.take();
+                    if shown {
+                        dropdown.returns = had;
+                    }
+                    (dropdown.focus.clone(), returns.filter(|_| !shown))
+                });
                 if shown {
                     crate::ui::overlay_opened(cx);
-                    let focus = state.read(cx).focus.clone();
                     window.focus(&focus, cx);
+                } else if let Some(returns) = returns {
+                    window.focus(&returns, cx);
                 }
                 window.refresh();
             }

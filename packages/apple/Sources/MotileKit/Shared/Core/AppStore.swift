@@ -175,7 +175,13 @@ final class AppStore {
     var settingsQuery = ""
     /// The thread's settings are open over the client, where they aren't around the composer.
     /// The composer's picker on the Mac while it is open: the part of the composer it opened from.
-    var composerPicker: ComposerPickerPart?
+    /// Closing it gives the keys back to the composer, which it opens from.
+    var composerPicker: ComposerPickerPart? {
+        didSet {
+            guard composerPicker == nil, oldValue != nil else { return }
+            composerFocus += 1
+        }
+    }
     /// Whether the picker's access menu is open over it.
     var composerAccessOpen = false
     /// The row of the picker's models that ⌘1 to ⌘9 asked for, until the picker takes it.
@@ -185,8 +191,16 @@ final class AppStore {
     var dropTargeted = false
     /// Files are being dragged over the composer's text, which takes drops itself.
     var composerDropTargeted = false
-    /// The branch picker is open. Its branches are `nil` until your server has listed them.
-    var showsBranches = false
+    /// The branch picker is open. Its branches are `nil` until your server has listed them. On the
+    /// Mac, closing it gives the keys back to the composer, which it opens from.
+    var showsBranches = false {
+        didSet {
+            #if os(macOS)
+            guard !showsBranches, oldValue else { return }
+            composerFocus += 1
+            #endif
+        }
+    }
     private(set) var listedBranches: Result<[Branch], CoreBridge.CoreError>?
     private var branchesProjectID: String?
     /// Each project's branches as last listed, which the picker opens on while it lists them again.

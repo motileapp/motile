@@ -1,14 +1,20 @@
 package app.motile.ui
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.text.InlineTextContent
 import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.Placeholder
 import androidx.compose.ui.text.PlaceholderVerticalAlign
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import app.motile.platform.Symbol
 import app.motile.theme.IconSize
 import app.motile.theme.symbolSide
@@ -16,6 +22,9 @@ import app.motile.theme.symbolSide
 /** The proxy's symbol in a line of text, after what runs through the proxy, centred on the line, where DM Sans centres its capitals. */
 object ProxyMark {
     private const val ID = "proxy"
+
+    /** What the symbol stands from the words before it beyond a space. */
+    val gap: Dp = 1.dp
 
     /** The symbol where the text has it, which a `Text` draws given `content`, and reads as "Proxy". */
     fun AnnotatedString.Builder.appendMark() = appendInlineContent(ID, "Proxy")
@@ -31,8 +40,12 @@ object ProxyMark {
     @Composable
     fun content(color: Color, fontSize: Float): Map<String, InlineTextContent> {
         val size = size(fontSize)
-        val side = with(LocalDensity.current) { symbolSide(size).toSp() }
-        return mapOf(ID to InlineTextContent(Placeholder(side, side, PlaceholderVerticalAlign.TextCenter)) { Icon(Symbol.Waypoints, size, color = color) })
+        val (width, height) = with(LocalDensity.current) { (symbolSide(size) + gap).toSp() to symbolSide(size).toSp() }
+        return mapOf(
+            ID to InlineTextContent(Placeholder(width, height, PlaceholderVerticalAlign.TextCenter)) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.CenterEnd) { Icon(Symbol.Waypoints, size, color = color) }
+            },
+        )
     }
 }
 

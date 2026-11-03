@@ -9,6 +9,7 @@ struct ThreadSettingsSheet: View {
     /// The accounts whose models are listed. The others are only their names until they are tapped.
     @State private var listed: Set<String> = []
     @State private var tmpReasoning = false
+    private static let titleGap: CGFloat = 6
 
     var body: some View {
         @Bindable var store = store
@@ -74,14 +75,24 @@ struct ThreadSettingsSheet: View {
                     Button {
                         withAnimation { _ = listed.remove(id) ?? listed.insert(id).memberAfterInsert }
                     } label: {
-                        VStack(spacing: 12) {
-                            HStack(spacing: 6) {
-                                AgentIcon(agent: choices.account.agent, size: .sm)
-                                Text(verbatim: choices.title)
-                                    .proxyMarked(choices.account.proxy, fontSize: UIFont.preferredFont(forTextStyle: .body).pointSize)
-                                Spacer()
-                                Image(.chevronDown, size: .sm)
-                                    .rotationEffect(.degrees(listed.contains(id) ? 180 : 0))
+                        VStack(alignment: .leading, spacing: 12) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                HStack(spacing: Self.titleGap) {
+                                    AgentIcon(agent: choices.account.agent, size: .sm)
+                                    Text(verbatim: choices.title)
+                                        .proxyMarked(choices.account.proxy, fontSize: UIFont.preferredFont(forTextStyle: .body).pointSize)
+                                    Spacer()
+                                    Image(.chevronDown, size: .sm)
+                                        .rotationEffect(.degrees(listed.contains(id) ? 180 : 0))
+                                }
+                                if let next = store.composerServer?.nextAccounts[id] {
+                                    Text(verbatim: next)
+                                        .font(.footnote)
+                                        .foregroundStyle(Color.themeMutedForeground)
+                                        .lineLimit(1)
+                                        .truncationMode(.middle)
+                                        .padding(.leading, PlatformImage.symbolSide(.sm) + Self.titleGap)
+                                }
                             }
                             if let windows = store.composerServer?.accountLimits[id], !windows.isEmpty {
                                 LimitPills(windows: windows)

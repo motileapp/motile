@@ -2141,6 +2141,10 @@ pub struct AgentLimits {
     #[serde(default)]
     pub reset_credits: u32,
     pub error: Option<String>,
+    /// For the Proxy account, the name of the proxy's account a new thread would start on, whose
+    /// limits these are.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub next_account: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]

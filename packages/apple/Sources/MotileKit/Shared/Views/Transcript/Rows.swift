@@ -518,8 +518,7 @@ struct AgentContent {
         let words = { (text: String) in NSAttributedString(string: text, attributes: [.font: font, .foregroundColor: color]) }
         let line = NSMutableAttributedString(attributedString: words(runsOn))
         if proxy {
-            line.append(words(runsOn.isEmpty ? "" : " "))
-            line.append(ProxyMark.attachment(font: font, color: color))
+            ProxyMark.append(to: line, font: font, color: color)
         }
         if !said.isEmpty {
             line.append(words(runsOn.isEmpty && !proxy ? said : " · \(said)"))

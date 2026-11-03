@@ -3,6 +3,7 @@
 //! One menu is open at a time; the window's root draws it over everything else.
 
 use std::rc::Rc;
+use std::time::{Duration, Instant};
 
 use gpui_kit::prelude::*;
 use gpui_kit::*;
@@ -41,6 +42,14 @@ enum Entry {
 #[derive(Default)]
 pub struct Menu {
     entries: Vec<Entry>,
+}
+
+/// What opened a menu under its button: a press, which may go on to be let go on a row, or the
+/// keys, which light its first row.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Opened {
+    Press,
+    Keys,
 }
 
 impl Menu {
@@ -198,40 +207,59 @@ impl Menu {
     /// Opens the menu with its top left corner at `position`, in the window, as a context menu
     /// does: above the point when there is no room under it.
     pub fn show(self, position: Point<Pixels>, window: &mut Window, cx: &mut App) {
-        self.open(position, position.y, false, window, cx);
+        self.open(position, position.y, false, None, window, cx);
     }
 
     /// Opens the menu `gap` under the element the anchor tracks, its left edge on the element's,
     /// or as far above it when there is no room under it.
-    pub fn show_under(self, anchor: &Anchor, gap: f32, window: &mut Window, cx: &mut App) {
+    pub fn show_under(self, anchor: &Anchor, gap: f32, opened: Opened, window: &mut Window, cx: &mut App) {
         let bounds = anchor.bounds();
         let position = point(bounds.origin.x, bounds.bottom() + px(gap));
-        self.open(position, bounds.origin.y - px(gap), false, window, cx);
+        self.open(position, bounds.origin.y - px(gap), false, Some((bounds, opened)), window, cx);
     }
 
     /// Opens the menu `gap` under the element the anchor tracks, its right edge on the element's,
     /// or as far above it when there is no room under it.
-    pub fn show_under_right(self, anchor: &Anchor, gap: f32, window: &mut Window, cx: &mut App) {
+    pub fn show_under_right(self, anchor: &Anchor, gap: f32, opened: Opened, window: &mut Window, cx: &mut App) {
         let bounds = anchor.bounds();
         let position = point(bounds.right(), bounds.bottom() + px(gap));
-        self.open(position, bounds.origin.y - px(gap), true, window, cx);
+        self.open(position, bounds.origin.y - px(gap), true, Some((bounds, opened)), window, cx);
     }
 
-    fn open(self, position: Point<Pixels>, above: Pixels, right_aligned: bool, window: &mut Window, cx: &mut App) {
+    fn open(
+        self,
+        position: Point<Pixels>,
+        above: Pixels,
+        right_aligned: bool,
+        button: Option<(Bounds<Pixels>, Opened)>,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        let returns = window.focused(cx);
         let focus = cx.focus_handle();
         window.focus(&focus, cx);
         crate::ui::overlay_opened(cx);
+        let opened = button.map(|(_, opened)| opened);
+        let highlighted = if opened == Some(Opened::Keys) { self.runnable().first().copied() } else { None };
         let open = Open {
             menu: Rc::new(self),
             position,
             above,
             right_aligned,
             focus,
-            highlighted: None,
+            returns,
+            button: button.map(|(bounds, _)| bounds),
+            held: (opened == Some(Opened::Press)).then(Instant::now),
+            highlighted,
             submenu: None,
             sub_highlighted: None,
+            sub_card: Anchor::default(),
+            leaving: None,
+            crossing: None,
+            moved_at: Instant::now(),
             typed: String::new(),
             typed_at: None,
+            typed_from: None,
         };
         cx.set_global(Layer(Some(open)));
         window.refresh();
@@ -245,6 +273,17 @@ impl Menu {
             .map(|entry| if matches!(entry, Entry::Separator) { SEPARATOR_HEIGHT } else { ROW_HEIGHT })
             .sum();
         rows + 2. * PADDING + 2.
+    }
+
+    /// The first runnable row after `after`, going round, whose label starts with `typed`.
+    fn starting_with(&self, typed: &str, after: Option<usize>) -> Option<usize> {
+        let runnable = self.runnable();
+        let start = after.and_then(|after| runnable.iter().position(|&index| index == after)).map_or(0, |at| at + 1);
+        let (before, from) = runnable.split_at(start.min(runnable.len()));
+        from.iter().chain(before).copied().find(|&index| match &self.entries[index] {
+            Entry::Item { label, .. } | Entry::Submenu { label, .. } => label.to_lowercase().starts_with(typed),
+            _ => false,
+        })
     }
 
     fn runnable(&self) -> Vec<usize> {
@@ -264,13 +303,28 @@ struct Open {
     above: Pixels,
     right_aligned: bool,
     focus: FocusHandle,
+    /// What had the keys before the menu opened, which gets them back.
+    returns: Option<FocusHandle>,
+    /// The button it opened from, where letting go of the press that opened it leaves it open.
+    button: Option<Bounds<Pixels>>,
+    /// When the press on its button that opened it went down, while it is held.
+    held: Option<Instant>,
     highlighted: Option<usize>,
     /// The row whose menu is open beside this one, and the row of that menu that is lit.
     submenu: Option<usize>,
     sub_highlighted: Option<usize>,
-    /// What was typed to find a row, and when last.
+    /// Where the open submenu is drawn.
+    sub_card: Anchor,
+    /// Where the pointer left the row of the open submenu, while it heads for the submenu.
+    leaving: Option<Point<Pixels>>,
+    /// The row the pointer crosses on its way to the submenu, which takes over once the pointer
+    /// turns away or rests.
+    crossing: Option<usize>,
+    moved_at: Instant,
+    /// What was typed to find a row, when last, and the row lit when the typing began.
     typed: String,
-    typed_at: Option<std::time::Instant>,
+    typed_at: Option<Instant>,
+    typed_from: Option<usize>,
 }
 
 impl Open {
@@ -280,6 +334,38 @@ impl Open {
             _ => None,
         }
     }
+
+    fn opens_submenu(&self, index: usize) -> bool {
+        matches!(self.menu.entries.get(index), Some(Entry::Submenu { .. }))
+    }
+
+    /// Whether the pointer, on another row, is still on its way from the open submenu's row to
+    /// the submenu: inside the triangle between where it left the row and the submenu's near edge.
+    fn heads_for_submenu(&self, index: usize, pointer: Point<Pixels>) -> bool {
+        let (Some(open), Some(apex)) = (self.submenu, self.leaving) else { return false };
+        let card = self.sub_card.bounds();
+        let edge = if card.left() >= apex.x { card.left() } else { card.right() };
+        open != index && inside_triangle(pointer, apex, point(edge, card.top()), point(edge, card.bottom()))
+    }
+
+    /// Lights a row of the top menu, closing a submenu of another row.
+    fn light(&mut self, index: usize) {
+        self.highlighted = Some(index);
+        self.leaving = None;
+        self.crossing = None;
+        if self.submenu != Some(index) {
+            self.submenu = None;
+            self.sub_highlighted = None;
+        }
+    }
+}
+
+fn inside_triangle(p: Point<Pixels>, a: Point<Pixels>, b: Point<Pixels>, c: Point<Pixels>) -> bool {
+    let side = |from: Point<Pixels>, to: Point<Pixels>| {
+        f32::from(to.x - from.x) * f32::from(p.y - from.y) - f32::from(to.y - from.y) * f32::from(p.x - from.x)
+    };
+    let (ab, bc, ca) = (side(a, b), side(b, c), side(c, a));
+    (ab >= 0. && bc >= 0. && ca >= 0.) || (ab <= 0. && bc <= 0. && ca <= 0.)
 }
 
 #[derive(Default)]
@@ -292,12 +378,52 @@ pub fn is_open(cx: &App) -> bool {
     cx.try_global::<Layer>().is_some_and(|layer| layer.0.is_some())
 }
 
-/// Closes the menu that is open, if one is.
+/// Closes the menu that is open, if one is, and gives the keys back to what had them.
 pub fn close(window: &mut Window, cx: &mut App) {
-    if cx.try_global::<Layer>().is_some_and(|layer| layer.0.is_some()) {
-        cx.global_mut::<Layer>().0 = None;
-        window.refresh();
+    if !is_open(cx) {
+        return;
     }
+    let open = cx.global_mut::<Layer>().0.take();
+    give_back(open.as_ref(), window, cx);
+    window.refresh();
+}
+
+fn give_back(open: Option<&Open>, window: &mut Window, cx: &mut App) {
+    let Some(returns) = open.and_then(|open| open.returns.as_ref()) else { return };
+    window.focus(returns, cx);
+}
+
+fn open_mut(cx: &mut App) -> Option<&mut Open> {
+    if !cx.has_global::<Layer>() {
+        return None;
+    }
+    cx.global_mut::<Layer>().0.as_mut()
+}
+
+/// Esc closes the submenu that is open, or else the menu.
+fn back(window: &mut Window, cx: &mut App) {
+    let Some(open) = open_mut(cx).filter(|open| open.submenu.is_some()) else { return close(window, cx) };
+    open.submenu = None;
+    open.sub_highlighted = None;
+    open.leaving = None;
+    open.crossing = None;
+}
+
+/// Whether the press that opened the menu was held long enough for letting go on a row to pick
+/// it, so that a click on the button only opens the menu.
+fn held_to_pick(cx: &App) -> bool {
+    let held = cx.try_global::<Layer>().and_then(|layer| layer.0.as_ref()).and_then(|open| open.held);
+    held.is_some_and(|at| at.elapsed() >= HOLD_TO_PICK)
+}
+
+/// Letting go of the press that opened the menu away from it and from its button closes it.
+fn let_go(position: Point<Pixels>, window: &mut Window, cx: &mut App) {
+    let Some(open) = open_mut(cx) else { return };
+    let held = open.held.take().is_some();
+    if !held || open.button.is_some_and(|button| button.contains(&position)) {
+        return;
+    }
+    close(window, cx);
 }
 
 /// Which of the open menus a row is in.
@@ -318,7 +444,10 @@ fn pick(level: Level, index: usize, window: &mut Window, cx: &mut App) {
         },
     };
     match menu.entries.get(index) {
-        Some(Entry::Item { run, enabled: true, .. }) => run(window, cx),
+        Some(Entry::Item { run, enabled: true, .. }) => {
+            give_back(Some(&open), window, cx);
+            run(window, cx)
+        }
         Some(Entry::Submenu { menu, .. }) => {
             let first = menu.runnable().first().copied();
             let mut open = open;
@@ -326,7 +455,7 @@ fn pick(level: Level, index: usize, window: &mut Window, cx: &mut App) {
             open.sub_highlighted = first;
             cx.set_global(Layer(Some(open)));
         }
-        _ => {}
+        _ => give_back(Some(&open), window, cx),
     }
 }
 
@@ -354,29 +483,35 @@ fn step(forward: bool, cx: &mut App) {
     open.submenu = None;
 }
 
-/// How long typed letters keep adding up to one search, as the system's menus have it.
-const TYPING_PAUSE: std::time::Duration = std::time::Duration::from_secs(1);
+/// How long typed letters keep adding up to one search.
+const TYPING_PAUSE: Duration = Duration::from_millis(500);
+/// How long the press that opened a menu is held before letting go on a row picks it.
+const HOLD_TO_PICK: Duration = Duration::from_millis(200);
+/// How long the pointer stays on a row before its submenu opens, and rests on its way to an open
+/// submenu before the row under it takes over.
+const SUBMENU_DELAY: Duration = Duration::from_millis(100);
 
-/// Lights the first row of the menu in front that starts with what was typed, as the system's
-/// menus do.
+/// Lights the row of the menu in front that starts with what was typed, from the one after the
+/// row lit when the typing began. The same letter typed again goes on to the next row with it.
 fn type_select(typed: &str, cx: &mut App) {
     let Some(open) = cx.global_mut::<Layer>().0.as_mut() else { return };
+    let in_submenu = open.submenu.is_some() && open.sub_highlighted.is_some();
+    let lit = if in_submenu { open.sub_highlighted } else { open.highlighted };
     let fresh = open.typed_at.is_none_or(|at| at.elapsed() > TYPING_PAUSE);
     if fresh {
         open.typed.clear();
+        open.typed_from = lit;
     }
     open.typed.push_str(&typed.to_lowercase());
-    open.typed_at = Some(std::time::Instant::now());
-    let in_submenu = open.submenu.is_some() && open.sub_highlighted.is_some();
+    open.typed_at = Some(Instant::now());
     let menu = if in_submenu { open.submenu().cloned() } else { Some(open.menu.clone()) };
     let Some(menu) = menu else { return };
-    let found = menu.runnable().into_iter().find(|&index| {
-        let label = match &menu.entries[index] {
-            Entry::Item { label, .. } | Entry::Submenu { label, .. } => label,
-            _ => return false,
-        };
-        label.to_lowercase().starts_with(&open.typed)
-    });
+    let mut letters = open.typed.chars();
+    let first = letters.next();
+    let repeated = first.filter(|first| letters.all(|letter| letter == *first)).map(String::from);
+    let found = menu
+        .starting_with(&open.typed, open.typed_from)
+        .or_else(|| repeated.and_then(|letter| menu.starting_with(&letter, lit)));
     let Some(found) = found else { return };
     if in_submenu {
         open.sub_highlighted = Some(found);
@@ -430,7 +565,7 @@ fn placement(open: &Open, height: f32, window: &Window) -> (Pixels, Pixels) {
 
 /// The open menu over the window, for the root to draw last.
 pub fn layer(window: &mut Window, cx: &mut App) -> Option<AnyElement> {
-    let (menu, position, right_aligned, focus, highlighted, submenu, sub_highlighted, max_height) = {
+    let (menu, position, right_aligned, focus, highlighted, submenu, sub_highlighted, sub_card, max_height) = {
         let open = cx.try_global::<Layer>()?.0.as_ref()?;
         let (top, max_height) = placement(open, open.menu.height(), window);
         let submenu = open.submenu.zip(open.submenu().cloned());
@@ -442,6 +577,7 @@ pub fn layer(window: &mut Window, cx: &mut App) -> Option<AnyElement> {
             open.highlighted,
             submenu,
             open.sub_highlighted,
+            open.sub_card.clone(),
             max_height,
         )
     };
@@ -457,7 +593,7 @@ pub fn layer(window: &mut Window, cx: &mut App) -> Option<AnyElement> {
     let beside = submenu.and_then(|(index, sub)| {
         let Some(Entry::Submenu { anchor, .. }) = menu.entries.get(index) else { return None };
         let row = anchor.bounds();
-        let card = card(&sub, Level::Sub, sub_highlighted, None, cx);
+        let card = card(&sub, Level::Sub, sub_highlighted, None, cx).child(sub_card.track());
         Some(
             anchored()
                 .position(point(row.right() + px(PADDING + 2.), row.origin.y - px(PADDING + 1.)))
@@ -473,7 +609,7 @@ pub fn layer(window: &mut Window, cx: &mut App) -> Option<AnyElement> {
         .track_focus(&focus)
         .on_key_down(move |event: &KeyDownEvent, window, cx| {
             match event.keystroke.key.as_str() {
-                "escape" => close(window, cx),
+                "escape" => back(window, cx),
                 "up" => step(false, cx),
                 "down" => step(true, cx),
                 "right" => step_level(true, cx),
@@ -508,29 +644,136 @@ pub fn layer(window: &mut Window, cx: &mut App) -> Option<AnyElement> {
             cx.stop_propagation();
             close(window, cx);
         })
+        .on_mouse_up(MouseButton::Left, |event, window, cx| let_go(event.position, window, cx))
+        .on_mouse_move(|_, window, cx| moved(window, cx))
         .child(placed)
         .children(beside);
     Some(deferred(overlay).with_priority(PRIORITY).into_any_element())
 }
 
-/// Lights the row, or lets go of it, as the pointer goes over it or leaves it. Going over a row
-/// of the menu opens the one it opens, or closes the one open beside it.
-fn hover(level: Level, index: usize, inside: bool, submenu: bool, window: &mut Window, cx: &mut App) {
-    let Some(open) = cx.global_mut::<Layer>().0.as_mut() else { return };
-    let lit = match level {
-        Level::Top => &mut open.highlighted,
-        Level::Sub => &mut open.sub_highlighted,
-    };
-    if inside {
-        *lit = Some(index);
-        if level == Level::Top {
-            open.submenu = submenu.then_some(index);
-            open.sub_highlighted = None;
+/// Lights the row, or lets go of it, as the pointer goes over it or leaves it. A row that opens a
+/// submenu opens it once the pointer has stayed on it a moment, and the submenu stays open while
+/// the pointer heads for it across other rows.
+fn hover(level: Level, index: usize, inside: bool, window: &mut Window, cx: &mut App) {
+    let pointer = window.mouse_position();
+    let Some(open) = open_mut(cx) else { return };
+    let mut opens_soon = false;
+    let mut crossing = false;
+    match (level, inside) {
+        (Level::Sub, true) => {
+            open.sub_highlighted = Some(index);
+            open.leaving = None;
+            open.crossing = None;
         }
-    } else if *lit == Some(index) && !submenu {
-        *lit = None;
+        (Level::Sub, false) if open.sub_highlighted == Some(index) => open.sub_highlighted = None,
+        (Level::Sub, false) => {}
+        (Level::Top, true) if open.heads_for_submenu(index, pointer) => {
+            crossing = open.crossing.is_none();
+            open.crossing = Some(index);
+            open.moved_at = Instant::now();
+        }
+        (Level::Top, true) => {
+            open.light(index);
+            opens_soon = open.opens_submenu(index) && open.submenu != Some(index);
+        }
+        (Level::Top, false) => {
+            if open.crossing == Some(index) {
+                open.crossing = None;
+            }
+            if open.submenu == Some(index) {
+                open.leaving = Some(pointer);
+            } else if open.highlighted == Some(index) {
+                open.highlighted = None;
+            }
+        }
     }
     window.refresh();
+    if opens_soon {
+        open_submenu_soon(index, window, cx);
+    }
+    if crossing {
+        watch_crossing(window, cx);
+    }
+}
+
+fn open_submenu_soon(index: usize, window: &mut Window, cx: &mut App) {
+    window
+        .spawn(cx, async move |cx| {
+            cx.background_executor().timer(SUBMENU_DELAY).await;
+            let _ = cx.update(|window, cx| {
+                let Some(open) = open_mut(cx) else { return };
+                if open.highlighted != Some(index) || open.submenu == Some(index) || !open.opens_submenu(index) {
+                    return;
+                }
+                open.submenu = Some(index);
+                open.sub_highlighted = None;
+                window.refresh();
+            });
+        })
+        .detach();
+}
+
+/// The pointer moved over the menus: once it turns away from the submenu it was heading for, the
+/// row it is on takes over.
+fn moved(window: &mut Window, cx: &mut App) {
+    let pointer = window.mouse_position();
+    let Some(open) = open_mut(cx) else { return };
+    let Some(row) = open.crossing else { return };
+    if open.heads_for_submenu(row, pointer) {
+        open.moved_at = Instant::now();
+        return;
+    }
+    take_over(row, window, cx);
+}
+
+/// Once the pointer rests on its way to the submenu, the row it is on takes over.
+fn watch_crossing(window: &mut Window, cx: &mut App) {
+    window
+        .spawn(cx, async move |cx| {
+            loop {
+                cx.background_executor().timer(SUBMENU_DELAY).await;
+                let watching = cx
+                    .update(|window, cx| {
+                        let Some(open) = open_mut(cx) else { return false };
+                        let Some(row) = open.crossing else { return false };
+                        if open.moved_at.elapsed() < SUBMENU_DELAY {
+                            return true;
+                        }
+                        take_over(row, window, cx);
+                        false
+                    })
+                    .unwrap_or(false);
+                if !watching {
+                    break;
+                }
+            }
+        })
+        .detach();
+}
+
+fn take_over(row: usize, window: &mut Window, cx: &mut App) {
+    let Some(open) = open_mut(cx) else { return };
+    open.light(row);
+    let opens_soon = open.opens_submenu(row);
+    window.refresh();
+    if opens_soon {
+        open_submenu_soon(row, window, cx);
+    }
+}
+
+/// Letting go on a row of the press that opened the menu picks it.
+fn released(level: Level, index: usize, window: &mut Window, cx: &mut App) {
+    if !held_to_pick(cx) {
+        return;
+    }
+    cx.stop_propagation();
+    pick(level, index, window, cx);
+}
+
+/// Letting go on the menu but off its rows leaves it open, and a press on it starts anew.
+fn let_go_inside(cx: &mut App) {
+    let Some(open) = open_mut(cx) else { return };
+    open.held = None;
 }
 
 /// The card of a menu's rows.
@@ -588,7 +831,7 @@ fn card(menu: &Menu, level: Level, highlighted: Option<usize>, open_submenu: Opt
             .when(any_checked, |row| row.child(check_column(false)))
             .child(div().flex_1().min_w_0().whitespace_nowrap().overflow_hidden().text_ellipsis().child(label.clone()))
             .child(icons::symbol("chevron-right", IconSize::Sm).text_color(c.muted_foreground))
-            .on_hover(move |inside, window, cx| hover(level, index, *inside, true, window, cx))
+            .on_hover(move |inside, window, cx| hover(level, index, *inside, window, cx))
             .on_click(move |_, window, cx| {
                 cx.stop_propagation();
                 pick(level, index, window, cx)
@@ -617,12 +860,12 @@ fn card(menu: &Menu, level: Level, highlighted: Option<usize>, open_submenu: Opt
                 )
                 .when_some(tooltip.clone(), |row, tooltip| row.tooltip(crate::ui::tooltip(tooltip)))
                 .when(*enabled, |row| {
-                    row.on_hover(move |inside, window, cx| hover(level, index, *inside, false, window, cx)).on_click(
-                        move |_, window, cx| {
+                    row.on_hover(move |inside, window, cx| hover(level, index, *inside, window, cx))
+                        .on_mouse_up(MouseButton::Left, move |_, window, cx| released(level, index, window, cx))
+                        .on_click(move |_, window, cx| {
                             cx.stop_propagation();
                             pick(level, index, window, cx)
-                        },
-                    )
+                        })
                 })
                 .into_any_element()
         }
@@ -636,7 +879,12 @@ fn card(menu: &Menu, level: Level, highlighted: Option<usize>, open_submenu: Opt
         .flex()
         .flex_col()
         // A press inside the menu is its rows', not one beside it that closes it.
-        .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+        .on_mouse_down(MouseButton::Left, |_, _, cx| {
+            cx.stop_propagation();
+            let_go_inside(cx);
+        })
+        .on_mouse_up(MouseButton::Left, |_, _, cx| let_go_inside(cx))
+        .on_mouse_move(|_, window, cx| moved(window, cx))
         .children(rows)
 }
 

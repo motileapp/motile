@@ -205,6 +205,8 @@ data class Server(
     val roomierAccounts: Map<String, Map<String, String>>,
     /** What each agent account has used of its limits, by account id. */
     val accountLimits: Map<String, List<LimitsReport.Window>> = emptyMap(),
+    /** The name of the proxy's account whose limits a Proxy account's are, by account id. */
+    val nextAccounts: Map<String, String> = emptyMap(),
     /** Its agents' accounts' ids, the one a new thread would start on first. */
     val accountsByRoom: List<String> = emptyList(),
     /** Whether the server has ever told us about itself. */
@@ -318,6 +320,7 @@ data class Server(
                 accountLimits = json.obj("account_limits")?.let { byAccount ->
                     byAccount.keys.associateWith { id -> byAccount.objects(id).map(LimitsReport::Window) }
                 } ?: emptyMap(),
+                nextAccounts = json.stringMap("next_accounts"),
                 accountsByRoom = json.strings("accounts_by_room"),
                 known = info != null,
                 update = info?.obj("update")?.let { ServerUpdate(it, version) },

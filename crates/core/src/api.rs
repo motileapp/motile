@@ -754,6 +754,9 @@ pub struct ServerView {
     pub roomier_accounts: HashMap<String, HashMap<String, String>>,
     /// What each of its agents' accounts has used of its limits, by account id.
     pub account_limits: HashMap<String, Vec<limits::Row>>,
+    /// The name of the proxy's account whose limits a Proxy account's are: the one a new thread
+    /// would start on, by account id.
+    pub next_accounts: HashMap<String, String>,
     /// Its agents' accounts, each agent's in the order a new thread would choose them.
     pub accounts_by_room: Vec<String>,
     /// How its copies of the account's other servers' threads stand. None for a removed server.

@@ -89,13 +89,11 @@ pub fn git_button(store: &Entity<Store>, anchor: &Anchor, cx: &App) -> Option<An
                     }),
             )
             .child(div().w(px(1.)).h(px(ControlSize::Regular.height())).bg(c.border))
-            .child(
-                ActionButton::chevron("git-menu", "Commit, push or open a pull request").joined(true, true).on_click(
-                    move |_, window, cx| {
-                        git_menu(&menu_store, &project, cx).show_under_right(&menu_anchor, MENU_GAP, window, cx);
-                    },
-                ),
-            )
+            .child(ActionButton::chevron("git-menu", "Commit, push or open a pull request").joined(true, true).on_open(
+                move |opened, window, cx| {
+                    git_menu(&menu_store, &project, cx).show_under_right(&menu_anchor, MENU_GAP, opened, window, cx);
+                },
+            ))
             .child(div().absolute().inset_0().rounded(px(Radius::MD)).border_1().border_color(c.border))
             .into_any_element(),
     )

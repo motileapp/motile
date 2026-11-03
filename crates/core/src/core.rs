@@ -1370,6 +1370,11 @@ impl Core {
                 .as_ref()
                 .map(|info| limits::by_account(&info.agent_accounts, &server.limits, now()))
                 .unwrap_or_default(),
+            next_accounts: server
+                .info
+                .as_ref()
+                .map(|info| limits::next_accounts(&info.agent_accounts, &server.limits))
+                .unwrap_or_default(),
             accounts_by_room: server
                 .info
                 .as_ref()

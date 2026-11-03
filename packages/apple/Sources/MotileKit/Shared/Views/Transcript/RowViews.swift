@@ -1518,8 +1518,7 @@ final class HandoffRowView: RowView {
             label.append(text(account, Theme.foreground))
         }
         guard end.proxy else { return label }
-        label.append(text(" ", Theme.foreground))
-        label.append(ProxyMark.attachment(font: Theme.smallFont, color: Theme.foreground))
+        ProxyMark.append(to: label, font: Theme.smallFont, color: Theme.foreground)
         return label
     }
 

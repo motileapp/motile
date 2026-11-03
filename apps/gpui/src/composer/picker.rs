@@ -15,6 +15,7 @@ use super::{access_symbol, effort_label, effort_symbol};
 use crate::models::{ACCESSES, AGENTS, ComposerPickerPart, ModelInfoExt, access_detail, access_label, agent_name};
 use crate::store::Store;
 use crate::theme::{ControlSize, IconSize, Layer, Opacity, Radius, Surface, colors};
+use crate::ui::dropdown::{backdrop, over_content};
 use crate::ui::menu::Anchor;
 use crate::ui::parts::{hidden_edges, with_edge_fades};
 use crate::ui::{ActionButton, Chip, Highlight, KeyCaps, Segmented, divider_on, edges, icons, logos, tooltip};
@@ -25,6 +26,8 @@ const SETTINGS_WIDTH: f32 = 196.;
 const HEIGHT: f32 = 348.;
 const SHORTEST: f32 = 180.;
 const ROW_HEIGHT: f32 = 28.;
+const ROW_LIGHT_INSET: f32 = 1.;
+const HEADER_GAP: f32 = 6.;
 const PADDING: f32 = 4.;
 const SEARCH_HEIGHT: f32 = 38.;
 /// The picker and its lines, as wide as its columns make it.
@@ -41,6 +44,8 @@ struct Group {
     title: String,
     account: AgentAccount,
     windows: Vec<limits::Row>,
+    /// The proxy's account whose limits `windows` are, for the Proxy account.
+    next: Option<String>,
     rows: Vec<ModelRow>,
 }
 
@@ -149,6 +154,7 @@ impl ComposerPicker {
         let store = self.store.read(cx);
         let words = self.words(cx);
         let limits = store.composer_server().map(|server| server.account_limits.clone()).unwrap_or_default();
+        let next = store.composer_server().map(|server| server.next_accounts.clone()).unwrap_or_default();
         let mut index = 0;
         store
             .composer_choices()
@@ -175,7 +181,8 @@ impl ComposerPicker {
                     return None;
                 }
                 let windows = limits.get(&account.id).cloned().unwrap_or_default();
-                Some(Group { title, account, windows, rows })
+                let next = next.get(&account.id).cloned();
+                Some(Group { title, account, windows, next, rows })
             })
             .collect()
     }
@@ -355,6 +362,14 @@ impl ComposerPicker {
             ComposerPickerPart::Access if !self.access_open => self.open_access(true, cx),
             ComposerPickerPart::Access => self.set_access(ACCESSES[lit.min(ACCESSES.len() - 1)], cx),
         }
+    }
+
+    /// A press around the picker closes its access menu when it is open, or else the picker.
+    fn press_around(&mut self, cx: &mut Context<Self>) {
+        if self.access_open {
+            return self.open_access(false, cx);
+        }
+        self.close(cx);
     }
 
     fn escape(&mut self, cx: &mut Context<Self>) {
@@ -703,7 +718,7 @@ fn row_light(group: SharedString, lit: bool, cx: &App) -> Div {
     Highlight::new()
         .radius(Radius::SM)
         .surface(Surface::Popover)
-        .inset(edges(1., 0., 1., 0.))
+        .inset(edges(ROW_LIGHT_INSET, 0., ROW_LIGHT_INSET, 0.))
         .lit(lit)
         .render(group, cx)
 }
@@ -752,16 +767,31 @@ fn header(group: &Group, cx: &App) -> Div {
         .flex_shrink_0()
         .px(px(8.))
         .pt(px(8.))
-        .pb(px(4.))
+        // The chips stand as far from a lit row as from the words above them.
+        .pb(px(if group.windows.is_empty() { 4. } else { HEADER_GAP - ROW_LIGHT_INSET }))
         .flex()
         .flex_col()
-        .gap(px(6.))
+        .gap(px(HEADER_GAP))
         .child(
             div()
-                .text_size(px(11.5))
-                .font_weight(FontWeight::MEDIUM)
-                .text_color(c.muted_foreground)
-                .child(crate::ui::proxied(group.title.clone(), group.account.proxy, 11.5)),
+                .flex()
+                .flex_col()
+                .gap(px(2.))
+                .child(
+                    div()
+                        .text_size(px(11.5))
+                        .font_weight(FontWeight::MEDIUM)
+                        .text_color(c.muted_foreground)
+                        .child(crate::ui::proxied(group.title.clone(), group.account.proxy, 11.5)),
+                )
+                .when_some(group.next.clone(), |title, next| {
+                    title.child(
+                        div()
+                            .text_size(px(11.5))
+                            .text_color(c.muted_stronger_foreground)
+                            .child(crate::ui::middle_truncated(next)),
+                    )
+                }),
         )
         .when(!group.windows.is_empty(), |header| header.child(limit_pills(&group.account.id, &group.windows, cx)))
 }
@@ -810,7 +840,6 @@ impl Render for ComposerPicker {
         let settings = self.settings(cx);
         let height = self.columns_height(window);
         let line = || div().w(px(1.)).flex_shrink_0().bg(c.border_popover);
-        let button = self.button.clone();
         crate::ui::dropdown_card(div(), cx)
             .id("composer-picker")
             .relative()
@@ -818,14 +847,6 @@ impl Render for ComposerPicker {
             .flex()
             .flex_col()
             .occlude()
-            .on_mouse_down_out(cx.listener(move |this, event: &MouseDownEvent, _, cx| {
-                if this.access_open {
-                    return this.open_access(false, cx);
-                }
-                if !button.bounds().contains(&event.position) {
-                    this.close(cx);
-                }
-            }))
             .capture_action(cx.listener(|this, _: &MoveUp, _, cx| {
                 cx.stop_propagation();
                 this.step(-1, cx);
@@ -877,15 +898,19 @@ impl Render for ComposerPicker {
     }
 }
 
-/// Lays the picker out over the button it opens from, its trailing edge on the button's.
-pub fn placed(picker: Entity<ComposerPicker>, button: &Anchor) -> impl IntoElement {
+/// Lays the picker out over the button it opens from, its trailing edge on the button's, on a
+/// backdrop that takes the presses around it.
+pub fn placed(picker: Entity<ComposerPicker>, button: &Anchor, window: &Window) -> impl IntoElement {
     let bounds = button.bounds();
-    deferred(
-        anchored()
-            .anchor(gpui_kit::Anchor::BottomRight)
-            .position(point(bounds.right(), bounds.top() - px(GAP)))
-            .snap_to_window_with_margin(px(8.))
-            .child(picker),
-    )
-    .with_priority(1)
+    let around = picker.clone();
+    let layer =
+        backdrop("composer-picker-layer", move |_, cx| around.update(cx, |picker, cx| picker.press_around(cx)), window)
+            .child(
+                anchored()
+                    .anchor(gpui_kit::Anchor::BottomRight)
+                    .position(point(bounds.right(), bounds.top() - px(GAP)))
+                    .snap_to_window_with_margin(px(8.))
+                    .child(picker),
+            );
+    over_content(layer, window)
 }

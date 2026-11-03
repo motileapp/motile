@@ -636,7 +636,7 @@ extension Text {
     /// The proxy's symbol beside words of `fontSize` that stand alone, centred on their line. It
     /// stands outside the line, which a symbol moved off the baseline would make taller.
     func proxyMarked(_ proxied: Bool, fontSize: CGFloat) -> some View {
-        HStack(spacing: (fontSize / 4).rounded()) {
+        HStack(spacing: (fontSize / 4).rounded() + ProxyMark.gap) {
             self
             if proxied {
                 Image(.waypoints, size: ProxyMark.size(for: fontSize))
@@ -651,7 +651,7 @@ extension Text {
         guard proxied else { return self }
         let size = ProxyMark.size(for: fontSize)
         let rise = ((PlatformFont.ui(fontSize).capHeight - PlatformImage.symbolSide(size)) / 2).rounded()
-        return Text("\(self) \(Text(Image(.waypoints, size: size)).baselineOffset(rise))")
+        return Text("\(self)\(Text(verbatim: " ").kerning(ProxyMark.gap))\(Text(Image(.waypoints, size: size)).baselineOffset(rise))")
     }
 
     init(dotted parts: [Text]) {

@@ -493,6 +493,7 @@ impl Proxy {
             windows: account.windows.clone(),
             reset_credits: account.reset_credits,
             error,
+            next_account: Some(account.name.clone()),
         })
     }
 

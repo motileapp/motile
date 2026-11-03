@@ -11,7 +11,7 @@ use gpui_kit::prelude::*;
 use gpui_kit::*;
 
 use crate::theme::{Colors, ControlSize, IconSize, Layer, Opacity, Radius, ShadowSize, Surface, colors};
-use crate::ui::menu::{Anchor, Menu};
+use crate::ui::menu::{Anchor, Menu, Opened};
 use crate::ui::{OnClick, tooltip};
 use crate::ui::{icons, motion};
 
@@ -598,7 +598,10 @@ pub struct ActionButton {
     /// It is a menu's, whose chevron keeps the quieter colour.
     menu: bool,
     on_click: Option<OnClick>,
+    on_open: Option<OnOpen>,
 }
+
+type OnOpen = Rc<dyn Fn(Opened, &mut Window, &mut App)>;
 
 impl ActionButton {
     /// A button with words, and a symbol before them when it has one.
@@ -619,6 +622,7 @@ impl ActionButton {
             open: false,
             menu: false,
             on_click: None,
+            on_open: None,
         }
     }
 
@@ -904,6 +908,13 @@ impl ActionButton {
         self
     }
 
+    /// Opens a menu as a menu's button does: on the pointer's press, which may go on to be let go
+    /// on a row, or with the keys.
+    pub fn on_open(mut self, handler: impl Fn(Opened, &mut Window, &mut App) + 'static) -> Self {
+        self.on_open = Some(Rc::new(handler));
+        self
+    }
+
     pub fn on_click(mut self, handler: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static) -> Self {
         self.on_click = Some(Rc::new(handler));
         self
@@ -982,6 +993,21 @@ impl RenderOnce for ActionButton {
                     cx.stop_propagation();
                     on_click(event, window, cx)
                 })
+            })
+            .when_some(self.on_open.filter(|_| active), |button, on_open| {
+                let keys = on_open.clone();
+                button
+                    .on_mouse_down(MouseButton::Left, move |_, window, cx| {
+                        cx.stop_propagation();
+                        on_open(Opened::Press, window, cx)
+                    })
+                    .on_click(move |event, window, cx| {
+                        if !event.is_keyboard() {
+                            return;
+                        }
+                        cx.stop_propagation();
+                        keys(Opened::Keys, window, cx)
+                    })
             })
     }
 }
@@ -1074,12 +1100,12 @@ impl RenderOnce for ActionMenu {
                     .child(anchor.track()),
             )
             .children(self.shortcut.map(crate::keyboard::target))
-            .child(self.button.on_click(move |_, window, cx| {
+            .child(self.button.on_open(move |opened, window, cx| {
                 let menu = build(window, cx);
                 if menu.is_empty() {
                     return;
                 }
-                menu.show_under(&opens, 4., window, cx);
+                menu.show_under(&opens, 4., opened, window, cx);
             }))
     }
 }

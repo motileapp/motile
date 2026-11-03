@@ -63,6 +63,8 @@ pub struct Server {
     pub roomier_accounts: HashMap<String, HashMap<String, String>>,
     /// What each agent account has used of its limits, by account id.
     pub account_limits: HashMap<String, Vec<motile_core::limits::Row>>,
+    /// The name of the proxy's account whose limits a Proxy account's are, by account id.
+    pub next_accounts: HashMap<String, String>,
     /// Its agents' accounts' ids, the one a new thread would start on first.
     pub accounts_by_room: Vec<String>,
     /// Whether the server has ever told us about itself.
@@ -101,6 +103,7 @@ impl From<ServerView> for Server {
             short_model_names: view.short_model_names,
             roomier_accounts: view.roomier_accounts,
             account_limits: view.account_limits,
+            next_accounts: view.next_accounts,
             accounts_by_room: view.accounts_by_room,
             sync: view.sync,
             text_model: info.as_ref().and_then(|info| info.text_model.clone()),
@@ -1179,6 +1182,7 @@ mod tests {
             short_model_names: HashMap::new(),
             roomier_accounts: HashMap::new(),
             account_limits: HashMap::new(),
+            next_accounts: HashMap::new(),
             accounts_by_room: Vec::new(),
             sync: None,
         })
@@ -1251,6 +1255,7 @@ mod tests {
             short_model_names: HashMap::new(),
             roomier_accounts: HashMap::new(),
             account_limits: HashMap::new(),
+            next_accounts: HashMap::new(),
             accounts_by_room: Vec::new(),
             sync: None,
         };

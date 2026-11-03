@@ -268,6 +268,8 @@ struct Server: Equatable, Identifiable {
     let roomierAccounts: [String: [String: String]]
     /// What each agent account has used of its limits, by account id.
     let accountLimits: [String: [LimitsReport.Window]]
+    /// The name of the proxy's account whose limits a Proxy account's are, by account id.
+    let nextAccounts: [String: String]
     /// Its agents' accounts' ids, the one a new thread would start on first.
     let accountsByRoom: [String]
     /// Whether the server has ever told us about itself.
@@ -289,6 +291,7 @@ struct Server: Equatable, Identifiable {
         rttMs = (json["rtt_ms"] as? NSNumber)?.intValue
         roomierAccounts = json["roomier_accounts"] as? [String: [String: String]] ?? [:]
         accountLimits = (json["account_limits"] as? [String: [JSON]] ?? [:]).mapValues { $0.map(LimitsReport.Window.init(json:)) }
+        nextAccounts = json["next_accounts"] as? [String: String] ?? [:]
         accountsByRoom = json.strings("accounts_by_room")
         sync = json.object("sync").map(ServerSync.init(json:))
         let info = json.object("info")

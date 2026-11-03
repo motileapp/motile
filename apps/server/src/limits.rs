@@ -50,6 +50,7 @@ pub fn pooled(account: &AgentAccount, read: anyhow::Result<Option<AgentLimits>>)
         windows: vec![],
         reset_credits: 0,
         error: Some(error),
+        next_account: None,
     };
     match read {
         Ok(Some(limits)) => AgentLimits { agent: account.agent, account_name: account.name.clone(), ..limits },
@@ -71,6 +72,7 @@ pub fn pinned(account: &AgentAccount, pooled: Option<&ProxyAccount>) -> AgentLim
         windows: pooled.windows.clone(),
         reset_credits: pooled.reset_credits,
         error: None,
+        next_account: None,
     });
     read.unwrap_or_else(|| AgentLimits {
         agent: account.agent,
@@ -80,6 +82,7 @@ pub fn pinned(account: &AgentAccount, pooled: Option<&ProxyAccount>) -> AgentLim
         windows: vec![],
         reset_credits: 0,
         error: Some("This account is no longer on your proxy.".to_string()),
+        next_account: None,
     })
 }
 
@@ -99,6 +102,7 @@ async fn read_account(account: &AgentAccount, environment: &Environment) -> Opti
         windows: vec![],
         reset_credits: 0,
         error: Some(motile_protocol::error_text(&error)),
+        next_account: None,
     }))
 }
 
@@ -131,6 +135,7 @@ fn claude_limits(account: &Value, usage: Result<Value, String>) -> AgentLimits {
         windows: vec![],
         reset_credits: 0,
         error: None,
+        next_account: None,
     };
     let usage = match usage {
         Ok(usage) => usage,
@@ -205,6 +210,7 @@ fn codex_limits(account: &Value, limits: Result<Value, String>) -> AgentLimits {
         windows: vec![],
         reset_credits: 0,
         error: None,
+        next_account: None,
     };
     if account["type"] != "chatgpt" {
         return read;
@@ -274,6 +280,7 @@ mod tests {
             windows: vec![window.clone()],
             reset_credits: 1,
             error: None,
+            next_account: None,
         };
         let read = pooled(&account, Ok(Some(next)));
         assert_eq!((read.account_name.as_str(), read.plan.as_deref()), ("Proxy", Some("Pro")));
@@ -383,6 +390,7 @@ mod tests {
                 .collect(),
             reset_credits: 0,
             error: error.map(String::from),
+            next_account: None,
         };
         let before = [read(Agent::Claude, 10.0, None), read(Agent::Codex, 20.0, None)];
         let now = [read(Agent::Claude, 0.0, Some("It didn't answer in time.")), read(Agent::Codex, 30.0, None)];

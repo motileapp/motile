@@ -255,7 +255,7 @@ private fun LineRow(line: UsageReport.Line, measure: Measure, stacked: Boolean) 
         val style = Theme.ui(12f)
         val named = with(density) {
             val name = measurer.measure(if (line.proxy) "${line.name} " else line.name, style, maxLines = 1).size.width.toDp() +
-                if (line.proxy) symbolSide(ProxyMark.size(12f)) else 0.dp
+                if (line.proxy) symbolSide(ProxyMark.size(12f)) + ProxyMark.gap else 0.dp
             val server = line.server?.let { measurer.measure(it, style, maxLines = 1).size.width.toDp() + spacing } ?: 0.dp
             name + server
         }

@@ -15,7 +15,7 @@ use crate::composer::children::agent_bar;
 use crate::models::{AgentViewExt, Project};
 use crate::store::Store;
 use crate::theme::{self, ControlSize, IconSize, Radius, colors};
-use crate::ui::menu::{Anchor, Menu, MenuIcon};
+use crate::ui::menu::{Anchor, Menu, MenuIcon, Opened};
 use crate::ui::modal::{Answer, Confirmation, Modal, confirmation, present_sheet, presented};
 use crate::ui::{ActionButton, Highlight, TOOLBAR_WIDTH, icons, logos};
 
@@ -342,7 +342,8 @@ impl ThreadPane {
                             .child(name)
                             .child(icons::symbol("chevron-down", IconSize::Md).text_color(c.muted_stronger_foreground)),
                     )
-                    .on_click(move |_, window, cx| {
+                    .on_mouse_down(MouseButton::Left, move |_, window, cx| {
+                        cx.stop_propagation();
                         let mut menu = Menu::new();
                         for (id, name, icon, symbol) in &projects {
                             let (store, id) = (handle.clone(), id.clone());
@@ -364,7 +365,7 @@ impl ThreadPane {
                                 cx.notify();
                             })
                         });
-                        menu.show_under(&anchor, 4., window, cx);
+                        menu.show_under(&anchor, 4., Opened::Press, window, cx);
                     }),
             )
     }

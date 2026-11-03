@@ -104,6 +104,7 @@ private struct ComposerPicker: View {
     private static let padding: CGFloat = 4
     /// The room between two rows' lights: only drawn, so that the rows' clicks meet.
     private static let rowLight = EdgeInsets(top: 1, leading: 0, bottom: 1, trailing: 0)
+    private static let headerGap: CGFloat = 6
     private static let railLight = EdgeInsets(top: 2, leading: 0, bottom: 2, trailing: 0)
 
     @Environment(AppStore.self) private var store
@@ -126,6 +127,8 @@ private struct ComposerPicker: View {
         let title: String
         let account: AgentAccount
         let windows: [LimitsReport.Window]
+        /// The proxy's account whose limits `windows` are, for the Proxy account.
+        let next: String?
         let rows: [Row]
         var id: String { account.id }
     }
@@ -224,7 +227,8 @@ private struct ComposerPicker: View {
             }
             guard !rows.isEmpty else { return nil }
             let windows = store.composerServer?.accountLimits[choice.account.id] ?? []
-            return Group(title: choice.title, account: choice.account, windows: windows, rows: rows)
+            let next = store.composerServer?.nextAccounts[choice.account.id]
+            return Group(title: choice.title, account: choice.account, windows: windows, next: next, rows: rows)
         }
     }
 
@@ -337,18 +341,28 @@ private struct ComposerPicker: View {
     }
 
     private func header(_ group: Group) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(verbatim: group.title)
-                .proxyMarked(group.account.proxy, fontSize: 11.5)
-                .font(.ui(size: 11.5, weight: .medium))
-                .foregroundStyle(Color.themeMutedForeground)
+        VStack(alignment: .leading, spacing: Self.headerGap) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(verbatim: group.title)
+                    .proxyMarked(group.account.proxy, fontSize: 11.5)
+                    .font(.ui(size: 11.5, weight: .medium))
+                    .foregroundStyle(Color.themeMutedForeground)
+                if let next = group.next {
+                    Text(verbatim: next)
+                        .font(.ui(size: 11.5))
+                        .foregroundStyle(Color.themeMutedStrongerForeground)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+            }
             if !group.windows.isEmpty {
                 LimitPills(windows: group.windows)
             }
         }
         .padding(.horizontal, 8)
         .padding(.top, 8)
-        .padding(.bottom, 4)
+        // The chips stand as far from a lit row as from the words above them.
+        .padding(.bottom, group.windows.isEmpty ? 4 : Self.headerGap - Self.rowLight.top)
     }
 
     private func modelRow(_ row: Row) -> some View {

@@ -415,9 +415,20 @@ final class ProgressRingView: LayerView {
 /// Symbols drawn in a colour that follows the appearance.
 /// The proxy's symbol in a line of text, as tall as the line's capitals and centred on them.
 enum ProxyMark {
+    /// What the symbol stands from the words before it beyond a space.
+    static let gap: CGFloat = 1
+
     /// The symbol's size beside words of `fontSize`.
     static func size(for fontSize: CGFloat) -> IconSize {
         fontSize <= 12.5 ? .xs : fontSize <= 15 ? .sm : .md
+    }
+
+    /// The symbol after `line`'s words, a space and `gap` from them.
+    static func append(to line: NSMutableAttributedString, font: PlatformFont, color: PlatformColor) {
+        if line.length > 0 {
+            line.append(NSAttributedString(string: " ", attributes: [.font: font, .kern: gap]))
+        }
+        line.append(attachment(font: font, color: color))
     }
 
     static func attachment(font: PlatformFont, color: PlatformColor) -> NSAttributedString {

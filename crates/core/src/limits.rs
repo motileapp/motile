@@ -371,6 +371,15 @@ pub fn by_account(accounts: &[AgentAccount], limits: &[AgentLimits], now: f64) -
         .collect()
 }
 
+/// The name of the proxy's account a new thread of each Proxy account would start on, by account id.
+pub fn next_accounts(accounts: &[AgentAccount], limits: &[AgentLimits]) -> HashMap<String, String> {
+    accounts
+        .iter()
+        .filter(|account| account.proxy && account.pin.is_none())
+        .filter_map(|account| Some((account.id.clone(), read(account, limits)?.next_account.clone()?)))
+        .collect()
+}
+
 fn read<'a>(account: &AgentAccount, limits: &'a [AgentLimits]) -> Option<&'a AgentLimits> {
     limits
         .iter()
@@ -404,6 +413,7 @@ mod tests {
             windows,
             reset_credits: 2,
             error: None,
+            next_account: None,
         };
         Read { server: server.into(), limits, proxy: false }
     }
@@ -560,6 +570,17 @@ mod tests {
             windows["yekta"].iter().map(|row| (row.label.as_str(), row.used.as_str(), row.tone)).collect();
         assert_eq!(yekta, [("Session", "80%", Tone::Warning), ("Weekly", "20%", Tone::Success)]);
         assert!(!windows.contains_key("work") && !windows.contains_key("codex"));
+    }
+
+    #[test]
+    fn a_proxy_account_names_the_proxy_account_its_limits_are_from() {
+        let placing = AgentAccount { proxy: true, ..account("Proxy", Agent::Claude) };
+        let pinned = AgentAccount { proxy: true, pin: Some("org-1".into()), ..account("Work", Agent::Claude) };
+        let accounts = [account("yekta", Agent::Claude), placing, pinned];
+        let next =
+            |name: &str| AgentLimits { next_account: Some("Stablecog".into()), ..used_by(name, Agent::Claude, vec![]) };
+        let limits = [next("yekta"), next("Proxy"), next("Work")];
+        assert_eq!(next_accounts(&accounts, &limits), HashMap::from([("Proxy".to_string(), "Stablecog".to_string())]));
     }
 
     const HOUR: f64 = 3600.0;

@@ -4641,6 +4641,7 @@ async fn answer_as_proxy(
                 windows: vec![],
                 reset_credits: 0,
                 error: None,
+                next_account: None,
             };
             write_frame(&mut send, &ProxyReply::Pool { limits: Some(limits) }).await.unwrap();
             send.finish().unwrap();

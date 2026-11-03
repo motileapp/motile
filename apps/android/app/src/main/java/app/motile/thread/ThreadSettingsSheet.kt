@@ -31,6 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.motile.LocalCloseSheet
 import app.motile.LocalStore
@@ -44,6 +45,7 @@ import app.motile.core.Project
 import app.motile.platform.Symbol
 import app.motile.theme.IconSize
 import app.motile.theme.iconSize
+import app.motile.theme.symbolSide
 import app.motile.theme.LocalForeground
 import app.motile.theme.Radius
 import app.motile.theme.SurfaceBox
@@ -68,6 +70,7 @@ private const val noteText = 12f
 private val rowSymbol = IconSize.Md
 private val rowChevron = IconSize.Sm
 private val noteSymbol = iconSize(text = noteText)
+private val titleGap = 6.dp
 private val rowPadding = 16.dp
 
 /** A page of the sheet other than its first, which goes back to it. */
@@ -158,13 +161,21 @@ private fun Models() {
                     Modifier.fillMaxWidth().heightIn(min = pressable(32f)).padding(horizontal = 4.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically),
                 ) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                        AgentIcon(choices.account.agent, size = noteSymbol)
-                        Text(
-                            AnnotatedString(choices.title).proxied(choices.account.proxy), Modifier.weight(1f), size = noteText,
-                            color = palette.mutedForeground, maxLines = 1, inlineContent = ProxyMark.content(palette.mutedForeground, noteText),
-                        )
-                        Icon(Symbol.ChevronDown, noteSymbol, Modifier.rotate(turn), color = palette.mutedForeground)
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(titleGap), verticalAlignment = Alignment.CenterVertically) {
+                            AgentIcon(choices.account.agent, size = noteSymbol)
+                            Text(
+                                AnnotatedString(choices.title).proxied(choices.account.proxy), Modifier.weight(1f), size = noteText,
+                                color = palette.mutedForeground, maxLines = 1, inlineContent = ProxyMark.content(palette.mutedForeground, noteText),
+                            )
+                            Icon(Symbol.ChevronDown, noteSymbol, Modifier.rotate(turn), color = palette.mutedForeground)
+                        }
+                        store.composerServer?.nextAccounts?.get(id)?.let { next ->
+                            Text(
+                                next, Modifier.padding(start = symbolSide(noteSymbol) + titleGap), size = noteText,
+                                color = palette.mutedStrongerForeground, maxLines = 1, overflow = TextOverflow.MiddleEllipsis,
+                            )
+                        }
                     }
                     store.composerServer?.accountLimits?.get(id)?.takeIf { it.isNotEmpty() }?.let { windows ->
                         LimitPills(windows, Modifier.padding(bottom = 8.dp))

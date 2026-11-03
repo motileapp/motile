@@ -21,7 +21,7 @@ use crate::panel::state::PanelTab;
 use crate::store::Store;
 use crate::theme::{self, ControlSize, IconSize, Radius, Surface, colors};
 use crate::ui::control::{ControlIcon, ControlLabel};
-use crate::ui::dropdown::{drop_from, light, over_content};
+use crate::ui::dropdown::{backdrop, drop_from, light, over_content};
 use crate::ui::menu::Anchor;
 use crate::ui::parts::{hidden_edges, with_edge_fades};
 use crate::ui::rich_text::RichText;
@@ -887,9 +887,10 @@ pub fn context_strip(
                 .child(branch_button(title))
                 .when_some(picker, |button, picker| {
                     let place = drop_from(light(anchor.bounds(), margin()), true, window);
-                    let content = crate::window_frame::content_bounds(window).size;
+                    let around = picker.clone();
+                    let close = move |_: &mut Window, cx: &mut App| around.update(cx, |picker, cx| picker.close(cx));
                     button.child(over_content(
-                        div().w(content.width).h(content.height).child(place.child(picker)),
+                        backdrop("branch-picker-layer", close, window).child(place.child(picker)),
                         window,
                     ))
                 })
@@ -955,8 +956,6 @@ pub struct BranchPicker {
     highlighted: usize,
     switching: bool,
     scroll: UniformListScrollHandle,
-    /// The button it opens from, whose presses are the button's to close it.
-    button: Anchor,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -968,7 +967,7 @@ const PLACEHOLDERS: usize = 5;
 const PLACEHOLDER_WIDTHS: [f32; PLACEHOLDERS] = [90., 150., 120., 170., 105.];
 
 impl BranchPicker {
-    pub fn new(store: Entity<Store>, button: Anchor, window: &mut Window, cx: &mut Context<Self>) -> Self {
+    pub fn new(store: Entity<Store>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let base = store.read(cx).draft_uses_worktree();
         let prompt = if base { "Start from a branch" } else { "Switch or create a branch" };
         let query = cx.new(|cx| InputState::new(window, cx).placeholder(prompt));
@@ -991,7 +990,6 @@ impl BranchPicker {
             highlighted: 0,
             switching: false,
             scroll: UniformListScrollHandle::new(),
-            button,
             _subscriptions: subscriptions,
         }
     }
@@ -1239,7 +1237,6 @@ impl Render for BranchPicker {
                 with_edge_fades(list, hidden, c.popover).into_any_element()
             }
         };
-        let button = self.button.clone();
         crate::ui::dropdown_card(div(), cx)
             .id("branch-picker")
             .relative()
@@ -1247,11 +1244,6 @@ impl Render for BranchPicker {
             .occlude()
             .flex()
             .flex_col()
-            .on_mouse_down_out(cx.listener(move |this, event: &MouseDownEvent, _, cx| {
-                if !button.bounds().contains(&event.position) {
-                    this.close(cx);
-                }
-            }))
             .on_key_down(cx.listener(|this, event: &KeyDownEvent, _, cx| match event.keystroke.key.as_str() {
                 "down" => this.move_highlight(1, cx),
                 "up" => this.move_highlight(-1, cx),

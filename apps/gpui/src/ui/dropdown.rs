@@ -39,6 +39,31 @@ pub fn drop_from(button: Bounds<Pixels>, trailing: bool, window: &Window) -> Div
     place.top(button.bottom() - content.top() + px(GAP))
 }
 
+/// What a dropdown lies on: the window's content around it, as a menu owns the pointer. A press on
+/// it only closes the dropdown, and what lies under it is not lit, scrolled or given the cursor.
+pub fn backdrop(
+    id: impl Into<ElementId>,
+    close: impl Fn(&mut Window, &mut App) + 'static,
+    window: &Window,
+) -> Stateful<Div> {
+    let content = content_bounds(window).size;
+    let close: Run = Rc::new(close);
+    let right = close.clone();
+    div()
+        .id(id)
+        .w(content.width)
+        .h(content.height)
+        .occlude()
+        .on_mouse_down(MouseButton::Left, move |_, window, cx| {
+            cx.stop_propagation();
+            close(window, cx)
+        })
+        .on_mouse_down(MouseButton::Right, move |_, window, cx| {
+            cx.stop_propagation();
+            right(window, cx)
+        })
+}
+
 /// A layer as big as the window's content, over everything but the menus.
 pub fn over_content(layer: impl IntoElement, window: &Window) -> Deferred {
     deferred(anchored().position(crate::window_frame::content_origin(window)).child(layer)).with_priority(1)
@@ -271,13 +296,8 @@ impl RenderOnce for ChoiceDropdown {
                         .child(self.title),
                 )
                 .children(rows);
-            let content = content_bounds(window).size;
             let escape = close.clone();
-            let layer = div()
-                .id("choice-dropdown-layer")
-                .w(content.width)
-                .h(content.height)
-                .occlude()
+            let layer = backdrop("choice-dropdown-layer", move |window, cx| close(window, cx), window)
                 .track_focus(&focus)
                 .on_key_down(move |event: &KeyDownEvent, window, cx| {
                     if event.keystroke.key != "escape" {
@@ -286,7 +306,6 @@ impl RenderOnce for ChoiceDropdown {
                     cx.stop_propagation();
                     escape(window, cx)
                 })
-                .on_mouse_down(MouseButton::Left, move |_, window, cx| close(window, cx))
                 .child(drop_from(light(anchor.bounds(), margin), self.trailing, window).child(card));
             over_content(layer, window)
         });

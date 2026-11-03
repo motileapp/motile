@@ -114,7 +114,7 @@ struct OpenDropdown: PreferenceKey {
 
 extension View {
     /// Draws the dropdown open inside it under its button, over everything else. A click or a tap
-    /// anywhere else closes it, and so does Esc.
+    /// anywhere else only closes it, and so does Esc.
     func dropdowns() -> some View {
         overlayPreferenceValue(OpenDropdown.self) { open in
             if let open {
@@ -175,15 +175,22 @@ private struct DropdownLayer: View {
         }
     }
 
+    /// Takes every press around the dropdown, which only closes it, as a menu does.
+    @ViewBuilder private var backdrop: some View {
+        #if os(macOS)
+        DropdownBackdropView(close: open.close)
+        #else
+        Color.clear
+            .contentShape(Rectangle())
+            .onTapGesture(perform: open.close)
+        #endif
+    }
 
     var body: some View {
         GeometryReader { proxy in
             let button = proxy[open.anchor]
             ZStack(alignment: .topLeading) {
-                Color.clear
-                    .contentShape(Rectangle())
-                    .onTapGesture(perform: open.close)
-                    .arrowPointer()
+                backdrop
                 // One that would have too little room under its button, as the strip under the
                 // composer at the window's bottom, opens above it.
                 let below = proxy.size.height - button.maxY

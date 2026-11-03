@@ -263,7 +263,7 @@ private final class RecycledTable: NSTableView {
     override func mouseMoved(with event: NSEvent) {
         super.mouseMoved(with: event)
         let row = row(at: convert(event.locationInWindow, from: nil))
-        point(at: row >= 0 ? row : nil)
+        point(at: row >= 0 && !DropdownBackdrop.covers(self, at: event) ? row : nil)
     }
 
     override func mouseExited(with event: NSEvent) {
@@ -561,7 +561,7 @@ final class RecycledCell<Content: View>: NSView {
     let host: NSHostingView<Content>
 
     init(_ content: Content) {
-        host = NSHostingView(rootView: content)
+        host = UncoveredHostingView(rootView: content)
         host.sizingOptions = []
         host.safeAreaRegions = []
         super.init(frame: .zero)

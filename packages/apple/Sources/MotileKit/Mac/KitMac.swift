@@ -180,11 +180,16 @@ class FlippedView: NSView {
     }
 
     override func mouseEntered(with event: NSEvent) {
-        onHover?(convert(event.locationInWindow, from: nil))
+        hover(event)
     }
 
     override func mouseMoved(with event: NSEvent) {
-        onHover?(convert(event.locationInWindow, from: nil))
+        hover(event)
+    }
+
+    /// Under an open dropdown the view is not lit, as under a menu.
+    private func hover(_ event: NSEvent) {
+        onHover?(DropdownBackdrop.covers(self, at: event) ? nil : convert(event.locationInWindow, from: nil))
     }
 
     override func mouseExited(with event: NSEvent) {
@@ -197,9 +202,9 @@ class FlippedView: NSView {
         return pointer == .hand ? .pointingHand : .arrow
     }
 
-    /// A view that takes clicks keeps its cursor, also when it floats over text.
+    /// A view that takes clicks keeps its cursor, also when it floats over text, but not under a dropdown.
     override func resetCursorRects() {
-        guard let cursor else { return }
+        guard let cursor, !DropdownBackdrop.isShown(in: window) else { return }
         addCursorRect(bounds, cursor: cursor)
     }
 
@@ -475,7 +480,7 @@ final class IconButton: NSButton {
     }
 
     override func mouseEntered(with event: NSEvent) {
-        hovering = true
+        hovering = !DropdownBackdrop.covers(self, at: event)
     }
 
     override func mouseExited(with event: NSEvent) {

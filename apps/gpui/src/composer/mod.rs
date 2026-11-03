@@ -259,8 +259,8 @@ impl Composer {
             self.text.update(cx, |text, cx| text.set_placeholder(placeholder, window, cx));
         }
         if wants_picker && self.branch_picker.is_none() {
-            let (store, button) = (self.store.clone(), self.branch_anchor.clone());
-            self.branch_picker = Some(cx.new(|cx| BranchPicker::new(store, button, window, cx)));
+            let store = self.store.clone();
+            self.branch_picker = Some(cx.new(|cx| BranchPicker::new(store, window, cx)));
         } else if !wants_picker {
             self.branch_picker = None;
         }
@@ -977,7 +977,7 @@ impl Render for Composer {
                     }),
             )
             .child(self.skill_menu(cx))
-            .children(self.picker.clone().map(|picker| picker::placed(picker, &self.settings_anchor)))
+            .children(self.picker.clone().map(|picker| picker::placed(picker, &self.settings_anchor, window)))
             .children(top_strip.map(|strip| div().relative().child(measure(true, self.strips.clone())).child(strip)))
             .child(self.box_(thread.as_ref(), labels, window, cx))
             .children(

@@ -33,6 +33,12 @@ final class PageWebView: WKWebView {
         return super.hitTest(point)
     }
 
+    /// Under an open dropdown the page doesn't follow the pointer, which would light and set the cursor.
+    override func mouseMoved(with event: NSEvent) {
+        guard !DropdownBackdrop.covers(self, at: event) else { return }
+        super.mouseMoved(with: event)
+    }
+
     override func scrollWheel(with event: NSEvent) {
         guard WheelGesture.owner === self else { return toTranscript(event) }
         switch wheel {
