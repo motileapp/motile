@@ -68,7 +68,7 @@ function Account() {
           <section className="flex flex-col gap-4">
             <Heading
               title="Proxy"
-              description="Shares your agents' logins with every server."
+              description="Shares your agent provider accounts with every server."
             />
             <DeviceList devices={[account.proxy]} />
           </section>
@@ -76,7 +76,7 @@ function Account() {
         <section className="flex flex-col gap-4">
           <Heading
             title="Clients"
-            description="The devices signed in to your account. They can reach every server."
+            description="The devices you use Motile on."
           />
           {account.clients.length > 0 ? (
             <DeviceList devices={account.clients} />
