@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use gpui_kit::App;
 use motile_core::api::Command;
-use motile_protocol::gateway_wire::McpChange;
+use motile_protocol::gateway_wire::{McpChange, ToolKind};
 use serde::Deserialize;
 use serde_json::Value;
 
@@ -132,8 +132,8 @@ pub struct McpServers {
     pub calls: Calls,
     /// The call opened from the activity.
     pub call: Option<(i64, Loaded<Option<Call>>)>,
-    /// The MCP servers whose tools are folded out, while the page shows.
-    pub unfolded: HashSet<String>,
+    /// The groups of tools folded out, by MCP server and kind, while the page shows.
+    pub unfolded: HashSet<(String, ToolKind)>,
     /// The MCP server whose sign-in is starting.
     pub starting_sign_in: Option<String>,
     session: Option<Session>,
@@ -242,10 +242,11 @@ impl Store {
         self.mcp_servers.call = None;
     }
 
-    pub fn toggle_mcp_server_tools(&mut self, mcp_server: &str) {
+    pub fn toggle_mcp_server_tools(&mut self, mcp_server: &str, kind: ToolKind) {
         let unfolded = &mut self.mcp_servers.unfolded;
-        if !unfolded.remove(mcp_server) {
-            unfolded.insert(mcp_server.to_string());
+        let group = (mcp_server.to_string(), kind);
+        if !unfolded.remove(&group) {
+            unfolded.insert(group);
         }
     }
 
@@ -258,7 +259,7 @@ impl Store {
     }
 
     pub fn remove_mcp_server(&mut self, mcp_server: String) {
-        self.mcp_servers.unfolded.remove(&mcp_server);
+        self.mcp_servers.unfolded.retain(|(unfolded, _)| *unfolded != mcp_server);
         self.gateway_command(Command::McpServerRemove { mcp_server });
     }
 

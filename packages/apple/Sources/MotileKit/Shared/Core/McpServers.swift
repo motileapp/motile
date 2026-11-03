@@ -29,10 +29,8 @@ struct McpServerRow: Equatable, Identifiable {
     /// "30 of 32 tools on".
     let toolsText: String
     let tools: [McpServerTool]
-    /// Some tools write and some only read, so "Read Only" changes something.
-    let hasReadOnly: Bool
-    /// How agents name one of its tools: `mcp__linear__create_issue`.
-    let example: String
+    /// Its tools by what they do: those that only read, those that write or delete, and the others.
+    let groups: [McpToolGroup]
 
     init(json: JSON) {
         id = json.string("id")
@@ -48,8 +46,7 @@ struct McpServerRow: Equatable, Identifiable {
         statusText = json.string("status_text")
         toolsText = json.string("tools_text")
         tools = json.objects("tools").map(McpServerTool.init)
-        hasReadOnly = json.bool("has_read_only")
-        example = json.string("example")
+        groups = json.objects("groups").map(McpToolGroup.init)
     }
 
     /// Its login stopped working or it fails, which its status says in warning.
@@ -57,8 +54,53 @@ struct McpServerRow: Equatable, Identifiable {
 
     /// How agents name its tools once it is called `slug`.
     func example(as slug: String) -> String {
-        let tool = example.components(separatedBy: "__").last ?? "tool"
-        return "mcp__\(slug.isEmpty ? self.slug : slug)__\(tool)"
+        "mcp__\(slug.isEmpty ? self.slug : slug)__\(tools.first?.name ?? "tool")"
+    }
+}
+
+/// What a tool does, as its annotations say.
+enum McpToolKind: String {
+    case read, write, other
+}
+
+/// What agents may do with a tool.
+enum McpToolPermission: String, CaseIterable, Identifiable {
+    case allow, ask, block
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .allow: "Always allow"
+        case .ask: "Needs approval"
+        case .block: "Blocked"
+        }
+    }
+
+    var symbol: Symbol {
+        switch self {
+        case .allow: .circleCheck
+        case .ask: .hand
+        case .block: .ban
+        }
+    }
+}
+
+/// An MCP server's tools of one kind, with the permission they share, or none when they differ.
+struct McpToolGroup: Equatable, Identifiable {
+    let kind: McpToolKind
+    /// "Read-only tools", "Write/delete tools", "Other tools".
+    let title: String
+    let permission: McpToolPermission?
+    let tools: [McpServerTool]
+
+    var id: String { kind.rawValue }
+
+    init(json: JSON) {
+        kind = McpToolKind(rawValue: json.string("kind")) ?? .other
+        title = json.string("title")
+        permission = json.optionalString("permission").flatMap(McpToolPermission.init)
+        tools = json.objects("tools").map(McpServerTool.init)
     }
 }
 
@@ -66,8 +108,8 @@ struct McpServerTool: Equatable, Identifiable {
     let name: String
     let title: String
     let summary: String?
-    let writes: Bool
-    let enabled: Bool
+    let kind: McpToolKind
+    let permission: McpToolPermission
 
     var id: String { name }
 
@@ -75,8 +117,8 @@ struct McpServerTool: Equatable, Identifiable {
         name = json.string("name")
         title = json.string("title")
         summary = json.optionalString("summary")
-        writes = json.bool("writes")
-        enabled = json.bool("enabled")
+        kind = McpToolKind(rawValue: json.string("kind")) ?? .other
+        permission = McpToolPermission(rawValue: json.string("permission")) ?? .allow
     }
 }
 
@@ -411,13 +453,13 @@ extension AppStore {
         updateMcpServer(mcpServer.id, ["type": "enabled", "enabled": enabled])
     }
 
-    func setMcpServerTool(_ mcpServer: McpServerRow, _ tool: McpServerTool, enabled: Bool) {
-        updateMcpServer(mcpServer.id, ["type": "tool", "name": tool.name, "enabled": enabled])
+    func setMcpServerTool(_ mcpServer: McpServerRow, _ tool: McpServerTool, to permission: McpToolPermission) {
+        updateMcpServer(mcpServer.id, ["type": "tool_permission", "name": tool.name, "permission": permission.rawValue])
     }
 
-    /// Turns off every tool that writes, or every tool on.
-    func setMcpServerTools(_ mcpServer: McpServerRow, readOnly: Bool) {
-        updateMcpServer(mcpServer.id, ["type": readOnly ? "read_only" : "all_tools"])
+    /// Sets every tool of the group, and those of its kind the MCP server adds later.
+    func setMcpServerGroup(_ mcpServer: McpServerRow, _ group: McpToolGroup, to permission: McpToolPermission) {
+        updateMcpServer(mcpServer.id, ["type": "group_permission", "kind": group.kind.rawValue, "permission": permission.rawValue])
     }
 
     func renameMcpServer(_ mcpServer: McpServerRow, name: String, slug: String) {

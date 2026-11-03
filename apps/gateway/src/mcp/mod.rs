@@ -6,11 +6,14 @@ pub mod client;
 pub mod passthrough;
 pub mod sign_in;
 
+use std::collections::HashMap;
 use std::sync::RwLock;
 use std::time::Instant;
 
 use anyhow::{Context, bail};
-use motile_protocol::gateway_wire::{McpAdding, McpAuth, McpChange, McpKey, McpServer, McpStatus, McpTool, ToolResult};
+use motile_protocol::gateway_wire::{
+    McpAdding, McpAuth, McpChange, McpKey, McpServer, McpStatus, McpTool, ToolKind, ToolPermission, ToolResult,
+};
 use motile_protocol::now;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -45,15 +48,33 @@ pub struct McpEntry {
     pub login: Login,
     pub status: McpStatus,
     pub tools: Vec<McpTool>,
-    /// The tools turned off, by name, so that a tool the MCP server adds later is on.
-    pub off: Vec<String>,
+    pub permissions: Permissions,
     pub icon: Option<String>,
     pub created_at: f64,
 }
 
+/// What agents may do with an MCP server's tools: a tool's own permission, or else its kind's, so that
+/// a tool the MCP server adds later takes its kind's. A tool or kind with none is allowed.
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+pub struct Permissions {
+    #[serde(default)]
+    pub groups: HashMap<ToolKind, ToolPermission>,
+    #[serde(default)]
+    pub tools: HashMap<String, ToolPermission>,
+}
+
+impl Permissions {
+    pub fn of(&self, name: &str, kind: ToolKind) -> ToolPermission {
+        let own = self.tools.get(name);
+        own.or_else(|| self.groups.get(&kind)).copied().unwrap_or_default()
+    }
+}
+
 impl McpEntry {
-    pub fn tool_on(&self, name: &str) -> bool {
-        !self.off.iter().any(|off| off == name)
+    /// What agents may do with the tool `name`; one the MCP server hasn't listed is of no kind.
+    pub fn permission(&self, name: &str) -> ToolPermission {
+        let kind = self.tools.iter().find(|tool| tool.name == name).map_or(ToolKind::Other, McpTool::kind);
+        self.permissions.of(name, kind)
     }
 
     /// The headers its login goes in.
@@ -66,7 +87,10 @@ impl McpEntry {
     }
 
     fn view(&self) -> McpServer {
-        let tools = self.tools.iter().map(|tool| McpTool { enabled: self.tool_on(&tool.name), ..tool.clone() });
+        let tools = self.tools.iter().map(|tool| {
+            let permission = self.permissions.of(&tool.name, tool.kind());
+            McpTool { enabled: permission != ToolPermission::Block, permission: Some(permission), ..tool.clone() }
+        });
         McpServer {
             id: self.id.clone(),
             slug: self.slug.clone(),
@@ -204,7 +228,12 @@ impl Gateway {
                 bail!("The MCP server refused the key.")
             }
             Err(Failure::Unauthorized(challenge)) => {
-                match self.mcp_servers.sign_ins.start(&self.http, url, name, None, challenge.as_deref()).await? {
+                match self
+                    .mcp_servers
+                    .sign_ins
+                    .start(&self.http, &self.upstreams.mcp_redirect, url, name, None, challenge.as_deref())
+                    .await?
+                {
                     Some((state, url)) => Ok(McpAdding::SignIn { state, url }),
                     None => Ok(McpAdding::NeedsKey),
                 }
@@ -215,8 +244,11 @@ impl Gateway {
 
     pub async fn sign_mcp_server_in(&self, id: &str) -> anyhow::Result<McpAdding> {
         let mcp_server = self.mcp_servers.get(id).context("There is no such MCP server.")?;
-        let started =
-            self.mcp_servers.sign_ins.start(&self.http, &mcp_server.url, None, Some(mcp_server.id), None).await?;
+        let started = self
+            .mcp_servers
+            .sign_ins
+            .start(&self.http, &self.upstreams.mcp_redirect, &mcp_server.url, None, Some(mcp_server.id), None)
+            .await?;
         let (state, url) = started.context("This MCP server doesn't sign in. Give it a key instead.")?;
         Ok(McpAdding::SignIn { state, url })
     }
@@ -273,7 +305,7 @@ impl Gateway {
             login,
             status: McpStatus::Ready,
             tools,
-            off: vec![],
+            permissions: Permissions::default(),
             icon: icon_of(&info),
             created_at: now(),
         };
@@ -340,17 +372,16 @@ impl Gateway {
             McpChange::Name { name } => mcp_server.name = name.trim().to_string(),
             McpChange::Slug { slug } => mcp_server.slug = slug_of(&slug),
             McpChange::Enabled { enabled } => mcp_server.enabled = enabled,
-            McpChange::Tool { name, enabled } => {
-                mcp_server.off.retain(|off| *off != name);
-                if !enabled {
-                    mcp_server.off.push(name);
+            McpChange::ToolPermission { name, permission } => {
+                mcp_server.permissions.tools.insert(name, permission);
+            }
+            McpChange::GroupPermission { kind, permission } => {
+                let McpEntry { tools, permissions, .. } = mcp_server;
+                permissions.groups.insert(kind, permission);
+                for tool in tools.iter().filter(|tool| tool.kind() == kind) {
+                    permissions.tools.remove(&tool.name);
                 }
             }
-            McpChange::ReadOnly => {
-                mcp_server.off =
-                    mcp_server.tools.iter().filter(|tool| tool.writes).map(|tool| tool.name.clone()).collect()
-            }
-            McpChange::AllTools => mcp_server.off.clear(),
             McpChange::Key { key } => {
                 mcp_server.login =
                     Login::Key { header: key.header.trim().to_string(), value: key.value.trim().to_string() };
@@ -442,13 +473,21 @@ impl Gateway {
 pub fn tool_of(tool: &Value) -> Option<McpTool> {
     let name = tool["name"].as_str()?;
     let title = tool["title"].as_str().or(tool["annotations"]["title"].as_str());
+    let hints = &tool["annotations"];
+    let kind = match (hints["readOnlyHint"].as_bool(), hints["destructiveHint"].as_bool()) {
+        (Some(true), _) => ToolKind::Read,
+        (Some(false), _) | (_, Some(true)) => ToolKind::Write,
+        _ => ToolKind::Other,
+    };
     Some(McpTool {
         name: name.to_string(),
         title: title.map(String::from),
         description: tool["description"].as_str().map(|text| text.trim().to_string()),
         input_schema: tool["inputSchema"].clone(),
-        writes: tool["annotations"]["readOnlyHint"].as_bool() != Some(true),
+        writes: kind != ToolKind::Read,
         enabled: true,
+        kind: Some(kind),
+        permission: None,
     })
 }
 
@@ -543,12 +582,26 @@ mod tests {
     }
 
     #[test]
-    fn a_tool_writes_unless_it_says_it_only_reads() {
-        let read = tool_of(&json!({"name": "list", "annotations": {"readOnlyHint": true}})).unwrap();
-        let write = tool_of(&json!({"name": "create", "description": " Files one. ", "inputSchema": {}})).unwrap();
-        assert!(!read.writes);
-        assert!(write.writes);
-        assert_eq!(write.description.as_deref(), Some("Files one."));
+    fn a_tools_kind_is_what_its_annotations_say() {
+        let kind = |annotations: Value| tool_of(&json!({"name": "a", "annotations": annotations})).unwrap().kind();
+        assert_eq!(kind(json!({"readOnlyHint": true})), ToolKind::Read);
+        assert_eq!(kind(json!({"readOnlyHint": false})), ToolKind::Write);
+        assert_eq!(kind(json!({"destructiveHint": true})), ToolKind::Write);
+        assert_eq!(kind(json!({})), ToolKind::Other);
+        let bare = tool_of(&json!({"name": "create", "description": " Files one. ", "inputSchema": {}})).unwrap();
+        assert!(bare.writes);
+        assert_eq!(bare.description.as_deref(), Some("Files one."));
+    }
+
+    #[test]
+    fn a_tool_takes_its_own_permission_or_its_kinds() {
+        let mut permissions = Permissions::default();
+        assert_eq!(permissions.of("list", ToolKind::Read), ToolPermission::Allow);
+        permissions.groups.insert(ToolKind::Write, ToolPermission::Ask);
+        permissions.tools.insert("delete".into(), ToolPermission::Block);
+        assert_eq!(permissions.of("create", ToolKind::Write), ToolPermission::Ask);
+        assert_eq!(permissions.of("delete", ToolKind::Write), ToolPermission::Block);
+        assert_eq!(permissions.of("list", ToolKind::Read), ToolPermission::Allow);
     }
 
     #[test]

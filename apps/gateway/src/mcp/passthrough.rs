@@ -1,7 +1,8 @@
 //! An agent's MCP request, passed on to its MCP server with the MCP server's login in place of the
 //! agent's token, and the answer passed back as it streams. The gateway reads only what it must: a
-//! call to a tool that is off is answered here, a `tools/list` loses the tools that are off, and
-//! each `tools/call` is logged with its result.
+//! call to a blocked tool is answered here, as is one that needs the user's approval until the server
+//! sends it again approved, a `tools/list` loses the blocked tools, and each `tools/call` is logged
+//! with its result.
 
 use std::sync::Arc;
 use std::time::Instant;
@@ -10,12 +11,12 @@ use anyhow::Context;
 use futures_util::StreamExt;
 use iroh::endpoint::{RecvStream, SendStream};
 use motile_protocol::frame::write_frame;
-use motile_protocol::gateway_wire::{GatewayReply, McpStatus};
+use motile_protocol::gateway_wire::{GatewayReply, MCP_APPROVED, MCP_NEEDS_APPROVAL, McpStatus, ToolPermission};
 use motile_protocol::now;
 use serde_json::{Value, json};
 
 use super::client::Events;
-use super::{Login, McpEntry, cut, result_error};
+use super::{Login, McpEntry, cut, result_error, tool_of};
 use crate::gateway::Gateway;
 use crate::store::CallRecord;
 use crate::upstream::{NOT_PASSED, header_pairs, passed_back};
@@ -71,12 +72,20 @@ pub async fn serve(
     };
     let started = Instant::now();
     let calling = asked.is("tools/call").then(|| asked.tool.clone()).flatten();
-    if let Some(tool) = &calling
-        && !mcp_server.tool_on(tool)
-    {
-        let error = format!("{tool} is turned off for agents in Motile's settings.");
-        log(&gateway, &incoming, &mcp_server, tool, &asked, started, Some(error.clone()), Value::Null);
-        return answer(&mut send, 200, &asked, &error).await;
+    let approved = incoming.headers.iter().any(|(name, _)| name.eq_ignore_ascii_case(MCP_APPROVED));
+    if let Some(tool) = &calling {
+        match mcp_server.permission(tool) {
+            ToolPermission::Block => {
+                let error = format!("{tool} is blocked for agents in Motile's settings.");
+                log(&gateway, &incoming, &mcp_server, tool, &asked, started, Some(error.clone()), Value::Null);
+                return answer(&mut send, 200, &asked, &error).await;
+            }
+            ToolPermission::Ask if !approved => {
+                let error = format!("{tool} needs your approval, which your server is too old to ask for. Update it.");
+                return answer_with(&mut send, 200, &asked, &error, Some(MCP_NEEDS_APPROVAL)).await;
+            }
+            _ => {}
+        }
     }
 
     let mut renewed = false;
@@ -92,7 +101,10 @@ pub async fn serve(
         let headers = incoming
             .headers
             .iter()
-            .filter(|(name, _)| !NOT_PASSED.contains(&name.to_ascii_lowercase().as_str()))
+            .filter(|(name, _)| {
+                let name = name.to_ascii_lowercase();
+                !NOT_PASSED.contains(&name.as_str()) && name != MCP_APPROVED
+            })
             .cloned()
             .chain(mcp_server.login_headers());
         let request = headers.fold(request, |request, (name, value)| request.header(name, value));
@@ -191,7 +203,19 @@ pub async fn serve(
 /// Answers the agent from the gateway: a JSON-RPC error to a request, `status` with the text to
 /// anything else.
 async fn answer(send: &mut SendStream, status: u16, asked: &Asked, message: &str) -> anyhow::Result<()> {
-    let json_header = vec![("content-type".to_string(), "application/json".to_string())];
+    answer_with(send, status, asked, message, None).await
+}
+
+/// `answer`, with the header `flag` set.
+async fn answer_with(
+    send: &mut SendStream,
+    status: u16,
+    asked: &Asked,
+    message: &str,
+    flag: Option<&str>,
+) -> anyhow::Result<()> {
+    let mut json_header = vec![("content-type".to_string(), "application/json".to_string())];
+    json_header.extend(flag.map(|flag| (flag.to_string(), "1".to_string())));
     let (status, body) = match (&asked.id, asked.is("tools/call")) {
         (Some(id), true) => (
             200,
@@ -207,7 +231,7 @@ async fn answer(send: &mut SendStream, status: u16, asked: &Asked, message: &str
 }
 
 fn sign_in_again(mcp_server: &McpEntry) -> String {
-    format!("{}'s login stopped working. Sign in again in Motile's settings, under McpServers.", mcp_server.name)
+    format!("{}'s login stopped working. Sign in again in Motile's settings, under MCP Gateway.", mcp_server.name)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -246,7 +270,7 @@ async fn read_all(response: reqwest::Response, limit: usize) -> Vec<u8> {
     kept
 }
 
-/// The answer with the tools that are off left out, as JSON or as the events it came in.
+/// The answer with the blocked tools left out, as JSON or as the events it came in.
 fn filtered_list(gateway: &Gateway, mcp_server: &McpEntry, body: &[u8], streams: bool) -> Vec<u8> {
     let filter = |message: &mut Value| {
         let first_page = message["result"]["nextCursor"].as_str().is_none_or(str::is_empty);
@@ -254,7 +278,9 @@ fn filtered_list(gateway: &Gateway, mcp_server: &McpEntry, body: &[u8], streams:
         if first_page {
             gateway.saw_tools(&mcp_server.id, tools);
         }
-        tools.retain(|tool| tool["name"].as_str().is_none_or(|name| mcp_server.tool_on(name)));
+        tools.retain(|tool| {
+            tool_of(tool).is_none_or(|tool| mcp_server.permissions.of(&tool.name, tool.kind()) != ToolPermission::Block)
+        });
     };
     if !streams {
         let Ok(mut message) = serde_json::from_slice::<Value>(body) else { return body.to_vec() };

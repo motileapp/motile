@@ -16,6 +16,8 @@ use crate::config::Config;
 use crate::db::NewSignIn;
 use crate::{AppState, db, google, pages};
 
+const MCP_REDIRECT: &str = "motile://mcp";
+
 fn is_sha256_hex(text: &str) -> bool {
     text.len() == 64 && text.chars().all(|character| character.is_ascii_hexdigit())
 }
@@ -94,4 +96,14 @@ pub async fn google_callback(State(state): State<AppState>, Query(query): Query<
         return failed("Something went wrong. Try again in a moment.");
     }
     back(&state.config, sign_in.web, &[("code", &code), ("state", &sign_in.app_state)])
+}
+
+/// Where an MCP server's sign-in, which the account's gateway started, comes back to: sent on to the
+/// client as it came, to `motile://mcp`. Only the gateway, which holds the PKCE verifier, can use
+/// its code. An https address, since some MCP servers refuse to send a sign-in anywhere else.
+pub async fn mcp_callback(Query(query): Query<Vec<(String, String)>>) -> Response {
+    let Ok(url) = Url::parse_with_params(MCP_REDIRECT, &query) else {
+        return failed("This sign-in can't be finished. Start again.");
+    };
+    Redirect::to(url.as_str()).into_response()
 }

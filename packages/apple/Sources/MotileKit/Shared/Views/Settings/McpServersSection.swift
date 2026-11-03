@@ -25,7 +25,62 @@ struct McpServerTile: View {
     }
 }
 
-/// An MCP server's tool with its switch: what it is, what it does, and whether it writes.
+/// What agents may do with a group of tools, or one: a menu of the three, "Custom" while a group's
+/// tools differ. `wordless`, it shows only the permission's symbol.
+struct McpPermissionMenu: View {
+    let permission: McpToolPermission?
+    var wordless = false
+    var size: ControlSize = .regular
+    let pick: (McpToolPermission) -> Void
+
+    var body: some View {
+        let title = permission?.title ?? "Custom"
+        ActionMenu(wordless ? nil : title, icon: permission?.symbol ?? .ellipsis, help: title, variant: .secondary, size: size) {
+            ForEach(McpToolPermission.allCases) { option in
+                Toggle(isOn: Binding { permission == option } set: { _ in pick(option) }) {
+                    Label(option.title, symbol: option.symbol)
+                }
+            }
+        }
+    }
+}
+
+/// A group of an MCP server's tools: its title and how many, which fold it, and its permission.
+struct McpToolGroupRow: View {
+    @Environment(AppStore.self) private var store
+    let mcpServer: McpServerRow
+    let group: McpToolGroup
+    /// None where the group doesn't fold, as in the add sheet.
+    var open: Bool?
+    var toggle: () -> Void = {}
+
+    var body: some View {
+        HStack(spacing: 8) {
+            title(open: open)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+                .onTapGesture { if open != nil { toggle() } }
+                .accessibilityAddTraits(open == nil ? [] : .isButton)
+            McpPermissionMenu(permission: group.permission) { store.setMcpServerGroup(mcpServer, group, to: $0) }
+        }
+    }
+
+    private func title(open: Bool?) -> some View {
+        HStack(spacing: 8) {
+            if let open {
+                Image(open ? .chevronDown : .chevronRight, size: .sm)
+                    .foregroundStyle(Color.themeMutedForeground)
+            }
+            Text(group.title)
+                .font(.ui(size: 13))
+                .foregroundStyle(Color.themeForeground)
+                .lineLimit(1)
+            Chip("\(group.tools.count)", muted: true)
+        }
+    }
+}
+
+/// An MCP server's tool: what it is, what it does, and what agents may do with it.
 struct McpServerToolRow: View {
     @Environment(AppStore.self) private var store
     let mcpServer: McpServerRow
@@ -45,43 +100,17 @@ struct McpServerToolRow: View {
                         .lineLimit(1)
                 }
             }
-            .opacity(.disabled, when: !tool.enabled)
+            .opacity(.disabled, when: tool.permission == .block)
             Spacer(minLength: 8)
-            if tool.writes {
-                Chip("Writes", tone: .themeWarning)
-                    .opacity(.disabled, when: !tool.enabled)
-            }
-            Switch(isOn: Binding { tool.enabled } set: { store.setMcpServerTool(mcpServer, tool, enabled: $0) })
-        }
-    }
-}
-
-/// `Read Only` and `All On`, over an MCP server's tools, each while it would change something.
-struct McpServerToolsActions: View {
-    @Environment(AppStore.self) private var store
-    let mcpServer: McpServerRow
-
-    /// Some tool that writes is on, which "Read Only" turns off.
-    private var writes: Bool {
-        mcpServer.hasReadOnly && mcpServer.tools.contains { $0.writes && $0.enabled }
-    }
-
-    private var someOff: Bool {
-        mcpServer.tools.contains { !$0.enabled }
-    }
-
-    var body: some View {
-        HStack(spacing: 0) {
-            if writes {
-                ActionButton("Read Only", icon: .eye, size: .small, margin: .beside(trailing: someOff ? 4 : 0)) {
-                    store.setMcpServerTools(mcpServer, readOnly: true)
-                }
-            }
-            if someOff {
-                ActionButton("All On", size: .small, margin: .beside(leading: writes ? 4 : 0)) {
-                    store.setMcpServerTools(mcpServer, readOnly: false)
-                }
-            }
+            #if os(macOS)
+            Segmented(
+                symbols: McpToolPermission.allCases.map { ($0.title, $0.symbol, $0) },
+                selection: Binding { tool.permission } set: { store.setMcpServerTool(mcpServer, tool, to: $0) },
+                size: .small
+            )
+            #else
+            McpPermissionMenu(permission: tool.permission, wordless: true) { store.setMcpServerTool(mcpServer, tool, to: $0) }
+            #endif
         }
     }
 }
@@ -362,9 +391,6 @@ struct McpServerAddSheet: View {
         adder.add(url: url, name: given, header: header, key: key)
     }
 
-    /// How many tools the connected step lists before it scrolls.
-    private static let toolsShown = 6
-
     @ViewBuilder private func added(_ id: String) -> some View {
         if let mcpServer = store.mcpServer(id) {
             Text(mcpServer.toolsText)
@@ -379,22 +405,12 @@ struct McpServerAddSheet: View {
                     .foregroundStyle(Color.themeMutedStrongerForeground)
                     .textSelection(.enabled)
             }
-            if !mcpServer.tools.isEmpty {
-                HStack {
-                    SheetLabel("Tools")
-                    Spacer()
-                    McpServerToolsActions(mcpServer: mcpServer)
-                }
-                let tools = VStack(spacing: 10) {
-                    ForEach(mcpServer.tools) { tool in
-                        McpServerToolRow(mcpServer: mcpServer, tool: tool)
+            if !mcpServer.groups.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    SheetLabel("Tool permissions")
+                    ForEach(mcpServer.groups) { group in
+                        McpToolGroupRow(mcpServer: mcpServer, group: group)
                     }
-                }
-                if mcpServer.tools.count > Self.toolsShown {
-                    ScrollView { tools.padding(.vertical, 2) }
-                        .frame(height: scaled(260))
-                } else {
-                    tools
                 }
             }
         } else {
@@ -770,7 +786,7 @@ struct McpServerTrySheet: View {
         case .ready(let made):
             ForEach(made) { self.field($0) }
         }
-        if picked?.writes == true {
+        if let picked, picked.kind != .read {
             HStack(spacing: 6) {
                 Image(.triangleAlert, size: .sm)
                 Text(McpServerText.runsForReal)

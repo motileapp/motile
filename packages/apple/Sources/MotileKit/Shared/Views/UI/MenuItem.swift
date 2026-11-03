@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// An item of a menu, with its symbol in the colour of its words: iOS writes a destructive one in
-/// the system's red, which the menu's tint would keep from its symbol, and the Mac in its text colour.
+/// An item of a menu. A destructive one is in the system's red, its words and its symbol, which
+/// neither the Mac's menus nor iOS's tint give it by themselves.
 struct MenuItem: View {
     let title: String
     let symbol: Symbol
@@ -17,19 +17,15 @@ struct MenuItem: View {
 
     var body: some View {
         Button(role: role, action: action) {
-            #if os(iOS)
             if role == .destructive {
                 Label {
-                    Text(title)
+                    Text(title).foregroundStyle(Color(platform: .systemRed))
                 } icon: {
                     Image(platform: TintedSymbol.image(symbol, size: .md, color: .systemRed))
                 }
             } else {
                 Label(title, symbol: symbol)
             }
-            #else
-            Label(title, symbol: symbol)
-            #endif
         }
     }
 }

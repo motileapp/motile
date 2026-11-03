@@ -30,7 +30,7 @@ use motile_protocol::{error_text, now};
 use serde_json::Value;
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, ChildStdin, Command};
-use tokio::sync::{Mutex, OwnedMutexGuard, broadcast, mpsc, watch};
+use tokio::sync::{Mutex, OwnedMutexGuard, broadcast, mpsc, oneshot, watch};
 use tokio::task::AbortHandle;
 
 use crate::agents::environment::Environment;
@@ -296,6 +296,9 @@ struct Live {
     tools: Option<u64>,
     /// The thread was deleted while this waited for its lock.
     deleted: bool,
+    /// The approvals the server asks for itself, of calls to the gateway's MCP servers, by id: told
+    /// the user's answer, or dropped as a refusal.
+    server_asks: HashMap<String, oneshot::Sender<bool>>,
 }
 
 struct StartedTurn {
@@ -501,7 +504,7 @@ impl Hub {
     ) -> anyhow::Result<()> {
         let tunnel = gateway::Tunnel::new(endpoint, key.clone());
         let token = hex::encode(rand::random::<[u8; 32]>());
-        let port = gateway::serve(tunnel.clone(), self.mcp_tokens.clone(), token.clone()).await?;
+        let port = gateway::serve(tunnel.clone(), self.mcp_tokens.clone(), token.clone(), Arc::downgrade(self)).await?;
         std::fs::create_dir_all(folder.join(agent_accounts::usual_id(Agent::Claude)))?;
         gateway::write_codex_config(&folder.join(agent_accounts::usual_id(Agent::Codex)), port)?;
         let way = GatewayWay {
@@ -1527,6 +1530,10 @@ impl Hub {
         let live = &mut *live;
         let waiting = live.activity.approvals.iter().position(|approval| approval.id == approval_id);
         let approval = live.activity.approvals.remove(waiting.context("The agent no longer waits for that answer.")?);
+        if let Some(asked) = live.server_asks.remove(approval_id) {
+            let _ = asked.send(allow);
+            return self.announce_approvals(live);
+        }
         let thread = &live.stored.thread;
         let line = agents::answer(thread.agent, &approval, allow, &answers, thread.access);
         if line.is_some_and(|line| !live.write(line)) {
@@ -1583,7 +1590,28 @@ impl Hub {
         Ok(())
     }
 
+    /// Asks the user whether the thread's agent may make `call` of a tool of the gateway's MCP servers,
+    /// and waits for the answer: refused when the thread is gone or its turn ends first.
+    pub async fn ask_for_mcp_call(&self, thread_id: &str, tool_name: String, input: String) -> bool {
+        let answered = {
+            let Some(mut live) = self.live(thread_id).await else { return false };
+            let live = &mut *live;
+            let id = format!("mcp:{}", hex::encode(rand::random::<[u8; 8]>()));
+            let (asked, answered) = oneshot::channel();
+            live.server_asks.insert(id.clone(), asked);
+            live.set_thinking(false);
+            live.activity.approvals.push(Approval { id, tool_name, input });
+            if let Err(error) = self.announce_approvals(live) {
+                tracing::warn!(thread_id, "couldn't ask for a tool call: {error:#}");
+            }
+            answered
+        };
+        answered.await.unwrap_or(false)
+    }
+
     fn announce_approvals(&self, live: &mut Live) -> anyhow::Result<()> {
+        let Live { server_asks, activity, .. } = live;
+        server_asks.retain(|id, _| activity.approvals.iter().any(|approval| approval.id == *id));
         live.stored.thread.needs_approval = !live.activity.approvals.is_empty();
         live.stored.thread.asking = live.activity.approvals.first().map(Approval::ask);
         self.store.save_thread(&live.stored)?;
@@ -3157,6 +3185,7 @@ impl Hub {
         thread.updated_at = now();
         thread.turn_ended_at = Some(now());
         live.activity = Activity::default();
+        live.server_asks.clear();
         live.open.clear();
         for queued in &mut live.queued {
             queued.held = true;
@@ -3650,6 +3679,7 @@ impl Hub {
                     live.append(store, ItemKind::Error { message })?;
                 }
                 live.activity.approvals.clear();
+                live.server_asks.clear();
                 live.stored.thread.needs_approval = false;
                 live.stored.thread.asking = None;
                 summary.cost_usd = live.cost_usd.take();
@@ -3815,6 +3845,7 @@ impl Hub {
         thread.agents = 0;
         thread.updated_at = now();
         live.activity = Activity::default();
+        live.server_asks.clear();
         live.open.clear();
 
         // What the user stopped doesn't go on by itself: the messages that waited stay until
@@ -4002,6 +4033,7 @@ impl Live {
             told_limit: false,
             tools: None,
             deleted: false,
+            server_asks: HashMap::new(),
             session_model: None,
             handoff_item: None,
             skills: Vec::new(),

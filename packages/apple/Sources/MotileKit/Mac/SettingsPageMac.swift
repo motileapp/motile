@@ -413,6 +413,8 @@ struct SettingsPage: View {
 }
 
 let settingsInset: CGFloat = 14
+/// How tall a list that keeps growing, as a log, is before it scrolls.
+let settingsListHeight: CGFloat = 420
 let settingsRowHeight: CGFloat = scaled(48)
 private let settingsRowSpacing: CGFloat = 10
 

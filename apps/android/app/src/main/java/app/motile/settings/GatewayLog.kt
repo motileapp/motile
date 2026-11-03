@@ -162,9 +162,9 @@ private fun LogRow(row: GatewayLogRow, open: (() -> Unit)?) {
                     Text(row.latency, Modifier.weight(1f), size = 12f, color = palette.mutedForeground, maxLines = 1)
                     if (row.captured) Chip("Captured", muted = true)
                 }
-                Text("${row.server} · ${row.thread}", maxLines = 1)
-                Text(details, size = 11.5f, color = palette.mutedForeground, maxLines = 2)
-                row.error?.let { Text(it, size = 11.5f, color = palette.warning, maxLines = 3) }
+                Text("${row.server} · ${row.thread}")
+                Text(details, size = 11.5f, color = palette.mutedForeground)
+                row.error?.let { Text(it, size = 11.5f, color = palette.warning) }
             }
         }
     }

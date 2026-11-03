@@ -15,6 +15,9 @@ pub struct Upstreams {
     /// Codex's sign-in and its tokens.
     pub openai_auth: String,
     pub prices: String,
+    /// Where an MCP server's sign-in comes back to: the auth server, which sends it on to
+    /// `motile://mcp`.
+    pub mcp_redirect: String,
 }
 
 impl Default for Upstreams {
@@ -26,6 +29,7 @@ impl Default for Upstreams {
             chatgpt: "https://chatgpt.com/backend-api".into(),
             openai_auth: "https://auth.openai.com".into(),
             prices: pricing::LIST_URL.into(),
+            mcp_redirect: mcp_redirect(motile_protocol::DEFAULT_AUTH_URL),
         }
     }
 }
@@ -48,6 +52,7 @@ impl Upstreams {
             chatgpt: read("MOTILE_CHATGPT_URL", real.chatgpt),
             openai_auth: read("MOTILE_OPENAI_AUTH_URL", real.openai_auth),
             prices: read("MOTILE_PRICES_URL", real.prices),
+            mcp_redirect: real.mcp_redirect,
         }
     }
 
@@ -60,6 +65,12 @@ impl Upstreams {
             chatgpt: format!("{base}/backend-api"),
             openai_auth: base.into(),
             prices: format!("{base}/prices.json"),
+            mcp_redirect: mcp_redirect(base),
         }
     }
+}
+
+/// Where an MCP server's sign-in comes back to on the auth server at `auth_url`.
+pub fn mcp_redirect(auth_url: &str) -> String {
+    format!("{}/mcp/callback", auth_url.trim_end_matches('/'))
 }

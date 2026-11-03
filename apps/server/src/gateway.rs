@@ -8,7 +8,7 @@
 use std::collections::HashMap;
 use std::path::Path;
 use std::str::FromStr;
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
 use std::time::Duration;
 
 use anyhow::{Context, bail};
@@ -25,10 +25,13 @@ use iroh::endpoint::{Connection, RecvStream, SendStream};
 use iroh::{Endpoint, EndpointAddr, EndpointId};
 use motile_protocol::GATEWAY_ALPN;
 use motile_protocol::frame::{read_frame, write_frame};
-use motile_protocol::gateway_wire::{GatewayAccount, GatewayReply, GatewayRequest, WsMessage};
+use motile_protocol::gateway_wire::{
+    GatewayAccount, GatewayReply, GatewayRequest, MCP_APPROVED, MCP_NEEDS_APPROVAL, WsMessage,
+};
 use motile_protocol::wire::{Agent, AgentLimits};
 use tokio::sync::{Mutex, mpsc, watch};
 
+use crate::hub::Hub;
 use crate::mcp::Tokens;
 
 /// What the server's own calls, a title or a commit message, are sent to the gateway as.
@@ -39,9 +42,11 @@ const NO_GATEWAY: &str = "Your account has no gateway. Add one in Settings, or s
 const DIAL_WITHIN: Duration = Duration::from_secs(20);
 const ANSWER_WITHIN: Duration = Duration::from_secs(30);
 const CHUNK: usize = 64 * 1024;
+const MAX_MCP_REQUEST: usize = 16 * 1024 * 1024;
 /// What isn't the request's own, or would give the token away.
-const NOT_PASSED: [&str; 14] = [
+const NOT_PASSED: [&str; 15] = [
     "host",
+    MCP_APPROVED,
     "authorization",
     "x-api-key",
     "connection",
@@ -232,6 +237,8 @@ struct Way {
     tokens: Arc<Tokens>,
     /// The token of the server's own calls.
     own: Arc<str>,
+    /// What asks the user to approve a call of an MCP server's tool.
+    hub: Weak<Hub>,
 }
 
 /// The thread the request's token is for: one `tokens` keeps, or the server's own calls for `own`.
@@ -247,11 +254,11 @@ fn thread_of(tokens: &Tokens, own: &str, headers: &HeaderMap) -> Option<String> 
 
 /// Listens on a port of the loopback interface that the system picks, for the threads whose tokens
 /// `tokens` keeps and for the server's own calls, made with `own`.
-pub async fn serve(tunnel: Arc<Tunnel>, tokens: Arc<Tokens>, own: String) -> anyhow::Result<u16> {
+pub async fn serve(tunnel: Arc<Tunnel>, tokens: Arc<Tokens>, own: String, hub: Weak<Hub>) -> anyhow::Result<u16> {
     let listener =
         tokio::net::TcpListener::bind(("127.0.0.1", 0)).await.context("The way to the gateway can't listen.")?;
     let port = listener.local_addr()?.port();
-    let app = axum::Router::new().fallback(handle).with_state(Way { tunnel, tokens, own: own.into() });
+    let app = axum::Router::new().fallback(handle).with_state(Way { tunnel, tokens, own: own.into(), hub });
     tokio::spawn(async move {
         if let Err(error) = axum::serve(listener, app).await {
             tracing::error!("the way to the gateway stopped: {error:#}");
@@ -270,9 +277,7 @@ async fn handle(State(way): State<Way>, request: Request) -> Response {
     }
     let headers = passed(&parts.headers);
     if let Some(mcp_server) = mcp_server_of(&parts) {
-        let request =
-            GatewayRequest::Mcp { thread: thread.clone(), mcp_server, method: parts.method.to_string(), headers };
-        let answered = tunnel(&way.tunnel, &thread, request, body).await;
+        let answered = mcp(&way, thread, mcp_server, parts.method.to_string(), headers, body).await;
         return answered.unwrap_or_else(|error| refused(StatusCode::BAD_GATEWAY, &motile_protocol::error_text(&error)));
     }
     let Some((agent, path)) = agent_and_path(&parts) else {
@@ -296,6 +301,47 @@ async fn handle(State(way): State<Way>, request: Request) -> Response {
         }
     };
     answered.unwrap_or_else(|error| refused(StatusCode::BAD_GATEWAY, &motile_protocol::error_text(&error)))
+}
+
+/// An agent's request to the gateway's MCP server `mcp_server`. A call that waits for the user's
+/// approval is asked of the user in the thread, and sent again approved, or refused.
+async fn mcp(
+    way: &Way,
+    thread: String,
+    mcp_server: String,
+    method: String,
+    mut headers: Vec<(String, String)>,
+    body: Body,
+) -> anyhow::Result<Response> {
+    let body = axum::body::to_bytes(body, MAX_MCP_REQUEST).await.context("The request's body didn't arrive whole.")?;
+    let request = |headers: &[(String, String)]| GatewayRequest::Mcp {
+        thread: thread.clone(),
+        mcp_server: mcp_server.clone(),
+        method: method.clone(),
+        headers: headers.to_vec(),
+    };
+    let response = tunnel(&way.tunnel, &thread, request(&headers), Body::from(body.clone())).await?;
+    if !response.headers().contains_key(MCP_NEEDS_APPROVAL) {
+        return Ok(response);
+    }
+    let Some(hub) = way.hub.upgrade() else { return Ok(response) };
+    let message: serde_json::Value = serde_json::from_slice(&body).unwrap_or_default();
+    let tool = message["params"]["name"].as_str().unwrap_or_default();
+    let arguments = &message["params"]["arguments"];
+    let input = if arguments.is_object() { arguments.to_string() } else { "{}".to_string() };
+    if !hub.ask_for_mcp_call(&thread, format!("mcp__{mcp_server}__{tool}"), input).await {
+        return Ok(refused_call(&message));
+    }
+    headers.push((MCP_APPROVED.to_string(), "1".to_string()));
+    tunnel(&way.tunnel, &thread, request(&headers), Body::from(body)).await
+}
+
+/// The answer to a tool call the user refused.
+fn refused_call(message: &serde_json::Value) -> Response {
+    let content = serde_json::json!([{"type": "text", "text": "The user refused this call."}]);
+    let answer =
+        serde_json::json!({"jsonrpc": "2.0", "id": message["id"], "result": {"content": content, "isError": true}});
+    axum::Json(answer).into_response()
 }
 
 /// Where a thread's agent reaches the gateway's MCP server `slug`.
