@@ -53,7 +53,8 @@ fn applied_effort(applied: &Value, efforts: &[String]) -> Option<String> {
 const LARGE_CONTEXT: &str = "[1m]";
 
 /// One model for each it lists under a name or two, `opus` and `opus[1m]`: the first it lists
-/// is the context window the model runs with by default.
+/// is the context window the model runs with by default. A model it lists only with the larger
+/// context window keeps it, so that it runs with it and the clients say so.
 fn claude_list(models: Vec<ClaudeModel>) -> Vec<ModelInfo> {
     let mut listed: Vec<ModelInfo> = Vec::new();
     for model in models {
@@ -90,7 +91,8 @@ fn claude_list(models: Vec<ClaudeModel>) -> Vec<ModelInfo> {
         });
     }
     for model in &mut listed {
-        if model.contexts.len() < 2 {
+        let only_large = model.contexts.iter().all(|context| context.model.ends_with(LARGE_CONTEXT));
+        if model.contexts.len() < 2 && !only_large {
             model.contexts.clear();
         }
     }
@@ -214,7 +216,15 @@ mod tests {
             .map(|context| (context.label.as_str(), context.model.as_str(), context.default))
             .collect();
         assert_eq!(contexts, [("200k", "claude-opus-5-5", false), ("1M", "claude-opus-5-5[1m]", true)]);
-        assert!(models[1].contexts.is_empty(), "one context window is no choice");
+        let fable: Vec<_> =
+            models[1].contexts.iter().map(|context| (context.label.as_str(), context.model.as_str())).collect();
+        assert_eq!(fable, [("1M", "claude-fable-5-1[1m]")], "it runs with the only window it has");
+    }
+
+    #[test]
+    fn a_model_listed_only_with_the_smaller_context_has_no_window_to_choose() {
+        let listed = serde_json::from_value(json!([{"value": "opus", "resolvedModel": "claude-opus-5-5"}])).unwrap();
+        assert!(claude_list(listed)[0].contexts.is_empty());
     }
 
     #[test]

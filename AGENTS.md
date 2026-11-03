@@ -114,6 +114,9 @@ place of the agent's.
   thread pinned to an account (the request's `pin`) goes there only, and gets its limit error.
 - `upstream.rs`, `websocket.rs`: the HTTP requests and Codex's WebSockets. A limit error before
   anything streamed rests the account and tries the next; a response that streamed is never replayed.
+  Claude Code's `/v1/models`, which it asks a gateway for the models an account adds to its picker
+  (`CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY`), is answered from Anthropic's bootstrap for the
+  thread's account, so that a Proxy account offers the 1M context window a direct login does.
 - `oauth.rs`: signing accounts in and renewing their tokens, as the CLIs do. `seal.rs` keeps the
   tokens sealed under a key from the proxy's device key.
 - `limits.rs`, `usage.rs`, `pricing.rs`: the accounts' limits from every response's headers (and
