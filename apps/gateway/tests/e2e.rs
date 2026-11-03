@@ -1003,7 +1003,7 @@ async fn a_mcp_server_with_a_key_gives_agents_only_the_tools_that_are_on() {
     let mcp_server = &mcp_servers[0];
     assert_eq!(
         (mcp_server.id.as_str(), mcp_server.name.as_str(), mcp_server.slug.as_str()),
-        (id.as_str(), "Fake Tracker", "fake-tracker")
+        (id.as_str(), "Fake Tracker", "Fake_Tracker")
     );
     assert_eq!(mcp_server.auth, McpAuth::Key);
     let writes: Vec<(&str, bool)> = mcp_server.tools.iter().map(|tool| (tool.name.as_str(), tool.writes)).collect();
@@ -1013,36 +1013,36 @@ async fn a_mcp_server_with_a_key_gives_agents_only_the_tools_that_are_on() {
     let GatewayReply::McpServers { mcp_servers } = ask(&server, &GatewayRequest::McpServers).await else {
         panic!("slugs")
     };
-    assert_eq!(mcp_servers, ["fake-tracker"]);
+    assert_eq!(mcp_servers, ["Fake_Tracker"]);
     let list = json!({"jsonrpc": "2.0", "id": 1, "method": "tools/list"});
-    assert_eq!(tool_names(&mcp(&server, "fake-tracker", list.clone()).await.1), ["list_issues", "create_issue"]);
+    assert_eq!(tool_names(&mcp(&server, "Fake_Tracker", list.clone()).await.1), ["list_issues", "create_issue"]);
     let seen = harness.fake.seen("/mcp/key");
     assert_eq!(seen.last().unwrap().header("x-api-key"), "k1");
     assert_eq!(seen.last().unwrap().header("authorization"), "", "the agent's token stays on the gateway");
 
     let block = McpChange::GroupPermission { kind: ToolKind::Other, permission: ToolPermission::Block };
     harness.manage(Manage::UpdateMcpServer { id: id.clone(), change: block }).await;
-    assert_eq!(tool_names(&mcp(&server, "fake-tracker", list).await.1), ["list_issues"]);
+    assert_eq!(tool_names(&mcp(&server, "Fake_Tracker", list).await.1), ["list_issues"]);
     let calls_before = harness.fake.seen("/mcp/key").len();
-    let (status, refused) = mcp(&server, "fake-tracker", call(2, "create_issue")).await;
+    let (status, refused) = mcp(&server, "Fake_Tracker", call(2, "create_issue")).await;
     assert_eq!(status, 200);
     assert_eq!(refused["result"]["isError"], true);
     assert_eq!(harness.fake.seen("/mcp/key").len(), calls_before, "a blocked tool never reaches the MCP server");
 
     let asks = McpChange::ToolPermission { name: "create_issue".into(), permission: ToolPermission::Ask };
     harness.manage(Manage::UpdateMcpServer { id: id.clone(), change: asks }).await;
-    let (head, waits) = mcp_with(&server, "fake-tracker", call(5, "create_issue"), &[]).await;
+    let (head, waits) = mcp_with(&server, "Fake_Tracker", call(5, "create_issue"), &[]).await;
     assert!(head.iter().any(|(name, _)| name == MCP_NEEDS_APPROVAL), "a tool that asks waits for the user");
     assert_eq!(waits["result"]["isError"], true);
     assert_eq!(harness.fake.seen("/mcp/key").len(), calls_before, "nor does one the user hasn't approved");
-    let (_, approved) = mcp_with(&server, "fake-tracker", call(6, "create_issue"), &[(MCP_APPROVED, "1")]).await;
+    let (_, approved) = mcp_with(&server, "Fake_Tracker", call(6, "create_issue"), &[(MCP_APPROVED, "1")]).await;
     assert_eq!(approved["result"]["content"][0]["text"], r#"called "create_issue" with {"title":"Hi"}"#);
     assert_eq!(
         harness.fake.seen("/mcp/key").last().unwrap().header(MCP_APPROVED),
         "",
         "the approval stays on the gateway"
     );
-    let (_, called) = mcp(&server, "fake-tracker", call(3, "list_issues")).await;
+    let (_, called) = mcp(&server, "Fake_Tracker", call(3, "list_issues")).await;
     assert_eq!(called["result"]["content"][0]["text"], r#"called "list_issues" with {"title":"Hi"}"#);
 
     let GatewayReply::McpCalls { calls } =
@@ -1058,12 +1058,19 @@ async fn a_mcp_server_with_a_key_gives_agents_only_the_tools_that_are_on() {
     };
     assert_eq!(detail.arguments, r#"{"title":"Hi"}"#);
 
+    let rename = McpChange::Name { name: "Unbind Banano".into() };
+    harness.manage(Manage::UpdateMcpServer { id: id.clone(), change: rename }).await;
+    let GatewayReply::McpServers { mcp_servers } = ask(&server, &GatewayRequest::McpServers).await else {
+        panic!("slugs")
+    };
+    assert_eq!(mcp_servers, ["Unbind_Banano"], "agents call it by its new name");
+
     harness.manage(Manage::UpdateMcpServer { id: id.clone(), change: McpChange::Enabled { enabled: false } }).await;
     let GatewayReply::McpServers { mcp_servers } = ask(&server, &GatewayRequest::McpServers).await else {
         panic!("slugs")
     };
     assert!(mcp_servers.is_empty(), "an MCP server that is off isn't given to agents");
-    let (_, off) = mcp(&server, "fake-tracker", call(4, "list_issues")).await;
+    let (_, off) = mcp(&server, "Unbind_Banano", call(4, "list_issues")).await;
     assert_eq!(off["result"]["isError"], true);
 }
 
@@ -1096,17 +1103,17 @@ async fn a_mcp_server_signs_in_once_and_its_login_is_renewed_when_refused() {
         panic!("added, not {finished:?}")
     };
     let mcp_server = harness.state().await.mcp_servers.unwrap().remove(0);
-    assert_eq!((mcp_server.slug.as_str(), mcp_server.auth, mcp_server.tools.len()), ("tracker", McpAuth::SignIn, 2));
+    assert_eq!((mcp_server.slug.as_str(), mcp_server.auth, mcp_server.tools.len()), ("Tracker", McpAuth::SignIn, 2));
 
     let server = harness.server().await;
     harness.fake.mcp_generation.store(1, Ordering::SeqCst);
-    let (_, called) = mcp(&server, "tracker", call(1, "create_issue")).await;
+    let (_, called) = mcp(&server, "Tracker", call(1, "create_issue")).await;
     assert!(called["result"]["content"][0]["text"].as_str().unwrap().starts_with("called"), "{called}");
     assert_eq!(harness.fake.mcp_renewals.load(Ordering::SeqCst), 1, "renewed once it was refused");
 
     harness.fake.mcp_refuse_renewal.store(true, Ordering::SeqCst);
     harness.fake.mcp_generation.store(2, Ordering::SeqCst);
-    let (_, refused) = mcp(&server, "tracker", call(2, "create_issue")).await;
+    let (_, refused) = mcp(&server, "Tracker", call(2, "create_issue")).await;
     assert!(refused["result"]["content"][0]["text"].as_str().unwrap().contains("Sign in again"), "{refused}");
     let mcp_server = harness.state().await.mcp_servers.unwrap().remove(0);
     assert_eq!(mcp_server.status, McpStatus::SignInAgain);

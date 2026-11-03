@@ -11,6 +11,8 @@ struct McpGatewaySettings: View {
     @State private var unfolded: Set<String> = []
     @State private var search = ""
     @State private var showsActivity = false
+    /// How far a row stands in from the list's edges.
+    private static let listInset: CGFloat = 20
 
     var body: some View {
         let gateway = store.gateway
@@ -161,10 +163,15 @@ struct McpGatewaySettings: View {
             ForEach(mcpServer.groups) { group in
                 let key = "\(mcpServer.id)/\(group.id)"
                 let open = unfolded.contains(key)
-                McpToolGroupRow(mcpServer: mcpServer, group: group, open: open) {
+                McpToolGroupRow(
+                    mcpServer: mcpServer, group: group, open: open,
+                    inset: EdgeInsets(top: 8, leading: Self.listInset, bottom: 8, trailing: Self.listInset)
+                ) {
                     withAnimation { if open { unfolded.remove(key) } else { unfolded.insert(key) } }
                 }
                 .opacity(.disabled, when: !mcpServer.enabled)
+                .listRowInsets(EdgeInsets())
+                .alignmentGuide(.listRowSeparatorLeading) { _ in Self.listInset }
                 if open {
                     ForEach(group.tools) { tool in
                         McpServerToolRow(mcpServer: mcpServer, tool: tool)

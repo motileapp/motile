@@ -52,9 +52,24 @@ struct McpServerRow: Equatable, Identifiable {
     /// Its login stopped working or it fails, which its status says in warning.
     var troubled: Bool { state == .signInAgain || state == .failing }
 
-    /// How agents name its tools once it is called `slug`.
-    func example(as slug: String) -> String {
-        "mcp__\(slug.isEmpty ? self.slug : slug)__\(tools.first?.name ?? "tool")"
+    /// How agents name its tools once it is called `name`.
+    func example(named name: String) -> String {
+        "mcp__\(Self.slug(of: name) ?? slug)__\(tools.first?.name ?? "tool")"
+    }
+
+    /// The slug the gateway makes of a name (`mcp_slug`), as Claude Code names claude.ai's connectors:
+    /// letters, digits, dashes and an underscore for anything else. Nil before there is a name.
+    static func slug(of name: String) -> String? {
+        var slug = ""
+        for character in name.trimmingCharacters(in: .whitespaces) {
+            if character.isASCII, character.isLetter || character.isNumber || character == "-" {
+                slug.append(character)
+            } else if !slug.isEmpty, !slug.hasSuffix("_") {
+                slug.append("_")
+            }
+        }
+        if slug.hasSuffix("_") { slug.removeLast() }
+        return slug.isEmpty ? nil : slug
     }
 }
 
@@ -405,7 +420,7 @@ final class McpServerAdder {
     }
 
     /// "Linear" for `https://mcp.linear.app/mcp`, until the gateway names it; an address by itself.
-    private static func hostName(_ url: String) -> String {
+    static func hostName(_ url: String) -> String {
         let host = URL(string: url)?.host() ?? url
         guard host.contains(where: \.isLetter), host != "localhost" else { return host }
         let skipped: Set = ["mcp", "api", "www", "server", "app"]
@@ -462,15 +477,11 @@ extension AppStore {
         updateMcpServer(mcpServer.id, ["type": "group_permission", "kind": group.kind.rawValue, "permission": permission.rawValue])
     }
 
-    func renameMcpServer(_ mcpServer: McpServerRow, name: String, slug: String) {
+    /// Renames the MCP server, which names it anew for agents too.
+    func renameMcpServer(_ mcpServer: McpServerRow, name: String) {
         let name = name.trimmingCharacters(in: .whitespaces)
-        let slug = slug.trimmingCharacters(in: .whitespaces)
-        if !name.isEmpty, name != mcpServer.name {
-            updateMcpServer(mcpServer.id, ["type": "name", "name": name])
-        }
-        if !slug.isEmpty, slug != mcpServer.slug {
-            updateMcpServer(mcpServer.id, ["type": "slug", "slug": slug])
-        }
+        guard !name.isEmpty, name != mcpServer.name else { return }
+        updateMcpServer(mcpServer.id, ["type": "name", "name": name])
     }
 
     func setMcpServerKey(_ mcpServer: McpServerRow, header: String, key: String, reply: @escaping (Result<JSON, CoreBridge.CoreError>) -> Void) {

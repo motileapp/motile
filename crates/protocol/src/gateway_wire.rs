@@ -205,7 +205,7 @@ pub enum McpChange {
     Name {
         name: String,
     },
-    /// The name agents call it by: `mcp__<slug>__<tool>`.
+    /// The name agents call it by: `mcp__<slug>__<tool>`. Clients now rename it with its `Name`.
     Slug {
         slug: String,
     },
@@ -226,6 +226,21 @@ pub enum McpChange {
     Key {
         key: McpKey,
     },
+}
+
+/// An MCP server's slug from its name, as Claude Code names claude.ai's connectors: letters, digits,
+/// dashes and an underscore for anything else, never two in a row.
+pub fn mcp_slug(name: &str) -> String {
+    let mut slug = String::new();
+    for character in name.trim().chars() {
+        if character.is_ascii_alphanumeric() || character == '-' {
+            slug.push(character);
+        } else if !slug.is_empty() && !slug.ends_with('_') {
+            slug.push('_');
+        }
+    }
+    let slug = slug.trim_end_matches('_');
+    if slug.is_empty() { "mcp_server".to_string() } else { slug.to_string() }
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
@@ -478,4 +493,18 @@ pub struct UsageRow {
     pub output_tokens: u64,
     pub cache_read_tokens: u64,
     pub cache_write_tokens: u64,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_slug_keeps_letters_digits_and_dashes_and_an_underscore_for_the_rest() {
+        assert_eq!(mcp_slug("Unbind Banano"), "Unbind_Banano");
+        assert_eq!(mcp_slug("  Google  Drive (work) "), "Google_Drive_work");
+        assert_eq!(mcp_slug("a__b"), "a_b");
+        assert_eq!(mcp_slug("my-server"), "my-server");
+        assert_eq!(mcp_slug("¿?"), "mcp_server");
+    }
 }

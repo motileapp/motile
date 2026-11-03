@@ -122,13 +122,14 @@ struct McpGatewaySettings: View {
     @ViewBuilder private func group(_ group: McpToolGroup, of mcpServer: McpServerRow) -> some View {
         let key = "\(mcpServer.id)/\(group.id)"
         let open = unfolded.contains(key)
-        McpToolGroupRow(mcpServer: mcpServer, group: group, open: open) {
+        McpToolGroupRow(
+            mcpServer: mcpServer, group: group, open: open,
+            inset: EdgeInsets(top: 8, leading: settingsInset, bottom: 8, trailing: settingsInset)
+        ) {
             withAnimation(.snappy(duration: 0.2)) {
                 if open { unfolded.remove(key) } else { unfolded.insert(key) }
             }
         }
-        .padding(.horizontal, settingsInset)
-        .padding(.vertical, 8)
         .opacity(.disabled, when: !mcpServer.enabled)
         if open {
             ForEach(group.tools) { tool in

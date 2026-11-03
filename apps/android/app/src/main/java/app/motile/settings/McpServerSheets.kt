@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
@@ -94,11 +95,11 @@ private fun Failure(text: String) {
     Text(text, size = 12f, color = LocalPalette.current.warning)
 }
 
-/** How agents name an MCP server's tools once it is called `slug`. */
+/** How agents will name an MCP server's tools, under its name. */
 @Composable
-private fun SlugExample(mcpServer: McpServerRow, slug: String) {
+private fun AgentName(text: String) {
     SelectionContainer {
-        Text(mcpServer.example(slug.trim()), style = Theme.uiMono(11.5f), color = LocalPalette.current.mutedStrongerForeground)
+        Text(text, style = Theme.uiMono(11.5f), color = LocalPalette.current.mutedStrongerForeground, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
     }
 }
 
@@ -135,7 +136,7 @@ fun McpServerAddSheet(query: String = "") {
     var search by remember { mutableStateOf(query) }
     var header by remember { mutableStateOf("") }
     var key by remember { mutableStateOf("") }
-    var slug by remember { mutableStateOf("") }
+    var name by remember { mutableStateOf("") }
     val step = adder.step
     val typed = search.trim()
     val address = typed.takeIf { (it.startsWith("https://") || it.startsWith("http://")) && it.length > "https://".length }
@@ -149,16 +150,14 @@ fun McpServerAddSheet(query: String = "") {
         if (key.isBlank()) return
         adder.add(step.url, step.given, header = header, key = key)
     }
-    fun done() {
-        val added = step as? McpServerAdder.Step.Added
-        added?.let { mcpServers.mcpServer(it.id) }?.let { mcpServers.rename(it, it.name, slug) }
-        close()
+    fun continueWithAddress() {
+        address?.let { adder.add(it, name.trim().ifEmpty { null }) }
     }
     McpServerSheetFrame(title) {
         when (step) {
             McpServerAdder.Step.Pick -> {
                 val known = if (typed.isEmpty()) gateway.view.known else gateway.view.known.filter { it.matches(typed) }
-                Pick(search, { search = it }, address, known, adder)
+                Pick(search, { search = it }, name, { name = it }, address, known, adder, ::continueWithAddress)
             }
             is McpServerAdder.Step.SigningIn -> SigningIn()
             is McpServerAdder.Step.Key -> {
@@ -167,14 +166,15 @@ fun McpServerAddSheet(query: String = "") {
                     key, { key = it }, header, { header = it },
                 ) { addWithKey(step) }
             }
-            is McpServerAdder.Step.Added -> Added(step.id, slug) { slug = it }
+            is McpServerAdder.Step.Added -> Added(step.id)
         }
         adder.error?.let { Failure(it) }
         when (step) {
             McpServerAdder.Step.Pick -> if (address != null) {
-                ActionButton("Continue", variant = ButtonVariant.Primary, size = ControlSize.Large, fills = true, pending = adder.adding == address) {
-                    adder.add(address, null)
-                }
+                ActionButton(
+                    "Continue", variant = ButtonVariant.Primary, size = ControlSize.Large, fills = true, pending = adder.adding == address,
+                    onClick = ::continueWithAddress,
+                )
             }
             is McpServerAdder.Step.Key -> Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                 ActionButton("Back", size = ControlSize.Large, margin = beside(end = 8.dp)) { adder.back() }
@@ -182,14 +182,17 @@ fun McpServerAddSheet(query: String = "") {
                     "Add", variant = ButtonVariant.Primary, size = ControlSize.Large, pending = adder.adding != null, disabled = key.isBlank(),
                 ) { addWithKey(step) }
             }
-            is McpServerAdder.Step.Added -> ActionButton("Done", variant = ButtonVariant.Primary, size = ControlSize.Large, fills = true, onClick = ::done)
+            is McpServerAdder.Step.Added -> ActionButton("Done", variant = ButtonVariant.Primary, size = ControlSize.Large, fills = true) { close() }
             else -> Unit
         }
     }
 }
 
 @Composable
-private fun Pick(search: String, onSearch: (String) -> Unit, address: String?, known: List<KnownMcpServer>, adder: McpServerAdder) {
+private fun Pick(
+    search: String, onSearch: (String) -> Unit, name: String, onName: (String) -> Unit, address: String?,
+    known: List<KnownMcpServer>, adder: McpServerAdder, continueWithAddress: () -> Unit,
+) {
     val palette = LocalPalette.current
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
@@ -197,9 +200,17 @@ private fun Pick(search: String, onSearch: (String) -> Unit, address: String?, k
         McpServerText.search, search, onSearch, Modifier.fillMaxWidth(), icon = if (address == null) Symbol.Search else Symbol.Link,
         size = ControlSize.Large, clearable = true, focusRequester = focus,
         keyboardOptions = plainKeyboard.copy(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Go),
-        onSubmit = { address?.let { adder.add(it, null) } },
+        onSubmit = continueWithAddress,
     )
     if (address != null) {
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            SheetLabel("Name")
+            InputField(
+                McpServerAdder.hostName(address), name, onName, Modifier.fillMaxWidth(), size = ControlSize.Large,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go), onSubmit = continueWithAddress,
+            )
+            McpServerRow.slugOf(name)?.let { AgentName("mcp__${it}__…") }
+        }
         Text("Your gateway reaches it there, and signs in or asks you for a key if it needs one.", size = 12.5f, color = palette.mutedForeground)
         return
     }
@@ -259,9 +270,9 @@ private fun KeyFields(caption: String?, key: String, onKey: (String) -> Unit, he
     }
 }
 
-/** What an MCP server that was just added is called by agents, and its tools. */
+/** The tools of an MCP server that was just added. */
 @Composable
-private fun Added(id: String, slug: String, onSlug: (String) -> Unit) {
+private fun Added(id: String) {
     val mcpServers = LocalStore.current.gateway.mcpServers
     val palette = LocalPalette.current
     val mcpServer = mcpServers.mcpServer(id)
@@ -269,13 +280,7 @@ private fun Added(id: String, slug: String, onSlug: (String) -> Unit) {
         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { Spinner(color = palette.mutedForeground) }
         return
     }
-    LaunchedEffect(mcpServer.id) { onSlug(mcpServer.slug) }
     Text(mcpServer.toolsText, size = 13f, color = palette.mutedForeground)
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        SheetLabel("Name agents see")
-        InputField(mcpServer.slug, slug, onSlug, Modifier.fillMaxWidth(), size = ControlSize.Large, monospaced = true, keyboardOptions = plainKeyboard)
-        SlugExample(mcpServer, slug)
-    }
     if (mcpServer.groups.isEmpty()) return
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         SheetLabel("Tool permissions")
@@ -287,31 +292,23 @@ private fun Added(id: String, slug: String, onSlug: (String) -> Unit) {
     }
 }
 
-/** Names an MCP server, for the user and for the agents. */
+/** Names an MCP server, which names it for agents too. */
 @Composable
 fun McpServerRenameSheet(mcpServer: McpServerRow) {
     val mcpServers = LocalStore.current.gateway.mcpServers
     val close = LocalCloseModal.current
     var name by remember(mcpServer.id) { mutableStateOf(mcpServer.name) }
-    var slug by remember(mcpServer.id) { mutableStateOf(mcpServer.slug) }
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
     fun save() {
-        mcpServers.rename(mcpServer, name, slug)
+        mcpServers.rename(mcpServer, name)
         close()
     }
     McpServerSheetFrame("Rename ${mcpServer.name}") {
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             SheetLabel("Name")
             InputField(mcpServer.name, name, { name = it }, Modifier.fillMaxWidth(), size = ControlSize.Large, focusRequester = focus, onSubmit = ::save)
-        }
-        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            SheetLabel("Name agents see")
-            InputField(
-                mcpServer.slug, slug, { slug = it }, Modifier.fillMaxWidth(), size = ControlSize.Large, monospaced = true,
-                keyboardOptions = plainKeyboard.copy(imeAction = ImeAction.Done), onSubmit = ::save,
-            )
-            SlugExample(mcpServer, slug)
+            AgentName(mcpServer.example(name))
         }
         ActionButton("Save", variant = ButtonVariant.Primary, size = ControlSize.Large, fills = true, onClick = ::save)
     }
