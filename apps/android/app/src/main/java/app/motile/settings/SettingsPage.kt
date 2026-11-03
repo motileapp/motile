@@ -61,7 +61,8 @@ import app.motile.ui.rememberMenuState
 /** One section of the settings as a list of the system's groups, scrolled to the group a search picked. */
 @Composable
 fun SettingsPage(section: SettingsSection) {
-    if (section == SettingsSection.Proxy) return ProxyPage()
+    if (section == SettingsSection.AgentGateway) return AgentGatewayPage()
+    if (section == SettingsSection.McpGateway) return McpGatewayPage()
     val store = LocalStore.current
     val navigator = LocalSettingsNavigator.current
     var edited by remember { mutableStateOf<EditedAccount?>(null) }
@@ -84,7 +85,7 @@ fun SettingsPage(section: SettingsSection) {
             SettingsSection.TextGeneration -> textGeneration(store, navigator)
             SettingsSection.PullRequests -> pullRequests(store)
             SettingsSection.Integrations -> integrations(store)
-            SettingsSection.Proxy, SettingsSection.Keyboard -> Unit
+            SettingsSection.AgentGateway, SettingsSection.McpGateway, SettingsSection.Keyboard -> Unit
         }
     }
     ConfirmsRemoval(removal) { removal = null }
@@ -187,7 +188,7 @@ private fun SettingsGroups.agentAccounts(store: AppStore, edit: (Server, AgentAc
             for (account in server.agentAccounts.filter { it.agent in installed && it.pin == null }) row {
                 AccountRow(
                     account, isDefault = server.isDefault(account),
-                    edit = { if (account.proxy) store.openSettings(SettingsSection.Proxy) else edit(server, account) },
+                    edit = { if (account.gateway) store.openSettings(SettingsSection.AgentGateway) else edit(server, account) },
                     makeDefault = { store.makeAgentAccountDefault(account, server) }, remove = { remove(Removal.OfAccount(account, server)) },
                 )
             }
@@ -200,21 +201,21 @@ private fun SettingsGroups.agentAccounts(store: AppStore, edit: (Server, AgentAc
     }
 }
 
-/** An account: pressed it opens to change, held it offers the same, making it its agent's default and its removal. The proxy's opens the proxy's page and is only made default. */
+/** An account: pressed it opens to change, held it offers the same, making it its agent's default and its removal. The gateway's opens the gateway's page and is only made default. */
 @Composable
 private fun AccountRow(account: AgentAccount, isDefault: Boolean, edit: () -> Unit, makeDefault: () -> Unit, remove: () -> Unit) {
     val menu = rememberMenuState()
     val description = if (isDefault) "Default · ${account.settingsDescription}" else account.settingsDescription
     Box(Modifier.pressPosition(menu)) {
-        SettingsPressRow(edit, onLongClick = { menu.openAtPress() }.takeIf { !account.proxy || !isDefault }) {
-            SettingsItem(account.settingsTitle, description, proxied = account.proxy) {
+        SettingsPressRow(edit, onLongClick = { menu.openAtPress() }.takeIf { !account.gateway || !isDefault }) {
+            SettingsItem(account.settingsTitle, description, proxied = account.gateway) {
                 Box(Modifier.size(SettingsTile.size.dp), contentAlignment = Alignment.Center) { AgentIcon(account.agent, size = SettingsTile.symbolSize) }
             }
         }
         MenuPopup(menu) {
-            if (!account.proxy) item("Edit", Symbol.Pencil, run = edit)
+            if (!account.gateway) item("Edit", Symbol.Pencil, run = edit)
             if (!isDefault) item("Make Default", Symbol.CircleCheck, run = makeDefault)
-            if (account.proxy) return@MenuPopup
+            if (account.gateway) return@MenuPopup
             divider()
             item("Remove Account", Symbol.Trash2, destructive = true, run = remove)
         }

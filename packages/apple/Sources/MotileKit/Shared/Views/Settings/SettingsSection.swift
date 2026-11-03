@@ -4,7 +4,7 @@ import Foundation
 enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
     /// In the order they are reached for: what the client is, then what it works with, and the
     /// keys last.
-    case general, accounts, servers, proxy, projects, pullRequests, textGeneration, integrations, keyboard
+    case general, accounts, servers, agentGateway, mcpGateway, projects, pullRequests, textGeneration, integrations, keyboard
 
     var id: String { rawValue }
 
@@ -18,7 +18,8 @@ enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
         case .general: "General"
         case .keyboard: "Keybindings"
         case .servers: "Servers"
-        case .proxy: "Proxy"
+        case .agentGateway: "Agent Gateway"
+        case .mcpGateway: "MCP Gateway"
         case .accounts: "Providers"
         case .projects: "Projects"
         case .textGeneration: "Text Generation"
@@ -32,7 +33,8 @@ enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
         case .general: .slidersHorizontal
         case .keyboard: .keyboard
         case .servers: .server
-        case .proxy: .waypoints
+        case .agentGateway: .waypoints
+        case .mcpGateway: .plug
         case .accounts: .bot
         case .projects: .folder
         case .textGeneration: .pencilLine
@@ -67,9 +69,11 @@ struct SettingsEntry: Identifiable, Hashable {
         SettingsEntry(id: "servers", title: "Servers", section: .servers, keywords: "add remove unlink unlinked delete copies machine agents connected"),
         SettingsEntry(id: "continue-limits", title: "Continue after usage limits", section: .servers, keywords: "rate limit reset resume quota wait"),
         SettingsEntry(id: "continue-restarts", title: "Continue after restarts", section: .servers, keywords: "restart update crash resume interrupted"),
-        SettingsEntry(id: "proxy", title: "Proxy", section: .proxy, keywords: "add remove replace enroll docker unbind image volume code connected"),
-        SettingsEntry(id: "proxy-accounts", title: "Accounts", section: .proxy, keywords: "claude codex sign in priority accounts pool limits next"),
-        SettingsEntry(id: "proxy-log", title: "Log", section: .proxy, keywords: "requests errors capture captured headers body"),
+        SettingsEntry(id: "gateway", title: "Gateway", section: .agentGateway, keywords: "add remove replace enroll docker unbind image volume code connected"),
+        SettingsEntry(id: "gateway-accounts", title: "Accounts", section: .agentGateway, keywords: "claude codex sign in priority accounts pool limits next"),
+        SettingsEntry(id: "gateway-log", title: "Log", section: .agentGateway, keywords: "requests errors capture captured headers body"),
+        SettingsEntry(id: "mcp-servers", title: "MCP Servers", section: .mcpGateway, keywords: "mcp tools connectors linear github notion sentry"),
+        SettingsEntry(id: "mcp-activity", title: "Activity", section: .mcpGateway, keywords: "calls tools log errors"),
         SettingsEntry(id: "projects", title: "Projects", section: .projects, keywords: "add remove folder icon setup worktree script"),
         SettingsEntry(id: "merged", title: "Mark the thread done after merge or close", section: .pullRequests, keywords: "merge close finished"),
         SettingsEntry(id: "worktrees", title: "Remove the thread's worktree after merge", section: .pullRequests, keywords: "merge pushed branch clean up"),

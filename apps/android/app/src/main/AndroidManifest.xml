@@ -43,6 +43,7 @@
                 <data android:host="auth" />
                 <data android:host="linear" />
                 <data android:host="ricrac" />
+                <data android:host="mcp" />
             </intent-filter>
         </activity>
 

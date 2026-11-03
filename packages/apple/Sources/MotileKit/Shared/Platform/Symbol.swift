@@ -77,6 +77,7 @@ enum Symbol: String {
     case image = "\u{e0f6}"
     case images = "\u{e5c4}"
     case info = "\u{e0f9}"
+    case keyRound = "\u{e4a3}"
     case keyboard = "\u{e284}"
     case layers = "\u{e529}"
     /// Linear's logo, which Lucide doesn't have.
@@ -103,6 +104,7 @@ enum Symbol: String {
     case pencil = "\u{e1f9}"
     case pencilLine = "\u{e4f0}"
     case play = "\u{e13c}"
+    case plug = "\u{e37f}"
     case plus = "\u{e13d}"
     case refreshCw = "\u{e145}"
     /// Ricrac's logo, which Lucide doesn't have.

@@ -63,8 +63,9 @@ sealed interface SettingsRoute {
     data class BranchNames(val serverID: String) : SettingsRoute
     data object AddProject : SettingsRoute
     data class ProjectIcon(val projectID: String) : SettingsRoute
-    data object ProxyLog : SettingsRoute
-    data class ProxyRequest(val entry: Long) : SettingsRoute
+    data object GatewayLog : SettingsRoute
+    data class GatewayRequest(val entry: Long) : SettingsRoute
+    data object McpServerActivity : SettingsRoute
 }
 
 /** The pages pushed over the settings' list, kept while the command panel covers the settings so that they come back as they were. */
@@ -193,8 +194,9 @@ private fun RoutePage(route: SettingsRoute) {
         is SettingsRoute.BranchNames -> BranchNamesPage(route.serverID)
         SettingsRoute.AddProject -> CommandPanel(LocalStore.current.addProjectPage, inStack = true, onLeave = LocalSettingsNavigator.current.pop)
         is SettingsRoute.ProjectIcon -> CommandPanel(PanelPage.Icon(route.projectID), inStack = true, onLeave = LocalSettingsNavigator.current.pop)
-        SettingsRoute.ProxyLog -> ProxyLogPage()
-        is SettingsRoute.ProxyRequest -> ProxyRequestPage(route.entry)
+        SettingsRoute.GatewayLog -> GatewayLogPage()
+        is SettingsRoute.GatewayRequest -> GatewayRequestPage(route.entry)
+        SettingsRoute.McpServerActivity -> McpServerActivityPage()
     }
 }
 
@@ -219,7 +221,7 @@ fun SettingsBar(title: String, trailing: (@Composable () -> Unit)? = null) {
 
 private val sectionGroups = listOf(
     listOf(SettingsSection.General),
-    listOf(SettingsSection.Accounts, SettingsSection.Proxy, SettingsSection.Servers, SettingsSection.Projects),
+    listOf(SettingsSection.Accounts, SettingsSection.Servers, SettingsSection.AgentGateway, SettingsSection.McpGateway, SettingsSection.Projects),
     listOf(SettingsSection.PullRequests, SettingsSection.TextGeneration),
     listOf(SettingsSection.Integrations),
 )

@@ -419,7 +419,7 @@ impl Composer {
             Some(_) => {
                 words(&store.composer_model_label().unwrap_or_default(), window)
                     + if store.composer_proxied() {
-                        crate::ui::proxy_mark_width(ControlSize::Regular.text_size())
+                        crate::ui::gateway_mark_width(ControlSize::Regular.text_size())
                     } else {
                         0.
                     }

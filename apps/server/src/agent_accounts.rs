@@ -1,12 +1,12 @@
 //! The agents' accounts on this server. An agent's CLI keeps its sign-in in a folder, so each
 //! account is a folder: `CLAUDE_CONFIG_DIR` for Claude Code, `CODEX_HOME` for Codex, or none for
 //! the CLI's usual one. An agent's first account is its default. While the server's account has a
-//! proxy, each agent also has a Proxy account, which the server makes and keeps as it is.
+//! gateway, each agent also has a Gateway account, which the server makes and keeps as it is.
 
 use std::path::{Path, PathBuf};
 
 use anyhow::bail;
-use motile_protocol::proxy_wire::ProxyAccount;
+use motile_protocol::gateway_wire::GatewayAccount;
 use motile_protocol::wire::{Agent, AgentAccount, Variable};
 
 use crate::agents::environment::Environment;
@@ -21,8 +21,8 @@ const LOCAL: [&str; 3] = ["log", "memories", "tmp"];
 const SHARED: [&str; 9] =
     ["sessions", "archived_sessions", "sqlite", "shell_snapshots", "worktrees", "skills", "plugins", "cache", "logs"];
 
-/// What the Proxy accounts are called.
-pub const PROXY_NAME: &str = "Proxy";
+/// What the Gateway accounts are called.
+pub const GATEWAY_NAME: &str = "Gateway";
 
 /// The id of the account a server starts with, in the CLI's usual folder.
 pub fn usual_id(agent: Agent) -> &'static str {
@@ -43,64 +43,64 @@ pub fn usual_account(agent: Agent) -> AgentAccount {
         variables: vec![],
         email: None,
         plan: None,
-        proxy: false,
+        gateway: false,
         pin: None,
     }
 }
 
-/// The id of the agent's Proxy account.
-pub fn proxy_id(agent: Agent) -> &'static str {
+/// The id of the agent's Gateway account.
+pub fn gateway_id(agent: Agent) -> &'static str {
     match agent {
-        Agent::Claude => "proxy-claude",
-        Agent::Codex => "proxy-codex",
+        Agent::Claude => "gateway-claude",
+        Agent::Codex => "gateway-codex",
     }
 }
 
-/// The account through which the server's account's proxy serves the agent, which keeps its
+/// The account through which the server's account's gateway serves the agent, which keeps its
 /// things in a folder of its own in `folder`.
-pub fn proxy_account(agent: Agent, folder: &Path) -> AgentAccount {
+pub fn gateway_account(agent: Agent, folder: &Path) -> AgentAccount {
     AgentAccount {
-        id: proxy_id(agent).to_string(),
+        id: gateway_id(agent).to_string(),
         agent,
-        name: PROXY_NAME.to_string(),
+        name: GATEWAY_NAME.to_string(),
         folder: folder.join(usual_id(agent)).to_string_lossy().into_owned(),
         shares_sessions: false,
         variables: vec![],
         email: None,
         plan: None,
-        proxy: true,
+        gateway: true,
         pin: None,
     }
 }
 
-/// The Proxy account whose threads are pinned to one of the proxy's accounts.
-pub fn pinned_account(account: &ProxyAccount, folder: &Path) -> AgentAccount {
+/// The Gateway account whose threads are pinned to one of the gateway's accounts.
+pub fn pinned_account(account: &GatewayAccount, folder: &Path) -> AgentAccount {
     AgentAccount {
-        id: format!("{}:{}", proxy_id(account.agent), account.id),
+        id: format!("{}:{}", gateway_id(account.agent), account.id),
         name: account.name.clone(),
         email: account.email.clone(),
         plan: account.plan.clone(),
         pin: Some(account.id.clone()),
-        ..proxy_account(account.agent, folder)
+        ..gateway_account(account.agent, folder)
     }
 }
 
-/// The accounts with the proxy's while the server's account has one: a Proxy account for each agent,
-/// which places its threads itself, and one pinned to each of the proxy's `accounts`, all keeping
-/// their folders in `folder`. They keep their places, and go when the account has no proxy.
-pub fn with_proxy(mut accounts: Vec<AgentAccount>, proxy: Option<(&Path, &[ProxyAccount])>) -> Vec<AgentAccount> {
-    let Some((folder, pool)) = proxy else {
-        accounts.retain(|account| !account.proxy);
+/// The accounts with the gateway's while the server's account has one: a Gateway account for each agent,
+/// which places its threads itself, and one pinned to each of the gateway's `accounts`, all keeping
+/// their folders in `folder`. They keep their places, and go when the account has no gateway.
+pub fn with_gateway(mut accounts: Vec<AgentAccount>, gateway: Option<(&Path, &[GatewayAccount])>) -> Vec<AgentAccount> {
+    let Some((folder, pool)) = gateway else {
+        accounts.retain(|account| !account.gateway);
         return with_every_agent(accounts);
     };
     let made: Vec<AgentAccount> = [Agent::Claude, Agent::Codex]
         .into_iter()
         .flat_map(|agent| {
             let pinned = pool.iter().filter(move |account| account.agent == agent);
-            std::iter::once(proxy_account(agent, folder)).chain(pinned.map(|account| pinned_account(account, folder)))
+            std::iter::once(gateway_account(agent, folder)).chain(pinned.map(|account| pinned_account(account, folder)))
         })
         .collect();
-    accounts.retain(|account| !account.proxy || made.iter().any(|kept| kept.id == account.id));
+    accounts.retain(|account| !account.gateway || made.iter().any(|kept| kept.id == account.id));
     for account in made {
         match accounts.iter_mut().find(|kept| kept.id == account.id) {
             Some(kept) => *kept = account,
@@ -150,8 +150,8 @@ pub fn checked(mut account: AgentAccount, accounts: &[AgentAccount]) -> anyhow::
     if !account.id.is_empty() && existing.is_none() {
         bail!("That account is no longer on your server.");
     }
-    if account.proxy || existing.is_some_and(|existing| existing.proxy) {
-        bail!("Your proxy's account can't be changed.");
+    if account.gateway || existing.is_some_and(|existing| existing.gateway) {
+        bail!("Your gateway's account can't be changed.");
     }
     keep_sensitive_values(&mut account, existing)?;
     if existing.is_some_and(|existing| existing.agent != account.agent) {
@@ -218,8 +218,8 @@ pub fn signing_in(mut account: AgentAccount, accounts: &[AgentAccount]) -> anyho
         variable.name = variable.name.trim().to_string();
     }
     let existing = accounts.iter().find(|kept| kept.id == account.id && !account.id.is_empty());
-    if account.proxy || existing.is_some_and(|existing| existing.proxy) {
-        bail!("Your proxy signs its own accounts in.");
+    if account.gateway || existing.is_some_and(|existing| existing.gateway) {
+        bail!("Your gateway signs its own accounts in.");
     }
     keep_sensitive_values(&mut account, existing)?;
     if !account.folder.is_empty() && !account.folder.starts_with('/') && !account.folder.starts_with("~/") {
@@ -352,7 +352,7 @@ mod tests {
             variables: vec![],
             email: None,
             plan: None,
-            proxy: false,
+            gateway: false,
             pin: None,
         }
     }
@@ -391,30 +391,30 @@ mod tests {
     }
 
     #[test]
-    fn the_proxy_accounts_are_there_while_the_account_has_a_proxy_and_keep_their_place() {
-        let folder = Path::new("/data/proxy");
+    fn the_gateway_accounts_are_there_while_the_account_has_a_gateway_and_keep_their_place() {
+        let folder = Path::new("/data/gateway");
         let work = account("work", Agent::Claude, "Work", "~/.claude-work");
-        let accounts = with_proxy(with_every_agent(vec![work]), Some((folder, &[])));
-        assert_eq!(ids(&accounts), ["work", "codex", "proxy-claude", "proxy-codex"]);
-        assert_eq!(accounts[2].folder, "/data/proxy/claude");
-        assert_eq!(accounts[3].folder, "/data/proxy/codex");
-        assert!(accounts[2].proxy && accounts[2].name == "Proxy");
+        let accounts = with_gateway(with_every_agent(vec![work]), Some((folder, &[])));
+        assert_eq!(ids(&accounts), ["work", "codex", "gateway-claude", "gateway-codex"]);
+        assert_eq!(accounts[2].folder, "/data/gateway/claude");
+        assert_eq!(accounts[3].folder, "/data/gateway/codex");
+        assert!(accounts[2].gateway && accounts[2].name == "Gateway");
 
-        let accounts = made_default(accounts, "proxy-codex").unwrap();
+        let accounts = made_default(accounts, "gateway-codex").unwrap();
         assert_eq!(
-            ids(&with_proxy(accounts.clone(), Some((folder, &[])))),
-            ["work", "proxy-codex", "codex", "proxy-claude"]
+            ids(&with_gateway(accounts.clone(), Some((folder, &[])))),
+            ["work", "gateway-codex", "codex", "gateway-claude"]
         );
-        assert_eq!(ids(&with_proxy(accounts, None)), ["work", "codex"]);
+        assert_eq!(ids(&with_gateway(accounts, None)), ["work", "codex"]);
 
-        let only_proxy = vec![proxy_account(Agent::Claude, folder), proxy_account(Agent::Codex, folder)];
-        assert_eq!(ids(&with_proxy(only_proxy, None)), ["claude", "codex"]);
+        let only_gateway = vec![gateway_account(Agent::Claude, folder), gateway_account(Agent::Codex, folder)];
+        assert_eq!(ids(&with_gateway(only_gateway, None)), ["claude", "codex"]);
     }
 
     #[test]
-    fn each_of_the_proxys_accounts_has_a_proxy_account_pinned_to_it_while_it_is_there() {
-        let folder = Path::new("/data/proxy");
-        let pooled = |id: &str, agent| ProxyAccount {
+    fn each_of_the_gateways_accounts_has_a_gateway_account_pinned_to_it_while_it_is_there() {
+        let folder = Path::new("/data/gateway");
+        let pooled = |id: &str, agent| GatewayAccount {
             id: id.into(),
             agent,
             name: format!("{id}@b.c"),
@@ -422,46 +422,46 @@ mod tests {
             plan: Some("Max 20x".into()),
             priority: 0,
             enabled: true,
-            status: motile_protocol::proxy_wire::AccountStatus::Ready,
+            status: motile_protocol::gateway_wire::AccountStatus::Ready,
             windows: vec![],
             reset_credits: 0,
             threads: 0,
             next: false,
         };
         let pool = [pooled("org-1", Agent::Claude), pooled("acct-1", Agent::Codex), pooled("org-2", Agent::Claude)];
-        let accounts = with_proxy(with_every_agent(vec![]), Some((folder, &pool)));
+        let accounts = with_gateway(with_every_agent(vec![]), Some((folder, &pool)));
         assert_eq!(
             ids(&accounts),
             [
                 "claude",
                 "codex",
-                "proxy-claude",
-                "proxy-claude:org-1",
-                "proxy-claude:org-2",
-                "proxy-codex",
-                "proxy-codex:acct-1"
+                "gateway-claude",
+                "gateway-claude:org-1",
+                "gateway-claude:org-2",
+                "gateway-codex",
+                "gateway-codex:acct-1"
             ]
         );
         let pinned = &accounts[3];
-        assert_eq!((pinned.name.as_str(), pinned.pin.as_deref(), pinned.proxy), ("org-1@b.c", Some("org-1"), true));
-        assert_eq!(pinned.folder, "/data/proxy/claude", "it runs where the Proxy account does");
+        assert_eq!((pinned.name.as_str(), pinned.pin.as_deref(), pinned.gateway), ("org-1@b.c", Some("org-1"), true));
+        assert_eq!(pinned.folder, "/data/gateway/claude", "it runs where the Gateway account does");
         assert_eq!(
-            ids(&with_proxy(accounts, Some((folder, &pool[..1])))),
-            ["claude", "codex", "proxy-claude", "proxy-claude:org-1", "proxy-codex"]
+            ids(&with_gateway(accounts, Some((folder, &pool[..1])))),
+            ["claude", "codex", "gateway-claude", "gateway-claude:org-1", "gateway-codex"]
         );
     }
 
     #[test]
-    fn a_proxy_account_is_never_changed_signed_in_or_made_by_a_client() {
-        let accounts = with_proxy(with_every_agent(vec![]), Some((Path::new("/data/proxy"), &[])));
+    fn a_gateway_account_is_never_changed_signed_in_or_made_by_a_client() {
+        let accounts = with_gateway(with_every_agent(vec![]), Some((Path::new("/data/gateway"), &[])));
         let mut renamed = accounts[2].clone();
         renamed.name = "Mine".into();
         assert!(checked(renamed.clone(), &accounts).is_err());
-        renamed.proxy = false;
+        renamed.gateway = false;
         assert!(checked(renamed.clone(), &accounts).is_err());
         assert!(signing_in(renamed, &accounts).is_err());
         let mut new = account("", Agent::Claude, "Another", "~/.claude-another");
-        new.proxy = true;
+        new.gateway = true;
         assert!(checked(new, &accounts).is_err());
     }
 

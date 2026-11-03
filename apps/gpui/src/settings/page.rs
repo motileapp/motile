@@ -10,12 +10,13 @@ use motile_core::link::State;
 use motile_protocol::wire::{Agent, AgentAccount, ContinueSettings, PullRequestSettings};
 
 use super::account_sheet::AccountSheet;
+use super::agent_gateway::AgentGatewayPage;
 use super::keybindings::KeybindingsPage;
 use super::layout::{
     Cut, END_ROOM, GROUP_GAP, INSET, PAGE_PADDING, TRAILING_GAP, Targets, column, footed_label, group, label,
     large_outset, more, note, proxied_label, row, switch_row, target,
 };
-use super::proxy::ProxyPage;
+use super::mcp_gateway::McpGatewayPage;
 use crate::format;
 use crate::models::{self, AgentAccountExt, Project, Server, agent_name, new_account};
 use crate::sidebar::{AppUpdateRow, ServerUpdateStatus};
@@ -107,7 +108,8 @@ pub struct SettingsPage {
     account: Option<Entity<AccountSheet>>,
     removal: Option<Removal>,
     keybindings: Option<Entity<KeybindingsPage>>,
-    proxy: Option<Entity<ProxyPage>>,
+    agent_gateway: Option<Entity<AgentGatewayPage>>,
+    mcp_gateway: Option<Entity<McpGatewayPage>>,
     scroll: ScrollHandle,
     /// Where the page scrolls on its way to what a search picked.
     scrolling: Option<Tween>,
@@ -128,7 +130,8 @@ impl SettingsPage {
             account: None,
             removal: None,
             keybindings: None,
-            proxy: None,
+            agent_gateway: None,
+            mcp_gateway: None,
             scroll: ScrollHandle::new(),
             scrolling: None,
             _subscriptions: subscriptions,
@@ -504,7 +507,7 @@ impl SettingsPage {
             let is_default = server.is_default_account(account);
             let make_default = (!is_default).then(|| self.make_default(server, account));
             let remove = Self::ask_removal(&page, Removal::Account(Box::new((account.clone(), server.clone()))));
-            let editable = !account.proxy;
+            let editable = !account.gateway;
             let menu = (editable || make_default.is_some()).then(|| {
                 more(("account-menu", index * 1000 + place), "What to do with the account", move |_, _| {
                     let (edit, remove) = (edit.clone(), remove.clone());
@@ -523,7 +526,7 @@ impl SettingsPage {
             let description = if is_default { format!("Default · {description}") } else { description };
             let leading = vec![
                 logos::agent_icon(account.agent, IconSize::Md, cx).into_any_element(),
-                proxied_label(account.settings_title(), Some(description), account.proxy, cx),
+                proxied_label(account.settings_title(), Some(description), account.gateway, cx),
             ];
             rows.push(row(leading, menu.into_iter().map(IntoElement::into_any_element).collect()).into_any_element());
             rows.push(divider_on(Surface::Card, cx).into_any_element());
@@ -737,9 +740,14 @@ impl SettingsPage {
         groups
     }
 
-    fn proxy(&mut self, cx: &mut Context<Self>) -> Entity<ProxyPage> {
+    fn agent_gateway(&mut self, cx: &mut Context<Self>) -> Entity<AgentGatewayPage> {
         let store = self.store.clone();
-        self.proxy.get_or_insert_with(|| cx.new(|cx| ProxyPage::new(store, cx))).clone()
+        self.agent_gateway.get_or_insert_with(|| cx.new(|cx| AgentGatewayPage::new(store, cx))).clone()
+    }
+
+    fn mcp_gateway(&mut self, cx: &mut Context<Self>) -> Entity<McpGatewayPage> {
+        let store = self.store.clone();
+        self.mcp_gateway.get_or_insert_with(|| cx.new(|cx| McpGatewayPage::new(store, cx))).clone()
     }
 
     fn keybindings(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Entity<KeybindingsPage> {
@@ -857,7 +865,8 @@ impl Render for SettingsPage {
             SettingsSection::TextGeneration => self.text_generation(cx),
             SettingsSection::PullRequests => self.pull_requests(cx),
             SettingsSection::Integrations => self.integrations(cx),
-            SettingsSection::Proxy => vec![self.proxy(cx).into_any_element()],
+            SettingsSection::AgentGateway => vec![self.agent_gateway(cx).into_any_element()],
+            SettingsSection::McpGateway => vec![self.mcp_gateway(cx).into_any_element()],
         };
         let keybindings = (section == SettingsSection::Keyboard).then(|| self.keybindings(window, cx));
         if let Some(target) = self.store.read(cx).settings.target.clone() {

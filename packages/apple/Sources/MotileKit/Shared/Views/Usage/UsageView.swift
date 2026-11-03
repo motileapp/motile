@@ -270,10 +270,10 @@ struct UsageContent: View {
             Group {
                 switch model.tab {
                 case .limits:
-                    // The proxy's accounts are among the limits while it is followed.
+                    // The gateway's accounts are among the limits while it is followed.
                     VStack(alignment: .leading, spacing: 0) { limits }
-                        .onAppear { store.watchProxy(true) }
-                        .onDisappear { store.watchProxy(false) }
+                        .onAppear { store.watchGateway(true) }
+                        .onDisappear { store.watchGateway(false) }
                 case .cost: spending(.cost)
                 case .tokens: spending(.tokens)
                 }

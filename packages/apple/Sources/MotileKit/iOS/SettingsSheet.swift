@@ -68,8 +68,10 @@ struct SettingsSheet: View {
 
     private func page(_ section: SettingsSection) -> some View {
         Group {
-            if section == .proxy {
-                ProxySettings()
+            if section == .agentGateway {
+                AgentGatewaySettings()
+            } else if section == .mcpGateway {
+                McpGatewaySettings()
             } else {
                 SettingsPage(section: section)
             }

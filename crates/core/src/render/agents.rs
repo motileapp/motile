@@ -142,9 +142,9 @@ pub struct AgentView {
     /// The account's name, when its agent has more than one.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub account: Option<String>,
-    /// It runs through the account's proxy, which the proxy's symbol after the account says.
+    /// It runs through the account's gateway, which the gateway's symbol after the account says.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
-    pub proxy: bool,
+    pub gateway: bool,
 }
 
 /// How many of `count` agents stand side by side as avatars: all of four or fewer, else three
@@ -237,7 +237,7 @@ pub fn starting(item: &Item, call: &ToolCall, threads: &HashMap<String, ThreadSt
             .and_then(|on| on.model.as_deref())
             .map(|model| short_model_name(model).unwrap_or(model).to_string()),
         account: runs_on.and_then(|on| on.account.clone()),
-        proxy: runs_on.is_some_and(|on| on.proxy),
+        gateway: runs_on.is_some_and(|on| on.gateway),
     })
 }
 
@@ -306,7 +306,7 @@ pub fn noticed(item: &Item, notice: &AgentNotice) -> AgentView {
         agent: Some(notice.agent),
         model: None,
         account: None,
-        proxy: false,
+        gateway: false,
     }
 }
 
@@ -505,7 +505,7 @@ mod tests {
             agent: Agent::Codex,
             model: None,
             account: None,
-            proxy: false,
+            gateway: false,
             thread_id: Some("c1".into()),
         }));
         assert_eq!(alone(&item).unwrap().detail, "Working");
@@ -615,7 +615,7 @@ mod tests {
             agent: Agent::Codex,
             model: None,
             account: None,
-            proxy: false,
+            gateway: false,
             thread_id: Some("c1".into()),
         }));
         item

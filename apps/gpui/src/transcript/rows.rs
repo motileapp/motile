@@ -1316,11 +1316,11 @@ const CARD_LIGHT: f32 = 4.;
 const CARD_ABOVE: f32 = 4. + CARD_LIGHT - LIGHT_GAP;
 const CARD_BELOW: f32 = 10. + CARD_LIGHT - LIGHT_GAP;
 
-/// The second line of an agent's row: what it runs on, with the proxy's symbol after it where it
-/// runs through the proxy, then what it does or said.
+/// The second line of an agent's row: what it runs on, with the gateway's symbol after it where it
+/// runs through the gateway, then what it does or said.
 fn agent_line(agent: &AgentRow) -> Div {
     let said = if agent.detail.is_empty() && agent.runs_on.is_empty() { &agent.label } else { &agent.detail };
-    crate::ui::proxied_line(&agent.runs_on, agent.proxy, said, 12.)
+    crate::ui::proxied_line(&agent.runs_on, agent.gateway, said, 12.)
 }
 
 /// When the thread's agent was told, for what it was told; else how long the agent has worked
@@ -1867,7 +1867,7 @@ fn handoff_row(from: &HandoffLabel, to: &HandoffLabel, ctx: &RowContext, window:
         (text.into(), runs)
     };
     let width = |end: &HandoffLabel, (text, runs): &(SharedString, Vec<TextRun>), window: &mut Window| {
-        let mark = if end.proxy { crate::ui::proxy_mark_width(12.) } else { 0. };
+        let mark = if end.gateway { crate::ui::gateway_mark_width(12.) } else { 0. };
         f32::from(window.text_system().shape_line(text.clone(), px(12.), runs, None).width).ceil() + mark
     };
     let (from_text, to_text) = (text(from), text(to));
@@ -1876,7 +1876,7 @@ fn handoff_row(from: &HandoffLabel, to: &HandoffLabel, ctx: &RowContext, window:
     let room = (ctx.width - line_gap * 4. - fixed).max(0.);
     let (from_width, to_width) = fitted(from_width, to_width, room);
     let end = |end: &HandoffLabel, (text, runs): (SharedString, Vec<TextRun>), width: f32| {
-        let label = crate::ui::proxied(StyledText::new(text).with_runs(runs), end.proxy, 12.);
+        let label = crate::ui::proxied(StyledText::new(text).with_runs(runs), end.gateway, 12.);
         div()
             .flex()
             .flex_none()

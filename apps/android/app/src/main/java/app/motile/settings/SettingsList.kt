@@ -58,7 +58,7 @@ import app.motile.ui.Text
 import app.motile.ui.TextArea
 import app.motile.ui.ThemeDivider
 import app.motile.ui.pressable
-import app.motile.ui.ProxyMark
+import app.motile.ui.GatewayMark
 import app.motile.ui.proxied
 import kotlinx.coroutines.delay
 
@@ -75,6 +75,8 @@ class SettingsGroup(
     val also: List<String>,
     val header: (@Composable () -> Unit)?,
     val footer: String?,
+    /** A footer of its own, drawn in the footer's place. */
+    val footerContent: (@Composable () -> Unit)?,
     /** What went wrong, said in the footer's place in the destructive colour. */
     val failure: String?,
     val rows: List<@Composable () -> Unit>,
@@ -93,13 +95,14 @@ class SettingsGroups {
         footer: String? = null,
         failure: String? = null,
         headerContent: (@Composable () -> Unit)? = null,
+        footerContent: (@Composable () -> Unit)? = null,
         bare: Boolean = false,
         rows: SettingsRows.() -> Unit,
     ) {
         val built = SettingsRows().apply(rows).rows
-        if (built.isEmpty() && footer == null && failure == null) return
+        if (built.isEmpty() && footer == null && footerContent == null && failure == null) return
         val shownHeader = headerContent ?: header?.let { title -> @Composable { GroupHeader(title) } }
-        groups += SettingsGroup(id, also, shownHeader, footer, failure, built, bare)
+        groups += SettingsGroup(id, also, shownHeader, footer, footerContent, failure, built, bare)
     }
 
     /** Said on a page with nothing to set yet. */
@@ -185,6 +188,11 @@ private fun Group(group: SettingsGroup, lit: Boolean) {
                 }
             }
         }
+        val footerContent = group.footerContent
+        if (group.failure == null && footerContent != null) {
+            Box(Modifier.padding(start = rowPadding, end = rowPadding, top = 7.dp)) { footerContent() }
+            return@Column
+        }
         (group.failure ?: group.footer)?.let {
             val color = if (group.failure == null) palette.mutedForeground else palette.destructive
             Text(it, Modifier.padding(start = rowPadding, end = rowPadding, top = 7.dp), size = NOTE_TEXT, color = color)
@@ -267,7 +275,7 @@ fun RowScope.SettingsItem(
     description: String,
     truncates: TextOverflow = TextOverflow.Ellipsis,
     lines: Int = 1,
-    /** What the title names runs through the proxy, which its symbol after it says. */
+    /** What the title names runs through the gateway, which its symbol after it says. */
     proxied: Boolean = false,
     footer: (@Composable () -> Unit)? = null,
     picture: (@Composable () -> Unit)? = null,
@@ -276,7 +284,7 @@ fun RowScope.SettingsItem(
     Column(Modifier.weight(1f).padding(vertical = 2.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
         if (proxied) {
             val color = LocalPalette.current.foreground
-            Text(AnnotatedString(title).proxied(true), size = ROW_TEXT, color = color, maxLines = 1, inlineContent = ProxyMark.content(color, ROW_TEXT))
+            Text(AnnotatedString(title).proxied(true), size = ROW_TEXT, color = color, maxLines = 1, inlineContent = GatewayMark.content(color, ROW_TEXT))
         } else {
             RowText(title, color = LocalPalette.current.foreground, maxLines = 1)
         }

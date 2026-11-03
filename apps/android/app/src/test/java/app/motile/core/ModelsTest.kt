@@ -133,22 +133,22 @@ class ModelsTest {
     }
 
     @Test
-    fun theProxyAccountLeavesItsNameToTheSymbol() {
+    fun theGatewayAccountLeavesItsNameToTheSymbol() {
         val info = mapOf(
             "protocol" to 31,
             "agent_accounts" to listOf(
                 mapOf("id" to "work", "agent" to "claude", "name" to "Work"),
-                mapOf("id" to "proxy", "agent" to "claude", "name" to "Proxy", "proxy" to true),
-                mapOf("id" to "seat", "agent" to "claude", "name" to "Seat", "proxy" to true, "pin" to "a"),
+                mapOf("id" to "gateway", "agent" to "claude", "name" to "Gateway", "gateway" to true),
+                mapOf("id" to "seat", "agent" to "claude", "name" to "Seat", "gateway" to true, "pin" to "a"),
             ),
             "models" to listOf(mapOf("id" to "opus", "name" to "Opus 5.5", "agent" to "claude")),
         )
         val server = Server(json("id" to "s", "name" to "studio", "state" to "connected", "info" to info))
         val opus = server.models.first()
         assertEquals("Opus 5.5 · Work", server.label(opus, "work"))
-        assertEquals("Opus 5.5", server.label(opus, "proxy"))
+        assertEquals("Opus 5.5", server.label(opus, "gateway"))
         assertEquals("Opus 5.5 · Seat", server.label(opus, "seat"))
-        assertEquals(listOf(false, true, true), listOf("work", "proxy", "seat").map { server.runsThroughProxy(it, Agent.Claude) })
+        assertEquals(listOf(false, true, true), listOf("work", "gateway", "seat").map { server.runsThroughGateway(it, Agent.Claude) })
     }
 
     @Test
@@ -205,9 +205,9 @@ class ModelsTest {
         val bare = agent()?.content
         assertEquals("Needs approval", bare?.line?.text)
         assertNull(bare?.card)
-        val proxied = agent("runs_on" to "Opus 5.5", "proxy" to true, "detail" to "Reading a.rs")?.content
-        assertEquals("Opus 5.5 Proxy · Reading a.rs", proxied?.line?.text)
-        assertEquals("Proxy · Needs approval", agent("proxy" to true)?.content?.line?.text)
+        val proxied = agent("runs_on" to "Opus 5.5", "gateway" to true, "detail" to "Reading a.rs")?.content
+        assertEquals("Opus 5.5 Gateway · Reading a.rs", proxied?.line?.text)
+        assertEquals("Gateway · Needs approval", agent("gateway" to true)?.content?.line?.text)
     }
 
     @Test

@@ -4,12 +4,13 @@
 mod account;
 mod attachments;
 mod commands;
+pub mod gateway;
 mod git;
 mod history;
 pub mod integrations;
 pub mod linear;
+pub mod mcp_servers;
 mod projects;
-pub mod proxy;
 pub mod pull_requests;
 pub mod ricrac;
 pub mod settings;
@@ -372,12 +373,13 @@ pub struct Store {
     /// The usage is open over the window, as a route of its own.
     pub shows_usage: bool,
     pub usage: usage::Usage,
-    pub proxy: proxy::Proxy,
+    pub gateway: gateway::Gateway,
+    pub mcp_servers: mcp_servers::McpServers,
     _events: Option<Task<()>>,
     /// The pages behind and ahead of this one, for Go Back and Go Forward.
     history: history::PageHistory,
     _page_watch: Subscription,
-    _proxy_views: Subscription,
+    _gateway_views: Subscription,
 }
 
 impl Store {
@@ -486,11 +488,12 @@ impl Store {
             jump_hint_task: None,
             shows_usage: false,
             usage: usage::Usage::default(),
-            proxy: proxy::Proxy::default(),
+            gateway: gateway::Gateway::default(),
+            mcp_servers: mcp_servers::McpServers::default(),
             _events: None,
             history: history::PageHistory::default(),
             _page_watch: Self::watch_page(cx),
-            _proxy_views: cx.observe_self(|store, _| store.follow_proxy_views()),
+            _gateway_views: cx.observe_self(|store, _| store.follow_gateway_views()),
         };
         store.load_preferences();
         store.show_sending_message(cx);
@@ -793,7 +796,7 @@ impl Store {
             Event::ThreadSearch { query, searching, matches } => {
                 self.apply_thread_search(sidebar::MessageSearch::new(query, searching, matches))
             }
-            Event::Proxy { proxy } => self.apply_proxy(*proxy),
+            Event::Gateway { gateway } => self.apply_gateway(*gateway),
         }
     }
 
@@ -1188,16 +1191,17 @@ impl Store {
         Some(label.unwrap_or_else(|| model.name.clone()))
     }
 
-    /// The composer's model runs through the proxy.
+    /// The composer's model runs through the gateway.
     pub fn composer_proxied(&self) -> bool {
         let Some(model) = self.composer_model() else { return false };
-        self.composer_server().is_some_and(|server| server.runs_through_proxy(self.composer_account_id(), model.agent))
+        self.composer_server()
+            .is_some_and(|server| server.runs_through_gateway(self.composer_account_id(), model.agent))
     }
 
     /// What the model picker lists: each account with its agent's models, titled with the
     /// account's name when its agent has more than one. Each agent's account that a new thread
-    /// would start on comes first. The Proxy account's title is its agent's alone, which the
-    /// proxy's symbol follows.
+    /// would start on comes first. The Gateway account's title is its agent's alone, which the
+    /// gateway's symbol follows.
     pub fn composer_choices(&self) -> Vec<(String, AgentAccount, Vec<ModelInfo>)> {
         let Some(server) = self.composer_server() else { return Vec::new() };
         let models = self.composer_models();
@@ -1216,7 +1220,7 @@ impl Store {
                 let several = server.accounts(account.agent).len() > 1;
                 let name = agent_name(account.agent);
                 let title =
-                    if several && !account.proxy { format!("{name} · {}", account.name) } else { name.to_string() };
+                    if several && !account.gateway { format!("{name} · {}", account.name) } else { name.to_string() };
                 let offered = models.iter().filter(|model| model.runs_under(account)).cloned().collect();
                 (title, account.clone(), offered)
             })
@@ -1604,7 +1608,7 @@ fn device_name() -> String {
 }
 
 /// `MOTILE_SERVER_ADDRS`, `key=address,…`: each device at an address of its own, as the dev
-/// stack's proxy is.
+/// stack's gateway is.
 fn direct_addrs() -> std::collections::HashMap<String, String> {
     let addresses = std::env::var("MOTILE_SERVER_ADDRS").unwrap_or_default();
     addresses

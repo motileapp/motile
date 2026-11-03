@@ -32,6 +32,7 @@ pub(crate) const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/0018_sync.sql"),
     include_str!("../migrations/0019_thread_parents.sql"),
     include_str!("../migrations/0020_ui_photos.sql"),
+    include_str!("../migrations/0021_gateway.sql"),
 ];
 
 pub struct Store {
@@ -974,7 +975,8 @@ fn migrate(connection: &Connection) -> anyhow::Result<()> {
 }
 
 /// Accounts were once named after their names. Each gets a UUID, and its threads, usage and
-/// models go with it. The usual accounts keep their agents' names.
+/// models go with it. The usual accounts keep their agents' names, and the Gateway accounts the
+/// ids the server gives them.
 fn renumber_agent_accounts(connection: &Connection) -> anyhow::Result<()> {
     let setting = |name: &str| -> rusqlite::Result<Option<String>> {
         connection.query_row("SELECT value FROM settings WHERE name = ?1", [name], |row| row.get(0)).optional()
@@ -985,7 +987,8 @@ fn renumber_agent_accounts(connection: &Connection) -> anyhow::Result<()> {
     for account in &mut accounts {
         let Some(id) = account["id"].as_str().map(str::to_string) else { continue };
         let agent: Agent = serde_json::from_value(account["agent"].clone())?;
-        if id == crate::agent_accounts::usual_id(agent) || uuid::Uuid::parse_str(&id).is_ok() {
+        let through_gateway = account["gateway"].as_bool() == Some(true) || account["proxy"].as_bool() == Some(true);
+        if through_gateway || id == crate::agent_accounts::usual_id(agent) || uuid::Uuid::parse_str(&id).is_ok() {
             continue;
         }
         let new = uuid::Uuid::new_v4().to_string();
@@ -1155,5 +1158,48 @@ mod tests {
         let again: Vec<serde_json::Value> =
             serde_json::from_str(&Store::open(&path).unwrap().setting("agent_accounts").unwrap()).unwrap();
         assert_eq!(again[1]["id"], work, "an account keeps its id from then on");
+    }
+
+    #[test]
+    fn the_proxys_accounts_become_the_gateways_with_their_threads_sessions_and_folders() {
+        let folder = tempfile::tempdir().unwrap();
+        let path = folder.path().join("motile.db");
+        {
+            let store = Store::open(&path).unwrap();
+            let accounts = r#"[{"id":"claude","agent":"claude","name":"Default","folder":""},
+                {"id":"proxy-claude","agent":"claude","name":"Proxy","folder":"/data/proxy/proxy-claude","proxy":true},
+                {"id":"proxy-claude:org-1","agent":"claude","name":"Proxy","folder":"/data/proxy/proxy-claude","proxy":true}]"#;
+            store.set_setting("agent_accounts", Some(accounts)).unwrap();
+            store.connection().execute_batch(
+                "INSERT INTO threads (id, title, title_source, project_id, cwd, agent, access, created_at, updated_at, agent_account)
+                 VALUES ('t', 'Title', 'user', 'p', '/tmp', 'claude', 'full', 0, 0, 'proxy-claude:org-1');
+                 INSERT INTO thread_sessions (thread_id, agent, sessions_folder, account)
+                 VALUES ('t', 'claude', '/data/proxy/proxy-claude', 'proxy-claude');
+                 PRAGMA user_version = 20;",
+            ).unwrap();
+        }
+        let store = Store::open(&path).unwrap();
+        let accounts: Vec<serde_json::Value> = serde_json::from_str(&store.setting("agent_accounts").unwrap()).unwrap();
+        let moved: Vec<(&str, &str, &str, bool)> = accounts
+            .iter()
+            .map(|account| {
+                let field = |name: &str| account[name].as_str().unwrap_or_default();
+                (field("id"), field("name"), field("folder"), account["gateway"].as_bool().unwrap_or_default())
+            })
+            .collect();
+        assert_eq!(
+            moved,
+            [
+                ("claude", "Default", "", false),
+                ("gateway-claude", "Gateway", "/data/gateway/gateway-claude", true),
+                ("gateway-claude:org-1", "Gateway", "/data/gateway/gateway-claude", true),
+            ]
+        );
+        assert_eq!(store.load_threads().unwrap()[0].thread.agent_account, "gateway-claude:org-1");
+        let (sessions_folder, account): (String, String) = store
+            .connection()
+            .query_row("SELECT sessions_folder, account FROM thread_sessions", [], |row| Ok((row.get(0)?, row.get(1)?)))
+            .unwrap();
+        assert_eq!((sessions_folder.as_str(), account.as_str()), ("/data/gateway/gateway-claude", "gateway-claude"));
     }
 }

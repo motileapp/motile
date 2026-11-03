@@ -5,9 +5,9 @@ pub mod auth_api;
 #[cfg(feature = "auth-client")]
 pub mod auth_client;
 pub mod frame;
+pub mod gateway_wire;
 pub mod identity;
 pub mod media;
-pub mod proxy_wire;
 pub mod select;
 pub mod skills;
 #[cfg(feature = "auth-client")]
@@ -15,8 +15,8 @@ pub mod tls;
 pub mod wire;
 
 pub const ALPN: &[u8] = b"motile/1";
-/// What servers and clients speak to the account's proxy.
-pub const PROXY_ALPN: &[u8] = b"motile-proxy/1";
+/// What servers and clients speak to the account's gateway.
+pub const GATEWAY_ALPN: &[u8] = b"motile-gateway/1";
 pub const PROTOCOL_VERSION: u32 = 36;
 pub const DEFAULT_AUTH_URL: &str = "https://auth.motile.app";
 /// Where the auth server sends the browser once a sign-in is done; the client owns this scheme.

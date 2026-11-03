@@ -197,10 +197,10 @@ impl Store {
         server.label(model, account)
     }
 
-    /// Whether the thread's model runs through the proxy.
+    /// Whether the thread's model runs through the gateway.
     pub fn model_proxied(&self, thread: &ThreadInfo) -> bool {
         let account = Some(thread.agent_account.as_str()).filter(|account| !account.is_empty());
-        self.server(Some(&thread.server_id)).is_some_and(|server| server.runs_through_proxy(account, thread.agent))
+        self.server(Some(&thread.server_id)).is_some_and(|server| server.runs_through_gateway(account, thread.agent))
     }
 
     fn bare_model(&self, thread: &ThreadInfo) -> String {

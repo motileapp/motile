@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
-"""Stand-in for Anthropic and OpenAI, for the proxy of the dev apps.
+"""Stand-in for Anthropic and OpenAI, for the gateway of the dev apps.
 
     scripts/fake-upstream <port>
 
 It signs in any Claude Code account with the code pasted, as the organisation of that name, but a
 code with "wrong" in it, and approves a Codex account at once. Each account reads a session and a weekly
 window, and Messages and Codex's responses answer with a short stream and the headers of a limit.
+
+It is two MCPs for connectors too: a tracker at /mcp/tracker, which signs in with OAuth and approves
+at once, and docs at /mcp/docs, which takes any key without "wrong" in it.
 """
 
 import base64
@@ -13,6 +16,7 @@ import json
 import sys
 import time
 from datetime import datetime, timezone
+from urllib.parse import parse_qs, urlencode
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 HOUR = 3600
@@ -32,6 +36,33 @@ def used(name):
     """An account's session and weekly use, the same for a name every run."""
     seed = sum(name.encode())
     return 10 + seed % 80, 20 + seed * 7 % 70
+
+
+TRACKER_TOOLS = [
+    {"name": "list_issues", "title": "List issues", "description": "Lists the open issues, by team or assignee.",
+     "inputSchema": {"type": "object", "properties": {
+         "team": {"type": "string", "description": "The team's key."},
+         "state": {"type": "string", "enum": ["open", "started", "done"]}}},
+     "annotations": {"readOnlyHint": True}},
+    {"name": "get_issue", "description": "One issue with its comments.",
+     "inputSchema": {"type": "object", "required": ["id"], "properties": {"id": {"type": "string"}}},
+     "annotations": {"readOnlyHint": True}},
+    {"name": "create_issue", "description": "Files a new issue.",
+     "inputSchema": {"type": "object", "required": ["title"], "properties": {
+         "title": {"type": "string"}, "priority": {"type": "integer", "default": 3},
+         "urgent": {"type": "boolean"}}}},
+    {"name": "update_issue", "description": "Changes an issue's state, assignee or priority.",
+     "inputSchema": {"type": "object", "required": ["id"], "properties": {
+         "id": {"type": "string"}, "state": {"type": "string", "enum": ["open", "started", "done"]}}}},
+    {"name": "comment", "description": "Comments on an issue.",
+     "inputSchema": {"type": "object", "required": ["id", "body"], "properties": {
+         "id": {"type": "string"}, "body": {"type": "string"}}}},
+]
+DOCS_TOOLS = [
+    {"name": "search_docs", "description": "Searches a library's documentation.",
+     "inputSchema": {"type": "object", "required": ["query"], "properties": {"query": {"type": "string"}}},
+     "annotations": {"readOnlyHint": True}},
+]
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -57,9 +88,45 @@ class Handler(BaseHTTPRequestHandler):
         token = (self.headers.get("authorization") or "").removeprefix("Bearer ")
         return token.split("-")[1] if token.startswith("claude-") else "codex"
 
+    def base(self):
+        return f"http://{self.headers.get('host')}"
+
+    def mcp(self, raw, tools, name):
+        message = json.loads(raw or b"{}")
+        method, id = message.get("method"), message.get("id")
+        if method == "initialize":
+            result = {"protocolVersion": "2025-06-18", "capabilities": {"tools": {}},
+                      "serverInfo": {"name": name.lower(), "title": name}}
+        elif method == "tools/list":
+            result = {"tools": tools}
+        elif method == "tools/call":
+            params = message.get("params", {})
+            text = f"{params.get('name')} did it with {json.dumps(params.get('arguments', {}))}."
+            answer = {"jsonrpc": "2.0", "id": id, "result": {"content": [{"type": "text", "text": text}]}}
+            return self.send(200, f"event: message\ndata: {json.dumps(answer)}\n\n", kind="text/event-stream")
+        else:
+            return self.send(202, "")
+        self.send(200, {"jsonrpc": "2.0", "id": id, "result": result}, [("mcp-session-id", "session")])
+
     def do_GET(self):
         now = time.time()
         path = self.path.split("?")[0]
+        if path == "/.well-known/oauth-protected-resource/mcp/tracker":
+            return self.send(200, {"resource": f"{self.base()}/mcp/tracker",
+                                   "authorization_servers": [f"{self.base()}/mcp-auth"]})
+        if path == "/.well-known/oauth-authorization-server/mcp-auth":
+            base = self.base()
+            return self.send(200, {"issuer": f"{base}/mcp-auth", "authorization_endpoint": f"{base}/mcp-auth/authorize",
+                                   "token_endpoint": f"{base}/mcp-auth/token",
+                                   "registration_endpoint": f"{base}/mcp-auth/register"})
+        if path == "/mcp-auth/authorize":
+            query = parse_qs(self.path.split("?", 1)[1] if "?" in self.path else "")
+            back = query["redirect_uri"][0] + "?" + urlencode({"code": "approved", "state": query["state"][0]})
+            self.send_response(302)
+            self.send_header("location", back)
+            self.send_header("content-length", "0")
+            self.end_headers()
+            return
         if path == "/prices":
             return self.send(200, {"claude-opus-4-5": {"litellm_provider": "anthropic", "input_cost_per_token": 5e-6,
                                                        "output_cost_per_token": 2.5e-5}})
@@ -89,6 +156,21 @@ class Handler(BaseHTTPRequestHandler):
         now = time.time()
         path = self.path.split("?")[0]
         raw = self.body()
+        if path == "/mcp/tracker":
+            if not (self.headers.get("authorization") or "").startswith("Bearer tracker-"):
+                challenge = f'Bearer resource_metadata="{self.base()}/.well-known/oauth-protected-resource/mcp/tracker"'
+                return self.send(401, {"error": "invalid_token"}, [("www-authenticate", challenge)])
+            return self.mcp(raw, TRACKER_TOOLS, "Tracker")
+        if path == "/mcp/docs":
+            key = self.headers.get("authorization") or ""
+            if not key or "wrong" in key:
+                return self.send(401, {"error": "Give a key."})
+            return self.mcp(raw, DOCS_TOOLS, "Docs")
+        if path == "/mcp-auth/register":
+            return self.send(201, {"client_id": "motile-dev"})
+        if path == "/mcp-auth/token":
+            return self.send(200, {"access_token": f"tracker-{int(now)}", "refresh_token": "tracker-refresh",
+                                   "expires_in": 8 * HOUR})
         if path == "/v1/oauth/token":
             body = json.loads(raw)
             org = body.get("code") or body.get("refresh_token", "").removeprefix("refresh-")

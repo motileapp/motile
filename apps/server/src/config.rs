@@ -53,14 +53,25 @@ impl DataDir {
         self.0.join("media")
     }
 
-    /// The account's clients and its proxy, as the auth server last listed them.
+    /// The account's clients and its gateway, as the auth server last listed them.
     pub fn account_keys(&self) -> PathBuf {
         self.0.join("account-keys.json")
     }
 
-    /// The folders of the Proxy accounts, where their agents keep their things.
-    pub fn proxy_accounts(&self) -> PathBuf {
-        self.0.join("proxy")
+    /// The folders of the Gateway accounts, where their agents keep their things. Those the proxy's
+    /// accounts kept, before it was the gateway, move there.
+    pub fn gateway_accounts(&self) -> PathBuf {
+        let folder = self.0.join("gateway");
+        let old = self.0.join("proxy");
+        if old.is_dir() && !folder.exists() {
+            for agent in ["claude", "codex"] {
+                let _ = std::fs::rename(old.join(format!("proxy-{agent}")), old.join(format!("gateway-{agent}")));
+            }
+            if let Err(error) = std::fs::rename(&old, &folder) {
+                tracing::warn!("couldn't move the proxy's accounts to the gateway's: {error:#}");
+            }
+        }
+        folder
     }
 
     pub fn device_key(&self) -> anyhow::Result<DeviceKey> {

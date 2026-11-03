@@ -61,8 +61,8 @@ struct LimitsView: View {
                 if let plan = section.plan {
                     Chip(plan)
                 }
-                if section.proxy {
-                    Chip("Proxy", icon: .waypoints)
+                if section.gateway {
+                    Chip("Gateway", icon: .waypoints)
                 }
                 if beside { account(section) }
                 Spacer(minLength: 0)

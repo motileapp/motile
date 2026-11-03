@@ -97,8 +97,8 @@ pub struct Line {
     pub cost_usd: Option<f64>,
     /// Its part of the cost, from 0 to 1, or of the tokens when nothing has a price.
     pub share: f64,
-    /// An account that runs through the proxy, which its symbol after the name says.
-    pub proxy: bool,
+    /// An account that runs through the gateway, which its symbol after the name says.
+    pub gateway: bool,
 }
 
 fn total(tokens: &Tokens) -> u64 {
@@ -132,7 +132,7 @@ pub fn view(
         let index = lines.iter().position(same).unwrap_or_else(|| {
             let server = server.map(str::to_string);
             let line =
-                Line { name: name.to_string(), agent, server, tokens: 0, cost_usd: None, share: 0.0, proxy: false };
+                Line { name: name.to_string(), agent, server, tokens: 0, cost_usd: None, share: 0.0, gateway: false };
             lines.push(line);
             lines.len() - 1
         });
@@ -190,7 +190,7 @@ pub fn view(
         let pinned = proxied.get(&(server_id.clone(), bucket.agent, account.to_string()));
         let account = if pinned == Some(&false) { agent_name(bucket.agent) } else { account };
         let index = add(&mut accounts, account, Some(bucket.agent), Some(server), bucket);
-        accounts[index].proxy |= pinned.is_some();
+        accounts[index].gateway |= pinned.is_some();
     }
 
     let several = |line: &Line| {
@@ -220,7 +220,7 @@ pub fn view(
     View { starts, agents, models, projects, servers, accounts, ..view }
 }
 
-/// The Proxy account that places its threads itself has no name of its own: it is its agent's.
+/// The Gateway account that places its threads itself has no name of its own: it is its agent's.
 fn agent_name(agent: Agent) -> &'static str {
     match agent {
         Agent::Claude => "Claude Code",
@@ -327,14 +327,14 @@ mod tests {
             ]
         );
 
-        all[0].bucket.account_name = "Proxy".into();
+        all[0].bucket.account_name = "Gateway".into();
         all[1].bucket.account_name = "Work".into();
         let proxied = HashMap::from([
-            (("studio".to_string(), Agent::Claude, "Proxy".to_string()), false),
+            (("studio".to_string(), Agent::Claude, "Gateway".to_string()), false),
             (("studio".to_string(), Agent::Claude, "Work".to_string()), true),
         ]);
         let accounts = view(&all, window, &HashMap::new(), &servers, &proxied).accounts;
-        let named: Vec<_> = accounts.iter().map(|line| (line.name.as_str(), line.proxy)).collect();
+        let named: Vec<_> = accounts.iter().map(|line| (line.name.as_str(), line.gateway)).collect();
         assert_eq!(named, [("Claude Code", true), ("Work", true), ("Default", false)]);
     }
 

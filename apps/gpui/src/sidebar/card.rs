@@ -120,7 +120,7 @@ impl Sidebar {
         let store = self.store.read(cx);
         let project = store.project(Some(&thread.project_id)).map(|project| project.seen(thread));
         let server = store.server(Some(&thread.server_id));
-        let card_line = |text: String, middle: bool, through_proxy: bool, icon: AnyElement| {
+        let card_line = |text: String, middle: bool, through_gateway: bool, icon: AnyElement| {
             let shown = div().min_w_0().text_size(px(12.)).whitespace_nowrap().overflow_hidden();
             let shown = if middle { shown.text_ellipsis_middle() } else { shown.text_ellipsis() };
             div()
@@ -130,7 +130,7 @@ impl Sidebar {
                 .gap(px(8.))
                 .text_color(c.muted_foreground)
                 .child(icon)
-                .child(proxied(shown.child(dotted(text, c)), through_proxy, 12.))
+                .child(proxied(shown.child(dotted(text, c)), through_gateway, 12.))
                 .into_any_element()
         };
         let line = |text: String, middle: bool, icon: AnyElement| card_line(text, middle, false, icon);

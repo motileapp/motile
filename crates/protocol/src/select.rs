@@ -1,6 +1,6 @@
 //! Which account a new thread starts on. Of the accounts that can carry it through the next hours
 //! without running dry, the one whose spare quota lapses soonest: first to expire, first spent. The
-//! proxy ranks its accounts with it, from what it measures; the clients rank a server's own accounts.
+//! gateway ranks its accounts with it, from what it measures; the clients rank a server's own accounts.
 
 use crate::wire::{Agent, LimitWindow};
 
@@ -28,7 +28,7 @@ pub struct Window {
     /// Seconds.
     pub length: f64,
     /// Points per hour what already runs on the account spends in it: its threads and anything
-    /// outside the proxy.
+    /// outside the gateway.
     pub spend: f64,
     /// Points per hour the new thread would spend in it.
     pub thread: f64,

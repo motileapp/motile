@@ -2394,6 +2394,34 @@ dependencies = [
 ]
 
 [[package]]
+name = "motile-gateway"
+version = "0.1.267"
+dependencies = [
+ "anyhow",
+ "axum",
+ "base64 0.23.1",
+ "chacha20poly1305",
+ "chrono",
+ "futures-util",
+ "getrandom 0.3.4",
+ "hex",
+ "hkdf 0.12.4",
+ "iroh",
+ "motile-protocol",
+ "reqwest",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tempfile",
+ "tokio",
+ "tokio-tungstenite",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+]
+
+[[package]]
 name = "motile-openui"
 version = "0.1.267"
 dependencies = [
@@ -2422,34 +2450,6 @@ dependencies = [
  "serde_json",
  "sha2 0.10.9",
  "tokio",
-]
-
-[[package]]
-name = "motile-proxy"
-version = "0.1.267"
-dependencies = [
- "anyhow",
- "axum",
- "base64 0.23.1",
- "chacha20poly1305",
- "chrono",
- "futures-util",
- "getrandom 0.3.4",
- "hex",
- "hkdf 0.12.4",
- "iroh",
- "motile-protocol",
- "reqwest",
- "rusqlite",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "tempfile",
- "tokio",
- "tokio-tungstenite",
- "tracing",
- "tracing-subscriber",
- "uuid",
 ]
 
 [[package]]

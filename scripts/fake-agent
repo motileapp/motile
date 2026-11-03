@@ -230,8 +230,8 @@ prompts = queue.Queue()
 answers = queue.Queue()
 
 
-def ask_through_proxy():
-    """On one of the proxy's accounts, sends a request through it as Claude Code does, so that the proxy
+def ask_through_gateway():
+    """On one of the gateway's accounts, sends a request through it as Claude Code does, so that the gateway
     places the thread on one of its accounts."""
     base, token = os.environ.get("ANTHROPIC_BASE_URL", ""), os.environ.get("ANTHROPIC_AUTH_TOKEN", "")
     if not base.startswith("http://127.0.0.1") or not token:
@@ -252,7 +252,7 @@ def read_stdin():
             continue
         message = json.loads(line)
         if message["type"] == "user":
-            ask_through_proxy()
+            ask_through_gateway()
             prompts.put(message)
         if message["type"] == "control_response":
             answers.put(message)

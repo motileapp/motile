@@ -63,7 +63,7 @@ pub struct Server {
     pub roomier_accounts: HashMap<String, HashMap<String, String>>,
     /// What each agent account has used of its limits, by account id.
     pub account_limits: HashMap<String, Vec<motile_core::limits::Row>>,
-    /// The name of the proxy's account whose limits a Proxy account's are, by account id.
+    /// The name of the gateway's account whose limits a Gateway account's are, by account id.
     pub next_accounts: HashMap<String, String>,
     /// Its agents' accounts' ids, the one a new thread would start on first.
     pub accounts_by_room: Vec<String>,
@@ -148,7 +148,7 @@ fn default_account(agent: Agent) -> AgentAccount {
         variables: Vec::new(),
         email: None,
         plan: None,
-        proxy: false,
+        gateway: false,
         pin: None,
     }
 }
@@ -164,14 +164,14 @@ pub fn new_account(agent: Agent) -> AgentAccount {
         variables: Vec::new(),
         email: None,
         plan: None,
-        proxy: false,
+        gateway: false,
         pin: None,
     }
 }
 
 /// What the app asks of an agent's account.
 pub trait AgentAccountExt {
-    /// "Claude Code · Work". The Proxy account has no name of its own to show: the proxy's symbol
+    /// "Claude Code · Work". The Gateway account has no name of its own to show: the gateway's symbol
     /// after its agent's says it.
     fn settings_title(&self) -> String;
     /// Who is signed in, or how it signs in, and its folder: what the settings say of it.
@@ -190,12 +190,12 @@ pub trait AgentAccountExt {
 impl AgentAccountExt for AgentAccount {
     fn settings_title(&self) -> String {
         let agent = agent_name(self.agent);
-        if self.proxy { agent.to_string() } else { format!("{agent} · {}", self.name) }
+        if self.gateway { agent.to_string() } else { format!("{agent} · {}", self.name) }
     }
 
     fn settings_description(&self) -> String {
-        if self.proxy {
-            return "Works with your proxy's logins".into();
+        if self.gateway {
+            return "Your gateway's accounts".into();
         }
         let signed_in = self.email.as_ref().map(|email| match &self.plan {
             Some(plan) => format!("{email} · {plan}"),
@@ -330,7 +330,7 @@ impl Server {
         self.short_model_names.get(&model.id).map_or(model.name.as_str(), String::as_str)
     }
 
-    /// The agent's accounts a person picks from: all but those pinned to one of the proxy's
+    /// The agent's accounts a person picks from: all but those pinned to one of the gateway's
     /// accounts, which only agents pick.
     pub fn accounts(&self, agent: Agent) -> Vec<&AgentAccount> {
         self.agent_accounts.iter().filter(|account| account.agent == agent && account.pin.is_none()).collect()
@@ -377,23 +377,23 @@ impl Server {
         Some((model, roomier.as_str()))
     }
 
-    /// The model's name, with the account's when its agent has more than one. The Proxy account,
-    /// whose threads the proxy places, has no name of its own to show: the proxy's symbol says it.
+    /// The model's name, with the account's when its agent has more than one. The Gateway account,
+    /// whose threads the gateway places, has no name of its own to show: the gateway's symbol says it.
     pub fn label(&self, model: &ModelInfo, account: Option<&str>) -> String {
         let short = self.short_name(model);
         if self.accounts(model.agent).len() < 2 {
             return short.to_string();
         }
         let Some(account) = self.account(account, model.agent) else { return short.to_string() };
-        if account.proxy && account.pin.is_none() {
+        if account.gateway && account.pin.is_none() {
             return short.to_string();
         }
         format!("{short} · {}", account.name)
     }
 
-    /// Whether the account runs through the proxy, which the proxy's symbol after its name says.
-    pub fn runs_through_proxy(&self, account: Option<&str>, agent: Agent) -> bool {
-        self.account(account, agent).is_some_and(|account| account.proxy)
+    /// Whether the account runs through the gateway, which the gateway's symbol after its name says.
+    pub fn runs_through_gateway(&self, account: Option<&str>, agent: Agent) -> bool {
+        self.account(account, agent).is_some_and(|account| account.gateway)
     }
 }
 
@@ -1208,18 +1208,18 @@ mod tests {
     }
 
     #[test]
-    fn the_proxy_account_leaves_its_name_to_the_symbol() {
+    fn the_gateway_account_leaves_its_name_to_the_symbol() {
         let account = |id: &str| AgentAccount { id: id.into(), name: id.into(), ..new_account(Agent::Claude) };
-        let proxy = AgentAccount { proxy: true, ..account("Proxy") };
-        let pinned = AgentAccount { proxy: true, pin: Some("seat".into()), ..account("Seat") };
-        let server = Server { agent_accounts: vec![account("work"), proxy, pinned], ..studio() };
+        let gateway = AgentAccount { gateway: true, ..account("Gateway") };
+        let pinned = AgentAccount { gateway: true, pin: Some("seat".into()), ..account("Seat") };
+        let server = Server { agent_accounts: vec![account("work"), gateway, pinned], ..studio() };
         let opus = model("opus", "");
         assert_eq!(server.label(&opus, Some("work")), "opus · work");
-        assert_eq!(server.label(&opus, Some("Proxy")), "opus");
+        assert_eq!(server.label(&opus, Some("Gateway")), "opus");
         assert_eq!(server.label(&opus, Some("Seat")), "opus · Seat");
-        assert!(!server.runs_through_proxy(Some("work"), Agent::Claude));
-        assert!(server.runs_through_proxy(Some("Proxy"), Agent::Claude));
-        assert!(server.runs_through_proxy(Some("Seat"), Agent::Claude));
+        assert!(!server.runs_through_gateway(Some("work"), Agent::Claude));
+        assert!(server.runs_through_gateway(Some("Gateway"), Agent::Claude));
+        assert!(server.runs_through_gateway(Some("Seat"), Agent::Claude));
     }
 
     #[test]

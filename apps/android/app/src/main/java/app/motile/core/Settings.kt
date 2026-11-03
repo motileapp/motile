@@ -5,7 +5,7 @@ import app.motile.platform.Symbol
 /** A page of the settings, listed in the settings' sidebar. */
 enum class SettingsSection(val raw: String) {
     // In the order they are reached for: what the client is, then what it works with, and the keys last.
-    General("general"), Accounts("accounts"), Proxy("proxy"), Servers("servers"), Projects("projects"),
+    General("general"), Accounts("accounts"), Servers("servers"), AgentGateway("agentGateway"), McpGateway("mcpGateway"), Projects("projects"),
     PullRequests("pullRequests"), TextGeneration("textGeneration"), Integrations("integrations"), Keyboard("keyboard");
 
     val title: String
@@ -14,7 +14,8 @@ enum class SettingsSection(val raw: String) {
             Keyboard -> "Keybindings"
             Servers -> "Servers"
             Accounts -> "Providers"
-            Proxy -> "Proxy"
+            AgentGateway -> "Agent Gateway"
+            McpGateway -> "MCP Gateway"
             Projects -> "Projects"
             TextGeneration -> "Text Generation"
             PullRequests -> "Pull Requests"
@@ -27,7 +28,8 @@ enum class SettingsSection(val raw: String) {
             Keyboard -> Symbol.Keyboard
             Servers -> Symbol.Server
             Accounts -> Symbol.Bot
-            Proxy -> Symbol.Waypoints
+            AgentGateway -> Symbol.Waypoints
+            McpGateway -> Symbol.Plug
             Projects -> Symbol.Folder
             TextGeneration -> Symbol.PencilLine
             PullRequests -> Symbol.GitPullRequest
@@ -63,11 +65,14 @@ data class SettingsEntry(
             SettingsEntry("manage-new-threads", "Manage new threads automatically", SettingsSection.General, "provider limits usage accounts switch quota rate"),
             SettingsEntry("storage", "Images and videos", SettingsSection.General, "storage cache clear media disk"),
             SettingsEntry("agent-accounts", "Provider Accounts", SettingsSection.Accounts, "agents claude codex sign in account folder subscription plan api key router"),
-            SettingsEntry("proxy", "Proxy", SettingsSection.Proxy, "accounts pool claude codex add remove priority limits"),
-            SettingsEntry("proxy-requests", "Requests", SettingsSection.Proxy, "proxy log capture errors"),
             SettingsEntry("servers", "Servers", SettingsSection.Servers, "add remove unlink unlinked delete copies machine agents connected"),
             SettingsEntry("continue-limits", "Continue after usage limits", SettingsSection.Servers, "rate limit reset resume quota wait"),
             SettingsEntry("continue-restarts", "Continue after restarts", SettingsSection.Servers, "restart update crash resume interrupted"),
+            SettingsEntry("gateway", "Gateway", SettingsSection.AgentGateway, "add remove replace enroll docker unbind image volume code connected"),
+            SettingsEntry("gateway-accounts", "Accounts", SettingsSection.AgentGateway, "claude codex sign in priority accounts pool limits next"),
+            SettingsEntry("gateway-log", "Log", SettingsSection.AgentGateway, "requests errors capture captured headers body"),
+            SettingsEntry("mcp-servers", "MCP Servers", SettingsSection.McpGateway, "mcp tools connectors linear github notion sentry"),
+            SettingsEntry("mcp-activity", "Activity", SettingsSection.McpGateway, "calls tools log errors"),
             SettingsEntry("projects", "Projects", SettingsSection.Projects, "add remove folder icon setup worktree script"),
             SettingsEntry("merged", "Mark the thread done after merge or close", SettingsSection.PullRequests, "merge close finished"),
             SettingsEntry("worktrees", "Remove the thread's worktree after merge", SettingsSection.PullRequests, "merge pushed branch clean up"),

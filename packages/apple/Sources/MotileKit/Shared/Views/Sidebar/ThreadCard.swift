@@ -30,7 +30,7 @@ struct ThreadCard: View {
                     let home = store.server(thread.serverID)?.home ?? ""
                     CardLine(text: ThreadFolderLabel.shortened(thread.cwd, home: home), middle: true) { Image(.folder, size: Self.iconSize) }
                 }
-                let proxied = store.server(thread.serverID)?.runsThroughProxy(thread.agentAccount, of: thread.agent) ?? false
+                let proxied = store.server(thread.serverID)?.runsThroughGateway(thread.agentAccount, of: thread.agent) ?? false
                 CardLine(text: store.modelLabel(of: thread), proxied: proxied) { AgentIcon(agent: thread.agent, size: Self.iconSize) }
                 if let server = store.server(thread.serverID) {
                     CardLine(text: server.name) { Image(.server, size: Self.iconSize) }
@@ -70,7 +70,7 @@ private struct CardLine<Icon: View>: View {
         HStack(spacing: 8) {
             icon()
             Text(dotted: text)
-                .proxyMarked(proxied, fontSize: 12)
+                .gatewayMarked(proxied, fontSize: 12)
                 .font(.ui(size: 12))
                 .lineLimit(1)
                 .truncationMode(middle ? .middle : .tail)

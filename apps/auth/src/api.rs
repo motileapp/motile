@@ -162,7 +162,7 @@ pub async fn create_enroll_token(
         Caller::Web(user) => user,
         Caller::Device(public_key) => {
             let user = linked_user(&state, &public_key).await?;
-            // A server or the proxy can't add devices; only someone signed in can, in a client or on the web.
+            // A server or the gateway can't add devices; only someone signed in can, in a client or on the web.
             if db::device_kind(&state.db, &public_key).await? != Some(DeviceKind::Client) {
                 return Err(AppError::new(StatusCode::FORBIDDEN, "Servers are added from a client."));
             }
@@ -219,7 +219,7 @@ pub async fn enroll(
     };
     let user = db::user_by_id(&state.db, user_id).await?.ok_or_else(expired)?;
 
-    let name = clean(&request.name, if request.kind == DeviceKind::Proxy { "Proxy" } else { "Server" });
+    let name = clean(&request.name, if request.kind == DeviceKind::Gateway { "Gateway" } else { "Server" });
     let platform = clean(&request.platform, "unknown");
     if !db::link_device(&state.db, user.id, &request.public_key, request.kind, &name, &platform).await? {
         return Err(AppError::new(StatusCode::CONFLICT, "This machine can't be linked to the account."));

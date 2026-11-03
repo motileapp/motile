@@ -19,18 +19,20 @@ pub enum SettingsSection {
     PullRequests,
     TextGeneration,
     Integrations,
-    Proxy,
+    AgentGateway,
+    McpGateway,
     Keyboard,
 }
 
 impl SettingsSection {
     /// In the order they are reached for: what the client is, then what it works with, and the
     /// keys last.
-    pub const ALL: [SettingsSection; 9] = [
+    pub const ALL: [SettingsSection; 10] = [
         SettingsSection::General,
         SettingsSection::Accounts,
-        SettingsSection::Proxy,
         SettingsSection::Servers,
+        SettingsSection::AgentGateway,
+        SettingsSection::McpGateway,
         SettingsSection::Projects,
         SettingsSection::PullRequests,
         SettingsSection::TextGeneration,
@@ -48,7 +50,8 @@ impl SettingsSection {
             SettingsSection::TextGeneration => "Text Generation",
             SettingsSection::PullRequests => "Pull Requests",
             SettingsSection::Integrations => "Integrations",
-            SettingsSection::Proxy => "Proxy",
+            SettingsSection::AgentGateway => "Agent Gateway",
+            SettingsSection::McpGateway => "MCP Gateway",
         }
     }
 
@@ -62,7 +65,8 @@ impl SettingsSection {
             SettingsSection::TextGeneration => "pencil-line",
             SettingsSection::PullRequests => "git-pull-request",
             SettingsSection::Integrations => "blocks",
-            SettingsSection::Proxy => "waypoints",
+            SettingsSection::AgentGateway => "waypoints",
+            SettingsSection::McpGateway => "plug",
         }
     }
 }
@@ -81,7 +85,7 @@ pub struct SettingsEntry {
     pub keywords: &'static str,
 }
 
-const ENTRIES: [(&str, &str, SettingsSection, &str); 22] = [
+const ENTRIES: [(&str, &str, SettingsSection, &str); 24] = [
     ("account", "Account", SettingsSection::General, "signed in email sign out"),
     ("updates", "Updates", SettingsSection::General, "version check for updates release"),
     ("appearance", "Theme", SettingsSection::General, "appearance light dark system mode"),
@@ -99,14 +103,6 @@ const ENTRIES: [(&str, &str, SettingsSection, &str); 22] = [
         SettingsSection::Accounts,
         "agents claude codex sign in account folder subscription plan api key router",
     ),
-    ("proxy", "Proxy", SettingsSection::Proxy, "add remove replace enroll docker unbind image version connected"),
-    (
-        "proxy-accounts",
-        "Accounts",
-        SettingsSection::Proxy,
-        "claude codex sign in accounts priority next limits pool rename turn off",
-    ),
-    ("proxy-log", "Log", SettingsSection::Proxy, "requests errors capture captured headers body latency tokens"),
     (
         "servers",
         "Servers",
@@ -120,6 +116,31 @@ const ENTRIES: [(&str, &str, SettingsSection, &str); 22] = [
         SettingsSection::Servers,
         "restart update crash resume interrupted",
     ),
+    (
+        "gateway",
+        "Gateway",
+        SettingsSection::AgentGateway,
+        "add remove replace enroll docker unbind image version connected",
+    ),
+    (
+        "gateway-accounts",
+        "Accounts",
+        SettingsSection::AgentGateway,
+        "claude codex sign in accounts priority next limits pool rename turn off",
+    ),
+    (
+        "gateway-log",
+        "Log",
+        SettingsSection::AgentGateway,
+        "requests errors capture captured headers body latency tokens",
+    ),
+    (
+        "mcp-servers",
+        "MCP Servers",
+        SettingsSection::McpGateway,
+        "mcp tools connectors linear github notion sentry servers",
+    ),
+    ("mcp-activity", "Activity", SettingsSection::McpGateway, "calls tools log errors"),
     ("projects", "Projects", SettingsSection::Projects, "add remove folder icon setup worktree script"),
     ("merged", "Mark the thread done after merge or close", SettingsSection::PullRequests, "merge close finished"),
     (

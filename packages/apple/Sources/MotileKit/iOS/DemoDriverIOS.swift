@@ -21,8 +21,8 @@ import UIKit
 ///     settings <section>|search <text>|pick <group>|close
 ///     appearance light|dark|system
 ///     answer <allow|refuse>             answers the first approval
-///     proxy sign-in claude|codex        starts signing an account in on the proxy
-///     proxy code <code>                 finishes Claude's sign-in with the code
+///     gateway sign-in claude|codex        starts signing an account in on the gateway
+///     gateway code <code>                 finishes Claude's sign-in with the code
 ///     view                              opens the thread's images in the viewer
 ///     branches                          opens the branch picker in the thread's settings
 ///     top                               scrolls the transcript to its start
@@ -171,11 +171,12 @@ enum DemoDriver {
             guard let approval = store.activity.approvals.first else { return }
             store.answer(approval, allow: rest == "allow")
         case "done": store.toggleDone()
-        case "proxy":
+        case "mcp": store.mcpStep = rest
+        case "gateway":
             let words = rest.split(separator: " ", maxSplits: 1).map(String.init)
             switch words.first {
-            case "sign-in": store.startProxySignIn(Agent(rawValue: words.count > 1 ? words[1] : "") ?? .claude)
-            case "code": store.finishProxySignIn(code: words.count > 1 ? words[1] : "")
+            case "sign-in": store.startGatewaySignIn(Agent(rawValue: words.count > 1 ? words[1] : "") ?? .claude)
+            case "code": store.finishGatewaySignIn(code: words.count > 1 ? words[1] : "")
             default: break
             }
         case "tmpaccount":

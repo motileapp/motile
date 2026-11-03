@@ -43,7 +43,7 @@ class MainActivity : ComponentActivity() {
         SignInSession.resumed()
     }
 
-    /** A `motile://` address the browser was sent back to, after a sign-in or connecting Linear or Ricrac. */
+    /** A `motile://` address the browser was sent back to, after a sign-in, connecting Linear or Ricrac, or signing an MCP server in. */
     private fun opened(intent: Intent) {
         val data = intent.data ?: return
         if (data.scheme != "motile") return

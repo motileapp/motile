@@ -122,12 +122,12 @@ impl Drop for Waiting {
     }
 }
 
-/// How the proxy's accounts work, said to an agent that lists the accounts while there is a proxy.
-const PROXY_ACCOUNTS: &str = "Accounts with \"proxy\": true run on your proxy. The one named Proxy, \
-     not pinned, puts each agent on whichever of the proxy's accounts has room for it and moves it when \
-     that account runs out, so agents started on it spread over the proxy's accounts by themselves. A \
-     pinned one is one of the proxy's accounts: an agent started on it stays there, and stops when that \
-     account reaches its limit. Pick Proxy to let it manage the limits, or pin agents to spread work \
+/// How the gateway's accounts work, said to an agent that lists the accounts while there is a gateway.
+const GATEWAY_ACCOUNTS: &str = "Accounts with \"gateway\": true run on your gateway. The one named Gateway, \
+     not pinned, puts each agent on whichever of the gateway's accounts has room for it and moves it when \
+     that account runs out, so agents started on it spread over the gateway's accounts by themselves. A \
+     pinned one is one of the gateway's accounts: an agent started on it stays there, and stops when that \
+     account reaches its limit. Pick Gateway to let it manage the limits, or pin agents to spread work \
      yourself.";
 
 impl Hub {
@@ -164,15 +164,15 @@ impl Hub {
     }
 
     /// The account a thread runs on, as its agent's row names it, and whether it runs through the
-    /// proxy: then the proxy's account it is pinned to, or the one that last answered it.
+    /// gateway: then the gateway's account it is pinned to, or the one that last answered it.
     pub(super) fn shown_account(&self, thread_id: &str, account: &AgentAccount) -> (Option<String>, bool) {
-        if !account.proxy {
+        if !account.gateway {
             return (self.account_name(account), false);
         }
         if account.pin.is_some() {
             return (Some(account.name.clone()), true);
         }
-        let Some(way) = self.proxy.get() else { return (None, true) };
+        let Some(way) = self.gateway.get() else { return (None, true) };
         let placed = way.tunnel.placed(thread_id);
         let name =
             placed.and_then(|id| way.pool().into_iter().find(|pooled| pooled.id == id).map(|pooled| pooled.name));
@@ -186,7 +186,7 @@ impl Hub {
     /// Your server's accounts an agent can start agents on, with their models and how much of
     /// their plans they have used.
     pub async fn accounts_for(self: &Arc<Self>, caller: &str) -> anyhow::Result<Value> {
-        self.follow_proxy().await;
+        self.follow_gateway().await;
         let own = self.thread(caller).await.context("Your thread is no longer on your server.")?;
         let own = self.account_of(&own).id;
         let limits = match self.limits().await {
@@ -225,14 +225,14 @@ impl Hub {
                     "installed": self.environment.executable(account.agent).is_some(),
                     "models": models,
                     "limits": windows,
-                    "proxy": account.proxy,
+                    "gateway": account.gateway,
                     "pinned": account.pin.is_some(),
                 })
             })
             .collect();
-        let has_proxy = accounts.iter().any(|account| account["proxy"] == true);
-        match has_proxy {
-            true => Ok(json!({ "accounts": accounts, "proxy": PROXY_ACCOUNTS })),
+        let has_gateway = accounts.iter().any(|account| account["gateway"] == true);
+        match has_gateway {
+            true => Ok(json!({ "accounts": accounts, "gateway": GATEWAY_ACCOUNTS })),
             false => Ok(json!({ "accounts": accounts })),
         }
     }
@@ -284,8 +284,9 @@ impl Hub {
         let mut stored = self.new_thread(new_thread, &prompt, &[], folder).await?;
         let child_id = stored.thread.id.clone();
         let model = stored.thread.model.clone().map(|model| self.model_name(account.agent, &model).unwrap_or(model));
-        let (shown, proxy) = self.shown_account(&child_id, &account);
-        let runs_on = RunsOn { agent: account.agent, model, account: shown, proxy, thread_id: Some(child_id.clone()) };
+        let (shown, gateway) = self.shown_account(&child_id, &account);
+        let runs_on =
+            RunsOn { agent: account.agent, model, account: shown, gateway, thread_id: Some(child_id.clone()) };
         let tool_id = self.show_started(caller, &text, role, runs_on).await?;
         stored.thread.parent = Some(ThreadParent { thread_id: caller.to_string(), tool_id });
         stored.reports = true;
@@ -677,12 +678,12 @@ impl Hub {
                 .then(|| ((ended - thread.created_at).max(0.0) * 1000.0) as u64),
             workflow: None,
             runs_on: Some(Box::new({
-                let (account, proxy) = self.shown_account(&thread.id, &self.account_of(thread));
+                let (account, gateway) = self.shown_account(&thread.id, &self.account_of(thread));
                 RunsOn {
                     agent: thread.agent,
                     model: state.model.clone().map(|model| self.model_name(thread.agent, &model).unwrap_or(model)),
                     account,
-                    proxy,
+                    gateway,
                     thread_id: Some(thread.id.clone()),
                 }
             })),

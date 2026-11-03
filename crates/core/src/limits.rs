@@ -1,10 +1,10 @@
 //! How much of their plans the agents' accounts have used, from every server, for the Limits tab
-//! of the usage view: a section for each account and each of the proxy's accounts, with a row
+//! of the usage view: a section for each account and each of the gateway's accounts, with a row
 //! for each of its windows. And which account a new thread is better off starting on.
 
 use std::collections::HashMap;
 
-use motile_protocol::proxy_wire::{AccountStatus, ProxyAccount};
+use motile_protocol::gateway_wire::{AccountStatus, GatewayAccount};
 use motile_protocol::select::{self, Candidate, HORIZON, Window};
 use motile_protocol::wire::{Agent, AgentAccount, AgentLimits, LimitWindow, ModelInfo};
 use serde::Serialize;
@@ -16,8 +16,8 @@ const ON_PACE: f64 = 5.0;
 pub struct Read {
     pub server: String,
     pub limits: AgentLimits,
-    /// The server's Proxy account: the proxy's account a new thread would start on.
-    pub proxy: bool,
+    /// The server's Gateway account: the gateway's account a new thread would start on.
+    pub gateway: bool,
 }
 
 #[derive(Serialize, Debug, PartialEq)]
@@ -33,8 +33,8 @@ pub struct Section {
     pub windows: Vec<Row>,
     /// Why there are no windows.
     pub note: Option<String>,
-    /// One of the proxy's accounts.
-    pub proxy: bool,
+    /// One of the gateway's accounts.
+    pub gateway: bool,
 }
 
 #[derive(Serialize, Clone, Debug, PartialEq)]
@@ -72,13 +72,13 @@ pub enum Pace {
 }
 
 /// The sections, Claude Code's first, each account once however many servers have it: the same
-/// email, or, where a server couldn't say who is signed in, the same name. The proxy's `accounts`
+/// email, or, where a server couldn't say who is signed in, the same name. The gateway's `accounts`
 /// come after the servers' of their agent, each once: one a server has too is that server's section,
-/// marked as the proxy's. The servers' Proxy accounts have none: they are the proxy's accounts.
-pub fn sections(reads: Vec<Read>, accounts: &[ProxyAccount], now: f64) -> Vec<Section> {
+/// marked as the gateway's. The servers' Gateway accounts have none: they are the gateway's accounts.
+pub fn sections(reads: Vec<Read>, accounts: &[GatewayAccount], now: f64) -> Vec<Section> {
     let mut sections: Vec<Section> = Vec::new();
     let mut failed: Vec<Vec<String>> = Vec::new();
-    let mut reads: Vec<Read> = reads.into_iter().filter(|read| !read.proxy).collect();
+    let mut reads: Vec<Read> = reads.into_iter().filter(|read| !read.gateway).collect();
     reads.sort_by_key(|read| {
         (read.limits.agent != Agent::Claude, read.limits.error.is_some(), read.limits.windows.is_empty())
     });
@@ -116,7 +116,7 @@ pub fn sections(reads: Vec<Read>, accounts: &[ProxyAccount], now: f64) -> Vec<Se
                 .find(|section| section.agent == account.agent && section.account.as_ref() == Some(email))
         });
         if let Some(section) = shared {
-            section.proxy = true;
+            section.gateway = true;
             if !windows.is_empty() {
                 section.windows = windows;
                 section.note = None;
@@ -131,7 +131,7 @@ pub fn sections(reads: Vec<Read>, accounts: &[ProxyAccount], now: f64) -> Vec<Se
             servers: Vec::new(),
             note: account_note(account, &windows),
             windows,
-            proxy: true,
+            gateway: true,
         });
     }
     sections.sort_by_key(|section| section.agent != Agent::Claude);
@@ -159,12 +159,12 @@ fn section(server: String, limits: AgentLimits, now: f64) -> Section {
         servers: vec![server],
         windows,
         note,
-        proxy: false,
+        gateway: false,
     }
 }
 
-/// Why an account of the proxy shows no windows.
-pub(crate) fn account_note(account: &ProxyAccount, windows: &[Row]) -> Option<String> {
+/// Why an account of the gateway shows no windows.
+pub(crate) fn account_note(account: &GatewayAccount, windows: &[Row]) -> Option<String> {
     if !windows.is_empty() {
         return None;
     }
@@ -299,7 +299,7 @@ impl Accounts<'_> {
         ordered
     }
 
-    /// The accounts a new thread can be put on: all but those pinned to one of the proxy's accounts,
+    /// The accounts a new thread can be put on: all but those pinned to one of the gateway's accounts,
     /// which only an agent that asks for one uses.
     fn offered(&self) -> impl Iterator<Item = &AgentAccount> {
         self.accounts.iter().filter(|account| account.pin.is_none())
@@ -371,11 +371,11 @@ pub fn by_account(accounts: &[AgentAccount], limits: &[AgentLimits], now: f64) -
         .collect()
 }
 
-/// The name of the proxy's account a new thread of each Proxy account would start on, by account id.
+/// The name of the gateway's account a new thread of each Gateway account would start on, by account id.
 pub fn next_accounts(accounts: &[AgentAccount], limits: &[AgentLimits]) -> HashMap<String, String> {
     accounts
         .iter()
-        .filter(|account| account.proxy && account.pin.is_none())
+        .filter(|account| account.gateway && account.pin.is_none())
         .filter_map(|account| Some((account.id.clone(), read(account, limits)?.next_account.clone()?)))
         .collect()
 }
@@ -415,7 +415,7 @@ mod tests {
             error: None,
             next_account: None,
         };
-        Read { server: server.into(), limits, proxy: false }
+        Read { server: server.into(), limits, gateway: false }
     }
 
     #[test]
@@ -530,7 +530,7 @@ mod tests {
             variables: vec![],
             email: None,
             plan: None,
-            proxy: false,
+            gateway: false,
             pin: None,
         }
     }
@@ -573,14 +573,17 @@ mod tests {
     }
 
     #[test]
-    fn a_proxy_account_names_the_proxy_account_its_limits_are_from() {
-        let placing = AgentAccount { proxy: true, ..account("Proxy", Agent::Claude) };
-        let pinned = AgentAccount { proxy: true, pin: Some("org-1".into()), ..account("Work", Agent::Claude) };
+    fn a_gateway_account_names_the_gateway_account_its_limits_are_from() {
+        let placing = AgentAccount { gateway: true, ..account("Gateway", Agent::Claude) };
+        let pinned = AgentAccount { gateway: true, pin: Some("org-1".into()), ..account("Work", Agent::Claude) };
         let accounts = [account("yekta", Agent::Claude), placing, pinned];
         let next =
             |name: &str| AgentLimits { next_account: Some("Stablecog".into()), ..used_by(name, Agent::Claude, vec![]) };
-        let limits = [next("yekta"), next("Proxy"), next("Work")];
-        assert_eq!(next_accounts(&accounts, &limits), HashMap::from([("Proxy".to_string(), "Stablecog".to_string())]));
+        let limits = [next("yekta"), next("Gateway"), next("Work")];
+        assert_eq!(
+            next_accounts(&accounts, &limits),
+            HashMap::from([("Gateway".to_string(), "Stablecog".to_string())])
+        );
     }
 
     const HOUR: f64 = 3600.0;
@@ -696,7 +699,7 @@ mod tests {
     fn accounts_are_ordered_as_a_new_thread_would_choose_them_and_unread_ones_last() {
         let mut accounts = claude(&["yekta", "unread", "work", "spare", "spent"]);
         accounts.insert(1, account("codex", Agent::Codex));
-        accounts.push(AgentAccount { proxy: true, pin: Some("org-1".into()), ..account("pinned", Agent::Claude) });
+        accounts.push(AgentAccount { gateway: true, pin: Some("org-1".into()), ..account("pinned", Agent::Claude) });
         let limits = [
             used_by("pinned", Agent::Claude, vec![session(0.0, 10.0 * 60.0)]),
             used_by("yekta", Agent::Claude, vec![session(10.0, 3.0 * HOUR), weekly(10.0, 5.0 * DAY)]),
@@ -711,12 +714,12 @@ mod tests {
         assert_eq!(
             ordered,
             ["work", "yekta", "spent", "unread", "spare", "codex"],
-            "an account pinned to one of the proxy's is never chosen"
+            "an account pinned to one of the gateway's is never chosen"
         );
     }
 
-    fn proxy_account(name: &str, agent: Agent, email: &str, windows: Vec<LimitWindow>) -> ProxyAccount {
-        ProxyAccount {
+    fn gateway_account(name: &str, agent: Agent, email: &str, windows: Vec<LimitWindow>) -> GatewayAccount {
+        GatewayAccount {
             id: name.into(),
             agent,
             name: name.into(),
@@ -733,36 +736,36 @@ mod tests {
     }
 
     #[test]
-    fn the_proxys_accounts_are_sections_of_their_own_or_mark_a_servers_that_shares_the_account() {
+    fn the_gateways_accounts_are_sections_of_their_own_or_mark_a_servers_that_shares_the_account() {
         let reads = || {
-            let mut through_proxy = read("studio", Agent::Claude, Some("main@b.c"), vec![session(50.0, HOUR)]);
-            through_proxy.limits.account_name = "Proxy".into();
-            through_proxy.proxy = true;
+            let mut through_gateway = read("studio", Agent::Claude, Some("main@b.c"), vec![session(50.0, HOUR)]);
+            through_gateway.limits.account_name = "Gateway".into();
+            through_gateway.gateway = true;
             vec![
                 read("studio", Agent::Claude, Some("a@b.c"), vec![session(20.0, HOUR)]),
                 read("studio", Agent::Codex, Some("x@b.c"), vec![session(20.0, HOUR)]),
-                through_proxy,
+                through_gateway,
             ]
         };
         let accounts = [
-            proxy_account("Codex", Agent::Codex, "c@b.c", vec![session(5.0, HOUR)]),
-            proxy_account("Shared", Agent::Claude, "a@b.c", vec![session(70.0, HOUR)]),
-            proxy_account("Main", Agent::Claude, "main@b.c", vec![]),
-            proxy_account("solo@b.c", Agent::Claude, "solo@b.c", vec![]),
+            gateway_account("Codex", Agent::Codex, "c@b.c", vec![session(5.0, HOUR)]),
+            gateway_account("Shared", Agent::Claude, "a@b.c", vec![session(70.0, HOUR)]),
+            gateway_account("Main", Agent::Claude, "main@b.c", vec![]),
+            gateway_account("solo@b.c", Agent::Claude, "solo@b.c", vec![]),
         ];
         let shown: Vec<_> = sections(reads(), &accounts, 1000.0)
             .into_iter()
             .map(|section| {
                 let used = section.windows.first().map(|row| row.used.clone());
-                (section.name, section.account.unwrap(), section.servers.len(), section.proxy, used, section.note)
+                (section.name, section.account.unwrap(), section.servers.len(), section.gateway, used, section.note)
             })
             .collect();
-        let section = |name: Option<&str>, account: &str, servers, proxy, used: Option<&str>, note: Option<&str>| {
+        let section = |name: Option<&str>, account: &str, servers, gateway, used: Option<&str>, note: Option<&str>| {
             (
                 name.map(String::from),
                 account.to_string(),
                 servers,
-                proxy,
+                gateway,
                 used.map(String::from),
                 note.map(String::from),
             )
@@ -780,7 +783,11 @@ mod tests {
 
         let unknown = sections(reads(), &[], 1000.0);
         let accounts: Vec<_> = unknown.iter().map(|section| section.account.as_deref().unwrap()).collect();
-        assert_eq!(accounts, ["a@b.c", "x@b.c"], "a server's Proxy account is the proxy's, not an account of its own");
+        assert_eq!(
+            accounts,
+            ["a@b.c", "x@b.c"],
+            "a server's Gateway account is the gateway's, not an account of its own"
+        );
     }
 
     #[test]
@@ -809,13 +816,13 @@ mod tests {
     }
 
     #[test]
-    fn the_servers_proxy_accounts_that_read_nothing_are_left_out_rather_than_repeated() {
+    fn the_servers_gateway_accounts_that_read_nothing_are_left_out_rather_than_repeated() {
         let empty = |server: &str| {
-            let mut through_proxy = read(server, Agent::Codex, None, vec![]);
-            through_proxy.limits.account_name = "Proxy".into();
-            through_proxy.limits.error = Some("Your proxy has no Codex account that takes threads.".into());
-            through_proxy.proxy = true;
-            through_proxy
+            let mut through_gateway = read(server, Agent::Codex, None, vec![]);
+            through_gateway.limits.account_name = "Gateway".into();
+            through_gateway.limits.error = Some("Your gateway has no Codex account that takes threads.".into());
+            through_gateway.gateway = true;
+            through_gateway
         };
         let reads =
             vec![read("vibe", Agent::Claude, Some("a@b.c"), vec![session(20.0, HOUR)]), empty("vibe"), empty("ymac")];

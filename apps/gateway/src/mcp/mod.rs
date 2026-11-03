@@ -1,0 +1,560 @@
+//! The account's MCP servers: MCPs the gateway holds the logins of, which every agent of every server
+//! is given, each by its slug. An agent's MCP requests pass through to the MCP server with its login
+//! (`gateway.rs`); the gateway itself only asks one for its tools and for a tool the user tries.
+
+pub mod client;
+pub mod passthrough;
+pub mod sign_in;
+
+use std::sync::RwLock;
+use std::time::Instant;
+
+use anyhow::{Context, bail};
+use motile_protocol::gateway_wire::{McpAdding, McpAuth, McpChange, McpKey, McpServer, McpStatus, McpTool, ToolResult};
+use motile_protocol::now;
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+
+use crate::gateway::Gateway;
+use crate::store::CallRecord;
+use client::{Failure, Session};
+use sign_in::{OAuth, RenewError, SignIns};
+
+/// A login is renewed when it expires within this.
+const RENEW_BEFORE: f64 = 5.0 * 60.0;
+/// What a call keeps of its arguments and its result.
+pub const CALL_KEPT: usize = 64 * 1024;
+/// Never an MCP server's slug: the agents' own MCP is called that.
+const RESERVED: &str = "motile";
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum Login {
+    None,
+    Key { header: String, value: String },
+    OAuth(OAuth),
+}
+
+#[derive(Clone, Debug)]
+pub struct McpEntry {
+    pub id: String,
+    pub slug: String,
+    pub name: String,
+    pub url: String,
+    pub enabled: bool,
+    pub login: Login,
+    pub status: McpStatus,
+    pub tools: Vec<McpTool>,
+    /// The tools turned off, by name, so that a tool the MCP server adds later is on.
+    pub off: Vec<String>,
+    pub icon: Option<String>,
+    pub created_at: f64,
+}
+
+impl McpEntry {
+    pub fn tool_on(&self, name: &str) -> bool {
+        !self.off.iter().any(|off| off == name)
+    }
+
+    /// The headers its login goes in.
+    pub fn login_headers(&self) -> Vec<(String, String)> {
+        match &self.login {
+            Login::None => vec![],
+            Login::Key { header, value } => vec![(header.clone(), value.clone())],
+            Login::OAuth(login) => vec![("authorization".into(), format!("Bearer {}", login.access))],
+        }
+    }
+
+    fn view(&self) -> McpServer {
+        let tools = self.tools.iter().map(|tool| McpTool { enabled: self.tool_on(&tool.name), ..tool.clone() });
+        McpServer {
+            id: self.id.clone(),
+            slug: self.slug.clone(),
+            name: self.name.clone(),
+            url: self.url.clone(),
+            enabled: self.enabled,
+            auth: match self.login {
+                Login::None => McpAuth::None,
+                Login::Key { .. } => McpAuth::Key,
+                Login::OAuth(_) => McpAuth::SignIn,
+            },
+            status: self.status.clone(),
+            tools: tools.collect(),
+            icon: self.icon.clone(),
+        }
+    }
+}
+
+#[derive(Default)]
+pub struct McpServers {
+    list: RwLock<Vec<McpEntry>>,
+    pub sign_ins: SignIns,
+    /// One renewal at a time: a refresh token may work only once.
+    renewing: tokio::sync::Mutex<()>,
+}
+
+impl McpServers {
+    pub fn new(list: Vec<McpEntry>) -> Self {
+        Self { list: RwLock::new(list), ..Self::default() }
+    }
+
+    pub fn all(&self) -> Vec<McpEntry> {
+        self.list.read().unwrap_or_else(|poisoned| poisoned.into_inner()).clone()
+    }
+
+    pub fn get(&self, id: &str) -> Option<McpEntry> {
+        self.all().into_iter().find(|mcp_server| mcp_server.id == id)
+    }
+
+    pub fn by_slug(&self, slug: &str) -> Option<McpEntry> {
+        self.all().into_iter().find(|mcp_server| mcp_server.slug == slug)
+    }
+
+    pub fn views(&self) -> Vec<McpServer> {
+        self.all().iter().map(McpEntry::view).collect()
+    }
+
+    /// The slugs the agents are given.
+    pub fn given(&self) -> Vec<String> {
+        self.all().into_iter().filter(|mcp_server| mcp_server.enabled).map(|mcp_server| mcp_server.slug).collect()
+    }
+}
+
+impl Gateway {
+    fn change_mcp_server(&self, id: &str, change: impl FnOnce(&mut McpEntry)) -> Option<McpEntry> {
+        let mut list = self.mcp_servers.list.write().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mcp_server = list.iter_mut().find(|mcp_server| mcp_server.id == id)?;
+        change(mcp_server);
+        if let Err(error) = self.store.save_mcp_server(mcp_server, &self.seal) {
+            tracing::warn!("couldn't keep a change to an MCP server: {error:#}");
+        }
+        Some(mcp_server.clone())
+    }
+
+    pub fn mcp_server_status(&self, id: &str, status: McpStatus) {
+        let Some(mcp_server) = self.mcp_servers.get(id) else { return };
+        if mcp_server.status != status {
+            self.change_mcp_server(id, |mcp_server| mcp_server.status = status);
+        }
+    }
+
+    /// The MCP server with a login that isn't about to expire.
+    pub async fn fresh_mcp_server(&self, id: &str) -> Option<McpEntry> {
+        let mcp_server = self.mcp_servers.get(id)?;
+        let Login::OAuth(login) = &mcp_server.login else { return Some(mcp_server) };
+        if login.expires_at.is_none_or(|expires_at| expires_at - now() > RENEW_BEFORE) {
+            return Some(mcp_server);
+        }
+        self.renew_mcp_server(id, &login.access).await
+    }
+
+    /// Renews the MCP server's login, unless another renewal already replaced `stale`. One whose
+    /// refresh was refused has to be signed in again.
+    pub async fn renew_mcp_server(&self, id: &str, stale: &str) -> Option<McpEntry> {
+        let _renewing = self.mcp_servers.renewing.lock().await;
+        let mcp_server = self.mcp_servers.get(id)?;
+        let Login::OAuth(login) = &mcp_server.login else { return None };
+        if login.access != stale {
+            return Some(mcp_server);
+        }
+        match sign_in::renew(&self.http, login).await {
+            Ok(renewed) => self.change_mcp_server(id, |mcp_server| {
+                mcp_server.login = Login::OAuth(renewed);
+                if mcp_server.status == McpStatus::SignInAgain {
+                    mcp_server.status = McpStatus::Ready;
+                }
+            }),
+            Err(RenewError::Dead) => {
+                tracing::warn!(mcp_server = mcp_server.slug, "an MCP server's login stopped working");
+                self.mcp_server_status(id, McpStatus::SignInAgain);
+                None
+            }
+            Err(RenewError::Failed(error)) => {
+                tracing::warn!(mcp_server = mcp_server.slug, "couldn't renew an MCP server's login: {error:#}");
+                None
+            }
+        }
+    }
+
+    pub async fn add_mcp_server(
+        &self,
+        url: &str,
+        name: Option<String>,
+        key: Option<McpKey>,
+    ) -> anyhow::Result<McpAdding> {
+        let url = url.trim();
+        let parsed = reqwest::Url::parse(url).context("That isn't an address.")?;
+        if !["http", "https"].contains(&parsed.scheme()) {
+            bail!("An MCP server's address starts with https://.");
+        }
+        let login = match key {
+            Some(key) => Login::Key { header: key.header.trim().to_string(), value: key.value.trim().to_string() },
+            None => Login::None,
+        };
+        let headers = match &login {
+            Login::Key { header, value } => vec![(header.clone(), value.clone())],
+            _ => vec![],
+        };
+        match Session::open(&self.http, url, headers).await {
+            Ok(session) => {
+                let id = self.create_mcp_server(url, name, login, session).await?;
+                Ok(McpAdding::Added { id })
+            }
+            Err(Failure::Unauthorized(_)) if matches!(login, Login::Key { .. }) => {
+                bail!("The MCP server refused the key.")
+            }
+            Err(Failure::Unauthorized(challenge)) => {
+                match self.mcp_servers.sign_ins.start(&self.http, url, name, None, challenge.as_deref()).await? {
+                    Some((state, url)) => Ok(McpAdding::SignIn { state, url }),
+                    None => Ok(McpAdding::NeedsKey),
+                }
+            }
+            Err(Failure::Failed(error)) => Err(error),
+        }
+    }
+
+    pub async fn sign_mcp_server_in(&self, id: &str) -> anyhow::Result<McpAdding> {
+        let mcp_server = self.mcp_servers.get(id).context("There is no such MCP server.")?;
+        let started =
+            self.mcp_servers.sign_ins.start(&self.http, &mcp_server.url, None, Some(mcp_server.id), None).await?;
+        let (state, url) = started.context("This MCP server doesn't sign in. Give it a key instead.")?;
+        Ok(McpAdding::SignIn { state, url })
+    }
+
+    pub async fn finish_mcp_server_sign_in(&self, state: &str, code: &str) -> anyhow::Result<McpAdding> {
+        let (pending, login) = self.mcp_servers.sign_ins.finish(&self.http, state, code).await?;
+        if let Some(id) = pending.mcp_server {
+            self.change_mcp_server(&id, |mcp_server| {
+                mcp_server.login = Login::OAuth(login);
+                mcp_server.status = McpStatus::Ready;
+            })
+            .context("The MCP server was removed while it signed in.")?;
+            self.refresh_mcp_server(&id).await;
+            return Ok(McpAdding::Added { id });
+        }
+        let headers = vec![("authorization".to_string(), format!("Bearer {}", login.access))];
+        let session = match Session::open(&self.http, &pending.url, headers).await {
+            Ok(session) => session,
+            Err(Failure::Unauthorized(_)) => bail!("The MCP server refused the login it just gave."),
+            Err(Failure::Failed(error)) => return Err(error),
+        };
+        let id = self.create_mcp_server(&pending.url, pending.name, Login::OAuth(login), session).await?;
+        Ok(McpAdding::Added { id })
+    }
+
+    async fn create_mcp_server(
+        &self,
+        url: &str,
+        name: Option<String>,
+        login: Login,
+        mut session: Session<'_>,
+    ) -> anyhow::Result<String> {
+        let listed = session.tools().await;
+        let info = session.server_info.clone();
+        session.close().await;
+        let tools = match listed {
+            Ok(tools) => tools.iter().filter_map(tool_of).collect(),
+            Err(Failure::Unauthorized(_)) => bail!("The MCP server refused to list its tools."),
+            Err(Failure::Failed(error)) => return Err(error),
+        };
+        let name = name
+            .map(|name| name.trim().to_string())
+            .filter(|name| !name.is_empty())
+            .or_else(|| info["title"].as_str().map(String::from))
+            .unwrap_or_else(|| name_of_host(url));
+        let mut list = self.mcp_servers.list.write().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let taken: Vec<String> = list.iter().map(|mcp_server| mcp_server.slug.clone()).collect();
+        let mcp_server = McpEntry {
+            id: uuid::Uuid::new_v4().to_string(),
+            slug: free_slug(&slug_of(&name), &taken),
+            name,
+            url: url.to_string(),
+            enabled: true,
+            login,
+            status: McpStatus::Ready,
+            tools,
+            off: vec![],
+            icon: icon_of(&info),
+            created_at: now(),
+        };
+        self.store.save_mcp_server(&mcp_server, &self.seal)?;
+        list.push(mcp_server.clone());
+        Ok(mcp_server.id)
+    }
+
+    /// Asks the MCP server for its tools again, and says how it answered.
+    pub async fn refresh_mcp_server(&self, id: &str) {
+        let mut renewed = false;
+        loop {
+            let Some(mcp_server) = self.fresh_mcp_server(id).await else { return };
+            let opened = Session::open(&self.http, &mcp_server.url, mcp_server.login_headers()).await;
+            let listed = match opened {
+                Ok(mut session) => {
+                    let listed = session.tools().await;
+                    let info = session.server_info.clone();
+                    session.close().await;
+                    listed.map(|tools| (tools, info))
+                }
+                Err(failure) => Err(failure),
+            };
+            match listed {
+                Ok((tools, info)) => {
+                    let tools: Vec<McpTool> = tools.iter().filter_map(tool_of).collect();
+                    self.change_mcp_server(id, |mcp_server| {
+                        mcp_server.tools = tools;
+                        mcp_server.icon = icon_of(&info).or(mcp_server.icon.take());
+                        mcp_server.status = McpStatus::Ready;
+                    });
+                    return;
+                }
+                Err(Failure::Unauthorized(_)) => match &mcp_server.login {
+                    Login::OAuth(login) if !renewed => {
+                        renewed = true;
+                        if self.renew_mcp_server(id, &login.access).await.is_none() {
+                            return;
+                        }
+                    }
+                    Login::OAuth(_) => return self.mcp_server_status(id, McpStatus::SignInAgain),
+                    _ => {
+                        let error = "It refused its key. Give it a new one.".to_string();
+                        return self.mcp_server_status(id, McpStatus::Failing { error });
+                    }
+                },
+                Err(Failure::Failed(error)) => {
+                    let error = motile_protocol::error_text(&error);
+                    return self.mcp_server_status(id, McpStatus::Failing { error });
+                }
+            }
+        }
+    }
+
+    pub fn update_mcp_server(&self, id: &str, change: McpChange) -> anyhow::Result<()> {
+        if let McpChange::Slug { slug } = &change {
+            let slug = slug_of(slug);
+            let taken = self.mcp_servers.all().iter().any(|mcp_server| mcp_server.slug == slug && mcp_server.id != id);
+            if taken || slug == RESERVED {
+                bail!("Another MCP server is called {slug}.");
+            }
+        }
+        let changed = self.change_mcp_server(id, |mcp_server| match change {
+            McpChange::Name { name } => mcp_server.name = name.trim().to_string(),
+            McpChange::Slug { slug } => mcp_server.slug = slug_of(&slug),
+            McpChange::Enabled { enabled } => mcp_server.enabled = enabled,
+            McpChange::Tool { name, enabled } => {
+                mcp_server.off.retain(|off| *off != name);
+                if !enabled {
+                    mcp_server.off.push(name);
+                }
+            }
+            McpChange::ReadOnly => {
+                mcp_server.off =
+                    mcp_server.tools.iter().filter(|tool| tool.writes).map(|tool| tool.name.clone()).collect()
+            }
+            McpChange::AllTools => mcp_server.off.clear(),
+            McpChange::Key { key } => {
+                mcp_server.login =
+                    Login::Key { header: key.header.trim().to_string(), value: key.value.trim().to_string() };
+                mcp_server.status = McpStatus::Ready;
+            }
+        });
+        changed.map(|_| ()).context("There is no such MCP server.")
+    }
+
+    pub fn remove_mcp_server(&self, id: &str) -> anyhow::Result<()> {
+        self.mcp_servers.list.write().unwrap_or_else(|poisoned| poisoned.into_inner()).retain(|kept| kept.id != id);
+        self.store.delete_mcp_server(id)
+    }
+
+    /// Calls the tool as an agent would, and logs it as tried from Settings.
+    pub async fn try_tool(&self, id: &str, tool: &str, arguments: Value) -> anyhow::Result<ToolResult> {
+        let started = Instant::now();
+        let mut renewed = false;
+        let answered = loop {
+            let mcp_server = self.fresh_mcp_server(id).await.context("There is no such MCP server.")?;
+            let called = match Session::open(&self.http, &mcp_server.url, mcp_server.login_headers()).await {
+                Ok(mut session) => {
+                    let called = session.call(tool, arguments.clone()).await;
+                    session.close().await;
+                    called
+                }
+                Err(failure) => Err(failure),
+            };
+            match called {
+                Err(Failure::Unauthorized(_)) if !renewed => {
+                    renewed = true;
+                    let Login::OAuth(login) = &mcp_server.login else {
+                        break Err("The MCP server refused its key.".into());
+                    };
+                    if self.renew_mcp_server(id, &login.access).await.is_none() {
+                        break Err("The MCP server's login stopped working. Sign in again.".into());
+                    }
+                }
+                Err(Failure::Unauthorized(_)) => {
+                    self.mcp_server_status(id, McpStatus::SignInAgain);
+                    break Err("The MCP server's login stopped working. Sign in again.".to_string());
+                }
+                Err(Failure::Failed(error)) => break Err(motile_protocol::error_text(&error)),
+                Ok(result) => break Ok(result),
+            }
+        };
+        let (result, error) = match answered {
+            Ok(result) => {
+                let error = result_error(&result);
+                (result, error)
+            }
+            Err(error) => (Value::Null, Some(error)),
+        };
+        self.log_call(CallRecord {
+            at: now(),
+            server: None,
+            thread: None,
+            mcp_server: id.to_string(),
+            tool: tool.to_string(),
+            latency_ms: started.elapsed().as_millis() as u64,
+            error: error.clone(),
+            arguments: cut(&arguments.to_string()),
+            result: cut(&result.to_string()),
+        });
+        Ok(ToolResult { result, error })
+    }
+
+    pub fn log_call(&self, call: CallRecord) {
+        if let Err(error) = self.store.add_call(&call) {
+            tracing::warn!("couldn't log a tool call: {error:#}");
+        }
+    }
+
+    /// Takes the tools a `tools/list` that passed through gave, so that Settings shows what the
+    /// agents see.
+    pub fn saw_tools(&self, id: &str, tools: &[Value]) {
+        let tools: Vec<McpTool> = tools.iter().filter_map(tool_of).collect();
+        let Some(mcp_server) = self.mcp_servers.get(id) else { return };
+        if mcp_server.tools != tools || mcp_server.status != McpStatus::Ready {
+            self.change_mcp_server(id, |mcp_server| {
+                mcp_server.tools = tools;
+                mcp_server.status = McpStatus::Ready;
+            });
+        }
+    }
+}
+
+/// A tool as `tools/list` gives it.
+pub fn tool_of(tool: &Value) -> Option<McpTool> {
+    let name = tool["name"].as_str()?;
+    let title = tool["title"].as_str().or(tool["annotations"]["title"].as_str());
+    Some(McpTool {
+        name: name.to_string(),
+        title: title.map(String::from),
+        description: tool["description"].as_str().map(|text| text.trim().to_string()),
+        input_schema: tool["inputSchema"].clone(),
+        writes: tool["annotations"]["readOnlyHint"].as_bool() != Some(true),
+        enabled: true,
+    })
+}
+
+/// What went wrong in a tool's result, by its text.
+pub fn result_error(result: &Value) -> Option<String> {
+    if result["isError"].as_bool() != Some(true) {
+        return None;
+    }
+    let texts: Vec<&str> =
+        result["content"].as_array().into_iter().flatten().filter_map(|part| part["text"].as_str()).collect();
+    Some(if texts.is_empty() { "The tool failed.".to_string() } else { texts.join("\n") })
+}
+
+pub fn cut(text: &str) -> String {
+    if text.len() <= CALL_KEPT {
+        return text.to_string();
+    }
+    let mut end = CALL_KEPT;
+    while !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    format!("{}…", &text[..end])
+}
+
+fn icon_of(info: &Value) -> Option<String> {
+    let icons = info["icons"].as_array()?;
+    icons.iter().find_map(|icon| icon["src"].as_str()).map(String::from)
+}
+
+/// A name from the address: `mcp.linear.app` is Linear.
+fn name_of_host(url: &str) -> String {
+    let host = reqwest::Url::parse(url).ok().and_then(|url| url.host_str().map(String::from)).unwrap_or_default();
+    let labels: Vec<&str> = host.split('.').collect();
+    let skipped = ["mcp", "api", "www", "server", "app"];
+    let label = labels
+        .iter()
+        .take(labels.len().saturating_sub(1).max(1))
+        .find(|label| !skipped.contains(label))
+        .or(labels.first())
+        .copied()
+        .unwrap_or("McpEntry");
+    let mut characters = label.chars();
+    match characters.next() {
+        Some(first) => first.to_uppercase().chain(characters).collect(),
+        None => "McpEntry".to_string(),
+    }
+}
+
+/// The name in letters, digits and dashes, as an MCP server's name in an agent's config.
+pub fn slug_of(name: &str) -> String {
+    let mut slug = String::new();
+    for character in name.trim().to_lowercase().chars() {
+        if character.is_ascii_alphanumeric() {
+            slug.push(character);
+        } else if !slug.ends_with('-') {
+            slug.push('-');
+        }
+    }
+    let slug = slug.trim_matches('-').to_string();
+    if slug.is_empty() { "mcp_server".to_string() } else { slug }
+}
+
+fn free_slug(slug: &str, taken: &[String]) -> String {
+    let free = |candidate: &String| candidate != RESERVED && !taken.contains(candidate);
+    let first = slug.to_string();
+    if free(&first) {
+        return first;
+    }
+    (2..).map(|number| format!("{slug}-{number}")).find(free).expect("some number is free")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn a_slug_is_the_name_in_letters_digits_and_dashes_and_never_taken() {
+        assert_eq!(slug_of("  Linear "), "linear");
+        assert_eq!(slug_of("Google Drive (work)"), "google-drive-work");
+        assert_eq!(slug_of("¿?"), "mcp_server");
+        assert_eq!(free_slug("linear", &["linear".into(), "linear-2".into()]), "linear-3");
+        assert_eq!(free_slug("motile", &[]), "motile-2");
+    }
+
+    #[test]
+    fn a_name_comes_from_the_host_without_its_mcp_or_api_part() {
+        assert_eq!(name_of_host("https://mcp.linear.app/mcp"), "Linear");
+        assert_eq!(name_of_host("https://api.githubcopilot.com/mcp/"), "Githubcopilot");
+        assert_eq!(name_of_host("https://sentry.dev/mcp"), "Sentry");
+        assert_eq!(name_of_host("http://localhost:4000/mcp"), "Localhost");
+    }
+
+    #[test]
+    fn a_tool_writes_unless_it_says_it_only_reads() {
+        let read = tool_of(&json!({"name": "list", "annotations": {"readOnlyHint": true}})).unwrap();
+        let write = tool_of(&json!({"name": "create", "description": " Files one. ", "inputSchema": {}})).unwrap();
+        assert!(!read.writes);
+        assert!(write.writes);
+        assert_eq!(write.description.as_deref(), Some("Files one."));
+    }
+
+    #[test]
+    fn a_failed_result_says_its_text() {
+        let failed = json!({"isError": true, "content": [{"type": "text", "text": "No such issue"}]});
+        assert_eq!(result_error(&failed).as_deref(), Some("No such issue"));
+        assert_eq!(result_error(&json!({"content": []})), None);
+    }
+}

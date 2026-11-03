@@ -47,7 +47,7 @@ import app.motile.theme.Theme
 import app.motile.theme.symbolSide
 import app.motile.ui.AgentIcon
 import app.motile.ui.Card
-import app.motile.ui.ProxyMark
+import app.motile.ui.GatewayMark
 import app.motile.ui.Segmented
 import app.motile.ui.Text
 import app.motile.ui.ThemeDivider
@@ -254,8 +254,8 @@ private fun LineRow(line: UsageReport.Line, measure: Measure, stacked: Boolean) 
         val density = LocalDensity.current
         val style = Theme.ui(12f)
         val named = with(density) {
-            val name = measurer.measure(if (line.proxy) "${line.name} " else line.name, style, maxLines = 1).size.width.toDp() +
-                if (line.proxy) symbolSide(ProxyMark.size(12f)) + ProxyMark.gap else 0.dp
+            val name = measurer.measure(if (line.gateway) "${line.name} " else line.name, style, maxLines = 1).size.width.toDp() +
+                if (line.gateway) symbolSide(GatewayMark.size(12f)) + GatewayMark.gap else 0.dp
             val server = line.server?.let { measurer.measure(it, style, maxLines = 1).size.width.toDp() + spacing } ?: 0.dp
             name + server
         }
@@ -272,8 +272,8 @@ private fun LineNumbers(line: UsageReport.Line, measure: Measure, bar: Boolean) 
         line.agent?.let { Dot(it.color(palette)) }
         Row(Modifier.weight(1f).padding(end = 8.dp), horizontalArrangement = Arrangement.spacedBy(spacing), verticalAlignment = Alignment.CenterVertically) {
             Text(
-                AnnotatedString(line.name).proxied(line.proxy), Modifier.weight(1f, fill = false), style = style, color = palette.foreground, maxLines = 1,
-                overflow = TextOverflow.MiddleEllipsis, inlineContent = ProxyMark.content(palette.foreground, 12f),
+                AnnotatedString(line.name).proxied(line.gateway), Modifier.weight(1f, fill = false), style = style, color = palette.foreground, maxLines = 1,
+                overflow = TextOverflow.MiddleEllipsis, inlineContent = GatewayMark.content(palette.foreground, 12f),
             )
             line.server?.let {
                 Text(it, Modifier.weight(1f, fill = false), style = style, color = palette.mutedForeground, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)

@@ -11,8 +11,8 @@ use motile_core::connection::{Connection, Follow, ServerAddr, bind};
 use motile_core::link::{Link, LinkEvent, State};
 use motile_core::sync::{self as relay, Origin};
 use motile_protocol::frame::{read_frame, write_frame};
+use motile_protocol::gateway_wire::{AccountStatus, GatewayAccount, GatewayReply, GatewayRequest, WsMessage};
 use motile_protocol::identity::DeviceKey;
-use motile_protocol::proxy_wire::{AccountStatus, ProxyAccount, ProxyReply, ProxyRequest, WsMessage};
 use motile_protocol::wire::{
     Access as AgentAccess, Agent, AgentAccount, AgentLimits, Approval, Ask, CONTINUE_PROMPT, Change, CheckStatus,
     CopiedThread, DiffScope, EventKind, FileKind, GitAction, GitHubState, GitStage, GitStatus, Interruption, Item,
@@ -23,9 +23,9 @@ use motile_protocol::wire::{
 };
 use motile_server::access::Access;
 use motile_server::agents::environment::Environment;
+use motile_server::gateway;
 use motile_server::hub::Hub;
 use motile_server::mcp;
-use motile_server::proxy;
 use motile_server::serve::{BindOptions, Server};
 use motile_server::store::Store;
 use serde_json::json;
@@ -124,11 +124,11 @@ impl Harness {
         self.connect_as(&self.app_key).await
     }
 
-    /// Serves the way to the account's proxy, as the server does, with the Proxy accounts' folders
-    /// in `proxy`.
-    async fn serve_proxy(&self) {
+    /// Serves the way to the account's gateway, as the server does, with the Gateway accounts' folders
+    /// in `gateway`.
+    async fn serve_gateway(&self) {
         let endpoint = self.endpoint.clone().unwrap();
-        self.hub.serve_proxy(endpoint, self.access.watch_proxy(), self.dir.path().join("proxy")).await.unwrap();
+        self.hub.serve_gateway(endpoint, self.access.watch_gateway(), self.dir.path().join("gateway")).await.unwrap();
     }
 
     async fn connect_as(&self, key: &DeviceKey) -> Connection {
@@ -1726,7 +1726,7 @@ async fn a_thread_works_with_the_account_it_was_started_with_and_moves_to_anothe
         variables: vec![Variable { name: "FAKE_AGENT_ARGUMENTS_FILE".into(), value: recorded, sensitive: true }],
         email: None,
         plan: None,
-        proxy: false,
+        gateway: false,
         pin: None,
     };
     let saved = connection.request(&Request::SaveAgentAccount { account: personal }).await.unwrap();
@@ -1817,7 +1817,7 @@ async fn an_account_signs_in_with_the_code_its_page_showed_and_is_saved() {
         variables: vec![],
         email: None,
         plan: None,
-        proxy: false,
+        gateway: false,
         pin: None,
     };
     let start = async || connection.request(&Request::StartSignIn { account: work.clone() }).await;
@@ -4518,29 +4518,29 @@ async fn accounts_until(list: &mut Follow, wanted: &[&str]) -> ServerInfo {
 }
 
 #[tokio::test]
-async fn the_proxy_accounts_are_there_while_the_account_has_a_proxy() {
+async fn the_gateway_accounts_are_there_while_the_account_has_a_gateway() {
     let harness = Harness::start("fixtures/read-and-bash.jsonl", "0").await;
-    harness.serve_proxy().await;
+    harness.serve_gateway().await;
     let connection = harness.connect().await;
     let project = harness.project(&connection).await;
     let mut list = connection.follow(&Request::Subscribe).await.unwrap();
     accounts_until(&mut list, &["claude", "codex"]).await;
 
-    harness.access.set_proxy(Some(DeviceKey::generate().public()));
-    let server = accounts_until(&mut list, &["claude", "codex", "proxy-claude", "proxy-codex"]).await;
-    let proxy = &server.agent_accounts[2];
-    assert!(proxy.proxy && proxy.name == "Proxy" && proxy.folder.ends_with("proxy/claude"), "{proxy:?}");
-    let config = std::fs::read_to_string(harness.dir.path().join("proxy/codex/config.toml")).unwrap();
+    harness.access.set_gateway(Some(DeviceKey::generate().public()));
+    let server = accounts_until(&mut list, &["claude", "codex", "gateway-claude", "gateway-codex"]).await;
+    let gateway = &server.agent_accounts[2];
+    assert!(gateway.gateway && gateway.name == "Gateway" && gateway.folder.ends_with("gateway/claude"), "{gateway:?}");
+    let config = std::fs::read_to_string(harness.dir.path().join("gateway/codex/config.toml")).unwrap();
     assert!(config.contains("model_provider = \"motile\""), "{config}");
 
-    let removed = connection.request(&Request::RemoveAgentAccount { id: "proxy-claude".into() }).await.unwrap();
+    let removed = connection.request(&Request::RemoveAgentAccount { id: "gateway-claude".into() }).await.unwrap();
     assert!(matches!(removed, Message::Error { .. }), "{removed:?}");
-    let renamed = AgentAccount { name: "Mine".into(), ..proxy.clone() };
+    let renamed = AgentAccount { name: "Mine".into(), ..gateway.clone() };
     let saved = connection.request(&Request::SaveAgentAccount { account: renamed }).await.unwrap();
     assert!(matches!(saved, Message::Error { .. }), "{saved:?}");
-    let made = connection.request(&Request::MakeAgentAccountDefault { id: "proxy-claude".into() }).await.unwrap();
+    let made = connection.request(&Request::MakeAgentAccountDefault { id: "gateway-claude".into() }).await.unwrap();
     assert_eq!(made, Message::Ok);
-    accounts_until(&mut list, &["proxy-claude", "claude", "codex", "proxy-codex"]).await;
+    accounts_until(&mut list, &["gateway-claude", "claude", "codex", "gateway-codex"]).await;
 
     let new_thread = NewThread {
         id: None,
@@ -4562,9 +4562,9 @@ async fn the_proxy_accounts_are_there_while_the_account_has_a_proxy() {
             break thread;
         }
     };
-    assert_eq!(thread.agent_account, "proxy-claude", "a new thread starts on the default account");
+    assert_eq!(thread.agent_account, "gateway-claude", "a new thread starts on the default account");
 
-    harness.access.set_proxy(None);
+    harness.access.set_gateway(None);
     let (mut listed, mut moved) = (false, false);
     while !listed || !moved {
         match next(&mut list).await {
@@ -4578,14 +4578,14 @@ async fn the_proxy_accounts_are_there_while_the_account_has_a_proxy() {
     }
 }
 
-/// What the fake proxy was asked, with the body of each HTTP request.
-type Asked = mpsc::UnboundedReceiver<(ProxyRequest, Vec<u8>)>;
+/// What the fake gateway was asked, with the body of each HTTP request.
+type Asked = mpsc::UnboundedReceiver<(GatewayRequest, Vec<u8>)>;
 
-/// A proxy that answers an HTTP request with two pieces of a stream, the second once `release`
+/// A gateway that answers an HTTP request with two pieces of a stream, the second once `release`
 /// is notified, echoes a WebSocket's texts, and says its pool's limits.
-async fn fake_proxy(release: Arc<tokio::sync::Notify>) -> (iroh::Endpoint, Asked) {
+async fn fake_gateway(release: Arc<tokio::sync::Notify>) -> (iroh::Endpoint, Asked) {
     let endpoint = iroh::Endpoint::builder(iroh::endpoint::presets::Minimal)
-        .alpns(vec![motile_protocol::PROXY_ALPN.to_vec()])
+        .alpns(vec![motile_protocol::GATEWAY_ALPN.to_vec()])
         .bind()
         .await
         .unwrap();
@@ -4597,7 +4597,7 @@ async fn fake_proxy(release: Arc<tokio::sync::Notify>) -> (iroh::Endpoint, Asked
             let (asked, release) = (asked.clone(), release.clone());
             tokio::spawn(async move {
                 while let Ok((send, recv)) = connection.accept_bi().await {
-                    tokio::spawn(answer_as_proxy(send, recv, asked.clone(), release.clone()));
+                    tokio::spawn(answer_as_gateway(send, recv, asked.clone(), release.clone()));
                 }
             });
         }
@@ -4605,34 +4605,36 @@ async fn fake_proxy(release: Arc<tokio::sync::Notify>) -> (iroh::Endpoint, Asked
     (endpoint, asks)
 }
 
-async fn answer_as_proxy(
+async fn answer_as_gateway(
     mut send: iroh::endpoint::SendStream,
     mut recv: iroh::endpoint::RecvStream,
-    asked: mpsc::UnboundedSender<(ProxyRequest, Vec<u8>)>,
+    asked: mpsc::UnboundedSender<(GatewayRequest, Vec<u8>)>,
     release: Arc<tokio::sync::Notify>,
 ) {
-    let request: ProxyRequest = read_frame(&mut recv).await.unwrap().unwrap();
+    let request: GatewayRequest = read_frame(&mut recv).await.unwrap().unwrap();
     match &request {
-        ProxyRequest::Http { .. } => {
+        GatewayRequest::Http { .. } => {
             let body = recv.read_to_end(1 << 20).await.unwrap();
             asked.send((request, body)).unwrap();
             let head = vec![("content-type".to_string(), "text/event-stream".to_string())];
-            write_frame(&mut send, &ProxyReply::HttpHead { status: 200, headers: head, account: None }).await.unwrap();
+            write_frame(&mut send, &GatewayReply::HttpHead { status: 200, headers: head, account: None })
+                .await
+                .unwrap();
             send.write_all(b"data: first\n\n").await.unwrap();
             release.notified().await;
             send.write_all(b"data: second\n\n").await.unwrap();
             send.finish().unwrap();
         }
-        ProxyRequest::WebSocket { .. } => {
+        GatewayRequest::WebSocket { .. } => {
             asked.send((request, vec![])).unwrap();
-            write_frame(&mut send, &ProxyReply::WebSocketOpen { headers: vec![], account: None }).await.unwrap();
+            write_frame(&mut send, &GatewayReply::WebSocketOpen { headers: vec![], account: None }).await.unwrap();
             while let Ok(Some(message)) = read_frame::<_, WsMessage>(&mut recv).await {
                 let WsMessage::Text { text } = message else { break };
                 write_frame(&mut send, &WsMessage::Text { text: format!("echo {text}") }).await.unwrap();
             }
             let _ = send.finish();
         }
-        ProxyRequest::Pool { agent } => {
+        GatewayRequest::Pool { agent } => {
             let limits = AgentLimits {
                 agent: *agent,
                 account_name: "work".into(),
@@ -4643,11 +4645,11 @@ async fn answer_as_proxy(
                 error: None,
                 next_account: None,
             };
-            write_frame(&mut send, &ProxyReply::Pool { limits: Some(limits) }).await.unwrap();
+            write_frame(&mut send, &GatewayReply::Pool { limits: Some(limits) }).await.unwrap();
             send.finish().unwrap();
         }
-        ProxyRequest::Accounts => {
-            let account = ProxyAccount {
+        GatewayRequest::Accounts => {
+            let account = GatewayAccount {
                 id: "org-1".into(),
                 agent: Agent::Claude,
                 name: "work@example.com".into(),
@@ -4661,31 +4663,45 @@ async fn answer_as_proxy(
                 threads: 0,
                 next: true,
             };
-            write_frame(&mut send, &ProxyReply::Accounts { accounts: vec![account] }).await.unwrap();
+            write_frame(&mut send, &GatewayReply::Accounts { accounts: vec![account] }).await.unwrap();
             send.finish().unwrap();
         }
-        ProxyRequest::Manage { .. } => panic!("a server never manages the proxy"),
+        GatewayRequest::McpServers => {
+            write_frame(&mut send, &GatewayReply::McpServers { mcp_servers: vec!["tracker".into()] }).await.unwrap();
+            send.finish().unwrap();
+        }
+        GatewayRequest::Mcp { .. } => {
+            let body = recv.read_to_end(1 << 20).await.unwrap();
+            asked.send((request, body)).unwrap();
+            let head = vec![("content-type".to_string(), "application/json".to_string())];
+            write_frame(&mut send, &GatewayReply::HttpHead { status: 200, headers: head, account: None })
+                .await
+                .unwrap();
+            send.write_all(br#"{"jsonrpc":"2.0","id":1,"result":{"tools":[]}}"#).await.unwrap();
+            send.finish().unwrap();
+        }
+        GatewayRequest::Manage { .. } => panic!("a server never manages the gateway"),
     }
 }
 
 #[tokio::test]
-async fn an_agents_request_reaches_the_proxy_as_its_threads_and_streams_back() {
+async fn an_agents_request_reaches_the_gateway_as_its_threads_and_streams_back() {
     let release = Arc::new(tokio::sync::Notify::new());
-    let (proxy_endpoint, mut asked) = fake_proxy(release.clone()).await;
-    let proxy_port = proxy_endpoint.bound_sockets().iter().find(|address| address.is_ipv4()).unwrap().port();
+    let (gateway_endpoint, mut asked) = fake_gateway(release.clone()).await;
+    let gateway_port = gateway_endpoint.bound_sockets().iter().find(|address| address.is_ipv4()).unwrap().port();
     let options = BindOptions { local_only: true, port: None };
     let endpoint = motile_server::serve::bind(&DeviceKey::generate(), &options).await.unwrap();
     let lookup = iroh::address_lookup::MemoryLookup::new();
     lookup.add_endpoint_info(
-        iroh::EndpointAddr::new(proxy_endpoint.id()).with_ip_addr(([127, 0, 0, 1], proxy_port).into()),
+        iroh::EndpointAddr::new(gateway_endpoint.id()).with_ip_addr(([127, 0, 0, 1], gateway_port).into()),
     );
     endpoint.address_lookup().unwrap().add(lookup);
 
-    let (proxy_key, key) = tokio::sync::watch::channel(Some(proxy_endpoint.id().to_string()));
-    let tunnel = proxy::Tunnel::new(endpoint, key);
+    let (gateway_key, key) = tokio::sync::watch::channel(Some(gateway_endpoint.id().to_string()));
+    let tunnel = gateway::Tunnel::new(endpoint, key);
     let tokens = Arc::new(mcp::Tokens::default());
     let token = tokens.mint("thread-1");
-    let port = proxy::serve(tunnel.clone(), tokens, "own".to_string()).await.unwrap();
+    let port = gateway::serve(tunnel.clone(), tokens, "own".to_string()).await.unwrap();
 
     motile_protocol::tls::install();
     let client = reqwest::Client::new();
@@ -4703,7 +4719,7 @@ async fn an_agents_request_reaches_the_proxy_as_its_threads_and_streams_back() {
     }
     assert_eq!(rest, b"data: second\n\n");
     let (request, body) = asked.recv().await.unwrap();
-    let ProxyRequest::Http { thread, agent, method, path, headers, pin } = request else { panic!("{request:?}") };
+    let GatewayRequest::Http { thread, agent, method, path, headers, pin } = request else { panic!("{request:?}") };
     assert_eq!((thread.as_str(), agent, method.as_str(), pin), ("thread-1", Agent::Claude, "POST", None));
     assert_eq!(path, "/v1/messages?beta=true");
     assert!(headers.contains(&("anthropic-version".to_string(), "2023-06-01".to_string())), "{headers:?}");
@@ -4722,7 +4738,7 @@ async fn an_agents_request_reaches_the_proxy_as_its_threads_and_streams_back() {
     assert_eq!(echoed, WebSocketMessage::Text("echo hello".into()));
     socket.close(None).await.unwrap();
     let (request, _) = asked.recv().await.unwrap();
-    let ProxyRequest::WebSocket { thread, agent, path, .. } = request else { panic!("{request:?}") };
+    let GatewayRequest::WebSocket { thread, agent, path, .. } = request else { panic!("{request:?}") };
     assert_eq!((thread.as_str(), agent, path.as_str()), ("thread-1", Agent::Codex, "/responses"));
 
     let pool = tunnel.pool(Agent::Codex).await.unwrap().unwrap();
@@ -4735,11 +4751,23 @@ async fn an_agents_request_reaches_the_proxy_as_its_threads_and_streams_back() {
     release.notify_one();
     let _ = pinned.bytes().await;
     let (request, _) = asked.recv().await.unwrap();
-    let ProxyRequest::Http { pin, .. } = request else { panic!("{request:?}") };
+    let GatewayRequest::Http { pin, .. } = request else { panic!("{request:?}") };
     assert_eq!(pin.as_deref(), Some("org-1"), "a pinned thread's requests name its account");
 
-    proxy_key.send(None).unwrap();
+    assert_eq!(tunnel.mcp_servers().await.unwrap(), ["tracker"]);
+    let list = r#"{"jsonrpc":"2.0","id":1,"method":"tools/list"}"#;
+    let mcp_server = client.post(gateway::mcp_server_url(port, "tracker")).bearer_auth(&token).body(list).send();
+    let answered = tokio::time::timeout(TIMEOUT, mcp_server).await.unwrap().unwrap();
+    assert_eq!(answered.status(), 200);
+    assert!(answered.text().await.unwrap().contains("\"tools\""));
+    let (request, body) = asked.recv().await.unwrap();
+    let GatewayRequest::Mcp { thread, mcp_server, method, headers } = request else { panic!("{request:?}") };
+    assert_eq!((thread.as_str(), mcp_server.as_str(), method.as_str()), ("thread-1", "tracker", "POST"));
+    assert!(!headers.iter().any(|(name, _)| name == "authorization"), "the token stays on the server: {headers:?}");
+    assert_eq!(body, list.as_bytes());
+
+    gateway_key.send(None).unwrap();
     let without = post().bearer_auth(&token).send().await.unwrap();
     assert_eq!(without.status(), 503);
-    assert!(without.text().await.unwrap().contains("no proxy"));
+    assert!(without.text().await.unwrap().contains("no gateway"));
 }

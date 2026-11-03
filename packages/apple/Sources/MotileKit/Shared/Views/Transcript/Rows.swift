@@ -480,8 +480,8 @@ struct AgentContent {
     let agent: Agent?
     /// "Opus 5.5 · work".
     let runsOn: String
-    /// It runs through the account's proxy, which the proxy's symbol after `runsOn` says.
-    let proxy: Bool
+    /// It runs through the account's gateway, which the gateway's symbol after `runsOn` says.
+    let gateway: Bool
     let startedAt: Double
     let durationMs: Int?
     /// When the thread's agent was told, for what it was told.
@@ -499,7 +499,7 @@ struct AgentContent {
         detail = json.string("detail")
         agent = json.optionalString("agent").flatMap(Agent.init(rawValue:))
         runsOn = json.string("runs_on")
-        proxy = json.bool("proxy")
+        gateway = json.bool("gateway")
         startedAt = json.double("started_at")
         durationMs = (json["duration_ms"] as? NSNumber)?.intValue
         at = json.optionalDouble("at")
@@ -512,16 +512,16 @@ struct AgentContent {
         detail.isEmpty && runsOn.isEmpty ? label : detail
     }
 
-    /// The second line: what it runs on, with the proxy's symbol after it where it runs through the
-    /// proxy, then what it does or said.
+    /// The second line: what it runs on, with the gateway's symbol after it where it runs through the
+    /// gateway, then what it does or said.
     func line(font: PlatformFont, color: PlatformColor) -> NSAttributedString {
         let words = { (text: String) in NSAttributedString(string: text, attributes: [.font: font, .foregroundColor: color]) }
         let line = NSMutableAttributedString(attributedString: words(runsOn))
-        if proxy {
-            ProxyMark.append(to: line, font: font, color: color)
+        if gateway {
+            GatewayMark.append(to: line, font: font, color: color)
         }
         if !said.isEmpty {
-            line.append(words(runsOn.isEmpty && !proxy ? said : " · \(said)"))
+            line.append(words(runsOn.isEmpty && !gateway ? said : " · \(said)"))
         }
         return line
     }
@@ -556,13 +556,13 @@ struct HandoffContent {
         let agent: Agent
         let label: String
         let account: String?
-        let proxy: Bool
+        let gateway: Bool
 
         init(json: JSON?) {
             agent = Agent(rawValue: json?.string("agent") ?? "") ?? .claude
             label = json?.string("label") ?? ""
             account = json?.optionalString("account")
-            proxy = json?.bool("proxy") ?? false
+            gateway = json?.bool("gateway") ?? false
         }
     }
 

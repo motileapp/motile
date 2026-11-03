@@ -235,7 +235,7 @@ fun ControlLabel(
     place: String? = null,
     /** Words after the title in a colour of their own, as "working" after "2 agents", which leave the title in the foreground. */
     tinted: Pair<String, Color>? = null,
-    /** What the words name runs through the proxy, which its symbol after them says. */
+    /** What the words name runs through the gateway, which its symbol after them says. */
     proxied: Boolean = false,
     /** Its chevron points up, at what it hides again. */
     chevronUp: Boolean = false,
@@ -334,7 +334,7 @@ private fun ControlWords(
                 val markColor = if (tinted == null) LocalForeground.current else LocalPalette.current.foreground
                 Text(
                     words(title, tinted, proxied, muted), style = font, maxLines = 1, modifier = Modifier.weight(1f, fill = false),
-                    inlineContent = if (proxied) ProxyMark.content(markColor, size.textSize) else emptyMap(),
+                    inlineContent = if (proxied) GatewayMark.content(markColor, size.textSize) else emptyMap(),
                 )
                 if (detail != null) {
                     Text(" · ", style = font, color = muted, maxLines = 1)
@@ -460,7 +460,7 @@ fun ActionButton(
     place: String? = null,
     /** Words after its title in its tint, which leave the title in the foreground. */
     tinted: String? = null,
-    /** What its title names runs through the proxy, which its symbol after the title says. */
+    /** What its title names runs through the gateway, which its symbol after the title says. */
     proxied: Boolean = false,
     help: String? = null,
     variant: ButtonVariant = if (title.isNullOrEmpty()) ButtonVariant.Ghost else ButtonVariant.Secondary,

@@ -54,11 +54,13 @@ const MAX_LIMIT: usize = 100;
 const DEFAULT_CHARS: usize = 20_000;
 const MAX_CHARS: usize = 50_000;
 
-/// Where an agent reads threads, and the token it does so with.
+/// Where an agent reads threads and reaches the gateway's MCP servers, and the token it does both with.
 #[derive(Clone, Debug)]
 pub struct McpAccess {
     pub url: String,
     pub token: String,
+    /// Each MCP server's slug, which the agent knows it by, and its address.
+    pub mcp_servers: Vec<(String, String)>,
 }
 
 /// The threads' tokens, kept only as their hashes, by the thread each is for.
@@ -275,7 +277,7 @@ pub struct StartAgent {
     pub title: Option<String>,
     /// The part it plays, such as "reviewer". Its prompt starts by telling it.
     pub role: Option<String>,
-    /// The account it runs on, by its name or id from list_accounts, which says how your proxy's
+    /// The account it runs on, by its name or id from list_accounts, which says how your gateway's
     /// accounts work if you have one. Yours when neither this nor `agent` is given.
     pub account: Option<String>,
     /// "claude" or "codex": that agent's default account, or yours when you are that agent.
