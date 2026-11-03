@@ -118,7 +118,7 @@ struct GatewayAccountActions: View {
         } label: {
             Label(account.priorityText, symbol: .listFilter)
         }
-        MenuItem("Sign In Again", symbol: .circleUser) { store.startGatewaySignIn(account.agent) }
+        MenuItem("Sign In Again", symbol: .circleUser) { store.startGatewaySignIn(account.agent, again: account.id) }
         Divider()
         MenuItem("Remove Account", symbol: .trash2, role: .destructive, action: remove)
     }
@@ -482,8 +482,15 @@ struct GatewaySignInSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             if let signIn = store.gateway.signIn {
-                Text("Sign In to \(signIn.agent.name)")
-                    .font(.ui(size: 15, weight: .semibold))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(signIn.title)
+                        .font(.ui(size: 15, weight: .semibold))
+                    if let account = signIn.account {
+                        Text(account)
+                            .font(.ui(size: 13))
+                            .foregroundStyle(Color.themeMutedForeground)
+                    }
+                }
                 steps(signIn)
                 HStack(spacing: 0) {
                     Spacer()
@@ -491,7 +498,7 @@ struct GatewaySignInSheet: View {
                         .keyboardShortcut(.cancelAction)
                     if startsAgain(signIn) {
                         ActionButton("Start Again", variant: .primary, pending: store.gatewaySignInStarting != nil, margin: .beside(leading: 4)) {
-                            store.startGatewaySignIn(signIn.agent)
+                            store.startGatewaySignIn(signIn.agent, again: signIn.again)
                         }
                     }
                 }
@@ -509,20 +516,35 @@ struct GatewaySignInSheet: View {
                         steps(signIn)
                         if startsAgain(signIn) {
                             ActionButton("Start Again", variant: .primary, pending: store.gatewaySignInStarting != nil, fills: true) {
-                                store.startGatewaySignIn(signIn.agent)
+                                store.startGatewaySignIn(signIn.agent, again: signIn.again)
                             }
                         }
                     }
                 }
                 .padding(20)
             }
-            .navigationTitle("Sign In to \(store.gateway.signIn?.agent.name ?? "")")
+            .navigationTitle(store.gateway.signIn?.title ?? "")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 GlassToolbarItem(placement: .cancellationAction) { SheetCloseButton() }
+                if let signIn = store.gateway.signIn, let account = signIn.account {
+                    ToolbarItem(placement: .principal) { title(signIn.title, account: account) }
+                }
             }
         }
         .presentationDragIndicator(.visible)
+    }
+
+    private func title(_ title: String, account: String) -> some View {
+        VStack(spacing: 1) {
+            Text(title)
+                .font(.ui(size: 15, weight: .semibold))
+                .foregroundStyle(Color.themeForeground)
+            Text(account)
+                .font(.ui(size: 12))
+                .foregroundStyle(Color.themeMutedForeground)
+        }
+        .lineLimit(1)
     }
     #endif
 }

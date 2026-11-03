@@ -219,6 +219,7 @@ object DemoDriver {
                 val argument = rest.substringAfter(' ', "")
                 when (rest.substringBefore(' ')) {
                     "sign-in" -> store.gateway.signIn(Agent.of(argument) ?: Agent.Claude)
+                    "sign-in-again" -> store.gateway.view.accounts.firstOrNull()?.let { store.gateway.signIn(it.agent, it.id) }
                     "code" -> store.gateway.finishSignIn(argument)
                 }
             }

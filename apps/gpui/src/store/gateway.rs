@@ -112,6 +112,8 @@ pub struct Adding {
 #[derive(Clone, PartialEq, Debug)]
 pub struct SigningIn {
     pub agent: Agent,
+    /// The account it signs in again.
+    pub again: Option<String>,
     /// Why starting it or finishing it failed, when the core didn't say so in the view.
     pub error: Option<String>,
     /// The view has shown its sign-in, whose end means the account was added.
@@ -243,9 +245,9 @@ impl Store {
     }
 
     /// Starts signing an account of the agent in. Its sheet shows the page to open.
-    pub fn start_gateway_sign_in(&mut self, agent: Agent) {
-        self.gateway.signing_in = Some(SigningIn { agent, error: None, started: false });
-        self.ask(Command::GatewaySignIn { agent }, move |store, result, _| {
+    pub fn start_gateway_sign_in(&mut self, agent: Agent, again: Option<String>) {
+        self.gateway.signing_in = Some(SigningIn { agent, again: again.clone(), error: None, started: false });
+        self.ask(Command::GatewaySignIn { agent, account: again }, move |store, result, _| {
             let Some(signing_in) = &mut store.gateway.signing_in else { return };
             if signing_in.agent != agent {
                 return;

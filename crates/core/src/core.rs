@@ -415,6 +415,8 @@ struct Gateway {
     /// Its last state, with its key.
     state: Option<(String, GatewayState)>,
     sign_in: Option<gateway::SignIn>,
+    /// The account the sign-in being started signs in again.
+    signing_in_again: Option<String>,
 }
 
 /// The rounds that copy the servers' threads between them.
@@ -1297,7 +1299,8 @@ impl Core {
         self.reply(id, Ok(json!({ "url": started.url, "user_code": started.user_code })));
         let codex = started.agent == Agent::Codex;
         let sign_in_id = started.id.clone();
-        self.gateway.sign_in = Some(gateway::SignIn { started, waiting: codex, error: None, task: None });
+        let again = self.gateway.signing_in_again.take();
+        self.gateway.sign_in = Some(gateway::SignIn { started, again, waiting: codex, error: None, task: None });
         if codex {
             self.gateway_finish_sign_in(sign_in_id, None, None);
         }
@@ -2611,8 +2614,9 @@ impl Core {
                     reply(&sink, id, removed.map(|_| json!({})));
                 });
             }
-            Command::GatewaySignIn { agent } => {
+            Command::GatewaySignIn { agent, account } => {
                 self.gateway.sign_in = None;
+                self.gateway.signing_in_again = account;
                 self.gateway_manage(id, Manage::SignIn { agent });
                 self.emit_gateway();
             }

@@ -109,7 +109,7 @@ struct AgentGatewaySettings: View {
         }
         .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
         if account.status == .signInAgain {
-            Button { store.startGatewaySignIn(account.agent) } label: {
+            Button { store.startGatewaySignIn(account.agent, again: account.id) } label: {
                 HStack {
                     SettingsActionLabel("Sign In Again", symbol: .circleUser)
                     Spacer()

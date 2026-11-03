@@ -528,9 +528,12 @@ pub enum Command {
     /// Removes the gateway from the account. The servers' Gateway accounts go with it.
     RemoveGateway,
     /// Starts signing an account of `agent` in on the gateway. Answers with the `url` to open and, for
-    /// Codex, the `user_code` to enter there; the `gateway` event's `sign_in` follows it.
+    /// Codex, the `user_code` to enter there; the `gateway` event's `sign_in` follows it. `account` is
+    /// the one it signs in again, if any.
     GatewaySignIn {
         agent: Agent,
+        #[serde(default)]
+        account: Option<String>,
     },
     /// Finishes Claude's sign-in with the code its page showed. Answers once the account is added.
     GatewayFinishSignIn {

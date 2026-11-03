@@ -210,13 +210,13 @@ fun SettingsScreen(title: String, trailing: (@Composable () -> Unit)? = null, co
 }
 
 @Composable
-fun SettingsBar(title: String, trailing: (@Composable () -> Unit)? = null) {
+fun SettingsBar(title: String, trailing: (@Composable () -> Unit)? = null, subtitle: String? = null) {
     val leading: (@Composable () -> Unit)? = when (val shown = LocalBarLeading.current) {
         is BarLeading.Close -> ({ SheetCloseButton(onClose = shown.action) })
         is BarLeading.Back -> ({ SheetBackButton(shown.action) })
         null -> null
     }
-    SheetBar(title, leading = leading, trailing = trailing)
+    SheetBar(title, subtitle = subtitle, leading = leading, trailing = trailing)
 }
 
 private val sectionGroups = listOf(

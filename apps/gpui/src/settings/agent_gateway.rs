@@ -100,7 +100,7 @@ impl AgentGatewayPage {
                     .size(ControlSize::Large)
                     .on_click(move |_, _, cx| {
                         store.update(cx, |store, cx| {
-                            store.start_gateway_sign_in(agent);
+                            store.start_gateway_sign_in(agent, None);
                             cx.notify();
                         })
                     });
@@ -134,11 +134,11 @@ impl AgentGatewayPage {
         });
         let signs_in_again = account.status == AccountState::SignInAgain;
         let sign_in_again = signs_in_again.then(|| {
-            let (store, agent) = (self.store.clone(), account.agent);
+            let (store, agent, again) = (self.store.clone(), account.agent, account.id.clone());
             large(("account-sign-in", index), "Sign In Again").margin(beside(0., TRAILING_GAP / 2.)).on_click(
                 move |_, _, cx| {
                     store.update(cx, |store, cx| {
-                        store.start_gateway_sign_in(agent);
+                        store.start_gateway_sign_in(agent, Some(again.clone()));
                         cx.notify();
                     })
                 },
@@ -201,10 +201,10 @@ impl AgentGatewayPage {
                 })
             });
             let sign_in = {
-                let (store, agent) = (store.clone(), account.agent);
+                let (store, agent, again) = (store.clone(), account.agent, account.id.clone());
                 move |_: &mut Window, cx: &mut App| {
                     store.update(cx, |store, cx| {
-                        store.start_gateway_sign_in(agent);
+                        store.start_gateway_sign_in(agent, Some(again.clone()));
                         cx.notify();
                     })
                 }
@@ -871,12 +871,17 @@ impl Render for SignInSheet {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let c = colors(cx);
         let store = self.store.read(cx);
-        let (agent, local_error) = store
-            .gateway
-            .signing_in
-            .as_ref()
-            .map_or((Agent::Claude, None), |signing_in| (signing_in.agent, signing_in.error.clone()));
+        let (agent, again, local_error) =
+            store.gateway.signing_in.as_ref().map_or((Agent::Claude, None, None), |signing_in| {
+                (signing_in.agent, signing_in.again.clone(), signing_in.error.clone())
+            });
         let sign_in = store.gateway_sign_in().cloned();
+        let title = match (&sign_in, &again) {
+            (Some(sign_in), _) => sign_in.title.clone(),
+            (None, Some(_)) => format!("Sign In to {} Again", agent_name(agent)),
+            (None, None) => format!("Sign In to {}", agent_name(agent)),
+        };
+        let account = sign_in.as_ref().and_then(|sign_in| sign_in.account.clone());
         let error = sign_in.as_ref().and_then(|sign_in| sign_in.error.clone()).or(local_error);
         let mut body: Vec<AnyElement> = Vec::new();
         match &sign_in {
@@ -978,7 +983,7 @@ impl Render for SignInSheet {
                         .margin(beside(4., 0.))
                         .on_click(move |_, _, cx| {
                             store.update(cx, |store, cx| {
-                                store.start_gateway_sign_in(agent);
+                                store.start_gateway_sign_in(agent, again.clone());
                                 cx.notify();
                             })
                         }),
@@ -992,9 +997,13 @@ impl Render for SignInSheet {
             .text_color(c.foreground)
             .child(
                 div()
-                    .text_size(px(15.))
-                    .font_weight(FontWeight::SEMIBOLD)
-                    .child(format!("Sign In to {}", agent_name(agent))),
+                    .flex()
+                    .flex_col()
+                    .gap(px(2.))
+                    .child(div().text_size(px(15.)).font_weight(FontWeight::SEMIBOLD).child(title))
+                    .children(
+                        account.map(|account| div().text_size(px(13.)).text_color(c.muted_foreground).child(account)),
+                    ),
             )
             .children(body)
             .child(footer);

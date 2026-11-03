@@ -221,7 +221,7 @@ pub fn view(
 }
 
 /// The Gateway account that places its threads itself has no name of its own: it is its agent's.
-fn agent_name(agent: Agent) -> &'static str {
+pub fn agent_name(agent: Agent) -> &'static str {
     match agent {
         Agent::Claude => "Claude Code",
         Agent::Codex => "Codex",

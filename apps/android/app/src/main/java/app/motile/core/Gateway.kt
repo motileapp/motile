@@ -129,6 +129,12 @@ data class GatewayCapture(val on: Boolean = false, val text: String = "Not captu
 /** An account's sign-in the gateway started: Claude's page shows a code to paste back, Codex's takes the code shown here. */
 data class GatewaySignIn(
     val agent: Agent,
+    /** "Sign In to Claude Code", "Sign In to Claude Code Again". */
+    val title: String,
+    /** The id of the account it signs in again. */
+    val again: String?,
+    /** Who signs in again: the account's email, or its name. */
+    val account: String?,
     val url: String,
     val userCode: String?,
     val needsCode: Boolean,
@@ -140,6 +146,9 @@ data class GatewaySignIn(
     companion object {
         fun of(json: JSON) = GatewaySignIn(
             agent = Agent.of(json.string("agent")) ?: Agent.Claude,
+            title = json.string("title"),
+            again = json.optionalString("again"),
+            account = json.optionalString("account"),
             url = json.string("url"),
             userCode = json.optionalString("user_code"),
             needsCode = json.bool("needs_code"),
@@ -338,10 +347,10 @@ class Gateway {
     // Accounts
 
     /** Starts an account's sign-in; the sheet follows it from the view's `signIn` and shows the page to open. */
-    fun signIn(agent: Agent) {
+    fun signIn(agent: Agent, again: String? = null) {
         if (startingSignIn != null) return
         startingSignIn = agent
-        send("gateway_sign_in", mapOf("agent" to agent.raw)) { result ->
+        send("gateway_sign_in", mapOf("agent" to agent.raw, "account" to again)) { result ->
             startingSignIn = null
             alert(result)
         }
