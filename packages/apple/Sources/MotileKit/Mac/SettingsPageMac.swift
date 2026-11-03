@@ -421,9 +421,9 @@ func rowOutset(for height: CGFloat) -> CGFloat {
     settingsInset - (settingsRowHeight - height) / 2
 }
 
-/// Half the room between the lights of two large controls side by side at a row's end, which
-/// each takes as its own.
-let settingsHalfGap = (settingsRowSpacing - rowOutset(for: ControlSize.large.height)) / 2
+/// Half the room between the lights of two controls side by side at a row's end, which each
+/// takes as its own.
+let settingsHalfGap = settingsRowSpacing / 2
 
 /// How a server's writer is told to name the branches it makes, to change and to put back.
 private struct BranchInstructionsEditor: View {
@@ -618,7 +618,7 @@ struct SettingsRow<Leading: View, Trailing: View>: View {
             leading
                 .padding(.vertical, scaled(8))
             Spacer(minLength: 12)
-            trailing
+            HStack(spacing: settingsRowSpacing) { trailing }
                 .padding(.trailing, -rowOutset(for: control))
         }
         .padding(.horizontal, settingsInset)
