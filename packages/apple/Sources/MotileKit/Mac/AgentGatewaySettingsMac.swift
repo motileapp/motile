@@ -127,20 +127,23 @@ struct AgentGatewaySettings: View {
                     .padding(.horizontal, settingsInset)
                     .padding(.vertical, 14)
             }
-            LazyVStack(spacing: 0) {
-                ForEach(log.rows) { row in
-                    ThemeDivider()
-                    logRow(row)
-                }
-                if log.more || (log.loading && log.rows.isEmpty) {
-                    ThemeDivider()
-                    Spinner()
-                        .foregroundStyle(Color.themeMutedForeground)
-                        .frame(maxWidth: .infinity, minHeight: 44)
-                        .task(id: log.rows.count) { log.loadMore() }
+            FadingScroll(maxHeight: settingsListHeight) {
+                LazyVStack(spacing: 0) {
+                    ForEach(log.rows) { row in
+                        ThemeDivider()
+                        logRow(row)
+                    }
+                    if log.more || (log.loading && log.rows.isEmpty) {
+                        ThemeDivider()
+                        Spinner()
+                            .foregroundStyle(Color.themeMutedForeground)
+                            .frame(maxWidth: .infinity, minHeight: 44)
+                            .task(id: log.rows.count) { log.loadMore() }
+                    }
                 }
             }
         }
+        .clipShape(RoundedRectangle(cornerRadius: Radius.lg, style: .continuous))
         .card()
     }
 

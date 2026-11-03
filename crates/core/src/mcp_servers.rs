@@ -1,7 +1,9 @@
 //! The McpServers page: the MCPs the account's gateway holds the logins of, as their cards show them,
 //! the known ones the add sheet offers, the form a tool is tried with, and the calls agents made.
 
-use motile_protocol::gateway_wire::{McpAuth, McpCall, McpCallDetail, McpKey, McpServer, McpStatus, McpTool};
+use motile_protocol::gateway_wire::{
+    McpAuth, McpCall, McpCallDetail, McpKey, McpServer, McpStatus, McpTool, ToolKind, ToolPermission,
+};
 use serde::Serialize;
 use serde_json::{Map, Value, json};
 
@@ -73,10 +75,19 @@ pub struct McpServerRow {
     /// "30 of 32 tools on", "No tools".
     pub tools_text: String,
     pub tools: Vec<ToolRow>,
-    /// Some of its tools write and some only read: "Read Only" changes something.
-    pub has_read_only: bool,
-    /// How agents name one of its tools: `mcp__linear__create_issue`.
-    pub example: String,
+    /// Its tools by what they do: those that only read, those that write or delete, and the others.
+    pub groups: Vec<ToolGroup>,
+}
+
+/// An MCP server's tools of one kind, with the permission they share.
+#[derive(Serialize, Clone, Debug, PartialEq)]
+pub struct ToolGroup {
+    pub kind: ToolKind,
+    /// "Read-only tools", "Write/delete tools", "Other tools".
+    pub title: String,
+    /// What every tool of it may do, or none when they differ: "Custom".
+    pub permission: Option<ToolPermission>,
+    pub tools: Vec<ToolRow>,
 }
 
 #[derive(Serialize, Clone, Copy, Debug, PartialEq)]
@@ -95,8 +106,8 @@ pub struct ToolRow {
     pub title: String,
     /// The first sentence of its description.
     pub summary: Option<String>,
-    pub writes: bool,
-    pub enabled: bool,
+    pub kind: ToolKind,
+    pub permission: ToolPermission,
 }
 
 pub fn rows(mcp_servers: &[McpServer]) -> Vec<McpServerRow> {
@@ -104,7 +115,7 @@ pub fn rows(mcp_servers: &[McpServer]) -> Vec<McpServerRow> {
 }
 
 fn row(mcp_server: &McpServer) -> McpServerRow {
-    let on = mcp_server.tools.iter().filter(|tool| tool.enabled).count();
+    let on = mcp_server.tools.iter().filter(|tool| tool.permission() != ToolPermission::Block).count();
     let total = mcp_server.tools.len();
     let tools_text = match total {
         0 => "No tools".to_string(),
@@ -124,8 +135,7 @@ fn row(mcp_server: &McpServer) -> McpServerRow {
             (McpServerState::Ready, format!("{login} · {}", host(&mcp_server.url)))
         }
     };
-    let writes = mcp_server.tools.iter().filter(|tool| tool.writes).count();
-    let example_tool = mcp_server.tools.iter().find(|tool| tool.writes).or(mcp_server.tools.first());
+    let tools: Vec<ToolRow> = mcp_server.tools.iter().map(tool_row).collect();
     McpServerRow {
         id: mcp_server.id.clone(),
         slug: mcp_server.slug.clone(),
@@ -139,10 +149,26 @@ fn row(mcp_server: &McpServer) -> McpServerRow {
         state,
         status_text,
         tools_text,
-        tools: mcp_server.tools.iter().map(tool_row).collect(),
-        has_read_only: writes > 0 && writes < total,
-        example: agent_name(&mcp_server.slug, example_tool.map_or("tool", |tool| tool.name.as_str())),
+        groups: groups(&tools),
+        tools,
     }
+}
+
+fn groups(tools: &[ToolRow]) -> Vec<ToolGroup> {
+    let kinds = [
+        (ToolKind::Read, "Read-only tools"),
+        (ToolKind::Write, "Write/delete tools"),
+        (ToolKind::Other, "Other tools"),
+    ];
+    kinds
+        .into_iter()
+        .filter_map(|(kind, title)| {
+            let tools: Vec<ToolRow> = tools.iter().filter(|tool| tool.kind == kind).cloned().collect();
+            let first = tools.first()?.permission;
+            let shared = tools.iter().all(|tool| tool.permission == first);
+            Some(ToolGroup { kind, title: title.to_string(), permission: shared.then_some(first), tools })
+        })
+        .collect()
 }
 
 /// How agents name a mcp_server's tool.
@@ -155,8 +181,8 @@ fn tool_row(tool: &McpTool) -> ToolRow {
         name: tool.name.clone(),
         title: tool.title.clone().unwrap_or_else(|| readable(&tool.name)),
         summary: tool.description.as_deref().and_then(summary),
-        writes: tool.writes,
-        enabled: tool.enabled,
+        kind: tool.kind(),
+        permission: tool.permission(),
     }
 }
 
@@ -474,26 +500,33 @@ mod tests {
         }
     }
 
-    fn tool(name: &str, writes: bool, enabled: bool) -> McpTool {
+    fn tool(name: &str, kind: ToolKind, permission: ToolPermission) -> McpTool {
         McpTool {
             name: name.into(),
             title: None,
             description: Some("Lists the issues. Filters by team.\nMore.".into()),
             input_schema: json!({}),
-            writes,
-            enabled,
+            writes: kind != ToolKind::Read,
+            enabled: permission != ToolPermission::Block,
+            kind: Some(kind),
+            permission: Some(permission),
         }
     }
 
     #[test]
-    fn a_card_says_how_its_mcp_server_stands_and_how_agents_name_its_tools() {
-        let tools = vec![tool("list_issues", false, true), tool("createIssue", true, false)];
+    fn a_card_says_how_its_mcp_server_stands_and_groups_its_tools() {
+        let tools = vec![
+            tool("list_issues", ToolKind::Read, ToolPermission::Allow),
+            tool("createIssue", ToolKind::Write, ToolPermission::Block),
+            tool("delete_issue", ToolKind::Write, ToolPermission::Ask),
+        ];
         let ready = row(&mcp_server(tools.clone(), McpStatus::Ready, true));
         assert_eq!(ready.status_text, "Signed in · mcp.linear.app");
-        assert_eq!(ready.tools_text, "1 of 2 tools on");
+        assert_eq!(ready.tools_text, "2 of 3 tools on");
         assert_eq!((ready.host.as_str(), ready.monogram.as_str()), ("mcp.linear.app", "L"));
-        assert_eq!(ready.example, "mcp__linear__createIssue");
-        assert!(ready.has_read_only);
+        let groups: Vec<(&str, Option<ToolPermission>, usize)> =
+            ready.groups.iter().map(|group| (group.title.as_str(), group.permission, group.tools.len())).collect();
+        assert_eq!(groups, [("Read-only tools", Some(ToolPermission::Allow), 1), ("Write/delete tools", None, 2)]);
         assert_eq!(ready.tools[0].title, "List issues");
         assert_eq!(ready.tools[1].title, "Create issue");
         assert_eq!(ready.tools[0].summary.as_deref(), Some("Lists the issues."));
@@ -502,8 +535,18 @@ mod tests {
         assert_eq!((off.state, off.status_text.as_str()), (McpServerState::Off, "Off · agents don't get it"));
         let again = row(&mcp_server(tools, McpStatus::SignInAgain, true));
         assert_eq!(again.state, McpServerState::SignInAgain);
-        let all_read = row(&mcp_server(vec![tool("a", false, true)], McpStatus::Ready, true));
-        assert_eq!((all_read.tools_text.as_str(), all_read.has_read_only), ("1 tool", false));
+        let all_read = row(&mcp_server(vec![tool("a", ToolKind::Read, ToolPermission::Allow)], McpStatus::Ready, true));
+        assert_eq!(all_read.tools_text, "1 tool");
+
+        let mut old = tool("b", ToolKind::Other, ToolPermission::Allow);
+        (old.kind, old.permission, old.enabled) = (None, None, false);
+        let from_old = row(&mcp_server(vec![old], McpStatus::Ready, true));
+        assert_eq!(
+            from_old.groups[0].permission,
+            Some(ToolPermission::Block),
+            "a gateway before permissions had switches"
+        );
+        assert_eq!(from_old.groups[0].kind, ToolKind::Other);
         assert_eq!(tint("Linear"), tint("linear"));
     }
 

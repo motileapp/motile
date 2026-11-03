@@ -276,25 +276,16 @@ private fun Added(id: String, slug: String, onSlug: (String) -> Unit) {
         InputField(mcpServer.slug, slug, onSlug, Modifier.fillMaxWidth(), size = ControlSize.Large, monospaced = true, keyboardOptions = plainKeyboard)
         SlugExample(mcpServer, slug)
     }
-    if (mcpServer.tools.isEmpty()) return
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        SheetLabel("Tools")
-        Spacer(Modifier.weight(1f))
-        McpServerToolsActions(mcpServer, mcpServers)
-    }
-    val scrolls = mcpServer.tools.size > TOOLS_SHOWN
-    val frame = if (scrolls) Modifier.height(scaled(260f).dp).verticalScroll(rememberScrollState()) else Modifier
-    Column(frame, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        for (tool in mcpServer.tools) {
+    if (mcpServer.groups.isEmpty()) return
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        SheetLabel("Tool permissions")
+        for (group in mcpServer.groups) {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                McpServerToolRow(mcpServer, tool, mcpServers)
+                McpToolGroupHeader(mcpServer, group, mcpServers)
             }
         }
     }
 }
-
-/** The most tools the connected step lists without a scroll of their own. */
-private const val TOOLS_SHOWN = 6
 
 /** Names an MCP server, for the user and for the agents. */
 @Composable
@@ -407,7 +398,7 @@ fun McpServerTrySheet(mcpServer: McpServerRow) {
                 FieldInput(field, values[field.name] ?: "") { values = values + (field.name to it) }
             }
         }
-        if (picked?.writes == true) Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+        if (picked != null && picked.kind != "read") Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(Symbol.TriangleAlert, IconSize.Sm, color = palette.warning)
             Text(McpServerText.runsForReal, size = 12f, color = palette.warning)
         }

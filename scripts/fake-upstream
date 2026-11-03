@@ -50,10 +50,12 @@ TRACKER_TOOLS = [
     {"name": "create_issue", "description": "Files a new issue.",
      "inputSchema": {"type": "object", "required": ["title"], "properties": {
          "title": {"type": "string"}, "priority": {"type": "integer", "default": 3},
-         "urgent": {"type": "boolean"}}}},
+         "urgent": {"type": "boolean"}}},
+     "annotations": {"readOnlyHint": False}},
     {"name": "update_issue", "description": "Changes an issue's state, assignee or priority.",
      "inputSchema": {"type": "object", "required": ["id"], "properties": {
-         "id": {"type": "string"}, "state": {"type": "string", "enum": ["open", "started", "done"]}}}},
+         "id": {"type": "string"}, "state": {"type": "string", "enum": ["open", "started", "done"]}}},
+     "annotations": {"destructiveHint": True}},
     {"name": "comment", "description": "Comments on an issue.",
      "inputSchema": {"type": "object", "required": ["id", "body"], "properties": {
          "id": {"type": "string"}, "body": {"type": "string"}}}},

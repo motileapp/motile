@@ -78,7 +78,9 @@ OpenUI Lang 1.0, the language of the programs agents show in their replies (thes
 
 ### apps/auth (Rust, Axum, sqlx on Postgres)
 
-- `sign_in.rs`: the browser's side of a sign-in. `google.rs` is the OIDC exchange.
+- `sign_in.rs`: the browser's side of a sign-in. `google.rs` is the OIDC exchange. `/mcp/callback`
+  is where an MCP server's sign-in, which a gateway started, comes back to, and goes on to
+  `motile://mcp`: an https address, which some MCP servers insist on.
 - `api.rs`: what clients, servers and the web app call. A caller is a device that signed the
   request or a session's `Bearer` token. A server removed from an account is kept in
   `removed_servers` with its name, so that its threads, which live on as copies on the account's
@@ -126,10 +128,13 @@ top of both.
   API's prices.
 - `mcp/`: the account's MCP servers, MCPs the gateway holds the logins of, which every agent of
   every server gets, each as an MCP server of its own named by its slug (`mcp__linear__…`). An agent's
-  MCP requests pass through to the MCP server with its login (`passthrough.rs`), which drops the tools
-  turned off from `tools/list`, refuses calls to them, and logs every call. `sign_in.rs` signs one in
-  as MCP's authorization spec says (protected resource metadata, client registration, PKCE), back to
-  `motile://mcp`; one that doesn't sign in takes a key. `client.rs` asks one for its tools and
+  MCP requests pass through to the MCP server with its login (`passthrough.rs`), which drops the
+  blocked tools from `tools/list`, refuses calls to them, holds a call to a tool that needs approval
+  until the server sends it again approved, and logs every call. Each tool is always allowed, needs
+  approval or is blocked, by its own permission or its kind's (read-only, write/delete, other, as its
+  annotations say). `sign_in.rs` signs one in as MCP's authorization spec says (protected resource
+  metadata, client registration, PKCE), back to the auth server's `/mcp/callback`, which sends it on
+  to `motile://mcp`; one that doesn't sign in takes a key. `client.rs` asks one for its tools and
   calls the tool the user tries.
 - `store.rs`: its SQLite on the volume, with the request log and the requests captured in full.
 - `tests/e2e.rs`: the gateway over real iroh connections, against fake upstreams.
@@ -275,7 +280,9 @@ shadcn's own colours, opacities and radii are gone from the theme.
   interface, called with the thread's token, and the iroh connection to the gateway that carries each
   request. The token never leaves the server; the gateway is told the thread. Every agent, on any
   account, reaches the gateway's MCP servers there too (`/mcp/<slug>`), which `hub.rs` adds
-  beside `motile` to its MCP servers while the account has a gateway.
+  beside `motile` to its MCP servers while the account has a gateway. A call the gateway says needs
+  approval is asked of the user in the thread, under any access, and sent again approved; the agents
+  themselves never ask for those servers' tools.
 - `sync.rs`: the server's change log and its copies of the account's other servers' logs. Triggers
   give each write to a project, a thread, an item or the usage the next number of the log
   (`migrations/0018_sync.sql`), and a delete leaves a tombstone. A client asks a server what changed

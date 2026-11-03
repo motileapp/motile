@@ -64,11 +64,14 @@ pub fn arguments(turn: &Turn) -> Vec<String> {
             servers.insert(slug.clone(), server(url));
         }
         servers.insert(crate::mcp::SERVER_NAME.to_string(), server(&mcp.url));
+        // The gateway's MCP servers ask for approval themselves, as their tools' permissions say.
+        let gateway_tools = mcp.mcp_servers.iter().map(|(slug, _)| format!("mcp__{slug}"));
+        let allowed: Vec<String> = crate::mcp::TOOLS.iter().map(|tool| tool.to_string()).chain(gateway_tools).collect();
         arguments.extend([
             "--mcp-config".to_string(),
             json!({"mcpServers": servers}).to_string(),
             "--allowedTools".to_string(),
-            crate::mcp::TOOLS.join(","),
+            allowed.join(","),
         ]);
     }
     arguments.extend(
@@ -969,10 +972,7 @@ mod tests {
         let allowed: Vec<&str> = arguments[at + 3].split(',').collect();
         assert_eq!(allowed[..2], ["mcp__motile__read_thread", "mcp__motile__list_accounts"]);
         assert!(allowed.contains(&"mcp__motile__start_agent"), "{allowed:?}");
-        assert!(
-            !allowed.iter().any(|tool| tool.starts_with("mcp__linear")),
-            "an MCP server's tools ask under supervision"
-        );
+        assert!(allowed.contains(&"mcp__linear"), "the gateway's MCP servers ask as their tools' permissions say");
         assert!(!arguments.iter().any(|argument| argument.contains("secret")));
     }
 

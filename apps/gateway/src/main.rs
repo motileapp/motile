@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use anyhow::Context;
 use motile_gateway::access::{Access, AccountSource};
-use motile_gateway::config::Upstreams;
+use motile_gateway::config::{self, Upstreams};
 use motile_gateway::serve::BindOptions;
 use motile_gateway::{Options, start};
 use motile_protocol::auth_api::DeviceKind;
@@ -54,9 +54,11 @@ async fn main() -> anyhow::Result<()> {
 
     let servers = keys("MOTILE_ALLOW_SERVERS")?;
     let clients = keys("MOTILE_ALLOW_CLIENTS")?;
+    let mut upstreams = Upstreams::from_env();
     let access = match servers.is_empty() && clients.is_empty() {
         true => {
             let auth_url = linked_auth_url(&data_dir, &auth_url, &key).await;
+            upstreams.mcp_redirect = config::mcp_redirect(&auth_url);
             let key = DeviceKey::from_bytes(key.to_bytes());
             Access::account(AccountSource { auth_url, key, cache: data_dir.join("devices.json") })
         }
@@ -67,7 +69,7 @@ async fn main() -> anyhow::Result<()> {
         data_dir,
         key: DeviceKey::from_bytes(key.to_bytes()),
         access,
-        upstreams: Upstreams::from_env(),
+        upstreams,
         bind: BindOptions {
             local_only: variable("MOTILE_LOCAL").is_some(),
             port: variable("MOTILE_GATEWAY_PORT").and_then(|port| port.parse().ok()),

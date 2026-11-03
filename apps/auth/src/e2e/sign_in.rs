@@ -127,3 +127,13 @@ async fn the_dev_login_signs_in_without_google(db: PgPool) {
 
     assert_eq!(emails(&me), Some("dev@example.com"));
 }
+
+#[sqlx::test]
+async fn an_mcp_sign_in_goes_on_to_the_client_as_it_came(db: PgPool) {
+    let auth = Auth::start(db).await;
+    let back = auth.get(&format!("{}/mcp/callback?code=c%201&state=s1", auth.base)).await;
+    assert!(back.status().is_redirection());
+    assert_eq!(back.headers()[LOCATION], "motile://mcp?code=c+1&state=s1");
+    let refused = auth.get(&format!("{}/mcp/callback?error=access_denied", auth.base)).await;
+    assert_eq!(refused.headers()[LOCATION], "motile://mcp?error=access_denied");
+}

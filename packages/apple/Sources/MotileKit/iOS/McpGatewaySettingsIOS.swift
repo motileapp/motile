@@ -70,7 +70,7 @@ struct McpGatewaySettings: View {
             search = words.count > 1 ? words[1] : ""
             adding = true
         case "activity": showsActivity = true
-        case "unfold": if let named { unfolded.insert(named.id) }
+        case "unfold": if let named { unfolded.formUnion(named.groups.map { "\(named.id)/\($0.id)" }) }
         case "try": sheet = named.map { McpServerSheet(kind: .tryTool, mcpServer: $0) }
         case "rename": sheet = named.map { McpServerSheet(kind: .rename, mcpServer: $0) }
         case "key": sheet = named.map { McpServerSheet(kind: .key, mcpServer: $0) }
@@ -117,7 +117,6 @@ struct McpGatewaySettings: View {
     }
 
     @ViewBuilder private func group(_ mcpServer: McpServerRow) -> some View {
-        let open = unfolded.contains(mcpServer.id)
         Section {
             HStack(spacing: 12) {
                 McpServerTile(monogram: mcpServer.monogram, tint: mcpServer.tint, size: SettingsTile.size)
@@ -159,33 +158,19 @@ struct McpGatewaySettings: View {
                 }
                 .disabled(store.mcpServerSigningIn != nil)
             }
-            if !mcpServer.tools.isEmpty {
-                Button {
-                    withAnimation { if open { unfolded.remove(mcpServer.id) } else { unfolded.insert(mcpServer.id) } }
-                } label: {
-                    HStack {
-                        Text(mcpServer.toolsText)
-                            .foregroundStyle(Color.themeForeground)
-                        Spacer()
-                        if open {
-                            McpServerToolsActions(mcpServer: mcpServer)
-                        }
-                        Image(open ? .chevronDown : .chevronRight, size: .md)
-                            .foregroundStyle(Color.themeMutedForeground)
-                    }
+            ForEach(mcpServer.groups) { group in
+                let key = "\(mcpServer.id)/\(group.id)"
+                let open = unfolded.contains(key)
+                McpToolGroupRow(mcpServer: mcpServer, group: group, open: open) {
+                    withAnimation { if open { unfolded.remove(key) } else { unfolded.insert(key) } }
                 }
+                .opacity(.disabled, when: !mcpServer.enabled)
                 if open {
-                    ForEach(mcpServer.tools) { tool in
+                    ForEach(group.tools) { tool in
                         McpServerToolRow(mcpServer: mcpServer, tool: tool)
                             .opacity(.disabled, when: !mcpServer.enabled)
                     }
                 }
-            }
-        } footer: {
-            if open {
-                Text(mcpServer.example)
-                    .font(.footnote.monospaced())
-                    .foregroundStyle(Color.themeMutedForeground)
             }
         }
         .id("mcp-server/\(mcpServer.id)")

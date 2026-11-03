@@ -200,8 +200,11 @@ impl Parser {
             let headers = json!({"Authorization": format!("Bearer {}", mcp.token)});
             let server = |url: &str| json!({"url": url, "http_headers": headers, "tool_timeout_sec": crate::mcp::TOOL_TIMEOUT_SECS});
             let mut servers = serde_json::Map::new();
+            // The gateway's MCP servers ask for approval themselves, as their tools' permissions say.
             for (slug, url) in &mcp.mcp_servers {
-                servers.insert(slug.clone(), server(url));
+                let mut gateway_server = server(url);
+                gateway_server["default_tools_approval_mode"] = json!("approve");
+                servers.insert(slug.clone(), gateway_server);
             }
             servers.insert(crate::mcp::SERVER_NAME.to_string(), server(&mcp.url));
             thread["config"] = json!({"mcp_servers": servers});
@@ -856,6 +859,7 @@ mod tests {
         );
         let linear = &asked[1]["params"]["config"]["mcp_servers"]["linear"];
         assert_eq!(linear["url"], "http://127.0.0.1:8/mcp/linear");
+        assert_eq!(linear["default_tools_approval_mode"], "approve");
         assert_eq!(linear["http_headers"]["Authorization"], "Bearer secret");
 
         let events = parser.parse(r#"{"id":2,"result":{"thread":{"id":"t1"},"model":"gpt-6"}}"#);

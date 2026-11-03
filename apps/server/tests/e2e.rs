@@ -4701,7 +4701,7 @@ async fn an_agents_request_reaches_the_gateway_as_its_threads_and_streams_back()
     let tunnel = gateway::Tunnel::new(endpoint, key);
     let tokens = Arc::new(mcp::Tokens::default());
     let token = tokens.mint("thread-1");
-    let port = gateway::serve(tunnel.clone(), tokens, "own".to_string()).await.unwrap();
+    let port = gateway::serve(tunnel.clone(), tokens, "own".to_string(), std::sync::Weak::new()).await.unwrap();
 
     motile_protocol::tls::install();
     let client = reqwest::Client::new();

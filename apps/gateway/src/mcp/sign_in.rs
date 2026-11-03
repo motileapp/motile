@@ -1,7 +1,8 @@
 //! Signing in to an MCP server as MCP's authorization spec says: the protected resource's metadata
 //! names its authorization server, the gateway registers itself there as a client, and the user
-//! approves it in the browser, which comes back to `motile://mcp` with a code that only the
-//! gateway, which holds the PKCE verifier, can exchange.
+//! approves it in the browser, which comes back to the auth server's `/mcp/callback` and on to
+//! `motile://mcp` with a code that only the gateway, which holds the PKCE verifier, can exchange.
+//! An https address, as claude.ai's: some authorization servers refuse any other.
 
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
@@ -15,7 +16,6 @@ use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use tokio::sync::Mutex;
 
-pub const REDIRECT: &str = "motile://mcp";
 const SIGN_IN_WAITS: Duration = Duration::from_secs(15 * 60);
 const ASK_WITHIN: Duration = Duration::from_secs(20);
 
@@ -47,6 +47,7 @@ pub struct Pending {
     pub mcp_server: Option<String>,
     pub url: String,
     pub name: Option<String>,
+    redirect: String,
     verifier: String,
     token_endpoint: String,
     client_id: String,
@@ -63,6 +64,7 @@ impl SignIns {
     pub async fn start(
         &self,
         http: &reqwest::Client,
+        redirect: &str,
         url: &str,
         name: Option<String>,
         mcp_server: Option<String>,
@@ -70,13 +72,13 @@ impl SignIns {
     ) -> anyhow::Result<Option<(String, String)>> {
         let Some(found) = discover(http, url, challenge).await? else { return Ok(None) };
         let Some(registration) = found.registration_endpoint.as_deref() else { return Ok(None) };
-        let (client_id, client_secret) = register(http, registration).await?;
+        let (client_id, client_secret) = register(http, registration, redirect).await?;
         let verifier = random_url_safe();
         let state = random_url_safe();
         let mut query = vec![
             ("response_type", "code".to_string()),
             ("client_id", client_id.clone()),
-            ("redirect_uri", REDIRECT.to_string()),
+            ("redirect_uri", redirect.to_string()),
             ("code_challenge", URL_SAFE_NO_PAD.encode(Sha256::digest(verifier.as_bytes()))),
             ("code_challenge_method", "S256".to_string()),
             ("state", state.clone()),
@@ -91,6 +93,7 @@ impl SignIns {
             mcp_server,
             url: url.to_string(),
             name,
+            redirect: redirect.to_string(),
             verifier,
             token_endpoint: found.token_endpoint,
             client_id,
@@ -109,7 +112,7 @@ impl SignIns {
         let mut form = vec![
             ("grant_type", "authorization_code"),
             ("code", code),
-            ("redirect_uri", REDIRECT),
+            ("redirect_uri", &pending.redirect),
             ("client_id", &pending.client_id),
             ("code_verifier", &pending.verifier),
             ("resource", &pending.resource),
@@ -250,13 +253,13 @@ async fn fetch_json(http: &reqwest::Client, url: &str) -> Option<Value> {
     response.json::<Value>().await.ok().filter(Value::is_object)
 }
 
-async fn register(http: &reqwest::Client, endpoint: &str) -> anyhow::Result<(String, Option<String>)> {
+async fn register(http: &reqwest::Client, endpoint: &str, redirect: &str) -> anyhow::Result<(String, Option<String>)> {
     let response = http
         .post(endpoint)
         .json(&json!({
             "client_name": "Motile",
             "client_uri": "https://motile.app",
-            "redirect_uris": [REDIRECT],
+            "redirect_uris": [redirect],
             "grant_types": ["authorization_code", "refresh_token"],
             "response_types": ["code"],
             "token_endpoint_auth_method": "none",

@@ -77,8 +77,7 @@ struct McpGatewaySettings: View {
     }
 
     private func card(_ mcpServer: McpServerRow) -> some View {
-        let open = unfolded.contains(mcpServer.id)
-        return VStack(spacing: 0) {
+        VStack(spacing: 0) {
             SettingsRow {
                 HStack(spacing: 10) {
                     McpServerTile(monogram: mcpServer.monogram, tint: mcpServer.tint)
@@ -110,64 +109,41 @@ struct McpGatewaySettings: View {
                     )
                 }
             }
-            if !mcpServer.tools.isEmpty {
+            ForEach(mcpServer.groups) { group in
                 ThemeDivider()
-                fold(mcpServer, open: open)
-                if open {
-                    tools(mcpServer)
-                }
+                self.group(group, of: mcpServer)
             }
         }
+        .clipShape(RoundedRectangle(cornerRadius: Radius.lg, style: .continuous))
         .card()
     }
 
-    /// How many tools it gives agents, which unfolds them.
-    private func fold(_ mcpServer: McpServerRow, open: Bool) -> some View {
-        Button {
+    /// A group of the MCP server's tools, its permission, and its tools while it is unfolded.
+    @ViewBuilder private func group(_ group: McpToolGroup, of mcpServer: McpServerRow) -> some View {
+        let key = "\(mcpServer.id)/\(group.id)"
+        let open = unfolded.contains(key)
+        McpToolGroupRow(mcpServer: mcpServer, group: group, open: open) {
             withAnimation(.snappy(duration: 0.2)) {
-                if open { unfolded.remove(mcpServer.id) } else { unfolded.insert(mcpServer.id) }
+                if open { unfolded.remove(key) } else { unfolded.insert(key) }
             }
-        } label: {
-            HStack(spacing: 8) {
-                Text(mcpServer.toolsText)
-                    .font(.ui(size: 12.5))
-                    .foregroundStyle(Color.themeMutedForeground)
-                Spacer()
-                Image(open ? .chevronDown : .chevronRight, size: .sm)
-                    .foregroundStyle(Color.themeMutedForeground)
-            }
-            .padding(.horizontal, settingsInset)
-            .frame(height: scaled(36))
-            .contentShape(Rectangle())
         }
-        .buttonStyle(.highlight(radius: 0))
+        .padding(.horizontal, settingsInset)
+        .padding(.vertical, 8)
         .opacity(.disabled, when: !mcpServer.enabled)
-    }
-
-    private func tools(_ mcpServer: McpServerRow) -> some View {
-        VStack(spacing: 0) {
-            ThemeDivider()
-            HStack {
-                Text("Agents call them as \(mcpServer.example)")
-                    .font(.ui(size: 11.5, design: .monospaced))
-                    .foregroundStyle(Color.themeMutedStrongerForeground)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                    .textSelection(.enabled)
-                Spacer(minLength: 12)
-                McpServerToolsActions(mcpServer: mcpServer)
-            }
-            .padding(.horizontal, settingsInset)
-            .padding(.vertical, 8)
-            ForEach(mcpServer.tools) { tool in
+        if open {
+            ForEach(group.tools) { tool in
                 ThemeDivider()
                 McpServerToolRow(mcpServer: mcpServer, tool: tool)
-                    .padding(.horizontal, settingsInset)
-                    .padding(.vertical, 9)
+                    .padding(.leading, settingsInset + Self.toolIndent)
+                    .padding(.trailing, settingsInset)
+                    .padding(.vertical, 8)
+                    .opacity(.disabled, when: !mcpServer.enabled)
             }
         }
-        .opacity(.disabled, when: !mcpServer.enabled)
     }
+
+    /// How far a group's tools stand in from its title, under it past its chevron.
+    private static let toolIndent: CGFloat = 20
 
     /// The calls agents made, newest first, all of them or only those that failed.
     private var activity: some View {
@@ -186,26 +162,33 @@ struct McpGatewaySettings: View {
                         .padding(.horizontal, settingsInset)
                         .padding(.vertical, 14)
                 }
-                LazyVStack(spacing: 0) {
-                    ForEach(calls.rows) { row in
-                        ThemeDivider()
-                        Button { call = McpServerCallEntry(id: row.id) } label: {
-                            McpServerCallRowView(row: row)
-                                .padding(.horizontal, settingsInset)
-                                .padding(.vertical, 10)
-                        }
-                        .buttonStyle(.highlight(radius: 0))
-                    }
-                    if calls.more || (calls.loading && calls.rows.isEmpty) {
-                        ThemeDivider()
-                        Spinner()
-                            .foregroundStyle(Color.themeMutedForeground)
-                            .frame(maxWidth: .infinity, minHeight: 44)
-                            .task(id: calls.rows.count) { calls.loadMore() }
-                    }
+                FadingScroll(maxHeight: settingsListHeight) {
+                    callRows
                 }
             }
+            .clipShape(RoundedRectangle(cornerRadius: Radius.lg, style: .continuous))
             .card()
+        }
+    }
+
+    private var callRows: some View {
+        LazyVStack(spacing: 0) {
+            ForEach(calls.rows) { row in
+                ThemeDivider()
+                Button { call = McpServerCallEntry(id: row.id) } label: {
+                    McpServerCallRowView(row: row)
+                        .padding(.horizontal, settingsInset)
+                        .padding(.vertical, 10)
+                }
+                .buttonStyle(.highlight(radius: 0))
+            }
+            if calls.more || (calls.loading && calls.rows.isEmpty) {
+                ThemeDivider()
+                Spinner()
+                    .foregroundStyle(Color.themeMutedForeground)
+                    .frame(maxWidth: .infinity, minHeight: 44)
+                    .task(id: calls.rows.count) { calls.loadMore() }
+            }
         }
     }
 }

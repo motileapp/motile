@@ -6,6 +6,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import androidx.core.net.toUri
 import app.motile.platform.Platform
+import app.motile.platform.Symbol
 import app.motile.theme.Palette
 
 /** An MCP the account's gateway holds the login of, which every agent is given, as its card shows it. */
@@ -25,10 +26,8 @@ data class McpServerRow(
     /** "30 of 32 tools on". */
     val toolsText: String,
     val tools: List<McpServerTool>,
-    /** Some tools write and some only read, so "Read Only" changes something. */
-    val hasReadOnly: Boolean,
-    /** How agents name one of its tools: `mcp__linear__create_issue`. */
-    val example: String,
+    /** Its tools by what they do: those that only read, those that write or delete, and the others. */
+    val groups: List<McpToolGroup>,
 ) {
     enum class State(val raw: String) {
         Ready("ready"), Off("off"), Failing("failing"), SignInAgain("sign_in_again");
@@ -50,10 +49,7 @@ data class McpServerRow(
     val troubled: Boolean get() = state == State.SignInAgain || state == State.Failing
 
     /** How agents name its tools once it is called `slug`. */
-    fun example(slug: String): String {
-        val tool = example.split("__").lastOrNull() ?: "tool"
-        return "mcp__${slug.ifEmpty { this.slug }}__$tool"
-    }
+    fun example(slug: String): String = "mcp__${slug.ifEmpty { this.slug }}__${tools.firstOrNull()?.name ?: "tool"}"
 
     companion object {
         fun of(json: JSON) = McpServerRow(
@@ -70,21 +66,43 @@ data class McpServerRow(
             statusText = json.string("status_text"),
             toolsText = json.string("tools_text"),
             tools = json.objects("tools").map(McpServerTool::of),
-            hasReadOnly = json.bool("has_read_only"),
-            example = json.string("example"),
+            groups = json.objects("groups").map(McpToolGroup::of),
         )
     }
 }
 
-data class McpServerTool(val name: String, val title: String, val summary: String?, val writes: Boolean, val enabled: Boolean) {
+data class McpServerTool(val name: String, val title: String, val summary: String?, val kind: String, val permission: ToolPermission) {
     companion object {
         fun of(json: JSON) = McpServerTool(
             name = json.string("name"),
             title = json.string("title"),
             summary = json.optionalString("summary"),
-            writes = json.bool("writes"),
-            enabled = json.bool("enabled"),
+            kind = json.string("kind"),
+            permission = ToolPermission.of(json.string("permission")),
         )
+    }
+}
+
+/** An MCP server's tools of one kind, with the permission they share, or none when they differ: "Custom". */
+data class McpToolGroup(val kind: String, val title: String, val permission: ToolPermission?, val tools: List<McpServerTool>) {
+    companion object {
+        fun of(json: JSON) = McpToolGroup(
+            kind = json.string("kind"),
+            title = json.string("title"),
+            permission = json.optionalString("permission")?.let(ToolPermission::of),
+            tools = json.objects("tools").map(McpServerTool::of),
+        )
+    }
+}
+
+/** What agents may do with a tool, as its menu names it. */
+enum class ToolPermission(val raw: String, val title: String, val symbol: Symbol) {
+    Allow("allow", "Always allow", Symbol.CircleCheck),
+    Ask("ask", "Needs approval", Symbol.Hand),
+    Block("block", "Blocked", Symbol.Ban);
+
+    companion object {
+        fun of(raw: String) = entries.firstOrNull { it.raw == raw } ?: Allow
     }
 }
 
@@ -239,11 +257,12 @@ class McpServers(private val gateway: Gateway) {
 
     fun setEnabled(mcpServer: McpServerRow, enabled: Boolean) = update(mcpServer.id, mapOf("type" to "enabled", "enabled" to enabled))
 
-    fun setTool(mcpServer: McpServerRow, tool: McpServerTool, enabled: Boolean) =
-        update(mcpServer.id, mapOf("type" to "tool", "name" to tool.name, "enabled" to enabled))
+    fun setTool(mcpServer: McpServerRow, tool: McpServerTool, permission: ToolPermission) =
+        update(mcpServer.id, mapOf("type" to "tool_permission", "name" to tool.name, "permission" to permission.raw))
 
-    /** Turns off every tool that writes, or every tool on. */
-    fun setTools(mcpServer: McpServerRow, readOnly: Boolean) = update(mcpServer.id, mapOf("type" to if (readOnly) "read_only" else "all_tools"))
+    /** Sets every tool of the group, and the ones of its kind the MCP server adds later. */
+    fun setGroup(mcpServer: McpServerRow, group: McpToolGroup, permission: ToolPermission) =
+        update(mcpServer.id, mapOf("type" to "group_permission", "kind" to group.kind, "permission" to permission.raw))
 
     fun rename(mcpServer: McpServerRow, name: String, slug: String) {
         val newName = name.trim()

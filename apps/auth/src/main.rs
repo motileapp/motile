@@ -39,6 +39,7 @@ fn router(state: AppState) -> Router {
         .route("/fonts/dm-sans.woff2", get(pages::font))
         .route("/auth/start", get(sign_in::start))
         .route("/auth/google/callback", get(sign_in::google_callback))
+        .route("/mcp/callback", get(sign_in::mcp_callback))
         .route("/api/auth/exchange", post(api::exchange))
         .route("/api/sessions", post(api::create_session))
         .route("/api/sessions/current", delete(api::end_session))

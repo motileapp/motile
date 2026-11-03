@@ -11,31 +11,38 @@ use gpui_kit::prelude::*;
 use gpui_kit::*;
 use motile_core::api::Command;
 use motile_core::gateway::{Reach, View};
-use motile_core::mcp_servers::{Known, McpServerRow, McpServerState, ToolRow, agent_name, is_address};
-use motile_protocol::gateway_wire::{McpAuth, McpChange};
+use motile_core::mcp_servers::{Known, McpServerRow, McpServerState, ToolGroup, ToolRow, agent_name, is_address};
+use motile_protocol::gateway_wire::{McpAuth, McpChange, ToolKind, ToolPermission};
 use serde_json::{Map, Value};
 
 use super::agent_gateway::{GatewayHeader, MCP_CAPTION, large};
-use super::layout::{Cut, INSET, TRAILING_GAP, group, label, more, row, switch_row};
+use super::layout::{Cut, INSET, TRAILING_GAP, group, label, more, row};
 use crate::panel::code_view::{CodeActions, CodeSnapshot, CodeView};
 use crate::panel::state::{CodeDocument, CodeMarks, Loaded};
 use crate::sign_in::Session;
 use crate::store::Store;
 use crate::store::mcp_servers::{Answer, CallRow, Field, FieldKind, MCP_REDIRECT};
-use crate::theme::{IconSize, Layer, Opacity, Radius, Surface, colors};
-use crate::ui::menu::Menu;
+use crate::theme::{ControlSize, IconSize, Layer, Opacity, Radius, Surface, colors};
+use crate::ui::menu::{Menu, MenuIcon};
 use crate::ui::modal::{Answer as Choice, Confirmation, confirmation, modal, present_sheet, presented};
+use crate::ui::parts::FadingScroll;
 use crate::ui::{
     ActionButton, ActionMenu, Chip, Highlight, InputField, Segmented, Spinner, Switch, TextArea, Variant, beside,
-    card_default, divider_on, icons, text_area_state,
+    card_default, divider_on, edges, icons, text_area_state,
 };
 
 const NONE_DETAIL: &str = "Add Linear, GitHub, Notion or any MCP by its address.";
 const TILE: f32 = 28.;
 const SMALL_TILE: f32 = 16.;
-/// How many tools the add sheet lists before it scrolls them, and how tall it is then.
-const TOOLS_SHOWN: usize = 6;
-const TOOLS_HEIGHT: f32 = 300.;
+/// How tall the activity grows before it scrolls.
+const ACTIVITY_HEIGHT: f32 = 420.;
+const GROUP_HEIGHT: f32 = 44.;
+/// What agents may do with a tool, as its dropdown and its row name it.
+const PERMISSIONS: [(ToolPermission, &str, &str); 3] = [
+    (ToolPermission::Allow, "Always allow", "circle-check"),
+    (ToolPermission::Ask, "Needs approval", "hand"),
+    (ToolPermission::Block, "Blocked", "ban"),
+];
 /// How far a modal stands from the window's edges.
 const MODAL_MARGIN: f32 = 32.;
 
@@ -74,8 +81,22 @@ fn find<'a>(view: Option<&'a View>, id: &str) -> Option<&'a McpServerRow> {
 
 /// The tool its agents' names are shown with: one that writes, or the first.
 fn example_tool(mcp_server: &McpServerRow) -> String {
-    let prefix = agent_name(&mcp_server.slug, "");
-    mcp_server.example.strip_prefix(&prefix).unwrap_or("tool").to_string()
+    let writes = mcp_server.tools.iter().find(|tool| tool.kind == ToolKind::Write);
+    writes.or(mcp_server.tools.first()).map_or_else(|| "tool".to_string(), |tool| tool.name.clone())
+}
+
+/// A permission's label and symbol; none is the group's tools differing, "Custom".
+fn permission_look(permission: Option<ToolPermission>) -> (&'static str, &'static str) {
+    let found = PERMISSIONS.iter().find(|(each, _, _)| Some(*each) == permission);
+    found.map_or(("Custom", "ellipsis"), |(_, title, symbol)| (*title, *symbol))
+}
+
+fn update(store: &Entity<Store>, id: &str, change: McpChange, cx: &mut App) {
+    let id = id.to_string();
+    store.update(cx, |store, cx| {
+        store.update_mcp_server(id, change);
+        cx.notify();
+    })
 }
 
 /// "Linear" for `https://mcp.linear.app/mcp`, until the gateway names it; an address by itself.
@@ -181,8 +202,8 @@ fn scrolling(id: &'static str, content: Div, window: &Window) -> Stateful<Div> {
     div().id(id).max_h(px(height.max(200.))).overflow_y_scroll().child(content)
 }
 
-/// A tool as its row shows it: its title, whether it writes, and what it does under it.
-fn tool_label(tool: &ToolRow, surface: Surface, cx: &App) -> AnyElement {
+/// A tool as its row shows it: its title, and what it does under it.
+fn tool_label(tool: &ToolRow, cx: &App) -> AnyElement {
     let c = colors(cx);
     div()
         .flex_1()
@@ -190,76 +211,99 @@ fn tool_label(tool: &ToolRow, surface: Surface, cx: &App) -> AnyElement {
         .flex()
         .flex_col()
         .gap(px(2.))
-        .child(
-            div()
-                .h(px(Chip::HEIGHT))
-                .flex()
-                .items_center()
-                .gap(px(6.))
-                .child(div().min_w_0().truncate().text_size(px(13.)).child(tool.title.clone()))
-                .when(tool.writes, |line| line.child(Chip::new("Writes").tone(c.warning).surface(surface))),
-        )
+        .child(div().min_w_0().truncate().text_size(px(13.)).child(tool.title.clone()))
         .when_some(tool.summary.clone(), |label, summary| {
             label.child(div().text_size(px(11.5)).text_color(c.muted_foreground).truncate().child(summary))
         })
         .into_any_element()
 }
 
-/// `Read Only` and `All On`, each while it would change something.
-fn tool_actions(store: &Entity<Store>, mcp_server: &McpServerRow, surface: Surface) -> Div {
-    let writes = mcp_server.has_read_only && mcp_server.tools.iter().any(|tool| tool.writes && tool.enabled);
-    let some_off = mcp_server.tools.iter().any(|tool| !tool.enabled);
-    let id = mcp_server.id.clone();
-    let quick = |key: &str, title: &'static str, change: McpChange| {
-        let (store, id) = (store.clone(), id.clone());
-        ActionButton::new(named(key, &id), title).ghost().small().surface(surface).on_click(move |_, _, cx| {
-            let (id, change) = (id.clone(), change.clone());
-            store.update(cx, |store, cx| {
-                store.update_mcp_server(id, change);
-                cx.notify();
+/// The dropdown that sets what agents may do with every tool of `group`, which shows "Custom"
+/// while they differ.
+fn group_permission(store: &Entity<Store>, mcp_server: &str, group: &ToolGroup) -> ActionMenu {
+    let (title, symbol) = permission_look(group.permission);
+    let (store, id, kind, current) = (store.clone(), mcp_server.to_string(), group.kind, group.permission);
+    let key = format!("{id}-{kind:?}");
+    ActionMenu::new(named("mcp-server-group-permission", key), title, move |_, _| {
+        PERMISSIONS.iter().fold(Menu::new(), |menu, (permission, title, symbol)| {
+            let (store, id, permission) = (store.clone(), id.clone(), *permission);
+            menu.choice(current == Some(permission), *title, Some(MenuIcon::Symbol(symbol)), None, move |_, cx| {
+                update(&store, &id, McpChange::GroupPermission { kind, permission }, cx)
             })
         })
-    };
-    div()
-        .flex()
-        .justify_end()
-        .gap(px(4.))
-        .when(writes, |actions| {
-            actions.child(quick("mcp-server-read-only", "Read Only", McpChange::ReadOnly).symbol("eye"))
-        })
-        .when(some_off, |actions| actions.child(quick("mcp-server-all-on", "All On", McpChange::AllTools)))
+    })
+    .button(|button| button.outline().symbol(symbol))
 }
 
-/// A row for each of the MCP server's tools with its switch, each under a line but the first.
-fn tool_rows(store: &Entity<Store>, mcp_server: &McpServerRow, surface: Surface, cx: &App) -> Vec<AnyElement> {
+/// A group's row: its title, how many tools it has and its dropdown, which unfolds its tools when
+/// it is given `fold`, whether it is open.
+fn group_row(
+    store: &Entity<Store>,
+    mcp_server: &str,
+    group: &ToolGroup,
+    fold: Option<bool>,
+    surface: Surface,
+    cx: &App,
+) -> AnyElement {
     let c = colors(cx);
-    let id = mcp_server.id.clone();
-    let mut rows = Vec::new();
-    for tool in &mcp_server.tools {
-        let (store, id, name) = (store.clone(), id.clone(), tool.name.clone());
-        let switch = Switch::new(named(&format!("mcp-server-tool-{id}"), &tool.name), tool.enabled).on_change(
-            move |enabled, _, cx| {
-                let change = McpChange::Tool { name: name.clone(), enabled };
-                let id = id.clone();
-                store.update(cx, |store, cx| {
-                    store.update_mcp_server(id, change);
-                    cx.notify();
-                })
-            },
-        );
-        let label = div()
-            .flex_1()
-            .min_w_0()
-            .flex()
-            .when(!tool.enabled, |label| label.opacity(c.opacity(Opacity::Disabled)))
-            .child(tool_label(tool, surface, cx))
-            .into_any_element();
-        if !rows.is_empty() {
-            rows.push(divider_on(surface, cx).into_any_element());
-        }
-        rows.push(switch_row(vec![label], switch).into_any_element());
+    let name = SharedString::from(format!("mcp-server-group-{mcp_server}-{:?}", group.kind));
+    let dropdown = div()
+        .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+        .child(group_permission(store, mcp_server, group));
+    let row = div()
+        .id(ElementId::Name(name.clone()))
+        .group(name.clone())
+        .relative()
+        .px(px(INSET))
+        .h(px(GROUP_HEIGHT))
+        .flex()
+        .items_center()
+        .gap(px(8.))
+        .when_some(fold, |row, open| {
+            row.cursor_default()
+                .child(
+                    Highlight::new().surface(surface).radius(Radius::MD).inset(edges(3., 4., 3., 4.)).render(name, cx),
+                )
+                .child(
+                    div()
+                        .text_color(c.muted_foreground)
+                        .child(icons::symbol("chevron-right", IconSize::Md).rotate(if open { 90. } else { 0. })),
+                )
+        })
+        .child(div().text_size(px(13.)).child(group.title.clone()))
+        .child(Chip::new(group.tools.len().to_string()).surface(surface).muted(true))
+        .child(div().flex_1())
+        .child(dropdown);
+    if fold.is_none() {
+        return row.into_any_element();
     }
-    rows
+    let (store, id, kind) = (store.clone(), mcp_server.to_string(), group.kind);
+    row.on_click(move |_, _, cx| {
+        store.update(cx, |store, cx| {
+            store.toggle_mcp_server_tools(&id, kind);
+            cx.notify();
+        })
+    })
+    .into_any_element()
+}
+
+/// How far a group's tools stand in, under its title past its chevron.
+const TOOL_INDENT: f32 = 24.;
+
+/// A tool's row, with the three things agents may do with it to pick from.
+fn tool_row(store: &Entity<Store>, mcp_server: &str, tool: &ToolRow, cx: &App) -> AnyElement {
+    let options =
+        PERMISSIONS.iter().map(|(_, title, symbol)| (SharedString::from(*title), SharedString::from(*symbol)));
+    let selected = PERMISSIONS.iter().position(|(permission, _, _)| *permission == tool.permission).unwrap_or(0);
+    let (store, id, name) = (store.clone(), mcp_server.to_string(), tool.name.clone());
+    let picker =
+        Segmented::symbols(named(&format!("mcp-server-tool-{mcp_server}"), &tool.name), options.collect(), selected)
+            .size(ControlSize::Small)
+            .on_select(move |index, _, cx| {
+                let Some((permission, _, _)) = PERMISSIONS.get(index) else { return };
+                update(&store, &id, McpChange::ToolPermission { name: name.clone(), permission: *permission }, cx)
+            });
+    row(vec![tool_label(tool, cx)], vec![picker.into_any_element()]).pl(px(INSET + TOOL_INDENT)).into_any_element()
 }
 
 /// What the page takes away once the user says so.
@@ -381,46 +425,24 @@ impl McpGatewayPage {
             dim(tile(&mcp_server.monogram, &mcp_server.tint, TILE, cx)).into_any_element(),
             dim(label).into_any_element(),
         ];
-        let open = self.store.read(cx).mcp_servers.unfolded.contains(&mcp_server.id);
-        let disclosure = {
-            let (store, id) = (self.store.clone(), id.clone());
-            div()
-                .id(named("mcp-server-tools", &id))
-                .px(px(INSET))
-                .h(px(40.))
-                .flex()
-                .items_center()
-                .justify_between()
-                .cursor_default()
-                .hover(|row| row.bg(Surface::Card.layer(Layer::Row, c)))
-                .child(div().text_size(px(12.5)).text_color(c.muted_foreground).child(mcp_server.tools_text.clone()))
-                .child(
-                    div()
-                        .text_color(c.muted_foreground)
-                        .child(icons::symbol("chevron-right", IconSize::Md).rotate(if open { 90. } else { 0. })),
-                )
-                .on_click(move |_, _, cx| {
-                    store.update(cx, |store, cx| {
-                        store.toggle_mcp_server_tools(&id);
-                        cx.notify();
-                    })
-                })
-        };
-        let mut rows = vec![
-            row(leading, vec![trailing.into_any_element()]).into_any_element(),
-            divider_on(Surface::Card, cx).into_any_element(),
-            div().when(off, |part| part.opacity(c.opacity(Opacity::Disabled))).child(disclosure).into_any_element(),
-        ];
-        if open {
-            let actions = tool_actions(&self.store, mcp_server, Surface::Card).px(px(INSET)).py(px(8.));
-            let tools = div()
-                .flex()
-                .flex_col()
-                .child(divider_on(Surface::Card, cx))
-                .child(actions)
-                .child(divider_on(Surface::Card, cx))
-                .children(tool_rows(&self.store, mcp_server, Surface::Card, cx));
-            rows.push(dim(tools).into_any_element());
+        let mut rows = vec![row(leading, vec![trailing.into_any_element()]).into_any_element()];
+        let unfolded = &self.store.read(cx).mcp_servers.unfolded;
+        for tools in &mcp_server.groups {
+            let open = unfolded.contains(&(mcp_server.id.clone(), tools.kind));
+            let mut part = div().flex().flex_col().child(divider_on(Surface::Card, cx)).child(group_row(
+                &self.store,
+                &id,
+                tools,
+                Some(open),
+                Surface::Card,
+                cx,
+            ));
+            if open {
+                for tool in &tools.tools {
+                    part = part.child(divider_on(Surface::Card, cx)).child(tool_row(&self.store, &id, tool, cx));
+                }
+            }
+            rows.push(dim(part).into_any_element());
         }
         card_default(div().flex().flex_col().overflow_hidden(), cx).children(rows).into_any_element()
     }
@@ -546,12 +568,13 @@ impl McpGatewayPage {
             list.push(divider_on(Surface::Card, cx).into_any_element());
             list.push(self.more_rows(loading, cx));
         }
+        let scroll = FadingScroll::new("mcp-server-calls", ACTIVITY_HEIGHT).fill(c.card).children(list);
         let content = div()
             .flex()
             .flex_col()
             .gap(px(12.))
             .child(div().flex().child(filter))
-            .child(card_default(div().flex().flex_col().overflow_hidden(), cx).children(list));
+            .child(card_default(div().flex().flex_col().overflow_hidden(), cx).child(scroll));
         group("mcp-activity", "Activity", None, false, vec![content.into_any_element()], cx)
     }
 
@@ -588,7 +611,7 @@ impl McpGatewayPage {
         let store = self.store.clone();
         let reaches = canvas(
             move |bounds, window, cx| {
-                if loading || bounds.top() > window.viewport_size().height {
+                if loading || bounds.top() > window.content_mask().bounds.bottom() {
                     return;
                 }
                 let store = store.clone();
@@ -1093,25 +1116,28 @@ impl AddSheet {
             let slug = mcp_server.slug.clone();
             self.slug.update(cx, |field, cx| field.set_value(slug, window, cx));
         }
-        let tools =
-            card_default(div().flex().flex_col(), cx).children(tool_rows(&self.store, &mcp_server, Surface::Card, cx));
-        let tools = if mcp_server.tools.len() > TOOLS_SHOWN {
-            div().id("mcp-server-added-tools").h(px(TOOLS_HEIGHT)).overflow_y_scroll().child(tools).into_any_element()
-        } else {
-            tools.into_any_element()
-        };
-        vec![
+        let mut body = vec![
             caption(mcp_server.tools_text.clone(), cx).into_any_element(),
             slug_field(&self.slug, &mcp_server.slug, &example_tool(&mcp_server), cx).into_any_element(),
-            div()
-                .flex()
-                .items_center()
-                .justify_between()
-                .child(field_label("Tools", cx))
-                .child(tool_actions(&self.store, &mcp_server, Surface::Background))
-                .into_any_element(),
-            tools,
-        ]
+        ];
+        if !mcp_server.groups.is_empty() {
+            let groups = mcp_server.groups.iter().enumerate().fold(
+                card_default(div().flex().flex_col(), cx),
+                |card, (index, tools)| {
+                    card.when(index > 0, |card| card.child(divider_on(Surface::Card, cx))).child(group_row(
+                        &self.store,
+                        &mcp_server.id,
+                        tools,
+                        None,
+                        Surface::Card,
+                        cx,
+                    ))
+                },
+            );
+            body.push(field_label("Tool permissions", cx).into_any_element());
+            body.push(groups.into_any_element());
+        }
+        body
     }
 }
 
@@ -1497,7 +1523,9 @@ impl TrySheet {
             leaving: false,
             _subscription: subscription,
         };
-        if let Some(tool) = mcp_server.tools.iter().find(|tool| tool.enabled).or(mcp_server.tools.first()) {
+        if let Some(tool) =
+            mcp_server.tools.iter().find(|tool| tool.permission != ToolPermission::Block).or(mcp_server.tools.first())
+        {
             sheet.choose(tool.name.clone(), cx);
         }
         sheet
@@ -1737,7 +1765,7 @@ impl Render for TrySheet {
                 }
                 body.extend(self.form(cx));
                 let can_run = matches!(self.form, Loaded::Ready(_));
-                let writes = tool.is_some_and(|tool| tool.writes);
+                let writes = tool.is_some_and(|tool| tool.kind != ToolKind::Read);
                 body.push(
                     div()
                         .flex()

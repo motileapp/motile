@@ -17,8 +17,11 @@ use crate::mcp::{Login, McpEntry};
 use crate::seal::Seal;
 use crate::usage::Spent;
 
-const MIGRATIONS: &[&str] =
-    &[include_str!("../migrations/0001_init.sql"), include_str!("../migrations/0002_mcp_servers.sql")];
+const MIGRATIONS: &[&str] = &[
+    include_str!("../migrations/0001_init.sql"),
+    include_str!("../migrations/0002_mcp_servers.sql"),
+    include_str!("../migrations/0003_tool_permissions.sql"),
+];
 const READINGS_KEPT: f64 = 48.0 * 3600.0;
 const LOG_KEPT: f64 = 30.0 * 86400.0;
 /// About 200 MB of entries.
@@ -386,14 +389,14 @@ impl Store {
     pub fn mcp_servers(&self, seal: &Seal) -> anyhow::Result<Vec<McpEntry>> {
         let connection = self.connection();
         let mut statement = connection.prepare(
-            "SELECT id, slug, name, url, enabled, login, status, tools, off, icon, created_at FROM mcp_servers
+            "SELECT id, slug, name, url, enabled, login, status, tools, permissions, icon, created_at FROM mcp_servers
              ORDER BY created_at",
         )?;
         let rows = statement.query_map([], |row| {
             let sealed: Vec<u8> = row.get(5)?;
             let status: String = row.get(6)?;
             let tools: String = row.get(7)?;
-            let off: String = row.get(8)?;
+            let permissions: String = row.get(8)?;
             let mcp_server = McpEntry {
                 id: row.get(0)?,
                 slug: row.get(1)?,
@@ -403,7 +406,7 @@ impl Store {
                 login: Login::None,
                 status: serde_json::from_str(&status).unwrap_or(McpStatus::Ready),
                 tools: serde_json::from_str(&tools).unwrap_or_default(),
-                off: serde_json::from_str(&off).unwrap_or_default(),
+                permissions: serde_json::from_str(&permissions).unwrap_or_default(),
                 icon: row.get(9)?,
                 created_at: row.get(10)?,
             };
@@ -424,10 +427,10 @@ impl Store {
     pub fn save_mcp_server(&self, mcp_server: &McpEntry, seal: &Seal) -> anyhow::Result<()> {
         let login = seal.seal(&serde_json::to_vec(&mcp_server.login)?);
         self.connection().execute(
-            "INSERT INTO mcp_servers (id, slug, name, url, enabled, login, status, tools, off, icon, created_at)
+            "INSERT INTO mcp_servers (id, slug, name, url, enabled, login, status, tools, permissions, icon, created_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
              ON CONFLICT (id) DO UPDATE SET slug = ?2, name = ?3, url = ?4, enabled = ?5, login = ?6, status = ?7,
-                tools = ?8, off = ?9, icon = ?10",
+                tools = ?8, permissions = ?9, icon = ?10",
             params![
                 mcp_server.id,
                 mcp_server.slug,
@@ -437,7 +440,7 @@ impl Store {
                 login,
                 serde_json::to_string(&mcp_server.status)?,
                 serde_json::to_string(&mcp_server.tools)?,
-                serde_json::to_string(&mcp_server.off)?,
+                serde_json::to_string(&mcp_server.permissions)?,
                 mcp_server.icon,
                 mcp_server.created_at,
             ],

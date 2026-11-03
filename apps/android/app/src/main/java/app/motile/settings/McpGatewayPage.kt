@@ -33,13 +33,14 @@ import app.motile.core.McpServerCallRow
 import app.motile.core.McpServerCalls
 import app.motile.core.McpServerRow
 import app.motile.core.McpServerTool
+import app.motile.core.McpToolGroup
+import app.motile.core.ToolPermission
 import app.motile.core.McpServers
 import app.motile.core.GatewayView
 import app.motile.core.mcpServerTint
 import app.motile.platform.Platform
 import app.motile.platform.Symbol
 import app.motile.platform.scaled
-import app.motile.theme.ControlSize
 import app.motile.theme.IconSize
 import app.motile.theme.LocalPalette
 import app.motile.theme.Opacity
@@ -47,7 +48,7 @@ import app.motile.theme.Radius
 import app.motile.theme.Theme
 import app.motile.theme.opacity
 import app.motile.theme.wash
-import app.motile.ui.ActionButton
+import app.motile.ui.ButtonVariant
 import app.motile.ui.ActionMenu
 import app.motile.ui.Card
 import app.motile.ui.Chip
@@ -57,9 +58,7 @@ import app.motile.ui.MenuBuilder
 import app.motile.ui.Modal
 import app.motile.ui.Segmented
 import app.motile.ui.Spinner
-import app.motile.ui.Switch
 import app.motile.ui.Text
-import app.motile.ui.beside
 import app.motile.ui.dotted
 
 /** What the MCP Gateway page says. */
@@ -107,7 +106,7 @@ fun McpGatewayPage() {
         when (action) {
             "add" -> adding = argument
             "activity" -> navigator.push(SettingsRoute.McpServerActivity)
-            "unfold" -> named?.let { unfolded = unfolded + it.id }
+            "unfold" -> named?.let { mcpServer -> unfolded = unfolded + mcpServer.groups.map { groupKey(mcpServer, it) } }
             "try" -> sheet = named?.let { McpServerSheet(McpServerSheet.Kind.TryTool, it) }
             "rename" -> sheet = named?.let { McpServerSheet(McpServerSheet.Kind.Rename, it) }
             "key" -> sheet = named?.let { McpServerSheet(McpServerSheet.Kind.Key, it) }
@@ -124,10 +123,9 @@ fun McpGatewayPage() {
         val mcpServers = view.mcpServers
         if (mcpServers.isNullOrEmpty()) return@SettingsList
         for (mcpServer in mcpServers) {
-            val open = mcpServer.id in unfolded
             mcpServerGroup(
-                mcpServer, open, gateway.mcpServers,
-                fold = { unfolded = if (open) unfolded - mcpServer.id else unfolded + mcpServer.id },
+                mcpServer, unfolded, gateway.mcpServers,
+                fold = { key -> unfolded = if (key in unfolded) unfolded - key else unfolded + key },
                 ask = { sheet = McpServerSheet(it, mcpServer) },
             ) { removal = Removal.OfMcpServer(mcpServer) }
         }
@@ -173,19 +171,22 @@ private fun Note(title: String, detail: String?) {
     }
 }
 
-/** An MCP server's group: its name and how it stands, its switch, and its tools, folded out when `open`. */
+/** What folds a group of an MCP server's tools out. */
+private fun groupKey(mcpServer: McpServerRow, group: McpToolGroup) = "${mcpServer.id}/${group.kind}"
+
+/**
+ * An MCP server's group: its name and how it stands, its switch, and its tools by what they do, each
+ * kind with its permission and folded out when `unfolded` holds it.
+ */
 private fun SettingsGroups.mcpServerGroup(
     mcpServer: McpServerRow,
-    open: Boolean,
+    unfolded: Set<String>,
     mcpServers: McpServers,
-    fold: () -> Unit,
+    fold: (String) -> Unit,
     ask: (McpServerSheet.Kind) -> Unit,
     remove: () -> Unit,
 ) {
-    val example: (@Composable () -> Unit)? = if (open) ({
-        Text(mcpServer.example, style = Theme.uiMono(NOTE_TEXT), color = LocalPalette.current.mutedForeground)
-    }) else null
-    group("mcp-server/${mcpServer.id}", footerContent = example) {
+    group("mcp-server/${mcpServer.id}") {
         row {
             SettingsRow {
                 McpServerTile(mcpServer.monogram, mcpServer.tint, SettingsTile.size)
@@ -207,17 +208,17 @@ private fun SettingsGroups.mcpServerGroup(
                 if (mcpServers.signingIn == mcpServer.id) Spinner(IconSize.Xl)
             }
         }
-        if (mcpServer.tools.isEmpty()) return@group
-        row {
-            SettingsPressRow(fold) {
-                RowText(mcpServer.toolsText, Modifier.weight(1f))
-                if (open) McpServerToolsActions(mcpServer, mcpServers)
-                Icon(if (open) Symbol.ChevronDown else Symbol.ChevronRight, IconSize.Md, color = LocalPalette.current.mutedForeground)
+        for (group in mcpServer.groups) {
+            val key = groupKey(mcpServer, group)
+            val open = key in unfolded
+            row {
+                SettingsPressRow({ fold(key) }, Modifier.opacity(Opacity.Disabled, on = !mcpServer.enabled)) {
+                    McpToolGroupHeader(mcpServer, group, mcpServers, open)
+                }
             }
-        }
-        if (!open) return@group
-        for (tool in mcpServer.tools) row {
-            SettingsRow(Modifier.opacity(Opacity.Disabled, on = !mcpServer.enabled)) { McpServerToolRow(mcpServer, tool, mcpServers) }
+            if (open) for (tool in group.tools) row {
+                SettingsRow(Modifier.opacity(Opacity.Disabled, on = !mcpServer.enabled)) { McpServerToolRow(mcpServer, tool, mcpServers) }
+            }
         }
     }
 }
@@ -247,29 +248,46 @@ fun McpServerTile(monogram: String, tint: String, side: Float = scaled(28f)) {
     }
 }
 
-/** An MCP server's tool with its switch: what it is, what it does, and whether it writes. */
+/** A permission's menu: its symbol, its name unless `compact`, and a chevron; "Custom" while the tools under it differ. */
+@Composable
+fun ToolPermissionMenu(
+    permission: ToolPermission?,
+    help: String,
+    compact: Boolean = false,
+    choose: (ToolPermission) -> Unit,
+) {
+    ActionMenu(
+        title = if (compact) null else permission?.title ?: "Custom",
+        icon = permission?.symbol ?: Symbol.Ellipsis,
+        help = help,
+        variant = ButtonVariant.Secondary,
+        chevron = true,
+    ) {
+        for (each in ToolPermission.entries) item(each.title, each.symbol, checked = each == permission) { choose(each) }
+    }
+}
+
+/** A kind of an MCP server's tools: its fold, its name and count, and the permission they share. */
+@Composable
+fun RowScope.McpToolGroupHeader(mcpServer: McpServerRow, group: McpToolGroup, mcpServers: McpServers, open: Boolean? = null) {
+    val palette = LocalPalette.current
+    open?.let { Icon(if (it) Symbol.ChevronDown else Symbol.ChevronRight, IconSize.Md, color = palette.mutedForeground) }
+    Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        RowText(group.title, Modifier.weight(1f, fill = false), maxLines = 1)
+        Chip("${group.tools.size}", monospaced = true)
+    }
+    ToolPermissionMenu(group.permission, "What agents may do with ${group.title.lowercase()}") { mcpServers.setGroup(mcpServer, group, it) }
+}
+
+/** An MCP server's tool: what it is, what it does, and what agents may do with it. */
 @Composable
 fun RowScope.McpServerToolRow(mcpServer: McpServerRow, tool: McpServerTool, mcpServers: McpServers) {
     val palette = LocalPalette.current
-    Column(Modifier.weight(1f).opacity(Opacity.Disabled, on = !tool.enabled), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+    Column(Modifier.weight(1f).opacity(Opacity.Disabled, on = tool.permission == ToolPermission.Block), verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Text(tool.title, size = 13f, color = palette.foreground, maxLines = 1)
         tool.summary?.let { Text(it, size = 11.5f, color = palette.mutedForeground, maxLines = 1) }
     }
-    if (tool.writes) Chip("Writes", Modifier.opacity(Opacity.Disabled, on = !tool.enabled), tone = palette.warning)
-    Switch(tool.enabled, { mcpServers.setTool(mcpServer, tool, it) })
-}
-
-/** `Read Only` and `All On`, over an MCP server's tools, each while it would change something. */
-@Composable
-fun McpServerToolsActions(mcpServer: McpServerRow, mcpServers: McpServers) {
-    val writes = mcpServer.hasReadOnly && mcpServer.tools.any { it.writes && it.enabled }
-    val someOff = mcpServer.tools.any { !it.enabled }
-    Row {
-        if (writes) {
-            ActionButton("Read Only", Symbol.Eye, size = ControlSize.Small, margin = beside(end = if (someOff) 8.dp else 0.dp)) { mcpServers.setTools(mcpServer, readOnly = true) }
-        }
-        if (someOff) ActionButton("All On", size = ControlSize.Small) { mcpServers.setTools(mcpServer, readOnly = false) }
-    }
+    ToolPermissionMenu(tool.permission, "What agents may do with ${tool.title}", compact = true) { mcpServers.setTool(mcpServer, tool, it) }
 }
 
 /** The calls agents made to the MCP servers, newest first, all of them or only those that failed. A call opens in full. */
@@ -342,8 +360,8 @@ fun McpServerCallRowView(row: McpServerCallRow) {
                 Spacer(Modifier.weight(1f))
                 Text(dotted("${row.latency} · ${row.time}", palette.mutedStrongerForeground), style = Theme.uiDigits(12f), color = palette.mutedForeground, maxLines = 1)
             }
-            Text(row.source, size = 11.5f, color = palette.mutedForeground, maxLines = 1)
-            row.error?.let { Text(it, size = 11.5f, color = palette.warning, maxLines = 2) }
+            Text(row.source, size = 11.5f, color = palette.mutedForeground)
+            row.error?.let { Text(it, size = 11.5f, color = palette.warning) }
         }
     }
 }

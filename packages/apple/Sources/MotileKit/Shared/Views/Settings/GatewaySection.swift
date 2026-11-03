@@ -165,7 +165,7 @@ struct GatewayLogRowView: View {
                 Text(dotted: row.details)
                     .font(.ui(size: 11.5, design: .monospaced))
                     .foregroundStyle(Color.themeMutedForeground)
-                    .lineLimit(Self.detailLines)
+                    .fixedSize(horizontal: false, vertical: true)
                 if let error = row.error {
                     Text(error)
                         .font(.ui(size: 11.5))
@@ -180,12 +180,6 @@ struct GatewayLogRowView: View {
         }
         .contentShape(Rectangle())
     }
-
-    #if os(macOS)
-    private static let detailLines = 1
-    #else
-    private static let detailLines = 2
-    #endif
 
     private var time: some View {
         Text(row.time)

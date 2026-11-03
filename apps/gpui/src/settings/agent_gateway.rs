@@ -24,6 +24,7 @@ use crate::store::usage::LimitWindow;
 use crate::theme::{ControlSize, IconSize, Layer, Opacity, Surface, colors};
 use crate::ui::menu::Menu;
 use crate::ui::modal::{Answer, Confirmation, confirmation, modal, present_sheet, presented};
+use crate::ui::parts::FadingScroll;
 use crate::ui::{
     ActionButton, ActionMenu, Chip, CommandBox, CopyButton, InputField, Segmented, Spinner, Switch, Variant, beside,
     card_default, divider_on, icons, logos,
@@ -38,6 +39,8 @@ const CAPTURE_THREADS: usize = 12;
 /// How many requests "Capture the next" captures.
 const CAPTURE_NEXT: u32 = 20;
 const CODE_SIZE: f32 = 26.;
+/// How tall the log grows before it scrolls.
+const LOG_HEIGHT: f32 = 420.;
 
 /// What the Agent Gateway page says it does with the gateway.
 const AGENT_CAPTION: &str = "Holds your Claude Code and Codex accounts. Every server's Gateway accounts use them.";
@@ -290,7 +293,7 @@ impl AgentGatewayPage {
                     })
                 });
         let toolbar = div().px(px(INSET)).py(px(10.)).flex().items_center().gap(px(8.)).child(filter);
-        let mut list = vec![toolbar.into_any_element()];
+        let mut list = Vec::new();
         let empty = match (&error, errors_only) {
             (Some(error), _) if rows.is_empty() => Some(error.clone()),
             _ if !rows.is_empty() || loading => None,
@@ -317,7 +320,8 @@ impl AgentGatewayPage {
             list.push(divider_on(Surface::Card, cx).into_any_element());
             list.push(self.more_rows(loading, cx));
         }
-        let log_card = card_default(div().flex().flex_col(), cx).children(list);
+        let scroll = FadingScroll::new("gateway-log-rows", LOG_HEIGHT).fill(c.card).children(list);
+        let log_card = card_default(div().flex().flex_col().overflow_hidden(), cx).child(toolbar).child(scroll);
         let content = div().flex().flex_col().gap(px(12.)).child(capture_card).child(log_card);
         group("gateway-log", "Log", None, false, vec![content.into_any_element()], cx)
     }
@@ -339,14 +343,7 @@ impl AgentGatewayPage {
         .flatten()
         .collect();
         let line = |text: String, color: Hsla| {
-            div()
-                .min_w_0()
-                .text_size(px(11.5))
-                .text_color(color)
-                .whitespace_nowrap()
-                .overflow_hidden()
-                .text_ellipsis()
-                .child(crate::ui::control::dotted(text, c))
+            div().min_w_0().text_size(px(11.5)).text_color(color).child(crate::ui::control::dotted(text, c))
         };
         let content = div()
             .flex_1()
@@ -426,7 +423,7 @@ impl AgentGatewayPage {
         let store = self.store.clone();
         let reaches = canvas(
             move |bounds, window, cx| {
-                if loading || bounds.top() > window.viewport_size().height {
+                if loading || bounds.top() > window.content_mask().bounds.bottom() {
                     return;
                 }
                 let store = store.clone();

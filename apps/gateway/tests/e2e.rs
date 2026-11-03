@@ -26,8 +26,8 @@ use motile_gateway::serve::BindOptions;
 use motile_protocol::GATEWAY_ALPN;
 use motile_protocol::frame::{read_frame, write_frame};
 use motile_protocol::gateway_wire::{
-    AccountChange, AccountStatus, GatewayAccount, GatewayReply, GatewayRequest, GatewayState, Manage, McpAdding,
-    McpAuth, McpChange, McpKey, McpStatus, WsMessage,
+    AccountChange, AccountStatus, GatewayAccount, GatewayReply, GatewayRequest, GatewayState, MCP_APPROVED,
+    MCP_NEEDS_APPROVAL, Manage, McpAdding, McpAuth, McpChange, McpKey, McpStatus, ToolKind, ToolPermission, WsMessage,
 };
 use motile_protocol::identity::DeviceKey;
 use motile_protocol::wire::Agent;
@@ -341,8 +341,9 @@ async fn mcp_authorization_server(State(fake): Shared) -> Json<Value> {
     }))
 }
 
-async fn mcp_register(Json(body): Json<Value>) -> Json<Value> {
-    assert_eq!(body["redirect_uris"], json!(["motile://mcp"]));
+async fn mcp_register(State(fake): Shared, Json(body): Json<Value>) -> Json<Value> {
+    let base = fake.base.lock().unwrap().clone();
+    assert_eq!(body["redirect_uris"], json!([format!("{base}/mcp/callback")]));
     Json(json!({"client_id": "client-1"}))
 }
 
@@ -352,7 +353,8 @@ async fn mcp_token(State(fake): Shared, Form(form): Form<Vec<(String, String)>>)
     match param("grant_type") {
         Some("authorization_code") => {
             assert!(param("code_verifier").is_some_and(|verifier| verifier.len() >= 43));
-            assert_eq!(param("redirect_uri"), Some("motile://mcp"));
+            let base = fake.base.lock().unwrap().clone();
+            assert_eq!(param("redirect_uri"), Some(format!("{base}/mcp/callback").as_str()));
             if param("code") != Some("good-code") {
                 return (StatusCode::BAD_REQUEST, Json(json!({"error": "invalid_grant"}))).into_response();
             }
@@ -936,23 +938,45 @@ async fn a_codex_thread_that_moves_leaves_the_reasoning_its_old_account_encrypte
 
 /// An agent's MCP message to the MCP server `slug`, as a server sends it.
 async fn mcp(connection: &Connection, slug: &str, message: Value) -> (u16, Value) {
+    let (status, _, answer) = mcp_call(connection, slug, message, &[]).await;
+    (status, answer)
+}
+
+/// The answer's headers and its message, to a request with `extra` headers.
+async fn mcp_with(
+    connection: &Connection,
+    slug: &str,
+    message: Value,
+    extra: &[(&str, &str)],
+) -> (Vec<(String, String)>, Value) {
+    let (_, headers, answer) = mcp_call(connection, slug, message, extra).await;
+    (headers, answer)
+}
+
+async fn mcp_call(
+    connection: &Connection,
+    slug: &str,
+    message: Value,
+    extra: &[(&str, &str)],
+) -> (u16, Vec<(String, String)>, Value) {
     let (mut send, mut recv) = connection.open_bi().await.unwrap();
-    let headers = vec![
+    let mut headers = vec![
         ("authorization".to_string(), "Bearer thread-token".to_string()),
         ("accept".to_string(), "application/json, text/event-stream".to_string()),
         ("content-type".to_string(), "application/json".to_string()),
     ];
+    headers.extend(extra.iter().map(|(name, value)| (name.to_string(), value.to_string())));
     let request = GatewayRequest::Mcp { thread: "t1".into(), mcp_server: slug.into(), method: "POST".into(), headers };
     write_frame(&mut send, &request).await.unwrap();
     send.write_all(message.to_string().as_bytes()).await.unwrap();
     send.finish().unwrap();
     let head: GatewayReply = tokio::time::timeout(TIMEOUT, read_frame(&mut recv)).await.unwrap().unwrap().unwrap();
-    let GatewayReply::HttpHead { status, .. } = head else { panic!("an answer, not {head:?}") };
+    let GatewayReply::HttpHead { status, headers, .. } = head else { panic!("an answer, not {head:?}") };
     let body = tokio::time::timeout(TIMEOUT, recv.read_to_end(1 << 24)).await.unwrap().unwrap_or_default();
     let body = String::from_utf8_lossy(&body).into_owned();
     let data = body.lines().filter_map(|line| line.strip_prefix("data: ")).collect::<Vec<_>>().join("\n");
     let answer = serde_json::from_str(if data.is_empty() { &body } else { &data }).unwrap_or(Value::String(body));
-    (status, answer)
+    (status, headers, answer)
 }
 
 fn call(id: u64, tool: &str) -> Value {
@@ -996,13 +1020,28 @@ async fn a_mcp_server_with_a_key_gives_agents_only_the_tools_that_are_on() {
     assert_eq!(seen.last().unwrap().header("x-api-key"), "k1");
     assert_eq!(seen.last().unwrap().header("authorization"), "", "the agent's token stays on the gateway");
 
-    harness.manage(Manage::UpdateMcpServer { id: id.clone(), change: McpChange::ReadOnly }).await;
+    let block = McpChange::GroupPermission { kind: ToolKind::Other, permission: ToolPermission::Block };
+    harness.manage(Manage::UpdateMcpServer { id: id.clone(), change: block }).await;
     assert_eq!(tool_names(&mcp(&server, "fake-tracker", list).await.1), ["list_issues"]);
     let calls_before = harness.fake.seen("/mcp/key").len();
     let (status, refused) = mcp(&server, "fake-tracker", call(2, "create_issue")).await;
     assert_eq!(status, 200);
     assert_eq!(refused["result"]["isError"], true);
-    assert_eq!(harness.fake.seen("/mcp/key").len(), calls_before, "a tool that is off never reaches the MCP server");
+    assert_eq!(harness.fake.seen("/mcp/key").len(), calls_before, "a blocked tool never reaches the MCP server");
+
+    let asks = McpChange::ToolPermission { name: "create_issue".into(), permission: ToolPermission::Ask };
+    harness.manage(Manage::UpdateMcpServer { id: id.clone(), change: asks }).await;
+    let (head, waits) = mcp_with(&server, "fake-tracker", call(5, "create_issue"), &[]).await;
+    assert!(head.iter().any(|(name, _)| name == MCP_NEEDS_APPROVAL), "a tool that asks waits for the user");
+    assert_eq!(waits["result"]["isError"], true);
+    assert_eq!(harness.fake.seen("/mcp/key").len(), calls_before, "nor does one the user hasn't approved");
+    let (_, approved) = mcp_with(&server, "fake-tracker", call(6, "create_issue"), &[(MCP_APPROVED, "1")]).await;
+    assert_eq!(approved["result"]["content"][0]["text"], r#"called "create_issue" with {"title":"Hi"}"#);
+    assert_eq!(
+        harness.fake.seen("/mcp/key").last().unwrap().header(MCP_APPROVED),
+        "",
+        "the approval stays on the gateway"
+    );
     let (_, called) = mcp(&server, "fake-tracker", call(3, "list_issues")).await;
     assert_eq!(called["result"]["content"][0]["text"], r#"called "list_issues" with {"title":"Hi"}"#);
 
@@ -1012,7 +1051,7 @@ async fn a_mcp_server_with_a_key_gives_agents_only_the_tools_that_are_on() {
         panic!("calls")
     };
     let logged: Vec<(&str, bool)> = calls.iter().map(|call| (call.tool.as_str(), call.error.is_some())).collect();
-    assert_eq!(logged, [("list_issues", false), ("create_issue", true)]);
+    assert_eq!(logged, [("list_issues", false), ("create_issue", false), ("create_issue", true)]);
     assert_eq!((calls[0].thread.as_deref(), calls[0].mcp_server.as_str()), (Some("t1"), id.as_str()));
     let GatewayReply::McpCall { call: Some(detail) } = harness.manage(Manage::McpCall { id: calls[0].id }).await else {
         panic!("a call")
@@ -1042,7 +1081,7 @@ async fn a_mcp_server_signs_in_once_and_its_login_is_renewed_when_refused() {
     assert!(page.as_str().starts_with(&format!("{base}/as/authorize?")));
     let query: Vec<(String, String)> = page.query_pairs().into_owned().collect();
     let param = |name: &str| query.iter().find(|(key, _)| key == name).map(|(_, value)| value.as_str());
-    assert_eq!(param("redirect_uri"), Some("motile://mcp"));
+    assert_eq!(param("redirect_uri"), Some(format!("{base}/mcp/callback").as_str()));
     assert_eq!(param("client_id"), Some("client-1"));
     assert_eq!(param("code_challenge_method"), Some("S256"));
     assert_eq!(param("resource"), Some(url.as_str()));

@@ -6,6 +6,12 @@ use serde::{Deserialize, Serialize};
 
 use crate::wire::{Agent, AgentLimits, LimitWindow};
 
+/// The header of the gateway's answer to a call that waits for the user's approval, which the
+/// server asks for.
+pub const MCP_NEEDS_APPROVAL: &str = "motile-needs-approval";
+/// The header of a call the user approved, which only the server sets.
+pub const MCP_APPROVED: &str = "motile-approved";
+
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum GatewayRequest {
@@ -40,7 +46,8 @@ pub enum GatewayRequest {
     },
     /// A server's MCP request to one of the gateway's MCP servers, by its slug, for one of its threads:
     /// passed on to the MCP server's address with its login, like `Http`. Answered `HttpHead` and the
-    /// body as it comes.
+    /// body as it comes. A call of a tool that needs the user's approval is answered with
+    /// `MCP_NEEDS_APPROVAL` until it comes again with `MCP_APPROVED`.
     Mcp { thread: String, mcp_server: String, method: String, headers: Vec<(String, String)> },
     /// A server asks for the slugs of the MCP servers that are on, which its agents are given. Answered
     /// with `McpServers`.
@@ -206,14 +213,16 @@ pub enum McpChange {
     Enabled {
         enabled: bool,
     },
-    Tool {
+    /// What agents may do with one tool.
+    ToolPermission {
         name: String,
-        enabled: bool,
+        permission: ToolPermission,
     },
-    /// Turns off every tool that doesn't say it only reads, and on every one that does.
-    ReadOnly,
-    /// Turns every tool on.
-    AllTools,
+    /// What agents may do with every tool of a kind, and with the ones of that kind it adds later.
+    GroupPermission {
+        kind: ToolKind,
+        permission: ToolPermission,
+    },
     Key {
         key: McpKey,
     },
@@ -261,7 +270,52 @@ pub struct McpTool {
     pub input_schema: serde_json::Value,
     /// It doesn't say it only reads.
     pub writes: bool,
+    /// It isn't blocked, for the clients that only know a switch.
     pub enabled: bool,
+    /// `None` from a gateway that only knew `writes`.
+    #[serde(default)]
+    pub kind: Option<ToolKind>,
+    /// `None` from a gateway that only knew `enabled`.
+    #[serde(default)]
+    pub permission: Option<ToolPermission>,
+}
+
+impl McpTool {
+    pub fn kind(&self) -> ToolKind {
+        self.kind.unwrap_or(if self.writes { ToolKind::Other } else { ToolKind::Read })
+    }
+
+    pub fn permission(&self) -> ToolPermission {
+        match self.enabled {
+            true => self.permission.unwrap_or(ToolPermission::Allow),
+            false => ToolPermission::Block,
+        }
+    }
+}
+
+/// What a tool does, as its annotations say.
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Hash, Debug)]
+#[serde(rename_all = "snake_case")]
+pub enum ToolKind {
+    /// It says it only reads.
+    Read,
+    /// It says it writes or deletes.
+    Write,
+    /// It says neither.
+    Other,
+}
+
+/// What agents may do with a tool.
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum ToolPermission {
+    /// They call it without asking.
+    #[default]
+    Allow,
+    /// Their server asks the user before each call.
+    Ask,
+    /// They don't see it.
+    Block,
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
