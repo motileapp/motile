@@ -97,8 +97,13 @@ struct AgentGatewaySettings: View {
         .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
         // On a row of its own under the name, which a phone has no room beside.
         HStack {
-            Text(GatewayText.takesThreads)
-                .foregroundStyle(Color.themeForeground)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(GatewayText.inRotation)
+                    .foregroundStyle(Color.themeForeground)
+                Text(GatewayText.rotation)
+                    .font(.footnote)
+                    .foregroundStyle(Color.themeMutedForeground)
+            }
             Spacer()
             Switch(isOn: Binding { account.enabled } set: { store.setGatewayAccount(account, enabled: $0) })
         }
@@ -237,9 +242,9 @@ struct GatewayHeader: View {
                     }
                     Spacer(minLength: 8)
                     ActionMenu(icon: .ellipsis, help: "What to do with \(name)") {
-                        GatewayMenuItem("Replace with a New Gateway", symbol: .refreshCw) { adding = true }
+                        MenuItem("Replace with a New Gateway", symbol: .refreshCw) { adding = true }
                         Divider()
-                        GatewayMenuItem("Remove Gateway", symbol: .trash2, role: .destructive) { removal = .gateway(name: name) }
+                        MenuItem("Remove Gateway", symbol: .trash2, role: .destructive) { removal = .gateway(name: name) }
                     }
                 }
                 .padding(.vertical, 2)

@@ -140,8 +140,8 @@ struct SettingsPage: View {
                     HStack(spacing: 0) {
                         ServerUpdateStatus(server: server, variant: .outline, size: .large, margin: .beside(trailing: settingsHalfGap)) { EmptyView() }
                         more("What to do with \(server.name)", margin: .beside(leading: settingsHalfGap)) {
-                            item("Unlink Server", symbol: .unlink, role: .destructive) { removal = .server(server) }
-                            item("Delete", symbol: .trash2, role: .destructive) { removal = .serverCompletely(server) }
+                            MenuItem("Unlink Server", symbol: .unlink, role: .destructive) { removal = .server(server) }
+                            MenuItem("Delete", symbol: .trash2, role: .destructive) { removal = .serverCompletely(server) }
                         }
                     }
                 }
@@ -169,7 +169,7 @@ struct SettingsPage: View {
                         serverName(server)
                     } trailing: {
                         more("What to do with \(server.name)") {
-                            item("Delete", symbol: .trash2, role: .destructive) { removal = .serverCompletely(server) }
+                            MenuItem("Delete", symbol: .trash2, role: .destructive) { removal = .serverCompletely(server) }
                         }
                     }
                     if server.id != removed.last?.id { ThemeDivider() }
@@ -345,14 +345,14 @@ struct SettingsPage: View {
                     if !account.gateway || !server.isDefault(account) {
                         more("What to do with the account") {
                             if !account.gateway {
-                                item("Edit", symbol: .pencil) { editedAccount = EditedAccount(server: server, account: account) }
+                                MenuItem("Edit", symbol: .pencil) { editedAccount = EditedAccount(server: server, account: account) }
                             }
                             if !server.isDefault(account) {
-                                item("Make Default", symbol: .circleCheck) { store.makeAgentAccountDefault(account, on: server) }
+                                MenuItem("Make Default", symbol: .circleCheck) { store.makeAgentAccountDefault(account, on: server) }
                             }
                             if !account.gateway {
                                 Divider()
-                                item("Remove Account", symbol: .trash2, role: .destructive) { removal = .account(account, on: server) }
+                                MenuItem("Remove Account", symbol: .trash2, role: .destructive) { removal = .account(account, on: server) }
                             }
                         }
                     }
@@ -383,12 +383,12 @@ struct SettingsPage: View {
                     SettingsLabel(project.name, description: project.path, truncates: .head)
                 } trailing: {
                     more("What to do with \(project.name)") {
-                        item("Choose an Icon", symbol: .image) { store.openPanel(.icon(project.id)) }
+                        MenuItem("Choose an Icon", symbol: .image) { store.openPanel(.icon(project.id)) }
                         if (store.server(project.serverID)?.protocolVersion ?? 0) >= 6 {
-                            item("Worktree Setup", symbol: .terminal) { setupProject = project }
+                            MenuItem("Worktree Setup", symbol: .terminal) { setupProject = project }
                         }
                         Divider()
-                        item("Remove Project", symbol: .trash2, role: .destructive) { removal = .project(project) }
+                        MenuItem("Remove Project", symbol: .trash2, role: .destructive) { removal = .project(project) }
                     }
                 }
                 ThemeDivider()
@@ -409,16 +409,6 @@ struct SettingsPage: View {
     /// The row's other actions, under its three dots.
     private func more<Items: View>(_ help: String, margin: EdgeInsets = EdgeInsets(), @ViewBuilder items: () -> Items) -> some View {
         ActionMenu(icon: .ellipsis, help: help, size: .large, margin: margin, content: items)
-    }
-
-    private func item(_ title: String, symbol: Symbol, role: ButtonRole? = nil, action: @escaping () -> Void) -> some View {
-        Button(role: role, action: action) {
-            Label {
-                Text(title)
-            } icon: {
-                Image(platform: .symbol(symbol, size: .md))
-            }
-        }
     }
 }
 

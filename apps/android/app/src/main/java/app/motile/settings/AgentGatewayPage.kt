@@ -220,7 +220,7 @@ private fun AccountRow(account: GatewayAccount, count: Int, gateway: Gateway, re
 @Composable
 private fun SwitchRow(account: GatewayAccount, gateway: Gateway) {
     SettingsRow {
-        RowText("Takes threads", Modifier.weight(1f))
+        SettingsItem("In rotation", "The gateway can use this account", lines = Int.MAX_VALUE)
         Switch(account.enabled, { gateway.setEnabled(account, it) })
     }
 }

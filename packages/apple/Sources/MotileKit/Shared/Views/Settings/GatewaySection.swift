@@ -7,7 +7,8 @@ enum GatewayText {
     static let agentCaption = "Holds your Claude Code and Codex accounts. Every server's Gateway accounts use them."
     static let mcpCaption = "Signs in to each MCP server once. Every agent on every server and account gets its tools."
     /// What an account's switch says on a phone, where it has a row of its own.
-    static let takesThreads = "Takes threads"
+    static let inRotation = "In rotation"
+    static let rotation = "The gateway can use this account"
     /// How many requests "Capture the next" captures.
     static let captureNext = 20
     /// How many threads the capture menu offers.
@@ -97,36 +98,6 @@ struct GatewayAccountLabel: View {
     #endif
 }
 
-/// An item of the page's menus, with its symbol.
-struct GatewayMenuItem: View {
-    let title: String
-    let symbol: Symbol
-    var role: ButtonRole?
-    let action: () -> Void
-
-    init(_ title: String, symbol: Symbol, role: ButtonRole? = nil, action: @escaping () -> Void) {
-        self.title = title
-        self.symbol = symbol
-        self.role = role
-        self.action = action
-    }
-
-    var body: some View {
-        Button(role: role, action: action) {
-            if role == .destructive {
-                // Red like its words, as every destructive item is.
-                Label {
-                    Text(title)
-                } icon: {
-                    Image(platform: TintedSymbol.image(symbol, size: .md, color: Theme.destructive))
-                }
-            } else {
-                Label(title, symbol: symbol)
-            }
-        }
-    }
-}
-
 /// What to do with an account: rename it, set its priority among its agent's `count`, sign it in
 /// again, remove it.
 struct GatewayAccountActions: View {
@@ -137,7 +108,7 @@ struct GatewayAccountActions: View {
     let remove: () -> Void
 
     var body: some View {
-        GatewayMenuItem("Rename Account", symbol: .pencil, action: rename)
+        MenuItem("Rename Account", symbol: .pencil, action: rename)
         Menu {
             ForEach(1...max(count, account.priority + 1), id: \.self) { number in
                 Toggle("Priority \(number)", isOn: Binding { account.priority == number - 1 } set: { _ in
@@ -147,9 +118,9 @@ struct GatewayAccountActions: View {
         } label: {
             Label(account.priorityText, symbol: .listFilter)
         }
-        GatewayMenuItem("Sign In Again", symbol: .circleUser) { store.startGatewaySignIn(account.agent) }
+        MenuItem("Sign In Again", symbol: .circleUser) { store.startGatewaySignIn(account.agent) }
         Divider()
-        GatewayMenuItem("Remove Account", symbol: .trash2, role: .destructive, action: remove)
+        MenuItem("Remove Account", symbol: .trash2, role: .destructive, action: remove)
     }
 }
 

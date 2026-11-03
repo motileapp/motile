@@ -167,15 +167,15 @@ private struct ShortcutRowView: View {
     private var menu: some View {
         ActionMenu(icon: .ellipsis, help: "What to do with the shortcut", size: .large, margin: halfGap(leading: true)) {
             if !row.key.isEmpty {
-                menuItem(row.when.isEmpty ? "Add a Condition" : "Edit the Condition", symbol: .pencil) { editingCondition = true }
-                menuItem("Add Another Shortcut", symbol: .plus) { addAnother(row.command) }
+                MenuItem(row.when.isEmpty ? "Add a Condition" : "Edit the Condition", symbol: .pencil) { editingCondition = true }
+                MenuItem("Add Another Shortcut", symbol: .plus) { addAnother(row.command) }
             }
             if row.resettable {
-                menuItem("Reset to Default", symbol: .undo2) { store.resetShortcut(row.command) }
+                MenuItem("Reset to Default", symbol: .undo2) { store.resetShortcut(row.command) }
             }
             if !row.key.isEmpty {
                 Divider()
-                menuItem("Remove", symbol: .trash2, role: .destructive) { store.removeShortcut(row) }
+                MenuItem("Remove", symbol: .trash2, role: .destructive) { store.removeShortcut(row) }
             }
         }
         .disabled(row.key.isEmpty && !row.resettable)
@@ -355,15 +355,5 @@ private struct ConditionEditor: View {
 private func halfGap(leading: Bool = false, trailing: Bool = false) -> EdgeInsets {
     let half = (settingsRowHeight - ControlSize.large.height) / 4
     return EdgeInsets(top: 0, leading: leading ? half : 0, bottom: 0, trailing: trailing ? half : 0)
-}
-
-private func menuItem(_ title: String, symbol: Symbol, role: ButtonRole? = nil, action: @escaping () -> Void) -> some View {
-    Button(role: role, action: action) {
-        Label {
-            Text(title)
-        } icon: {
-            Image(platform: .symbol(symbol, size: .md))
-        }
-    }
 }
 #endif

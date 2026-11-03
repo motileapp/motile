@@ -843,17 +843,10 @@ fn card(menu: &Menu, level: Level, highlighted: Option<usize>, open_submenu: Opt
                 .when(!*enabled, |row| row.opacity(c.opacity(Opacity::Disabled)))
                 .when(any_checked, |row| row.child(check_column(*checked)))
                 .when_some(icon.as_ref(), |row, icon| {
-                    row.child(
-                        div()
-                            .flex_shrink_0()
-                            .flex()
-                            .items_center()
-                            .text_color(if *danger { c.destructive } else { c.muted_foreground })
-                            .child(match icon {
-                                MenuIcon::Symbol(name) => icons::symbol(*name, IconSize::Sm).into_any_element(),
-                                MenuIcon::File(path) => crate::ui::logos::icon_file(path.to_string(), IconSize::Sm, cx),
-                            }),
-                    )
+                    row.child(div().flex_shrink_0().flex().items_center().child(match icon {
+                        MenuIcon::Symbol(name) => icons::symbol(*name, IconSize::Sm).into_any_element(),
+                        MenuIcon::File(path) => crate::ui::logos::icon_file(path.to_string(), IconSize::Sm, cx),
+                    }))
                 })
                 .child(
                     div().flex_1().min_w_0().whitespace_nowrap().overflow_hidden().text_ellipsis().child(label.clone()),

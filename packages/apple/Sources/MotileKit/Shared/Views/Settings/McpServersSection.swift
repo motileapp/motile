@@ -97,18 +97,18 @@ struct McpServerActions: View {
 
     var body: some View {
         if !mcpServer.tools.isEmpty {
-            GatewayMenuItem("Try a Tool", symbol: .play, action: tryTool)
+            MenuItem("Try a Tool", symbol: .play, action: tryTool)
         }
-        GatewayMenuItem("Rename", symbol: .pencil, action: rename)
+        MenuItem("Rename", symbol: .pencil, action: rename)
         switch mcpServer.auth {
-        case .signIn: GatewayMenuItem("Sign In Again", symbol: .circleUser) { store.signMcpServerInAgain(mcpServer) }
-        case .key: GatewayMenuItem("Change Key", symbol: .keyRound, action: changeKey)
+        case .signIn: MenuItem("Sign In Again", symbol: .circleUser) { store.signMcpServerInAgain(mcpServer) }
+        case .key: MenuItem("Change Key", symbol: .keyRound, action: changeKey)
         case .none: EmptyView()
         }
-        GatewayMenuItem("Ask for Its Tools Again", symbol: .refreshCw) { store.refreshMcpServer(mcpServer) }
-        GatewayMenuItem("Copy Address", symbol: .copy) { Platform.copy(mcpServer.url) }
+        MenuItem("Ask for Its Tools Again", symbol: .refreshCw) { store.refreshMcpServer(mcpServer) }
+        MenuItem("Copy Address", symbol: .copy) { Platform.copy(mcpServer.url) }
         Divider()
-        GatewayMenuItem("Remove MCP Server", symbol: .trash2, role: .destructive, action: remove)
+        MenuItem("Remove MCP Server", symbol: .trash2, role: .destructive, action: remove)
     }
 }
 

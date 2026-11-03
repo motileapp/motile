@@ -221,9 +221,9 @@ struct GatewayHeader: View {
                     }
                 } trailing: {
                     ActionMenu(icon: .ellipsis, help: "What to do with \(name)", size: .large) {
-                        GatewayMenuItem("Replace with a New Gateway", symbol: .refreshCw) { adding = true }
+                        MenuItem("Replace with a New Gateway", symbol: .refreshCw) { adding = true }
                         Divider()
-                        GatewayMenuItem("Remove Gateway", symbol: .trash2, role: .destructive) { removal = .gateway(name: name) }
+                        MenuItem("Remove Gateway", symbol: .trash2, role: .destructive) { removal = .gateway(name: name) }
                     }
                 }
             } else {
