@@ -541,7 +541,8 @@ impl Sidebar {
             .into_any_element()
     }
 
-    /// The line where the list has nothing: no thread yet, none active, or nothing found.
+    /// The line where the list has nothing: no thread yet, none active, or nothing found; or under
+    /// what was found while the servers still search.
     pub(super) fn empty_line(&self, cx: &mut Context<Self>) -> AnyElement {
         let c = colors(cx);
         let store = self.store.read(cx);

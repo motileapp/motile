@@ -1569,13 +1569,19 @@ data class MessageSearch(
     /** Some server may still answer. */
     val searching: Boolean = false,
     val matches: Map<String, MessageMatch> = emptyMap(),
+    /** The threads found, best first, then what servers that answered later found. */
+    val order: List<String> = emptyList(),
 ) {
     companion object {
-        fun of(json: JSON) = MessageSearch(
-            query = json.string("query"),
-            searching = json.bool("searching"),
-            matches = json.objects("matches").reversed().associate { it.string("thread_id") to MessageMatch(it) },
-        )
+        fun of(json: JSON): MessageSearch {
+            val found = json.objects("matches")
+            return MessageSearch(
+                query = json.string("query"),
+                searching = json.bool("searching"),
+                matches = found.reversed().associate { it.string("thread_id") to MessageMatch(it) },
+                order = found.map { it.string("thread_id") }.distinct(),
+            )
+        }
     }
 }
 

@@ -972,8 +972,8 @@ pub enum Request {
     CancelSignIn {
         id: String,
     },
-    /// The threads whose messages, the user's or the agent's, have `query` in them, the last
-    /// updated first, at most `limit` of them. `ThreadMatches` answers.
+    /// The threads whose messages, the user's or the agent's, have every word of `query` in them,
+    /// best first, at most `limit` of them. `ThreadMatches` answers.
     SearchThreads {
         query: String,
         limit: u32,
@@ -1108,8 +1108,8 @@ pub enum Speaker {
     Agent,
 }
 
-/// A thread a search found by its messages: the best of them, the user's before the agent's and
-/// then the latest, cut to the part around what was searched for.
+/// A thread a search found by its messages: the best of them, as `search` grades them, then the
+/// user's before the agent's and the latest, cut to the part around what was searched for.
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct ThreadMatch {
     pub thread_id: String,

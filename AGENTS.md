@@ -52,6 +52,9 @@ What the programs agree on.
 - `skills.rs`: how a message names the skills it starts, `$name` at the start of a word.
 - `gateway_wire.rs`: what servers and clients say to the account's gateway on `GATEWAY_ALPN`, a stream
   for each request.
+- `search.rs`: how a search through the messages matches, alike on the servers and the clients:
+  its words in any order, whatever their case and accents, a message graded by whether they are
+  whole words, start words or sit inside them, and written together; and the excerpt shown.
 - `select.rs`: which account a new thread starts on: of those that can carry it through the next
   hours, the one whose spare quota lapses soonest. The gateway ranks its accounts with it, from what it
   measures; the clients rank a server's own accounts with it.
@@ -225,8 +228,12 @@ shadcn's own colours, opacities and radii are gone from the theme.
   (`rev`); a client asks for what changed after the revision it has. It also keeps what the
   agents spend, by model and by what it was spent on (a turn, or writing a title, a branch's
   name, a commit message or a pull request): Claude Code reports a session's total with each
-  result and Codex what each answer took. The sidebar's search finds threads by their messages
-  here, each by its best one, cut to the part around the match.
+  result and Codex what each answer took.
+- `search.rs`: the sidebar's search through the messages, by an FTS5 trigram index of the user's
+  and the agents' messages (`item_search`, `copied_item_search`, kept by triggers): the newest
+  messages with every word of three letters or more, narrowed by the shorter words, then each
+  thread once by its best message, ranked as `motile_protocol::search` grades them. It reads on a
+  connection of its own, beside the writes.
 - `pricing.rs`: what the models cost at the API's prices, fetched from LiteLLM's list once a day,
   to say what the tokens Codex spent would have cost. Claude Code says what its own cost.
 - `limits.rs`: how much of their plans the agents' accounts have used, as their CLIs say without
@@ -327,7 +334,9 @@ for tests.
   or `/`, best match first, and the chips a message's `$name`s become.
 - `search.rs`: the sidebar's search through every server's messages, asked a moment after the
   search stops changing. What was found stays while it still fits the search, so the list never
-  empties and fills again, and its excerpts come in parts that set off the match.
+  empties and fills again. Each server's answer shows as it comes, below what already shows, and
+  the search says it still searches until the last one answered. Its excerpts come in parts that
+  set off the words.
 - `usage.rs`: what the agents spent on every server, added up for the usage view: a series for
   each agent, and the models, projects and kinds of token.
 - `limits.rs`: the Limits tab of the usage view: a section for each account, shown once however

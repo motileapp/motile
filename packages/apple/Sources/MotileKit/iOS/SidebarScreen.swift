@@ -146,9 +146,11 @@ struct SidebarScreen: View {
         return items
     }
 
-    /// What the search found, or the line that says it found nothing.
+    /// What the search found, then the line that says the servers still search, or that line
+    /// alone when it found nothing.
     private func searchItems(_ results: [SearchResult]) -> [SidebarItem] {
-        results.isEmpty ? [.empty] : results.map(SidebarItem.result)
+        guard !results.isEmpty else { return [.empty] }
+        return results.map(SidebarItem.result) + (store.messageSearch.searching ? [.empty] : [])
     }
 
     /// What the rows show as the list was last drawn. They are drawn outside this view, so they

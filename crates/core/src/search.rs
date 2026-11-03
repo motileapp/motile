@@ -1,11 +1,12 @@
 //! The sidebar's search through the threads' messages: what each server found, kept while the
 //! search changes, and its excerpts in parts that set off what was searched for.
 
+use motile_protocol::search::{Matcher, ranges};
 use motile_protocol::wire::{Speaker, ThreadMatch};
 use serde::Serialize;
 
-/// How many characters a search needs before the servers are asked.
-pub const MIN_QUERY: usize = 2;
+pub use motile_protocol::search::searchable;
+
 /// How many threads each server answers with, at most.
 pub const LIMIT: u32 = 50;
 
@@ -13,6 +14,8 @@ pub const LIMIT: u32 = 50;
 #[derive(Clone, Debug)]
 pub struct Found {
     pub server_id: String,
+    /// The server that answered: `server_id`, or the one holding its copy once it was removed.
+    pub asked: String,
     pub thread: ThreadMatch,
 }
 
@@ -37,9 +40,28 @@ pub fn normalized(query: &str) -> String {
     query.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
-/// Whether `query` is in `text`, with letters of any case, as the servers search.
-pub fn contains(text: &str, query: &str) -> bool {
-    find(text, query).is_some()
+/// Keeps what was found that still fits the search while it changes.
+pub fn keep_fitting(found: &mut Vec<Found>, query: &str) {
+    let matcher = Matcher::new(query);
+    found.retain(|found| matcher.grade(&found.thread.excerpt).is_some());
+}
+
+/// What `asked` answered, into what shows: what it no longer finds goes, what it finds again
+/// stays in its place, and what it finds anew comes below, so that nothing shown moves.
+pub fn merge(shown: &mut Vec<Found>, asked: &str, answer: Vec<Found>) {
+    let mut answer: Vec<Option<Found>> = answer.into_iter().map(Some).collect();
+    shown.retain_mut(|found| {
+        if found.asked != asked {
+            return true;
+        }
+        let same =
+            |again: &Found| again.server_id == found.server_id && again.thread.thread_id == found.thread.thread_id;
+        let again = answer.iter_mut().find(|again| again.as_ref().is_some_and(same)).and_then(Option::take);
+        let Some(again) = again else { return false };
+        *found = again;
+        true
+    });
+    shown.extend(answer.into_iter().flatten());
 }
 
 pub fn view(found: &Found, query: &str) -> MatchView {
@@ -51,32 +73,21 @@ pub fn view(found: &Found, query: &str) -> MatchView {
     }
 }
 
-/// The excerpt cut where `query` starts and ends, each time it is there.
+/// The excerpt cut where the words of `query` are, each time they are there.
 pub fn parts(excerpt: &str, query: &str) -> Vec<Part> {
     let mut parts = Vec::new();
-    let mut rest = excerpt;
-    while let Some(start) = find(rest, query) {
-        let end = start + query.len();
-        if start > 0 {
-            parts.push(Part { text: rest[..start].to_string(), matched: false });
+    let mut at = 0;
+    for range in ranges(excerpt, query) {
+        if range.start > at {
+            parts.push(Part { text: excerpt[at..range.start].to_string(), matched: false });
         }
-        parts.push(Part { text: rest[start..end].to_string(), matched: true });
-        rest = &rest[end..];
+        parts.push(Part { text: excerpt[range.clone()].to_string(), matched: true });
+        at = range.end;
     }
-    if !rest.is_empty() {
-        parts.push(Part { text: rest.to_string(), matched: false });
+    if at < excerpt.len() {
+        parts.push(Part { text: excerpt[at..].to_string(), matched: false });
     }
     parts
-}
-
-/// Where `query` first is in `text`, with letters of any case. Only ASCII letters are folded, as
-/// SQLite's `LIKE` does, so a match starts and ends between characters.
-fn find(text: &str, query: &str) -> Option<usize> {
-    let (text, query) = (text.as_bytes(), query.as_bytes());
-    if query.is_empty() || query.len() > text.len() {
-        return None;
-    }
-    text.windows(query.len()).position(|window| window.eq_ignore_ascii_case(query))
 }
 
 #[cfg(test)]
@@ -88,7 +99,7 @@ mod tests {
     }
 
     #[test]
-    fn an_excerpt_sets_off_every_match_whatever_its_case() {
+    fn an_excerpt_sets_off_every_word_whatever_its_case_and_accents() {
         assert_eq!(
             parts("…Deploy it, then deploy é again", "deploy"),
             [
@@ -99,14 +110,27 @@ mod tests {
                 part(" é again", false)
             ]
         );
-        assert_eq!(parts("café crème", "É"), [part("café crème", false)]);
-        assert_eq!(parts("café", "fé"), [part("ca", false), part("fé", true)]);
+        assert_eq!(parts("Green café", "cafe green"), [part("Green", true), part(" ", false), part("café", true)]);
+        assert_eq!(parts("two drafts", "fts"), [part("two drafts", false)]);
+    }
+
+    fn found(asked: &str, thread_id: &str, excerpt: &str) -> Found {
+        let thread =
+            ThreadMatch { thread_id: thread_id.into(), speaker: Speaker::User, excerpt: excerpt.into(), origin: None };
+        Found { server_id: asked.into(), asked: asked.into(), thread }
     }
 
     #[test]
-    fn a_search_is_one_line_without_spaces_around_it() {
-        assert_eq!(normalized("  watch\nthe   deploy "), "watch the deploy");
-        assert!(contains("Watch the DEPLOY", "the deploy"));
-        assert!(!contains("Watch", ""));
+    fn what_a_server_answers_later_comes_below_and_what_shows_stays_in_place() {
+        let mut shown = vec![found("a", "1", "deploy"), found("b", "2", "deploy"), found("a", "3", "deploy")];
+        keep_fitting(&mut shown, "deploy it");
+        assert!(shown.is_empty());
+
+        let mut shown = vec![found("a", "1", "deploy"), found("b", "2", "deploy"), found("a", "3", "deploy")];
+        merge(&mut shown, "a", vec![found("a", "4", "new"), found("a", "3", "deploy again")]);
+
+        let shown: Vec<_> =
+            shown.iter().map(|found| (found.thread.thread_id.as_str(), found.thread.excerpt.as_str())).collect();
+        assert_eq!(shown, [("2", "deploy"), ("3", "deploy again"), ("4", "new")]);
     }
 }

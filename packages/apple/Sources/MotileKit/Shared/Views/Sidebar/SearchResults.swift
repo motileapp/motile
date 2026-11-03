@@ -39,7 +39,8 @@ extension AppStore {
         let named = threads.filter { matches($0, search: search) }
         let namedIDs = Set(named.map(\.id))
         let found = messageSearch.matches
-        let byMessage = threads.filter { !namedIDs.contains($0.id) && found[$0.id] != nil }
+        let byID = Dictionary(threads.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        let byMessage = messageSearch.order.compactMap { namedIDs.contains($0) ? nil : byID[$0] }
         return searched(listedDrafts, for: search).map(SearchResult.draft)
             + named.map { .thread($0, nil) }
             + byMessage.map { .thread($0, found[$0.id]) }
@@ -91,7 +92,8 @@ private struct SearchKeys: ViewModifier {
     }
 }
 
-/// The line the search shows when it found nothing, in the place of its first row.
+/// The line under what the search found while the servers still search, or in its place when it
+/// found nothing.
 struct SearchEmptyLine: View {
     @Environment(AppStore.self) private var store
     let size: CGFloat

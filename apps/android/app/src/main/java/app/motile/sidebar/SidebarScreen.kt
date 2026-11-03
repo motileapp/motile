@@ -185,7 +185,7 @@ fun SidebarScreen(underThread: Boolean) {
     val done = if (searching) emptyList() else store.doneThreads
     val results = store.searchResults
     val highlightedID = results.getOrNull(highlighted.index)?.id
-    val items = if (searching) searchItems(results) else items(store, active, done, doneExpanded)
+    val items = if (searching) searchItems(results, store.messageSearch.searching) else items(store, active, done, doneExpanded)
     val shown = reorder.arranged(items) { it.id }
     val places = if (store.showsJumpHints) jumpPlaces(store.jumpThreads) else emptyMap()
 
@@ -410,9 +410,12 @@ private fun items(store: AppStore, active: List<ThreadInfo>, done: List<ThreadIn
     if (expanded) done.forEach { add(SidebarItem.Done(it)) }
 }
 
-/** What the search found, or the line that says it found nothing. */
-private fun searchItems(results: List<SearchResult>): List<SidebarItem> =
-    if (results.isEmpty()) listOf(SidebarItem.Empty) else results.map { SidebarItem.Result(it) }
+/** What the search found, then the line that says the servers still search, or that line alone when it found nothing. */
+private fun searchItems(results: List<SearchResult>, searching: Boolean): List<SidebarItem> = when {
+    results.isEmpty() -> listOf(SidebarItem.Empty)
+    searching -> results.map { SidebarItem.Result(it) } + SidebarItem.Empty
+    else -> results.map { SidebarItem.Result(it) }
+}
 
 /** Where each thread is among those the jump keys go through, the first place it has. */
 private fun jumpPlaces(threads: List<ThreadInfo>): Map<String, Int> = buildMap {

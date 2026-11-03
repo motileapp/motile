@@ -85,7 +85,7 @@ const UI_PROTOCOL: u32 = 34;
 /// How long the skills a server listed are offered before it is asked again.
 const SKILLS_FRESH: Duration = Duration::from_secs(30);
 /// How long the search has to stay as it is before the servers are asked.
-const SEARCH_DELAY: Duration = Duration::from_millis(200);
+const SEARCH_DELAY: Duration = Duration::from_millis(120);
 /// How long a search waits for a server.
 const SEARCH_TIMEOUT: Duration = Duration::from_secs(5);
 /// How long the Limits tab waits for the gateway's accounts.
@@ -173,10 +173,12 @@ enum Input {
         id: String,
         result: Result<String, String>,
     },
-    /// What the servers found for the search.
+    /// What a server found for the search, and whether it was the last to answer.
     Searched {
         query: String,
+        asked: String,
         found: Vec<search::Found>,
+        last: bool,
     },
     /// Time to copy the servers' threads between them.
     Relay,
@@ -699,13 +701,15 @@ impl Core {
                 let Some((id, _)) = self.uploads.remove(&key) else { return };
                 self.reply(id, result);
             }
-            Input::Searched { query, found } => {
+            Input::Searched { query, asked, found, last } => {
                 if self.search.query != query {
                     return;
                 }
-                self.search.found = found;
-                self.search.asking = None;
-                self.emit_search(false);
+                search::merge(&mut self.search.found, &asked, found);
+                if last {
+                    self.search.asking = None;
+                }
+                self.emit_search(!last);
             }
             Input::Keep { key, value } => {
                 self.cache.keep(&key, &value);
@@ -3466,7 +3470,7 @@ impl Core {
         if let Some(asking) = self.search.asking.take() {
             asking.abort();
         }
-        self.search.found.retain(|found| search::contains(&found.thread.excerpt, &query));
+        search::keep_fitting(&mut self.search.found, &query);
         self.search.query = query.clone();
         let links: Vec<(String, Arc<Link>)> = self
             .servers
@@ -3475,7 +3479,7 @@ impl Core {
             .filter_map(|server| Some((server.device.public_key.clone(), server.link.clone()?)))
             .collect();
         let (removed, holder) = self.removed_and_holder();
-        if query.chars().count() < search::MIN_QUERY || links.is_empty() {
+        if !search::searchable(&query) || links.is_empty() {
             self.search.found.clear();
             return self.emit_search(false);
         }
@@ -3490,19 +3494,21 @@ impl Core {
                 let request = Request::SearchThreads { query: query.clone(), limit: search::LIMIT, removed };
                 asked.spawn(async move {
                     let answer = tokio::time::timeout(SEARCH_TIMEOUT, link.request(&request)).await;
-                    let Ok(Ok(Message::ThreadMatches { matches })) = answer else { return Vec::new() };
+                    let Ok(Ok(Message::ThreadMatches { matches })) = answer else { return (server_id, Vec::new()) };
                     let found = |thread: ThreadMatch| search::Found {
                         server_id: thread.origin.clone().unwrap_or_else(|| server_id.clone()),
+                        asked: server_id.clone(),
                         thread,
                     };
-                    matches.into_iter().map(found).collect()
+                    let found = matches.into_iter().map(found).collect();
+                    (server_id, found)
                 });
             }
-            let mut found = Vec::new();
             while let Some(answer) = asked.join_next().await {
-                found.extend(answer.unwrap_or_default());
+                let (server_id, found) = answer.unwrap_or_default();
+                let last = asked.is_empty();
+                let _ = inputs.send(Input::Searched { query: query.clone(), asked: server_id, found, last });
             }
-            let _ = inputs.send(Input::Searched { query, found });
         });
         self.search.asking = Some(asking.abort_handle());
     }

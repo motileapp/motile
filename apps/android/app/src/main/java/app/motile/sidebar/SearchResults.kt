@@ -92,7 +92,7 @@ fun Modifier.steersSearch(store: AppStore, highlighted: Highlight): Modifier = o
     true
 }
 
-/** The line the search shows when it found nothing, in the place of its first row. */
+/** The line under what the search found while the servers still search, or in its place when it found nothing. */
 @Composable
 fun SearchEmptyLine(size: Float) {
     val store = LocalStore.current
