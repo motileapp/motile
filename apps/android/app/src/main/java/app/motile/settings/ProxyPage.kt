@@ -247,7 +247,7 @@ private fun AccountRow(account: ProxyAccount, count: Int, proxy: Proxy, rename: 
 @Composable
 private fun SwitchRow(account: ProxyAccount, proxy: Proxy) {
     SettingsRow {
-        RowText("Use this account", Modifier.weight(1f))
+        SettingsItem("In rotation", "The proxy can use this account", lines = Int.MAX_VALUE)
         Switch(account.enabled, { proxy.setEnabled(account, it) })
     }
 }
