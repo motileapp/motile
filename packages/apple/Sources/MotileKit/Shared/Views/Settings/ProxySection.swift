@@ -4,7 +4,8 @@ import SwiftUI
 enum ProxyText {
     static let absent = "Runs on a machine that is always on"
     /// What an account's switch says on a phone, where it has a row of its own.
-    static let useAccount = "Use this account"
+    static let inRotation = "In rotation"
+    static let rotation = "The proxy can use this account"
     /// How many requests "Capture the next" captures.
     static let captureNext = 20
     /// How many threads the capture menu offers.

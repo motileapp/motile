@@ -149,8 +149,13 @@ struct ProxySettings: View {
         .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
         // On a row of its own under the name, which a phone has no room beside.
         HStack {
-            Text(ProxyText.useAccount)
-                .foregroundStyle(Color.themeForeground)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(ProxyText.inRotation)
+                    .foregroundStyle(Color.themeForeground)
+                Text(ProxyText.rotation)
+                    .font(.footnote)
+                    .foregroundStyle(Color.themeMutedForeground)
+            }
             Spacer()
             Switch(isOn: Binding { account.enabled } set: { store.setProxyAccount(account, enabled: $0) })
         }
