@@ -11,6 +11,7 @@ use std::sync::RwLock;
 use std::time::Instant;
 
 use anyhow::{Context, bail};
+use motile_protocol::gateway_wire::mcp_slug;
 use motile_protocol::gateway_wire::{
     McpAdding, McpAuth, McpChange, McpKey, McpServer, McpStatus, McpTool, ToolKind, ToolPermission, ToolResult,
 };
@@ -298,7 +299,7 @@ impl Gateway {
         let taken: Vec<String> = list.iter().map(|mcp_server| mcp_server.slug.clone()).collect();
         let mcp_server = McpEntry {
             id: uuid::Uuid::new_v4().to_string(),
-            slug: free_slug(&slug_of(&name), &taken),
+            slug: free_slug(&mcp_slug(&name), &taken),
             name,
             url: url.to_string(),
             enabled: true,
@@ -360,17 +361,37 @@ impl Gateway {
         }
     }
 
+    /// Renaming an MCP server names it anew for agents too.
     pub fn update_mcp_server(&self, id: &str, change: McpChange) -> anyhow::Result<()> {
+        if let McpChange::Name { name } = &change
+            && name.trim().is_empty()
+        {
+            bail!("An MCP server needs a name.");
+        }
         if let McpChange::Slug { slug } = &change {
-            let slug = slug_of(slug);
-            let taken = self.mcp_servers.all().iter().any(|mcp_server| mcp_server.slug == slug && mcp_server.id != id);
-            if taken || slug == RESERVED {
+            let slug = mcp_slug(slug);
+            let taken = self
+                .mcp_servers
+                .all()
+                .iter()
+                .any(|mcp_server| mcp_server.slug.eq_ignore_ascii_case(&slug) && mcp_server.id != id);
+            if taken || slug.eq_ignore_ascii_case(RESERVED) {
                 bail!("Another MCP server is called {slug}.");
             }
         }
+        let others: Vec<String> = self
+            .mcp_servers
+            .all()
+            .into_iter()
+            .filter(|mcp_server| mcp_server.id != id)
+            .map(|mcp_server| mcp_server.slug)
+            .collect();
         let changed = self.change_mcp_server(id, |mcp_server| match change {
-            McpChange::Name { name } => mcp_server.name = name.trim().to_string(),
-            McpChange::Slug { slug } => mcp_server.slug = slug_of(&slug),
+            McpChange::Name { name } => {
+                mcp_server.name = name.trim().to_string();
+                mcp_server.slug = free_slug(&mcp_slug(&name), &others);
+            }
+            McpChange::Slug { slug } => mcp_server.slug = mcp_slug(&slug),
             McpChange::Enabled { enabled } => mcp_server.enabled = enabled,
             McpChange::ToolPermission { name, permission } => {
                 mcp_server.permissions.tools.insert(name, permission);
@@ -536,22 +557,10 @@ fn name_of_host(url: &str) -> String {
     }
 }
 
-/// The name in letters, digits and dashes, as an MCP server's name in an agent's config.
-pub fn slug_of(name: &str) -> String {
-    let mut slug = String::new();
-    for character in name.trim().to_lowercase().chars() {
-        if character.is_ascii_alphanumeric() {
-            slug.push(character);
-        } else if !slug.ends_with('-') {
-            slug.push('-');
-        }
-    }
-    let slug = slug.trim_matches('-').to_string();
-    if slug.is_empty() { "mcp_server".to_string() } else { slug }
-}
-
 fn free_slug(slug: &str, taken: &[String]) -> String {
-    let free = |candidate: &String| candidate != RESERVED && !taken.contains(candidate);
+    let free = |candidate: &String| {
+        [RESERVED.to_string()].iter().chain(taken).all(|taken| !taken.eq_ignore_ascii_case(candidate))
+    };
     let first = slug.to_string();
     if free(&first) {
         return first;
@@ -565,12 +574,9 @@ mod tests {
     use serde_json::json;
 
     #[test]
-    fn a_slug_is_the_name_in_letters_digits_and_dashes_and_never_taken() {
-        assert_eq!(slug_of("  Linear "), "linear");
-        assert_eq!(slug_of("Google Drive (work)"), "google-drive-work");
-        assert_eq!(slug_of("¿?"), "mcp_server");
-        assert_eq!(free_slug("linear", &["linear".into(), "linear-2".into()]), "linear-3");
-        assert_eq!(free_slug("motile", &[]), "motile-2");
+    fn a_slug_is_never_taken_in_any_case() {
+        assert_eq!(free_slug("Linear", &["linear".into(), "Linear-2".into()]), "Linear-3");
+        assert_eq!(free_slug("Motile", &[]), "Motile-2");
     }
 
     #[test]

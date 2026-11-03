@@ -12,7 +12,7 @@ use gpui_kit::*;
 use motile_core::api::Command;
 use motile_core::gateway::{Reach, View};
 use motile_core::mcp_servers::{Known, McpServerRow, McpServerState, ToolGroup, ToolRow, agent_name, is_address};
-use motile_protocol::gateway_wire::{McpAuth, McpChange, ToolKind, ToolPermission};
+use motile_protocol::gateway_wire::{McpAuth, McpChange, ToolKind, ToolPermission, mcp_slug};
 use serde_json::{Map, Value};
 
 use super::agent_gateway::{GatewayHeader, MCP_CAPTION, large};
@@ -138,24 +138,23 @@ fn warning_line(text: impl Into<SharedString>, cx: &App) -> Div {
     div().text_size(px(12.)).text_color(colors(cx).warning).child(text.into())
 }
 
-/// The name agents see, and under it how they name a tool with it as it is typed.
-fn slug_field(slug: &Entity<InputState>, fallback: &str, tool: &str, cx: &App) -> Div {
-    let typed = text_of(slug, cx);
-    let shown = if typed.is_empty() { fallback } else { typed.as_str() };
-    div()
-        .flex()
-        .flex_col()
-        .gap(px(6.))
-        .child(field_label("Name agents see", cx))
-        .child(InputField::new(slug).monospaced(true))
-        .child(
-            div()
-                .text_size(px(11.5))
-                .font_family(crate::theme::MONO_FONT)
-                .text_color(colors(cx).muted_foreground)
-                .truncate()
-                .child(agent_name(shown, tool)),
-        )
+/// A name field, and under it how agents will name the MCP server's tools once it is called that.
+fn name_field(name: &Entity<InputState>, tool: Option<&str>, fallback: Option<&str>, cx: &App) -> Div {
+    let typed = text_of(name, cx);
+    let slug = if typed.is_empty() { fallback.map(String::from) } else { Some(mcp_slug(&typed)) };
+    div().flex().flex_col().gap(px(6.)).child(field_label("Name", cx)).child(InputField::new(name)).when_some(
+        slug,
+        |field, slug| {
+            field.child(
+                div()
+                    .text_size(px(11.5))
+                    .font_family(crate::theme::MONO_FONT)
+                    .text_color(colors(cx).muted_foreground)
+                    .truncate()
+                    .child(agent_name(&slug, tool.unwrap_or("…"))),
+            )
+        },
+    )
 }
 
 /// A box of a document's lines, which can be selected and scrolled.
@@ -788,7 +787,8 @@ pub struct AddSheet {
     search: Entity<InputState>,
     key: Entity<InputState>,
     header: Entity<InputState>,
-    slug: Entity<InputState>,
+    /// The name of an MCP server added by its address.
+    name: Entity<InputState>,
     /// The address and name being added.
     adding: Option<(String, Option<String>)>,
     /// The gateway hasn't answered yet.
@@ -796,8 +796,6 @@ pub struct AddSheet {
     error: Option<String>,
     /// Counts the sign-ins, so that only the last one's return is taken.
     attempt: u64,
-    /// The MCP server whose slug the field was given.
-    slug_of: Option<String>,
     focus_key: bool,
     pub leaving: bool,
     _subscriptions: Vec<Subscription>,
@@ -813,14 +811,21 @@ impl AddSheet {
         let search = cx.new(|cx| InputState::new(window, cx).placeholder("Search, or paste an MCP address"));
         let key = cx.new(|cx| InputState::new(window, cx).placeholder("Key"));
         let header = cx.new(|cx| InputState::new(window, cx).placeholder("Authorization"));
-        let slug = cx.new(|cx| InputState::new(window, cx).placeholder("linear"));
+        let name = cx.new(|cx| InputState::new(window, cx));
         let subscriptions = vec![
-            cx.subscribe(&search, |this, _, event: &InputEvent, cx| match event {
+            cx.subscribe_in(&search, window, |this, search, event: &InputEvent, window, cx| match event {
+                InputEvent::PressEnter { .. } => this.continue_with_address(cx),
+                _ => {
+                    let placeholder = host_name(&search.read(cx).value());
+                    this.name.update(cx, |name, cx| name.set_placeholder(placeholder, window, cx));
+                    cx.notify();
+                }
+            }),
+            cx.subscribe(&key, |_, _, _: &InputEvent, cx| cx.notify()),
+            cx.subscribe(&name, |this, _, event: &InputEvent, cx| match event {
                 InputEvent::PressEnter { .. } => this.continue_with_address(cx),
                 _ => cx.notify(),
             }),
-            cx.subscribe(&key, |_, _, _: &InputEvent, cx| cx.notify()),
-            cx.subscribe(&slug, |_, _, _: &InputEvent, cx| cx.notify()),
             cx.observe(&store, |_, _, cx| cx.notify()),
         ];
         search.update(cx, |search, cx| search.focus(window, cx));
@@ -831,12 +836,11 @@ impl AddSheet {
             search,
             key,
             header,
-            slug,
+            name,
             adding: None,
             waiting: false,
             error: None,
             attempt: 0,
-            slug_of: None,
             focus_key: false,
             leaving: false,
             _subscriptions: subscriptions,
@@ -855,7 +859,8 @@ impl AddSheet {
         if !matches!(self.step, Step::Pick) || !is_address(&text) {
             return;
         }
-        self.add(text, None, cx);
+        let name = Some(text_of(&self.name, cx)).filter(|name| !name.is_empty());
+        self.add(text, name, cx);
     }
 
     /// Sends the address to the gateway, with the key the key step holds.
@@ -971,26 +976,11 @@ impl AddSheet {
         self.add(url.clone(), name, cx);
     }
 
-    fn done(&mut self, cx: &mut Context<Self>) {
-        let Step::Connected(id) = &self.step else { return };
-        let view = self.store.read(cx).gateway.view.clone();
-        let slug = text_of(&self.slug, cx);
-        let changed = find(view.as_ref(), id).is_some_and(|mcp_server| mcp_server.slug != slug);
-        if changed && !slug.is_empty() {
-            let id = id.clone();
-            self.store.update(cx, |store, cx| {
-                store.update_mcp_server(id, McpChange::Slug { slug });
-                cx.notify();
-            });
-        }
-        self.close(cx);
-    }
-
     fn on_return(&mut self, cx: &mut Context<Self>) {
         match self.step {
             Step::Pick => self.continue_with_address(cx),
             Step::Key { .. } => self.submit_key(cx),
-            Step::Connected(_) => self.done(cx),
+            Step::Connected(_) => self.close(cx),
             Step::SigningIn { .. } => {}
         }
     }
@@ -1004,6 +994,7 @@ impl AddSheet {
             body.push(warning_line(error.clone(), cx).into_any_element());
         }
         if is_address(&text) {
+            body.push(name_field(&self.name, None, None, cx).into_any_element());
             body.push(
                 caption("Your gateway reaches it there, and signs in or asks you for a key if it needs one.", cx)
                     .into_any_element(),
@@ -1108,18 +1099,10 @@ impl AddSheet {
         body
     }
 
-    fn connected(&mut self, id: &str, window: &mut Window, cx: &mut Context<Self>) -> Vec<AnyElement> {
+    fn connected(&mut self, id: &str, cx: &mut Context<Self>) -> Vec<AnyElement> {
         let view = self.store.read(cx).gateway.view.clone();
         let Some(mcp_server) = find(view.as_ref(), id).cloned() else { return vec![spinner_box(80., cx)] };
-        if self.slug_of.as_deref() != Some(id) {
-            self.slug_of = Some(id.to_string());
-            let slug = mcp_server.slug.clone();
-            self.slug.update(cx, |field, cx| field.set_value(slug, window, cx));
-        }
-        let mut body = vec![
-            caption(mcp_server.tools_text.clone(), cx).into_any_element(),
-            slug_field(&self.slug, &mcp_server.slug, &example_tool(&mcp_server), cx).into_any_element(),
-        ];
+        let mut body = vec![caption(mcp_server.tools_text.clone(), cx).into_any_element()];
         if !mcp_server.groups.is_empty() {
             let groups = mcp_server.groups.iter().enumerate().fold(
                 card_default(div().flex().flex_col(), cx),
@@ -1209,8 +1192,8 @@ impl Render for AddSheet {
                 let id = id.clone();
                 let done = ActionButton::new("mcp-server-added-done", "Done")
                     .primary()
-                    .on_click(cx.listener(|this, _, _, cx| this.done(cx)));
-                (self.connected(&id, window, cx), vec![done.into_any_element()])
+                    .on_click(cx.listener(|this, _, _, cx| this.close(cx)));
+                (self.connected(&id, cx), vec![done.into_any_element()])
             }
         };
         self.focus_key = false;
@@ -1241,7 +1224,6 @@ pub struct RenameSheet {
     page: WeakEntity<McpGatewayPage>,
     mcp_server: McpServerRow,
     name: Entity<InputState>,
-    slug: Entity<InputState>,
     pub leaving: bool,
     _subscriptions: Vec<Subscription>,
 }
@@ -1256,14 +1238,9 @@ impl RenameSheet {
     ) -> Self {
         let name =
             cx.new(|cx| InputState::new(window, cx).placeholder("Linear").default_value(mcp_server.name.clone()));
-        let slug =
-            cx.new(|cx| InputState::new(window, cx).placeholder("linear").default_value(mcp_server.slug.clone()));
-        let subscriptions = vec![
-            cx.subscribe(&name, |_, _, _: &InputEvent, cx| cx.notify()),
-            cx.subscribe(&slug, |_, _, _: &InputEvent, cx| cx.notify()),
-        ];
+        let subscriptions = vec![cx.subscribe(&name, |_, _, _: &InputEvent, cx| cx.notify())];
         name.update(cx, |name, cx| name.focus(window, cx));
-        Self { store, page, mcp_server: mcp_server.clone(), name, slug, leaving: false, _subscriptions: subscriptions }
+        Self { store, page, mcp_server: mcp_server.clone(), name, leaving: false, _subscriptions: subscriptions }
     }
 
     fn close(&self, cx: &mut App) {
@@ -1274,24 +1251,17 @@ impl RenameSheet {
     }
 
     fn save(&self, cx: &mut App) {
-        let (name, slug) = (text_of(&self.name, cx), text_of(&self.slug, cx));
-        if name.is_empty() || slug.is_empty() {
+        let name = text_of(&self.name, cx);
+        if name.is_empty() {
             return;
         }
-        let mut changes = Vec::new();
         if name != self.mcp_server.name {
-            changes.push(McpChange::Name { name });
+            let id = self.mcp_server.id.clone();
+            self.store.update(cx, |store, cx| {
+                store.update_mcp_server(id, McpChange::Name { name });
+                cx.notify();
+            });
         }
-        if slug != self.mcp_server.slug {
-            changes.push(McpChange::Slug { slug });
-        }
-        let id = self.mcp_server.id.clone();
-        self.store.update(cx, |store, cx| {
-            for change in changes {
-                store.update_mcp_server(id.clone(), change);
-            }
-            cx.notify();
-        });
         self.close(cx);
     }
 }
@@ -1299,7 +1269,7 @@ impl RenameSheet {
 impl Render for RenameSheet {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let c = colors(cx);
-        let can_save = !text_of(&self.name, cx).is_empty() && !text_of(&self.slug, cx).is_empty();
+        let can_save = !text_of(&self.name, cx).is_empty();
         let content = div()
             .p(px(20.))
             .flex()
@@ -1307,10 +1277,7 @@ impl Render for RenameSheet {
             .gap(px(14.))
             .text_color(c.foreground)
             .child(sheet_title(format!("Rename {}", self.mcp_server.name)))
-            .child(
-                div().flex().flex_col().gap(px(6.)).child(field_label("Name", cx)).child(InputField::new(&self.name)),
-            )
-            .child(slug_field(&self.slug, &self.mcp_server.slug, &example_tool(&self.mcp_server), cx))
+            .child(name_field(&self.name, Some(&example_tool(&self.mcp_server)), Some(&self.mcp_server.slug), cx))
             .child(
                 div()
                     .flex()

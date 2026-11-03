@@ -52,16 +52,29 @@ struct McpToolGroupRow: View {
     let group: McpToolGroup
     /// None where the group doesn't fold, as in the add sheet.
     var open: Bool?
+    /// How far its content stands in from the edges its light reaches.
+    var inset = EdgeInsets()
     var toggle: () -> Void = {}
+    @State private var hovered = false
 
     var body: some View {
-        HStack(spacing: 8) {
+        let row = HStack(spacing: 8) {
             title(open: open)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .contentShape(Rectangle())
-                .onTapGesture { if open != nil { toggle() } }
-                .accessibilityAddTraits(open == nil ? [] : .isButton)
+                .allowsHitTesting(false)
             McpPermissionMenu(permission: group.permission) { store.setMcpServerGroup(mcpServer, group, to: $0) }
+        }
+        .padding(inset)
+        if open == nil {
+            row
+        } else {
+            row
+                .background {
+                    Button(action: toggle) { Color.clear }
+                        .buttonStyle(.highlight(radius: 0, hovered: hovered))
+                        .accessibilityLabel(group.title)
+                }
+                .onHover { hovered = $0 }
         }
     }
 
@@ -243,8 +256,8 @@ private struct SheetLabel: View {
     }
 }
 
-/// Adds an MCP server: picks a known one or takes an address, then signs it in, takes its key, and
-/// shows what agents will call it.
+/// Adds an MCP server: picks a known one or takes an address and its name, then signs it in, takes
+/// its key, and shows its tools.
 struct McpServerAddSheet: View {
     @Environment(AppStore.self) private var store
     @Environment(\.closeModal) private var close
@@ -252,7 +265,7 @@ struct McpServerAddSheet: View {
     @State private var search: String
     @State private var header = ""
     @State private var key = ""
-    @State private var slug = ""
+    @State private var name = ""
     @FocusState private var searchFocused: Bool
     @FocusState private var keyFocused: Bool
 
@@ -308,9 +321,17 @@ struct McpServerAddSheet: View {
             .textInputAutocapitalization(.never)
             .keyboardType(.URL)
             #endif
-            .onSubmit { if let address { adder.add(url: address, name: nil) } }
+            .onSubmit(continueWithAddress)
             .onAppear { searchFocused = true }
-        if address != nil {
+        if let address {
+            VStack(alignment: .leading, spacing: 6) {
+                SheetLabel("Name")
+                InputField(McpServerAdder.hostName(address), text: $name)
+                    .onSubmit(continueWithAddress)
+                if let slug = McpServerRow.slug(of: name) {
+                    AgentName(text: "mcp__\(slug)__…")
+                }
+            }
             Text("Your gateway reaches it there, and signs in or asks you for a key if it needs one.")
                 .font(.ui(size: 12.5))
                 .foregroundStyle(Color.themeMutedForeground)
@@ -396,15 +417,6 @@ struct McpServerAddSheet: View {
             Text(mcpServer.toolsText)
                 .font(.ui(size: 13))
                 .foregroundStyle(Color.themeMutedForeground)
-            VStack(alignment: .leading, spacing: 6) {
-                SheetLabel("Name agents see")
-                InputField(mcpServer.slug, text: $slug, monospaced: true)
-                    .onAppear { slug = mcpServer.slug }
-                Text(mcpServer.example(as: slug))
-                    .font(.ui(size: 11.5, design: .monospaced))
-                    .foregroundStyle(Color.themeMutedStrongerForeground)
-                    .textSelection(.enabled)
-            }
             if !mcpServer.groups.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
                     SheetLabel("Tool permissions")
@@ -420,11 +432,10 @@ struct McpServerAddSheet: View {
         }
     }
 
-    private func done() {
-        if case .added(let id) = adder.step, let mcpServer = store.mcpServer(id) {
-            store.renameMcpServer(mcpServer, name: mcpServer.name, slug: slug)
-        }
-        close()
+    private func continueWithAddress() {
+        guard let address else { return }
+        let name = name.trimmingCharacters(in: .whitespaces)
+        adder.add(url: address, name: name.isEmpty ? nil : name)
     }
 
     @ViewBuilder private var buttons: some View {
@@ -434,7 +445,7 @@ struct McpServerAddSheet: View {
                 .keyboardShortcut(.cancelAction)
             if let address {
                 ActionButton("Continue", variant: .primary, pending: adder.adding == address, margin: .beside(leading: 4)) {
-                    adder.add(url: address, name: nil)
+                    continueWithAddress()
                 }
                 .keyboardShortcut(.defaultAction)
             }
@@ -450,7 +461,7 @@ struct McpServerAddSheet: View {
             .keyboardShortcut(.defaultAction)
             .disabled(key.trimmingCharacters(in: .whitespaces).isEmpty)
         case .added:
-            ActionButton("Done", variant: .primary, action: done)
+            ActionButton("Done", variant: .primary) { close() }
                 .keyboardShortcut(.defaultAction)
         }
     }
@@ -478,14 +489,14 @@ struct McpServerAddSheet: View {
                     content
                     if case .pick = adder.step, let address {
                         ActionButton("Continue", variant: .primary, pending: adder.adding == address, fills: true) {
-                            adder.add(url: address, name: nil)
+                            continueWithAddress()
                         }
                     }
                     if case .key = adder.step {
                         HStack(spacing: 0) { Spacer(); buttons }
                     }
                     if case .added = adder.step {
-                        ActionButton("Done", variant: .primary, fills: true, action: done)
+                        ActionButton("Done", variant: .primary, fills: true) { close() }
                     }
                 }
                 .padding(20)
@@ -502,13 +513,26 @@ struct McpServerAddSheet: View {
     #endif
 }
 
-/// Names an MCP server, for the user and for the agents.
+/// How agents will name an MCP server's tools, under its name.
+private struct AgentName: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(.ui(size: 11.5, design: .monospaced))
+            .foregroundStyle(Color.themeMutedStrongerForeground)
+            .lineLimit(1)
+            .truncationMode(.middle)
+            .textSelection(.enabled)
+    }
+}
+
+/// Names an MCP server, which names it for agents too.
 struct McpServerRenameSheet: View {
     @Environment(AppStore.self) private var store
     @Environment(\.closeModal) private var close
     let mcpServer: McpServerRow
     @State private var name = ""
-    @State private var slug = ""
     @FocusState private var focused: Bool
 
     private var fields: some View {
@@ -517,20 +541,13 @@ struct McpServerRenameSheet: View {
                 SheetLabel("Name")
                 InputField(mcpServer.name, text: $name, focus: $focused)
                     .onSubmit(save)
-            }
-            VStack(alignment: .leading, spacing: 6) {
-                SheetLabel("Name agents see")
-                InputField(mcpServer.slug, text: $slug, monospaced: true)
-                    .onSubmit(save)
-                Text(mcpServer.example(as: slug))
-                    .font(.ui(size: 11.5, design: .monospaced))
-                    .foregroundStyle(Color.themeMutedStrongerForeground)
+                AgentName(text: mcpServer.example(named: name))
             }
         }
     }
 
     private func save() {
-        store.renameMcpServer(mcpServer, name: name, slug: slug)
+        store.renameMcpServer(mcpServer, name: name)
         close()
     }
 
@@ -575,7 +592,6 @@ struct McpServerRenameSheet: View {
 
     private func start() {
         name = mcpServer.name
-        slug = mcpServer.slug
         focused = true
     }
 }

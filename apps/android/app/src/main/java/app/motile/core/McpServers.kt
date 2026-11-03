@@ -48,10 +48,21 @@ data class McpServerRow(
     /** Its login stopped working or it fails, which its status says in warning. */
     val troubled: Boolean get() = state == State.SignInAgain || state == State.Failing
 
-    /** How agents name its tools once it is called `slug`. */
-    fun example(slug: String): String = "mcp__${slug.ifEmpty { this.slug }}__${tools.firstOrNull()?.name ?: "tool"}"
+    /** How agents name its tools once it is called `name`. */
+    fun example(name: String): String = "mcp__${slugOf(name) ?: slug}__${tools.firstOrNull()?.name ?: "tool"}"
 
     companion object {
+        /**
+         * The slug the gateway makes of a name (`mcp_slug`), as Claude Code names claude.ai's connectors:
+         * letters, digits, dashes and an underscore for anything else. Null before there is a name.
+         */
+        fun slugOf(name: String): String? = buildString {
+            for (character in name.trim()) {
+                if (character in 'a'..'z' || character in 'A'..'Z' || character in '0'..'9' || character == '-') append(character)
+                else if (isNotEmpty() && !endsWith('_')) append('_')
+            }
+        }.removeSuffix("_").ifEmpty { null }
+
         fun of(json: JSON) = McpServerRow(
             id = json.string("id"),
             slug = json.string("slug"),
@@ -264,11 +275,10 @@ class McpServers(private val gateway: Gateway) {
     fun setGroup(mcpServer: McpServerRow, group: McpToolGroup, permission: ToolPermission) =
         update(mcpServer.id, mapOf("type" to "group_permission", "kind" to group.kind, "permission" to permission.raw))
 
-    fun rename(mcpServer: McpServerRow, name: String, slug: String) {
+    /** Renames the MCP server, which names it anew for agents too. */
+    fun rename(mcpServer: McpServerRow, name: String) {
         val newName = name.trim()
-        val newSlug = slug.trim()
         if (newName.isNotEmpty() && newName != mcpServer.name) update(mcpServer.id, mapOf("type" to "name", "name" to newName))
-        if (newSlug.isNotEmpty() && newSlug != mcpServer.slug) update(mcpServer.id, mapOf("type" to "slug", "slug" to newSlug))
     }
 
     fun setKey(mcpServer: McpServerRow, header: String, key: String, reply: (Result<JSON>) -> Unit) =
