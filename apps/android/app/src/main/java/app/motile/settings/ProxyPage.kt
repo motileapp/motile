@@ -193,6 +193,7 @@ private fun SettingsGroups.accounts(agent: Agent, view: ProxyView, proxy: Proxy,
     accounts.forEach { account ->
         group("proxy-account/${account.id}") {
             row { AccountRow(account, accounts.size, proxy, rename = { rename(account) }) { remove(account) } }
+            row { SwitchRow(account, proxy) }
             if (account.status == ProxyAccount.Status.SignInAgain) row { SignInRow("Sign In Again", agent, proxy, Symbol.CircleUser) }
             for (window in account.windows) row {
                 Box(Modifier.opacity(Opacity.Disabled, on = !account.enabled)) { LimitWindowRow(window) }
@@ -221,14 +222,13 @@ private fun SignInRow(title: String, agent: Agent, proxy: Proxy, symbol: Symbol)
     }
 }
 
-/** An account: its agent and name, how it stands, who is signed in, the threads on it, its switch and its menu. */
+/** An account: its agent and name, how it stands, who is signed in, the threads on it and its menu. */
 @Composable
 private fun AccountRow(account: ProxyAccount, count: Int, proxy: Proxy, rename: () -> Unit, remove: () -> Unit) {
     val palette = LocalPalette.current
     SettingsRow {
         // As far from the card's top as its limits' numbers are from theirs.
         AccountLines(account, Modifier.weight(1f).padding(vertical = 8.dp))
-        Switch(account.enabled, { proxy.setEnabled(account, it) })
         ActionMenu(icon = Symbol.Ellipsis, help = "More") {
             item("Rename Account", Symbol.Pencil, run = rename)
             submenu(account.priorityText, Symbol.ListFilter) {
@@ -240,6 +240,15 @@ private fun AccountRow(account: ProxyAccount, count: Int, proxy: Proxy, rename: 
             divider()
             item("Remove Account", Symbol.Trash2, destructive = true, run = remove)
         }
+    }
+}
+
+/** The account's switch, on a row of its own under its name, which a phone has no room beside. */
+@Composable
+private fun SwitchRow(account: ProxyAccount, proxy: Proxy) {
+    SettingsRow {
+        RowText("Takes threads", Modifier.weight(1f))
+        Switch(account.enabled, { proxy.setEnabled(account, it) })
     }
 }
 

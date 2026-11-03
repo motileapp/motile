@@ -141,12 +141,19 @@ struct ProxySettings: View {
         HStack(spacing: 10) {
             ProxyAccountLabel(account: account)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            Switch(isOn: Binding { account.enabled } set: { store.setProxyAccount(account, enabled: $0) })
             ActionMenu(icon: .ellipsis, help: "What to do with \(account.name)") {
                 ProxyAccountActions(account: account, count: count, rename: { rename(account) }, remove: { removal = .proxyAccount(account) })
             }
         }
         .padding(.vertical, 2)
+        .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
+        // On a row of its own under the name, which a phone has no room beside.
+        HStack {
+            Text(ProxyText.takesThreads)
+                .foregroundStyle(Color.themeForeground)
+            Spacer()
+            Switch(isOn: Binding { account.enabled } set: { store.setProxyAccount(account, enabled: $0) })
+        }
         .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
         if account.status == .signInAgain {
             Button { store.startProxySignIn(account.agent) } label: {
