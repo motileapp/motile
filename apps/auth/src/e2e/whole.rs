@@ -372,13 +372,19 @@ async fn a_client_signs_in_links_a_server_and_runs_a_thread_it_still_has_after_a
         server_id: server.id.clone(),
         thread_id: thread_id.clone(),
         speaker: Speaker::User,
-        parts: vec![part("Add a ", false), part("rate limiter", true), part(" to the API", false)],
+        parts: vec![
+            part("Add a ", false),
+            part("rate", true),
+            part(" ", false),
+            part("limiter", true),
+            part(" to the API", false),
+        ],
     };
     assert_eq!(client.search.2, [found]);
     // A longer search keeps what still fits until the server answers it.
-    client.handle.send(0, Command::SearchThreads { query: "rate limiter to".into() });
-    client.until("the search is longer", |client| client.search.0 == "rate limiter to").await;
-    assert_eq!(client.search.2[0].parts[1], part("rate limiter to", true));
+    client.handle.send(0, Command::SearchThreads { query: "rate limiter API".into() });
+    client.until("the search is longer", |client| client.search.0 == "rate limiter API").await;
+    assert_eq!(client.search.2[0].parts[5], part("API", true));
     client.handle.send(0, Command::SearchThreads { query: "x".into() });
     client.until("a search too short is left alone", |client| client.search == ("x".into(), false, Vec::new())).await;
 
