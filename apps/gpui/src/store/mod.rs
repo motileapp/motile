@@ -1350,7 +1350,6 @@ impl Store {
     fn add_draft(&mut self) -> ThreadDraft {
         let mut draft = ThreadDraft::new();
         draft.project_id = self.prefs.string("new.project");
-        draft.worktree = Some(self.prefs.bool("new.worktree"));
         self.apply_last_settings(&mut draft);
         self.thread_drafts.push(draft.clone());
         self.save_thread_drafts();
@@ -1361,6 +1360,7 @@ impl Store {
     /// on it. A draft whose server isn't known yet keeps what it had.
     fn apply_last_settings(&mut self, draft: &mut ThreadDraft) {
         draft.access = self.prefs.get("new.access").unwrap_or(Access::Full);
+        draft.worktree = Some(self.prefs.bool("new.worktree"));
         draft.base = None;
         let Some(server) = self.server_of(draft).map(|server| server.id.clone()) else {
             self.draft_awaiting_server = Some(draft.id.clone());

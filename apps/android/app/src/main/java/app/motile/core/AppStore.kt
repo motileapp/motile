@@ -1244,7 +1244,7 @@ class AppStore(private val context: Context) {
 
     /** A draft that starts with what the last one was set to. */
     private fun addDraft(): ThreadDraft {
-        val draft = applyLastSettings(ThreadDraft(projectID = Preferences.string("new.project"), worktree = Preferences.bool("new.worktree")))
+        val draft = applyLastSettings(ThreadDraft(projectID = Preferences.string("new.project")))
         threadDrafts = threadDrafts + draft
         saveThreadDrafts()
         return draft
@@ -1252,7 +1252,7 @@ class AppStore(private val context: Context) {
 
     /** The model, account and effort are the server's, so each server keeps what was last chosen on it. A draft whose server isn't known yet keeps what it had. */
     private fun applyLastSettings(draft: ThreadDraft): ThreadDraft {
-        val reset = draft.copy(access = Access.of(Preferences.string("new.access")) ?: Access.Full, base = null)
+        val reset = draft.copy(access = Access.of(Preferences.string("new.access")) ?: Access.Full, worktree = Preferences.bool("new.worktree"), base = null)
         val server = serverOf(reset)
         if (server == null) {
             draftAwaitingServer = reset.id
