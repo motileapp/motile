@@ -1233,7 +1233,6 @@ final class AppStore {
     private func addDraft() -> ThreadDraft {
         var draft = ThreadDraft()
         draft.projectID = defaults.string(forKey: "new.project")
-        draft.worktree = defaults.bool(forKey: "new.worktree")
         applyLastSettings(to: &draft)
         threadDrafts.append(draft)
         saveThreadDrafts()
@@ -1244,6 +1243,7 @@ final class AppStore {
     /// chosen on it. A draft whose server isn't known yet keeps what it had.
     private func applyLastSettings(to draft: inout ThreadDraft) {
         draft.access = Access(rawValue: defaults.string(forKey: "new.access") ?? "") ?? .full
+        draft.worktree = defaults.bool(forKey: "new.worktree")
         draft.base = nil
         guard let server = server(of: draft) else {
             draftAwaitingServer = draft.id
