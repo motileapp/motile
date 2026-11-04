@@ -33,7 +33,7 @@ struct Chip: View {
                     .frame(width: 7, height: 7)
             }
             if let icon {
-                Image(icon, size: .sm)
+                Image(icon, size: .xs)
             }
             Text(title)
                 .font(.ui(size: 11.5, weight: .medium, design: monospaced ? .monospaced : .default))
