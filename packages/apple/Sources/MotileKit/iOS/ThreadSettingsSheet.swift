@@ -10,6 +10,8 @@ struct ThreadSettingsSheet: View {
     @State private var listed: Set<String> = []
     @State private var tmpReasoning = false
     private static let titleGap: CGFloat = 6
+    /// The agent's logo in an account's header, and the gateway's symbol beside it.
+    private static let logoSize: IconSize = .sm
 
     var body: some View {
         @Bindable var store = store
@@ -77,11 +79,11 @@ struct ThreadSettingsSheet: View {
                     } label: {
                         VStack(alignment: .leading, spacing: 12) {
                             HStack(spacing: Self.titleGap) {
-                                AgentIcon(agent: choices.account.agent, size: .sm)
+                                AgentIcon(agent: choices.account.agent, size: Self.logoSize)
                                 // "Claude Code", the gateway's symbol, then the account its bars are from, a step quieter.
                                 HStack(spacing: 0) {
                                     Text(verbatim: choices.title)
-                                        .gatewayMarked(choices.account.gateway, fontSize: UIFont.preferredFont(forTextStyle: .body).pointSize)
+                                        .gatewayMarked(choices.account.gateway, fontSize: UIFont.preferredFont(forTextStyle: .body).pointSize, size: Self.logoSize)
                                         .layoutPriority(1)
                                     if let next = store.composerServer?.nextAccounts[id] {
                                         Text(verbatim: " · ")

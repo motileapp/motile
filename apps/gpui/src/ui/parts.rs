@@ -28,7 +28,12 @@ pub fn gateway_mark_size(font_size: f32) -> IconSize {
 
 /// How much wider the gateway's symbol makes words of `font_size`: its gap, and itself.
 pub fn gateway_mark_width(font_size: f32) -> f32 {
-    gateway_gap(font_size) + gateway_mark_size(font_size).side()
+    gateway_mark_width_as(font_size, gateway_mark_size(font_size))
+}
+
+/// How much wider the gateway's symbol of `size` makes words of `font_size`.
+pub fn gateway_mark_width_as(font_size: f32, size: IconSize) -> f32 {
+    gateway_gap(font_size) + size.side()
 }
 
 /// A space of DM Sans, and a point more.
@@ -38,24 +43,29 @@ fn gateway_gap(font_size: f32) -> f32 {
 
 /// The gateway's symbol after words of `font_size`, which says what they name runs through the
 /// gateway, centred on their capitals, which DM Sans centres in the line.
-fn gateway_mark(font_size: f32, spaced: bool) -> Div {
+fn gateway_mark(font_size: f32, size: IconSize, spaced: bool) -> Div {
     div()
         .flex_none()
         .when(spaced, |mark| mark.ml(px(gateway_gap(font_size))))
         .flex()
         .items_center()
-        .child(icons::symbol("waypoints", gateway_mark_size(font_size)))
+        .child(icons::symbol("waypoints", size))
 }
 
 /// The words with the gateway's symbol after them where what they name runs through the gateway,
 /// cut at their end before the symbol is.
 pub fn proxied(words: impl IntoElement, proxied: bool, font_size: f32) -> Div {
+    proxied_as(words, proxied, font_size, gateway_mark_size(font_size))
+}
+
+/// `proxied`, with the symbol as large as `size`, where it matches an icon beside it.
+pub fn proxied_as(words: impl IntoElement, proxied: bool, font_size: f32, size: IconSize) -> Div {
     div()
         .min_w_0()
         .flex()
         .items_center()
         .child(div().min_w_0().whitespace_nowrap().overflow_hidden().text_ellipsis().child(words))
-        .when(proxied, |line| line.child(gateway_mark(font_size, true)))
+        .when(proxied, |line| line.child(gateway_mark(font_size, size, true)))
 }
 
 /// What something runs on, the gateway's symbol after it where it runs through the gateway, then
@@ -72,7 +82,7 @@ pub fn proxied_line(runs_on: &str, proxied: bool, rest: &str, font_size: f32) ->
         .overflow_hidden()
         .text_size(px(font_size))
         .when(!runs_on.is_empty(), |line| line.child(div().flex_none().whitespace_nowrap().child(runs_on.to_string())))
-        .child(gateway_mark(font_size, !runs_on.is_empty()))
+        .child(gateway_mark(font_size, gateway_mark_size(font_size), !runs_on.is_empty()))
         .when(!rest.is_empty(), |line| line.child(div().min_w_0().truncate().child(format!(" · {rest}"))))
 }
 

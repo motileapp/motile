@@ -36,10 +36,10 @@ object GatewayMark {
         else -> IconSize.Md
     }
 
-    /** What draws the symbol of `appendMark` beside words of `fontSize`, in `color`. */
+    /** What draws the symbol of `appendMark` beside words of `fontSize`, in `color`, as large as `symbol` where it matches an icon beside it. */
     @Composable
-    fun content(color: Color, fontSize: Float): Map<String, InlineTextContent> {
-        val size = size(fontSize)
+    fun content(color: Color, fontSize: Float, symbol: IconSize? = null): Map<String, InlineTextContent> {
+        val size = symbol ?: size(fontSize)
         val (width, height) = with(LocalDensity.current) { (symbolSide(size) + gap).toSp() to symbolSide(size).toSp() }
         return mapOf(
             ID to InlineTextContent(Placeholder(width, height, PlaceholderVerticalAlign.TextCenter)) {

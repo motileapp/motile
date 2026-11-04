@@ -175,7 +175,7 @@ private fun Models() {
                         }
                         Text(
                             title, Modifier.weight(1f), size = noteText,
-                            color = palette.mutedForeground, maxLines = 1, inlineContent = GatewayMark.content(palette.mutedForeground, noteText),
+                            color = palette.mutedForeground, maxLines = 1, inlineContent = GatewayMark.content(palette.mutedForeground, noteText, noteSymbol),
                         )
                         Icon(Symbol.ChevronDown, noteSymbol, Modifier.rotate(turn), color = palette.mutedForeground)
                     }

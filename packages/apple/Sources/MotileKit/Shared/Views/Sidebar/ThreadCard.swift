@@ -4,7 +4,7 @@ import SwiftUI
 /// the composer shows them, and its pull request.
 struct ThreadCard: View {
     static let maxWidth: CGFloat = 320
-    private static let iconSize = IconSize.sm
+    fileprivate static let iconSize = IconSize.sm
     @Environment(AppStore.self) private var store
     let threadID: String
 
@@ -70,7 +70,7 @@ private struct CardLine<Icon: View>: View {
         HStack(spacing: 8) {
             icon()
             Text(dotted: text)
-                .gatewayMarked(proxied, fontSize: 12)
+                .gatewayMarked(proxied, fontSize: 12, size: ThreadCard.iconSize)
                 .font(.ui(size: 12))
                 .lineLimit(1)
                 .truncationMode(middle ? .middle : .tail)

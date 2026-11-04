@@ -334,7 +334,7 @@ private fun ControlWords(
                 val markColor = if (tinted == null) LocalForeground.current else LocalPalette.current.foreground
                 Text(
                     words(title, tinted, proxied, muted), style = font, maxLines = 1, modifier = Modifier.weight(1f, fill = false),
-                    inlineContent = if (proxied) GatewayMark.content(markColor, size.textSize) else emptyMap(),
+                    inlineContent = if (proxied) GatewayMark.content(markColor, size.textSize, markSize) else emptyMap(),
                 )
                 if (detail != null) {
                     Text(" · ", style = font, color = muted, maxLines = 1)
