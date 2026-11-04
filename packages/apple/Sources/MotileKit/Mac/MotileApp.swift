@@ -406,25 +406,16 @@ struct PaneDivider: View {
             .frame(width: 1)
             .ignoresSafeArea()
             .overlay {
-                Color.clear
-                    .frame(width: Self.threadReach + 1 + Self.paneReach)
-                    .contentShape(Rectangle())
-                    .alignmentGuide(HorizontalAlignment.center) { grab in
-                        grab[HorizontalAlignment.center] + (growsLeft ? 1 : -1) * (Self.threadReach - Self.paneReach) / 2
-                    }
-                    .onHover { inside in
-                        if inside { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() }
-                    }
-                    .gesture(
-                        DragGesture(minimumDistance: 1, coordinateSpace: .global)
-                            .onChanged { drag in
-                                let start = widthAtStart ?? min(widths.upperBound, max(widths.lowerBound, width))
-                                widthAtStart = start
-                                let moved = growsLeft ? -drag.translation.width : drag.translation.width
-                                width = min(widths.upperBound, max(widths.lowerBound, start + moved))
-                            }
-                            .onEnded { _ in widthAtStart = nil }
-                    )
+                ResizeGrab(axis: .horizontal) { moved in
+                    guard let moved else { return widthAtStart = nil }
+                    let start = widthAtStart ?? min(widths.upperBound, max(widths.lowerBound, width))
+                    widthAtStart = start
+                    width = min(widths.upperBound, max(widths.lowerBound, start + (growsLeft ? -moved : moved)))
+                }
+                .frame(width: Self.threadReach + 1 + Self.paneReach)
+                .alignmentGuide(HorizontalAlignment.center) { grab in
+                    grab[HorizontalAlignment.center] + (growsLeft ? 1 : -1) * (Self.threadReach - Self.paneReach) / 2
+                }
             }
     }
 }

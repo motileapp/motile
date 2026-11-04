@@ -712,7 +712,7 @@ private struct Shelf<Item: Identifiable, Header: View, Row: View>: View {
     var pointed: (Item?, CGRect, NSView) -> Void = { _, _, _ in }
     @ViewBuilder let header: () -> Header
     @ViewBuilder let row: (Item) -> Row
-    @GestureState private var pulledUp = 0.0
+    @State private var pulledUp = 0.0
 
     var body: some View {
         let contentHeight = Double(items.count) * (Self.rowHeight + rowGap) + 4
@@ -753,19 +753,14 @@ private struct Shelf<Item: Identifiable, Header: View, Row: View>: View {
     private func resizeHandle(_ heights: ClosedRange<Double>) -> some View {
         ThemeDivider()
             .overlay {
-                Color.clear
-                    .frame(height: Theme.resizeGrab)
-                    .contentShape(Rectangle())
-                    .onHover { inside in
-                        if inside { NSCursor.resizeUpDown.push() } else { NSCursor.pop() }
+                ResizeGrab(axis: .vertical) { moved in
+                    guard let moved else {
+                        height = listHeight(in: heights, pulledUp: pulledUp)
+                        return pulledUp = 0
                     }
-                    .gesture(
-                        DragGesture(minimumDistance: 1, coordinateSpace: .global)
-                            .updating($pulledUp) { drag, pull, _ in pull = -drag.translation.height }
-                            .onEnded { drag in
-                                height = listHeight(in: heights, pulledUp: -drag.translation.height)
-                            }
-                    )
+                    pulledUp = -moved
+                }
+                .frame(height: Theme.resizeGrab)
             }
             .zIndex(1)
     }
