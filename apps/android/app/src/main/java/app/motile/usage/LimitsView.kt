@@ -10,12 +10,14 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -178,9 +180,9 @@ private fun LimitBar(window: LimitsReport.Window, color: Color, modifier: Modifi
     val shape = RoundedCornerShape(Radius.md)
     val fill = color.at(Opacity.ColorTintChart)
     val text = Theme.uiDigits(11f, FontWeight.Medium)
-    BoxWithConstraints(modifier.height(scaled(28f).dp).background(surface.color(Surface.Layer.Control), shape)) {
+    BoxWithConstraints(modifier.height(scaled(28f).dp).clip(shape).background(surface.color(Surface.Layer.Control))) {
         val filled = maxWidth * (window.usedPercent / 100).toFloat().coerceIn(0f, 1f)
-        Box(Modifier.width(filled).fillMaxHeight().background(fill, shape))
+        Box(Modifier.offset(x = filled - maxWidth).fillMaxSize().background(fill, shape))
         Row(
             Modifier.fillMaxSize().padding(horizontal = 9.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),

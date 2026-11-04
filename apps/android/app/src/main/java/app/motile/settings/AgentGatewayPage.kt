@@ -26,6 +26,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -225,7 +226,8 @@ private fun SwitchRow(account: GatewayAccount, gateway: Gateway) {
     }
 }
 
-/** The account's name with its badges beside it, or after who is signed in under it where that would cut the name short. */
+/** The account's name with its badges beside it, or after who is signed in under it where that would cut the name short.
+ * "Next" keeps its place while it is hidden, so that it never moves what is around it. */
 @Composable
 private fun AccountLines(account: GatewayAccount, modifier: Modifier) {
     val palette = LocalPalette.current
@@ -235,8 +237,8 @@ private fun AccountLines(account: GatewayAccount, modifier: Modifier) {
         RowText(account.name, color = palette.foreground, maxLines = 1)
     }
     val badges: @Composable () -> Unit = {
-        account.statusText?.let { Chip(it, tone = tone) }
-        if (account.next) Chip("Next", tone = palette.primary)
+        account.statusText?.let { Chip(it, tone = tone, compact = true) }
+        Chip("Next", Modifier.alpha(if (account.next) 1f else 0f), tone = palette.primary, compact = true)
     }
     val line = Arrangement.spacedBy(6.dp)
     SubcomposeLayout(modifier) { constraints ->

@@ -5,6 +5,7 @@ import SwiftUI
 /// `dot` the colour is the dot's and the words stay plain.
 struct Chip: View {
     static let height = scaled(20)
+    static let compactHeight = scaled(18)
 
     let title: String
     var icon: Symbol?
@@ -13,16 +14,19 @@ struct Chip: View {
     var monospaced = false
     /// It marks quietly, as a default does: its words muted on the accent's tint, with no line.
     var muted = false
+    /// Less tall, to sit on a line of text without making it taller.
+    var compact = false
     @Environment(\.surface) private var surface
     @Environment(\.row) private var row
 
-    init(_ title: String, icon: Symbol? = nil, dot: Color? = nil, tone: Color? = nil, monospaced: Bool = false, muted: Bool = false) {
+    init(_ title: String, icon: Symbol? = nil, dot: Color? = nil, tone: Color? = nil, monospaced: Bool = false, muted: Bool = false, compact: Bool = false) {
         self.title = title
         self.icon = icon
         self.dot = dot
         self.tone = tone
         self.monospaced = monospaced
         self.muted = muted
+        self.compact = compact
     }
 
     var body: some View {
@@ -41,7 +45,7 @@ struct Chip: View {
         }
         .foregroundStyle(muted ? Color.themeMutedForeground : dot == nil ? tone ?? Color.themeForeground : Color.themeForeground)
         .padding(.horizontal, 7)
-        .frame(height: Self.height)
+        .frame(height: compact ? Self.compactHeight : Self.height)
         .background(background, in: Capsule())
         .overlay {
             if tone == nil && !muted && surface != .glass {

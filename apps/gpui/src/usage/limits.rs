@@ -156,8 +156,8 @@ pub fn limit_row(id: (usize, usize), window: &LimitWindow, beside: bool, cx: &Ap
     row.into_any_element()
 }
 
-/// What was used of a window as the part of a bar it fills, and at its end when the window starts
-/// over and the resets the account may use.
+/// What was used of a window as the part of a bar it fills, cut by the bar's corners, and at its end
+/// when the window starts over and the resets the account may use.
 fn limit_bar(id: (usize, usize), window: &LimitWindow, tone: Hsla, cx: &App) -> Div {
     let c = colors(cx);
     let used = (window.used_percent / 100.).clamp(0., 1.) as f32;
@@ -198,16 +198,7 @@ fn limit_bar(id: (usize, usize), window: &LimitWindow, tone: Hsla, cx: &App) -> 
         .h(px(BAR_HEIGHT))
         .rounded(px(Radius::MD))
         .bg(Surface::Card.layer(Layer::Control, c))
-        .child(
-            div()
-                .absolute()
-                .top_0()
-                .bottom_0()
-                .left_0()
-                .w(relative(used))
-                .rounded(px(Radius::MD))
-                .bg(c.at(tone, Opacity::ColorTintChart)),
-        )
+        .child(used_fill(used, c.at(tone, Opacity::ColorTintChart)))
         .child(
             div()
                 .relative()
@@ -222,4 +213,46 @@ fn limit_bar(id: (usize, usize), window: &LimitWindow, tone: Hsla, cx: &App) -> 
                 .child(div().flex_1())
                 .child(end),
         )
+}
+
+/// The bar's rounded shape up to `used` of its width, its end rounded alike: where a fill shorter than
+/// its corners meets them, it follows the bar's edge rather than shrinking into a pill.
+fn used_fill(used: f32, color: Hsla) -> Canvas<()> {
+    canvas(
+        |_, _, _| {},
+        move |bounds, _, window, _| {
+            const STEPS: usize = 16;
+            let (width, height) = (f32::from(bounds.size.width), f32::from(bounds.size.height));
+            let filled = width * used;
+            let radius = Radius::MD.min(height / 2.);
+            if filled < 0.5 {
+                return;
+            }
+            let below_corner = |from_end: f32| match from_end < radius {
+                true => radius - (radius * radius - (radius - from_end).powi(2)).max(0.).sqrt(),
+                false => 0.,
+            };
+            let top = |x: f32| below_corner(x).max(below_corner(filled - x));
+            let reach = radius.min(filled);
+            let mut xs: Vec<f32> = (0..=STEPS)
+                .flat_map(|step| {
+                    let along = reach * step as f32 / STEPS as f32;
+                    [along, filled - along]
+                })
+                .collect();
+            xs.sort_by(f32::total_cmp);
+            let points: Vec<_> = xs
+                .iter()
+                .map(|&x| bounds.origin + point(px(x), px(top(x))))
+                .chain(xs.iter().rev().map(|&x| bounds.origin + point(px(x), px(height - top(x)))))
+                .collect();
+            let mut shape = PathBuilder::fill();
+            shape.add_polygon(&points, true);
+            if let Ok(path) = shape.build() {
+                window.paint_path(path, color);
+            }
+        },
+    )
+    .absolute()
+    .size_full()
 }

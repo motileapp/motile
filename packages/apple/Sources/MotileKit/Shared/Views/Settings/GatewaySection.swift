@@ -41,6 +41,7 @@ struct GatewayAccountLabel: View {
     let account: GatewayAccount
 
     /// The badges stand beside the name, or after the plan under it where that would cut the name short.
+    /// "Next" keeps its place while it is hidden, so that it never moves what is around it.
     var body: some View {
         ViewThatFits(in: .horizontal) {
             lines(badgesBeside: true)
@@ -73,11 +74,11 @@ struct GatewayAccountLabel: View {
 
     @ViewBuilder private var chips: some View {
         if let status = account.statusText {
-            Chip(status, tone: account.status.tone, muted: account.status.tone == nil)
+            Chip(status, tone: account.status.tone, muted: account.status.tone == nil, compact: true)
         }
-        if account.next {
-            Chip("Next", tone: .themePrimary)
-        }
+        Chip("Next", tone: .themePrimary, compact: true)
+            .opacity(account.next ? 1 : 0)
+            .accessibilityHidden(!account.next)
     }
 
     @ViewBuilder private var description: some View {
