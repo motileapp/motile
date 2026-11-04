@@ -31,7 +31,7 @@ use crate::api::{
 };
 use crate::browse;
 use crate::cache::{Cache, Page};
-use crate::connection::{NOT_CONNECTED, ServerAddr, bind, offline};
+use crate::connection::{NOT_CONNECTED, ServerAddr, bind, leave_relays, offline};
 use crate::follow::{self, Followed};
 use crate::gateway::{self, GatewayEvent, GatewayLink};
 use crate::git;
@@ -366,6 +366,8 @@ struct Core {
     backgrounded_at: Option<SystemTime>,
     /// When the endpoint last had a server answer it, or was opened.
     reached_at: Instant,
+    /// The key of the endpoint being opened, while it is.
+    binding: Option<String>,
     me: Me,
     account_error: Option<String>,
     servers: Vec<Server>,
@@ -508,6 +510,7 @@ pub fn start(config: Config, sink: EventSink) -> anyhow::Result<Handle> {
         ran_at: SystemTime::now(),
         backgrounded_at: None,
         reached_at: Instant::now(),
+        binding: None,
         account_error: None,
         servers: Vec::new(),
         open: HashMap::new(),
@@ -984,16 +987,17 @@ impl Core {
     }
 
     /// Opens a new endpoint for the links once the client ran again after a pause, or was `away`
-    /// in the background as long. The system cuts what a paused endpoint had open without a
-    /// word, and the endpoint can go on dialing through it for long.
-    fn replace_stale_endpoint(&mut self, away: Duration) {
+    /// in the background as long, and says whether it does. The system cuts what a paused
+    /// endpoint had open without a word, and the endpoint can go on dialing through it for long.
+    fn replace_stale_endpoint(&mut self, away: Duration) -> bool {
         let now = SystemTime::now();
         let paused = now.duration_since(self.ran_at).unwrap_or_default().max(away);
         self.ran_at = now;
         if paused < STALE_AFTER || self.endpoint.is_none() {
-            return;
+            return false;
         }
         self.bind_endpoint();
+        true
     }
 
     /// Opens a new endpoint when the one there is has long reached none of the servers. They may
@@ -1012,15 +1016,29 @@ impl Core {
         self.bind_endpoint();
     }
 
-    fn bind_endpoint(&self) {
+    /// Opens a new endpoint once the one there is has let go of the relays. Two endpoints of one
+    /// key take the relay from each other.
+    fn bind_endpoint(&mut self) {
+        if self.binding.as_deref() == Some(self.key.public().as_str()) {
+            return;
+        }
+        self.binding = Some(self.key.public());
         let (key, inputs, local_only) = (self.key.clone(), self.inputs.clone(), self.config.local_only);
+        let stale = self.endpoint.clone();
         tokio::spawn(async move {
+            if let Some(stale) = stale {
+                leave_relays(&stale).await;
+                tokio::spawn(async move { stale.close().await });
+            }
             let result = bind(&key, local_only).await.map_err(error_text);
             let _ = inputs.send(Input::Endpoint { key: key.public(), result });
         });
     }
 
     fn endpoint_bound(&mut self, key: &str, result: Result<Endpoint, String>) {
+        if self.binding.as_deref() == Some(key) {
+            self.binding = None;
+        }
         if key != self.key.public() {
             return;
         }
@@ -2535,8 +2553,9 @@ impl Core {
             Command::Foreground => {
                 let backgrounded_at = self.backgrounded_at.take();
                 let away = backgrounded_at.and_then(|at| SystemTime::now().duration_since(at).ok());
-                self.replace_stale_endpoint(away.unwrap_or_default());
-                self.network_changed();
+                if !self.replace_stale_endpoint(away.unwrap_or_default()) {
+                    self.network_changed();
+                }
                 self.check_account();
                 self.reply(id, Ok(json!({})));
             }
