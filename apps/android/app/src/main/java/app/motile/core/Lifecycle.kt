@@ -2,6 +2,7 @@ package app.motile.core
 
 import android.content.Context
 import android.net.ConnectivityManager
+import android.net.LinkProperties
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.os.Handler
@@ -19,6 +20,7 @@ import androidx.lifecycle.ProcessLifecycleOwner
 class Lifecycle {
     private val main = Handler(Looper.getMainLooper())
     private var path: String? = null
+    private var addresses: String? = null
     private var metered: Boolean? = null
 
     fun start(context: Context, store: AppStore) {
@@ -44,9 +46,14 @@ class Lifecycle {
                 }
                 val metered = !capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
                 main.post {
-                    pathChanged(name, store)
+                    pathChanged("$network $name", store)
                     meteredChanged(metered, store)
                 }
+            }
+
+            override fun onLinkPropertiesChanged(network: Network, properties: LinkProperties) {
+                val addresses = properties.linkAddresses.map { it.toString() }.sorted().joinToString()
+                main.post { addressesChanged(addresses, store) }
             }
 
             override fun onLost(network: Network) {
@@ -59,6 +66,13 @@ class Lifecycle {
         val before = path
         path = name
         if (before == null || before == name) return
+        store.core.send("network_changed")
+    }
+
+    private fun addressesChanged(addresses: String, store: AppStore) {
+        val before = this.addresses
+        this.addresses = addresses
+        if (before == null || before == addresses) return
         store.core.send("network_changed")
     }
 

@@ -24,6 +24,8 @@ const RTT_REFRESH: Duration = Duration::from_secs(5);
 const REFUSED_RETRY: Duration = Duration::from_secs(10);
 /// A dial that takes longer than this is given up and started again.
 const DIAL_TIMEOUT: Duration = Duration::from_secs(30);
+/// A connection whose server hasn't sent its thread list by then is given up and dialed again.
+const WELCOME_TIMEOUT: Duration = Duration::from_secs(20);
 /// How long a request made while the link dials again waits for the connection.
 const RECONNECT_WAIT: Duration = Duration::from_secs(15);
 /// How many times a file is sent from its start when the connection is lost on the way.
@@ -220,7 +222,16 @@ impl Link {
             Err(_) => return Closed { refused: false, reason: "Your server didn't answer in time.".to_string() },
         };
         self.attach(&connection);
-        connection.closed().await
+        let welcomed = async {
+            tokio::time::sleep(WELCOME_TIMEOUT).await;
+            if self.status().state == State::Connected {
+                std::future::pending::<()>().await;
+            }
+        };
+        tokio::select! {
+            closed = connection.closed() => closed,
+            () = welcomed => Closed { refused: false, reason: "Your server didn't send its threads in time.".to_string() },
+        }
     }
 
     /// Starts using a connection whose handshake is done. It counts as connected once the server
@@ -243,7 +254,15 @@ impl Link {
     async fn follow_list(self: Arc<Self>, connection: Connection) {
         // The stream ends when the client fell behind; following again starts from a fresh list.
         while let Ok(mut follow) = connection.follow(&Request::Subscribe).await {
-            while let Ok(Some(message)) = follow.next().await {
+            loop {
+                let message = match follow.next().await {
+                    Ok(Some(message)) => message,
+                    Ok(None) => break,
+                    Err(error) => {
+                        tracing::warn!(server = self.server_id, "the thread list stopped: {error:#}");
+                        break;
+                    }
+                };
                 let welcomed = matches!(message, Message::Welcome { .. });
                 self.emit(LinkEvent::List(message));
                 if !welcomed {
@@ -260,6 +279,7 @@ impl Link {
             }
             tokio::time::sleep(Duration::from_millis(200)).await;
         }
+        connection.close();
     }
 
     async fn follow_thread(self: Arc<Self>, connection: Connection, thread_id: String) {
@@ -442,5 +462,59 @@ impl Link {
 
     pub async fn media(&self, id: &str, file: &Path, progress: impl FnMut(u64, u64)) -> anyhow::Result<()> {
         self.connection().await?.media(id, file, progress).await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use motile_protocol::ALPN;
+    use motile_protocol::identity::DeviceKey;
+
+    use super::*;
+    use crate::connection::bind;
+
+    /// A server that takes every stream and never answers one.
+    async fn silent_server() -> (Endpoint, ServerAddr) {
+        let endpoint =
+            Endpoint::builder(iroh::endpoint::presets::Minimal).alpns(vec![ALPN.to_vec()]).bind().await.unwrap();
+        let accepting = endpoint.clone();
+        tokio::spawn(async move {
+            while let Some(incoming) = accepting.accept().await {
+                let Ok(connection) = incoming.await else { continue };
+                tokio::spawn(async move {
+                    let mut streams = Vec::new();
+                    while let Ok(stream) = connection.accept_bi().await {
+                        streams.push(stream);
+                    }
+                });
+            }
+        });
+        let port = endpoint.bound_sockets().iter().find(|address| address.is_ipv4()).unwrap().port();
+        let address = format!("{}@127.0.0.1:{port}", endpoint.id()).parse().unwrap();
+        (endpoint, address)
+    }
+
+    #[tokio::test]
+    async fn a_server_that_never_sends_its_threads_is_dialed_again() {
+        let (_server, address) = silent_server().await;
+        let endpoint = bind(&DeviceKey::generate(), true).await.unwrap();
+        let (events, mut heard) = mpsc::unbounded_channel();
+        let link = Link::connect(endpoint, address, events);
+
+        let given_up = tokio::time::timeout(WELCOME_TIMEOUT + Duration::from_secs(10), async {
+            while let Some((_, event)) = heard.recv().await {
+                if let LinkEvent::Status(status) = event
+                    && status.state == State::Disconnected
+                {
+                    return status;
+                }
+            }
+            panic!("the link stopped");
+        })
+        .await
+        .expect("the link waited for the threads forever");
+
+        assert_eq!(given_up.error.as_deref(), Some("Your server didn't send its threads in time."));
+        link.shutdown();
     }
 }
