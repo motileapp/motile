@@ -65,8 +65,8 @@ fun Chip(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (dot != null) Box(Modifier.size(7.dp).background(dot, CircleShape))
-            if (icon != null) Icon(icon, IconSize.Sm)
-            if (glyph != null) Glyph(glyph, symbolSide(IconSize.Sm))
+            if (icon != null) Icon(icon, IconSize.Xs)
+            if (glyph != null) Glyph(glyph, symbolSide(IconSize.Xs))
             Text(title, style = if (monospaced) Theme.uiMono(11.5f, FontWeight.Medium) else Theme.ui(11.5f, FontWeight.Medium), maxLines = 1)
         }
     }

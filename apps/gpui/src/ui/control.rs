@@ -1256,7 +1256,7 @@ pub struct Chip {
 
 impl Chip {
     pub const HEIGHT: f32 = 20.;
-    pub const SYMBOL: IconSize = IconSize::Sm;
+    pub const SYMBOL: IconSize = IconSize::Xs;
 
     pub fn new(title: impl Into<SharedString>) -> Self {
         Self {
