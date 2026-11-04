@@ -263,7 +263,7 @@ struct ControlLabel: View {
     }
 
     private func text(_ title: String, tinted: (words: String, color: Color)?) -> Text {
-        let named = Text(dotted: title).proxied(proxied, fontSize: size.textSize)
+        let named = Text(dotted: title).proxied(proxied, fontSize: size.textSize, size: markSize)
         guard let tinted else { return named }
         return Text("\(named.foregroundStyle(Color.themeForeground)) \(Text(verbatim: tinted.words).foregroundStyle(tinted.color))")
     }
@@ -633,23 +633,24 @@ extension Text {
         self.init(dotted: text.components(separatedBy: " · ").map { Text(verbatim: $0) })
     }
 
-    /// The gateway's symbol beside words of `fontSize` that stand alone, centred on their line. It
-    /// stands outside the line, which a symbol moved off the baseline would make taller.
-    func gatewayMarked(_ proxied: Bool, fontSize: CGFloat) -> some View {
+    /// The gateway's symbol beside words of `fontSize` that stand alone, centred on their line, as
+    /// large as `size` where it matches an icon beside it. It stands outside the line, which a symbol
+    /// moved off the baseline would make taller.
+    func gatewayMarked(_ proxied: Bool, fontSize: CGFloat, size: IconSize? = nil) -> some View {
         HStack(spacing: (fontSize / 4).rounded() + GatewayMark.gap) {
             self
             if proxied {
-                Image(.waypoints, size: GatewayMark.size(for: fontSize))
+                Image(.waypoints, size: size ?? GatewayMark.size(for: fontSize))
             }
         }
     }
 
     /// The gateway's symbol after words of `fontSize` inside a line of fixed height, which says what
     /// they name runs through the gateway: centred on their capitals rather than standing on their
-    /// baseline.
-    func proxied(_ proxied: Bool, fontSize: CGFloat) -> Text {
+    /// baseline, and as large as `size` where it matches an icon beside it.
+    func proxied(_ proxied: Bool, fontSize: CGFloat, size: IconSize? = nil) -> Text {
         guard proxied else { return self }
-        let size = GatewayMark.size(for: fontSize)
+        let size = size ?? GatewayMark.size(for: fontSize)
         let rise = ((PlatformFont.ui(fontSize).capHeight - PlatformImage.symbolSide(size)) / 2).rounded()
         return Text("\(self)\(Text(verbatim: " ").kerning(GatewayMark.gap))\(Text(Image(.waypoints, size: size)).baselineOffset(rise))")
     }

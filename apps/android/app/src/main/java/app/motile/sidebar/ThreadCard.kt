@@ -109,7 +109,7 @@ private fun CardLine(text: String, middle: Boolean = false, proxied: Boolean = f
             Text(
                 dotted(text, palette.mutedStrongerForeground).proxied(proxied), size = 12f, maxLines = 1,
                 overflow = if (middle) TextOverflow.MiddleEllipsis else TextOverflow.Ellipsis,
-                inlineContent = if (proxied) GatewayMark.content(palette.mutedForeground, 12f) else emptyMap(),
+                inlineContent = if (proxied) GatewayMark.content(palette.mutedForeground, 12f, ThreadCard.iconSize) else emptyMap(),
             )
         }
     }

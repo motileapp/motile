@@ -13,7 +13,7 @@ use crate::models::{ThreadInfo, last_component, shortened};
 use crate::theme::{IconSize, Surface, colors};
 use crate::ui::control::dotted;
 use crate::ui::logos::{self, pull_request_color, pull_request_symbol};
-use crate::ui::{divider_on, dropdown_card, icons, proxied, tabular_numbers};
+use crate::ui::{divider_on, dropdown_card, icons, proxied_as, tabular_numbers};
 
 const MAX_WIDTH: f32 = 320.;
 /// Every line's icon, beside its 12-point text.
@@ -130,7 +130,7 @@ impl Sidebar {
                 .gap(px(8.))
                 .text_color(c.muted_foreground)
                 .child(icon)
-                .child(proxied(shown.child(dotted(text, c)), through_gateway, 12.))
+                .child(proxied_as(shown.child(dotted(text, c)), through_gateway, 12., ICON))
                 .into_any_element()
         };
         let line = |text: String, middle: bool, icon: AnyElement| card_line(text, middle, false, icon);

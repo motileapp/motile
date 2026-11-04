@@ -1867,7 +1867,7 @@ fn handoff_row(from: &HandoffLabel, to: &HandoffLabel, ctx: &RowContext, window:
         (text.into(), runs)
     };
     let width = |end: &HandoffLabel, (text, runs): &(SharedString, Vec<TextRun>), window: &mut Window| {
-        let mark = if end.gateway { crate::ui::gateway_mark_width(12.) } else { 0. };
+        let mark = if end.gateway { crate::ui::gateway_mark_width_as(12., logo) } else { 0. };
         f32::from(window.text_system().shape_line(text.clone(), px(12.), runs, None).width).ceil() + mark
     };
     let (from_text, to_text) = (text(from), text(to));
@@ -1876,7 +1876,7 @@ fn handoff_row(from: &HandoffLabel, to: &HandoffLabel, ctx: &RowContext, window:
     let room = (ctx.width - line_gap * 4. - fixed).max(0.);
     let (from_width, to_width) = fitted(from_width, to_width, room);
     let end = |end: &HandoffLabel, (text, runs): (SharedString, Vec<TextRun>), width: f32| {
-        let label = crate::ui::proxied(StyledText::new(text).with_runs(runs), end.gateway, 12.);
+        let label = crate::ui::proxied_as(StyledText::new(text).with_runs(runs), end.gateway, 12., logo);
         div()
             .flex()
             .flex_none()

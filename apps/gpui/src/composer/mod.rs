@@ -419,7 +419,10 @@ impl Composer {
             Some(_) => {
                 words(&store.composer_model_label().unwrap_or_default(), window)
                     + if store.composer_proxied() {
-                        crate::ui::gateway_mark_width(ControlSize::Regular.text_size())
+                        crate::ui::gateway_mark_width_as(
+                            ControlSize::Regular.text_size(),
+                            ControlSize::Regular.symbol(),
+                        )
                     } else {
                         0.
                     }
@@ -797,7 +800,7 @@ fn settings_part(mark: Option<AnyElement>, title: Option<String>, proxied: bool,
             .text_size(px(size.text_size()))
             .font_weight(FontWeight::MEDIUM)
             .whitespace_nowrap()
-            .child(crate::ui::proxied(dotted(title, c), proxied, size.text_size())),
+            .child(crate::ui::proxied_as(dotted(title, c), proxied, size.text_size(), size.symbol())),
     )
 }
 

@@ -1486,13 +1486,15 @@ final class LineageView: FlippedView {
 final class HandoffRowView: RowView {
     static let height = ControlSize.large.height
 
-    private static let logoSide = PlatformImage.symbolSide(ControlSize.regular.symbol)
+    /// The agents' logos, and the gateway's symbol after an account that runs through it.
+    private static let logoSize = ControlSize.regular.symbol
+    private static let logoSide = PlatformImage.symbolSide(logoSize)
     private static let arrowSize = ControlSize.regular.smallSymbol
     private static let labelGap = ControlSize.regular.gap
     private static let arrowGap = ControlSize.small.padding
     private static let lineGap = ControlSize.regular.padding
     private static let logos: [Agent: PlatformImage] = Dictionary(uniqueKeysWithValues: Agent.allCases.map {
-        ($0, $0.logo(size: ControlSize.regular.symbol))
+        ($0, $0.logo(size: logoSize))
     })
 
     private var content: HandoffContent?
@@ -1518,7 +1520,7 @@ final class HandoffRowView: RowView {
             label.append(text(account, Theme.foreground))
         }
         guard end.gateway else { return label }
-        GatewayMark.append(to: label, font: Theme.smallFont, color: Theme.foreground)
+        GatewayMark.append(to: label, font: Theme.smallFont, color: Theme.foreground, size: logoSize)
         return label
     }
 

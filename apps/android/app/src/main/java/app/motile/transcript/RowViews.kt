@@ -719,7 +719,7 @@ private fun HandoffRow(handoff: HandoffContent) {
                 append(account)
             }
         }.proxied(end.gateway)
-        Text(label, style = Theme.smallFont, color = palette.foreground, maxLines = 1, inlineContent = GatewayMark.content(palette.foreground, 12f))
+        Text(label, style = Theme.smallFont, color = palette.foreground, maxLines = 1, inlineContent = GatewayMark.content(palette.foreground, 12f, ControlSize.Regular.symbol))
     }
     Row(Modifier.fillMaxWidth().height(ControlSize.Large.height), verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.weight(1f).height(1.dp).background(palette.border))

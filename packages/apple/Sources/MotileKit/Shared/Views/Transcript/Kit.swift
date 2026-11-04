@@ -423,16 +423,17 @@ enum GatewayMark {
         fontSize <= 12.5 ? .xs : fontSize <= 15 ? .sm : .md
     }
 
-    /// The symbol after `line`'s words, a space and `gap` from them.
-    static func append(to line: NSMutableAttributedString, font: PlatformFont, color: PlatformColor) {
+    /// The symbol after `line`'s words, a space and `gap` from them, as large as `size` where it
+    /// matches an icon beside it.
+    static func append(to line: NSMutableAttributedString, font: PlatformFont, color: PlatformColor, size: IconSize? = nil) {
         if line.length > 0 {
             line.append(NSAttributedString(string: " ", attributes: [.font: font, .kern: gap]))
         }
-        line.append(attachment(font: font, color: color))
+        line.append(attachment(font: font, color: color, size: size))
     }
 
-    static func attachment(font: PlatformFont, color: PlatformColor) -> NSAttributedString {
-        let image = TintedSymbol.image(.waypoints, size: size(for: font.pointSize), color: color)
+    static func attachment(font: PlatformFont, color: PlatformColor, size: IconSize? = nil) -> NSAttributedString {
+        let image = TintedSymbol.image(.waypoints, size: size ?? self.size(for: font.pointSize), color: color)
         let attachment = NSTextAttachment()
         attachment.image = image
         attachment.bounds = CGRect(x: 0, y: ((font.capHeight - image.size.height) / 2).rounded(), width: image.size.width, height: image.size.height)
