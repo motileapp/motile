@@ -374,7 +374,7 @@ impl Store {
             if !attached.is_empty() {
                 store.attachments_by_key.insert(key.clone(), attached);
             }
-            store.fail(error);
+            store.fail_send(error);
             if store.draft_key() != key {
                 return;
             }
@@ -401,7 +401,7 @@ impl Store {
             Err(error) => {
                 store.sent_drafts.remove(&draft_id);
                 store.unsend(&draft_id, cx);
-                store.fail(error);
+                store.fail_send(error);
             }
             Ok(value) => {
                 // A server from before thread ids picks its own, and one whose thread was deleted

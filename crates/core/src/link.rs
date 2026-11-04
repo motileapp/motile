@@ -125,6 +125,9 @@ impl Link {
         let mut inner = self.lock();
         let before = inner.status.clone();
         change(&mut inner.status);
+        if inner.status.state != before.state {
+            tracing::info!(server = self.server_id, state = ?inner.status.state, error = ?inner.status.error, "link");
+        }
         if inner.status != before {
             self.emit(LinkEvent::Status(inner.status.clone()));
         }

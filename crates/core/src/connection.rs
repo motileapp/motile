@@ -7,7 +7,7 @@ use std::str::FromStr;
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, anyhow, bail};
-use iroh::endpoint::{ConnectionError, RecvStream, presets};
+use iroh::endpoint::{ConnectionError, IdleTimeout, QuicTransportConfig, RecvStream, presets};
 use iroh::{Endpoint, EndpointAddr, EndpointId, SecretKey};
 use motile_protocol::frame::{read_frame, write_frame};
 use motile_protocol::identity::DeviceKey;
@@ -19,6 +19,9 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 /// More than a server sends of any file.
 const MAX_FILE_BYTES: u64 = 64 * 1024 * 1024;
+/// A connection that hears nothing for this long is given up. Both sides keep it alive every 5s,
+/// and QUIC's default of 30s left a dead connection looking connected for half a minute.
+const IDLE_TIMEOUT: Duration = Duration::from_secs(15);
 
 const CONNECTION_LOST: &str = "The connection to your server was lost. Try again when it is back.";
 pub const NOT_CONNECTED: &str = "Your server isn't connected. Try again when it is back.";
@@ -79,7 +82,14 @@ pub async fn bind(key: &DeviceKey, local_only: bool) -> anyhow::Result<Endpoint>
         false => Endpoint::builder(presets::N0),
     };
     let secret_key = SecretKey::from_bytes(&key.to_bytes());
-    builder.secret_key(secret_key).bind().await.context("The network endpoint couldn't be opened.")
+    let idle = IdleTimeout::try_from(IDLE_TIMEOUT)?;
+    let transport = QuicTransportConfig::builder().max_idle_timeout(Some(idle)).build();
+    builder
+        .secret_key(secret_key)
+        .transport_config(transport)
+        .bind()
+        .await
+        .context("The network endpoint couldn't be opened.")
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize)]
@@ -292,5 +302,42 @@ impl Follow {
     /// `None` when the server ended the stream.
     pub async fn next(&mut self) -> anyhow::Result<Option<Message>> {
         read_frame(&mut self.recv).await.map_err(lost_on_the_way)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A server on a runtime of its own, so that stopping the runtime silences it without a word.
+    fn server_that_can_vanish() -> (tokio::runtime::Runtime, ServerAddr) {
+        let runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(1).enable_all().build().unwrap();
+        let address = runtime.block_on(async {
+            let endpoint = Endpoint::builder(presets::Minimal).alpns(vec![ALPN.to_vec()]).bind().await.unwrap();
+            let accepting = endpoint.clone();
+            tokio::spawn(async move {
+                while let Some(incoming) = accepting.accept().await {
+                    let Ok(connection) = incoming.await else { continue };
+                    tokio::spawn(async move { connection.closed().await });
+                }
+            });
+            let port = endpoint.bound_sockets().iter().find(|address| address.is_ipv4()).unwrap().port();
+            format!("{}@127.0.0.1:{port}", endpoint.id()).parse().unwrap()
+        });
+        (runtime, address)
+    }
+
+    #[test]
+    fn a_server_gone_silent_is_given_up_before_quic_would() {
+        let (server, address) = server_that_can_vanish();
+        let client = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
+        let endpoint = client.block_on(bind(&DeviceKey::generate(), true)).unwrap();
+        let connection = client.block_on(Connection::dial(&endpoint, &address)).unwrap();
+
+        let silent = Instant::now();
+        server.shutdown_background();
+        client.block_on(connection.closed());
+
+        assert!(silent.elapsed() < Duration::from_secs(25), "took {:?}", silent.elapsed());
     }
 }

@@ -48,6 +48,9 @@ use crate::prefs::Prefs;
 use crate::transcript::model::{Prepared, Transcript};
 use crate::updater::Updater;
 
+const UNSENT: &str =
+    "Your message wasn't sent. The connection to your server was lost, so it's back where you wrote it.";
+
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum Selection {
     Draft(String),
@@ -1552,6 +1555,12 @@ impl Store {
             return;
         }
         self.error_message = Some(error.message);
+    }
+
+    /// Says that a message didn't reach its server, even when only the connection was lost: it
+    /// went back to the composer, which is easy to miss.
+    pub fn fail_send(&mut self, error: CoreError) {
+        self.error_message = Some(if error.offline { UNSENT.to_string() } else { error.message });
     }
 
     /// The account's name, when its sign-in gave one.
