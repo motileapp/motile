@@ -240,20 +240,12 @@ private struct AgentRow: View {
     }
 
     /// "6.1-Sol · work · 3 tools · 21k tokens", as far as each is known, with the gateway's symbol
-    /// after the account of one that runs through the gateway.
+    /// after the model of one that runs through the gateway.
     @ViewBuilder private var facts: some View {
-        let runsOn = [agent.model, agent.account].compactMap { $0 }.map { Text(verbatim: $0) }
-        let usage = (agent.usage?.components(separatedBy: " · ") ?? []).map { Text(verbatim: $0) }
-        if agent.gateway && !runsOn.isEmpty {
-            HStack(spacing: 0) {
-                Text(dotted: runsOn).gatewayMarked(true, fontSize: 11)
-                    .layoutPriority(1)
-                if !usage.isEmpty {
-                    Text(dotted: [Text(verbatim: "")] + usage)
-                }
-            }
-        } else if !(runsOn + usage).isEmpty {
-            Text(dotted: runsOn + usage)
+        let runsOn = [agent.model, agent.account].compactMap { $0 }
+        let usage = agent.usage?.components(separatedBy: " · ") ?? []
+        if !(runsOn + usage).isEmpty {
+            ProxiedLine(parts: runsOn + usage, proxied: agent.gateway && !runsOn.isEmpty, fontSize: 11)
         }
     }
 

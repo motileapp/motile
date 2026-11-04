@@ -1316,8 +1316,8 @@ const CARD_LIGHT: f32 = 4.;
 const CARD_ABOVE: f32 = 4. + CARD_LIGHT - LIGHT_GAP;
 const CARD_BELOW: f32 = 10. + CARD_LIGHT - LIGHT_GAP;
 
-/// The second line of an agent's row: what it runs on, with the gateway's symbol after it where it
-/// runs through the gateway, then what it does or said.
+/// The second line of an agent's row: what it runs on, with the gateway's symbol after the model
+/// where it runs through the gateway, then what it does or said.
 fn agent_line(agent: &AgentRow) -> Div {
     let said = if agent.detail.is_empty() && agent.runs_on.is_empty() { &agent.label } else { &agent.detail };
     crate::ui::proxied_line(&agent.runs_on, agent.gateway, said, 12.)
@@ -1875,8 +1875,16 @@ fn handoff_row(from: &HandoffLabel, to: &HandoffLabel, ctx: &RowContext, window:
     let fixed = (logo.side() + label_gap) * 2. + arrow_gap * 2. + arrow.side();
     let room = (ctx.width - line_gap * 4. - fixed).max(0.);
     let (from_width, to_width) = fitted(from_width, to_width, room);
-    let end = |end: &HandoffLabel, (text, runs): (SharedString, Vec<TextRun>), width: f32| {
-        let label = crate::ui::proxied_as(StyledText::new(text).with_runs(runs), end.gateway, 12., logo);
+    let end = |end: &HandoffLabel, width: f32| {
+        let plain = font(theme::UI_FONT, FontWeight::NORMAL, false);
+        let account = end.account.as_ref().map(|account| {
+            let runs = vec![
+                run(" · ".len(), plain.clone(), c.muted_stronger_foreground),
+                run(account.len(), plain.clone(), c.foreground),
+            ];
+            div().min_w_0().truncate().child(StyledText::new(format!(" · {account}")).with_runs(runs))
+        });
+        let label = crate::ui::proxied_as(end.label.clone(), end.gateway, 12., logo).children(account);
         div()
             .flex()
             .flex_none()
@@ -1897,13 +1905,13 @@ fn handoff_row(from: &HandoffLabel, to: &HandoffLabel, ctx: &RowContext, window:
                 .flex()
                 .flex_none()
                 .items_center()
-                .child(end(from, from_text, from_width))
+                .child(end(from, from_width))
                 .child(
                     div()
                         .mx(px(arrow_gap))
                         .child(icons::symbol("arrow-right", arrow).text_color(c.muted_stronger_foreground)),
                 )
-                .child(end(to, to_text, to_width)),
+                .child(end(to, to_width)),
         )
         .child(rule())
         .into_any_element()

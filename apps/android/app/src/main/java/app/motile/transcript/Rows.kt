@@ -30,7 +30,7 @@ import app.motile.platform.Symbol
 import app.motile.theme.Palette
 import app.motile.theme.Theme
 import app.motile.transcript.openui.UiContent
-import app.motile.ui.GatewayMark
+import app.motile.ui.proxied
 import java.util.concurrent.Executors
 import android.os.Handler
 import android.os.Looper
@@ -429,7 +429,7 @@ data class AgentContent(
     val agent: Agent?,
     /** "Opus 5.5 · work". */
     val runsOn: String,
-    /** It runs through the account's gateway, which the gateway's symbol after `runsOn` says. */
+    /** It runs through the account's gateway, which the gateway's symbol after the model says. */
     val gateway: Boolean,
     val startedAt: Double,
     val durationMs: Int?,
@@ -462,14 +462,10 @@ data class AgentContent(
     /** What the second line says after what it runs on: what it does or said. */
     val said: String get() = if (detail.isEmpty() && runsOn.isEmpty()) label else detail
 
-    /** The second line: what it runs on, with the gateway's symbol after it where it runs through the gateway, then what it does or said. */
+    /** The second line: what it runs on, with the gateway's symbol after the model where it runs through the gateway, then what it does or said. */
     val line: AnnotatedString
         get() = buildAnnotatedString {
-            append(runsOn)
-            if (gateway) {
-                if (runsOn.isNotEmpty()) append(" ")
-                with(GatewayMark) { appendMark() }
-            }
+            append(AnnotatedString(runsOn).proxied(gateway))
             if (said.isNotEmpty()) append(if (runsOn.isEmpty() && !gateway) said else " · $said")
         }
 }

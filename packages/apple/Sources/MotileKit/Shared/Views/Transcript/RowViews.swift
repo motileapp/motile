@@ -1486,7 +1486,7 @@ final class LineageView: FlippedView {
 final class HandoffRowView: RowView {
     static let height = ControlSize.large.height
 
-    /// The agents' logos, and the gateway's symbol after an account that runs through it.
+    /// The agents' logos, and the gateway's symbol after the model of an account that runs through it.
     private static let logoSize = ControlSize.regular.symbol
     private static let logoSide = PlatformImage.symbolSide(logoSize)
     private static let arrowSize = ControlSize.regular.smallSymbol
@@ -1508,19 +1508,19 @@ final class HandoffRowView: RowView {
 
     override func layout(width: CGFloat) -> CGFloat { Self.height }
 
-    /// The model, and the account after a muted dot, as the model picker shows them, then the
-    /// gateway's symbol where the account runs through it.
+    /// The model, the gateway's symbol where the account runs through it, and the account after a
+    /// muted dot, as the model picker shows them.
     private static func label(_ end: HandoffContent.End) -> NSAttributedString {
         let text = { (string: String, color: PlatformColor) in
             NSAttributedString(string: string, attributes: [.font: Theme.smallFont, .foregroundColor: color])
         }
         let label = NSMutableAttributedString(attributedString: text(end.label, Theme.foreground))
-        if let account = end.account {
-            label.append(text(" · ", Theme.mutedStrongerForeground))
-            label.append(text(account, Theme.foreground))
+        if end.gateway {
+            GatewayMark.append(to: label, font: Theme.smallFont, color: Theme.foreground, size: logoSize)
         }
-        guard end.gateway else { return label }
-        GatewayMark.append(to: label, font: Theme.smallFont, color: Theme.foreground, size: logoSize)
+        guard let account = end.account else { return label }
+        label.append(text(" · ", Theme.mutedStrongerForeground))
+        label.append(text(account, Theme.foreground))
         return label
     }
 

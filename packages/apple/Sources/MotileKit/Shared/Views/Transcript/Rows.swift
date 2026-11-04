@@ -480,7 +480,7 @@ struct AgentContent {
     let agent: Agent?
     /// "Opus 5.5 · work".
     let runsOn: String
-    /// It runs through the account's gateway, which the gateway's symbol after `runsOn` says.
+    /// It runs through the account's gateway, which the gateway's symbol after the model says.
     let gateway: Bool
     let startedAt: Double
     let durationMs: Int?
@@ -512,16 +512,19 @@ struct AgentContent {
         detail.isEmpty && runsOn.isEmpty ? label : detail
     }
 
-    /// The second line: what it runs on, with the gateway's symbol after it where it runs through the
-    /// gateway, then what it does or said.
+    /// The second line: what it runs on, with the gateway's symbol after the model where it runs
+    /// through the gateway, then what it does or said.
     func line(font: PlatformFont, color: PlatformColor) -> NSAttributedString {
         let words = { (text: String) in NSAttributedString(string: text, attributes: [.font: font, .foregroundColor: color]) }
-        let line = NSMutableAttributedString(attributedString: words(runsOn))
+        let parts = runsOn.isEmpty ? [] : runsOn.components(separatedBy: " · ")
+        let named = gateway ? Array(parts.prefix(1)) : parts
+        let rest = (gateway ? Array(parts.dropFirst()) : []) + (said.isEmpty ? [] : [said])
+        let line = NSMutableAttributedString(attributedString: words(named.joined(separator: " · ")))
         if gateway {
             GatewayMark.append(to: line, font: font, color: color)
         }
-        if !said.isEmpty {
-            line.append(words(runsOn.isEmpty && !gateway ? said : " · \(said)"))
+        if !rest.isEmpty {
+            line.append(words((named.isEmpty && !gateway ? "" : " · ") + rest.joined(separator: " · ")))
         }
         return line
     }

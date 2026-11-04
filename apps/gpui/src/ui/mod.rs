@@ -31,8 +31,8 @@ pub use date_field::DateField;
 pub use dropdown::{ChoiceDropdown, DropdownChoice};
 pub use parts::{
     CommandBox, CopyButton, FadingScroll, GlassButton, KeyCaps, PickMark, anchored_popover, dropdown_card,
-    gateway_mark_width, gateway_mark_width_as, popover_card, popover_panel, proxied, proxied_as, proxied_line,
-    tracks_bounds,
+    gateway_mark_width, gateway_mark_width_as, popover_card, popover_panel, proxied, proxied_as, proxied_dotted,
+    proxied_line, tracks_bounds,
 };
 pub use pick::{OptionCard, PickRow};
 pub use slider::Slider;

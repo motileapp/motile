@@ -69,8 +69,7 @@ private struct CardLine<Icon: View>: View {
     var body: some View {
         HStack(spacing: 8) {
             icon()
-            Text(dotted: text)
-                .gatewayMarked(proxied, fontSize: 12, size: ThreadCard.iconSize)
+            ProxiedLine(text, proxied: proxied, fontSize: 12, size: ThreadCard.iconSize)
                 .font(.ui(size: 12))
                 .lineLimit(1)
                 .truncationMode(middle ? .middle : .tail)
