@@ -27,7 +27,7 @@ use self::strips::{BranchPicker, agents_strip, context_strip, interruption_strip
 use crate::models::{ComposerPickerPart, ThreadInfo, access_label};
 use crate::store::Store;
 use crate::theme::{self, ControlSize, IconSize, Surface, colors};
-use crate::ui::control::{Look, dotted};
+use crate::ui::control::Look;
 use crate::ui::menu::Anchor;
 use crate::ui::{ActionButton, Variant, edges, icons, logos, text_width};
 
@@ -800,7 +800,7 @@ fn settings_part(mark: Option<AnyElement>, title: Option<String>, proxied: bool,
             .text_size(px(size.text_size()))
             .font_weight(FontWeight::MEDIUM)
             .whitespace_nowrap()
-            .child(crate::ui::proxied_as(dotted(title, c), proxied, size.text_size(), size.symbol())),
+            .child(crate::ui::proxied_dotted(title, proxied, size.text_size(), size.symbol(), c)),
     )
 }
 

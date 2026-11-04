@@ -263,7 +263,7 @@ struct ControlLabel: View {
     }
 
     private func text(_ title: String, tinted: (words: String, color: Color)?) -> Text {
-        let named = Text(dotted: title).proxied(proxied, fontSize: size.textSize, size: markSize)
+        let named = Text(dotted: title, proxied: proxied, fontSize: size.textSize, size: markSize)
         guard let tinted else { return named }
         return Text("\(named.foregroundStyle(Color.themeForeground)) \(Text(verbatim: tinted.words).foregroundStyle(tinted.color))")
     }
@@ -633,6 +633,17 @@ extension Text {
         self.init(dotted: text.components(separatedBy: " · ").map { Text(verbatim: $0) })
     }
 
+    /// "Opus 5.5 · Work" with the gateway's symbol after the name, ahead of the account, where it runs
+    /// through the gateway, inside a line of fixed height.
+    init(dotted text: String, proxied: Bool, fontSize: CGFloat, size: IconSize? = nil) {
+        let parts = text.components(separatedBy: " · ").map { Text(verbatim: $0) }
+        guard proxied, let name = parts.first else {
+            self.init(dotted: parts)
+            return
+        }
+        self.init(dotted: [name.proxied(true, fontSize: fontSize, size: size)] + parts.dropFirst())
+    }
+
     /// The gateway's symbol beside words of `fontSize` that stand alone, centred on their line, as
     /// large as `size` where it matches an icon beside it. It stands outside the line, which a symbol
     /// moved off the baseline would make taller.
@@ -658,6 +669,41 @@ extension Text {
     init(dotted parts: [Text]) {
         self = parts.dropFirst().reduce(parts.first ?? Text(verbatim: "")) { line, part in
             Text("\(line)\(Text(verbatim: " · ").foregroundStyle(Color.themeMutedStrongerForeground))\(part)")
+        }
+    }
+}
+
+/// "Opus 5.5", the gateway's symbol where it runs through the gateway, then " · Work" and what
+/// follows: the symbol after the name, ahead of the account, standing outside the line.
+struct ProxiedLine: View {
+    let parts: [String]
+    let proxied: Bool
+    let fontSize: CGFloat
+    var size: IconSize? = nil
+
+    init(_ text: String, proxied: Bool, fontSize: CGFloat, size: IconSize? = nil) {
+        self.init(parts: text.components(separatedBy: " · "), proxied: proxied, fontSize: fontSize, size: size)
+    }
+
+    init(parts: [String], proxied: Bool, fontSize: CGFloat, size: IconSize? = nil) {
+        self.parts = parts
+        self.proxied = proxied
+        self.fontSize = fontSize
+        self.size = size
+    }
+
+    var body: some View {
+        let words = parts.map { Text(verbatim: $0) }
+        if proxied, let name = words.first {
+            HStack(spacing: 0) {
+                name.gatewayMarked(true, fontSize: fontSize, size: size)
+                    .layoutPriority(1)
+                if words.count > 1 {
+                    Text(dotted: [Text(verbatim: "")] + words.dropFirst())
+                }
+            }
+        } else {
+            Text(dotted: words)
         }
     }
 }

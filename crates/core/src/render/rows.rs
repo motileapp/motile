@@ -230,7 +230,7 @@ pub struct AgentRow {
     /// The model's short name and the account, when they are known: "Opus 5.5 · work".
     #[serde(skip_serializing_if = "String::is_empty")]
     pub runs_on: String,
-    /// It runs through the account's gateway, which the gateway's symbol after `runs_on` says.
+    /// It runs through the account's gateway, which the gateway's symbol after the model says.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub gateway: bool,
     pub started_at: f64,

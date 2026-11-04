@@ -49,13 +49,15 @@ object GatewayMark {
     }
 }
 
-/** The words with the gateway's symbol after them where what they name runs through the gateway. */
+/** The words with the gateway's symbol after the name they start with, ahead of the account after its dot, where what they name runs through the gateway: "Opus 5.5 ⟿ · Work". */
 fun AnnotatedString.proxied(proxied: Boolean): AnnotatedString {
     if (!proxied) return this
     val words = this
+    val name = text.indexOf(" · ").takeIf { it >= 0 } ?: length
     return buildAnnotatedString {
-        append(words)
-        append(" ")
+        append(words.subSequence(0, name))
+        if (name > 0) append(" ")
         with(GatewayMark) { appendMark() }
+        append(words.subSequence(name, words.length))
     }
 }

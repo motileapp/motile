@@ -179,7 +179,7 @@ private fun AgentRow(agent: AgentInfo) {
         store.rightPanel.visit(agent.id)
         if (threadID != null) store.openStartedThread(threadID) else store.rightPanel.showAgent(agent.id)
     }
-    // "6.1-Sol · work · 3 tools · 21k tokens", as far as each is known, with the gateway's symbol after the account of one that runs through the gateway.
+    // "6.1-Sol · work · 3 tools · 21k tokens", as far as each is known, with the gateway's symbol after the model of one that runs through the gateway.
     val runsOn = listOfNotNull(agent.model, agent.account).joinToString(" · ")
     val facts = buildAnnotatedString {
         append(AnnotatedString(runsOn).proxied(agent.gateway && runsOn.isNotEmpty()))

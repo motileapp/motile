@@ -10,8 +10,8 @@ use std::time::{Duration, Instant};
 use gpui_kit::prelude::*;
 use gpui_kit::*;
 
-use crate::theme::{ControlSize, IconSize, Layer, Opacity, Radius, ShadowSize, Surface, colors};
-use crate::ui::control::{ActionButton, Variant};
+use crate::theme::{Colors, ControlSize, IconSize, Layer, Opacity, Radius, ShadowSize, Surface, colors};
+use crate::ui::control::{ActionButton, Variant, dotted};
 use crate::ui::menu::Anchor;
 use crate::ui::{edges, icons, motion};
 
@@ -68,21 +68,45 @@ pub fn proxied_as(words: impl IntoElement, proxied: bool, font_size: f32, size: 
         .when(proxied, |line| line.child(gateway_mark(font_size, size, true)))
 }
 
-/// What something runs on, the gateway's symbol after it where it runs through the gateway, then
-/// `rest` after a dot: one line of `font_size`, cut at its end.
+/// "Opus 5.5 · Work" with its dots muted, and the gateway's symbol after the name, ahead of the
+/// account, where it runs through the gateway: what follows the name is cut at its end first.
+pub fn proxied_dotted(text: String, proxied: bool, font_size: f32, size: IconSize, c: &Colors) -> Div {
+    let Some((name, rest)) = text.split_once(" · ").filter(|_| proxied) else {
+        return proxied_as(dotted(text, c), proxied, font_size, size);
+    };
+    div()
+        .min_w_0()
+        .flex()
+        .items_center()
+        .child(div().flex_none().whitespace_nowrap().child(name.to_string()))
+        .child(gateway_mark(font_size, size, true))
+        .child(
+            div()
+                .min_w_0()
+                .whitespace_nowrap()
+                .overflow_hidden()
+                .text_ellipsis()
+                .child(dotted(format!(" · {rest}"), c)),
+        )
+}
+
+/// What something runs on, "Opus 5.5 · Work", with the gateway's symbol after the model where it
+/// runs through the gateway, then `rest` after a dot: one line of `font_size`, cut at its end.
 pub fn proxied_line(runs_on: &str, proxied: bool, rest: &str, font_size: f32) -> Div {
     if !proxied {
         let words = [runs_on, rest].into_iter().filter(|part| !part.is_empty()).collect::<Vec<_>>().join(" · ");
         return div().min_w_0().text_size(px(font_size)).truncate().child(words);
     }
+    let (name, account) = runs_on.split_once(" · ").unwrap_or((runs_on, ""));
+    let rest = [account, rest].into_iter().filter(|part| !part.is_empty()).collect::<Vec<_>>().join(" · ");
     div()
         .min_w_0()
         .flex()
         .items_center()
         .overflow_hidden()
         .text_size(px(font_size))
-        .when(!runs_on.is_empty(), |line| line.child(div().flex_none().whitespace_nowrap().child(runs_on.to_string())))
-        .child(gateway_mark(font_size, gateway_mark_size(font_size), !runs_on.is_empty()))
+        .when(!name.is_empty(), |line| line.child(div().flex_none().whitespace_nowrap().child(name.to_string())))
+        .child(gateway_mark(font_size, gateway_mark_size(font_size), !name.is_empty()))
         .when(!rest.is_empty(), |line| line.child(div().min_w_0().truncate().child(format!(" · {rest}"))))
 }
 

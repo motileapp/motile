@@ -142,7 +142,7 @@ pub struct AgentView {
     /// The account's name, when its agent has more than one.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub account: Option<String>,
-    /// It runs through the account's gateway, which the gateway's symbol after the account says.
+    /// It runs through the account's gateway, which the gateway's symbol after the model says.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub gateway: bool,
 }
