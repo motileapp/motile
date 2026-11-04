@@ -4,7 +4,7 @@
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, LazyLock};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use anyhow::Context;
 use iroh::endpoint::{Connection, RecvStream, SendStream, presets};
@@ -122,7 +122,10 @@ impl Server {
         let reply = match request {
             Request::Subscribe => {
                 hub.refresh_models_soon();
-                return follow_list(send, hub.subscribe().await).await;
+                let asked = Instant::now();
+                let subscription = hub.subscribe().await;
+                tracing::info!(took_ms = asked.elapsed().as_millis() as u64, "sending the thread list");
+                return follow_list(send, subscription).await;
             }
             Request::UpdateServer { when } => return update_server(send, hub.clone(), when).await,
             Request::GitRun { project_id, action, thread_id, message, paths, new_branch } => {
