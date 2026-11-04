@@ -55,7 +55,8 @@ pub struct McpEntry {
 }
 
 /// What agents may do with an MCP server's tools: a tool's own permission, or else its kind's, so that
-/// a tool the MCP server adds later takes its kind's. A tool or kind with none is allowed.
+/// a tool the MCP server adds later takes its kind's. A read-only tool with none is allowed, any other
+/// needs approval.
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
 pub struct Permissions {
     #[serde(default)]
@@ -67,7 +68,11 @@ pub struct Permissions {
 impl Permissions {
     pub fn of(&self, name: &str, kind: ToolKind) -> ToolPermission {
         let own = self.tools.get(name);
-        own.or_else(|| self.groups.get(&kind)).copied().unwrap_or_default()
+        let fallback = match kind {
+            ToolKind::Read => ToolPermission::Allow,
+            ToolKind::Write | ToolKind::Other => ToolPermission::Ask,
+        };
+        own.or_else(|| self.groups.get(&kind)).copied().unwrap_or(fallback)
     }
 }
 
@@ -603,9 +608,11 @@ mod tests {
     fn a_tool_takes_its_own_permission_or_its_kinds() {
         let mut permissions = Permissions::default();
         assert_eq!(permissions.of("list", ToolKind::Read), ToolPermission::Allow);
-        permissions.groups.insert(ToolKind::Write, ToolPermission::Ask);
-        permissions.tools.insert("delete".into(), ToolPermission::Block);
         assert_eq!(permissions.of("create", ToolKind::Write), ToolPermission::Ask);
+        assert_eq!(permissions.of("comment", ToolKind::Other), ToolPermission::Ask);
+        permissions.groups.insert(ToolKind::Write, ToolPermission::Allow);
+        permissions.tools.insert("delete".into(), ToolPermission::Block);
+        assert_eq!(permissions.of("create", ToolKind::Write), ToolPermission::Allow);
         assert_eq!(permissions.of("delete", ToolKind::Write), ToolPermission::Block);
         assert_eq!(permissions.of("list", ToolKind::Read), ToolPermission::Allow);
     }

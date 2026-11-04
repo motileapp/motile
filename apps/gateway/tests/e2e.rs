@@ -1020,6 +1020,9 @@ async fn a_mcp_server_with_a_key_gives_agents_only_the_tools_that_are_on() {
     assert_eq!(seen.last().unwrap().header("x-api-key"), "k1");
     assert_eq!(seen.last().unwrap().header("authorization"), "", "the agent's token stays on the gateway");
 
+    let (head, _) = mcp_with(&server, "Fake_Tracker", call(7, "create_issue"), &[]).await;
+    assert!(head.iter().any(|(name, _)| name == MCP_NEEDS_APPROVAL), "a tool that may write asks to start with");
+
     let block = McpChange::GroupPermission { kind: ToolKind::Other, permission: ToolPermission::Block };
     harness.manage(Manage::UpdateMcpServer { id: id.clone(), change: block }).await;
     assert_eq!(tool_names(&mcp(&server, "Fake_Tracker", list).await.1), ["list_issues"]);
@@ -1107,13 +1110,13 @@ async fn a_mcp_server_signs_in_once_and_its_login_is_renewed_when_refused() {
 
     let server = harness.server().await;
     harness.fake.mcp_generation.store(1, Ordering::SeqCst);
-    let (_, called) = mcp(&server, "Tracker", call(1, "create_issue")).await;
+    let (_, called) = mcp(&server, "Tracker", call(1, "list_issues")).await;
     assert!(called["result"]["content"][0]["text"].as_str().unwrap().starts_with("called"), "{called}");
     assert_eq!(harness.fake.mcp_renewals.load(Ordering::SeqCst), 1, "renewed once it was refused");
 
     harness.fake.mcp_refuse_renewal.store(true, Ordering::SeqCst);
     harness.fake.mcp_generation.store(2, Ordering::SeqCst);
-    let (_, refused) = mcp(&server, "Tracker", call(2, "create_issue")).await;
+    let (_, refused) = mcp(&server, "Tracker", call(2, "list_issues")).await;
     assert!(refused["result"]["content"][0]["text"].as_str().unwrap().contains("Sign in again"), "{refused}");
     let mcp_server = harness.state().await.mcp_servers.unwrap().remove(0);
     assert_eq!(mcp_server.status, McpStatus::SignInAgain);
