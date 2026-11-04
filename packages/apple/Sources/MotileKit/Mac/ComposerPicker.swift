@@ -355,7 +355,7 @@ private struct ComposerPicker: View {
             // "Claude Code", the gateway's symbol, then the account its bars are from, a step quieter.
             HStack(spacing: 0) {
                 Text(verbatim: group.title)
-                    .gatewayMarked(group.account.gateway, fontSize: 11.5)
+                    .gatewayMarked(group.account.gateway, fontSize: ControlSize.regular.textSize, size: ControlSize.regular.symbol)
                     .foregroundStyle(Color.themeMutedForeground)
                     .layoutPriority(1)
                 if let next = group.next {
@@ -366,7 +366,7 @@ private struct ComposerPicker: View {
                         .truncationMode(.middle)
                 }
             }
-            .font(.ui(size: 11.5, weight: .medium))
+            .font(ControlSize.regular.font)
             .lineLimit(1)
             if !group.windows.isEmpty {
                 LimitPills(windows: group.windows)
@@ -471,7 +471,7 @@ private struct ComposerPicker: View {
                     .lineLimit(1)
             }
         }
-        .font(.ui(size: 11.5, weight: .medium))
+        .font(ControlSize.regular.font)
         .padding(.horizontal, 8)
         .padding(.top, 8)
         .padding(.bottom, 4)
@@ -545,7 +545,7 @@ private struct ComposerPicker: View {
         let shown = shownAccess ?? current
         return VStack(alignment: .leading, spacing: 8) {
             Text("Access")
-                .font(.ui(size: 11.5, weight: .medium))
+                .font(ControlSize.regular.font)
                 .foregroundStyle(Color.themeMutedForeground)
             Segmented(
                 symbols: Access.allCases.map { ($0.label, $0.symbol, $0) },

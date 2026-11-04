@@ -710,7 +710,7 @@ impl ComposerPicker {
             .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
             .child(
                 div()
-                    .text_size(px(11.5))
+                    .text_size(px(ControlSize::Regular.text_size()))
                     .font_weight(FontWeight::MEDIUM)
                     .text_color(c.muted_foreground)
                     .child("Access"),
@@ -769,7 +769,7 @@ fn section_title(title: &'static str, model: Option<String>, cx: &App) -> Div {
         .flex()
         .items_center()
         .gap(px(8.))
-        .text_size(px(11.5))
+        .text_size(px(ControlSize::Regular.text_size()))
         .font_weight(FontWeight::MEDIUM)
         .child(div().text_color(c.muted_foreground).child(title))
         .child(div().flex_1())
@@ -803,10 +803,18 @@ fn header(group: &Group, cx: &App) -> Div {
                 .min_w_0()
                 .flex()
                 .items_center()
-                .text_size(px(11.5))
+                .text_size(px(ControlSize::Regular.text_size()))
                 .font_weight(FontWeight::MEDIUM)
                 .text_color(c.muted_foreground)
-                .child(crate::ui::proxied(group.title.clone(), group.account.gateway, 11.5).flex_none())
+                .child(
+                    crate::ui::proxied_as(
+                        group.title.clone(),
+                        group.account.gateway,
+                        ControlSize::Regular.text_size(),
+                        ControlSize::Regular.symbol(),
+                    )
+                    .flex_none(),
+                )
                 .when_some(group.next.clone(), |title, next| {
                     title
                         .child(
