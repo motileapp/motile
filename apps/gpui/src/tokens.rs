@@ -461,6 +461,7 @@ impl Radius {
 /// of these.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum IconSize {
+    Xxs,
     Xs,
     Sm,
     Md,
@@ -474,6 +475,7 @@ pub enum IconSize {
 impl IconSize {
     pub const fn side(self) -> f32 {
         match self {
+            IconSize::Xxs => 10.,
             IconSize::Xs => 12.,
             IconSize::Sm => 14.,
             IconSize::Md => 16.,

@@ -393,6 +393,7 @@ object Radius {
 
 /** How large an icon is, of any kind: the side of its square, as on the Mac. Every icon is one of these. */
 enum class IconSize(val side: Float) {
+    Xxs(10f),
     Xs(12f),
     Sm(14f),
     Md(16f),

@@ -29,17 +29,20 @@ object GatewayMark {
     /** The symbol where the text has it, which a `Text` draws given `content`, and reads as "Gateway". */
     fun AnnotatedString.Builder.appendMark() = appendInlineContent(ID, "Gateway")
 
-    /** The symbol's size beside words of `fontSize`, as the Mac app sizes it. */
-    fun size(fontSize: Float): IconSize = when {
-        fontSize <= 12.5f -> IconSize.Xs
-        fontSize <= 15f -> IconSize.Sm
-        else -> IconSize.Md
+    /** The symbol's size beside words of `fontSize`, or a step smaller than `icon`, an icon beside it, as the Mac app sizes it. */
+    fun size(fontSize: Float, icon: IconSize? = null): IconSize {
+        if (icon != null) return IconSize.entries.lastOrNull { it.side < icon.side } ?: icon
+        return when {
+            fontSize <= 12.5f -> IconSize.Xxs
+            fontSize <= 15f -> IconSize.Xs
+            else -> IconSize.Sm
+        }
     }
 
-    /** What draws the symbol of `appendMark` beside words of `fontSize`, in `color`, as large as `symbol` where it matches an icon beside it. */
+    /** What draws the symbol of `appendMark` beside words of `fontSize`, in `color`, a step smaller than `symbol` where it goes with an icon beside it. */
     @Composable
     fun content(color: Color, fontSize: Float, symbol: IconSize? = null): Map<String, InlineTextContent> {
-        val size = symbol ?: size(fontSize)
+        val size = size(fontSize, symbol)
         val (width, height) = with(LocalDensity.current) { (symbolSide(size) + gap).toSp() to symbolSide(size).toSp() }
         return mapOf(
             ID to InlineTextContent(Placeholder(width, height, PlaceholderVerticalAlign.TextCenter)) {

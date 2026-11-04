@@ -218,6 +218,7 @@
 }
 
 :root {
+  --icon-xxs: 10px;
   --icon-xs: 12px;
   --icon-sm: 14px;
   --icon-md: 16px;
