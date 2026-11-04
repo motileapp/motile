@@ -345,6 +345,11 @@ final class AppStore {
         guard !error.offline else { return }
         errorMessage = error.message
     }
+    /// Says that a message didn't reach its server, even when only the connection was lost: it
+    /// went back to the composer, which is easy to miss.
+    private func alertUnsent(_ error: CoreBridge.CoreError) {
+        errorMessage = error.offline ? Self.unsent : error.message
+    }
     /// The error's first sentence as the alert's title, and the rest below it.
     var errorAlert: (title: String, detail: String) {
         let message = errorMessage ?? ""
@@ -2298,6 +2303,7 @@ final class AppStore {
     static let steersKey = "send.steers"
     /// It steers until the setting says otherwise.
     static let steersByDefault = true
+    static let unsent = "Your message wasn't sent. The connection to your server was lost, so it's back where you wrote it."
 
     /// Sends what is written. While the agent works, an `alternate` message steers when the
     /// setting queues, and queues when it steers.
@@ -2364,7 +2370,7 @@ final class AppStore {
             // The message goes back to where it was written, wherever the client is now.
             self.setText(text, for: key)
             self.attachmentsByKey[key] = attached.isEmpty ? nil : attached
-            self.alert(error)
+            self.alertUnsent(error)
             guard self.draftKey == key else { return }
             self.transcript.setPending(nil)
             self.transcriptIsEmpty = self.transcript.isEmpty
@@ -2382,7 +2388,7 @@ final class AppStore {
             case .failure(let error):
                 self.sentDrafts.remove(draftID)
                 self.unsend(draftID)
-                self.alert(error)
+                self.alertUnsent(error)
             case .success(let value):
                 // A server from before thread ids picks its own, and one whose thread was deleted
                 // starts another.

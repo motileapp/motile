@@ -352,6 +352,11 @@ class AppStore(private val context: Context) {
         result.coreError?.let(::alert)
     }
 
+    /** Says that a message didn't reach its server, even when only the connection was lost: it went back to the composer, which is easy to miss. */
+    private fun alertUnsent(error: CoreError) {
+        errorMessage = if (error.offline) UNSENT else error.message
+    }
+
     /** The error's first sentence as the alert's title, and the rest below it. */
     val errorAlert: Pair<String, String>
         get() {
@@ -2303,7 +2308,7 @@ class AppStore(private val context: Context) {
             // The message goes back to where it was written, wherever the client is now.
             setText(text, key)
             attachmentsByKey = if (attached.isEmpty()) attachmentsByKey - key else attachmentsByKey + (key to attached)
-            alert(error)
+            alertUnsent(error)
             if (draftKey != key) return@send
             transcript.setPending(null)
             transcriptIsEmpty = transcript.isEmpty
@@ -2320,7 +2325,7 @@ class AppStore(private val context: Context) {
             if (error != null) {
                 sentDrafts.remove(draftID)
                 unsend(draftID)
-                alert(error)
+                alertUnsent(error)
                 return@send
             }
             // A server from before thread ids picks its own, and one whose thread was deleted starts another.
@@ -2746,6 +2751,7 @@ class AppStore(private val context: Context) {
         const val STEERS_KEY = "send.steers"
         /** It steers until the setting says otherwise. */
         const val STEERS_BY_DEFAULT = true
+        const val UNSENT = "Your message wasn't sent. The connection to your server was lost, so it's back where you wrote it."
 
         fun preview(text: String, attachments: Int): String? {
             val trimmed = text.trim()

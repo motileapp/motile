@@ -93,10 +93,13 @@ impl Server {
         }
         tracing::info!(device, "client connected");
         let mut recheck = tokio::time::interval(RECHECK_ACCESS_EVERY);
-        loop {
+        let reason = loop {
             tokio::select! {
                 stream = connection.accept_bi() => {
-                    let Ok((send, recv)) = stream else { break };
+                    let (send, recv) = match stream {
+                        Ok(stream) => stream,
+                        Err(error) => break error.to_string(),
+                    };
                     let server = self.clone();
                     tokio::spawn(async move {
                         if let Err(error) = server.handle_stream(send, recv).await {
@@ -108,12 +111,12 @@ impl Server {
                     if !self.access.is_listed(&device).await {
                         tracing::warn!(device, "closed a device that was removed from the account");
                         connection.close(NOT_LINKED.into(), b"This device is no longer linked to the server's account.");
-                        break;
+                        break "removed from the account".to_string();
                     }
                 }
             }
-        }
-        tracing::info!(device, "client disconnected");
+        };
+        tracing::info!(device, reason, "client disconnected");
     }
 
     async fn handle_stream(self, mut send: SendStream, mut recv: RecvStream) -> anyhow::Result<()> {
