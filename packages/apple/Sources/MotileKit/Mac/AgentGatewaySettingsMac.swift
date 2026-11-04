@@ -127,7 +127,7 @@ struct AgentGatewaySettings: View {
                     .padding(.horizontal, settingsInset)
                     .padding(.vertical, 14)
             }
-            FadingScroll(maxHeight: settingsListHeight) {
+            FadingScroll(maxHeight: settingsListHeight, holdsWheel: true) {
                 LazyVStack(spacing: 0) {
                     ForEach(log.rows) { row in
                         ThemeDivider()
