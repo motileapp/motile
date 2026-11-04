@@ -91,6 +91,7 @@ struct McpGatewaySettings: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
+                .padding(.vertical, 4)
                 .opacity(.disabled, when: !mcpServer.enabled)
             } trailing: {
                 if mcpServer.state == .signInAgain {

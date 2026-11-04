@@ -1252,10 +1252,13 @@ pub struct Chip {
     selectable: Option<ElementId>,
     /// It marks quietly, as a default does: its words muted on the accent's tint, with no line.
     muted: bool,
+    /// Less tall, to sit on a line of text without making it taller.
+    compact: bool,
 }
 
 impl Chip {
     pub const HEIGHT: f32 = 20.;
+    pub const COMPACT_HEIGHT: f32 = 18.;
     pub const SYMBOL: IconSize = IconSize::Xs;
 
     pub fn new(title: impl Into<SharedString>) -> Self {
@@ -1270,6 +1273,7 @@ impl Chip {
             middle: false,
             selectable: None,
             muted: false,
+            compact: false,
         }
     }
 
@@ -1303,6 +1307,11 @@ impl Chip {
 
     pub fn muted(mut self, muted: bool) -> Self {
         self.muted = muted;
+        self
+    }
+
+    pub fn compact(mut self, compact: bool) -> Self {
+        self.compact = compact;
         self
     }
 
@@ -1346,7 +1355,7 @@ impl RenderOnce for Chip {
         div()
             .when(!self.middle, |chip| chip.flex_shrink_0())
             .when(self.middle, |chip| chip.min_w_0())
-            .h(px(Self::HEIGHT))
+            .h(px(if self.compact { Self::COMPACT_HEIGHT } else { Self::HEIGHT }))
             .px(px(7.))
             .rounded_full()
             .bg(background)

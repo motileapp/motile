@@ -163,8 +163,8 @@ struct LimitRow: View {
     }
 }
 
-/// What was used of a window as the part of a bar it fills, and at its end when the window starts
-/// over and the resets the account may use.
+/// What was used of a window as the part of a bar it fills, cut by the bar's corners, and at its end
+/// when the window starts over and the resets the account may use.
 private struct LimitBar: View {
     private static let height: CGFloat = 28
 
@@ -174,15 +174,16 @@ private struct LimitBar: View {
 
     var body: some View {
         GeometryReader { bar in
-            let filled = bar.size.width * window.usedPercent / 100
+            let filled = bar.size.width * min(max(window.usedPercent, 0), 100) / 100
             RoundedRectangle(cornerRadius: Radius.md, style: .continuous)
                 .fill(surface.color(.control))
                 .overlay(alignment: .leading) {
                     RoundedRectangle(cornerRadius: Radius.md, style: .continuous)
                         .fill(color)
                         .opacity(.colorTintChart)
-                        .frame(width: filled)
+                        .offset(x: filled - bar.size.width)
                 }
+                .clipShape(RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
                 .overlay {
                     HStack(spacing: 8) {
                         used

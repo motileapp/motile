@@ -191,7 +191,7 @@ private fun SettingsGroups.mcpServerGroup(
         row {
             SettingsRow {
                 McpServerTile(mcpServer.monogram, mcpServer.tint, SettingsTile.size)
-                Column(Modifier.weight(1f).padding(vertical = 2.dp).opacity(Opacity.Disabled, on = !mcpServer.enabled), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Column(Modifier.weight(1f).padding(vertical = 6.dp).opacity(Opacity.Disabled, on = !mcpServer.enabled), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     val palette = LocalPalette.current
                     RowText(mcpServer.name, color = palette.foreground, maxLines = 1)
                     Text(mcpServer.statusText, size = NOTE_TEXT, color = if (mcpServer.troubled) palette.warning else palette.mutedForeground)
@@ -266,7 +266,7 @@ fun ToolPermissionMenu(
         title = if (compact) null else permission?.title ?: "Custom",
         icon = permission?.symbol ?: Symbol.Ellipsis,
         help = help,
-        variant = ButtonVariant.Secondary,
+        variant = ButtonVariant.Outline,
         chevron = true,
     ) {
         for (each in ToolPermission.entries) item(each.title, each.symbol, checked = each == permission) { choose(each) }

@@ -413,6 +413,7 @@ impl McpGatewayPage {
             .flex()
             .flex_col()
             .gap(px(2.))
+            .py(px(4.))
             .child(div().text_size(px(13.)).font_weight(FontWeight::MEDIUM).child(mcp_server.name.clone()))
             .child(
                 div()

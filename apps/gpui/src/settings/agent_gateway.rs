@@ -550,6 +550,9 @@ fn account_label(account: &AccountRow, cx: &App) -> AnyElement {
         AccountState::Resting => Chip::new(text).tone(c.pending),
         AccountState::Off | AccountState::Ready => Chip::new(text).muted(true),
     });
+    // "Next" keeps its place while it is hidden, so that it never moves what is around it.
+    let next =
+        div().when(!account.next, |chip| chip.opacity(0.)).child(Chip::new("Next").tone(c.primary).compact(true));
     let description: Vec<String> =
         [account.email.clone(), account.plan.clone(), account.threads_text.clone()].into_iter().flatten().collect();
     div()
@@ -572,8 +575,8 @@ fn account_label(account: &AccountRow, cx: &App) -> AnyElement {
                         .font_weight(FontWeight::MEDIUM)
                         .child(account.name.clone()),
                 )
-                .children(status.map(|chip| chip.surface(Surface::Card)))
-                .when(account.next, |line| line.child(Chip::new("Next").tone(c.primary))),
+                .children(status.map(|chip| chip.surface(Surface::Card).compact(true)))
+                .child(next),
         )
         .when(!description.is_empty(), |label| {
             label.child(

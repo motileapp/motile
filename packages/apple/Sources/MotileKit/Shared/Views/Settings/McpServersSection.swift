@@ -35,7 +35,7 @@ struct McpPermissionMenu: View {
 
     var body: some View {
         let title = permission?.title ?? "Custom"
-        ActionMenu(wordless ? nil : title, icon: permission?.symbol ?? .ellipsis, help: title, variant: .secondary, size: size) {
+        ActionMenu(wordless ? nil : title, icon: permission?.symbol ?? .ellipsis, help: title, variant: .outline, size: size) {
             ForEach(McpToolPermission.allCases) { option in
                 Toggle(isOn: Binding { permission == option } set: { _ in pick(option) }) {
                     Label(option.title, symbol: option.symbol)

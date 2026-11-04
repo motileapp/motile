@@ -36,6 +36,7 @@ import app.motile.theme.wash
  */
 object Chip {
     val height = scaled(20f).dp
+    val compactHeight = scaled(18f).dp
 }
 
 @Composable
@@ -48,6 +49,7 @@ fun Chip(
     tone: Color? = null,
     monospaced: Boolean = false,
     muted: Boolean = false,
+    compact: Boolean = false,
 ) {
     val palette = LocalPalette.current
     val surface = LocalSurface.current
@@ -60,7 +62,7 @@ fun Chip(
     }
     CompositionLocalProvider(LocalForeground provides foreground) {
         Row(
-            modifier.height(Chip.height).background(fill, CircleShape).then(bordered).padding(horizontal = 7.dp),
+            modifier.height(if (compact) Chip.compactHeight else Chip.height).background(fill, CircleShape).then(bordered).padding(horizontal = 7.dp),
             horizontalArrangement = Arrangement.spacedBy(5.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
