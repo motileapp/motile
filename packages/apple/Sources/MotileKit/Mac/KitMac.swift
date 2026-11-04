@@ -72,7 +72,9 @@ class FlippedView: NSView {
     }
 
     /// Called with where the view was clicked. A view with one takes the clicks on what is inside it.
-    var onPress: ((CGPoint) -> Void)?
+    var onPress: ((CGPoint) -> Void)? {
+        didSet { updateTrackingAreas() }
+    }
     /// Called with where the pointer is over the view, and with nothing when it leaves.
     var onHover: ((CGPoint?) -> Void)? {
         didSet { updateTrackingAreas() }
@@ -91,6 +93,7 @@ class FlippedView: NSView {
     var onAdjust: ((Int) -> Void)?
     private var tracking: NSTrackingArea?
     private var dragging = false
+    private var ownCursor = OwnCursor()
 
     override var isFlipped: Bool { true }
 
@@ -172,8 +175,8 @@ class FlippedView: NSView {
     // One area that follows the view, so that moving a row doesn't make another.
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
-        guard tracking == nil, onHover != nil else { return }
-        let options: NSTrackingArea.Options = [.mouseMoved, .mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect]
+        guard tracking == nil, onHover != nil || onPress != nil else { return }
+        let options: NSTrackingArea.Options = [.mouseMoved, .mouseEnteredAndExited, .cursorUpdate, .activeInKeyWindow, .inVisibleRect]
         let area = NSTrackingArea(rect: .zero, options: options, owner: self)
         addTrackingArea(area)
         tracking = area
@@ -185,11 +188,24 @@ class FlippedView: NSView {
 
     override func mouseMoved(with event: NSEvent) {
         hover(event)
+        updateCursor(event)
     }
 
     /// Under an open dropdown the view is not lit, as under a menu.
     private func hover(_ event: NSEvent) {
         onHover?(DropdownBackdrop.covers(self, at: event) ? nil : convert(event.locationInWindow, from: nil))
+    }
+
+    override func cursorUpdate(with event: NSEvent) {
+        guard cursor != nil else { return super.cursorUpdate(with: event) }
+        updateCursor(event)
+    }
+
+    /// A view that takes clicks shows its cursor where it is what lies under the pointer, also
+    /// over text, but not under what lies over it.
+    private func updateCursor(_ event: NSEvent) {
+        guard let cursor else { return }
+        ownCursor.update(event, in: self, owns: { $0 === self }) { _ in cursor }
     }
 
     override func mouseExited(with event: NSEvent) {
@@ -202,11 +218,7 @@ class FlippedView: NSView {
         return pointer == .hand ? .pointingHand : .arrow
     }
 
-    /// A view that takes clicks keeps its cursor, also when it floats over text, but not under a dropdown.
-    override func resetCursorRects() {
-        guard let cursor, !DropdownBackdrop.isShown(in: window) else { return }
-        addCursorRect(bounds, cursor: cursor)
-    }
+    override func resetCursorRects() {}
 
     override func menu(for event: NSEvent) -> NSMenu? {
         guard let actions = menuActions?(), !actions.isEmpty else { return super.menu(for: event) }
@@ -514,24 +526,30 @@ extension NSView {
     }
 }
 
-/// Keeps text's I-beam to where the text is the view under the pointer, not a control inside it
-/// or what lies over it. AppKit's text sets it anywhere in its visible rect, also under a menu.
-struct TextCursor {
-    private var covered = false
+/// Shows a view's cursor only where the view, and not what lies over it, is under the pointer.
+/// AppKit's cursor rects show anywhere in a view's visible rect, also under a dropdown or a modal,
+/// so the views that set a cursor do it from their own tracking area, through this.
+struct OwnCursor {
+    private var shown: NSCursor?
 
-    /// Whether the text sets the cursor for the event. As the pointer moves onto what covers
-    /// the text, an I-beam left there turns to that view's cursor.
-    mutating func owns(_ event: NSEvent, in text: NSView) -> Bool {
-        let hit = text.window?.contentView?.hitTest(event.locationInWindow)
-        let owns = hit.map { $0 === text || !($0 is FlippedView || $0 is NSControl) && $0.isDescendant(of: text) } ?? false
-        defer { covered = !owns }
-        guard !owns else { return true }
-        guard !covered || event.type == .cursorUpdate, NSCursor.current == NSCursor.iBeam else { return false }
-        Self.cursor(over: hit)?.set()
-        return false
+    /// Shows `cursor` where `owns` says the view under the pointer is the view's, and says whether
+    /// it is. As the pointer moves onto what lies over the view, the cursor it left there turns
+    /// to that view's.
+    @discardableResult
+    mutating func update(_ event: NSEvent, in view: NSView, owns: (NSView) -> Bool, cursor: (CGPoint) -> NSCursor) -> Bool {
+        let hit = view.window?.contentView?.hitTest(event.locationInWindow)
+        guard let hit, owns(hit) else {
+            if let shown, NSCursor.current == shown { Self.cursor(over: hit)?.set() }
+            shown = nil
+            return false
+        }
+        let cursor = cursor(view.convert(event.locationInWindow, from: nil))
+        cursor.set()
+        shown = cursor
+        return true
     }
 
-    /// The cursor of what covers text; none over other text, which sets its own.
+    /// The cursor of what lies over a view; none over text, which sets its own.
     private static func cursor(over view: NSView?) -> NSCursor? {
         switch view {
         case let view as FlippedView: view.cursor ?? .arrow
@@ -540,26 +558,16 @@ struct TextCursor {
         default: .arrow
         }
     }
+
+    /// Whether `hit` is the text's own: the text, or what is inside it but a control.
+    static func text(_ text: NSView, owns hit: NSView) -> Bool {
+        hit === text || !(hit is FlippedView || hit is NSControl) && hit.isDescendant(of: text)
+    }
 }
 
-/// A text view whose I-beam only shows where nothing lies over it.
+/// A text view whose I-beam, and the hand over its links, only show where nothing lies over it.
 class PointerTextView: NSTextView {
-    private var pointer = TextCursor()
-
-    override func mouseMoved(with event: NSEvent) {
-        guard pointer.owns(event, in: self) else { return }
-        super.mouseMoved(with: event)
-    }
-
-    override func cursorUpdate(with event: NSEvent) {
-        guard pointer.owns(event, in: self) else { return }
-        super.cursorUpdate(with: event)
-    }
-}
-
-/// A field whose I-beam only shows where nothing lies over it.
-final class PointerTextField: NSTextField {
-    private var pointer = TextCursor()
+    private var pointer = OwnCursor()
     private var tracking: NSTrackingArea?
 
     override func resetCursorRects() {}
@@ -573,13 +581,64 @@ final class PointerTextField: NSTextField {
     }
 
     override func cursorUpdate(with event: NSEvent) {
-        guard pointer.owns(event, in: self) else { return }
-        (isEnabled ? NSCursor.iBeam : NSCursor.arrow).set()
+        updateCursor(event)
     }
 
     override func mouseMoved(with event: NSEvent) {
-        guard pointer.owns(event, in: self), isEnabled else { return super.mouseMoved(with: event) }
-        NSCursor.iBeam.set()
+        guard updateCursor(event) else { return }
+        super.mouseMoved(with: event)
+    }
+
+    @discardableResult private func updateCursor(_ event: NSEvent) -> Bool {
+        pointer.update(event, in: self, owns: { OwnCursor.text(self, owns: $0) }, cursor: cursor(at:))
+    }
+
+    private func cursor(at point: CGPoint) -> NSCursor {
+        guard isSelectable || isEditable else { return .arrow }
+        guard let index = characterIndex(under: point), let storage = textStorage else { return .iBeam }
+        if let cursor = storage.attribute(.cursor, at: index, effectiveRange: nil) as? NSCursor { return cursor }
+        guard storage.attribute(.link, at: index, effectiveRange: nil) != nil else { return .iBeam }
+        return linkTextAttributes?[.cursor] as? NSCursor ?? .pointingHand
+    }
+
+    /// The character drawn under the point, if any.
+    private func characterIndex(under point: CGPoint) -> Int? {
+        guard let layoutManager, let textContainer else { return nil }
+        let origin = textContainerOrigin
+        let inContainer = CGPoint(x: point.x - origin.x, y: point.y - origin.y)
+        let glyph = layoutManager.glyphIndex(for: inContainer, in: textContainer)
+        let drawn = layoutManager.boundingRect(forGlyphRange: NSRange(location: glyph, length: 1), in: textContainer)
+        guard glyph < layoutManager.numberOfGlyphs, drawn.contains(inContainer) else { return nil }
+        return layoutManager.characterIndexForGlyph(at: glyph)
+    }
+}
+
+/// A field whose I-beam only shows where nothing lies over it.
+final class PointerTextField: NSTextField {
+    private var pointer = OwnCursor()
+    private var tracking: NSTrackingArea?
+
+    override func resetCursorRects() {}
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        guard tracking == nil else { return }
+        let area = NSTrackingArea(rect: .zero, options: [.cursorUpdate, .mouseMoved, .activeInKeyWindow, .inVisibleRect], owner: self)
+        addTrackingArea(area)
+        tracking = area
+    }
+
+    override func cursorUpdate(with event: NSEvent) {
+        updateCursor(event)
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        guard !updateCursor(event) || !isEnabled else { return }
+        super.mouseMoved(with: event)
+    }
+
+    @discardableResult private func updateCursor(_ event: NSEvent) -> Bool {
+        pointer.update(event, in: self, owns: { OwnCursor.text(self, owns: $0) }) { _ in self.isEnabled ? .iBeam : .arrow }
     }
 }
 

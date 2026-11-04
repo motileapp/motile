@@ -209,12 +209,6 @@ class LinearCell: FlippedView {
 
     /// A cell shown again starts unlit, wherever the pointer left it.
     func dim() {}
-
-    #if os(macOS)
-    /// No text lies under the pointer here, so the arrow needs no rect: one would have the window
-    /// look over every view on every scroll.
-    override func resetCursorRects() {}
-    #endif
 }
 
 /// The space between the rows' lights, and around each one: it looks empty but is the row's.
