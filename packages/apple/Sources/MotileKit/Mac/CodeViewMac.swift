@@ -285,6 +285,7 @@ private final class CodeCanvas: NSView, NSMenuItemValidation {
         guard hovered?.file != sheet.hovered?.file || hovered?.line != sheet.hovered?.line else { return }
         sheet.hovered = hovered
         needsDisplay = true
+        guard isUnderPointer(event) else { return }
         if hovered != nil { NSCursor.pointingHand.set() } else { NSCursor.arrow.set() }
     }
 
