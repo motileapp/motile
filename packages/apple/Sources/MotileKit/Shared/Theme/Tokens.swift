@@ -336,6 +336,7 @@ enum Radius {
 /// How large an icon is, of any kind: the side of its square, as on the Mac. Every icon is one
 /// of these.
 enum IconSize: CGFloat, CaseIterable {
+    case xxs = 10
     case xs = 12
     case sm = 14
     case md = 16

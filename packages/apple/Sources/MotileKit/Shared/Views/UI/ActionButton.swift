@@ -644,24 +644,24 @@ extension Text {
         self.init(dotted: [name.proxied(true, fontSize: fontSize, size: size)] + parts.dropFirst())
     }
 
-    /// The gateway's symbol beside words of `fontSize` that stand alone, centred on their line, as
-    /// large as `size` where it matches an icon beside it. It stands outside the line, which a symbol
-    /// moved off the baseline would make taller.
+    /// The gateway's symbol beside words of `fontSize` that stand alone, centred on their line, a
+    /// step smaller than `size` where it goes with an icon beside it. It stands outside the line,
+    /// which a symbol moved off the baseline would make taller.
     func gatewayMarked(_ proxied: Bool, fontSize: CGFloat, size: IconSize? = nil) -> some View {
         HStack(spacing: (fontSize / 4).rounded() + GatewayMark.gap) {
             self
             if proxied {
-                Image(.waypoints, size: size ?? GatewayMark.size(for: fontSize))
+                Image(.waypoints, size: GatewayMark.size(for: fontSize, beside: size))
             }
         }
     }
 
     /// The gateway's symbol after words of `fontSize` inside a line of fixed height, which says what
     /// they name runs through the gateway: centred on their capitals rather than standing on their
-    /// baseline, and as large as `size` where it matches an icon beside it.
+    /// baseline, and a step smaller than `size` where it goes with an icon beside it.
     func proxied(_ proxied: Bool, fontSize: CGFloat, size: IconSize? = nil) -> Text {
         guard proxied else { return self }
-        let size = size ?? GatewayMark.size(for: fontSize)
+        let size = GatewayMark.size(for: fontSize, beside: size)
         let rise = ((PlatformFont.ui(fontSize).capHeight - PlatformImage.symbolSide(size)) / 2).rounded()
         return Text("\(self)\(Text(verbatim: " ").kerning(GatewayMark.gap))\(Text(Image(.waypoints, size: size)).baselineOffset(rise))")
     }

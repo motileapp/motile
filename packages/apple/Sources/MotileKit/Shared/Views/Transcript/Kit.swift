@@ -413,18 +413,19 @@ final class ProgressRingView: LayerView {
 }
 
 /// Symbols drawn in a colour that follows the appearance.
-/// The gateway's symbol in a line of text, as tall as the line's capitals and centred on them.
+/// The gateway's symbol in a line of text, centred on the line's capitals.
 enum GatewayMark {
     /// What the symbol stands from the words before it beyond a space.
     static let gap: CGFloat = 1
 
-    /// The symbol's size beside words of `fontSize`.
-    static func size(for fontSize: CGFloat) -> IconSize {
-        fontSize <= 12.5 ? .xs : fontSize <= 15 ? .sm : .md
+    /// The symbol's size beside words of `fontSize`, or a step smaller than `icon`, an icon beside it.
+    static func size(for fontSize: CGFloat, beside icon: IconSize? = nil) -> IconSize {
+        guard let icon else { return fontSize <= 12.5 ? .xxs : fontSize <= 15 ? .xs : .sm }
+        return IconSize.allCases.last { $0.rawValue < icon.rawValue } ?? icon
     }
 
-    /// The symbol after `line`'s words, a space and `gap` from them, as large as `size` where it
-    /// matches an icon beside it.
+    /// The symbol after `line`'s words, a space and `gap` from them, a step smaller than `size`
+    /// where it goes with an icon beside it.
     static func append(to line: NSMutableAttributedString, font: PlatformFont, color: PlatformColor, size: IconSize? = nil) {
         if line.length > 0 {
             line.append(NSAttributedString(string: " ", attributes: [.font: font, .kern: gap]))
@@ -433,7 +434,7 @@ enum GatewayMark {
     }
 
     static func attachment(font: PlatformFont, color: PlatformColor, size: IconSize? = nil) -> NSAttributedString {
-        let image = TintedSymbol.image(.waypoints, size: size ?? self.size(for: font.pointSize), color: color)
+        let image = TintedSymbol.image(.waypoints, size: self.size(for: font.pointSize, beside: size), color: color)
         let attachment = NSTextAttachment()
         attachment.image = image
         attachment.bounds = CGRect(x: 0, y: ((font.capHeight - image.size.height) / 2).rounded(), width: image.size.width, height: image.size.height)
