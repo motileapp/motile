@@ -6,13 +6,20 @@ struct FadingScroll<Content: View>: View {
     let maxHeight: CGFloat
     var anchor: UnitPoint = .top
     var padding: CGFloat = 0
+    /// A wheel over it scrolls it alone, never what it lies in, even at its ends.
+    var holdsWheel = false
     @ViewBuilder let content: Content
 
     var body: some View {
         AtMost(height: maxHeight) {
             ViewThatFits(in: .vertical) {
                 content.padding(padding)
-                ScrollView { content }
+                ScrollView {
+                    content
+                    #if os(macOS)
+                        .background { if holdsWheel { WheelHold() } }
+                    #endif
+                }
                     .contentMargins(padding, for: .scrollContent)
                     .defaultScrollAnchor(anchor)
                     .fadesHiddenEdges()

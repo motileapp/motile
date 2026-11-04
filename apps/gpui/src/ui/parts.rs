@@ -495,13 +495,22 @@ pub struct FadingScroll {
     max_height: f32,
     padding: f32,
     starts_at_end: bool,
+    holds_wheel: bool,
     fill: Option<Hsla>,
     children: Vec<AnyElement>,
 }
 
 impl FadingScroll {
     pub fn new(id: impl Into<ElementId>, max_height: f32) -> Self {
-        Self { id: id.into(), max_height, padding: 0., starts_at_end: false, fill: None, children: Vec::new() }
+        Self {
+            id: id.into(),
+            max_height,
+            padding: 0.,
+            starts_at_end: false,
+            holds_wheel: false,
+            fill: None,
+            children: Vec::new(),
+        }
     }
 
     pub fn padding(mut self, padding: f32) -> Self {
@@ -512,6 +521,12 @@ impl FadingScroll {
     /// It starts scrolled to its end.
     pub fn starts_at_end(mut self, starts_at_end: bool) -> Self {
         self.starts_at_end = starts_at_end;
+        self
+    }
+
+    /// A wheel over it scrolls it alone, never what it lies in, even at its ends.
+    pub fn holds_wheel(mut self, holds_wheel: bool) -> Self {
+        self.holds_wheel = holds_wheel;
         self
     }
 
@@ -539,16 +554,23 @@ impl RenderOnce for FadingScroll {
             handle.scroll_to_bottom();
         }
         let fill = self.fill.unwrap_or(colors(cx).background);
-        let scroll = div().relative().w_full().max_h(px(self.max_height)).flex().flex_col().child(
-            div()
-                .id(self.id)
-                .w_full()
-                .max_h(px(self.max_height))
-                .overflow_y_scroll()
-                .track_scroll(&handle)
-                .p(px(self.padding))
-                .children(self.children),
-        );
+        let scroll = div()
+            .relative()
+            .w_full()
+            .max_h(px(self.max_height))
+            .flex()
+            .flex_col()
+            .when(self.holds_wheel, |scroll| scroll.on_scroll_wheel(|_, _, cx| cx.stop_propagation()))
+            .child(
+                div()
+                    .id(self.id)
+                    .w_full()
+                    .max_h(px(self.max_height))
+                    .overflow_y_scroll()
+                    .track_scroll(&handle)
+                    .p(px(self.padding))
+                    .children(self.children),
+            );
         with_edge_fades(scroll, hidden_edges(&handle), fill)
     }
 }

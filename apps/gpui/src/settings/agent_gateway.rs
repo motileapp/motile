@@ -320,7 +320,7 @@ impl AgentGatewayPage {
             list.push(divider_on(Surface::Card, cx).into_any_element());
             list.push(self.more_rows(loading, cx));
         }
-        let scroll = FadingScroll::new("gateway-log-rows", LOG_HEIGHT).fill(c.card).children(list);
+        let scroll = FadingScroll::new("gateway-log-rows", LOG_HEIGHT).holds_wheel(true).fill(c.card).children(list);
         let log_card = card_default(div().flex().flex_col().overflow_hidden(), cx).child(toolbar).child(scroll);
         let content = div().flex().flex_col().gap(px(12.)).child(capture_card).child(log_card);
         group("gateway-log", "Log", None, false, vec![content.into_any_element()], cx)
