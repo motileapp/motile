@@ -49,12 +49,11 @@ impl RenderOnce for UpdateLabel {
             .min_w_0()
             .flex()
             .items_center()
-            .gap(px(5.))
-            .child(div().flex_shrink_0().text_color(tint).child(turning_symbol(
-                self.symbol.into(),
-                IconSize::Sm,
-                self.turning,
-            )))
+            .gap(px(7.))
+            .child(
+                super::shelves::line_mark(turning_symbol(self.symbol.into(), IconSize::Sm, self.turning))
+                    .text_color(tint),
+            )
             .child(div().min_w_0().text_size(px(12.)).font_weight(FontWeight::MEDIUM).truncate().child(self.text))
     }
 }

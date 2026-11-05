@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::time::Duration;
 
 use gpui_kit::prelude::*;
-use motile_core::api::Command;
+use motile_core::api::{Command, Section};
 use motile_core::search::MatchView;
 use motile_protocol::wire::{Agent, ThreadChange};
 
@@ -153,7 +153,7 @@ impl Store {
         if search.is_empty() {
             return Vec::new();
         }
-        let threads = || self.active_threads().iter().chain(self.done_threads());
+        let threads = || self.all_threads();
         let named: Vec<&ThreadInfo> = threads().filter(|thread| self.matches(thread, search)).collect();
         let message_search = &self.sidebar.message_search;
         let found = &message_search.matches;
@@ -220,7 +220,7 @@ impl Store {
 
     /// Whether the user can move the thread among the active ones.
     pub fn moves(&self, thread: &ThreadInfo) -> bool {
-        !thread.is_done()
+        thread.section == Section::Active
             && !self.on_removed_server(thread)
             && self.server(Some(&thread.server_id)).is_some_and(Server::moves_threads)
     }
@@ -314,6 +314,8 @@ mod tests {
             thread: serde_json::from_value(value).unwrap(),
             server_id: String::new(),
             unread: false,
+            woke: false,
+            section: Section::Active,
             children: None,
         }
     }

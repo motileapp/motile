@@ -137,7 +137,12 @@ data class AddingProject(val serverID: String, val name: String)
 /** What the images and videos fetched from the servers take on this device, and what they may take. */
 data class MediaStorage(val used: Long, val limit: Long)
 
-data class UndoNotice(val threadIDs: List<String>, val text: String)
+data class UndoNotice(val kind: Kind, val threadIDs: List<String>, val text: String) {
+    enum class Kind { Archive, Snooze }
+}
+
+/** The threads a custom snooze is being set for. */
+data class CustomSnooze(val threadIDs: List<String>, val fromSidebar: Boolean)
 
 /**
  * Everything the views show. It mirrors the core: commands go to it, and its events change the
@@ -183,6 +188,10 @@ class AppStore(private val context: Context) {
     var settingsQuery by mutableStateOf("")
     /** A step of `do.sh`'s for the MCP Gateway page, which it takes as a finger would. */
     var mcpStep by mutableStateOf<String?>(null)
+    /** The thread whose sidebar row `do.sh` has slid aside, to show what its swipe offers. */
+    var swipeStep by mutableStateOf<String?>(null)
+    /** The sidebar's part `do.sh` has opened: "working", "snoozed" or "archived". */
+    var expandStep by mutableStateOf<String?>(null)
     /** The thread's settings are open over the client, where they aren't around the composer. */
     var showsThreadSettings by mutableStateOf(false)
     var modelPickerJump by mutableStateOf<Int?>(null)
@@ -200,6 +209,8 @@ class AppStore(private val context: Context) {
     private val knownBranches = HashMap<String, List<Branch>>()
     /** The project whose changes the commit sheet is open on, with the files it was opened with. */
     var committingProject by mutableStateOf<Project?>(null)
+    /** The threads the custom snooze sheet is open for. */
+    var customSnooze by mutableStateOf<CustomSnooze?>(null)
     var gitFiles by mutableStateOf(emptyList<ChangedFile>())
         private set
     /** An action that pushes from the default branch, until the user says where it should happen. */
@@ -297,8 +308,15 @@ class AppStore(private val context: Context) {
     /** The threads as the sidebar lists them, kept in order as they change so that it never sorts them. */
     var activeThreads by mutableStateOf(emptyList<ThreadInfo>())
         private set
-    var doneThreads by mutableStateOf(emptyList<ThreadInfo>())
+    var workingThreads by mutableStateOf(emptyList<ThreadInfo>())
         private set
+    var snoozedThreads by mutableStateOf(emptyList<ThreadInfo>())
+        private set
+    var archivedThreads by mutableStateOf(emptyList<ThreadInfo>())
+        private set
+    /** The threads the sidebar lists above its shelves, in its order. */
+    val listedThreads: List<ThreadInfo> get() = activeThreads + workingThreads
+    val allThreads: List<ThreadInfo> get() = activeThreads + workingThreads + snoozedThreads + archivedThreads
 
     // The open thread
     /** The open thread and the one whose agent started it, kept apart from `threads` so that what shows them changes with them alone, not with every thread. */
@@ -790,7 +808,7 @@ class AppStore(private val context: Context) {
         openArrivedThreads()
         markOpenThreadSeen()
         before ?: return
-        if (!before.isDone && thread.isDone && before.pullRequest != thread.pullRequest) revealedThreadID = thread.id
+        if (!before.isArchived && thread.isArchived && before.pullRequest != thread.pullRequest) revealedThreadID = thread.id
         if (selection != Selection.Thread(thread.id)) return
         if (before.turnEndedAt != thread.turnEndedAt || (before.running && !thread.running)) workspaceVersion += 1
     }
@@ -798,7 +816,7 @@ class AppStore(private val context: Context) {
     /** A reply in the open thread has been seen once the client is in front. */
     private fun markOpenThreadSeen() {
         val thread = selectedThread ?: return
-        if (!Platform.isActive || !thread.unread) return
+        if (!Platform.isActive || !(thread.unread || thread.woke)) return
         core.send("mark_seen", json("thread_id" to thread.id))
     }
 
@@ -841,9 +859,11 @@ class AppStore(private val context: Context) {
     private fun replaceThreads(new: Map<String, ThreadInfo>) {
         threads = new.filterValues { it.parentID == null }
         startedThreads = new.filterValues { it.parentID != null }
-        val listed = threads.values
-        activeThreads = listed.filter { !it.isDone }.sortedWith(ThreadInfo.order)
-        doneThreads = listed.filter { it.isDone }.sortedWith(ThreadInfo.order)
+        val listed = threads.values.sortedWith(ThreadInfo.order)
+        activeThreads = listed.filter { it.section == ThreadSection.Active }
+        workingThreads = listed.filter { it.section == ThreadSection.Working }
+        snoozedThreads = listed.filter { it.section == ThreadSection.Snoozed }
+        archivedThreads = listed.filter { it.section == ThreadSection.Archived }
         showSelectedThread()
     }
 
@@ -856,16 +876,21 @@ class AppStore(private val context: Context) {
         }
         threads = if (thread == null) threads - id else threads + (id to thread)
         showSelectedThread()
-        if (before != null && thread != null && before.isDone == thread.isDone && before.listedAt == thread.listedAt) {
-            changeList(thread.isDone) { list -> list.indexOfListed(before)?.let { list[it] = thread } }
+        if (before != null && thread != null && before.section == thread.section && before.listedAt == thread.listedAt) {
+            changeList(thread.section) { list -> list.indexOfListed(before)?.let { list[it] = thread } }
             return
         }
-        if (before != null) changeList(before.isDone) { list -> list.indexOfListed(before)?.let { list.removeAt(it) } }
-        if (thread != null) changeList(thread.isDone) { list -> list.add(list.place(thread), thread) }
+        if (before != null) changeList(before.section) { list -> list.indexOfListed(before)?.let { list.removeAt(it) } }
+        if (thread != null) changeList(thread.section) { list -> list.add(list.place(thread), thread) }
     }
 
-    private fun changeList(done: Boolean, change: (MutableList<ThreadInfo>) -> Unit) {
-        if (done) doneThreads = doneThreads.toMutableList().also(change) else activeThreads = activeThreads.toMutableList().also(change)
+    private fun changeList(section: ThreadSection, change: (MutableList<ThreadInfo>) -> Unit) {
+        when (section) {
+            ThreadSection.Active -> activeThreads = activeThreads.toMutableList().also(change)
+            ThreadSection.Working -> workingThreads = workingThreads.toMutableList().also(change)
+            ThreadSection.Snoozed -> snoozedThreads = snoozedThreads.toMutableList().also(change)
+            ThreadSection.Archived -> archivedThreads = archivedThreads.toMutableList().also(change)
+        }
     }
 
     /** Keeps `selectedThread` and `parentThread` as the threads have them, assigned only when they change. */
@@ -1569,7 +1594,7 @@ class AppStore(private val context: Context) {
 
     /** Goes to the project's latest thread that is still going, or opens a new one in it. */
     private fun goTo(project: Project) {
-        val thread = activeThreads.firstOrNull { it.projectID == project.id } ?: return openThread(project)
+        val thread = listedThreads.firstOrNull { it.projectID == project.id } ?: return openThread(project)
         closeSettings()
         show(Selection.Thread(thread.id))
     }
@@ -2249,7 +2274,7 @@ class AppStore(private val context: Context) {
         removeDraft(draft.id)
         if (!wasOpen) return
         threadDrafts.lastOrNull { !isSending(it) }?.let { return select(Selection.Draft(it.id)) }
-        activeThreads.firstOrNull()?.let { return select(Selection.Thread(it.id)) }
+        listedThreads.firstOrNull()?.let { return select(Selection.Thread(it.id)) }
         openEmptyDraft()
     }
 
@@ -2585,26 +2610,63 @@ class AppStore(private val context: Context) {
         update(thread, mapOf("access" to access.raw)) { it.copy(access = access) }
     }
 
-    /** Marks threads done or brings them back. A thread that is working or monitoring can't be marked done. */
-    fun setDone(ids: List<String>, done: Boolean, fromSidebar: Boolean = false) {
-        val changed = ids.mapNotNull { anyThread(it) }.filter { it.isDone != done && !(done && it.unfinished) && !onRemovedServer(it) }
+    /** Archives threads or brings them back. A thread that is working or monitoring can't be archived. */
+    fun setArchived(ids: List<String>, archived: Boolean, fromSidebar: Boolean = false) {
+        val changed = ids.mapNotNull { anyThread(it) }.filter { it.isArchived != archived && !(archived && it.unfinished) && !onRemovedServer(it) }
         if (changed.isEmpty()) return
-        // Leaving the thread that was just put away, for the next one that is still active.
-        val open = (selection as? Selection.Thread)?.id
-        if (done && fromSidebar && open != null && changed.any { it.id == open }) {
-            val active = activeThreads
-            val position = active.indexOfFirst { it.id == open }.coerceAtLeast(0)
-            val remaining = active.filter { thread -> changed.none { it.id == thread.id } }
-            val next = if (remaining.isEmpty()) null else remaining[minOf(position, remaining.size - 1)]
-            if (next != null) select(Selection.Thread(next.id)) else openEmptyDraft()
-        }
+        if (archived && fromSidebar) leave(changed)
         val now = Time.now()
-        for (thread in changed) update(thread, mapOf("done" to done)) { it.copy(doneAt = if (done) now else null) }
-        if (!done) {
+        for (thread in changed) {
+            update(thread, mapOf("done" to archived)) {
+                val awake = it.copy(archivedAt = null, snoozedUntil = null)
+                if (archived) awake.copy(archivedAt = now, section = ThreadSection.Archived) else awake.copy(section = awake.awakeSection)
+            }
+        }
+        if (!archived) {
             undo = null
             return
         }
-        showUndo(UndoNotice(changed.map { it.id }, if (changed.size == 1) "Done" else "Marked ${changed.size} threads done"))
+        val text = if (changed.size == 1) "Archived" else "Archived ${changed.size} threads"
+        showUndo(UndoNotice(UndoNotice.Kind.Archive, changed.map { it.id }, text))
+    }
+
+    /** Snoozes threads until `until`, out of the sidebar's way until then. */
+    fun snooze(ids: List<String>, until: Double, fromSidebar: Boolean = false) {
+        val changed = ids.mapNotNull { anyThread(it) }.filter { snoozes(it) }
+        if (changed.isEmpty()) return
+        if (fromSidebar) leave(changed)
+        for (thread in changed) {
+            update(thread, mapOf("snoozed_until" to until)) {
+                it.copy(snoozedUntil = until, archivedAt = null, section = ThreadSection.Snoozed)
+            }
+        }
+        val text = if (changed.size == 1) "Snoozed" else "Snoozed ${changed.size} threads"
+        showUndo(UndoNotice(UndoNotice.Kind.Snooze, changed.map { it.id }, text))
+    }
+
+    /** Brings snoozed threads back among the active ones. */
+    fun wake(ids: List<String>) {
+        val now = Time.now()
+        for (thread in ids.mapNotNull { anyThread(it) }) {
+            if (thread.section != ThreadSection.Snoozed || onRemovedServer(thread)) continue
+            update(thread, mapOf("snoozed_until" to 0)) {
+                val awake = it.copy(snoozedUntil = null, position = now)
+                awake.copy(section = awake.awakeSection)
+            }
+        }
+    }
+
+    fun snoozes(thread: ThreadInfo): Boolean = !onRemovedServer(thread) && server(thread.serverID)?.snoozes == true
+
+    /** Leaves the open thread when it is put away, for the next one the sidebar lists. */
+    private fun leave(threads: List<ThreadInfo>) {
+        val open = (selection as? Selection.Thread)?.id ?: return
+        if (threads.none { it.id == open }) return
+        val listed = listedThreads
+        val position = listed.indexOfFirst { it.id == open }.coerceAtLeast(0)
+        val remaining = listed.filter { thread -> threads.none { it.id == thread.id } }
+        val next = if (remaining.isEmpty()) null else remaining[minOf(position, remaining.size - 1)]
+        if (next != null) select(Selection.Thread(next.id)) else openEmptyDraft()
     }
 
     /** Has the agent of the open thread go on with what it was doing when it was interrupted. */
@@ -2621,14 +2683,15 @@ class AppStore(private val context: Context) {
         update(thread, mapOf("continues" to on)) { it.copy(interruption = Interruption.Limit(limit.resetsAt, on)) }
     }
 
-    fun toggleDone() {
+    fun toggleArchived() {
         val thread = selectedThread ?: return
         if (onRemovedServer(thread)) return
-        setDone(listOf(thread.id), !thread.isDone)
+        setArchived(listOf(thread.id), !thread.isArchived)
     }
 
     /** Whether the user can move the thread among the active ones. */
-    fun moves(thread: ThreadInfo): Boolean = !thread.isDone && !onRemovedServer(thread) && server(thread.serverID)?.movesThreads == true
+    fun moves(thread: ThreadInfo): Boolean =
+        thread.section == ThreadSection.Active && !onRemovedServer(thread) && server(thread.serverID)?.movesThreads == true
 
     /** Puts the thread where `index` is among the sidebar's rows without it: `rows` is the active thread of each, or null for a row that isn't one. */
     fun move(thread: ThreadInfo, index: Int, rows: List<ThreadInfo?>) {
@@ -2671,7 +2734,10 @@ class AppStore(private val context: Context) {
     fun performUndo() {
         val notice = undo ?: return
         undo = null
-        setDone(notice.threadIDs, false)
+        when (notice.kind) {
+            UndoNotice.Kind.Archive -> setArchived(notice.threadIDs, false)
+            UndoNotice.Kind.Snooze -> wake(notice.threadIDs)
+        }
     }
 
     /** Changes a thread on its server, and here at once so the client doesn't wait for the answer. */

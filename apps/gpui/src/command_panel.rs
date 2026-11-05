@@ -745,9 +745,7 @@ impl CommandPanel {
             store.threads.values().filter(|thread| thread.parent_id().is_some()).collect();
         started.sort_by(|one, other| other.updated_at.total_cmp(&one.updated_at));
         store
-            .active_threads()
-            .iter()
-            .chain(store.done_threads())
+            .all_threads()
             .chain(started)
             .map(|thread| {
                 let project = store.project(Some(&thread.project_id)).cloned();
@@ -757,8 +755,10 @@ impl CommandPanel {
                     .and_then(|id| store.threads.get(id))
                     .map(|parent| format!(" · from {}", parent.title))
                     .unwrap_or_default();
-                let state = if thread.is_done() {
-                    "done".to_string()
+                let state = if thread.is_archived() {
+                    "archived".to_string()
+                } else if thread.section == motile_core::api::Section::Snoozed {
+                    "snoozed".to_string()
                 } else if let Some(ask) = thread.waits_for() {
                     ask_phrase(ask).into()
                 } else if thread.working() {
@@ -809,16 +809,16 @@ impl CommandPanel {
                 |this, _, cx| this.store.update(cx, |store, _| store.continue_thread()),
             ));
         }
-        let done = thread.is_done();
-        if !done && thread.waits_on_agents() {
+        let archived = thread.is_archived();
+        if !archived && thread.waits_on_agents() {
             return items;
         }
         let mark = Item::new(
             "done",
-            if done { "Mark undone" } else { "Mark done" },
+            if archived { "Unarchive" } else { "Archive" },
             thread.title.clone(),
-            ItemIcon::Symbol(if done { "undo-2" } else { "circle-check" }),
-            |this, _, cx| this.store.update(cx, |store, cx| store.toggle_done(cx)),
+            ItemIcon::Symbol(if archived { "archive-restore" } else { "archive" }),
+            |this, _, cx| this.store.update(cx, |store, cx| store.toggle_archived(cx)),
         );
         items.push(mark.keys(store.shortcuts.label("thread.done")));
         items

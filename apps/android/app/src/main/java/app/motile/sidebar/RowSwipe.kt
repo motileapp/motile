@@ -1,6 +1,12 @@
 package app.motile.sidebar
 
 import androidx.compose.animation.core.Animatable
+import app.motile.ui.rememberMenuState
+import app.motile.ui.MenuPopup
+import app.motile.ui.MenuBuilder
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.spring
@@ -15,7 +21,6 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -57,6 +62,17 @@ import kotlin.math.roundToInt
 
 private val settleSpring = spring<Float>(dampingRatio = 0.86f, stiffness = 470f)
 
+/** A round button a swipe shows behind a sidebar row: it does something, or opens a menu. */
+class SwipeAction(
+    val symbol: Symbol,
+    val label: String,
+    val tint: Color,
+    /** The row leaves when it is done, unless the button won't take it away. */
+    val leaves: Boolean = true,
+    val perform: (() -> Unit)? = null,
+    val menu: (MenuBuilder.() -> Unit)? = null,
+)
+
 /**
  * Lets a swipe to the right slide a sidebar row aside and show a round button behind it. A short
  * swipe leaves the button there to tap, a long one does what the button does. The row leaves with a
@@ -76,22 +92,36 @@ fun RowSwipe(
     leaves: Boolean = true,
     content: @Composable () -> Unit,
 ) {
+    RowSwipe(listOf(SwipeAction(symbol, label, tint, leaves, action)), size, isOpen, onOpenChange, modifier, content)
+}
+
+/** The same with a button for each action, the first against the edge. A long swipe does what the first does, when it is a button. */
+@Composable
+fun RowSwipe(
+    actions: List<SwipeAction>,
+    size: Dp,
+    isOpen: Boolean,
+    onOpenChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
     val density = LocalDensity.current
     val haptics = LocalHapticFeedback.current
     val scope = rememberCoroutineScope()
     val offset = remember { Animatable(0f) }
     var width by remember { mutableFloatStateOf(0f) }
     var dragging by remember { mutableStateOf(false) }
-    val currentAction by rememberUpdatedState(action)
+    val currentActions by rememberUpdatedState(actions)
     val currentOpenChange by rememberUpdatedState(onOpenChange)
-    val currentLeaves by rememberUpdatedState(leaves)
 
-    /** How far the row rests aside while its button shows. */
-    val openWidth = with(density) { (size + 20.dp).toPx() }
-    /** From here on, letting go does what the button does. */
+    /** How far the row rests aside while its buttons show. */
+    val openWidth = with(density) { ((size + swipeGap) * actions.size + 10.dp).toPx() }
+    /** The first action, which a long swipe does. */
+    val swiped = actions.firstOrNull()?.takeIf { it.perform != null }
+    /** From here on, letting go does what the first button does. */
     val shortest = openWidth + with(density) { 44.dp.toPx() }
     fun fullSwipe() = max(shortest, width * 0.3f)
-    val armed = offset.value >= fullSwipe()
+    val armed = swiped != null && offset.value >= fullSwipe()
 
     fun settle(open: Boolean) {
         currentOpenChange(open)
@@ -99,15 +129,16 @@ fun RowSwipe(
     }
 
     /** The row leaves to the right, and then what the button does happens. */
-    fun commit() {
-        if (!currentLeaves) {
+    fun commit(action: SwipeAction) {
+        val perform = action.perform ?: return
+        if (!action.leaves) {
             settle(false)
-            currentAction()
+            perform()
             return
         }
         scope.launch {
             offset.animateTo(max(width, offset.value), tween(180, easing = FastOutSlowInEasing))
-            currentAction()
+            perform()
             currentOpenChange(false)
             offset.snapTo(0f)
         }
@@ -115,15 +146,17 @@ fun RowSwipe(
 
     LaunchedEffect(armed) { if (armed) haptics.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate) }
     LaunchedEffect(isOpen) {
-        if (isOpen || dragging || offset.value <= 0f) return@LaunchedEffect
-        offset.animateTo(0f, settleSpring)
+        if (dragging || isOpen == (offset.value > 0f)) return@LaunchedEffect
+        offset.animateTo(if (isOpen) openWidth else 0f, settleSpring)
     }
 
     Box(
         modifier
             .clipToBounds()
             .onSizeChanged { width = it.width.toFloat() }
-            .semantics { customActions = listOf(CustomAccessibilityAction(label) { currentAction(); true }) }
+            .semantics {
+                customActions = currentActions.filter { it.perform != null }.map { action -> CustomAccessibilityAction(action.label) { commit(action); true } }
+            }
             .pointerInput(openWidth) {
                 val speedLimit = 300.dp.toPx()
                 awaitEachGesture {
@@ -160,12 +193,13 @@ fun RowSwipe(
                     dragging = false
                     val end = max(0f, atStart + travelled)
                     val speed = tracker.calculateVelocity().x
-                    if (end >= fullSwipe()) return@awaitEachGesture commit()
+                    val first = currentActions.firstOrNull()?.takeIf { it.perform != null }
+                    if (first != null && end >= fullSwipe()) return@awaitEachGesture commit(first)
                     settle(if (abs(speed) > speedLimit) speed > 0 else end > openWidth / 2)
                 }
             },
     ) {
-        if (offset.value > 0f) SwipeButton(symbol, label, tint, size, offset.value, openWidth, armed, Modifier.matchParentSize()) { commit() }
+        if (offset.value > 0f) SwipeButtons(actions, size, offset.value, openWidth, armed, Modifier.matchParentSize(), ::commit)
         Box(Modifier.offset { IntOffset(offset.value.roundToInt(), 0) }) {
             content()
             if (offset.value > 0f) {
@@ -175,44 +209,61 @@ fun RowSwipe(
     }
 }
 
-/** The button comes in as the row leaves, and past its place stretches after the row. */
+private val swipeGap = 10.dp
+
+/** The buttons come in as the row leaves, and past their place the first stretches after the row. */
 @Composable
-private fun SwipeButton(
-    symbol: Symbol,
-    label: String,
-    tint: Color,
+private fun SwipeButtons(
+    actions: List<SwipeAction>,
     size: Dp,
     offset: Float,
     openWidth: Float,
     armed: Boolean,
     modifier: Modifier,
-    onClick: () -> Unit,
+    commit: (SwipeAction) -> Unit,
 ) {
     val density = LocalDensity.current
-    val stretch = with(density) { max(0f, offset - openWidth).toDp() }
+    val stretches = actions.firstOrNull()?.perform != null
+    val stretch = if (stretches) with(density) { max(0f, offset - openWidth).toDp() } else 0.dp
     val entry = min(1f, max(0f, (offset - 8f) / (openWidth * 0.72f - 8f)))
     val shift by animateDpAsState(if (armed) stretch / 2 else 0.dp, tween(150), label = "shift")
     Box(modifier, contentAlignment = Alignment.CenterStart) {
-        Box(
+        Row(
             Modifier
                 .fillMaxHeight()
-                .width(sidebarEdge + size + stretch)
-                .clickable(interactionSource = null, indication = null, onClick = onClick)
-                .semantics { contentDescription = label }
+                .padding(start = sidebarEdge)
                 .graphicsLayer {
                     val scale = 0.78f + 0.22f * entry
                     scaleX = scale
                     scaleY = scale
                     alpha = entry
+                    transformOrigin = TransformOrigin(0f, 0.5f)
                 },
-            contentAlignment = Alignment.CenterStart,
+            horizontalArrangement = Arrangement.spacedBy(swipeGap),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box(
-                Modifier.padding(start = sidebarEdge).size(width = size + stretch, height = size).background(tint, CircleShape),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(symbol, size * 0.44f, Modifier.offset { IntOffset(shift.roundToPx(), 0) }, color = Theme.colors.background)
+            actions.forEachIndexed { index, action ->
+                val grown = if (index == 0) stretch else 0.dp
+                SwipeButton(action, size, grown, if (index == 0) shift else 0.dp) { commit(action) }
             }
         }
+    }
+}
+
+@Composable
+private fun SwipeButton(action: SwipeAction, size: Dp, stretch: Dp, shift: Dp, onClick: () -> Unit) {
+    val menu = rememberMenuState()
+    Box {
+        Box(
+            Modifier
+                .size(width = size + stretch, height = size)
+                .background(action.tint, CircleShape)
+                .clickable(interactionSource = null, indication = null) { if (action.menu != null) menu.open() else onClick() }
+                .semantics { contentDescription = action.label },
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(action.symbol, size * 0.44f, Modifier.offset { IntOffset(shift.roundToPx(), 0) }, color = Theme.colors.background)
+        }
+        action.menu?.let { MenuPopup(menu, it) }
     }
 }

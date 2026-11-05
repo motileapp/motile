@@ -7,7 +7,7 @@ import {
 import { useRef, useState, type ReactNode, type RefObject } from "react"
 import { Dotted } from "./composer"
 import { AgentIcon, ProjectIcon } from "./icons"
-import type { DoneThread, Thread } from "./threads"
+import type { ShelvedThread, Thread } from "./threads"
 import { cn } from "@/lib/utils"
 
 type CardThread = Pick<
@@ -39,7 +39,7 @@ export function useThreadPeek(demoWindow: RefObject<HTMLDivElement | null>) {
   const hiddenAt = useRef(0)
   const waiting = useRef<number | undefined>(undefined)
 
-  const point = (thread: CardThread | DoneThread | null, row?: HTMLElement) => {
+  const point = (thread: CardThread | ShelvedThread | null, row?: HTMLElement) => {
     clearTimeout(waiting.current)
     const frame = demoWindow.current
     if (!thread || !row || !frame) {

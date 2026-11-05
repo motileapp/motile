@@ -26,7 +26,7 @@ use std::path::PathBuf;
 use futures::StreamExt;
 use gpui_kit::prelude::*;
 use gpui_kit::*;
-use motile_core::api::{AccountView, Command, Config, Event};
+use motile_core::api::{AccountView, Command, Config, Event, Section};
 use motile_core::outbox::Outgoing;
 use motile_core::render::agents::AgentView;
 use motile_protocol::wire::{
@@ -41,6 +41,7 @@ pub use self::pull_requests::PullRequests;
 pub use self::settings::SettingsState;
 pub use self::shortcuts::Shortcuts;
 pub use self::sidebar::{SearchResult, SidebarState};
+pub use self::threads::snooze_presets;
 pub use crate::bridge::CoreError;
 use crate::bridge::{Bridge, Incoming, Read};
 use crate::models::*;
@@ -227,10 +228,24 @@ pub struct MediaStorage {
     pub limit: u64,
 }
 
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum UndoKind {
+    Archive,
+    Snooze,
+}
+
 #[derive(Clone, PartialEq, Debug)]
 pub struct UndoNotice {
+    pub kind: UndoKind,
     pub thread_ids: Vec<String>,
     pub text: String,
+}
+
+/// The threads the custom snooze modal is open for.
+#[derive(Clone, PartialEq, Debug)]
+pub struct CustomSnooze {
+    pub thread_ids: Vec<String>,
+    pub from_sidebar: bool,
 }
 
 pub type Reply = Result<Value, CoreError>;
@@ -315,9 +330,13 @@ pub struct Store {
     /// The project of each server that threads start in without one, in the servers' order.
     pub no_projects: Vec<Project>,
     pub threads: HashMap<String, ThreadInfo>,
-    /// The active threads and the done ones, each in the order the sidebar lists them.
+    /// The threads of each part of the sidebar, each in the order it lists them.
     active: Vec<ThreadInfo>,
-    done: Vec<ThreadInfo>,
+    working: Vec<ThreadInfo>,
+    snoozed: Vec<ThreadInfo>,
+    archived: Vec<ThreadInfo>,
+    /// The threads the custom snooze modal is open for.
+    pub custom_snooze: Option<CustomSnooze>,
 
     // The open thread
     /// Always a draft or a thread; `load_preferences` opens the first draft.
@@ -465,7 +484,10 @@ impl Store {
             no_projects: Vec::new(),
             threads: HashMap::new(),
             active: Vec::new(),
-            done: Vec::new(),
+            working: Vec::new(),
+            snoozed: Vec::new(),
+            archived: Vec::new(),
+            custom_snooze: None,
             selection: Selection::Draft(String::new()),
             activity: Activity::default(),
             transcript_is_empty: true,
@@ -848,20 +870,38 @@ impl Store {
         &self.active
     }
 
-    pub fn done_threads(&self) -> &[ThreadInfo] {
-        &self.done
+    pub fn working_threads(&self) -> &[ThreadInfo] {
+        &self.working
+    }
+
+    pub fn snoozed_threads(&self) -> &[ThreadInfo] {
+        &self.snoozed
+    }
+
+    pub fn archived_threads(&self) -> &[ThreadInfo] {
+        &self.archived
+    }
+
+    /// The threads the sidebar lists that are neither snoozed nor archived, in its order.
+    pub fn listed_threads(&self) -> impl Iterator<Item = &ThreadInfo> {
+        self.active.iter().chain(&self.working)
+    }
+
+    pub fn all_threads(&self) -> impl Iterator<Item = &ThreadInfo> {
+        self.listed_threads().chain(&self.snoozed).chain(&self.archived)
     }
 
     /// The lists leave out the threads agents started, which their parents show.
     fn set_threads(&mut self, threads: HashMap<String, ThreadInfo>) {
         self.threads = threads;
-        let listed = || self.threads.values().filter(|thread| thread.parent_id().is_none());
-        let mut active: Vec<ThreadInfo> = listed().filter(|thread| !thread.is_done()).cloned().collect();
-        let mut done: Vec<ThreadInfo> = listed().filter(|thread| thread.is_done()).cloned().collect();
-        active.sort_by(ThreadInfo::listed_order);
-        done.sort_by(ThreadInfo::listed_order);
-        self.active = active;
-        self.done = done;
+        let mut listed: Vec<ThreadInfo> =
+            self.threads.values().filter(|thread| thread.parent_id().is_none()).cloned().collect();
+        listed.sort_by(ThreadInfo::listed_order);
+        let of = |section: Section| listed.iter().filter(|thread| thread.section == section).cloned().collect();
+        self.active = of(Section::Active);
+        self.working = of(Section::Working);
+        self.snoozed = of(Section::Snoozed);
+        self.archived = of(Section::Archived);
     }
 
     /// Changes one thread, and moves it in its list only when its place there changed.
@@ -874,30 +914,35 @@ impl Store {
             return;
         }
         if let (Some(before), Some(thread)) = (&before, &thread)
-            && before.is_done() == thread.is_done()
+            && before.section == thread.section
             && before.listed_at() == thread.listed_at()
         {
-            let list = self.list_mut(thread.is_done());
+            let list = self.list_mut(thread.section);
             if let Some(index) = index_of(list, before) {
                 list[index] = thread.clone();
             }
             return;
         }
         if let Some(before) = before {
-            let list = self.list_mut(before.is_done());
+            let list = self.list_mut(before.section);
             if let Some(index) = index_of(list, &before) {
                 list.remove(index);
             }
         }
         if let Some(thread) = thread {
-            let list = self.list_mut(thread.is_done());
+            let list = self.list_mut(thread.section);
             let place = place_of(list, &thread);
             list.insert(place, thread);
         }
     }
 
-    fn list_mut(&mut self, done: bool) -> &mut Vec<ThreadInfo> {
-        if done { &mut self.done } else { &mut self.active }
+    fn list_mut(&mut self, section: Section) -> &mut Vec<ThreadInfo> {
+        match section {
+            Section::Active => &mut self.active,
+            Section::Working => &mut self.working,
+            Section::Snoozed => &mut self.snoozed,
+            Section::Archived => &mut self.archived,
+        }
     }
 
     pub fn selected_thread(&self) -> Option<&ThreadInfo> {

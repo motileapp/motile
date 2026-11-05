@@ -60,7 +60,7 @@ impl Sidebar {
                 (store.project(Some(&thread.project_id)).map(|project| project.seen(thread)), thread.title.clone())
             }
         };
-        let done = result.thread().is_some_and(|thread| thread.is_done());
+        let done = result.thread().is_some_and(|thread| thread.is_archived());
         let title_color = if highlighted {
             c.foreground
         } else if done {
@@ -88,7 +88,7 @@ impl Sidebar {
                     div()
                         .text_size(px(11.))
                         .text_color(c.muted_stronger_foreground)
-                        .child(ago(thread.done_at.unwrap_or(thread.updated_at)))
+                        .child(ago(thread.archived_at.unwrap_or(thread.updated_at)))
                         .into_any_element()
                 } else {
                     thread_status(thread, false, cx)

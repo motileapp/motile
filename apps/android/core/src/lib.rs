@@ -129,6 +129,21 @@ pub extern "system" fn Java_app_motile_core_Native_uiPage<'caller>(
     .resolve::<ThrowRuntimeExAndDefault>()
 }
 
+/// The times a snooze menu offers, or when a snooze the user wrote ends (`snooze::snooze_json`),
+/// JSON in and out. Synchronous, on any thread.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_app_motile_core_Native_snooze<'caller>(
+    mut env: EnvUnowned<'caller>,
+    _class: JClass<'caller>,
+    input: JString<'caller>,
+) -> JString<'caller> {
+    env.with_env(|env| -> Result<JString<'caller>, jni::errors::Error> {
+        let answer = motile_core::snooze::snooze_json(&input.to_string());
+        JString::from_str(env, answer)
+    })
+    .resolve::<ThrowRuntimeExAndDefault>()
+}
+
 /// Gives the JVM and the application to the crates that ask Android itself through `ndk_context`,
 /// like iroh's DNS resolver, which reads the system's nameservers. The reference is kept for good.
 #[cfg(target_os = "android")]

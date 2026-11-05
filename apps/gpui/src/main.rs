@@ -26,6 +26,7 @@ mod root;
 mod settings;
 mod sidebar;
 mod sign_in;
+mod snooze;
 mod store;
 mod theme;
 mod thread;

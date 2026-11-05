@@ -213,7 +213,9 @@ object DemoDriver {
                 val approval = store.activity.approvals.firstOrNull() ?: return
                 store.answer(approval, allow = rest == "allow")
             }
-            "done" -> store.toggleDone()
+            "done" -> store.toggleArchived()
+            "swipe" -> store.swipeStep = store.allThreads.firstOrNull { it.title == rest }?.id
+            "expand" -> store.expandStep = rest
             "mcp" -> store.mcpStep = rest
             "gateway" -> {
                 val argument = rest.substringAfter(' ', "")

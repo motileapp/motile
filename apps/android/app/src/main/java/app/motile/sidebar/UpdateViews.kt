@@ -1,5 +1,6 @@
 package app.motile.sidebar
 
+import app.motile.theme.IconSize
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -152,8 +153,8 @@ private fun UpdateLine(
 /** What an update is at, after its symbol. */
 @Composable
 fun UpdateLabel(text: String, symbol: Symbol, tint: Color = Theme.colors.mutedForeground, turning: Boolean = false, modifier: Modifier = Modifier) {
-    Row(modifier, horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) {
-        TurningSymbol(symbol, turning, iconSize(text = 12f), color = tint)
+    Row(modifier, horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically) {
+        ShelfLineMark { TurningSymbol(symbol, turning, IconSize.Sm, color = tint) }
         Text(text, size = 12f, weight = FontWeight.Medium, maxLines = 1)
     }
 }

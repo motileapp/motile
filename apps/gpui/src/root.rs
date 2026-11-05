@@ -19,6 +19,7 @@ pub struct Root {
     viewer: Option<Entity<crate::media::viewer::MediaViewer>>,
     panel: Option<Entity<crate::command_panel::CommandPanel>>,
     settings: Option<Entity<crate::settings::SettingsRoute>>,
+    custom_snooze: Option<Entity<crate::snooze::CustomSnoozeSheet>>,
     appearance: Appearance,
     /// The window is visible: the core has said what it remembers, or something went wrong.
     revealed: bool,
@@ -60,6 +61,7 @@ impl Root {
             viewer: None,
             panel: None,
             settings: None,
+            custom_snooze: None,
             appearance: Appearance::System,
             revealed: false,
             moving: Default::default(),
@@ -123,6 +125,16 @@ impl Root {
         } else if !wants_settings {
             self.settings = None;
         }
+        let snooze = self.store.read(cx).custom_snooze.clone();
+        match snooze {
+            Some(snooze) if self.custom_snooze.is_none() => {
+                let store = self.store.clone();
+                self.custom_snooze =
+                    Some(cx.new(|cx| crate::snooze::CustomSnoozeSheet::new(store, snooze, window, cx)));
+            }
+            Some(_) => {}
+            None => self.custom_snooze = None,
+        }
         let wants_viewer = self.store.read(cx).viewing.is_some();
         crate::ui::popover_shown("viewer", wants_viewer, cx);
         if wants_viewer && self.viewer.is_none() {
@@ -169,6 +181,7 @@ impl Render for Root {
         let ui_confirm = crate::ui::modal::presented("ui-confirm", ui_confirm, window, cx);
         let adding_server = self.connect.clone().filter(|_| !first_server);
         let adding_server = crate::ui::modal::presented("add-server", adding_server, window, cx);
+        let custom_snooze = crate::ui::modal::presented("custom-snooze", self.custom_snooze.clone(), window, cx);
         // One scrim for every page of the command panel, which fades as it opens and closes.
         let panel_scrim = crate::ui::motion::eased_on(
             "command-panel-scrim",
@@ -225,6 +238,22 @@ impl Render for Root {
                     })
                     .width(620.)
                     .leaving(leaving),
+                )
+            })
+            .when_some(custom_snooze, |root, (sheet, leaving)| {
+                let (store, submit) = (self.store.clone(), sheet.downgrade());
+                root.child(
+                    modal("custom-snooze", sheet, move |_, cx| {
+                        store.update(cx, |store, cx| {
+                            store.custom_snooze = None;
+                            cx.notify();
+                        })
+                    })
+                    .width(400.)
+                    .leaving(leaving)
+                    .on_return(move |_, cx| {
+                        let _ = submit.update(cx, |sheet, cx| sheet.submit(cx));
+                    }),
                 )
             })
             .when(panel_scrim > 0., |root| {

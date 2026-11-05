@@ -65,6 +65,8 @@ pub const PULL_REQUEST_FRESH: Duration = Duration::from_secs(60);
 pub const PULL_REQUEST_WATCH: Duration = Duration::from_secs(30);
 /// How often the threads that wait for their usage limit are looked at.
 pub const LIMITS_CHECK: Duration = Duration::from_secs(30);
+/// How often the snoozed threads are looked at, for the ones whose time has come.
+pub const SNOOZE_CHECK: Duration = Duration::from_secs(5);
 /// How long what the agents last said of their models is taken as current when a client asks.
 const MODELS_FRESH: Duration = Duration::from_secs(60);
 /// How long the skills a project's agents listed are offered before they are asked again.
@@ -1062,9 +1064,42 @@ impl Hub {
             Some(Interruption::Limit { resets_at: Some(at), continues: true }) => at <= now(),
             _ => false,
         };
-        let open = |live: &Live| live.stored.thread.done_at.is_none();
+        let open = |live: &Live| live.stored.thread.archived_at.is_none();
         self.each_thread(|live| (!live.busy() && reset(live) && open(live)).then(|| live.stored.thread.id.clone()))
             .await
+    }
+
+    /// Wakes the snoozed threads whose time has come, looking every `every`.
+    pub fn keep_snoozes_woken(self: &Arc<Self>, every: Duration) {
+        let hub = self.clone();
+        tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(every).await;
+                hub.each_thread(|live| {
+                    let due = live.stored.thread.snoozed_until.is_some_and(|until| until <= now());
+                    if due && wake(&mut live.stored.thread, true) {
+                        hub.save_and_announce(live);
+                    }
+                    None::<()>
+                })
+                .await;
+            }
+        });
+    }
+
+    /// Brings a snoozed thread back when the user writes to it.
+    pub async fn wake(&self, thread_id: &str) {
+        let Some(mut live) = self.live(thread_id).await else { return };
+        if wake(&mut live.stored.thread, false) {
+            self.save_and_announce(&live);
+        }
+    }
+
+    fn save_and_announce(&self, live: &Live) {
+        if let Err(error) = self.store.save_thread(&live.stored) {
+            tracing::error!("couldn't save a thread: {error:#}");
+        }
+        self.announce(&live.stored.thread);
     }
 
     /// Lets the agents go before the server stops: nothing new starts, and what runs is stopped
@@ -1403,7 +1438,9 @@ impl Hub {
             access: new_thread.access,
             created_at,
             updated_at: created_at,
-            done_at: None,
+            archived_at: None,
+            snoozed_until: None,
+            woke_at: None,
             position: created_at,
             running: false,
             monitoring: false,
@@ -1632,7 +1669,11 @@ impl Hub {
     fn announce_approvals(&self, live: &mut Live) -> anyhow::Result<()> {
         let Live { server_asks, activity, .. } = live;
         server_asks.retain(|id, _| activity.approvals.iter().any(|approval| approval.id == *id));
-        live.stored.thread.needs_approval = !live.activity.approvals.is_empty();
+        let asks = !live.activity.approvals.is_empty();
+        if asks && !live.stored.thread.needs_approval {
+            wake(&mut live.stored.thread, true);
+        }
+        live.stored.thread.needs_approval = asks;
         live.stored.thread.asking = live.activity.approvals.first().map(Approval::ask);
         self.store.save_thread(&live.stored)?;
         live.send_activity();
@@ -1747,19 +1788,33 @@ impl Hub {
             };
             *continues = on && resets_at.is_some_and(|at| at > now());
         }
-        match change.done {
+        match change.archived {
             Some(true) if thread.running => {
-                bail!("The agent is still working. Mark the thread done when it has finished.")
+                bail!("The agent is still working. Archive the thread when it has finished.")
             }
             Some(true) if thread.monitoring => {
-                bail!("The agent is still monitoring. Mark the thread done when it has stopped.")
+                bail!("The agent is still monitoring. Archive the thread when it has stopped.")
             }
-            Some(true) => thread.done_at = thread.done_at.or_else(|| Some(now())),
-            Some(false) if thread.done_at.is_some() => {
-                thread.done_at = None;
+            Some(true) => {
+                thread.archived_at = thread.archived_at.or_else(|| Some(now()));
+                thread.snoozed_until = None;
+            }
+            Some(false) if thread.archived_at.is_some() => {
+                thread.archived_at = None;
                 thread.position = now();
             }
             _ => {}
+        }
+        match change.snoozed_until {
+            Some(until) if !until.is_finite() => bail!("A snooze needs a time to wake at."),
+            Some(until) if until > now() => {
+                thread.snoozed_until = Some(until);
+                thread.archived_at = None;
+            }
+            Some(_) => {
+                wake(thread, false);
+            }
+            None => {}
         }
         if let Some(position) = change.position {
             if !position.is_finite() {
@@ -1773,7 +1828,7 @@ impl Hub {
                 live.write(line);
             }
         }
-        if live.stored.thread.done_at.is_some() {
+        if live.stored.thread.archived_at.is_some() {
             live.let_go();
         }
         self.store.save_thread(&live.stored)?;
@@ -2632,8 +2687,9 @@ impl Hub {
         let thread = &mut live.stored.thread;
         if ended {
             thread.watching = false;
-            if settings.done_on_merge && thread.done_at.is_none() && !thread.running && !thread.monitoring {
-                thread.done_at = Some(now());
+            if settings.done_on_merge && thread.archived_at.is_none() && !thread.running && !thread.monitoring {
+                thread.archived_at = Some(now());
+                thread.snoozed_until = None;
             }
         }
         if let Err(error) = self.store.save_thread(&live.stored) {
@@ -2722,7 +2778,7 @@ impl Hub {
     /// those still at work whose own is merged or closed, which went on in the branch.
     async fn follow_pull_request_of(&self, folder: &str, found: &PullRequest) {
         let follows = |own: &PullRequest, thread: &Thread| {
-            own.number == found.number || (!own.is_open() && thread.done_at.is_none())
+            own.number == found.number || (!own.is_open() && thread.archived_at.is_none())
         };
         self.set_pull_request_where(folder, found, follows).await;
     }
@@ -2761,7 +2817,7 @@ impl Hub {
         let followed: Vec<(String, String, u64)> = self
             .each_thread(|live| {
                 let thread = &live.stored.thread;
-                let pull_request = thread.pull_request.as_ref().filter(|found| match thread.done_at {
+                let pull_request = thread.pull_request.as_ref().filter(|found| match thread.archived_at {
                     Some(_) => found.is_open(),
                     None => !found.merged,
                 })?;
@@ -3386,8 +3442,8 @@ impl Hub {
         thread.asking = None;
         thread.interruption = None;
         thread.updated_at = now();
-        // New activity brings a done thread back, to the top of the list.
-        if thread.done_at.take().is_some() {
+        // New activity brings an archived thread back, to the top of the list.
+        if thread.archived_at.take().is_some() {
             thread.position = now();
         }
         let agents = live.stored.thread.agents;
@@ -3695,6 +3751,7 @@ impl Hub {
                     }
                 }
                 if summary.is_error {
+                    wake(&mut live.stored.thread, true);
                     let message = result_text.filter(|text| !text.is_empty());
                     let message = message.unwrap_or_else(|| "The agent reported an error.".to_string());
                     live.append(store, ItemKind::Error { message })?;
@@ -3739,6 +3796,7 @@ impl Hub {
             AgentEvent::Limited { resets_at } => {
                 let continues = self.continue_settings().after_limits && resets_at.is_some_and(|at| at > now());
                 live.stored.thread.interruption = Some(Interruption::Limit { resets_at, continues });
+                wake(&mut live.stored.thread, true);
                 store.save_thread(&live.stored)?;
                 self.announce(&live.stored.thread);
             }
@@ -4746,6 +4804,19 @@ impl NewMessage {
     pub fn text(text: impl Into<String>) -> Self {
         Self { text: text.into(), ..Self::default() }
     }
+}
+
+/// Brings a snoozed thread back to the top of the active ones, marked as woken when it woke by
+/// itself: its time came, or it needs the user.
+fn wake(thread: &mut Thread, by_itself: bool) -> bool {
+    if thread.snoozed_until.take().is_none() {
+        return false;
+    }
+    thread.position = now();
+    if by_itself {
+        thread.woke_at = Some(now());
+    }
+    true
 }
 
 fn new_id() -> String {

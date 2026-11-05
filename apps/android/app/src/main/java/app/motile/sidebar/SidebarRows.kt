@@ -1,5 +1,10 @@
 package app.motile.sidebar
 
+import androidx.compose.foundation.border
+import app.motile.theme.Opacity
+import app.motile.theme.symbolSide
+import app.motile.core.ThreadSection
+import app.motile.theme.at
 import android.os.Handler
 import android.os.Looper
 import androidx.compose.animation.core.animateFloatAsState
@@ -158,7 +163,7 @@ val Project.checkoutSymbol: Symbol
 fun ThreadInfo.attentionColor(palette: Palette): Color? = when {
     waitsFor != null -> palette.warning
     working || gitStage != null || monitoring -> null
-    interruption != null -> palette.warning
+    interruption != null || woke -> palette.warning
     unread -> palette.success
     else -> null
 }
@@ -175,10 +180,14 @@ fun AppStore.offersNewThread(drafts: List<ListedDraft>, active: List<ThreadInfo>
 /** What a thread's menu offers, in groups a line divides. */
 fun MenuBuilder.threadMenu(store: AppStore, thread: ThreadInfo, rename: (ThreadInfo) -> Unit, delete: (ThreadInfo) -> Unit) {
     if (store.onRemovedServer(thread)) return
-    if (thread.isDone) {
-        item("Mark Undone") { store.setDone(listOf(thread.id), done = false) }
+    if (thread.isArchived) {
+        item("Unarchive") { store.setArchived(listOf(thread.id), false) }
     } else {
-        item("Mark Done", disabled = thread.unfinished) { store.setDone(listOf(thread.id), done = true, fromSidebar = true) }
+        item("Archive", disabled = thread.unfinished) { store.setArchived(listOf(thread.id), true, fromSidebar = true) }
+    }
+    when {
+        thread.section == ThreadSection.Snoozed -> item("Wake") { store.wake(listOf(thread.id)) }
+        store.snoozes(thread) -> submenu("Snooze") { snoozeItems(store, listOf(thread.id), fromSidebar = true) }
     }
     item("Rename") { rename(thread) }
     divider()
@@ -413,9 +422,9 @@ private fun DraftRow(listed: ListedDraft, modifier: Modifier = Modifier, onLongC
     }
 }
 
-/** A thread that is done: one quiet line, with its pull request. */
+/** A thread that is working, snoozed or archived: one quiet line, with its pull request and its live status, how soon it wakes or when it was archived. */
 @Composable
-fun DoneRow(
+fun SlimThreadRow(
     thread: ThreadInfo,
     project: Project?,
     selected: Boolean,
@@ -447,15 +456,26 @@ fun DoneRow(
             Text(thread.title, Modifier.weight(1f).padding(start = 7.dp, end = 6.dp), size = 13f, maxLines = 1, color = palette.mutedForeground)
             Row(horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically) {
                 project?.pullRequest(thread)?.let { ThreadPullRequestLabel(thread, it, colored = false, open = open) }
-                Box(contentAlignment = Alignment.CenterEnd) {
-                    val ago = Time.ago(thread.doneAt ?: thread.updatedAt, AgoClock.now)
-                    Text(ago, Modifier.alpha(if (hovering) 0f else 1f), size = 11f, color = palette.mutedStrongerForeground)
+                val until = thread.snoozedUntil
+                when {
+                    thread.section == ThreadSection.Working -> ThreadStatus(thread, store.onRemovedServer(thread))
+                    thread.section == ThreadSection.Snoozed && until != null -> StatusLabel(
+                        Time.left(until, AgoClock.now), palette.mutedStrongerForeground, Modifier.alpha(if (hovering) 0f else 1f),
+                    ) { Icon(Symbol.AlarmClock, statusSymbol) }
+                    else -> {
+                        val ago = Time.ago(thread.archivedAt ?: thread.updatedAt, AgoClock.now)
+                        Text(ago, Modifier.alpha(if (hovering) 0f else 1f), size = 11f, color = palette.mutedStrongerForeground)
+                    }
                 }
             }
         }
-        if (hovering && !store.onRemovedServer(thread)) {
+        if (hovering && !store.onRemovedServer(thread) && thread.section != ThreadSection.Working) {
             OnRowSurface(Modifier.align(Alignment.CenterEnd).padding(end = sidebarRowInset + buttonInset)) {
-                ActionButton(icon = Symbol.Undo2, help = "Mark undone", size = ControlSize.Small) { store.setDone(listOf(thread.id), done = false) }
+                if (thread.section == ThreadSection.Snoozed) {
+                    ActionButton(icon = Symbol.AlarmClockOff, help = "Wake", size = ControlSize.Small) { store.wake(listOf(thread.id)) }
+                } else {
+                    ActionButton(icon = Symbol.Undo2, help = "Unarchive", size = ControlSize.Small) { store.setArchived(listOf(thread.id), false) }
+                }
             }
         }
     }
@@ -469,7 +489,7 @@ private fun OnRowSurface(modifier: Modifier = Modifier, content: @Composable () 
     Box(modifier.background(surface.color(row)).padding(start = 6.dp)) { content() }
 }
 
-/** Starts a thread, where the sidebar has no draft and no active thread. Laid out like a done row. */
+/** Starts a thread, where the sidebar has no draft and no active thread. Laid out like a slim row. */
 @Composable
 fun NewThreadRow(modifier: Modifier = Modifier) {
     val store = LocalStore.current
@@ -516,6 +536,7 @@ fun ThreadStatus(thread: ThreadInfo, readOnly: Boolean = false) {
         interruption != null -> StatusLabel(capitalized(interruption.word), palette.warning, Modifier.semantics { contentDescription = interruption.detail() }) {
             Icon(interruption.symbol, statusSymbol)
         }
+        thread.woke -> StatusLabel("Woke", palette.warning) { Icon(Symbol.AlarmClock, statusSymbol) }
         thread.unread -> StatusLabel("Finished", palette.success) { Icon(Symbol.Flag, statusSymbol) }
         else -> Text(Time.ago(thread.updatedAt, AgoClock.now), size = 11f, color = palette.mutedStrongerForeground)
     }
@@ -535,6 +556,37 @@ private fun StatusLabel(text: String, color: Color, modifier: Modifier = Modifie
             icon()
             Text(text, style = Theme.uiDigits(11f, FontWeight.Medium), color = color, maxLines = 1)
         }
+    }
+}
+
+/**
+ * What a line of the sidebar's lower part starts with: a symbol, or a server's state, in a column as
+ * wide as a slim row's project icon, so that every line's words start where its title does.
+ */
+@Composable
+fun ShelfLineMark(content: @Composable () -> Unit) {
+    Box(Modifier.width(symbolSide(IconSize.Md)), contentAlignment = Alignment.Center) { content() }
+}
+
+/** A state as a dot in a ring of its colour's tint, the size of a symbol. Both are even, so that the dot sits in the ring's middle. */
+@Composable
+fun StateRing(tint: Color) {
+    Box(Modifier.size(12.dp).border(1.dp, tint.at(Opacity.ColorTintChartStronger), CircleShape), contentAlignment = Alignment.Center) {
+        Box(Modifier.size(6.dp).background(tint, CircleShape))
+    }
+}
+
+/** The line of a part of the sidebar: its symbol and its name in one colour, how many threads it holds, and the chevron that opens and closes it. Its name lines up with the slim rows' titles. */
+@Composable
+fun SectionLine(section: ThreadSection, count: Int, expanded: Boolean, modifier: Modifier = Modifier) {
+    val palette = Theme.colors
+    val color = if (expanded || LocalRow.current != null) palette.foreground else palette.mutedForeground
+    Row(modifier, horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically) {
+        section.symbol?.let { ShelfLineMark { Icon(it, IconSize.Sm, color = color) } }
+        ShelfTitle(section.title, expanded)
+        Text("$count", style = Theme.uiDigits(11f), color = palette.mutedStrongerForeground)
+        Spacer(Modifier.weight(1f))
+        SidebarChevron(expanded)
     }
 }
 
@@ -567,7 +619,7 @@ fun ShelfTitle(title: String, expanded: Boolean) {
     Text(title, size = 12f, weight = FontWeight.Medium, color = color, maxLines = 1)
 }
 
-/** The offer to undo marking threads done, held while a finger or the pointer is on it. */
+/** The offer to undo archiving or snoozing threads, held while a finger or the pointer is on it. */
 @Composable
 fun UndoRow(notice: UndoNotice, modifier: Modifier = Modifier) {
     val store = LocalStore.current
@@ -581,12 +633,12 @@ fun UndoRow(notice: UndoNotice, modifier: Modifier = Modifier) {
                 horizontalArrangement = Arrangement.spacedBy(7.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                ShelfMark(lit = false) { Icon(Symbol.Undo2, IconSize.Xs, Modifier.offset(x = (-2).dp), trimmed = true) }
+                ShelfLineMark { Icon(Symbol.Undo2, IconSize.Sm, color = palette.mutedStrongerForeground) }
                 ShelfTitle("Undo", expanded = false)
                 Spacer(Modifier.weight(1f))
                 CompositionLocalProvider(LocalForeground provides palette.mutedStrongerForeground) {
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Symbol.Check, iconSize(text = 11f))
+                        Icon(if (notice.kind == UndoNotice.Kind.Snooze) Symbol.AlarmClock else Symbol.Archive, iconSize(text = 11f))
                         Text(notice.text, size = 11f, maxLines = 1)
                     }
                 }
@@ -599,16 +651,11 @@ fun UndoRow(notice: UndoNotice, modifier: Modifier = Modifier) {
 @Composable
 fun AllServersLine(servers: List<Server>, expanded: Boolean, modifier: Modifier = Modifier) {
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically) {
-        StateDot(servers.worstTint(Theme.colors))
+        ShelfLineMark { StateRing(servers.worstTint(Theme.colors)) }
         ShelfTitle("Servers", expanded)
         Spacer(Modifier.weight(1f))
         Text(servers.reach, style = Theme.uiDigits(11f), color = Theme.colors.mutedStrongerForeground, maxLines = 1)
     }
-}
-
-@Composable
-fun StateDot(tint: Color) {
-    Box(Modifier.size(7.dp).background(tint, CircleShape))
 }
 
 /** The worst state among the servers: one out of reach, then one connecting. */
@@ -645,7 +692,7 @@ fun ServerLine(server: Server, modifier: Modifier = Modifier) {
         modifier.semantics(mergeDescendants = true) { contentDescription = "${server.name}, ${server.error ?: detail}" },
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        SidebarMark { StateDot(server.stateTint ?: palette.success) }
+        ShelfLineMark { StateRing(server.stateTint ?: palette.success) }
         Text(server.name, Modifier.weight(1f).padding(start = 7.dp, end = 4.dp), size = 12f, weight = FontWeight.Medium, maxLines = 1)
         ServerUpdateStatus(server) {
             Text(detail, style = Theme.uiDigits(11f), color = palette.mutedStrongerForeground, maxLines = 1)

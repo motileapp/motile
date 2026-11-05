@@ -88,8 +88,8 @@ struct UpdateLabel: View {
     static var upToDate: UpdateLabel { UpdateLabel(text: "Up to date", symbol: .circleCheck, tint: .themeSuccess) }
 
     var body: some View {
-        HStack(spacing: 5) {
-            TurningSymbol(symbol: symbol, size: .sm, turning: turning)
+        HStack(spacing: 7) {
+            ShelfLineMark { TurningSymbol(symbol: symbol, size: .sm, turning: turning) }
                 .foregroundStyle(tint)
             Text(text)
                 .font(.ui(size: 12, weight: .medium))

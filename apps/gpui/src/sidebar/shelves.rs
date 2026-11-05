@@ -1,19 +1,21 @@
 //! The shelves at the bottom of the sidebar: a line that opens into a list, which the line above
-//! it makes taller or shorter. The threads marked done are on one and the servers on another, and
-//! the offer to undo marking threads done stands above them.
+//! it makes taller or shorter. The working, the snoozed and the archived threads are on one each
+//! and the servers on another, and the offer to undo archiving or snoozing stands above them.
 
 use std::time::Duration;
 
 use gpui_kit::prelude::*;
 use gpui_kit::*;
+use motile_core::api::Section;
 use motile_core::link::State;
 
 use super::list::{Layout, place};
 use super::updates::ServerUpdateStatus;
 use super::{DONE_ROW_HEIGHT, ROW_GAP, SIDEBAR_EDGE, Shelf, Sidebar, row_margin};
-use crate::models::Server;
-use crate::store::UndoNotice;
-use crate::theme::{self, IconSize, colors};
+use crate::models::{Server, ThreadInfo, section_label};
+use crate::prefs::Prefs;
+use crate::store::{Store, UndoKind, UndoNotice};
+use crate::theme::{self, IconSize, Opacity, colors};
 use crate::ui::{Highlight, divider, ease_out, icons, tabular_numbers, tooltip};
 
 /// How tall a shelf's list can get at least, when there is room, and before it is resized.
@@ -24,17 +26,87 @@ pub const UNDO_FADE: Duration = Duration::from_millis(150);
 const UNDO_HEIGHT: f32 = 1. + DONE_ROW_HEIGHT + 8.;
 
 impl Shelf {
+    /// The shelves of threads, in the order they stand, the highest first.
+    pub const THREADS: [Shelf; 3] = [Shelf::Working, Shelf::Snoozed, Shelf::Archived];
+
     fn height_key(self) -> &'static str {
         match self {
-            Shelf::Done => "sidebar.doneHeight",
+            Shelf::Working => "sidebar.workingHeight",
+            Shelf::Snoozed => "sidebar.snoozedHeight",
+            Shelf::Archived => "sidebar.doneHeight",
             Shelf::Servers => "sidebar.serversHeight",
         }
     }
 
-    pub fn expanded_key(self) -> &'static str {
+    fn expanded_key(self) -> &'static str {
         match self {
-            Shelf::Done => "sidebar.doneExpanded",
+            Shelf::Working => "sidebar.workingExpanded",
+            Shelf::Snoozed => "sidebar.snoozedExpanded",
+            Shelf::Archived => "sidebar.doneExpanded",
             Shelf::Servers => "sidebar.serversExpanded",
+        }
+    }
+
+    /// Whether the shelf is open. The working threads are, until the user closes them.
+    pub fn expanded(self, prefs: &Prefs) -> bool {
+        prefs.get(self.expanded_key()).unwrap_or(self == Shelf::Working)
+    }
+
+    pub fn open(self, prefs: &mut Prefs, open: bool) {
+        prefs.set(self.expanded_key(), open);
+    }
+
+    /// The shelf the threads of a part of the sidebar are on.
+    pub fn of(section: Section) -> Option<Shelf> {
+        match section {
+            Section::Working => Some(Shelf::Working),
+            Section::Snoozed => Some(Shelf::Snoozed),
+            Section::Archived => Some(Shelf::Archived),
+            Section::Active => None,
+        }
+    }
+
+    fn section(self) -> Section {
+        match self {
+            Shelf::Working => Section::Working,
+            Shelf::Snoozed => Section::Snoozed,
+            Shelf::Archived | Shelf::Servers => Section::Archived,
+        }
+    }
+
+    pub fn threads(self, store: &Store) -> &[ThreadInfo] {
+        match self {
+            Shelf::Working => store.working_threads(),
+            Shelf::Snoozed => store.snoozed_threads(),
+            Shelf::Archived => store.archived_threads(),
+            Shelf::Servers => &[],
+        }
+    }
+
+    fn group(self) -> &'static str {
+        match self {
+            Shelf::Working => "working-shelf",
+            Shelf::Snoozed => "snoozed-shelf",
+            Shelf::Archived => "archived-shelf",
+            Shelf::Servers => "servers-shelf",
+        }
+    }
+
+    fn resize_id(self) -> &'static str {
+        match self {
+            Shelf::Working => "working-resize",
+            Shelf::Snoozed => "snoozed-resize",
+            Shelf::Archived => "archived-resize",
+            Shelf::Servers => "servers-resize",
+        }
+    }
+
+    fn list_id(self) -> &'static str {
+        match self {
+            Shelf::Working => "working-list",
+            Shelf::Snoozed => "snoozed-list",
+            Shelf::Archived => "archived-list",
+            Shelf::Servers => "servers-list",
         }
     }
 }
@@ -46,12 +118,63 @@ fn heights(count: usize, max: f32) -> (f32, f32) {
     (SHELF_MIN_HEIGHT.min(tallest), tallest)
 }
 
-/// What a sidebar line starts with, against its edge, in a column that lines up the words after
-/// it, a step quieter than its title: muted while it is open or lit.
-fn shelf_mark(lit: bool, mark: impl Fn(Hsla) -> AnyElement, cx: &App) -> Div {
+/// The chevron that opens and closes a shelf, at the end of its line, a step quieter than its
+/// title: muted while it is open or lit.
+fn shelf_chevron(expanded: bool, lit: bool, cx: &App) -> Div {
     let c = colors(cx);
-    let color = if lit { c.muted_foreground } else { c.muted_stronger_foreground };
-    div().w(px(9.)).flex_shrink_0().flex().items_center().text_color(color).child(mark(color))
+    let color = if expanded || lit { c.muted_foreground } else { c.muted_stronger_foreground };
+    div()
+        .w(px(9.))
+        .flex_shrink_0()
+        .flex()
+        .items_center()
+        .child(icons::trimmed("chevron-right", IconSize::Xs).text_color(color).rotate(if expanded { 90. } else { 0. }))
+}
+
+/// What a line at the bottom of the sidebar starts with: a symbol, or a server's state, in a
+/// column as wide as a slim row's project icon, so that every line's words start where its title does.
+pub fn line_mark(mark: impl IntoElement) -> Div {
+    div().w(px(IconSize::Md.side())).flex_shrink_0().flex().justify_center().items_center().child(mark)
+}
+
+/// A state as a dot in a ring of its colour's tint, the size of a symbol. Both are even, so that
+/// the dot sits in the ring's middle on whole points.
+pub fn state_ring(tint: Hsla, cx: &App) -> Div {
+    let ring = colors(cx).at(tint, Opacity::ColorTintChartStronger);
+    div()
+        .size(px(12.))
+        .flex_shrink_0()
+        .flex()
+        .items_center()
+        .justify_center()
+        .rounded_full()
+        .border_1()
+        .border_color(ring)
+        .child(div().size(px(6.)).rounded_full().bg(tint))
+}
+
+/// The line of a shelf of threads: its symbol and its name in one colour, and how many threads
+/// it holds. Its name lines up with the slim rows' titles.
+fn section_line(section: Section, count: usize, lit: bool, cx: &App) -> Div {
+    let c = colors(cx);
+    let (title, symbol) = section_label(section);
+    let color = if lit { c.foreground } else { c.muted_foreground };
+    div()
+        .flex_1()
+        .min_w_0()
+        .flex()
+        .items_center()
+        .gap(px(7.))
+        .children(symbol.map(|symbol| line_mark(icons::symbol(symbol, IconSize::Sm).text_color(color))))
+        .child(shelf_title(title, lit, cx))
+        .child(
+            div()
+                .text_size(px(11.))
+                .text_color(c.muted_stronger_foreground)
+                .font_features(tabular_numbers())
+                .child(count.to_string()),
+        )
+        .child(div().flex_1().min_w(px(4.)))
 }
 
 /// The name of a sidebar line: muted while it is closed and not lit.
@@ -70,10 +193,6 @@ fn shelf_title(title: &'static str, lit: bool, cx: &App) -> Div {
 const ERROR_SIZE: f32 = 11.;
 const ERROR_LINE_HEIGHT: f32 = 15.;
 const ERROR_LINES: usize = 3;
-
-fn state_dot(tint: Hsla) -> Div {
-    div().size(px(7.)).flex_shrink_0().rounded_full().bg(tint)
-}
 
 /// How the client reaches a server, or why it doesn't.
 fn server_detail(server: &Server) -> String {
@@ -141,8 +260,8 @@ fn worst_tint(servers: &[Server], cx: &App) -> Hsla {
 }
 
 impl Sidebar {
-    /// The offer to undo marking threads done: a line above the done threads, which stays while
-    /// the pointer is on it. It comes and goes as one piece.
+    /// The offer to undo archiving or snoozing threads: a line above the shelves, which stays
+    /// while the pointer is on it. It comes and goes as one piece.
     pub(super) fn undo_row(
         &self,
         notice: &UndoNotice,
@@ -180,15 +299,8 @@ impl Sidebar {
                             .flex()
                             .items_center()
                             .gap(px(7.))
-                            .child(shelf_mark(
-                                lit,
-                                |color| {
-                                    div()
-                                        .ml(px(-2.))
-                                        .child(icons::trimmed("undo-2", IconSize::Xs).text_color(color))
-                                        .into_any_element()
-                                },
-                                cx,
+                            .child(line_mark(
+                                icons::symbol("undo-2", IconSize::Sm).text_color(c.muted_stronger_foreground),
                             ))
                             .child(shelf_title("Undo", lit, cx))
                             .child(div().flex_1())
@@ -199,7 +311,13 @@ impl Sidebar {
                                     .items_center()
                                     .gap(px(4.))
                                     .text_color(c.muted_stronger_foreground)
-                                    .child(icons::symbol("check", IconSize::Sm))
+                                    .child(icons::symbol(
+                                        match notice.kind {
+                                            UndoKind::Archive => "archive",
+                                            UndoKind::Snooze => "alarm-clock",
+                                        },
+                                        IconSize::Sm,
+                                    ))
                                     .child(div().min_w_0().text_size(px(11.)).truncate().child(notice.text.clone())),
                             ),
                     )
@@ -221,7 +339,7 @@ impl Sidebar {
         .into_any_element()
     }
 
-    /// A shelf's line, which opens and closes its list.
+    /// A shelf's line, which opens and closes its list, with the chevron at its end.
     fn shelf_header(
         &self,
         shelf: Shelf,
@@ -229,10 +347,7 @@ impl Sidebar {
         header: impl IntoElement,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let group = match shelf {
-            Shelf::Done => "done-shelf",
-            Shelf::Servers => "servers-shelf",
-        };
+        let group = shelf.group();
         let store = self.store.clone();
         let lit = self.hovering(group);
         div()
@@ -253,22 +368,13 @@ impl Sidebar {
                     .flex()
                     .items_center()
                     .gap(px(7.))
-                    .child(shelf_mark(
-                        expanded || lit,
-                        |color| {
-                            icons::trimmed("chevron-right", IconSize::Xs)
-                                .text_color(color)
-                                .rotate(if expanded { 90. } else { 0. })
-                                .into_any_element()
-                        },
-                        cx,
-                    ))
-                    .child(header),
+                    .child(header)
+                    .child(shelf_chevron(expanded, lit, cx)),
             )
             .on_click(move |_, _, cx| {
                 store.update(cx, |store, cx| {
-                    let open = !store.prefs.bool(shelf.expanded_key());
-                    store.prefs.set(shelf.expanded_key(), open);
+                    let open = !shelf.expanded(&store.prefs);
+                    shelf.open(&mut store.prefs, open);
                     cx.notify();
                 })
             })
@@ -280,10 +386,7 @@ impl Sidebar {
     fn resize_handle(&self, shelf: Shelf, cx: &mut Context<Self>) -> Div {
         div().relative().flex_shrink_0().child(divider(cx)).child(
             div()
-                .id(match shelf {
-                    Shelf::Done => "done-resize",
-                    Shelf::Servers => "servers-resize",
-                })
+                .id(shelf.resize_id())
                 .absolute()
                 .left_0()
                 .right_0()
@@ -342,15 +445,7 @@ impl Sidebar {
         let (lowest, tallest) = heights(count, max);
         let list_height = self.shelf_list_height(shelf, count, max, cx);
         let fill = colors(cx).background;
-        let list = match shelf {
-            Shelf::Done => &self.done_list,
-            Shelf::Servers => &self.servers_list,
-        };
-        let id = match shelf {
-            Shelf::Done => "done-list",
-            Shelf::Servers => "servers-list",
-        };
-        let element = list.element(id, layout, rows, fill);
+        let element = self.list(shelf).element(shelf.list_id(), layout, rows, fill);
         div()
             .flex()
             .flex_col()
@@ -372,40 +467,35 @@ impl Sidebar {
             })
     }
 
-    /// The threads marked done, on a shelf that opens into their list.
-    pub(super) fn done_shelf(&mut self, layout: &Layout, max: f32, window: &mut Window, cx: &mut Context<Self>) -> Div {
-        let c = colors(cx);
+    /// The working, the snoozed or the archived threads, on a shelf that opens into their list.
+    pub(super) fn thread_shelf(
+        &mut self,
+        shelf: Shelf,
+        layout: &Layout,
+        max: f32,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Div {
         let count = layout.tops.len();
         let (expanded, revealed) = {
             let store = self.store.read(cx);
-            (store.prefs.bool(Shelf::Done.expanded_key()), store.sidebar.revealed_thread_id.clone())
+            (shelf.expanded(&store.prefs), store.sidebar.revealed_thread_id.clone())
         };
-        let group = "done-shelf";
-        let header = div()
-            .flex_1()
-            .min_w_0()
-            .flex()
-            .items_center()
-            .gap(px(7.))
-            .child(shelf_title("Done", expanded || self.hovering(group), cx))
-            .child(div().flex_1())
-            .child(
-                div()
-                    .text_size(px(11.))
-                    .text_color(c.muted_stronger_foreground)
-                    .font_features(tabular_numbers())
-                    .child(count.to_string()),
-            )
-            .into_any_element();
+        let lit = expanded || self.hovering(shelf.group());
+        let header = section_line(shelf.section(), count, lit, cx).into_any_element();
         let mut rows = Vec::new();
         if expanded {
-            self.done_list.follow(revealed.as_deref(), true, layout, window);
-            for index in self.done_list.visible(layout, window) {
-                let Some(thread) = self.store.read(cx).done_threads().get(index).cloned() else { continue };
-                rows.push(place(layout, index, 0., self.done_row(&thread, cx)));
+            let visible = {
+                let list = self.list_mut(shelf);
+                list.follow(revealed.as_deref(), true, layout, window);
+                list.visible(layout, window)
+            };
+            for index in visible {
+                let Some(thread) = shelf.threads(self.store.read(cx)).get(index).cloned() else { continue };
+                rows.push(place(layout, index, 0., self.slim_row(&thread, cx)));
             }
         }
-        self.shelf(Shelf::Done, layout, max, expanded, header, rows, cx)
+        self.shelf(shelf, layout, max, expanded, header, rows, cx)
     }
 
     /// The servers of the account: one line for them all that opens into a line for each, or the
@@ -414,7 +504,10 @@ impl Sidebar {
         let c = colors(cx);
         let servers: Vec<Server> = self.store.read(cx).live_servers().cloned().collect();
         let window_width = f32::from(window.viewport_size().width);
-        let room = crate::main_view::shown_sidebar_width(self.store.read(cx), window_width) - 2. * SIDEBAR_EDGE - 16.;
+        let room = crate::main_view::shown_sidebar_width(self.store.read(cx), window_width)
+            - 2. * SIDEBAR_EDGE
+            - IconSize::Md.side()
+            - 7.;
         let height = |server: &Server| DONE_ROW_HEIGHT + error_lines(server, room, cx) as f32 * ERROR_LINE_HEIGHT;
         if let [server] = servers.as_slice() {
             return div().flex().flex_col().flex_shrink_0().child(divider(cx)).child(
@@ -427,15 +520,15 @@ impl Sidebar {
                     .child(self.server_line(server, cx)),
             );
         }
-        let expanded = self.store.read(cx).prefs.bool(Shelf::Servers.expanded_key());
-        let group = "servers-shelf";
+        let expanded = Shelf::Servers.expanded(&self.store.read(cx).prefs);
+        let group = Shelf::Servers.group();
         let header = div()
             .flex_1()
             .min_w_0()
             .flex()
             .items_center()
             .gap(px(7.))
-            .child(state_dot(worst_tint(&servers, cx)))
+            .child(line_mark(state_ring(worst_tint(&servers, cx), cx)))
             .child(shelf_title("Servers", expanded || self.hovering(group), cx))
             .child(div().flex_1().min_w(px(4.)))
             .child(
@@ -447,13 +540,14 @@ impl Sidebar {
                     .child(reach(&servers)),
             )
             .into_any_element();
-        self.servers_list.set_ids(servers.iter().map(|server| server.id.clone()).collect());
+        self.list_mut(Shelf::Servers).set_ids(servers.iter().map(|server| server.id.clone()).collect());
         let heights = servers.iter().map(|server| height(server) + ROW_GAP).collect();
         let layout = Layout::new(heights, 0., 4. - ROW_GAP / 2.);
         let mut rows = Vec::new();
         if expanded {
             let margin = row_margin();
-            for index in self.servers_list.visible(&layout, window) {
+            let visible = self.list_mut(Shelf::Servers).visible(&layout, window);
+            for index in visible {
                 let line = div()
                     .size_full()
                     .pt(px(margin.top))
@@ -478,7 +572,7 @@ impl Sidebar {
             .flex()
             .items_center()
             .gap(px(7.))
-            .child(div().w(px(9.)).flex_shrink_0().flex().items_center().child(state_dot(tint)))
+            .child(line_mark(state_ring(tint, cx)))
             .child(
                 div()
                     .min_w_0()
@@ -500,7 +594,7 @@ impl Sidebar {
             );
         let error = server_error(server).map(|error| {
             div()
-                .pl(px(16.))
+                .pl(px(IconSize::Md.side() + 7.))
                 .text_size(px(ERROR_SIZE))
                 .line_height(px(ERROR_LINE_HEIGHT))
                 .text_color(c.muted_stronger_foreground)

@@ -204,7 +204,7 @@ private fun TopBar(overSidebar: Boolean) {
  * while one monitors.
  */
 private fun AppStore.attention(palette: Palette): Color? {
-    val others = activeThreads.filter { selection != Selection.Thread(it.id) }
+    val others = listedThreads.filter { selection != Selection.Thread(it.id) }
     others.firstNotNullOfOrNull { it.attentionColor(palette) }?.let { return it }
     if (others.any { it.working || it.gitStage != null }) return palette.process
     if (others.none { it.monitoring }) return null

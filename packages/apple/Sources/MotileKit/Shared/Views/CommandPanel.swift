@@ -615,11 +615,11 @@ struct CommandPanel: View {
     /// The threads, then the ones agents started, each saying which thread started it.
     private var threadItems: [PanelItem] {
         let started = store.startedThreads.values.sorted { $0.updatedAt > $1.updatedAt }
-        return (store.activeThreads + store.doneThreads + started).map { thread in
+        return (store.allThreads + started).map { thread in
             let project = store.project(thread.projectID)
             let name = project?.name ?? URL(fileURLWithPath: thread.cwd).lastPathComponent
             let from = thread.parentID.flatMap { store.anyThread($0)?.title }.map { " · from \($0)" } ?? ""
-            let state = thread.isDone ? "done" : thread.waitsFor?.phrase ?? (thread.working ? "working" : thread.monitoring ? "monitoring" : thread.interruption?.word ?? Time.ago(thread.updatedAt))
+            let state = thread.isArchived ? "archived" : thread.section == .snoozed ? "snoozed" : thread.waitsFor?.phrase ?? (thread.working ? "working" : thread.monitoring ? "monitoring" : thread.interruption?.word ?? Time.ago(thread.updatedAt))
             return PanelItem(id: "thread-\(thread.id)", title: thread.title, detail: "\(name)\(from) · \(state)", icon: .project(project)) {
                 store.show(.thread(thread.id))
             }
@@ -638,10 +638,12 @@ struct CommandPanel: View {
             if thread.interruption != nil {
                 items.append(PanelItem(id: "continue", title: "Continue the agent", detail: thread.title, icon: .symbol(.play)) { store.continueThread() })
             }
-            let done = thread.isDone
-            guard done || !thread.waitsOnAgents else { return items }
-            var mark = PanelItem(id: "done", title: done ? "Mark undone" : "Mark done", detail: thread.title, icon: .symbol(done ? .undo2 : .circleCheck)) {
-                store.toggleDone()
+            let archived = thread.isArchived
+            guard archived || !thread.waitsOnAgents else { return items }
+            var mark = PanelItem(
+                id: "done", title: archived ? "Unarchive" : "Archive", detail: thread.title, icon: .symbol(archived ? .archiveRestore : .archive)
+            ) {
+                store.toggleArchived()
             }
             mark.keys = store.shortcuts.label("thread.done")
             items.append(mark)

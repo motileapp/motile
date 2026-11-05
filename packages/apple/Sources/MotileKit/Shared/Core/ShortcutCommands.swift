@@ -83,7 +83,7 @@ extension AppStore {
         case "thread.next": return showThread(offset: 1)
         case "thread.done":
             guard let thread = selectedThread, !onRemovedServer(thread) else { return false }
-            toggleDone()
+            toggleArchived()
         case "thread.undo":
             guard undo != nil else { return false }
             performUndo()

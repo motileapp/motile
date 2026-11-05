@@ -174,6 +174,12 @@ struct MediaStorage: Equatable {
 }
 
 struct UndoNotice: Equatable {
+    enum Kind {
+        case archive
+        case snooze
+    }
+
+    let kind: Kind
     let threadIDs: [String]
     let text: String
 }
@@ -217,6 +223,8 @@ final class AppStore {
     /// A step `do.sh` gave the MCP Servers page on iOS: "add", "add <address>", "unfold <name>",
     /// "try <name>", "rename <name>", "key <name>", "remove <name>", "activity", "call".
     var mcpStep: String?
+    /// The thread whose sidebar row `do.sh` has slid aside on iOS, to show what its swipe offers.
+    var swipeStep: String?
     /// The thread's settings are open over the client, where they aren't around the composer.
     /// The composer's picker on the Mac while it is open: the part of the composer it opened from.
     /// Closing it gives the keys back to the composer, which it opens from.
@@ -252,6 +260,8 @@ final class AppStore {
     private var knownBranches: [String: [Branch]] = [:]
     /// The project whose changes the commit sheet is open on, with the files it was opened with.
     var committingProject: Project?
+    /// The threads the custom snooze sheet is open for.
+    var customSnooze: CustomSnooze?
     private(set) var gitFiles: [ChangedFile] = []
     /// An action that pushes from the default branch, until the user says where it should happen.
     var pendingGit: PendingGit?
@@ -343,7 +353,12 @@ final class AppStore {
     private var everyThread: [String: ThreadInfo] { threads.merging(startedThreads) { listed, _ in listed } }
     /// The threads as the sidebar lists them, kept in order as they change so that it never sorts them.
     private(set) var activeThreads: [ThreadInfo] = []
-    private(set) var doneThreads: [ThreadInfo] = []
+    private(set) var workingThreads: [ThreadInfo] = []
+    private(set) var snoozedThreads: [ThreadInfo] = []
+    private(set) var archivedThreads: [ThreadInfo] = []
+    /// The threads the sidebar lists above its shelf, in its order.
+    var listedThreads: [ThreadInfo] { activeThreads + workingThreads }
+    var allThreads: [ThreadInfo] { activeThreads + workingThreads + snoozedThreads + archivedThreads }
 
     // The open thread
     /// Always a draft or a thread; `loadPreferences` opens the first draft.
@@ -780,14 +795,14 @@ final class AppStore {
         openArrivedThreads()
         markOpenThreadSeen()
         guard let before else { return }
-        if !before.isDone, thread.isDone, before.pullRequest != thread.pullRequest { revealedThreadID = thread.id }
+        if !before.isArchived, thread.isArchived, before.pullRequest != thread.pullRequest { revealedThreadID = thread.id }
         guard selection == .thread(thread.id) else { return }
         if before.turnEndedAt != thread.turnEndedAt || (before.running && !thread.running) { workspaceVersion += 1 }
     }
 
     /// A reply in the open thread has been seen once Motile is in front.
     private func markOpenThreadSeen() {
-        guard Platform.isActive, let thread = selectedThread, thread.unread else { return }
+        guard Platform.isActive, let thread = selectedThread, thread.unread || thread.woke else { return }
         core.send("mark_seen", ["thread_id": thread.id])
     }
 
@@ -837,9 +852,11 @@ final class AppStore {
     private func setThreads(_ new: [String: ThreadInfo]) {
         threads = new.filter { $0.value.parentID == nil }
         startedThreads = new.filter { $0.value.parentID != nil }
-        let listed = Array(threads.values)
-        activeThreads = listed.filter { !$0.isDone }.sorted(by: ThreadInfo.listed)
-        doneThreads = listed.filter(\.isDone).sorted(by: ThreadInfo.listed)
+        let listed = Array(threads.values).sorted(by: ThreadInfo.listed)
+        activeThreads = listed.filter { $0.section == .active }
+        workingThreads = listed.filter { $0.section == .working }
+        snoozedThreads = listed.filter { $0.section == .snoozed }
+        archivedThreads = listed.filter { $0.section == .archived }
         showSelectedThread()
     }
 
@@ -852,26 +869,31 @@ final class AppStore {
             return
         }
         threads[id] = thread
-        if let before, let thread, before.isDone == thread.isDone, before.listedAt == thread.listedAt {
-            changeList(done: thread.isDone) { list in
+        if let before, let thread, before.section == thread.section, before.listedAt == thread.listedAt {
+            changeList(thread.section) { list in
                 guard let index = list.index(of: before) else { return }
                 list[index] = thread
             }
             return
         }
         if let before {
-            changeList(done: before.isDone) { list in
+            changeList(before.section) { list in
                 guard let index = list.index(of: before) else { return }
                 list.remove(at: index)
             }
         }
         if let thread {
-            changeList(done: thread.isDone) { $0.insert(thread, at: $0.place(of: thread)) }
+            changeList(thread.section) { $0.insert(thread, at: $0.place(of: thread)) }
         }
     }
 
-    private func changeList(done: Bool, _ change: (inout [ThreadInfo]) -> Void) {
-        if done { change(&doneThreads) } else { change(&activeThreads) }
+    private func changeList(_ section: ThreadSection, _ change: (inout [ThreadInfo]) -> Void) {
+        switch section {
+        case .active: change(&activeThreads)
+        case .working: change(&workingThreads)
+        case .snoozed: change(&snoozedThreads)
+        case .archived: change(&archivedThreads)
+        }
     }
 
     /// Keeps `selectedThread` and `parentThread` as the threads have them, assigned only when they change.
@@ -1638,7 +1660,7 @@ final class AppStore {
 
     /// Goes to the project's latest thread that is still going, or opens a new one in it.
     private func goTo(_ project: Project) {
-        guard let thread = activeThreads.first(where: { $0.projectID == project.id }) else { return openThread(in: project) }
+        guard let thread = listedThreads.first(where: { $0.projectID == project.id }) else { return openThread(in: project) }
         closeSettings()
         show(.thread(thread.id))
     }
@@ -2349,7 +2371,7 @@ final class AppStore {
         removeDraft(draft.id)
         guard wasOpen else { return }
         if let next = threadDrafts.last(where: { !isSending($0) }) { return select(.draft(next.id)) }
-        if let next = activeThreads.first { return select(.thread(next.id)) }
+        if let next = listedThreads.first { return select(.thread(next.id)) }
         openEmptyDraft()
     }
 
@@ -2721,28 +2743,69 @@ final class AppStore {
         update(thread, ["access": access.rawValue]) { $0.access = access }
     }
 
-    /// Marks threads done or brings them back. A thread that is working or monitoring can't be
-    /// marked done.
-    func setDone(_ ids: [String], done: Bool, fromSidebar: Bool = false) {
-        let changed = ids.compactMap { anyThread($0) }.filter { $0.isDone != done && !(done && $0.unfinished) && !onRemovedServer($0) }
-        guard !changed.isEmpty else { return }
-        // Leaving the thread that was just put away, for the next one that is still active.
-        if done, fromSidebar, case .thread(let open) = selection, changed.contains(where: { $0.id == open }) {
-            let active = activeThreads
-            let position = active.firstIndex { $0.id == open } ?? 0
-            let remaining = active.filter { thread in !changed.contains { $0.id == thread.id } }
-            let next = remaining.isEmpty ? nil : remaining[min(position, remaining.count - 1)]
-            if let next { select(.thread(next.id)) } else { openEmptyDraft() }
+    /// Archives threads or brings them back. A thread that is working or monitoring can't be
+    /// archived.
+    func setArchived(_ ids: [String], archived: Bool, fromSidebar: Bool = false) {
+        let changed = ids.compactMap { anyThread($0) }.filter {
+            $0.isArchived != archived && !(archived && $0.unfinished) && !onRemovedServer($0)
         }
+        guard !changed.isEmpty else { return }
+        if archived, fromSidebar { leave(changed) }
         let now = Date().timeIntervalSince1970
         for thread in changed {
-            update(thread, ["done": done]) { $0.doneAt = done ? now : nil }
+            update(thread, ["done": archived]) {
+                $0.archivedAt = archived ? now : nil
+                $0.snoozedUntil = nil
+                $0.section = archived ? .archived : $0.awakeSection
+            }
         }
-        guard done else {
+        guard archived else {
             undo = nil
             return
         }
-        showUndo(UndoNotice(threadIDs: changed.map(\.id), text: changed.count == 1 ? "Done" : "Marked \(changed.count) threads done"))
+        showUndo(UndoNotice(kind: .archive, threadIDs: changed.map(\.id), text: changed.count == 1 ? "Archived" : "Archived \(changed.count) threads"))
+    }
+
+    /// Snoozes threads until `until`, out of the sidebar's way until then.
+    func snooze(_ ids: [String], until: Double, fromSidebar: Bool = false) {
+        let changed = ids.compactMap { anyThread($0) }.filter { snoozes($0) }
+        guard !changed.isEmpty else { return }
+        if fromSidebar { leave(changed) }
+        for thread in changed {
+            update(thread, ["snoozed_until": until]) {
+                $0.snoozedUntil = until
+                $0.archivedAt = nil
+                $0.section = .snoozed
+            }
+        }
+        let text = changed.count == 1 ? "Snoozed" : "Snoozed \(changed.count) threads"
+        showUndo(UndoNotice(kind: .snooze, threadIDs: changed.map(\.id), text: text))
+    }
+
+    /// Brings snoozed threads back among the active ones.
+    func wake(_ ids: [String]) {
+        let now = Date().timeIntervalSince1970
+        for thread in ids.compactMap({ anyThread($0) }) where thread.section == .snoozed && !onRemovedServer(thread) {
+            update(thread, ["snoozed_until": 0]) {
+                $0.snoozedUntil = nil
+                $0.position = now
+                $0.section = $0.awakeSection
+            }
+        }
+    }
+
+    func snoozes(_ thread: ThreadInfo) -> Bool {
+        !onRemovedServer(thread) && server(thread.serverID)?.snoozes == true
+    }
+
+    /// Leaves the open thread when it is put away, for the next one the sidebar lists.
+    private func leave(_ threads: [ThreadInfo]) {
+        guard case .thread(let open) = selection, threads.contains(where: { $0.id == open }) else { return }
+        let listed = listedThreads
+        let position = listed.firstIndex { $0.id == open } ?? 0
+        let remaining = listed.filter { thread in !threads.contains { $0.id == thread.id } }
+        let next = remaining.isEmpty ? nil : remaining[min(position, remaining.count - 1)]
+        if let next { select(.thread(next.id)) } else { openEmptyDraft() }
     }
 
     /// Has the agent of the open thread go on with what it was doing when it was interrupted.
@@ -2757,14 +2820,14 @@ final class AppStore {
         update(thread, ["continues": on]) { $0.interruption = .limit(resetsAt: resetsAt, continues: on) }
     }
 
-    func toggleDone() {
+    func toggleArchived() {
         guard let thread = selectedThread, !onRemovedServer(thread) else { return }
-        setDone([thread.id], done: !thread.isDone)
+        setArchived([thread.id], archived: !thread.isArchived)
     }
 
     /// Whether the user can move the thread among the active ones.
     func moves(_ thread: ThreadInfo) -> Bool {
-        !thread.isDone && !onRemovedServer(thread) && server(thread.serverID)?.movesThreads == true
+        thread.section == .active && !onRemovedServer(thread) && server(thread.serverID)?.movesThreads == true
     }
 
     /// Puts the thread where `index` is among the sidebar's rows without it: `rows` is the
@@ -2811,7 +2874,10 @@ final class AppStore {
     func performUndo() {
         guard let notice = undo else { return }
         undo = nil
-        setDone(notice.threadIDs, done: false)
+        switch notice.kind {
+        case .archive: setArchived(notice.threadIDs, archived: false)
+        case .snooze: wake(notice.threadIDs)
+        }
     }
 
     /// Changes a thread on its server, and here at once so the client doesn't wait for the answer.

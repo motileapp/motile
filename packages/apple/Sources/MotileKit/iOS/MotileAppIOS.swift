@@ -131,7 +131,7 @@ struct MotileCommands: Commands {
             PanelTabCommands(store: store)
         }
         CommandMenu("Thread") {
-            Button(store.selectedThread?.isDone == true ? "Mark Undone" : "Mark Done") { store.toggleDone() }
+            Button(store.selectedThread?.isArchived == true ? "Unarchive" : "Archive") { store.toggleArchived() }
                 .shortcut("thread.done", in: keys)
                 .disabled(store.selectedThread == nil || store.openThreadRemovedServer != nil)
             Button("Stop") { store.stop() }
@@ -196,6 +196,7 @@ private enum RootSheet: Identifiable {
     case settings
     case usage
     case threadSettings
+    case customSnooze(CustomSnooze)
 
     var id: String {
         switch self {
@@ -205,6 +206,7 @@ private enum RootSheet: Identifiable {
         case .settings: "settings"
         case .usage: "usage"
         case .threadSettings: "thread-settings"
+        case .customSnooze(let snooze): "snooze-\(snooze.id)"
         }
     }
 }
@@ -249,6 +251,8 @@ struct RootView: View {
                     UsageSheet()
                 case .threadSettings:
                     ThreadSettingsSheet()
+                case .customSnooze(let snooze):
+                    CustomSnoozeSheet(snooze: snooze)
                 }
             }
             .sheetSurface()
@@ -279,6 +283,7 @@ struct RootView: View {
             if store.settings != nil { return .settings }
             if store.showsUsage { return .usage }
             if store.showsThreadSettings { return .threadSettings }
+            if let snooze = store.customSnooze { return .customSnooze(snooze) }
             return nil
         } set: { new in
             guard new == nil else { return }
@@ -287,6 +292,7 @@ struct RootView: View {
             if store.panel != nil { return store.closePanel() }
             if store.settings != nil { return store.closeSettings() }
             if store.showsUsage { return store.showsUsage = false }
+            if store.customSnooze != nil { return store.customSnooze = nil }
             store.showsThreadSettings = false
             store.showsBranches = false
         }

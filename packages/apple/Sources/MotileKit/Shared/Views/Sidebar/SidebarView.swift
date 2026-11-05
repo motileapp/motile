@@ -22,11 +22,13 @@ final class AgoClock {
 }
 
 #if os(macOS)
-/// The drafts, then every active thread on every server in one list, with the ones marked done on
-/// a shelf at the bottom.
+/// The drafts, then every active thread on every server in one list, with the working, the
+/// snoozed and the archived ones on shelves at the bottom.
 struct SidebarView: View {
     @Environment(AppStore.self) private var store
-    @AppStorage("sidebar.doneExpanded") private var doneExpanded = false
+    @AppStorage("sidebar.doneExpanded") private var archivedExpanded = false
+    @AppStorage("sidebar.workingExpanded") private var workingExpanded = true
+    @AppStorage("sidebar.snoozedExpanded") private var snoozedExpanded = false
     @State private var renaming: ThreadInfo?
     @State private var deleting: ThreadInfo?
     /// The search's result the arrow keys are on.
@@ -35,8 +37,11 @@ struct SidebarView: View {
     var body: some View {
         @Bindable var store = store
         let results = store.searchResults
-        let active = store.isSearchingThreads ? [] : store.activeThreads
-        let done = store.isSearchingThreads ? [] : store.doneThreads
+        let searching = store.isSearchingThreads
+        let lists = SidebarLists(
+            active: searching ? [] : store.activeThreads, working: searching ? [] : store.workingThreads,
+            snoozed: searching ? [] : store.snoozedThreads, archived: searching ? [] : store.archivedThreads
+        )
         let projects = store.projectsByID
         let selection = store.selection
         VStack(spacing: 0) {
@@ -49,14 +54,13 @@ struct SidebarView: View {
                 .padding(.top, 2)
                 .padding(.bottom, 6)
             GeometryReader { list in
-                threads(
-                    active: active, done: done, results: results, projects: projects, selection: selection, sidebarHeight: list.size.height
-                )
+                threads(lists: lists, results: results, projects: projects, selection: selection, sidebarHeight: list.size.height)
             }
         }
         .onChange(of: store.revealedThreadID) { _, revealed in
-            guard let revealed, store.doneThreads.contains(where: { $0.id == revealed }) else { return }
-            doneExpanded = true
+            guard let revealed else { return }
+            if store.archivedThreads.contains(where: { $0.id == revealed }) { archivedExpanded = true }
+            if store.snoozedThreads.contains(where: { $0.id == revealed }) { snoozedExpanded = true }
         }
         .modal(item: $renaming) { thread in
             RenameThread(thread: thread)
@@ -70,12 +74,12 @@ struct SidebarView: View {
     }
 
     private func threads(
-        active: [ThreadInfo], done: [ThreadInfo], results: [SearchResult], projects: [String: Project], selection: Selection,
-        sidebarHeight: Double
+        lists: SidebarLists, results: [SearchResult], projects: [String: Project], selection: Selection, sidebarHeight: Double
     ) -> some View {
         let searching = store.isSearchingThreads
         let drafts = searching ? [] : store.listedDrafts
-        let items = searching ? searchItems(results) : items(drafts: drafts, active: active)
+        let active = lists.active
+        let items = searching ? searchItems(results) : items(drafts: drafts, lists: lists)
         let jumps = store.jumpThreads
         let places = store.showsJumpHints ? Dictionary(jumps.enumerated().map { ($1.id, $0) }, uniquingKeysWith: { first, _ in first }) : [:]
         return VStack(spacing: 0) {
@@ -128,7 +132,7 @@ struct SidebarView: View {
                         if searching {
                             SearchEmptyLine(size: 12)
                         } else {
-                            Text(store.doneThreads.isEmpty ? "No threads yet" : "No active threads")
+                            Text(store.allThreads.isEmpty ? "No threads yet" : "No active threads")
                                 .font(.ui(size: 12))
                                 .foregroundStyle(Color.themeMutedStrongerForeground)
                         }
@@ -145,21 +149,22 @@ struct SidebarView: View {
                 UndoRow(notice: undo)
                     .appearing()
             }
-            if !done.isEmpty {
-                DoneShelf(
-                    threads: done,
+            ForEach(lists.shelves, id: \.section) { shelf in
+                ThreadShelf(
+                    section: shelf.section,
+                    threads: shelf.threads,
                     projects: projects,
                     selection: selection,
-                    maxHeight: sidebarHeight * 0.5,
-                    expanded: $doneExpanded,
+                    maxHeight: sidebarHeight * 0.25,
+                    expanded: expanded(shelf.section),
                     rename: beginRename,
                     delete: { deleting = $0 }
                 )
             }
             if !store.servers.isEmpty {
-                ServersShelf(maxHeight: sidebarHeight * 0.3)
+                ServersShelf(maxHeight: sidebarHeight * 0.25)
             }
-            if !done.isEmpty || !store.servers.isEmpty {
+            if !lists.shelves.isEmpty || !store.servers.isEmpty {
                 ThemeDivider()
             }
             SidebarFooter()
@@ -171,12 +176,20 @@ struct SidebarView: View {
     private static let emptyLineHeight = scaled(15)
 
     /// The drafts as one row, then the active threads.
-    private func items(drafts: [ListedDraft], active: [ThreadInfo]) -> [SidebarItem] {
+    private func items(drafts: [ListedDraft], lists: SidebarLists) -> [SidebarItem] {
         var items: [SidebarItem] = drafts.isEmpty ? [] : [.drafts]
-        items += active.map(SidebarItem.active)
-        if active.isEmpty { items.append(.empty) }
-        if store.offersNewThread(drafts: drafts, active: active) { items.append(.newThread) }
+        items += lists.active.map(SidebarItem.active)
+        if lists.active.isEmpty { items.append(.empty) }
+        if store.offersNewThread(drafts: drafts, active: lists.active) { items.append(.newThread) }
         return items
+    }
+
+    private func expanded(_ section: ThreadSection) -> Binding<Bool> {
+        switch section {
+        case .working: $workingExpanded
+        case .snoozed: $snoozedExpanded
+        default: $archivedExpanded
+        }
     }
 
     /// What the search found, then the line that says the servers still search, or that line
@@ -230,6 +243,18 @@ private struct RenameThread: View {
         }
         .padding(20)
         .frame(width: 400)
+    }
+}
+
+private struct SidebarLists {
+    let active: [ThreadInfo]
+    let working: [ThreadInfo]
+    let snoozed: [ThreadInfo]
+    let archived: [ThreadInfo]
+
+    /// The parts on shelves at the bottom, the ones that hold threads.
+    var shelves: [(section: ThreadSection, threads: [ThreadInfo])] {
+        [(ThreadSection.working, working), (.snoozed, snoozed), (.archived, archived)].filter { !$0.1.isEmpty }
     }
 }
 
@@ -319,17 +344,31 @@ struct RowAction {
     let title: String
     var destructive = false
     var disabled = false
-    let perform: () -> Void
+    /// A submenu's groups, in place of `perform`.
+    var children: [[RowAction]] = []
+    var perform: () -> Void = {}
 }
 
 extension AppStore {
     /// What a thread's menu offers, in groups a line divides.
     func rowActions(for thread: ThreadInfo, rename: @escaping (ThreadInfo) -> Void, delete: @escaping (ThreadInfo) -> Void) -> [[RowAction]] {
         guard !onRemovedServer(thread) else { return [] }
-        let done = thread.isDone
-            ? RowAction(title: "Mark Undone") { self.setDone([thread.id], done: false) }
-            : RowAction(title: "Mark Done", disabled: thread.unfinished) { self.setDone([thread.id], done: true, fromSidebar: true) }
-        return [[done, RowAction(title: "Rename") { rename(thread) }], [RowAction(title: "Delete", destructive: true) { delete(thread) }]]
+        let archive = thread.isArchived
+            ? RowAction(title: "Unarchive") { self.setArchived([thread.id], archived: false) }
+            : RowAction(title: "Archive", disabled: thread.unfinished) { self.setArchived([thread.id], archived: true, fromSidebar: true) }
+        let snooze = snoozeAction(for: thread).map { [$0] } ?? []
+        return [[archive] + snooze + [RowAction(title: "Rename") { rename(thread) }], [RowAction(title: "Delete", destructive: true) { delete(thread) }]]
+    }
+
+    /// Wakes a snoozed thread, or snoozes one until a time the presets offer or the user picks.
+    func snoozeAction(for thread: ThreadInfo) -> RowAction? {
+        if thread.section == .snoozed { return RowAction(title: "Wake") { self.wake([thread.id]) } }
+        guard snoozes(thread) else { return nil }
+        let presets = Snooze.presets.map { preset in
+            RowAction(title: preset.title) { self.snooze([thread.id], until: preset.until, fromSidebar: true) }
+        }
+        let custom = RowAction(title: "Custom…") { self.customSnooze = CustomSnooze(threadIDs: [thread.id], fromSidebar: true) }
+        return RowAction(title: "Snooze", children: [presets, [custom]])
     }
 }
 
@@ -345,22 +384,42 @@ struct ThreadMenu: View {
         ForEach(groups.indices, id: \.self) { index in
             if index > 0 { Divider() }
             ForEach(groups[index], id: \.title) { action in
-                Button(action.title, role: action.destructive ? .destructive : nil, action: action.perform)
-                    .disabled(action.disabled)
+                if action.children.isEmpty {
+                    Button(action.title, role: action.destructive ? .destructive : nil, action: action.perform)
+                        .disabled(action.disabled)
+                } else {
+                    Menu(action.title) {
+                        ForEach(action.children.indices, id: \.self) { index in
+                            if index > 0 { Divider() }
+                            ForEach(action.children[index], id: \.title) { Button($0.title, action: $0.perform) }
+                        }
+                    }
+                }
             }
         }
     }
 }
 
 #if os(macOS)
-private struct MarkDoneButton: View {
-    let action: () -> Void
+/// What a thread's row offers under the pointer: a snooze, and archiving it once it has finished.
+private struct RowButtons: View {
+    @Environment(AppStore.self) private var store
+    let thread: ThreadInfo
 
     var body: some View {
-        ActionButton(
-            "Mark Done", icon: .check, variant: .ghost, size: .small, symbolSize: ControlSize.small.smallSymbol, action: action
-        )
-            .fixedSize()
+        HStack(spacing: 2) {
+            if store.snoozes(thread) {
+                ActionMenu(icon: .alarmClock, help: "Snooze", size: .small, symbolSize: ControlSize.small.smallSymbol) {
+                    SnoozeItems(store: store, threadIDs: [thread.id], fromSidebar: true)
+                }
+            }
+            if !thread.unfinished {
+                ActionButton(
+                    "Archive", icon: .check, variant: .ghost, size: .small, symbolSize: ControlSize.small.smallSymbol
+                ) { store.setArchived([thread.id], archived: true, fromSidebar: true) }
+                    .fixedSize()
+            }
+        }
     }
 }
 
@@ -410,8 +469,8 @@ struct ThreadRow: View, Equatable {
                     KeyCaps([jump])
                         .foregroundStyle(Color.themeForeground)
                         .padding(.trailing, Self.buttonInset - Self.sidePadding)
-                } else if hovering && !thread.unfinished && !store.onRemovedServer(thread) {
-                    MarkDoneButton { store.setDone([thread.id], done: true, fromSidebar: true) }
+                } else if hovering && (!thread.unfinished || store.snoozes(thread)) && !store.onRemovedServer(thread) {
+                    RowButtons(thread: thread)
                         .padding(.trailing, Self.buttonInset - Self.sidePadding)
                 } else {
                     ThreadStatus(thread: thread, readOnly: store.onRemovedServer(thread))
@@ -664,7 +723,7 @@ private struct DraftRow: View {
     }
 }
 
-/// The offer to undo marking threads done: a line above the done threads.
+/// The offer to undo archiving or snoozing threads: a line above the archived threads.
 struct UndoRow: View {
     @Environment(AppStore.self) private var store
     let notice: UndoNotice
@@ -676,11 +735,12 @@ struct UndoRow: View {
                 store.performUndo()
             } label: {
                 HStack(spacing: 7) {
-                    ShelfMark(lit: false) { Image(.undo2, size: .xs, trimmed: true).offset(x: -2) }
+                    ShelfLineMark { Image(.undo2, size: .sm) }
+                        .foregroundStyle(Color.themeMutedStrongerForeground)
                     ShelfTitle("Undo", expanded: false)
                     Spacer()
                     HStack(spacing: 4) {
-                        Image(.check, size: .sm)
+                        Image(notice.kind == .snooze ? .alarmClock : .archive, size: .sm)
                         Text(notice.text)
                             .font(.ui(size: 11))
                             .lineLimit(1)
@@ -727,10 +787,7 @@ private struct Shelf<Item: Identifiable, Header: View, Row: View>: View {
             Button {
                 expanded.toggle()
             } label: {
-                HStack(spacing: 7) {
-                    SidebarChevron(expanded: expanded)
-                    header()
-                }
+                header()
                 .padding(.horizontal, sidebarEdge)
                 .frame(height: Self.rowHeight)
                 .padding(.top, 3)
@@ -771,9 +828,10 @@ private struct Shelf<Item: Identifiable, Header: View, Row: View>: View {
     }
 }
 
-/// The threads marked done.
-private struct DoneShelf: View {
+/// The working, the snoozed or the archived threads.
+private struct ThreadShelf: View {
     @Environment(AppStore.self) private var store
+    let section: ThreadSection
     let threads: [ThreadInfo]
     let projects: [String: Project]
     let selection: Selection
@@ -781,21 +839,31 @@ private struct DoneShelf: View {
     @Binding var expanded: Bool
     let rename: (ThreadInfo) -> Void
     let delete: (ThreadInfo) -> Void
-    @AppStorage("sidebar.doneHeight") private var height = 250.0
+    @AppStorage private var height: Double
+
+    init(
+        section: ThreadSection, threads: [ThreadInfo], projects: [String: Project], selection: Selection, maxHeight: Double,
+        expanded: Binding<Bool>, rename: @escaping (ThreadInfo) -> Void, delete: @escaping (ThreadInfo) -> Void
+    ) {
+        self.section = section
+        self.threads = threads
+        self.projects = projects
+        self.selection = selection
+        self.maxHeight = maxHeight
+        _expanded = expanded
+        self.rename = rename
+        self.delete = delete
+        _height = AppStorage(wrappedValue: 250, section == .archived ? "sidebar.doneHeight" : "sidebar.\(section.rawValue)Height")
+    }
 
     var body: some View {
         Shelf(
             items: threads, maxHeight: maxHeight, expanded: $expanded, height: $height, scrollTarget: store.revealedThreadID,
             pointed: { thread, row, view in ThreadPeek.shared.point(at: thread, row: row, in: view, store: store) }
         ) {
-            ShelfTitle("Done", expanded: expanded)
-            Spacer()
-            Text("\(threads.count)")
-                .font(.ui(size: 11))
-                .foregroundStyle(Color.themeMutedStrongerForeground)
-                .monospacedDigit()
+            SectionLine(section: section, count: threads.count, expanded: expanded)
         } row: { thread in
-            DoneRow(
+            SlimThreadRow(
                 thread: thread, project: projects[thread.projectID], selected: selection == .thread(thread.id),
                 rename: rename, delete: delete
             ) { store.select($0) }
@@ -825,7 +893,10 @@ private struct ServersShelf: View {
         } else {
             VStack(spacing: 0) {
                 Shelf(items: servers, maxHeight: maxHeight, expanded: $expanded, height: $height) {
-                    AllServersLine(servers: servers, expanded: expanded)
+                    HStack(spacing: 7) {
+                        AllServersLine(servers: servers, expanded: expanded)
+                        SidebarChevron(expanded: expanded)
+                    }
                 } row: { server in
                     ServerLine(server: server)
                         .padding(.horizontal, 8)
@@ -840,8 +911,9 @@ private struct ServersShelf: View {
 
 #endif
 
-/// A thread that is done: one quiet line, with its pull request. It is redrawn only when what it shows changes.
-struct DoneRow: View, Equatable {
+/// A thread that is archived or snoozed: one quiet line, with its pull request and when it was
+/// archived or how soon it wakes. It is redrawn only when what it shows changes.
+struct SlimThreadRow: View, Equatable {
     @Environment(AppStore.self) private var store
     let thread: ThreadInfo
     let project: Project?
@@ -855,7 +927,7 @@ struct DoneRow: View, Equatable {
     /// The undo button is as far from the row's side as from its top.
     private static let buttonInset = (doneRowHeight - ControlSize.small.height) / 2
 
-    static func == (one: DoneRow, other: DoneRow) -> Bool {
+    static func == (one: SlimThreadRow, other: SlimThreadRow) -> Bool {
         one.thread == other.thread && one.project?.iconPath == other.project?.iconPath && one.pullRequest == other.pullRequest
             && one.selected == other.selected
     }
@@ -873,17 +945,22 @@ struct DoneRow: View, Equatable {
             if let pullRequest {
                 ThreadPullRequestLabel(thread: thread, pullRequest: pullRequest, colored: false, open: open)
             }
-            Text(Time.ago(thread.doneAt ?? thread.updatedAt, now: AgoClock.shared.now))
-                .font(.ui(size: 11))
-                .foregroundStyle(Color.themeMutedStrongerForeground)
-                .opacity(hovering ? 0 : 1)
+            if thread.section == .working {
+                ThreadStatus(thread: thread, readOnly: store.onRemovedServer(thread))
+            } else {
+                trailing
+            }
         }
         .padding(.horizontal, Self.sidePadding)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         .overlay(alignment: .trailing) {
-            if !store.onRemovedServer(thread) {
+            if !store.onRemovedServer(thread) && thread.section != .working {
                 OnRowSurface {
-                    ActionButton(icon: .undo2, help: "Mark undone", size: .small) { store.setDone([thread.id], done: false) }
+                    if thread.section == .snoozed {
+                        ActionButton(icon: .alarmClockOff, help: "Wake", size: .small) { store.wake([thread.id]) }
+                    } else {
+                        ActionButton(icon: .undo2, help: "Unarchive", size: .small) { store.setArchived([thread.id], archived: false) }
+                    }
                 }
                 .padding(.trailing, Self.buttonInset)
                 .opacity(hovering ? 1 : 0)
@@ -897,9 +974,28 @@ struct DoneRow: View, Equatable {
         .contextMenu { ThreadMenu(thread: thread, rename: rename, delete: delete) }
         #endif
     }
+
+    /// When it was archived or how soon it wakes, which its button covers under the pointer.
+    private var trailing: some View {
+        Group {
+            if let until = thread.snoozedUntil, thread.section == .snoozed {
+                HStack(spacing: 3) {
+                    Image(.alarmClock, size: .sm)
+                    Text(Time.left(until, now: AgoClock.shared.now))
+                        .monospacedDigit()
+                }
+                .help("Wakes \(Time.stamp(until))")
+            } else {
+                Text(Time.ago(thread.archivedAt ?? thread.updatedAt, now: AgoClock.shared.now))
+            }
+        }
+        .font(.ui(size: 11))
+        .foregroundStyle(Color.themeMutedStrongerForeground)
+        .opacity(hovering ? 0 : 1)
+    }
 }
 
-/// Starts a thread, where the sidebar has no draft and no active thread. Laid out like a done row.
+/// Starts a thread, where the sidebar has no draft and no active thread. Laid out like a slim row.
 struct NewThreadRow: View {
     @Environment(AppStore.self) private var store
 
@@ -946,7 +1042,7 @@ extension ThreadInfo {
     var attentionColor: Color? {
         if waitsFor != nil { return .themeWarning }
         if working || gitStage != nil || monitoring { return nil }
-        if interruption != nil { return .themeWarning }
+        if interruption != nil || woke { return .themeWarning }
         if unread { return .themeSuccess }
         return nil
     }
@@ -1015,6 +1111,10 @@ struct ThreadStatus: View {
                 symbol(interruption.symbol)
             }
             .help(interruption.detail())
+        } else if thread.woke {
+            label("Woke", Color.themeWarning) {
+                symbol(.alarmClock)
+            }
         } else if thread.unread {
             label("Finished", Color.themeSuccess) {
                 symbol(.flag)
@@ -1038,6 +1138,58 @@ struct ThreadStatus: View {
 
     private func symbol(_ name: Symbol) -> some View {
         Image(name, size: .sm)
+    }
+}
+
+/// The line of a shelf: its symbol and its name in one colour, how many threads it holds, and the
+/// chevron that opens and closes it. Its name lines up with the slim rows' titles.
+struct SectionLine: View {
+    let section: ThreadSection
+    let count: Int
+    let expanded: Bool
+    @Environment(\.row) private var row
+
+    var body: some View {
+        HStack(spacing: 7) {
+            if let symbol = section.symbol {
+                ShelfLineMark { Image(symbol, size: .sm) }
+                    .foregroundStyle(expanded || row != nil ? Color.themeForeground : Color.themeMutedForeground)
+            }
+            ShelfTitle(section.title, expanded: expanded)
+            Text("\(count)")
+                .font(.ui(size: 11))
+                .foregroundStyle(Color.themeMutedStrongerForeground)
+                .monospacedDigit()
+            Spacer(minLength: 4)
+            SidebarChevron(expanded: expanded)
+        }
+    }
+}
+
+/// What a line at the bottom of the sidebar starts with: a symbol, or a server's state, in a
+/// column as wide as a slim row's project icon, so that every line's words start where its title does.
+struct ShelfLineMark<Mark: View>: View {
+    @ViewBuilder let mark: () -> Mark
+
+    var body: some View {
+        mark().frame(width: PlatformImage.symbolSide(.md))
+    }
+}
+
+/// A state as a dot in a ring of its colour's tint, the size of a symbol. Both are even, so that
+/// the dot sits in the ring's middle on whole points.
+struct StateRing: View {
+    let tint: Color
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .strokeBorder(tint.at(.colorTintChartStronger), lineWidth: 1)
+                .frame(width: 12, height: 12)
+            Circle()
+                .fill(tint)
+                .frame(width: 6, height: 6)
+        }
     }
 }
 
@@ -1105,7 +1257,7 @@ struct AllServersLine: View {
 
     var body: some View {
         HStack(spacing: 7) {
-            StateDot(tint: servers.worstTint)
+            ShelfLineMark { StateRing(tint: servers.worstTint) }
             ShelfTitle("Servers", expanded: expanded)
             Spacer(minLength: 4)
             Text(servers.reach)
@@ -1114,16 +1266,6 @@ struct AllServersLine: View {
                 .monospacedDigit()
                 .lineLimit(1)
         }
-    }
-}
-
-struct StateDot: View {
-    let tint: Color
-
-    var body: some View {
-        Circle()
-            .fill(tint)
-            .frame(width: 7, height: 7)
     }
 }
 
@@ -1178,7 +1320,7 @@ struct ServerLine: View {
 
     var body: some View {
         HStack(spacing: 7) {
-            SidebarMark(StateDot(tint: server.stateTint ?? .themeSuccess))
+            ShelfLineMark { StateRing(tint: server.stateTint ?? .themeSuccess) }
             Text(server.name)
                 .font(.ui(size: 12, weight: .medium))
                 .lineLimit(1)

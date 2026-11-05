@@ -138,9 +138,15 @@ struct MotileApp: App {
                     .shortcut("commandPalette.toggle", in: keys)
             }
             CommandMenu("Thread") {
-                Button(menu.threadDone ? "Mark Undone" : "Mark Done") { store.toggleDone() }
+                Button(menu.threadArchived ? "Unarchive" : "Archive") { store.toggleArchived() }
                     .shortcut("thread.done", in: keys)
                     .disabled(!menu.threadOpen || menu.removedServer)
+                if menu.threadSnoozed {
+                    Button("Wake") { store.wake(menu.openThreadIDs) }
+                } else {
+                    Menu("Snooze") { SnoozeItems(store: store, threadIDs: menu.openThreadIDs) }
+                        .disabled(!menu.snoozes)
+                }
                 Button("Stop") { store.stop() }
                     .shortcut("thread.stop", in: keys)
                     .disabled(!menu.busy || menu.removedServer)
@@ -245,6 +251,7 @@ struct RootView: View {
             ConnectServerView(isFirst: false)
                 .frame(width: 620)
         }
+        .modal(item: $store.customSnooze) { CustomSnoozeSheet(snooze: $0) }
         .asking(shownError) { _ in
             Confirmation(title: store.errorAlert.title, message: store.errorAlert.detail, dismissal: "OK")
         }

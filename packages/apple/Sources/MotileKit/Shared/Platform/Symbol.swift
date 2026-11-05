@@ -3,6 +3,10 @@ import SwiftUI
 
 /// The icons the apps draw, from Lucide's font: each is the character it has there.
 enum Symbol: String {
+    case alarmClock = "\u{e03a}"
+    case alarmClockOff = "\u{e23b}"
+    case archive = "\u{e041}"
+    case archiveRestore = "\u{e2cd}"
     case arrowDown = "\u{e042}"
     case arrowLeft = "\u{e048}"
     case arrowRight = "\u{e049}"

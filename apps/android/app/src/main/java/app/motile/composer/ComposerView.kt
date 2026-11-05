@@ -38,6 +38,7 @@ import app.motile.core.AppStore
 import app.motile.core.Server
 import app.motile.core.ThreadChildren
 import app.motile.core.ThreadInfo
+import app.motile.core.ThreadSection
 import app.motile.core.Time
 import app.motile.core.closeSkillMenu
 import app.motile.layout.KeyboardFocus
@@ -150,7 +151,7 @@ private fun ComposerBox(model: ComposerTextModel, focus: FocusRequester, press: 
             .clickable(interactionSource = null, indication = null, onClick = press),
     ) {
         val thread = store.selectedThread
-        if (thread != null && thread.isDone) DoneBanner(thread)
+        if (thread != null) PutAwayBanner(thread)
         store.selectedDraft?.from?.let { ContinuedThreadChip(it, Modifier.padding(start = 14.dp, end = 14.dp, top = 12.dp)) }
         if (store.attachments.isNotEmpty()) Attachments()
         ComposerRows(
@@ -163,7 +164,8 @@ private fun ComposerBox(model: ComposerTextModel, focus: FocusRequester, press: 
 
 private fun placeholder(store: AppStore): String {
     val server = store.composerServer ?: return "Ask anything"
-    if (store.selectedThread?.isDone == true) return "Message to bring it back"
+    if (store.selectedThread?.isArchived == true) return "Message to bring it back"
+    if (store.selectedThread?.section == ThreadSection.Snoozed) return "Message to wake it"
     if (server.state != Server.State.Connected) return "Waiting for ${server.name}"
     if (server.models.isEmpty() && server.known) return "Install Claude Code or Codex"
     if (store.activity.running) return "Send a follow-up"
@@ -233,20 +235,25 @@ private fun AgentsButton(text: String, children: ThreadChildren, modifier: Modif
     FirstThatFits(modifier, { button("${children.running} working") }, { button("${children.running}") })
 }
 
+/** Says the open thread is archived or snoozed, with the way back. */
 @Composable
-private fun DoneBanner(thread: ThreadInfo) {
+private fun PutAwayBanner(thread: ThreadInfo) {
     val store = LocalStore.current
+    val until = thread.snoozedUntil
+    val (title, action, perform) = when {
+        thread.isArchived -> Triple("Archived", "Unarchive") { store.setArchived(listOf(thread.id), false) }
+        thread.section == ThreadSection.Snoozed && until != null -> Triple("Snoozed until ${Time.stamp(until)}", "Wake") { store.wake(listOf(thread.id)) }
+        else -> return
+    }
     Row(
         Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp - ControlSize.Small.padding, top = 12.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(Symbol.CircleCheck, iconSize(text = 12.5f), color = Theme.colors.success)
-        Text("Done", size = 12.5f, weight = FontWeight.Medium)
+        thread.section.symbol?.let { Icon(it, iconSize(text = 12.5f), color = Theme.colors.mutedForeground) }
+        Text(title, size = 12.5f, weight = FontWeight.Medium)
         Spacer(Modifier.weight(1f))
-        ActionButton("Mark Undone", modifier = Modifier.overhang(vertical = 4.dp), variant = ButtonVariant.Link, size = ControlSize.Small) {
-            store.setDone(listOf(thread.id), done = false)
-        }
+        ActionButton(action, modifier = Modifier.overhang(vertical = 4.dp), variant = ButtonVariant.Link, size = ControlSize.Small, onClick = perform)
     }
 }
 

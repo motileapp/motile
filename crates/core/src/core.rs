@@ -26,8 +26,8 @@ use tokio::sync::mpsc;
 use tokio::task::AbortHandle;
 
 use crate::api::{
-    AccountView, Children, Command, Config, Event, ProjectView, ScrollAt, ServerView, SyncState, SyncView, ThreadView,
-    WaitingChild,
+    AccountView, Children, Command, Config, Event, ProjectView, ScrollAt, Section, ServerView, SyncState, SyncView,
+    ThreadView, WaitingChild,
 };
 use crate::browse;
 use crate::cache::{Cache, Page};
@@ -1141,11 +1141,9 @@ impl Core {
                 cached.iter().map(|cached| (cached.thread.id.clone(), cached.thread.clone())).collect();
             let views: Vec<ThreadView> = cached
                 .iter()
-                .map(|cached| ThreadView {
-                    unread: is_unread(&cached.thread, cached.seen_at),
-                    thread: cached.thread.clone(),
-                    server_id: server_id.clone(),
-                    children: children_of(&threads, &cached.thread.id),
+                .map(|cached| {
+                    let children = children_of(&threads, &cached.thread.id);
+                    view_of(&server_id, &cached.thread, cached.seen_at, children)
                 })
                 .collect();
             self.servers.push(Server {
@@ -1661,12 +1659,8 @@ impl Core {
 
     fn thread_view(&self, server_id: &str, thread: &Thread) -> ThreadView {
         let threads = self.servers.iter().find(|server| server.device.public_key == server_id);
-        ThreadView {
-            unread: is_unread(thread, self.cache.seen_at(&thread.id)),
-            thread: thread.clone(),
-            server_id: server_id.to_string(),
-            children: threads.and_then(|server| children_of(&server.threads, &thread.id)),
-        }
+        let children = threads.and_then(|server| children_of(&server.threads, &thread.id));
+        view_of(server_id, thread, self.cache.seen_at(&thread.id), children)
     }
 
     /// Shows the open thread's agents again once a thread one of them works in changed how it is
@@ -4110,12 +4104,37 @@ fn stopped(thread: Thread) -> Thread {
     }
 }
 
+fn view_of(server_id: &str, thread: &Thread, seen_at: Option<f64>, children: Option<Children>) -> ThreadView {
+    ThreadView {
+        unread: is_unread(thread, seen_at),
+        woke: thread.woke_at.is_some() && (seen_at.is_none() || after_seen(thread.woke_at, seen_at)),
+        section: section_of(thread, children.as_ref()),
+        thread: thread.clone(),
+        server_id: server_id.to_string(),
+        children,
+    }
+}
+
 /// A turn ended after the user last looked. A thread never opened here doesn't nag.
 fn is_unread(thread: &Thread, seen_at: Option<f64>) -> bool {
-    match (thread.turn_ended_at, seen_at) {
-        (Some(ended), Some(seen)) => ended > seen && !thread.running && !thread.monitoring,
-        _ => false,
+    after_seen(thread.turn_ended_at, seen_at) && !thread.running && !thread.monitoring
+}
+
+fn after_seen(at: Option<f64>, seen_at: Option<f64>) -> bool {
+    matches!((at, seen_at), (Some(at), Some(seen)) if at > seen)
+}
+
+/// A thread that waits for the user stays among the active ones while its agents work.
+fn section_of(thread: &Thread, children: Option<&Children>) -> Section {
+    if thread.archived_at.is_some() {
+        return Section::Archived;
     }
+    if thread.snoozed_until.is_some() {
+        return Section::Snoozed;
+    }
+    let waits = thread.needs_approval || children.is_some_and(|children| !children.waiting.is_empty());
+    let works = thread.running || thread.monitoring || children.is_some_and(|children| children.running > 0);
+    if works && !waits { Section::Working } else { Section::Active }
 }
 
 /// Joins splices that continue one another, as a catch-up's appended items do.
@@ -4253,7 +4272,9 @@ mod tests {
             access: motile_protocol::wire::Access::Full,
             created_at: 1.0,
             updated_at: 2.0,
-            done_at: None,
+            archived_at: None,
+            snoozed_until: None,
+            woke_at: None,
             position: 1.0,
             running,
             monitoring,

@@ -125,8 +125,10 @@ struct ComposerView: View {
     }
 
     @ViewBuilder private var aboveText: some View {
-        if let thread = store.selectedThread, thread.isDone {
-            doneBanner(thread)
+        if let thread = store.selectedThread, thread.isArchived {
+            putAwayBanner(.archived, title: "Archived", action: "Unarchive") { store.setArchived([thread.id], archived: false) }
+        } else if let thread = store.selectedThread, let until = thread.snoozedUntil, thread.section == .snoozed {
+            putAwayBanner(.snoozed, title: "Snoozed until \(Time.stamp(until))", action: "Wake") { store.wake([thread.id]) }
         }
         if let from = store.selectedDraft?.from {
             ContinuedThreadChip(from: from)
@@ -219,7 +221,8 @@ struct ComposerView: View {
 
     private var placeholder: String {
         guard let server = store.composerServer else { return "Ask anything" }
-        if store.selectedThread?.isDone == true { return "Message to bring it back" }
+        if store.selectedThread?.isArchived == true { return "Message to bring it back" }
+        if store.selectedThread?.section == .snoozed { return "Message to wake it" }
         if server.state != .connected { return "Waiting for \(server.name)" }
         if server.models.isEmpty && server.known { return "Install Claude Code or Codex" }
         if store.activity.running { return "Send a follow-up" }
@@ -228,14 +231,17 @@ struct ComposerView: View {
 
     private static let undoneButtonPadding = ControlSize.small.padding
 
-    private func doneBanner(_ thread: ThreadInfo) -> some View {
+    /// Says the open thread is archived or snoozed, with the way back.
+    private func putAwayBanner(_ section: ThreadSection, title: String, action: String, perform: @escaping () -> Void) -> some View {
         HStack(spacing: 8) {
-            Image(.circleCheck, size: .sm)
-                .foregroundStyle(Color.themeSuccess)
-            Text("Done")
+            if let symbol = section.symbol {
+                Image(symbol, size: .sm)
+                    .foregroundStyle(Color.themeMutedForeground)
+            }
+            Text(title)
                 .fontWeight(.medium)
             Spacer()
-            ActionButton("Mark Undone", variant: .link, size: .small) { store.setDone([thread.id], done: false) }
+            ActionButton(action, variant: .link, size: .small, action: perform)
                 .padding(.vertical, -4)
         }
         .font(.ui(size: 12.5))

@@ -898,9 +898,24 @@ pub struct ThreadView {
     pub server_id: String,
     /// A turn ended since the user last looked at the thread on this device.
     pub unread: bool,
+    /// It woke from a snooze by itself since the user last looked at it on this device.
+    pub woke: bool,
+    /// Where the sidebar lists it.
+    pub section: Section,
     /// How the agents its agent started are doing, theirs too, when it started any.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub children: Option<Children>,
+}
+
+/// The part of the sidebar a thread is listed in.
+#[derive(Serialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum Section {
+    Active,
+    /// Its agent, or an agent it started, works or monitors, and nothing waits for the user.
+    Working,
+    Snoozed,
+    Archived,
 }
 
 /// The agents a thread's agent started, and theirs, as the thread shows them.
@@ -949,7 +964,10 @@ mod tests {
         let Command::Request { server_id, request: Request::Update { thread_id, change } } = envelope.command else {
             panic!("expected an update request");
         };
-        assert_eq!((server_id.as_str(), thread_id.as_str(), change.done, change.title), ("h", "t", Some(true), None));
+        assert_eq!(
+            (server_id.as_str(), thread_id.as_str(), change.archived, change.title),
+            ("h", "t", Some(true), None)
+        );
 
         let send: Envelope = serde_json::from_str(
             r#"{"id": 8, "type": "send", "server_id": "h", "thread_id": "t", "new_thread": null, "text": "hi"}"#,
@@ -992,7 +1010,14 @@ mod tests {
         }))
         .unwrap();
         let event = Event::ThreadUpsert {
-            thread: Box::new(ThreadView { thread, server_id: "h".into(), unread: false, children: None }),
+            thread: Box::new(ThreadView {
+                thread,
+                server_id: "h".into(),
+                unread: false,
+                woke: false,
+                section: Section::Active,
+                children: None,
+            }),
         };
         let json = serde_json::to_value(event).unwrap();
 

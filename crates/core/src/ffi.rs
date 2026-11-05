@@ -113,6 +113,14 @@ pub extern "C" fn motile_model_search(input_json: *const c_char) -> *mut c_char 
     CString::new(found).unwrap_or_default().into_raw()
 }
 
+/// The times a snooze menu offers, or when a snooze the user wrote ends (`snooze::snooze_json`):
+/// JSON in, JSON out, on any thread. The answer is the caller's to free with `motile_free_string`.
+#[unsafe(no_mangle)]
+pub extern "C" fn motile_snooze(input_json: *const c_char) -> *mut c_char {
+    let answer = crate::snooze::snooze_json(&text(input_json).unwrap_or_default());
+    CString::new(answer).unwrap_or_default().into_raw()
+}
+
 /// Frees a string the core gave the client.
 ///
 /// # Safety

@@ -1,24 +1,25 @@
-//! The sidebar's rows: an active thread on three lines, a draft laid out like one, a done thread
-//! on one quiet line, the offer to start a thread, the line that says there is nothing, and what
-//! a thread is up to.
+//! The sidebar's rows: an active thread on three lines, a draft laid out like one, a working,
+//! snoozed or archived thread on one quiet line, the offer to start a thread, the line that says
+//! there is nothing, and what a thread is up to.
 
 use gpui_kit::prelude::*;
 use gpui_kit::*;
+use motile_core::api::Section;
 use motile_protocol::wire::PullRequest;
 
 use super::{
     BOTTOM_PADDING, DONE_ROW_HEIGHT, FIRST_LINE_HEIGHT, ROW_GAP, SIDE_PADDING, SIDEBAR_EDGE, Sidebar, TITLE_HEIGHT,
-    TOP_PADDING, button_inset, row_layer, row_margin, stop_press,
+    TOP_PADDING, button_inset, row_layer, row_margin, snooze_menu, stop_press,
 };
 use crate::models::{
-    Project, ThreadInfo, ago, ask_label, elapsed, interruption_detail, interruption_label, last_component, now,
+    Project, ThreadInfo, ago, ask_label, elapsed, interruption_detail, interruption_label, last_component, left, now,
     shortened,
 };
 use crate::store::{ListedDraft, Selection, stage_label};
 use crate::theme::{ControlSize, IconSize, Opacity, Radius, Surface, colors};
 use crate::ui::logos::{self, PullRequestLabel};
 use crate::ui::menu::Menu;
-use crate::ui::{ActionButton, Highlight, KeyCaps, Spinner, divider, icons, tabular_numbers, tooltip};
+use crate::ui::{ActionButton, ActionMenu, Highlight, KeyCaps, Spinner, divider, icons, tabular_numbers, tooltip};
 
 /// How tall the line under the drafts is, with the room around it.
 pub const DRAFTS_DIVIDER: f32 = 1. + 2. * (4. + ROW_GAP / 2.);
@@ -112,21 +113,8 @@ impl Sidebar {
                 .text_color(c.foreground)
                 .child(KeyCaps::new([jump]))
                 .into_any_element()
-        } else if hovering && !thread.unfinished() && !read_only {
-            let (store, id) = (self.store.clone(), thread.id.clone());
-            let button = ActionButton::new(SharedString::from(format!("mark-done-{id}")), "Mark Done")
-                .symbol("check")
-                .symbol_size(ControlSize::Small.small_symbol())
-                .ghost()
-                .small()
-                .row(row_layer(selected))
-                .on_click(move |_, _, cx| {
-                    store.update(cx, |store, cx| {
-                        store.set_done(std::slice::from_ref(&id), true, true, cx);
-                        cx.notify();
-                    })
-                });
-            div().mr(px(button_inset() - SIDE_PADDING)).child(stop_press(button)).into_any_element()
+        } else if hovering && (!thread.unfinished() || store.snoozes(thread)) && !read_only {
+            div().mr(px(button_inset() - SIDE_PADDING)).child(self.row_buttons(thread, selected, cx)).into_any_element()
         } else {
             thread_status(thread, read_only, cx)
         };
@@ -191,6 +179,39 @@ impl Sidebar {
                             .child(logos::agent_icon(thread.agent, IconSize::Sm, cx)),
                     ),
             )
+    }
+
+    /// What a thread's row offers under the pointer: a snooze, and archiving it once it has finished.
+    fn row_buttons(&self, thread: &ThreadInfo, selected: bool, cx: &App) -> Div {
+        let id = thread.id.clone();
+        let snooze = self.store.read(cx).snoozes(thread).then(|| {
+            let (store, thread_id) = (self.store.clone(), id.clone());
+            let menu =
+                ActionMenu::icon(SharedString::from(format!("snooze-{id}")), "alarm-clock", "Snooze", move |_, _| {
+                    snooze_menu(&store, &thread_id)
+                })
+                .button(|button| {
+                    button.small().symbol_size(ControlSize::Small.small_symbol()).row(row_layer(selected))
+                });
+            stop_press(menu)
+        });
+        let archive = (!thread.unfinished()).then(|| {
+            let (store, thread_id) = (self.store.clone(), id.clone());
+            let button = ActionButton::new(SharedString::from(format!("archive-{id}")), "Archive")
+                .symbol("check")
+                .symbol_size(ControlSize::Small.small_symbol())
+                .ghost()
+                .small()
+                .row(row_layer(selected))
+                .on_click(move |_, _, cx| {
+                    store.update(cx, |store, cx| {
+                        store.set_archived(std::slice::from_ref(&thread_id), true, true, cx);
+                        cx.notify();
+                    })
+                });
+            stop_press(button)
+        });
+        div().flex().items_center().gap(px(2.)).children(snooze).children(archive)
     }
 
     /// An active thread. `movable` rows are picked up by a press the list follows; the others
@@ -400,30 +421,35 @@ impl Sidebar {
             .into_any_element()
     }
 
-    /// A thread that is done: one quiet line, with its pull request. Under the pointer its time
-    /// gives way to the button that brings it back, which lies on the row's light.
-    pub(super) fn done_row(&self, thread: &ThreadInfo, cx: &mut Context<Self>) -> AnyElement {
+    /// A thread that is working, snoozed or archived: one quiet line, with its pull request and
+    /// what it does, how soon it wakes or when it was archived. Under the pointer a snoozed or
+    /// archived one's time gives way to the button that brings it back, which lies on the row's light.
+    pub(super) fn slim_row(&self, thread: &ThreadInfo, cx: &mut Context<Self>) -> AnyElement {
         let c = colors(cx);
         let store = self.store.read(cx);
         let selected = store.selection == Selection::Thread(thread.id.clone());
         let project = store.project(Some(&thread.project_id)).cloned();
         let pull_request = project.as_ref().and_then(|project| project.pull_request(thread));
-        let key = format!("done-{}", thread.id);
+        let key = format!("slim-{}", thread.id);
         let hovering = self.hovering(&key);
         let removed = store.on_removed_server(thread);
-        let (select, undone, menu_id) = (self.store.clone(), self.store.clone(), thread.id.clone());
-        let (id, undone_id) = (thread.id.clone(), thread.id.clone());
+        let (select, menu_id, id) = (self.store.clone(), thread.id.clone(), thread.id.clone());
         let margin = row_margin();
         let layer = row_layer(selected).unwrap_or(crate::theme::Layer::Row);
-        let undo = ActionButton::icon(SharedString::from(format!("undone-{id}")), "undo-2", "Mark undone")
-            .small()
-            .row(Some(layer))
-            .on_click(move |_, _, cx| {
-                undone.update(cx, |store, cx| {
-                    store.set_done(std::slice::from_ref(&undone_id), false, false, cx);
-                    cx.notify();
-                })
-            });
+        let back = self.bring_back_button(thread, layer);
+        let trailing = match (thread.section, thread.snoozed_until) {
+            (Section::Working, _) => thread_status(thread, removed, cx),
+            (Section::Snoozed, Some(until)) => div()
+                .id(SharedString::from(format!("wakes-{}", thread.id)))
+                .flex()
+                .items_center()
+                .gap(px(3.))
+                .child(icons::symbol("alarm-clock", IconSize::Sm))
+                .child(div().font_features(tabular_numbers()).child(left(until)))
+                .tooltip(tooltip(format!("Wakes {}", crate::format::stamp(until))))
+                .into_any_element(),
+            _ => div().child(ago(thread.archived_at.unwrap_or(thread.updated_at))).into_any_element(),
+        };
         div()
             .id(SharedString::from(key.clone()))
             .group(SharedString::from(key.clone()))
@@ -460,10 +486,10 @@ impl Sidebar {
                             .flex_shrink_0()
                             .text_size(px(11.))
                             .text_color(c.muted_stronger_foreground)
-                            .when(hovering, |time| time.opacity(0.))
-                            .child(ago(thread.done_at.unwrap_or(thread.updated_at))),
+                            .when(hovering && back.is_some(), |time| time.opacity(0.))
+                            .child(trailing),
                     )
-                    .when(hovering && !removed, |line| {
+                    .when_some(back.filter(|_| hovering && !removed), |line, back| {
                         line.child(
                             div()
                                 .absolute()
@@ -474,7 +500,7 @@ impl Sidebar {
                                 .items_center()
                                 .pl(px(6.))
                                 .bg(Surface::Background.layer(layer, c))
-                                .child(stop_press(undo)),
+                                .child(stop_press(back)),
                         )
                     }),
             )
@@ -495,7 +521,33 @@ impl Sidebar {
             .into_any_element()
     }
 
-    /// Starts a thread, where the sidebar has no draft and no active thread. Laid out like a done
+    /// What brings a snoozed or archived thread back: waking it, or unarchiving it. A working
+    /// one has none.
+    fn bring_back_button(&self, thread: &ThreadInfo, layer: crate::theme::Layer) -> Option<ActionButton> {
+        let (store, id) = (self.store.clone(), thread.id.clone());
+        let (symbol, help) = match thread.section {
+            Section::Snoozed => ("alarm-clock-off", "Wake"),
+            Section::Archived => ("undo-2", "Unarchive"),
+            Section::Active | Section::Working => return None,
+        };
+        let section = thread.section;
+        let button = ActionButton::icon(SharedString::from(format!("back-{id}")), symbol, help)
+            .small()
+            .row(Some(layer))
+            .on_click(move |_, _, cx| {
+                store.update(cx, |store, cx| {
+                    if section == Section::Snoozed {
+                        store.wake(std::slice::from_ref(&id));
+                    } else {
+                        store.set_archived(std::slice::from_ref(&id), false, false, cx);
+                    }
+                    cx.notify();
+                })
+            });
+        Some(button)
+    }
+
+    /// Starts a thread, where the sidebar has no draft and no active thread. Laid out like a slim
     /// row, and muted until it lights up.
     pub(super) fn new_thread_row(&self, cx: &mut Context<Self>) -> AnyElement {
         let key = "new-thread-row";
@@ -556,7 +608,7 @@ impl Sidebar {
             .text_size(px(12.))
             .text_color(c.muted_stronger_foreground);
         if !store.is_searching_threads() {
-            let text = if store.done_threads().is_empty() { "No threads yet" } else { "No active threads" };
+            let text = if store.all_threads().next().is_none() { "No threads yet" } else { "No active threads" };
             return line.child(text).into_any_element();
         }
         if store.sidebar.message_search.searching {
@@ -646,6 +698,9 @@ pub fn thread_status(thread: &ThreadInfo, read_only: bool, cx: &App) -> AnyEleme
             .tooltip(tooltip(interruption_detail(interruption, now())))
             .into_any_element();
     }
+    if thread.woke {
+        return label("Woke".into(), c.warning, symbol("alarm-clock")).into_any_element();
+    }
     if thread.unread {
         return label("Finished".into(), c.success, symbol("flag")).into_any_element();
     }
@@ -657,7 +712,7 @@ pub fn thread_status(thread: &ThreadInfo, read_only: bool, cx: &App) -> AnyEleme
         .into_any_element()
 }
 
-/// Whether a done or found thread is shown quieter: its project's icon at the disabled opacity.
+/// Whether an archived or found thread is shown quieter: its project's icon at the disabled opacity.
 pub fn quieted(element: AnyElement, quiet: bool, cx: &App) -> AnyElement {
     if !quiet {
         return element;

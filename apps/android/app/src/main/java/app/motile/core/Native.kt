@@ -23,4 +23,7 @@ object Native {
 
     /** Builds the page an HtmlView or a YouTube shows, a `web::PageRequest`, into its `web::Page`. Any thread. */
     @JvmStatic external fun uiPage(input: String): String
+
+    /** The times a snooze menu offers, or when a snooze the user wrote ends. Any thread. */
+    @JvmStatic external fun snooze(input: String): String
 }
