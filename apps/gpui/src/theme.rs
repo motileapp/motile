@@ -393,6 +393,8 @@ pub fn set_app_appearance(_: Appearance) {}
 
 /// The app's typeface, bundled in `assets/fonts`.
 pub const UI_FONT: &str = "DM Sans";
+/// How tall a line of text is, for its size.
+pub const LINE_HEIGHT: f32 = 1.21;
 #[cfg(target_os = "macos")]
 pub const MONO_FONT: &str = ".AppleSystemUIFontMonospaced";
 #[cfg(windows)]

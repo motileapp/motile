@@ -5,6 +5,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.layout.SubcomposeLayout
+import androidx.compose.ui.layout.layout
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -201,8 +202,8 @@ private fun SignInRow(title: String, agent: Agent, gateway: Gateway, symbol: Sym
 private fun AccountRow(account: GatewayAccount, count: Int, gateway: Gateway, rename: () -> Unit, remove: () -> Unit) {
     val palette = LocalPalette.current
     SettingsRow {
-        // As far from the card's top as its limits' numbers are from theirs.
-        AccountLines(account, Modifier.weight(1f).padding(vertical = 8.dp))
+        // As tall as an MCP server's row, which has a tile beside the same two lines.
+        AccountLines(account, Modifier.weight(1f).padding(vertical = 6.dp))
         ActionMenu(icon = Symbol.Ellipsis, help = "More") {
             item("Rename Account", Symbol.Pencil, run = rename)
             submenu(account.priorityText, Symbol.ListFilter) {
@@ -237,8 +238,8 @@ private fun AccountLines(account: GatewayAccount, modifier: Modifier) {
         RowText(account.name, color = palette.foreground, maxLines = 1)
     }
     val badges: @Composable () -> Unit = {
-        account.statusText?.let { Chip(it, tone = tone, compact = true) }
-        Chip("Next", Modifier.alpha(if (account.next) 1f else 0f), tone = palette.primary, compact = true)
+        account.statusText?.let { Chip(it, Modifier.standingPastLine(), tone = tone, compact = true) }
+        Chip("Next", Modifier.standingPastLine().alpha(if (account.next) 1f else 0f), tone = palette.primary, compact = true)
     }
     val line = Arrangement.spacedBy(6.dp)
     SubcomposeLayout(modifier) { constraints ->
@@ -247,7 +248,7 @@ private fun AccountLines(account: GatewayAccount, modifier: Modifier) {
         }.first().measure(Constraints())
         val beside = together.width <= constraints.maxWidth
         val lines = subcompose("lines") {
-            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Row(horizontalArrangement = line, verticalAlignment = Alignment.CenterVertically) {
                     name()
                     if (beside) badges()
@@ -261,6 +262,12 @@ private fun AccountLines(account: GatewayAccount, modifier: Modifier) {
         }.first().measure(constraints.copy(minWidth = 0))
         layout(constraints.maxWidth, lines.height) { lines.place(0, 0) }
     }
+}
+
+/** A badge that stands past its line above and below, centred on it, so that it never makes the line taller. */
+private fun Modifier.standingPastLine(): Modifier = layout { measurable, constraints ->
+    val badge = measurable.measure(constraints.copy(minHeight = 0))
+    layout(badge.width, 0) { badge.place(0, -badge.height / 2) }
 }
 
 @Composable

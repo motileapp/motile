@@ -58,9 +58,9 @@ struct AgentGatewaySettings: View {
     private func card(_ account: GatewayAccount, count: Int) -> some View {
         VStack(spacing: 0) {
             SettingsRow {
-                // As far from the card's top as its limits' numbers are from theirs.
+                // As tall as an MCP server's card's top row, which has a tile beside the same two lines.
                 GatewayAccountLabel(account: account)
-                    .padding(.vertical, 6)
+                    .padding(.vertical, 4)
             } trailing: {
                 if account.status == .signInAgain {
                     ActionButton("Sign In Again", variant: .outline, size: .large, pending: store.gatewaySignInStarting == account.agent) {

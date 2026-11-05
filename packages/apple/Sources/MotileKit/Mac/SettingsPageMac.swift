@@ -419,8 +419,8 @@ let settingsRowHeight: CGFloat = scaled(48)
 private let settingsRowSpacing: CGFloat = 10
 
 /// What stands a control this tall as far from its row's right as from its top and bottom.
-func rowOutset(for height: CGFloat) -> CGFloat {
-    settingsInset - (settingsRowHeight - height) / 2
+func rowOutset(for height: CGFloat, in row: CGFloat = settingsRowHeight) -> CGFloat {
+    settingsInset - (row - height) / 2
 }
 
 /// Half the room between the lights of two controls side by side at a row's end, which each
@@ -611,9 +611,16 @@ extension SettingsLabel where Footer == EmptyView {
 /// tallest, with the same room above and below.
 struct SettingsRow<Leading: View, Trailing: View>: View {
     /// How tall the trailing control is, which stands as far from the row's right as from its top and bottom.
-    var control = ControlSize.large.height
-    @ViewBuilder let leading: Leading
-    @ViewBuilder let trailing: Trailing
+    let control: CGFloat
+    let leading: Leading
+    let trailing: Trailing
+    @State private var height = settingsRowHeight
+
+    init(control: CGFloat = ControlSize.large.height, @ViewBuilder leading: () -> Leading, @ViewBuilder trailing: () -> Trailing) {
+        self.control = control
+        self.leading = leading()
+        self.trailing = trailing()
+    }
 
     var body: some View {
         HStack(spacing: settingsRowSpacing) {
@@ -621,10 +628,11 @@ struct SettingsRow<Leading: View, Trailing: View>: View {
                 .padding(.vertical, scaled(8))
             Spacer(minLength: 12)
             HStack(spacing: settingsRowSpacing) { trailing }
-                .padding(.trailing, -rowOutset(for: control))
+                .padding(.trailing, -rowOutset(for: control, in: height))
         }
         .padding(.horizontal, settingsInset)
         .frame(minHeight: settingsRowHeight)
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height = $0 }
     }
 }
 
