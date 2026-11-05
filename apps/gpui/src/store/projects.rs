@@ -8,7 +8,7 @@ use gpui_kit::*;
 use motile_core::api::Command;
 use motile_protocol::wire::{GitHubState, Repo, Request};
 
-use super::{AddingProject, Notice, PanelPage, Selection, Store};
+use super::{AddingProject, PanelPage, Selection, Store, Toast};
 use crate::bridge::CoreError;
 use crate::models::{FolderListing, Project, ProjectImage, Server};
 
@@ -76,7 +76,7 @@ impl Store {
         let server = server_id.to_string();
         self.request_then(server_id, Request::AddProject { path }, move |store, result, cx| {
             if let Err(error) = result {
-                return store.show_notice(Notice::failure(format!("Couldn't add {name}"), error.into()), cx);
+                return store.show_toast(Toast::failure(format!("Couldn't add {name}"), error.into()), cx);
             }
             store.awaited_folder = Some((server, trimmed));
             store.pick_awaited_folder(cx);
@@ -227,24 +227,24 @@ impl Store {
         });
     }
 
-    /// Clones the repository while the notice says so, and opens a thread in it once it is there.
+    /// Clones the repository while the toast says so, and opens a thread in it once it is there.
     /// Someone who has gone elsewhere meanwhile is offered the thread instead.
     pub fn clone_repo(&mut self, repo: String, server_id: &str, cx: &mut Context<Self>) {
         let into = self.server(Some(server_id)).map(|server| format!(" on {}", server.name)).unwrap_or_default();
-        let cloning = Notice::new(format!("Cloning {repo}"), Some(format!("Into ~/projects{into}")));
-        self.show_notice(Notice { pending: true, ..cloning }, cx);
+        let cloning = Toast::new(format!("Cloning {repo}"), Some(format!("Into ~/projects{into}")));
+        self.show_toast(Toast { pending: true, ..cloning }, cx);
         let from = self.selection.clone();
         let failed_repo = repo.clone();
         let arrived = move |store: &mut Store, project: Project, cx: &mut Context<Store>| {
-            let cloned = Notice::new(format!("Cloned {repo}"), Some(project.path.clone()));
+            let cloned = Toast::new(format!("Cloned {repo}"), Some(project.path.clone()));
             if store.selection != from {
-                return store.show_notice(Notice { project_id: Some(project.id.clone()), ..cloned }, cx);
+                return store.show_toast(Toast { project_id: Some(project.id.clone()), ..cloned }, cx);
             }
-            store.show_notice(cloned, cx);
+            store.show_toast(cloned, cx);
             store.open_thread_in(&project, cx);
         };
         self.add(Request::CloneRepo { repo: failed_repo.clone() }, server_id, arrived, move |store, error, cx| {
-            store.show_notice(Notice::failure(format!("Couldn't clone {failed_repo}"), error.into()), cx);
+            store.show_toast(Toast::failure(format!("Couldn't clone {failed_repo}"), error.into()), cx);
         });
     }
 

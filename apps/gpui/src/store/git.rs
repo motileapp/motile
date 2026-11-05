@@ -5,15 +5,17 @@ use std::time::Duration;
 use gpui_kit::prelude::*;
 use motile_core::api::Command;
 use motile_core::git::{Confirm, Item};
+use motile_core::link::State;
 use motile_protocol::wire::{Branch, ChangedFile, GitAction, GitStage, Request};
 
 use super::Store;
 use crate::models::Project;
 
-/// What a git action or a project add did, or why it couldn't, shown at the top of the thread
-/// until it is dismissed. A git notice belongs to its checkout; a project's shows anywhere.
+/// What a git action or a project add did, or why it couldn't, or that a server can't be reached,
+/// shown at the top of the thread until it is dismissed. A git toast belongs to its checkout, a
+/// server's to its threads and drafts; a project's shows anywhere.
 #[derive(Clone, PartialEq, Debug, Default)]
-pub struct Notice {
+pub struct Toast {
     /// The checkout a git run was in: the project's folder or a thread's worktree.
     pub checkout_id: Option<String>,
     pub title: String,
@@ -27,12 +29,14 @@ pub struct Notice {
     pub next: Option<GitAction>,
     /// The project to open a thread in.
     pub project_id: Option<String>,
-    /// Tells two notices with the same words apart, so that the older one's timer leaves the
+    /// The server that can't be reached.
+    pub server_id: Option<String>,
+    /// Tells two toasts with the same words apart, so that the older one's timer leaves the
     /// newer one up.
     pub serial: u64,
 }
 
-impl Notice {
+impl Toast {
     pub(super) fn new(title: String, description: Option<String>) -> Self {
         Self { title, description, ..Self::default() }
     }
@@ -160,10 +164,10 @@ impl Store {
             let Ok(answer) = result else { return };
             store.worktree_starts.insert(key, answer["start"].as_str().unwrap_or_default().to_string());
             let Some(problem) = answer["problem"].as_str() else { return };
-            let mut notice = Notice::git(&project.checkout_id(), format!("Couldn't fetch {base}"));
-            notice.description = Some(problem.to_string());
-            notice.failed = true;
-            store.show_notice(notice, cx);
+            let mut toast = Toast::git(&project.checkout_id(), format!("Couldn't fetch {base}"));
+            toast.description = Some(problem.to_string());
+            toast.failed = true;
+            store.show_toast(toast, cx);
         });
     }
 
@@ -189,38 +193,41 @@ impl Store {
         if !self.pulling_bases.insert(key.clone()) {
             return;
         }
-        self.notice = None;
+        self.toast = None;
         let request = Request::UpdateBase { project_id: project.id.clone(), base: base.clone() };
         let server_id = project.server_id.clone();
         self.request_then(&server_id, request, move |store, result, cx| {
             store.pulling_bases.remove(&key);
-            let notice = match result {
+            let toast = match result {
                 Ok(answer) => {
                     store.worktree_starts.insert(key, answer["start"].as_str().unwrap_or_default().to_string());
-                    Notice::git(&project.checkout_id(), format!("Pulled {base}"))
+                    Toast::git(&project.checkout_id(), format!("Pulled {base}"))
                 }
                 Err(error) => {
-                    let mut notice = Notice::git(&project.checkout_id(), format!("Couldn't pull {base}"));
-                    notice.description = Some(error.into());
-                    notice.failed = true;
-                    notice
+                    let mut toast = Toast::git(&project.checkout_id(), format!("Couldn't pull {base}"));
+                    toast.description = Some(error.into());
+                    toast.failed = true;
+                    toast
                 }
             };
-            store.show_notice(notice, cx);
+            store.show_toast(toast, cx);
         });
     }
 
-    /// The notice to draw here: a project's anywhere, a git one over the checkout git works in
+    /// The toast to draw here: a project's anywhere, a git one over the checkout git works in
     /// from here, or over the project the open draft starts a worktree in.
-    pub fn open_notice(&self) -> Option<Notice> {
-        let notice = self.notice.as_ref()?;
-        let Some(wanted) = &notice.checkout_id else { return Some(notice.clone()) };
+    pub fn open_toast(&self) -> Option<Toast> {
+        let toast = self.toast.as_ref()?;
+        if let Some(server_id) = &toast.server_id {
+            return (self.composer_server()?.id == *server_id).then(|| toast.clone());
+        }
+        let Some(wanted) = &toast.checkout_id else { return Some(toast.clone()) };
         let draft_project = self
             .draft_uses_worktree()
             .then(|| self.project(self.selected_draft()?.project_id.as_deref()).cloned())
             .flatten();
         let checkout = self.git_project().or(draft_project)?.checkout_id();
-        (*wanted == checkout).then(|| notice.clone())
+        (*wanted == checkout).then(|| toast.clone())
     }
 
     /// The line over the thread's title: its project, its branch, and whether it starts in a new
@@ -345,10 +352,10 @@ impl Store {
         self.request_then(&server_id, request, move |store, result, cx| match result {
             Ok(answer) => {
                 if let Some(problem) = answer["problem"].as_str() {
-                    let mut notice = Notice::git(&project.checkout_id(), "Couldn't fetch from the remote".into());
-                    notice.description = Some(problem.to_string());
-                    notice.failed = true;
-                    store.show_notice(notice, cx);
+                    let mut toast = Toast::git(&project.checkout_id(), "Couldn't fetch from the remote".into());
+                    toast.description = Some(problem.to_string());
+                    toast.failed = true;
+                    store.show_toast(toast, cx);
                 }
                 if let Some(done) = done {
                     let files: Vec<ChangedFile> = serde_json::from_value(answer["files"].clone()).unwrap_or_default();
@@ -406,7 +413,7 @@ impl Store {
     /// Opens the pull request's tab in the right panel, or the pull request on GitHub when its
     /// number isn't in the address.
     pub fn show_pull_request(&mut self, url: &str, cx: &mut Context<Self>) {
-        self.notice = None;
+        self.toast = None;
         let number = crate::panel::pull_request::parse_number(url);
         if self.pull_request_unavailable().is_some() {
             return cx.open_url(url);
@@ -426,7 +433,7 @@ impl Store {
         }
         let Some(action) = quick.action else {
             let title = quick.hint.clone().unwrap_or(quick.label.clone());
-            self.show_notice(Notice::git(&project.checkout_id(), title), cx);
+            self.show_toast(Toast::git(&project.checkout_id(), title), cx);
             return;
         };
         self.start_git(action, project, quick.confirm.clone(), cx);
@@ -483,7 +490,7 @@ impl Store {
         let checkout_id = project.checkout_id();
         let written = message.as_ref().is_some_and(|message| !message.is_empty()) && !new_branch;
         self.git_stages.insert(checkout_id.clone(), Self::first_stage(action, project, written));
-        self.notice = None;
+        self.toast = None;
         let thread_id =
             self.selected_thread().filter(|thread| thread.project_id == project.id).map(|thread| thread.id.clone());
         let command = Command::GitRun {
@@ -497,39 +504,39 @@ impl Store {
         };
         self.ask(command, move |store, result, cx| {
             store.git_stages.remove(&checkout_id);
-            let notice = match result {
+            let toast = match result {
                 Ok(done) => {
-                    let mut notice = Notice::git(&checkout_id, done["title"].as_str().unwrap_or_default().to_string());
-                    notice.description = done["description"].as_str().map(String::from);
-                    notice.url = done["url"].as_str().map(String::from);
-                    notice.next = serde_json::from_value(done["next"].clone()).ok();
-                    notice
+                    let mut toast = Toast::git(&checkout_id, done["title"].as_str().unwrap_or_default().to_string());
+                    toast.description = done["description"].as_str().map(String::from);
+                    toast.url = done["url"].as_str().map(String::from);
+                    toast.next = serde_json::from_value(done["next"].clone()).ok();
+                    toast
                 }
                 Err(error) => {
-                    let mut notice = Notice::git(&checkout_id, "Git stopped".into());
-                    notice.description = Some(error.into());
-                    notice.failed = true;
-                    notice
+                    let mut toast = Toast::git(&checkout_id, "Git stopped".into());
+                    toast.description = Some(error.into());
+                    toast.failed = true;
+                    toast
                 }
             };
-            store.show_notice(notice, cx);
+            store.show_toast(toast, cx);
         });
     }
 
     /// What worked goes away by itself; what failed or is still under way stays until it is
     /// closed or replaced.
-    pub(super) fn show_notice(&mut self, mut notice: Notice, cx: &mut Context<Self>) {
-        notice.serial = self.notice.as_ref().map_or(0, |shown| shown.serial) + 1;
-        let stays = notice.failed || notice.pending;
-        self.notice = Some(notice.clone());
+    pub(super) fn show_toast(&mut self, mut toast: Toast, cx: &mut Context<Self>) {
+        toast.serial = self.toast.as_ref().map_or(0, |shown| shown.serial) + 1;
+        let stays = toast.failed || toast.pending;
+        self.toast = Some(toast.clone());
         if stays {
             return;
         }
         cx.spawn(async move |this, cx| {
             cx.background_executor().timer(Duration::from_secs(10)).await;
             let _ = this.update(cx, |store, cx| {
-                if store.notice.as_ref() == Some(&notice) {
-                    store.notice = None;
+                if store.toast.as_ref() == Some(&toast) {
+                    store.toast = None;
                     cx.notify();
                 }
             });
@@ -537,32 +544,67 @@ impl Store {
         .detach();
     }
 
-    pub fn dismiss_notice(&mut self) {
-        self.notice = None;
+    pub fn dismiss_toast(&mut self) {
+        let Some(toast) = self.toast.take() else { return };
+        self.dismissed_outages.extend(toast.server_id);
     }
 
-    /// The action a notice says comes next, like the push after a commit.
+    /// Says a server can't be reached, until it is again or the toast is dismissed, unless
+    /// another failed or waiting toast is up.
+    pub(super) fn toast_outages(&mut self) {
+        let mut toast = self.toast.clone();
+        for server in self.servers.iter().filter(|server| !server.removed) {
+            let own = toast.as_ref().is_some_and(|toast| toast.server_id.as_ref() == Some(&server.id));
+            if server.connected() {
+                self.dismissed_outages.remove(&server.id);
+                if own {
+                    toast = None;
+                }
+                continue;
+            }
+            let Some(error) = server.error.clone().filter(|_| server.state != State::Connecting) else { continue };
+            if self.dismissed_outages.contains(&server.id) {
+                continue;
+            }
+            let busy = toast.as_ref().is_some_and(|toast| toast.failed || toast.pending);
+            if busy && !own {
+                continue;
+            }
+            let serial = toast.as_ref().map_or(0, |toast| toast.serial);
+            let outage = Toast {
+                server_id: Some(server.id.clone()),
+                serial: if own { serial } else { serial + 1 },
+                ..Toast::failure(format!("Couldn't reach {}", server.name), error)
+            };
+            if toast.as_ref() != Some(&outage) {
+                toast = Some(outage);
+            }
+        }
+        self.toast = toast;
+    }
+
+    /// The action a toast says comes next, like the push after a commit.
     pub fn run_next_git(&mut self, cx: &mut Context<Self>) {
-        let Some(notice) = self.notice.clone() else { return };
-        let Some(next) = notice.next else { return };
-        let Some(project) = self.git_project().filter(|project| Some(project.checkout_id()) == notice.checkout_id)
+        let Some(toast) = self.toast.clone() else { return };
+        let Some(next) = toast.next else { return };
+        let Some(project) = self.git_project().filter(|project| Some(project.checkout_id()) == toast.checkout_id)
         else {
             return;
         };
         let confirm = project.git_control.as_ref().and_then(|control| {
             control.menu.iter().find(|item| item.action == next).and_then(|item| item.confirm.clone())
         });
-        self.notice = None;
+        self.toast = None;
         self.start_git(next, &project, confirm, cx);
     }
 
-    /// Opens a thread in the project a notice is about.
-    pub fn open_notice_project(&mut self, cx: &mut Context<Self>) {
-        let Some(project) = self.project(self.notice.as_ref().and_then(|notice| notice.project_id.as_deref())).cloned()
+    /// Opens a thread in the project a toast is about.
+    pub fn open_toast_project(&mut self, cx: &mut Context<Self>) {
+        let Some(project) = self.project(self.toast.as_ref().and_then(|toast| toast.project_id.as_deref())).cloned()
         else {
             return;
         };
-        self.notice = None;
+        self.toast = None;
         self.open_thread_in(&project, cx);
     }
 }

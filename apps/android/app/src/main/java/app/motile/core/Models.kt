@@ -562,9 +562,11 @@ enum class GitStage(val raw: String) {
     }
 }
 
-/** What a git action or a project add did, or why it couldn't, shown at the top of the thread until it is dismissed. A git notice belongs to its checkout; a project's shows anywhere. */
-data class Notice(
+/** What a git action or a project add did, or why it couldn't, shown at the top of the thread until it is dismissed. A git toast belongs to its checkout; a project's shows anywhere. */
+data class Toast(
     val checkoutID: String? = null,
+    /** The server that can't be reached, whose toast shows over its threads until it is back. */
+    val serverID: String? = null,
     val title: String,
     val description: String? = null,
     val failed: Boolean = false,
@@ -576,7 +578,7 @@ data class Notice(
     val next: String? = null,
     /** The project to open a thread in. */
     val projectID: String? = null,
-    /** Tells apart two notices that read alike, so that one going away by itself leaves the other. */
+    /** Tells apart two toasts that read alike, so that one going away by itself leaves the other. */
     val stamp: Long = System.nanoTime(),
 ) {
     val nextLabel: String?

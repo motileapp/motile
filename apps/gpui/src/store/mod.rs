@@ -35,7 +35,7 @@ use motile_protocol::wire::{
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-pub use self::git::{Notice, PendingGit, stage_label};
+pub use self::git::{PendingGit, Toast, stage_label};
 pub use self::projects::RepoListing;
 pub use self::pull_requests::PullRequests;
 pub use self::settings::SettingsState;
@@ -280,7 +280,9 @@ pub struct Store {
     pub pending_git: Option<PendingGit>,
     /// The stage a project's git action is at, by project.
     pub git_stages: HashMap<String, GitStage>,
-    pub notice: Option<Notice>,
+    pub toast: Option<Toast>,
+    /// The servers whose toast saying they can't be reached was dismissed, until they connect.
+    pub dismissed_outages: HashSet<String>,
     /// The projects whose folders their servers are making git repositories.
     pub initializing_git: HashSet<String>,
     /// The `draft_worktree_key`s whose base is being pulled.
@@ -444,7 +446,8 @@ impl Store {
             git_files: Vec::new(),
             pending_git: None,
             git_stages: HashMap::new(),
-            notice: None,
+            toast: None,
+            dismissed_outages: HashSet::new(),
             initializing_git: HashSet::new(),
             pulling_bases: HashSet::new(),
             worktree_starts: HashMap::new(),

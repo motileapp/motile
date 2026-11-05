@@ -213,8 +213,10 @@ class AppStore(private val context: Context) {
     /** The `draftWorktreeKey`s whose base is being pulled. */
     var pullingBases by mutableStateOf(setOf<String>())
         private set
-    var notice by mutableStateOf<Notice?>(null)
+    var toast by mutableStateOf<Toast?>(null)
         private set
+    /** The servers whose toast the user closed while they can't be reached, until they are back. */
+    private val dismissedOutages = mutableSetOf<String>()
     /** What a new worktree starts at, like `origin/main`, by `draftWorktreeKey`. */
     var worktreeStarts by mutableStateOf(mapOf<String, String>())
         private set
@@ -768,9 +770,29 @@ class AppStore(private val context: Context) {
             if (update.restarting && server.version != update.from) serverUpdates.remove(server.id)
         }
         showServerUpdates()
+        showOutages(servers)
         ensureDraftProject()
         // The server has arrived; the install command has done its job.
         if (showsAddServer && servers.size > addServerCount) showsAddServer = false
+    }
+
+    /** Says a server can't be reached until it is back, unless the user closed it for this outage. A git toast that waits or failed stays. */
+    private fun showOutages(servers: List<Server>) {
+        for (server in servers) {
+            if (server.state == Server.State.Connected) {
+                dismissedOutages.remove(server.id)
+                if (toast?.serverID == server.id) toast = null
+                continue
+            }
+            val error = server.error ?: continue
+            if (server.state != Server.State.Disconnected && server.state != Server.State.Refused) continue
+            if (server.id in dismissedOutages) continue
+            val current = toast
+            if (current != null && current.serverID != server.id && (current.failed || current.pending)) continue
+            val title = "Couldn't reach ${server.name}"
+            if (current?.serverID == server.id && current.title == title && current.description == error) continue
+            toast = Toast(serverID = server.id, title = title, description = error, failed = true)
+        }
     }
 
     private fun applyThreads(new: List<ThreadInfo>, serverID: String) {
@@ -1005,14 +1027,15 @@ class AppStore(private val context: Context) {
             return if (canUseGit(project)) project else null
         }
 
-    /** The notice to draw here: a project's anywhere, a git one over the checkout git works in from here, or over the project the open draft starts a worktree in. */
-    val openNotice: Notice?
+    /** The toast to draw here: a server's over its threads, a project's anywhere, a git one over the checkout git works in from here, or over the project the open draft starts a worktree in. */
+    val openToast: Toast?
         get() {
-            val notice = notice ?: return null
-            val wanted = notice.checkoutID ?: return notice
+            val toast = toast ?: return null
+            toast.serverID?.let { return if (it == composerServer?.id) toast else null }
+            val wanted = toast.checkoutID ?: return toast
             val draftProject = if (draftUsesWorktree) project(selectedDraft?.projectID) else null
             val checkoutID = (gitProject ?: draftProject)?.checkoutID ?: return null
-            return if (wanted == checkoutID) notice else null
+            return if (wanted == checkoutID) toast else null
         }
 
     /** The folder the right panel looks into: the one the open thread works in, or the project's for the open draft. */
@@ -1067,7 +1090,7 @@ class AppStore(private val context: Context) {
 
     /** Opens the pull request's tab, or the pull request on GitHub where the tab can't show it. */
     fun showPullRequest(url: String) {
-        notice = null
+        toast = null
         if (panelUnavailable != null || pullRequestUnavailable != null) return Platform.open(url)
         rightPanel.open(app.motile.panel.PanelTab.PullRequest)
     }
@@ -1545,7 +1568,7 @@ class AppStore(private val context: Context) {
         val name = trimmed.substringAfterLast('/')
         core.send("request", mapOf("server_id" to serverID, "request" to mapOf("type" to "add_project", "path" to path))) { result ->
             val error = result.coreError
-            if (error != null) return@send show(Notice(title = "Couldn't add $name", description = error.message, failed = true))
+            if (error != null) return@send show(Toast(title = "Couldn't add $name", description = error.message, failed = true))
             awaitedFolder = serverID to trimmed
             pickAwaitedFolder()
         }
@@ -1694,17 +1717,17 @@ class AppStore(private val context: Context) {
         })
     }
 
-    /** Clones the repository while the notice says so, and opens a thread in it once it is there. Someone who has gone elsewhere meanwhile is offered the thread instead. */
+    /** Clones the repository while the toast says so, and opens a thread in it once it is there. Someone who has gone elsewhere meanwhile is offered the thread instead. */
     fun clone(repo: String, serverID: String) {
         val into = server(serverID)?.let { " on ${it.name}" } ?: ""
-        show(Notice(title = "Cloning $repo", description = "Into ~/projects$into", pending = true))
+        show(Toast(title = "Cloning $repo", description = "Into ~/projects$into", pending = true))
         val from = selection
         add(mapOf("type" to "clone_repo", "repo" to repo), serverID, arrived = { project ->
-            if (selection != from) return@add show(Notice(title = "Cloned $repo", description = project.path, projectID = project.id))
-            show(Notice(title = "Cloned $repo", description = project.path))
+            if (selection != from) return@add show(Toast(title = "Cloned $repo", description = project.path, projectID = project.id))
+            show(Toast(title = "Cloned $repo", description = project.path))
             openThread(project)
         }, failed = { error ->
-            show(Notice(title = "Couldn't clone $repo", description = error.message, failed = true))
+            show(Toast(title = "Couldn't clone $repo", description = error.message, failed = true))
         })
     }
 
@@ -1780,7 +1803,7 @@ class AppStore(private val context: Context) {
             val answer = result.getOrNull() ?: return@send
             worktreeStarts = worktreeStarts + (key to answer.string("start"))
             val problem = answer.optionalString("problem") ?: return@send
-            show(Notice(checkoutID = project.checkoutID, title = "Couldn't fetch $base", description = problem, failed = true))
+            show(Toast(checkoutID = project.checkoutID, title = "Couldn't fetch $base", description = problem, failed = true))
         }
     }
 
@@ -1803,16 +1826,16 @@ class AppStore(private val context: Context) {
         val project = project(selectedDraft?.projectID) ?: return
         if (key in pullingBases) return
         pullingBases = pullingBases + key
-        notice = null
+        toast = null
         val request = mapOf("type" to "update_base", "project_id" to project.id, "base" to base)
         core.send("request", mapOf("server_id" to project.serverID, "request" to request)) { result ->
             pullingBases = pullingBases - key
             val answer = result.getOrNull()
             if (answer != null) {
                 worktreeStarts = worktreeStarts + (key to answer.string("start"))
-                show(Notice(checkoutID = project.checkoutID, title = "Pulled $base"))
+                show(Toast(checkoutID = project.checkoutID, title = "Pulled $base"))
             } else {
-                show(Notice(checkoutID = project.checkoutID, title = "Couldn't pull $base", description = result.coreError?.message, failed = true))
+                show(Toast(checkoutID = project.checkoutID, title = "Couldn't pull $base", description = result.coreError?.message, failed = true))
             }
         }
     }
@@ -1897,7 +1920,7 @@ class AppStore(private val context: Context) {
             val answer = result.getOrNull()
             if (answer != null) {
                 answer.optionalString("problem")?.let { problem ->
-                    show(Notice(checkoutID = project.checkoutID, title = "Couldn't fetch from the remote", description = problem, failed = true))
+                    show(Toast(checkoutID = project.checkoutID, title = "Couldn't fetch from the remote", description = problem, failed = true))
                 }
                 done?.invoke(answer.objects("files").map(::ChangedFile))
             } else if (done != null) {
@@ -1930,7 +1953,7 @@ class AppStore(private val context: Context) {
         val quick = project.gitControl?.quick ?: return
         if (gitStage(project) != null) return
         quick.url?.let { return showPullRequest(it) }
-        val action = quick.action ?: return show(Notice(checkoutID = project.checkoutID, title = quick.hint ?: quick.label))
+        val action = quick.action ?: return show(Toast(checkoutID = project.checkoutID, title = quick.hint ?: quick.label))
         startGit(action, project, quick.confirm)
     }
 
@@ -1961,7 +1984,7 @@ class AppStore(private val context: Context) {
         val checkoutID = project.checkoutID
         if (gitStage(project) != null) return
         gitStages = gitStages + (checkoutID to firstStage(action, project, written = !message.isNullOrEmpty() && !newBranch))
-        notice = null
+        toast = null
         val command = buildMap<String, Any?> {
             put("server_id", project.serverID)
             put("project_id", project.id)
@@ -1975,42 +1998,43 @@ class AppStore(private val context: Context) {
             gitStages = gitStages - checkoutID
             val done = result.getOrNull()
             if (done != null) {
-                show(Notice(
+                show(Toast(
                     checkoutID = checkoutID, title = done.string("title"), description = done.optionalString("description"),
                     url = done.optionalString("url"), next = done.optionalString("next"),
                 ))
             } else {
-                show(Notice(checkoutID = checkoutID, title = "Git stopped", description = result.coreError?.message, failed = true))
+                show(Toast(checkoutID = checkoutID, title = "Git stopped", description = result.coreError?.message, failed = true))
             }
         }
     }
 
     /** What worked goes away by itself; what failed or is still under way stays until it is closed or replaced. */
-    private fun show(notice: Notice) {
-        this.notice = notice
-        if (notice.failed || notice.pending) return
-        main.postDelayed({ if (this.notice == notice) this.notice = null }, 10_000)
+    private fun show(toast: Toast) {
+        this.toast = toast
+        if (toast.failed || toast.pending) return
+        main.postDelayed({ if (this.toast == toast) this.toast = null }, 10_000)
     }
 
-    fun dismissNotice() {
-        notice = null
+    fun dismissToast() {
+        toast?.serverID?.let { dismissedOutages.add(it) }
+        toast = null
     }
 
-    /** The action a notice says comes next, like the push after a commit. */
+    /** The action a toast says comes next, like the push after a commit. */
     fun runNextGit() {
-        val notice = notice ?: return
-        val next = notice.next ?: return
+        val toast = toast ?: return
+        val next = toast.next ?: return
         val project = gitProject ?: return
-        if (project.checkoutID != notice.checkoutID) return
+        if (project.checkoutID != toast.checkoutID) return
         val confirm = project.gitControl?.menu?.firstOrNull { it.action == next }?.confirm
-        this.notice = null
+        this.toast = null
         startGit(next, project, confirm)
     }
 
-    /** Opens a thread in the project a notice is about. */
-    fun openNoticeProject() {
-        val project = project(notice?.projectID) ?: return
-        notice = null
+    /** Opens a thread in the project a toast is about. */
+    fun openToastProject() {
+        val project = project(toast?.projectID) ?: return
+        toast = null
         openThread(project)
     }
 

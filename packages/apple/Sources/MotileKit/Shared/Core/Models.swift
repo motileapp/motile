@@ -601,9 +601,10 @@ enum GitStage: String {
     }
 }
 
-/// What a git action or a project add did, or why it couldn't, shown at the top of the thread
-/// until it is dismissed. A git notice belongs to its checkout; a project's shows anywhere.
-struct Notice: Equatable {
+/// What a git action or a project add did, or why it couldn't, or why a server can't be reached,
+/// shown at the top of the thread until it is dismissed. A git toast belongs to its checkout, a
+/// server's to that server's threads; a project's shows anywhere.
+struct Toast: Equatable {
     var checkoutID: String?
     let title: String
     var description: String?
@@ -616,6 +617,8 @@ struct Notice: Equatable {
     var next: String?
     /// The project to open a thread in.
     var projectID: String?
+    /// The server that can't be reached.
+    var serverID: String?
 
     var nextLabel: String? {
         switch next {

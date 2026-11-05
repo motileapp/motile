@@ -306,11 +306,11 @@ private final class Demo {
             await shoot("07-git-button")
             store.runQuickGit(in: project)
             await expect("one click commits with a written message") {
-                store.notice?.title.hasPrefix("Committed") == true
+                store.toast?.title.hasPrefix("Committed") == true
                     && store.project(project.id)?.gitControl?.quick.action == nil
             }
             await shoot("07-committed")
-            store.dismissNotice()
+            store.dismissToast()
         }
 
         // What a turn changed in its folder is listed under its reply, and opens beside the

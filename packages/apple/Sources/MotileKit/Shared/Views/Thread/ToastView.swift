@@ -3,37 +3,37 @@ import SwiftUI
 /// What the last git action or project add did, or what was refused, at the top of the thread.
 /// What follows is one click away: the push after a commit, the pull request after a push, the
 /// thread in a project that was cloned.
-struct NoticeView: View {
+struct ToastView: View {
     @Environment(AppStore.self) private var store
-    let notice: Notice
+    let toast: Toast
 
     private static let radius = Radius.lg
     private static let padding: CGFloat = 14
     private static let closeSize = ControlSize.regular.height
     private static let titleHeight: CGFloat = scaled(16)
-    /// Tucks the close button into the corner, its own corner running along the notice's.
+    /// Tucks the close button into the corner, its own corner running along the toast's.
     private static let closeMargin = radius - ControlSize.regular.radius
     private static let trailing = closeMargin + closeSize + 4
 
     var body: some View {
-        let url = notice.url.flatMap { URL(string: $0) }
+        let url = toast.url.flatMap { URL(string: $0) }
         HStack(alignment: .top, spacing: 10) {
             Group {
-                if notice.pending {
+                if toast.pending {
                     Spinner(size: .md)
                 } else {
-                    Image(notice.failed ? .circleAlert : .circleCheck, size: .md)
-                        .foregroundStyle(notice.failed ? Color.themeDestructive : Color.themeSuccess)
+                    Image(toast.failed ? .circleAlert : .circleCheck, size: .md)
+                        .foregroundStyle(toast.failed ? Color.themeDestructive : Color.themeSuccess)
                 }
             }
             .frame(height: Self.titleHeight)
             VStack(alignment: .leading, spacing: 4) {
-                Text(notice.title)
+                Text(toast.title)
                     .font(.ui(size: 13, weight: .medium))
                     .foregroundStyle(Color.themeForeground)
                     .frame(minHeight: Self.titleHeight)
-                if let description = notice.description {
-                    if notice.failed {
+                if let description = toast.description {
+                    if toast.failed {
                         output(description)
                     } else {
                         Text(description)
@@ -72,7 +72,7 @@ struct NoticeView: View {
             RoundedRectangle(cornerRadius: Self.radius, style: .continuous).strokeBorder(Color.themeBorderPopover, lineWidth: 1)
         }
         .overlay(alignment: .topTrailing) {
-            ActionButton(icon: .x, help: "Close", symbolSize: ControlSize.regular.smallSymbol) { store.dismissNotice() }
+            ActionButton(icon: .x, help: "Close", symbolSize: ControlSize.regular.smallSymbol) { store.dismissToast() }
                 .padding(Self.closeMargin)
         }
         .environment(\.surface, .popover)
@@ -84,13 +84,13 @@ struct NoticeView: View {
     private func actions(url: URL?) -> [(title: String, prominent: Bool, run: () -> Void)] {
         var actions: [(title: String, prominent: Bool, run: () -> Void)] = []
         if let url {
-            actions.append(("View PR", notice.nextLabel == nil, { store.showPullRequest(url) }))
+            actions.append(("View PR", toast.nextLabel == nil, { store.showPullRequest(url) }))
         }
-        if let next = notice.nextLabel {
+        if let next = toast.nextLabel {
             actions.append((next, true, { store.runNextGit() }))
         }
-        if notice.projectID != nil {
-            actions.append(("Open project", true, { store.openNoticeProject() }))
+        if toast.projectID != nil {
+            actions.append(("Open project", true, { store.openToastProject() }))
         }
         return actions
     }

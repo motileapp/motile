@@ -21,7 +21,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.motile.LocalStore
-import app.motile.core.Notice
+import app.motile.core.Toast
 import app.motile.platform.Platform
 import app.motile.platform.Symbol
 import app.motile.platform.scaled
@@ -50,13 +50,13 @@ import app.motile.ui.Text
  * What follows is one tap away: the push after a commit, the pull request after a push, the
  * thread in a project that was cloned.
  */
-object NoticeView {
+object ToastView {
     val maxWidth = 440.dp
     private val radius = Radius.lg
     private val padding = 14.dp
     private val closeSize = ControlSize.Regular.height
     internal val titleHeight = scaled(16f).dp
-    /** Tucks the close button into the corner, its own corner running along the notice's. */
+    /** Tucks the close button into the corner, its own corner running along the toast's. */
     internal val closeMargin = radius - ControlSize.Regular.radius
     internal val trailing = closeMargin + closeSize + 4.dp
     internal val shape = RoundedCornerShape(radius)
@@ -71,36 +71,36 @@ object NoticeView {
 }
 
 @Composable
-fun NoticeView(notice: Notice, modifier: Modifier = Modifier) {
+fun ToastView(toast: Toast, modifier: Modifier = Modifier) {
     val store = LocalStore.current
     val palette = Theme.colors
     CompositionLocalProvider(LocalSurface provides Surface.Popover, LocalRow provides null, LocalForeground provides palette.foreground) {
         Box(
             modifier
-                .widthIn(max = NoticeView.maxWidth)
-                .shadow(ShadowSize.Lg, NoticeView.shape, Opacity.ShadowStronger)
-                .background(palette.popover, NoticeView.shape)
-                .border(1.dp, palette.borderPopover, NoticeView.shape),
+                .widthIn(max = ToastView.maxWidth)
+                .shadow(ShadowSize.Lg, ToastView.shape, Opacity.ShadowStronger)
+                .background(palette.popover, ToastView.shape)
+                .border(1.dp, palette.borderPopover, ToastView.shape),
         ) {
             Row(
-                Modifier.padding(start = NoticeView.edge, top = NoticeView.edge, bottom = NoticeView.edge, end = NoticeView.trailing),
+                Modifier.padding(start = ToastView.edge, top = ToastView.edge, bottom = ToastView.edge, end = ToastView.trailing),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalAlignment = Alignment.Top,
             ) {
-                Box(Modifier.height(NoticeView.titleHeight), contentAlignment = Alignment.Center) {
+                Box(Modifier.height(ToastView.titleHeight), contentAlignment = Alignment.Center) {
                     val symbolSize = iconSize(text = 13f)
                     when {
-                        notice.pending -> Spinner(symbolSize)
-                        notice.failed -> Icon(Symbol.CircleAlert, symbolSize, color = palette.destructive)
+                        toast.pending -> Spinner(symbolSize)
+                        toast.failed -> Icon(Symbol.CircleAlert, symbolSize, color = palette.destructive)
                         else -> Icon(Symbol.CircleCheck, symbolSize, color = palette.success)
                     }
                 }
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Box(Modifier.heightIn(min = NoticeView.titleHeight), contentAlignment = Alignment.CenterStart) {
-                        Text(notice.title, size = 13f, weight = FontWeight.Medium)
+                    Box(Modifier.heightIn(min = ToastView.titleHeight), contentAlignment = Alignment.CenterStart) {
+                        Text(toast.title, size = 13f, weight = FontWeight.Medium)
                     }
-                    notice.description?.let { description ->
-                        if (notice.failed) {
+                    toast.description?.let { description ->
+                        if (toast.failed) {
                             Output(description)
                         } else {
                             SelectionContainer {
@@ -108,27 +108,27 @@ fun NoticeView(notice: Notice, modifier: Modifier = Modifier) {
                             }
                         }
                     }
-                    Actions(notice)
+                    Actions(toast)
                 }
             }
             ActionButton(
                 icon = Symbol.X, help = "Close", symbolSize = ControlSize.Regular.smallSymbol,
-                modifier = Modifier.align(Alignment.TopEnd).padding(NoticeView.closeMargin),
-            ) { store.dismissNotice() }
+                modifier = Modifier.align(Alignment.TopEnd).padding(ToastView.closeMargin),
+            ) { store.dismissToast() }
         }
     }
 }
 
-/** What follows from the notice: its pull request, the next git action, the project it added. */
+/** What follows from the toast: its pull request, the next git action, the project it added. */
 @Composable
-private fun Actions(notice: Notice) {
+private fun Actions(toast: Toast) {
     val store = LocalStore.current
-    val url = notice.url
-    val next = notice.nextLabel
+    val url = toast.url
+    val next = toast.nextLabel
     val actions = buildList<Triple<String, Boolean, () -> Unit>> {
         if (url != null) add(Triple("View PR", next == null) { store.showPullRequest(url) })
         if (next != null) add(Triple(next, true) { store.runNextGit() })
-        if (notice.projectID != null) add(Triple("Open project", true) { store.openNoticeProject() })
+        if (toast.projectID != null) add(Triple("Open project", true) { store.openToastProject() })
     }
     if (actions.isEmpty()) return
     Row(Modifier.padding(top = 6.dp)) {
@@ -147,13 +147,13 @@ private val actionGap = 8.dp
 /** What git printed, scrolled to its end, where a hook says what it found. */
 @Composable
 private fun Output(text: String) {
-    val style = Theme.uiMono(NoticeView.outputSize).copy(lineHeight = NoticeView.outputLine.value.sp)
+    val style = Theme.uiMono(ToastView.outputSize).copy(lineHeight = ToastView.outputLine.value.sp)
     SurfaceBox(
         RoundedCornerShape(Radius.md),
-        Modifier.padding(top = 4.dp).outset(end = NoticeView.trailing - NoticeView.edge).fillMaxWidth(),
+        Modifier.padding(top = 4.dp).outset(end = ToastView.trailing - ToastView.edge).fillMaxWidth(),
         bordered = true,
     ) {
-        FadingScroll(NoticeView.outputHeight, anchor = Alignment.Bottom, padding = NoticeView.outputPadding) {
+        FadingScroll(ToastView.outputHeight, anchor = Alignment.Bottom, padding = ToastView.outputPadding) {
             SelectionContainer {
                 Text(text, Modifier.fillMaxWidth(), style = style, color = Theme.colors.mutedForeground)
             }

@@ -54,6 +54,7 @@ impl Store {
         let were_connected: std::collections::HashSet<String> =
             self.servers.iter().filter(|server| server.connected()).map(|server| server.id.clone()).collect();
         self.servers = servers;
+        self.toast_outages();
         let connected: Vec<String> = self
             .servers
             .iter()

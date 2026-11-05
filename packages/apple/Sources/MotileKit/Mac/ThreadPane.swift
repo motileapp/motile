@@ -54,14 +54,14 @@ struct ThreadPane: View {
             CommitSheet(project: project)
         }
         .overlay(alignment: .topTrailing) {
-            if let notice = store.openNotice {
-                NoticeView(notice: notice)
+            if let toast = store.openToast {
+                ToastView(toast: toast)
                     .padding(.top, 6)
                     .padding(.trailing, 14)
                     .appearing(.opacity.combined(with: .offset(y: -6)))
             }
         }
-        .animation(.easeOut(duration: 0.15), value: store.notice)
+        .animation(.easeOut(duration: 0.15), value: store.toast)
     }
 
     /// The thread's project and name and its git button, drawn in the window's top bar over

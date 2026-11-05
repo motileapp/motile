@@ -1,7 +1,7 @@
 //! The right side of the window: the open thread with the composer over its end, or the start
 //! of a new one.
 
-mod notice;
+mod toast;
 
 use std::cell::Cell;
 use std::rc::Rc;
@@ -25,7 +25,7 @@ const COMPOSER_BOTTOM_GAP: f32 = 16.;
 /// How far above the middle the start is, as a part of the window's height.
 const START_LIFT: f32 = 0.03;
 const HEADLINE_SIZE: f32 = 28.;
-const NOTICE_FADE: Duration = Duration::from_millis(150);
+const TOAST_FADE: Duration = Duration::from_millis(150);
 
 /// How far the title starts from the pane's side beside the sidebar.
 pub const BESIDE_SIDEBAR_INSET: f32 = 20.;
@@ -443,7 +443,7 @@ impl Render for ThreadPane {
         let is_start =
             store.selected_draft().is_some_and(|draft| store.transcript_is_empty && !store.is_sending(&draft.id));
         let pending_git = store.pending_git.clone();
-        let notice = store.open_notice();
+        let toast = store.open_toast();
         let removing = store.removing_project.clone();
         let title = store.selected_thread().map(|thread| thread.title.clone()).unwrap_or("New thread".into());
         let removed = store.open_thread_removed();
@@ -473,13 +473,13 @@ impl Render for ThreadPane {
             window,
             cx,
         );
-        // The notice slides and fades in and out, and changes in place when another follows it.
-        let notice = crate::ui::motion::lingering("notice", notice, NOTICE_FADE, window, cx);
-        let notice_shown = crate::ui::motion::eased_from(
-            "notice-shown",
+        // The toast slides and fades in and out, and changes in place when another follows it.
+        let toast = crate::ui::motion::lingering("toast", toast, TOAST_FADE, window, cx);
+        let toast_shown = crate::ui::motion::eased_from(
+            "toast-shown",
             0.,
-            if notice.as_ref().is_some_and(|(_, going)| !going) { 1. } else { 0. },
-            NOTICE_FADE,
+            if toast.as_ref().is_some_and(|(_, going)| !going) { 1. } else { 0. },
+            TOAST_FADE,
             window,
             cx,
         );
@@ -530,14 +530,14 @@ impl Render for ThreadPane {
                     .into_any_element()
             })
             .child(self.top_bar(cx))
-            .when_some(notice, |pane, (notice, _)| {
+            .when_some(toast, |pane, (toast, _)| {
                 pane.child(
                     div()
                         .absolute()
-                        .top(px(theme::TOP_BAR + 6. - 6. * (1. - notice_shown)))
+                        .top(px(theme::TOP_BAR + 6. - 6. * (1. - toast_shown)))
                         .right(px(14.))
-                        .opacity(notice_shown)
-                        .child(notice::notice_view(&self.store, &notice, cx)),
+                        .opacity(toast_shown)
+                        .child(toast::toast_view(&self.store, &toast, cx)),
                 )
             })
             .when(cover > 0., |pane| pane.child(self.drop_cover(cover, cx)))

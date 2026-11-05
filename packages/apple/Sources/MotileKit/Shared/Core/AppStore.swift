@@ -264,7 +264,9 @@ final class AppStore {
     private(set) var initializingGit: Set<String> = []
     /// The `draftWorktreeKey`s whose base is being pulled.
     private(set) var pullingBases: Set<String> = []
-    private(set) var notice: Notice?
+    private(set) var toast: Toast?
+    /// The servers whose toast was closed while they still can't be reached.
+    @ObservationIgnored private var dismissedOutages: Set<String> = []
     /// What a new worktree starts at, like `origin/main`, by `draftWorktreeKey`.
     private(set) var worktreeStarts: [String: String] = [:]
     private(set) var panel: PanelPage?
@@ -754,10 +756,26 @@ final class AppStore {
             serverUpdates[server.id] = nil
         }
         showServerUpdates()
+        toastUnreachable(servers)
         ensureDraftProject()
         // The server has arrived; the install command has done its job.
         if showsAddServer, servers.count > addServerCount {
             showsAddServer = false
+        }
+    }
+
+    /// Says why a server can't be reached until it is back, once for each time it goes away.
+    private func toastUnreachable(_ servers: [Server]) {
+        for server in servers {
+            guard server.state != .connected else {
+                dismissedOutages.remove(server.id)
+                if toast?.serverID == server.id { toast = nil }
+                continue
+            }
+            guard server.state != .connecting, let error = server.error, !dismissedOutages.contains(server.id) else { continue }
+            if let toast, toast.serverID != server.id, toast.failed || toast.pending { continue }
+            let unreachable = Toast(title: "Couldn't reach \(server.name)", description: error, failed: true, serverID: server.id)
+            if toast != unreachable { toast = unreachable }
         }
     }
 
@@ -1043,13 +1061,15 @@ final class AppStore {
         return project
     }
 
-    /// The notice to draw here: a project's anywhere, a git one over the checkout git works in
+    /// The toast to draw here: a project's anywhere, a git one over the checkout git works in
     /// from here, or over the project the open draft starts a worktree in.
-    var openNotice: Notice? {
-        guard let notice, let wanted = notice.checkoutID else { return notice }
+    var openToast: Toast? {
+        guard let toast else { return nil }
+        if let serverID = toast.serverID { return composerServer?.id == serverID ? toast : nil }
+        guard let wanted = toast.checkoutID else { return toast }
         let draftProject = draftUsesWorktree ? project(selectedDraft?.projectID) : nil
         guard let checkoutID = (gitProject ?? draftProject)?.checkoutID, wanted == checkoutID else { return nil }
-        return notice
+        return toast
     }
 
     /// The folder the right panel looks into: the one the open thread works in, or the project's
@@ -1103,7 +1123,7 @@ final class AppStore {
 
     /// Opens the pull request's tab, or the pull request on GitHub where the tab can't show it.
     func showPullRequest(_ url: URL) {
-        notice = nil
+        toast = nil
         guard panelUnavailable == nil, pullRequestUnavailable == nil else { return Platform.open(url) }
         rightPanel.open(.pullRequest)
     }
@@ -1615,7 +1635,7 @@ final class AppStore {
                 awaitedFolder = (serverID, trimmed)
                 pickAwaitedFolder()
             case .failure(let error):
-                show(Notice(title: "Couldn't add \(name)", description: error.message, failed: true))
+                show(Toast(title: "Couldn't add \(name)", description: error.message, failed: true))
             }
         }
     }
@@ -1761,21 +1781,21 @@ final class AppStore {
         })
     }
 
-    /// Clones the repository while the notice says so, and opens a thread in it once it is
+    /// Clones the repository while the toast says so, and opens a thread in it once it is
     /// there. Someone who has gone elsewhere meanwhile is offered the thread instead.
     func clone(_ repo: String, on serverID: String) {
         let into = server(serverID).map { " on \($0.name)" } ?? ""
-        show(Notice(title: "Cloning \(repo)", description: "Into ~/projects\(into)", pending: true))
+        show(Toast(title: "Cloning \(repo)", description: "Into ~/projects\(into)", pending: true))
         let from = selection
         add(["type": "clone_repo", "repo": repo], on: serverID, arrived: { [weak self] project in
             guard let self else { return }
             guard selection == from else {
-                return show(Notice(title: "Cloned \(repo)", description: project.path, projectID: project.id))
+                return show(Toast(title: "Cloned \(repo)", description: project.path, projectID: project.id))
             }
-            show(Notice(title: "Cloned \(repo)", description: project.path))
+            show(Toast(title: "Cloned \(repo)", description: project.path))
             openThread(in: project)
         }, failed: { [weak self] error in
-            self?.show(Notice(title: "Couldn't clone \(repo)", description: error.message, failed: true))
+            self?.show(Toast(title: "Couldn't clone \(repo)", description: error.message, failed: true))
         })
     }
 
@@ -1851,7 +1871,7 @@ final class AppStore {
             guard let self, case .success(let answer) = result else { return }
             worktreeStarts[key] = answer.string("start")
             guard let problem = answer.optionalString("problem") else { return }
-            show(Notice(checkoutID: project.checkoutID, title: "Couldn't fetch \(base)", description: problem, failed: true))
+            show(Toast(checkoutID: project.checkoutID, title: "Couldn't fetch \(base)", description: problem, failed: true))
         }
     }
 
@@ -1873,7 +1893,7 @@ final class AppStore {
         guard let key = draftWorktreeKey, let base = draftBaseToPull, let project = project(selectedDraft?.projectID),
             pullingBases.insert(key).inserted
         else { return }
-        notice = nil
+        toast = nil
         let request: JSON = ["type": "update_base", "project_id": project.id, "base": base]
         core.send("request", ["server_id": project.serverID, "request": request]) { [weak self] result in
             guard let self else { return }
@@ -1881,9 +1901,9 @@ final class AppStore {
             switch result {
             case .success(let answer):
                 worktreeStarts[key] = answer.string("start")
-                show(Notice(checkoutID: project.checkoutID, title: "Pulled \(base)"))
+                show(Toast(checkoutID: project.checkoutID, title: "Pulled \(base)"))
             case .failure(let error):
-                show(Notice(checkoutID: project.checkoutID, title: "Couldn't pull \(base)", description: error.message, failed: true))
+                show(Toast(checkoutID: project.checkoutID, title: "Couldn't pull \(base)", description: error.message, failed: true))
             }
         }
     }
@@ -1977,7 +1997,7 @@ final class AppStore {
             case .success(let answer):
                 if let problem = answer.optionalString("problem") {
                     let title = "Couldn't fetch from the remote"
-                    self?.show(Notice(checkoutID: project.checkoutID, title: title, description: problem, failed: true))
+                    self?.show(Toast(checkoutID: project.checkoutID, title: title, description: problem, failed: true))
                 }
                 done?(answer.objects("files").map { ChangedFile(json: $0) })
             // Only said when the user is waiting for the answer.
@@ -2013,7 +2033,7 @@ final class AppStore {
             return
         }
         guard let action = quick.action else {
-            show(Notice(checkoutID: project.checkoutID, title: quick.hint ?? quick.label))
+            show(Toast(checkoutID: project.checkoutID, title: quick.hint ?? quick.label))
             return
         }
         startGit(action, in: project, confirm: quick.confirm)
@@ -2047,7 +2067,7 @@ final class AppStore {
         let checkoutID = project.checkoutID
         guard gitStage(in: project) == nil else { return }
         gitStages[checkoutID] = firstStage(of: action, in: project, written: message?.isEmpty == false && !newBranch)
-        notice = nil
+        toast = nil
         var command: JSON = [
             "server_id": project.serverID, "project_id": project.id, "action": action, "paths": paths, "new_branch": newBranch,
         ]
@@ -2058,44 +2078,45 @@ final class AppStore {
             self.gitStages[checkoutID] = nil
             switch result {
             case .success(let done):
-                let notice = Notice(
+                let toast = Toast(
                     checkoutID: checkoutID, title: done.string("title"), description: done.optionalString("description"),
                     url: done.optionalString("url"), next: done.optionalString("next")
                 )
-                self.show(notice)
+                self.show(toast)
             case .failure(let error):
-                self.show(Notice(checkoutID: checkoutID, title: "Git stopped", description: error.message, failed: true))
+                self.show(Toast(checkoutID: checkoutID, title: "Git stopped", description: error.message, failed: true))
             }
         }
     }
 
     /// What worked goes away by itself; what failed or is still under way stays until it is
     /// closed or replaced.
-    private func show(_ notice: Notice) {
-        self.notice = notice
-        guard !notice.failed, !notice.pending else { return }
+    private func show(_ toast: Toast) {
+        self.toast = toast
+        guard !toast.failed, !toast.pending else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + 10) { [weak self] in
-            if self?.notice == notice { self?.notice = nil }
+            if self?.toast == toast { self?.toast = nil }
         }
     }
 
-    func dismissNotice() {
-        notice = nil
+    func dismissToast() {
+        if let serverID = toast?.serverID { dismissedOutages.insert(serverID) }
+        toast = nil
     }
 
-    /// The action a notice says comes next, like the push after a commit.
+    /// The action a toast says comes next, like the push after a commit.
     func runNextGit() {
-        guard let notice, let next = notice.next else { return }
-        guard let project = gitProject, project.checkoutID == notice.checkoutID else { return }
+        guard let toast, let next = toast.next else { return }
+        guard let project = gitProject, project.checkoutID == toast.checkoutID else { return }
         let confirm = project.gitControl?.menu.first { $0.action == next }?.confirm
-        self.notice = nil
+        self.toast = nil
         startGit(next, in: project, confirm: confirm)
     }
 
-    /// Opens a thread in the project a notice is about.
-    func openNoticeProject() {
-        guard let project = project(notice?.projectID) else { return }
-        notice = nil
+    /// Opens a thread in the project a toast is about.
+    func openToastProject() {
+        guard let project = project(toast?.projectID) else { return }
+        toast = nil
         openThread(in: project)
     }
 

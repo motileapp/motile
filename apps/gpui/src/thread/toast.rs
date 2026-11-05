@@ -3,7 +3,7 @@
 use gpui_kit::prelude::*;
 use gpui_kit::*;
 
-use crate::store::{Notice, Store};
+use crate::store::{Store, Toast};
 use crate::theme::{ControlSize, IconSize, Layer, Opacity, Radius, ShadowSize, Surface, colors};
 use crate::ui::rich_text::RichText;
 use crate::ui::{ActionButton, FadingScroll, Spinner, Variant, icons, sharing};
@@ -12,37 +12,37 @@ const NOTICE_RADIUS: f32 = Radius::LG;
 const NOTICE_PADDING: f32 = 14.;
 const TITLE_HEIGHT: f32 = 16.;
 const CLOSE_SIZE: f32 = ControlSize::Regular.height();
-/// Tucks the close button into the corner, its own corner running along the notice's.
+/// Tucks the close button into the corner, its own corner running along the toast's.
 const CLOSE_MARGIN: f32 = NOTICE_RADIUS - ControlSize::Regular.radius();
 const TRAILING: f32 = CLOSE_MARGIN + CLOSE_SIZE + 4.;
 /// How many lines of what a failed action printed show before they scroll.
 const OUTPUT_LINES: f32 = 8.;
 const OUTPUT_LINE_HEIGHT: f32 = 16.;
 const OUTPUT_PADDING: f32 = 8.;
-/// The room between the notice's buttons' lights, which their clicks share.
+/// The room between the toast's buttons' lights, which their clicks share.
 const BUTTON_GAP: f32 = 8.;
 
 /// What follows is one click away: the push after a commit, the pull request after a push, the
 /// thread in a project that was cloned.
-pub fn notice_view(store: &Entity<Store>, notice: &Notice, cx: &App) -> impl IntoElement {
+pub fn toast_view(store: &Entity<Store>, toast: &Toast, cx: &App) -> impl IntoElement {
     let c = colors(cx);
     let close = store.clone();
     let next = store.clone();
     let view = store.clone();
     let open = store.clone();
-    let url = notice.url.clone();
-    let next_label = notice.next_label();
-    let opens_project = notice.project_id.is_some();
+    let url = toast.url.clone();
+    let next_label = toast.next_label();
+    let opens_project = toast.project_id.is_some();
     let count = [url.is_some(), next_label.is_some(), opens_project].into_iter().filter(|shown| *shown).count();
     let next_index = usize::from(url.is_some());
     let project_index = next_index + usize::from(next_label.is_some());
-    let description = notice.description.clone().map(|description| {
-        let text = RichText::new(SharedString::from(format!("notice-{}", notice.serial)), description);
-        if !notice.failed {
+    let description = toast.description.clone().map(|description| {
+        let text = RichText::new(SharedString::from(format!("toast-{}", toast.serial)), description);
+        if !toast.failed {
             return div().text_size(px(12.5)).text_color(c.muted_foreground).line_clamp(2).child(text);
         }
         // The end is where a hook says what it found.
-        let output = FadingScroll::new("notice-output", OUTPUT_LINES * OUTPUT_LINE_HEIGHT + 2. * OUTPUT_PADDING)
+        let output = FadingScroll::new("toast-output", OUTPUT_LINES * OUTPUT_LINE_HEIGHT + 2. * OUTPUT_PADDING)
             .padding(OUTPUT_PADDING)
             .starts_at_end(true)
             .fill(Surface::Popover.layer(Layer::Box, c))
@@ -81,12 +81,12 @@ pub fn notice_view(store: &Entity<Store>, notice: &Notice, cx: &App) -> impl Int
         .items_start()
         .gap(px(10.))
         .child(div().h(px(TITLE_HEIGHT)).flex_shrink_0().flex().items_center().map(|icon| {
-            if notice.pending {
+            if toast.pending {
                 return icon.child(Spinner::new(IconSize::Md).render(cx));
             }
             icon.child(
-                icons::symbol(if notice.failed { "circle-alert" } else { "circle-check" }, IconSize::Md)
-                    .text_color(if notice.failed { c.destructive } else { c.success }),
+                icons::symbol(if toast.failed { "circle-alert" } else { "circle-check" }, IconSize::Md)
+                    .text_color(if toast.failed { c.destructive } else { c.success }),
             )
         }))
         .child(
@@ -105,7 +105,7 @@ pub fn notice_view(store: &Entity<Store>, notice: &Notice, cx: &App) -> impl Int
                         .text_size(px(13.))
                         .font_weight(FontWeight::MEDIUM)
                         .text_color(c.foreground)
-                        .child(notice.title.clone()),
+                        .child(toast.title.clone()),
                 )
                 .children(description)
                 .when(count > 0, |column| {
@@ -116,7 +116,7 @@ pub fn notice_view(store: &Entity<Store>, notice: &Notice, cx: &App) -> impl Int
                             .when_some(url, |row, url| {
                                 let variant = if next_label.is_none() { Variant::Primary } else { Variant::Secondary };
                                 row.child(
-                                    ActionButton::new("notice-pr", "View PR")
+                                    ActionButton::new("toast-pr", "View PR")
                                         .variant(variant)
                                         .surface(Surface::Popover)
                                         .margin(sharing(BUTTON_GAP, 0, count))
@@ -130,7 +130,7 @@ pub fn notice_view(store: &Entity<Store>, notice: &Notice, cx: &App) -> impl Int
                             })
                             .when_some(next_label, |row, label| {
                                 row.child(
-                                    ActionButton::new("notice-next", label)
+                                    ActionButton::new("toast-next", label)
                                         .primary()
                                         .surface(Surface::Popover)
                                         .margin(sharing(BUTTON_GAP, next_index, count))
@@ -144,13 +144,13 @@ pub fn notice_view(store: &Entity<Store>, notice: &Notice, cx: &App) -> impl Int
                             })
                             .when(opens_project, |row| {
                                 row.child(
-                                    ActionButton::new("notice-project", "Open project")
+                                    ActionButton::new("toast-project", "Open project")
                                         .primary()
                                         .surface(Surface::Popover)
                                         .margin(sharing(BUTTON_GAP, project_index, count))
                                         .on_click(move |_, _, cx| {
                                             open.update(cx, |store, cx| {
-                                                store.open_notice_project(cx);
+                                                store.open_toast_project(cx);
                                                 cx.notify();
                                             })
                                         }),
@@ -161,12 +161,12 @@ pub fn notice_view(store: &Entity<Store>, notice: &Notice, cx: &App) -> impl Int
         )
         .child(
             div().absolute().top(px(CLOSE_MARGIN - 1.)).right(px(CLOSE_MARGIN - 1.)).child(
-                ActionButton::icon("notice-close", "x", "Close")
+                ActionButton::icon("toast-close", "x", "Close")
                     .symbol_size(ControlSize::Regular.small_symbol())
                     .surface(Surface::Popover)
                     .on_click(move |_, _, cx| {
                         close.update(cx, |store, cx| {
-                            store.dismiss_notice();
+                            store.dismiss_toast();
                             cx.notify();
                         })
                     }),

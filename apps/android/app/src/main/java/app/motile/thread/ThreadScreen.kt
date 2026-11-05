@@ -54,7 +54,7 @@ import app.motile.LocalStore
 import app.motile.composer.AgentBar
 import app.motile.composer.ComposerView
 import app.motile.core.AppStore
-import app.motile.core.Notice
+import app.motile.core.Toast
 import app.motile.core.PanelPage
 import app.motile.core.Project
 import app.motile.core.Selection
@@ -127,7 +127,7 @@ fun ThreadScreen(overSidebar: Boolean = true) {
                     }
                 }
             }
-            OpenNotice(Modifier.align(Alignment.TopEnd).padding(top = top + 6.dp, start = 14.dp, end = 14.dp))
+            OpenToast(Modifier.align(Alignment.TopEnd).padding(top = top + 6.dp, start = 14.dp, end = 14.dp))
         }
     }
 }
@@ -139,19 +139,19 @@ private val AppStore.isStart: Boolean
         return transcriptIsEmpty && !isSending(draft)
     }
 
-/** The notice over the top of the thread, which comes down a little as it appears. */
+/** The toast over the top of the thread, which comes down a little as it appears. */
 @Composable
-private fun OpenNotice(modifier: Modifier) {
-    val notice = LocalStore.current.openNotice
-    val kept = remember { arrayOfNulls<Notice>(1) }
-    if (notice != null) kept[0] = notice
+private fun OpenToast(modifier: Modifier) {
+    val toast = LocalStore.current.openToast
+    val kept = remember { arrayOfNulls<Toast>(1) }
+    if (toast != null) kept[0] = toast
     val rise = with(LocalDensity.current) { 6.dp.roundToPx() }
     AnimatedVisibility(
-        notice != null, modifier,
+        toast != null, modifier,
         enter = fadeIn(tween(150)) + slideInVertically(tween(150)) { -rise },
         exit = fadeOut(tween(150)) + slideOutVertically(tween(150)) { -rise },
     ) {
-        kept[0]?.let { NoticeView(it) }
+        kept[0]?.let { ToastView(it) }
     }
 }
 
