@@ -268,24 +268,31 @@ private fun Attachments() {
     }
 }
 
-/** Stops the turn that runs, and sends what is written: into that turn, or queued behind it, as the settings say. */
+/**
+ * Stops the turn that runs, and sends what is written: into that turn, or queued behind it, as the settings say.
+ * While the server connects neither works, and the last of them waits for it, sending signals.
+ */
 @Composable
 fun ComposerSendButtons() {
     val store = LocalStore.current
     val running = store.activity.running && store.selectedThread != null
-    val sends = !running || store.canSend
+    val sends = !running || store.hasMessage
+    val state = store.composerServer?.state
+    val connecting = state == Server.State.Connecting
     Row(verticalAlignment = Alignment.CenterVertically) {
         if (running) {
+            val waits = connecting && !sends
             ActionButton(
-                "", picture = { StopMark() }, help = "Stop", variant = ButtonVariant.Danger, round = true,
-                margin = ComposerView.margin(leading = 4.dp, trailing = if (sends) 4.dp else 8.dp),
+                "", picture = { StopMark() }, help = "Stop", variant = if (waits) ButtonVariant.Waiting else ButtonVariant.Danger, round = true,
+                margin = ComposerView.margin(leading = 4.dp, trailing = if (sends) 4.dp else 8.dp), disabled = state != Server.State.Connected,
+                signals = waits,
             ) { store.stop() }
         }
         if (sends) {
             Disabled(!store.canSend) {
                 ActionButton(
-                    icon = Symbol.ArrowUp, help = "Send", variant = ButtonVariant.Primary, symbolSize = IconSize.Md, round = true,
-                    margin = ComposerView.margin(leading = 4.dp, trailing = 8.dp),
+                    icon = Symbol.ArrowUp, help = "Send", variant = if (connecting) ButtonVariant.Waiting else ButtonVariant.Primary,
+                    symbolSize = IconSize.Md, round = true, margin = ComposerView.margin(leading = 4.dp, trailing = 8.dp), signals = connecting,
                 ) { store.send() }
             }
         }

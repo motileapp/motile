@@ -2260,8 +2260,12 @@ class AppStore(private val context: Context) {
             if (server.state != Server.State.Connected) return false
             if (selectedThread == null && project(selectedDraft?.projectID) == null) return false
             if (!attachments.all { it.state == Attachment.State.Ready && it.serverID == server.id }) return false
-            return draft.isNotBlank() || attachments.isNotEmpty()
+            return hasMessage
         }
+
+    /** Whether the composer holds something to send, whether or not it can be sent now. */
+    val hasMessage: Boolean
+        get() = draft.isNotBlank() || attachments.isNotEmpty()
 
     /** Why a message with these attachments can't be sent yet. */
     val attachmentsHold: String?

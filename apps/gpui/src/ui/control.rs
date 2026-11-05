@@ -31,6 +31,8 @@ pub enum Variant {
     Success,
     /// What the user is asked to let happen.
     Warning,
+    /// What waits for something else, as the composer's buttons while their server connects.
+    Waiting,
     /// Nothing until the pointer is over it: the buttons of bars and rows.
     Ghost,
     /// In the colour of a link.
@@ -99,6 +101,7 @@ impl Look {
             Variant::Danger => c.destructive_foreground,
             Variant::Success => c.success_foreground,
             Variant::Warning => c.warning_foreground,
+            Variant::Waiting => c.pending_foreground,
             Variant::Ghost => {
                 if self.selected || lit {
                     c.foreground
@@ -131,6 +134,7 @@ impl Look {
             Variant::Danger => filled(c.destructive),
             Variant::Success => filled(c.success),
             Variant::Warning => filled(c.warning),
+            Variant::Waiting => filled(c.pending),
             Variant::Ghost => {
                 if self.selected {
                     self.surface.layer(Layer::ControlLit, c)
@@ -601,6 +605,8 @@ pub struct ActionButton {
     open: bool,
     /// It is a menu's, whose chevron keeps the quieter colour.
     menu: bool,
+    /// Rings move out from it, while what it does waits for something else.
+    signals: bool,
     on_click: Option<OnClick>,
     on_open: Option<OnOpen>,
 }
@@ -625,6 +631,7 @@ impl ActionButton {
             stretches: false,
             open: false,
             menu: false,
+            signals: false,
             on_click: None,
             on_open: None,
         }
@@ -912,6 +919,11 @@ impl ActionButton {
         self
     }
 
+    pub fn signals(mut self, signals: bool) -> Self {
+        self.signals = signals;
+        self
+    }
+
     /// Opens a menu as a menu's button does: on the pointer's press, which may go on to be let go
     /// on a row, or with the keys.
     pub fn on_open(mut self, handler: impl Fn(Opened, &mut Window, &mut App) + 'static) -> Self {
@@ -955,9 +967,34 @@ impl RenderOnce for ActionButton {
         }
         let label =
             self.label.render(cx).when(truncates, |label| label.min_w_0()).mx(px(-inset)).my(px(-light_inset - inset));
+        let face = div()
+            .id("face")
+            .my(px(light_inset))
+            .when(fills, |inner| inner.w_full())
+            .when(truncates, |inner| inner.min_w_0())
+            .rounded_tl(corners.top_left)
+            .rounded_tr(corners.top_right)
+            .rounded_bl(corners.bottom_left)
+            .rounded_br(corners.bottom_right)
+            .bg(fill)
+            .when_some(border, |inner, border| inner.border_1().border_color(border))
+            .when_some(look.shadow(c), |inner, shadow| inner.shadow(shadow))
+            .text_color(foreground)
+            .when(active, |inner| {
+                inner
+                    .group_hover(group.clone(), move |inner| inner.bg(lit))
+                    .group_active(group.clone(), move |inner| inner.bg(lit))
+            })
+            .child(label);
+        let face = if self.signals && !crate::media::native::reduces_motion() {
+            window.request_animation_frame();
+            div().relative().children(signal_rings(&look, fill)).child(face).into_any_element()
+        } else {
+            face.into_any_element()
+        };
         div()
             .id(self.id.clone())
-            .group(group.clone())
+            .group(group)
             .when(truncates, |button| button.min_w_0().flex())
             .when(!truncates, |button| button.flex_shrink_0())
             .when(fills || self.stretches, |button| button.w_full())
@@ -969,27 +1006,7 @@ impl RenderOnce for ActionButton {
             .when_some(bleed, |button, (leading, vertical)| button.ml(px(-leading)).my(px(-vertical)))
             .when(self.disabled && !pending, |button| button.opacity(c.opacity(Opacity::Disabled)))
             .cursor_default()
-            .child(
-                div()
-                    .id("face")
-                    .my(px(light_inset))
-                    .when(fills, |inner| inner.w_full())
-                    .when(truncates, |inner| inner.min_w_0())
-                    .rounded_tl(corners.top_left)
-                    .rounded_tr(corners.top_right)
-                    .rounded_bl(corners.bottom_left)
-                    .rounded_br(corners.bottom_right)
-                    .bg(fill)
-                    .when_some(border, |inner, border| inner.border_1().border_color(border))
-                    .when_some(look.shadow(c), |inner, shadow| inner.shadow(shadow))
-                    .text_color(foreground)
-                    .when(active, |inner| {
-                        inner
-                            .group_hover(group.clone(), move |inner| inner.bg(lit))
-                            .group_active(group, move |inner| inner.bg(lit))
-                    })
-                    .child(label),
-            )
+            .child(face)
             .on_hover(crate::ui::track_hover(&hovered))
             .when_some(self.help, |button, help| button.tooltip(tooltip(help)))
             .when_some(self.on_click.filter(|_| active), |button, on_click| {
@@ -1014,6 +1031,33 @@ impl RenderOnce for ActionButton {
                     })
             })
     }
+}
+
+/// How long a signal ring takes to move out from a button, and how far it goes, of the button's height.
+const SIGNAL_BEAT: f32 = 2.2;
+const SIGNAL_SPREAD: f32 = 0.16;
+const SIGNAL_LINE: f32 = 2.;
+const SIGNAL_OPACITY: f32 = 0.6;
+
+/// Two rings in the button's colour that move out from behind it, half a beat apart.
+fn signal_rings(look: &Look, color: Hsla) -> [Div; 2] {
+    static START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+    let beats = START.get_or_init(std::time::Instant::now).elapsed().as_secs_f32() / SIGNAL_BEAT;
+    let side = look.size.height();
+    let radius = look.radius();
+    [0., 0.5].map(|offset| {
+        let out = 1. - (1. - (beats + offset).fract()).powi(3);
+        let grown = side * SIGNAL_SPREAD * out;
+        div()
+            .absolute()
+            .top(px(-grown))
+            .left(px(-grown))
+            .right(px(-grown))
+            .bottom(px(-grown))
+            .rounded(px(radius + grown))
+            .border(px(SIGNAL_LINE))
+            .border_color(color.opacity(SIGNAL_OPACITY * (1. - out)))
+    })
 }
 
 type BuildMenu = Rc<dyn Fn(&mut Window, &mut App) -> Menu>;

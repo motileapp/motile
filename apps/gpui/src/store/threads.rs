@@ -273,7 +273,12 @@ impl Store {
         {
             return false;
         }
-        !self.draft().trim().is_empty() || !attachments.is_empty()
+        self.has_message()
+    }
+
+    /// Whether the composer holds something to send, whether or not it can be sent now.
+    pub fn has_message(&self) -> bool {
+        !self.draft().trim().is_empty() || !self.attachments().is_empty()
     }
 
     /// Why a message with these attachments can't be sent yet.
