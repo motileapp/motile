@@ -24,6 +24,7 @@ const WHEEL_ZOOM: f32 = 1.12;
 const ZOOM_FOR: Duration = Duration::from_millis(250);
 
 type ClickedBeside = Rc<dyn Fn(&mut Window, &mut App)>;
+type RightClicked = Rc<dyn Fn(Point<Pixels>, &mut Window, &mut App)>;
 
 pub struct ZoomableImage {
     file: PathBuf,
@@ -35,6 +36,8 @@ pub struct ZoomableImage {
     /// It lies over a picture's darkness, as in the viewer.
     over_picture: bool,
     clicked_beside: Option<ClickedBeside>,
+    /// A right click on the picture, where it fell.
+    right_clicked: Option<RightClicked>,
     /// The display's pixels to a point.
     pixels_per_point: f32,
     /// How much it is magnified, and how far it is moved from the middle.
@@ -66,6 +69,7 @@ impl ZoomableImage {
             largest_fit: 1.,
             over_picture: false,
             clicked_beside: None,
+            right_clicked: None,
             pixels_per_point: 2.,
             scale: None,
             offset: Point::default(),
@@ -90,6 +94,11 @@ impl ZoomableImage {
 
     pub fn on_clicked_beside(mut self, run: impl Fn(&mut Window, &mut App) + 'static) -> Self {
         self.clicked_beside = Some(Rc::new(run));
+        self
+    }
+
+    pub fn on_right_click(mut self, run: impl Fn(Point<Pixels>, &mut Window, &mut App) + 'static) -> Self {
+        self.right_clicked = Some(Rc::new(run));
         self
     }
 
@@ -303,6 +312,17 @@ impl Render for ZoomableImage {
                         let target = if fitted { (fit * 2.).max(1.) } else { fit };
                         this.zoom_smoothly(target, Some(event.position), cx);
                     }
+                }),
+            )
+            .on_mouse_down(
+                MouseButton::Right,
+                cx.listener(|this, event: &MouseDownEvent, window, cx| {
+                    let Some(right_clicked) = this.right_clicked.clone() else { return };
+                    if !this.on_picture(event.position) {
+                        return;
+                    }
+                    cx.stop_propagation();
+                    right_clicked(event.position, window, cx);
                 }),
             )
             .on_mouse_move(cx.listener(|this, event: &MouseMoveEvent, _, cx| {

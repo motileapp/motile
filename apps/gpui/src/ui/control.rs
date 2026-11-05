@@ -176,9 +176,13 @@ impl Look {
         self.surface.layer(layer, c)
     }
 
-    /// The line around an outline button.
+    /// The line around an outline button, or a button over a picture.
     pub fn border(&self, c: &Colors) -> Option<Hsla> {
-        (self.variant == Variant::Outline).then(|| self.surface.border(c))
+        match self.variant {
+            Variant::Outline => Some(self.surface.border(c)),
+            Variant::Overlay => Some(c.control_border_over_picture),
+            _ => None,
+        }
     }
 
     /// The shadow a glass control floats on, with its edge as a hairline that takes no room.

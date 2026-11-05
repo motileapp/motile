@@ -196,14 +196,18 @@ data class ControlLook(
         }
 }
 
-/** The look's fill and, for an outline, its border. */
+/** The look's fill and, for an outline or over a picture, its border. */
 @Composable
 fun Modifier.controlBackground(look: ControlLook): Modifier {
     val palette = LocalPalette.current
     val shape = look.shape
     val filled = background(look.fill(palette, LocalDark.current), shape)
-    if (look.variant != ButtonVariant.Outline) return filled
-    return filled.border(1.dp, look.surface.border(palette), shape)
+    val border = when (look.variant) {
+        ButtonVariant.Outline -> look.surface.border(palette)
+        ButtonVariant.Overlay -> OverPicture.controlBorder
+        else -> return filled
+    }
+    return filled.border(1.dp, border, shape)
 }
 
 /**

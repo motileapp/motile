@@ -222,9 +222,7 @@ class FlippedView: NSView {
 
     override func menu(for event: NSEvent) -> NSMenu? {
         guard let actions = menuActions?(), !actions.isEmpty else { return super.menu(for: event) }
-        let menu = NSMenu()
-        for action in actions { menu.addItem(ClosureMenuItem(action)) }
-        return menu
+        return NSMenu(actions)
     }
 }
 
@@ -242,6 +240,13 @@ extension ControlKey {
             guard event.charactersIgnoringModifiers == " " else { return nil }
             self = .press
         }
+    }
+}
+
+extension NSMenu {
+    convenience init(_ actions: [MenuAction]) {
+        self.init()
+        for action in actions { addItem(ClosureMenuItem(action)) }
     }
 }
 
