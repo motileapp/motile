@@ -1,6 +1,9 @@
 package app.motile.settings
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -218,8 +221,11 @@ private fun SettingsGroups.mcpServerGroup(
             val key = groupKey(mcpServer, group)
             val open = key in unfolded
             row {
-                SettingsPressRow({ fold(key) }, Modifier.opacity(Opacity.Disabled, on = !mcpServer.enabled)) {
-                    McpToolGroupHeader(mcpServer, group, mcpServers, open)
+                // The row's light would hide its menu, so the row stays unlit while the pointer is on the menu.
+                val menu = remember { MutableInteractionSource() }
+                val onMenu by menu.collectIsHoveredAsState()
+                SettingsPressRow({ fold(key) }, Modifier.opacity(Opacity.Disabled, on = !mcpServer.enabled), hovered = if (onMenu) false else null) {
+                    McpToolGroupHeader(mcpServer, group, mcpServers, open, Modifier.hoverable(menu))
                 }
             }
             if (open) for (tool in group.tools) row {
@@ -260,11 +266,13 @@ fun ToolPermissionMenu(
     permission: ToolPermission?,
     help: String,
     compact: Boolean = false,
+    modifier: Modifier = Modifier,
     choose: (ToolPermission) -> Unit,
 ) {
     ActionMenu(
         title = if (compact) null else permission?.title ?: "Custom",
         icon = permission?.symbol ?: Symbol.Ellipsis,
+        modifier = modifier,
         help = help,
         variant = ButtonVariant.Outline,
         chevron = true,
@@ -275,14 +283,14 @@ fun ToolPermissionMenu(
 
 /** A kind of an MCP server's tools: its fold, its name and count, and the permission they share. */
 @Composable
-fun RowScope.McpToolGroupHeader(mcpServer: McpServerRow, group: McpToolGroup, mcpServers: McpServers, open: Boolean? = null) {
+fun RowScope.McpToolGroupHeader(mcpServer: McpServerRow, group: McpToolGroup, mcpServers: McpServers, open: Boolean? = null, menu: Modifier = Modifier) {
     val palette = LocalPalette.current
     open?.let { Icon(if (it) Symbol.ChevronDown else Symbol.ChevronRight, IconSize.Md, color = palette.mutedForeground) }
     Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
         RowText(group.title, Modifier.weight(1f, fill = false), maxLines = 1)
         Chip("${group.tools.size}", monospaced = true)
     }
-    ToolPermissionMenu(group.permission, "What agents may do with ${group.title.lowercase()}") { mcpServers.setGroup(mcpServer, group, it) }
+    ToolPermissionMenu(group.permission, "What agents may do with ${group.title.lowercase()}", modifier = menu) { mcpServers.setGroup(mcpServer, group, it) }
 }
 
 /** An MCP server's tool: what it is, what it does, and what agents may do with it. */

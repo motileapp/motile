@@ -246,9 +246,7 @@ fn group_row(
 ) -> AnyElement {
     let c = colors(cx);
     let name = SharedString::from(format!("mcp-server-group-{mcp_server}-{:?}", group.kind));
-    let dropdown = div()
-        .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-        .child(group_permission(store, mcp_server, group));
+    let dropdown = div().block_mouse_except_scroll().child(group_permission(store, mcp_server, group));
     let row = div()
         .id(ElementId::Name(name.clone()))
         .group(name.clone())
