@@ -17,6 +17,7 @@ public func runMotile() {
     }
     #endif
     adoptFormerSettings()
+    _ = MotileApplication.shared
     MotileApp.main()
 }
 

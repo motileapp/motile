@@ -71,10 +71,7 @@ struct InputField: View {
         .frame(height: bare ? nil : size.height)
         .frame(maxHeight: bare ? .infinity : nil)
         .background {
-            Color.clear
-                .contentShape(Rectangle())
-                .onTapGesture { (focus ?? $ownFocus).wrappedValue = true }
-                .textPointer()
+            TypingArea { (focus ?? $ownFocus).wrappedValue = true }
         }
         .fieldFrame(size, filled: !bare)
     }
@@ -153,17 +150,19 @@ extension View {
     }
 }
 
-extension View {
-    /// The cursor of text, over what starts typing when it is clicked. A control inside keeps the arrow.
-    @ViewBuilder func textPointer(_ shown: Bool = true) -> some View {
+/// Room that starts typing when it is pressed, under the cursor of text where nothing lies over it.
+struct TypingArea: View {
+    var press: (() -> Void)?
+
+    var body: some View {
         #if os(macOS)
-        if #available(macOS 15.0, *) {
-            pointerStyle(shown ? .horizontalText : .default)
-        } else {
-            self
-        }
+        TypingAreaMac(press: press)
         #else
-        self
+        if let press {
+            Color.clear
+                .contentShape(Rectangle())
+                .onTapGesture(perform: press)
+        }
         #endif
     }
 }

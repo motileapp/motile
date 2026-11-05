@@ -283,6 +283,7 @@ private struct ComposerPicker: View {
         HStack(spacing: 8) {
             Image(.search, size: .md)
                 .foregroundStyle(Color.themeMutedStrongerForeground)
+                .allowsHitTesting(false)
             TextField("", text: $query)
                 .placeholder("Search models", shown: query.isEmpty)
                 .textFieldStyle(.plain)
@@ -301,9 +302,7 @@ private struct ComposerPicker: View {
         .padding(.horizontal, 12)
         .frame(height: 38)
         // All of the row is the field: a click anywhere on it, its icon too, types there.
-        .contentShape(Rectangle())
-        .onTapGesture { searching = true }
-        .textPointer()
+        .background { TypingArea { searching = true } }
     }
 
     private func list(_ groups: [Group]) -> some View {

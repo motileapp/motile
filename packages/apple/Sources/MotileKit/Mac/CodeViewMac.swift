@@ -232,7 +232,7 @@ private final class PinnedHeading: NSView {
 }
 
 /// Draws the sheet, and selects in it with the pointer.
-private final class CodeCanvas: NSView, NSMenuItemValidation {
+private final class CodeCanvas: NSView, NSMenuItemValidation, CursorOwner {
     let sheet = CodeSheet()
     weak var owner: CodeView?
 
@@ -285,8 +285,10 @@ private final class CodeCanvas: NSView, NSMenuItemValidation {
         guard hovered?.file != sheet.hovered?.file || hovered?.line != sheet.hovered?.line else { return }
         sheet.hovered = hovered
         needsDisplay = true
-        guard isUnderPointer(event) else { return }
-        if hovered != nil { NSCursor.pointingHand.set() } else { NSCursor.arrow.set() }
+    }
+
+    func cursor(at point: CGPoint) -> NSCursor {
+        sheet.hovered != nil ? .pointingHand : .arrow
     }
 
     override func mouseExited(with event: NSEvent) {

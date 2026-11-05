@@ -138,13 +138,9 @@ struct ComposerView: View {
         }
     }
 
-    /// Empty room in the composer: a click there starts typing, under the cursor of text. It is
-    /// never under a control, whose menu would keep that cursor.
+    /// Empty room in the composer: a click there starts typing.
     private var typingArea: some View {
-        Color.clear
-            .contentShape(Rectangle())
-            .onTapGesture { pressed += 1 }
-            .textPointer()
+        TypingArea { pressed += 1 }
     }
 
     static let radius = Radius.xxl

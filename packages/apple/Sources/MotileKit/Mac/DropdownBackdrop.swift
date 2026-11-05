@@ -3,13 +3,12 @@ import AppKit
 import SwiftUI
 
 /// What an open dropdown lies on: the whole window around it, as a menu owns the pointer. A press
-/// on it only closes the dropdown, and what lies under it is not lit, scrolled or given the cursor.
+/// on it only closes the dropdown, and what lies under it is not lit or scrolled.
 /// When the dropdown goes, what had the keys before it opened gets them back.
 final class DropdownBackdrop: NSView {
     private static weak var shown: DropdownBackdrop?
 
     var close: () -> Void = {}
-    private var tracking: NSTrackingArea?
     private weak var returns: NSResponder?
 
     /// Whether an open dropdown or what it lies on is over the view where the pointer is.
@@ -17,8 +16,8 @@ final class DropdownBackdrop: NSView {
         isShown(in: view.window) && !view.isUnderPointer(event)
     }
 
-    /// Whether a dropdown is open over the window, which then keeps the cursors of the views in it.
-    static func isShown(in window: NSWindow?) -> Bool {
+    /// Whether a dropdown is open over the window.
+    private static func isShown(in window: NSWindow?) -> Bool {
         guard let shown, !shown.isHiddenOrHasHiddenAncestor else { return false }
         return shown.window === window
     }
@@ -32,7 +31,7 @@ final class DropdownBackdrop: NSView {
         guard let window, Self.shown !== self else { return }
         Self.shown = self
         returns = Self.owner(of: window.firstResponder)
-        window.resetCursorRects()
+        PointerCursor.refresh()
     }
 
     override func viewWillMove(toWindow newWindow: NSWindow?) {
@@ -48,7 +47,7 @@ final class DropdownBackdrop: NSView {
     func leave() {
         guard let window, Self.shown === self else { return }
         Self.shown = nil
-        window.resetCursorRects()
+        PointerCursor.refresh()
         guard Self.owner(of: window.firstResponder) !== returns else { return }
         let back = (returns as? NSView).flatMap { $0.window === window ? $0 : nil }
         window.makeFirstResponder(back)
@@ -58,23 +57,6 @@ final class DropdownBackdrop: NSView {
     private static func owner(of responder: NSResponder?) -> NSResponder? {
         guard let editor = responder as? NSTextView, editor.isFieldEditor else { return responder }
         return editor.delegate as? NSResponder ?? editor
-    }
-
-    override func updateTrackingAreas() {
-        super.updateTrackingAreas()
-        guard tracking == nil else { return }
-        let area = NSTrackingArea(rect: .zero, options: [.cursorUpdate, .mouseMoved, .activeInKeyWindow, .inVisibleRect], owner: self)
-        addTrackingArea(area)
-        tracking = area
-    }
-
-    override func cursorUpdate(with event: NSEvent) {
-        NSCursor.arrow.set()
-    }
-
-    override func mouseMoved(with event: NSEvent) {
-        guard isUnderPointer(event) else { return }
-        NSCursor.arrow.set()
     }
 
     override func mouseDown(with event: NSEvent) {
@@ -97,26 +79,9 @@ final class DropdownBackdrop: NSView {
 }
 
 /// What a menu open inside a dropdown lies on, over the rest of the dropdown: a press on it only
-/// closes that menu, and nothing under it is lit or given the cursor.
+/// closes that menu.
 final class PressCatcher: NSView {
     var close: () -> Void = {}
-    private var tracking: NSTrackingArea?
-
-    override func updateTrackingAreas() {
-        super.updateTrackingAreas()
-        guard tracking == nil else { return }
-        let area = NSTrackingArea(rect: .zero, options: [.cursorUpdate, .mouseMoved, .activeInKeyWindow, .inVisibleRect], owner: self)
-        addTrackingArea(area)
-        tracking = area
-    }
-
-    override func cursorUpdate(with event: NSEvent) {
-        NSCursor.arrow.set()
-    }
-
-    override func mouseMoved(with event: NSEvent) {
-        NSCursor.arrow.set()
-    }
 
     override func mouseDown(with event: NSEvent) {
         close()
