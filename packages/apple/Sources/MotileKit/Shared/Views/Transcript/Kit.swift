@@ -269,6 +269,7 @@ final class OverlayButton: FlippedView {
         self.symbol = SymbolView(symbol, size: size.symbol, tint: Theme.foregroundOverPicture)
         super.init(frame: .zero)
         fill.radius = size.height / 2
+        fill.stroke = Theme.controlBorderOverPicture
         addSubview(fill)
         addSubview(self.symbol)
         light(false)

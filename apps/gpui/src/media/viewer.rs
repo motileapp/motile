@@ -1,17 +1,19 @@
 //! The images and videos of a message or of the composer, one at a time over the whole window.
 //! ← and → go through them, and Esc or a click beside the picture closes it. An image zooms as
-//! a `ZoomableImage` does. ⌘C copies what is shown and ⌘S saves it.
+//! a `ZoomableImage` does. ⌘C copies what is shown and ⌘S saves it, as a right click on it offers.
+//! Its buttons sit in the window's top bar.
 
 use std::path::PathBuf;
 
 use gpui_kit::prelude::*;
 use gpui_kit::*;
 
-use super::MediaFiles;
 use super::zoom::ZoomableImage;
+use super::{MediaFiles, SAVE_TITLE};
 use crate::models::{MediaSource, ViewedMedia};
 use crate::store::Store;
-use crate::theme::{ControlSize, Radius, colors};
+use crate::theme::{ControlSize, Radius, TOP_BAR, colors};
+use crate::ui::menu::Menu;
 use crate::ui::parts::CopyButton;
 use crate::ui::{ActionButton, Spinner, Variant, beside};
 
@@ -100,12 +102,16 @@ impl MediaViewer {
         };
         self.file = Some(file.clone());
         if !item.video {
-            let viewer = cx.entity().downgrade();
+            let (viewer, menu) = (cx.entity().downgrade(), cx.entity().downgrade());
             let image = ZoomableImage::new(&file, size(MARGIN.0, MARGIN.1), Radius::MD)
                 .largest_fit(LARGEST_FIT)
                 .over_picture()
                 .on_clicked_beside(move |_, cx| {
                     let _ = viewer.update(cx, |viewer, cx| viewer.close(cx));
+                })
+                .on_right_click(move |position, window, cx| {
+                    let Ok(menu) = menu.update(cx, |viewer, cx| viewer.menu(cx)) else { return };
+                    menu.show(position, window, cx);
                 });
             self.image = Some(cx.new(|_| image));
             return cx.notify();
@@ -162,6 +168,26 @@ impl MediaViewer {
         super::copy(file, item.video, item.name, cx);
     }
 
+    /// Copies as ⌘C does, with the copy button's check mark.
+    fn copy_checked(&mut self, cx: &mut Context<Self>) {
+        self.copy(cx);
+        self.copies += 1;
+        cx.notify();
+    }
+
+    /// What a right click on the picture offers, as the corner's buttons do.
+    fn menu(&self, cx: &mut Context<Self>) -> Menu {
+        let video = self.shown.as_ref().is_some_and(|item| item.video);
+        let (copy, save) = (cx.entity().downgrade(), cx.entity().downgrade());
+        Menu::new()
+            .symbol_item(copy_title(video), "copy", move |_, cx| {
+                let _ = copy.update(cx, |viewer, cx| viewer.copy_checked(cx));
+            })
+            .symbol_item(SAVE_TITLE, "download", move |_, cx| {
+                let _ = save.update(cx, |viewer, cx| viewer.save(cx));
+            })
+    }
+
     fn save(&self, cx: &mut App) {
         let (Some(file), Some(item)) = (self.file.clone(), self.shown.as_ref()) else { return };
         super::native::save(file, &item.name, cx);
@@ -189,11 +215,7 @@ impl MediaViewer {
             return cx.stop_propagation();
         }
         match keystroke.key.as_str() {
-            "c" if command && self.file.is_some() => {
-                self.copy(cx);
-                self.copies += 1;
-                cx.notify();
-            }
+            "c" if command && self.file.is_some() => self.copy_checked(cx),
             "s" if command && self.file.is_some() => self.save(cx),
             "escape" => self.close(cx),
             "left" => self.step(-1, cx),
@@ -305,11 +327,16 @@ impl Render for MediaViewer {
 
         let shortcuts = &self.store.read(cx).shortcuts;
         let (copy_keys, save_keys) = (shortcuts.keys_label("mod+c"), shortcuts.keys_label("mod+s"));
+        let button = ControlSize::Large.height();
+        let inset = (TOP_BAR - button) / 2.;
+        let trailing = inset + crate::window_frame::trailing_room(window, cx);
         let corner = div()
             .absolute()
-            .top(px(crate::theme::TOP_BAR + 10.))
-            .right(px(10.))
+            .top_0()
+            .h(px(TOP_BAR))
+            .right(px(trailing))
             .flex()
+            .items_center()
             .when(self.file.is_some(), |corner| {
                 let copy = cx.entity().downgrade();
                 corner
@@ -317,7 +344,7 @@ impl Render for MediaViewer {
                         div().on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation()).child(
                             CopyButton::new(
                                 "copy-viewed",
-                                format!("Copy {} ({copy_keys})", if item.video { "Video" } else { "Image" }),
+                                format!("{} ({copy_keys})", copy_title(item.video)),
                                 move |_, cx| {
                                     let _ = copy.update(cx, |viewer, cx| viewer.copy(cx));
                                 },
@@ -406,7 +433,7 @@ impl Render for MediaViewer {
                             .child(
                                 div()
                                     .absolute()
-                                    .top(px(crate::theme::TOP_BAR + 14.))
+                                    .top(px(TOP_BAR + 14.))
                                     .left(px(80.))
                                     .right(px(80.))
                                     .flex()
@@ -426,8 +453,9 @@ impl MediaViewer {
     /// The video in its place, with a spinner until its first frame is there, or filling the
     /// window while it is full screen.
     #[cfg(target_os = "macos")]
-    fn video(&self, full_screen: bool, cx: &App) -> Option<AnyElement> {
+    fn video(&self, full_screen: bool, cx: &mut Context<Self>) -> Option<AnyElement> {
         let player = self.player.clone()?;
+        let menu = cx.entity().downgrade();
         let ready = player.read(cx).ready();
         let c = colors(cx);
         Some(
@@ -444,6 +472,13 @@ impl MediaViewer {
                         .overflow_hidden()
                 })
                 .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                .when(!full_screen, |video| {
+                    video.on_mouse_down(MouseButton::Right, move |event, window, cx| {
+                        let Ok(menu) = menu.update(cx, |viewer, cx| viewer.menu(cx)) else { return };
+                        cx.stop_propagation();
+                        menu.show(event.position, window, cx);
+                    })
+                })
                 .child(player)
                 .when(!ready, |video| {
                     video.child(
@@ -462,7 +497,11 @@ impl MediaViewer {
     }
 
     #[cfg(not(target_os = "macos"))]
-    fn video(&self, _: bool, _: &App) -> Option<AnyElement> {
+    fn video(&self, _: bool, _: &mut Context<Self>) -> Option<AnyElement> {
         None
     }
+}
+
+fn copy_title(video: bool) -> &'static str {
+    if video { "Copy Video" } else { "Copy Image" }
 }

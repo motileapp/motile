@@ -48,9 +48,11 @@ enum Theme {
     /// The text colours as they are in the dark, for what lies over a picture.
     static let foregroundOverPicture = resolved(foreground, dark: true)
     static let mutedForegroundOverPicture = resolved(mutedForeground, dark: true)
-    /// A control as it is in the dark, over a picture: the background's accent, stronger when lit.
+    /// A control as it is in the dark, over a picture: the background's accent, stronger when lit,
+    /// inside a line of the strongest accent.
     static let controlOverPicture = resolved(backgroundAccent, dark: true)
     static let controlLitOverPicture = resolved(backgroundAccentStronger, dark: true)
+    static let controlBorderOverPicture = resolved(backgroundAccentStrongest, dark: true)
     /// A colour's wash: the colour at color-tint. Chips, notices, diff lines.
     static let primaryTint = thinned(primary, .colorTint)
     static let primaryTintStronger = thinned(primary, .colorTintStronger)
@@ -417,6 +419,7 @@ extension Color {
     static let themeMutedForegroundOverPicture = Color(platform: Theme.mutedForegroundOverPicture)
     static let themeControlOverPicture = Color(platform: Theme.controlOverPicture)
     static let themeControlLitOverPicture = Color(platform: Theme.controlLitOverPicture)
+    static let themeControlBorderOverPicture = Color(platform: Theme.controlBorderOverPicture)
     static let themeScrim = Color(platform: Theme.scrim)
     static let themeGlassTint = Color(platform: Theme.glassTint)
 }

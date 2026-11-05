@@ -4,7 +4,8 @@ import SwiftUI
 
 /// The images and videos of a message or of the composer, one at a time over the whole window.
 /// ← and → go through them, and Esc or a click beside the picture closes it. An image zooms
-/// as it does in Preview.
+/// as it does in Preview. Its buttons sit in the window's top bar, and a right click
+/// on it copies or saves it.
 struct MediaViewer: View {
     private static let playedHere: Set<String> = ["mp4", "mov", "m4v"]
 
@@ -25,8 +26,19 @@ struct MediaViewer: View {
     }
 
     var body: some View {
+        GeometryReader { window in
+            viewer(bar: window.safeAreaInsets.top)
+        }
+    }
+
+    /// `bar` is the height of the window's top bar, which the name and the buttons are drawn in.
+    private func viewer(bar: CGFloat) -> some View {
         let item = viewing.item
-        ZStack {
+        let count = file == nil ? 1 : 3
+        let buttonHeight = ControlSize.large.height
+        let row = max(bar, buttonHeight + 2 * Self.buttonGap)
+        let inset = (row - buttonHeight) / 2
+        return ZStack {
             Color.themeScrim
                 .ignoresSafeArea()
                 .onTapGesture { store.closeViewer() }
@@ -59,11 +71,10 @@ struct MediaViewer: View {
             .padding(.horizontal, 80)
         }
         .overlay(alignment: .topTrailing) {
-            let count = file == nil ? 1 : 3
             HStack(spacing: 0) {
                 if let file {
                     CopyButton(
-                        help: item.video ? "Copy Video (⌘C)" : "Copy Image (⌘C)", variant: .overlay, size: .large,
+                        help: "\(Self.copyTitle(item)) (⌘C)", variant: .overlay, size: .large,
                         symbolSize: ControlSize.large.smallSymbol, round: true, copies: copies, margin: .sharing(Self.buttonGap, at: 0, of: count)
                     ) { MediaFiles.copy(file, video: item.video, named: item.name) }
                     roundButton(.download, help: "Save As (⌘S)", margin: .sharing(Self.buttonGap, at: 1, of: count)) {
@@ -72,7 +83,9 @@ struct MediaViewer: View {
                 }
                 roundButton(.x, help: "Close (Esc)", margin: .sharing(Self.buttonGap, at: count - 1, of: count)) { store.closeViewer() }
             }
-            .padding(10)
+            .frame(height: row)
+            .padding(.trailing, inset)
+            .offset(y: -bar)
         }
         .task(id: item) { load(item) }
         .onReceive(NotificationCenter.default.publisher(for: .mediaProgress)) { note in
@@ -99,11 +112,13 @@ struct MediaViewer: View {
                 size: CGSize(width: CGFloat(image.width) / scale, height: CGFloat(image.height) / scale),
                 margin: ZoomingScrollView.viewerMargin,
                 radius: Radius.md,
-                largestFit: ZoomingScrollView.viewerLargestFit
-            ) { store.closeViewer() }
+                largestFit: ZoomingScrollView.viewerLargestFit,
+                menu: menu,
+                clickedBeside: { store.closeViewer() }
+            )
             .ignoresSafeArea()
         case .video(let player):
-            PlayerView(player: player, ready: $playerReady, fullScreen: $fullScreen)
+            PlayerView(player: player, ready: $playerReady, fullScreen: $fullScreen, menu: menu)
                 .clipShape(RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
                 .padding(.horizontal, ZoomingScrollView.viewerMargin.width)
                 .padding(.vertical, ZoomingScrollView.viewerMargin.height)
@@ -130,6 +145,23 @@ struct MediaViewer: View {
 
     /// The room between the round buttons' lights, which their presses share.
     private static let buttonGap: CGFloat = 8
+
+    private static func copyTitle(_ item: ViewedMedia) -> String {
+        item.video ? "Copy Video" : "Copy Image"
+    }
+
+    /// What a right click on the picture offers, as the corner's buttons do.
+    private func menu() -> [MenuAction] {
+        guard let file else { return [] }
+        let item = viewing.item
+        return [
+            MenuAction(title: Self.copyTitle(item), symbol: .copy) {
+                MediaFiles.copy(file, video: item.video, named: item.name)
+                copies += 1
+            },
+            MenuAction(title: MediaFiles.saveTitle, symbol: .download) { MediaFiles.save(file, named: item.name) },
+        ]
+    }
 
     private func roundButton(_ symbol: Symbol, help: String, margin: EdgeInsets = EdgeInsets(), action: @escaping () -> Void) -> some View {
         ActionButton(
@@ -207,9 +239,10 @@ private struct PlayerView: NSViewRepresentable {
     let player: AVPlayer
     @Binding var ready: Bool
     @Binding var fullScreen: Bool
+    let menu: () -> [MenuAction]
 
-    func makeNSView(context: Context) -> AVPlayerView {
-        let view = AVPlayerView()
+    func makeNSView(context: Context) -> MenuPlayerView {
+        let view = MenuPlayerView()
         view.controlsStyle = .floating
         view.showsFullScreenToggleButton = true
         view.delegate = context.coordinator
@@ -217,8 +250,9 @@ private struct PlayerView: NSViewRepresentable {
         return view
     }
 
-    func updateNSView(_ view: AVPlayerView, context: Context) {
+    func updateNSView(_ view: MenuPlayerView, context: Context) {
         context.coordinator.parent = self
+        view.menuActions = menu
         guard view.player !== player else { return }
         view.player = player
     }
@@ -244,6 +278,16 @@ private struct PlayerView: NSViewRepresentable {
     }
 }
 
+/// The Mac's player, with what a right click on it offers.
+private final class MenuPlayerView: AVPlayerView {
+    var menuActions: () -> [MenuAction] = { [] }
+
+    override func menu(for event: NSEvent) -> NSMenu? {
+        let actions = menuActions()
+        return actions.isEmpty ? super.menu(for: event) : NSMenu(actions)
+    }
+}
+
 /// A `CGImage` or an `NSImage`, at `size` in points when it isn't zoomed.
 struct ZoomableImage: NSViewRepresentable {
     let image: AnyObject
@@ -254,6 +298,8 @@ struct ZoomableImage: NSViewRepresentable {
     var largestFit: CGFloat = 1
     /// Whether ⌘+, ⌘−, ⌘0 and ⌘9 are this image's.
     var keys = true
+    /// What a right click on the picture offers.
+    var menu: () -> [MenuAction] = { [] }
     var clickedBeside: () -> Void = {}
 
     func makeNSView(context: Context) -> ZoomingScrollView {
@@ -263,6 +309,7 @@ struct ZoomableImage: NSViewRepresentable {
     func updateNSView(_ view: ZoomingScrollView, context: Context) {
         view.putAway(context.environment.putAway)
         view.keys = keys
+        view.menuActions = menu
         view.clickedBeside = clickedBeside
         view.show(image, size: size)
     }
@@ -276,6 +323,7 @@ final class ZoomingScrollView: NSScrollView {
     static let viewerLargestFit: CGFloat = 2
 
     var keys = true
+    var menuActions: () -> [MenuAction] = { [] }
     var clickedBeside: () -> Void = {}
     private let margin: CGSize
     private let radius: CGFloat
@@ -366,6 +414,12 @@ final class ZoomingScrollView: NSScrollView {
         }
         let target = magnification * exp(event.scrollingDeltaY * log(1.12))
         setMagnification(min(max(target, smallest), maxMagnification), centeredAt: contentView.convert(event.locationInWindow, from: nil))
+    }
+
+    override func menu(for event: NSEvent) -> NSMenu? {
+        let actions = menuActions()
+        guard onPicture(event), !actions.isEmpty else { return nil }
+        return NSMenu(actions)
     }
 
     override func smartMagnify(with event: NSEvent) {

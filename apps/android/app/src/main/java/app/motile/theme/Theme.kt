@@ -163,9 +163,13 @@ fun Modifier.shadow(size: ShadowSize, shape: Shape, strength: Opacity = Opacity.
 object OverPicture {
     val foreground get() = Palette.dark.foreground
     val mutedForeground get() = Palette.dark.mutedForeground
-    /** A control as it is in the dark, over a picture: the background's accent, stronger when lit. */
+    /**
+     * A control as it is in the dark, over a picture: the background's accent, stronger when lit,
+     * inside a line of the strongest accent.
+     */
     val control get() = Palette.dark.backgroundAccent
     val controlLit get() = Palette.dark.backgroundAccentStronger
+    val controlBorder get() = Palette.dark.backgroundAccentStrongest
 }
 
 /** The icon that goes with text of `size`: about a fifth larger, as on the web. */

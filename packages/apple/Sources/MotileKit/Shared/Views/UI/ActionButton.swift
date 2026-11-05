@@ -106,6 +106,9 @@ struct ControlLook {
         shape.fill(fill)
             .overlay {
                 if variant == .outline { shape.strokeBorder(surface.border, lineWidth: 1) }
+                if variant == .overlay {
+                    shape.strokeBorder(Color.themeControlBorderOverPicture, lineWidth: 1)
+                }
             }
     }
 }
@@ -145,7 +148,11 @@ extension ControlLook {
     }
 
     var platformBorder: PlatformColor? {
-        variant == .outline ? surface.platformBorder : nil
+        switch variant {
+        case .outline: surface.platformBorder
+        case .overlay: Theme.controlBorderOverPicture
+        default: nil
+        }
     }
 
     private var platformGhostLit: PlatformColor {
