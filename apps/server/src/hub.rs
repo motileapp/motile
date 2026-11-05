@@ -1037,7 +1037,7 @@ impl Hub {
 
     /// Has the thread's agent go on with what it was doing.
     pub async fn continue_thread(self: &Arc<Self>, thread_id: &str) -> anyhow::Result<()> {
-        self.send(Some(thread_id.to_string()), None, CONTINUE_PROMPT.to_string(), Vec::new(), false, None).await?;
+        self.send(Some(thread_id.to_string()), None, NewMessage::text(CONTINUE_PROMPT)).await?;
         Ok(())
     }
 
@@ -1155,14 +1155,21 @@ impl Hub {
         self: &Arc<Self>,
         thread_id: Option<String>,
         new_thread: Option<NewThread>,
-        text: String,
-        attachments: Vec<String>,
-        now: bool,
-        context: Option<Value>,
+        message: NewMessage,
     ) -> anyhow::Result<String> {
+        let NewMessage { text, attachments, now, context, message_id } = message;
         let text = text.trim().to_string();
         if text.is_empty() && attachments.is_empty() && context.is_none() {
             bail!("There is nothing to send.");
+        }
+        if message_id.as_deref().is_some_and(|id| uuid::Uuid::parse_str(id).is_err()) {
+            bail!("The message's id isn't a UUID. Update the client and try again.");
+        }
+        if let (Some(thread_id), Some(message_id)) = (&thread_id, &message_id)
+            && let Some(live) = self.live(thread_id).await
+            && self.has_message(&live, message_id)?
+        {
+            return Ok(thread_id.clone());
         }
         if self.closing.load(Ordering::SeqCst) {
             bail!("Your server is restarting. Send it again once it is back.");
@@ -1208,11 +1215,16 @@ impl Hub {
             (None, None) => bail!("No thread was given."),
         };
         let mut live = self.live_or(&thread_id, "That thread no longer exists.").await?;
+        if let Some(message_id) = &message_id
+            && self.has_message(&live, message_id)?
+        {
+            return Ok(thread_id);
+        }
         let live = &mut *live;
         // A message goes on with the thread, so it no longer waits to be continued.
         live.stored.thread.interruption = None;
         let message = Queued {
-            id: new_id(),
+            id: message_id.unwrap_or_else(new_id),
             media: self.keep_attached(&thread_id, &attachments)?,
             skills: self.mentioned_skills(&live.stored.thread, &text),
             programs: ui::states(&self.store.programs_changed(&thread_id)?),
@@ -1254,6 +1266,14 @@ impl Hub {
             tokio::spawn(self.clone().title_from_first_message(thread_id.clone(), text));
         }
         Ok(thread_id)
+    }
+
+    /// Whether the thread has the message already, queued or in its transcript.
+    fn has_message(&self, live: &Live, message_id: &str) -> anyhow::Result<bool> {
+        if live.queued.iter().any(|queued| queued.id == message_id) {
+            return Ok(true);
+        }
+        Ok(self.store.item(&live.stored.thread.id, message_id)?.is_some())
     }
 
     /// Keeps the state the user left a program of an assistant item in. Only the server's own
@@ -2481,7 +2501,7 @@ impl Hub {
             let before = self.lock_watched().insert(thread_id.clone(), seen.clone());
             let Some(before) = before else { continue };
             let Some(text) = news(&found, &before, &seen) else { continue };
-            if let Err(error) = self.send(Some(thread_id.clone()), None, text, Vec::new(), false, None).await {
+            if let Err(error) = self.send(Some(thread_id.clone()), None, NewMessage::text(text)).await {
                 tracing::warn!(thread_id, "couldn't tell the agent about its pull request: {error:#}");
             }
         }
@@ -4708,6 +4728,24 @@ fn works(call: &ToolCall) -> bool {
 
 fn new_tool_call(id: String, name: String) -> ToolCall {
     ToolCall { id, name, input: "{}".to_string(), output: None, status: ToolStatus::Running, agent: None }
+}
+
+/// A message for a thread, as `Request::Send` carries it.
+#[derive(Default)]
+pub struct NewMessage {
+    pub text: String,
+    pub attachments: Vec<String>,
+    /// Given to the turn that runs at once, if the agent can take it.
+    pub now: bool,
+    pub context: Option<Value>,
+    /// The id the client gave it, which a message sent again is known by.
+    pub message_id: Option<String>,
+}
+
+impl NewMessage {
+    pub fn text(text: impl Into<String>) -> Self {
+        Self { text: text.into(), ..Self::default() }
+    }
 }
 
 fn new_id() -> String {

@@ -820,15 +820,19 @@ private struct ServersShelf: View {
                     .padding(.horizontal, sidebarEdge)
                     .frame(height: doneRowHeight)
                     .padding(.vertical, 3)
+                ServerErrors(servers: servers)
             }
         } else {
-            Shelf(items: servers, maxHeight: maxHeight, expanded: $expanded, height: $height) {
-                AllServersLine(servers: servers, expanded: expanded)
-            } row: { server in
-                ServerLine(server: server)
-                    .padding(.horizontal, 8)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .padding(rowMargin)
+            VStack(spacing: 0) {
+                Shelf(items: servers, maxHeight: maxHeight, expanded: $expanded, height: $height) {
+                    AllServersLine(servers: servers, expanded: expanded)
+                } row: { server in
+                    ServerLine(server: server)
+                        .padding(.horizontal, 8)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .padding(rowMargin)
+                }
+                ServerErrors(servers: servers)
             }
         }
     }
@@ -1138,6 +1142,33 @@ extension [Server] {
         let path = paths.count > 1 ? "Mixed" : paths.first?.capitalized
         let slowest = connected.compactMap(\.rttMs).max().map { "\($0) ms" }
         return [path, slowest].compactMap { $0 }.joined(separator: " · ")
+    }
+}
+
+/// Why each server that isn't connected isn't, as its link last said, under the servers' lines,
+/// so that it is read without pointing at anything. With more than one server each is named.
+struct ServerErrors: View {
+    let servers: [Server]
+
+    var body: some View {
+        let failing = servers.compactMap { server in
+            server.state == .connected ? nil : server.error.map { (server, $0) }
+        }
+        if !failing.isEmpty {
+            VStack(alignment: .leading, spacing: 4) {
+                ForEach(failing, id: \.0.id) { server, error in
+                    Text(servers.count > 1 ? "\(server.name): \(error)" : error)
+                        .font(.ui(size: 11))
+                        .foregroundStyle(Color.themeMutedStrongerForeground)
+                        .lineLimit(3)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+            .textSelection(.enabled)
+            .padding(.horizontal, sidebarEdge)
+            .padding(.bottom, 8)
+        }
     }
 }
 

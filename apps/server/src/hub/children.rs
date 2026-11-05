@@ -18,7 +18,7 @@ use serde::Serialize;
 use serde_json::{Value, json};
 use tokio::sync::broadcast;
 
-use super::{Hub, Live, Slot, TitleSource, agent_name, new_id, plain_message, thread_worktree};
+use super::{Hub, Live, NewMessage, Slot, TitleSource, agent_name, new_id, plain_message, thread_worktree};
 use crate::git;
 use crate::mcp::StartAgent;
 
@@ -494,7 +494,7 @@ impl Hub {
             live.stored.reports = true;
             self.store.save_thread(&live.stored)?;
         }
-        self.send(Some(id.to_string()), None, text, Vec::new(), true, None).await?;
+        self.send(Some(id.to_string()), None, NewMessage { now: true, ..NewMessage::text(text) }).await?;
         Ok(self.child_states(caller, &[id.to_string()], None).await?.remove(0))
     }
 

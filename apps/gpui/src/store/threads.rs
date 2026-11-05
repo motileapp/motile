@@ -4,12 +4,15 @@ use std::collections::HashMap;
 
 use gpui_kit::prelude::*;
 use motile_core::api::Command;
+use motile_core::outbox::Outgoing;
 use motile_protocol::wire::{
     Access, AgentAccount, CopiedThread, Interruption, ModelContext, ModelInfo, NewThread, NewWorktree, Request,
     ThreadChange,
 };
 
-use super::{Continuation, PanelPage, Selection, SendingDraft, StopQuestion, Store, ThreadDraft, UndoNotice};
+use super::{
+    Continuation, PanelPage, Selection, SendingDraft, StopQuestion, Store, ThreadDraft, UndoNotice, shown_files,
+};
 use crate::models::*;
 use crate::panel::state::PanelTab;
 use crate::transcript::model::RowModel;
@@ -32,7 +35,6 @@ impl Store {
         }
         self.set_threads(kept);
         self.open_arrived_threads(cx);
-        self.resend_drafts(cx);
         if let Selection::Thread(id) = &self.selection
             && !self.threads.contains_key(id)
         {
@@ -179,6 +181,7 @@ impl Store {
         });
         self.send(Command::MarkSeen { thread_id: thread.id.clone() });
         self.read_git(true, None::<fn(&mut Store, Vec<motile_protocol::wire::ChangedFile>, &mut Context<Store>)>, cx);
+        self.show_outbox_message(cx);
     }
 
     /// What the toolbar button and ⌘N do: with one project there is nothing to pick and the draft
@@ -305,6 +308,7 @@ impl Store {
                 text: text.clone(),
                 attachments: paths,
                 now: steers,
+                shown: shown_value(&attached),
             }
         } else {
             let draft = self.selected_draft().cloned();
@@ -333,18 +337,25 @@ impl Store {
                     .as_ref()
                     .map(|from| CopiedThread { origin: from.origin.clone(), thread_id: from.thread_id.clone() }),
             };
+            let command = Command::Send {
+                server_id: project.server_id.clone(),
+                thread_id: None,
+                new_thread: Some(new_thread),
+                text: text.clone(),
+                attachments: paths.clone(),
+                now: false,
+                shown: shown_value(&attached),
+            };
             let sending = SendingDraft {
                 text: text.clone(),
                 attachments: attached.iter().map(Attachment::attached).collect(),
                 started_at: now(),
                 server_id: project.server_id.clone(),
-                new_thread,
                 paths,
             };
             self.activity = sending.activity();
             let activity = self.activity.clone();
-            let command = sending.command();
-            self.set_sending(&draft.id, Some(sending));
+            self.sending_drafts.insert(draft.id.clone(), sending);
             self.transcript.update(cx, |transcript, cx| {
                 transcript.set_activity(activity);
                 cx.notify();
@@ -363,9 +374,16 @@ impl Store {
         });
         self.transcript_is_empty = false;
         if existing.is_none() {
-            return self.send_draft(&key);
+            self.ask(command, move |store, result, cx| {
+                let Err(error) = result else { return };
+                store.unsend(&key, cx);
+                store.fail(error);
+            });
+            return;
         }
 
+        // The core keeps the message until its server has it, so only a server it doesn't know
+        // refuses it here.
         self.ask(command, move |store, result, cx| {
             let Err(error) = result else { return };
             // The message goes back to where it was written, wherever the app is now.
@@ -374,7 +392,7 @@ impl Store {
             if !attached.is_empty() {
                 store.attachments_by_key.insert(key.clone(), attached);
             }
-            store.fail_send(error);
+            store.fail(error);
             if store.draft_key() != key {
                 return;
             }
@@ -389,78 +407,95 @@ impl Store {
         });
     }
 
-    /// Sends a draft's first message, which starts its thread under the draft's id. The draft
-    /// stays until the thread reaches the client, whether before the server answers or after.
-    fn send_draft(&mut self, draft_id: &str) {
-        let Some(sending) = self.sending_drafts.get(draft_id) else { return };
-        if !self.sent_drafts.insert(draft_id.to_string()) {
-            return;
+    /// Takes in the core's outbox: the drafts whose first message is on its way, the drafts kept
+    /// for them after a restart, and the errors of the messages that haven't reached their servers.
+    pub(super) fn apply_outbox(&mut self, messages: Vec<Outgoing>, cx: &mut Context<Self>) {
+        for message in &messages {
+            if let Some(error) = &message.error
+                && self.told_outbox_errors.get(&message.id) != Some(error)
+            {
+                self.told_outbox_errors.insert(message.id.clone(), error.clone());
+                self.error_message = Some(error.clone());
+            }
+            let Some(new_thread) = &message.new_thread else { continue };
+            if !self.thread_drafts.iter().any(|draft| draft.id == message.thread_id) {
+                self.thread_drafts.push(ThreadDraft::of(&message.thread_id, new_thread));
+                self.save_thread_drafts();
+            }
+            self.sending_drafts.entry(message.thread_id.clone()).or_insert_with(|| SendingDraft::of(message));
         }
-        let draft_id = draft_id.to_string();
-        self.ask(sending.command(), move |store, result, cx| match result {
-            Err(error) => {
-                store.sent_drafts.remove(&draft_id);
-                store.unsend(&draft_id, cx);
-                store.fail_send(error);
-            }
-            Ok(value) => {
-                // A server from before thread ids picks its own, and one whose thread was deleted
-                // starts another.
-                let thread_id = value["thread_id"].as_str().unwrap_or_default().to_string();
-                if thread_id != draft_id {
-                    store.awaited_threads.insert(thread_id, draft_id);
-                }
-                store.open_arrived_threads(cx);
-            }
-        });
+        self.told_outbox_errors.retain(|id, _| messages.iter().any(|message| &message.id == id));
+        self.outbox = messages;
+        if self.transcript.read(cx).pending.is_none() {
+            self.show_sending_message(cx);
+        }
+        self.show_outbox_message(cx);
     }
 
-    /// Sends again the first messages that were on their way when the client was last closed,
-    /// once their servers are back. A server from before thread ids could start them twice, so
-    /// they go back to their drafts there.
-    pub(super) fn resend_drafts(&mut self, cx: &mut Context<Self>) {
-        let waiting: Vec<(String, String)> = self
-            .sending_drafts
+    /// Shows the open thread's message that is still in the outbox, as after a restart, unless
+    /// the transcript shows it already.
+    fn show_outbox_message(&mut self, cx: &mut Context<Self>) {
+        let Selection::Thread(thread_id) = &self.selection else { return };
+        let outgoing =
+            self.outbox.iter().rev().find(|message| &message.thread_id == thread_id && message.new_thread.is_none());
+        let Some(message) = outgoing else { return };
+        let transcript = self.transcript.read(cx);
+        let shown = transcript.pending.is_some() || transcript.rows.iter().any(|row| row.row.item == message.id);
+        if shown || transcript.thread_id.as_deref() != Some(thread_id) {
+            return;
+        }
+        let pending = RowModel::pending(message.text.clone(), shown_files(&message.shown), false);
+        self.transcript.update(cx, |transcript, cx| {
+            transcript.set_pending(Some(pending));
+            cx.notify();
+        });
+        self.transcript_is_empty = false;
+    }
+
+    /// A message the core won't send goes back to where it was written, and says why.
+    pub(super) fn unsent(&mut self, message: Outgoing, error: String, cx: &mut Context<Self>) {
+        self.error_message = Some(error);
+        if message.new_thread.is_some() {
+            self.sending_drafts.entry(message.thread_id.clone()).or_insert_with(|| SendingDraft::of(&message));
+            return self.unsend(&message.thread_id, cx);
+        }
+        let key = message.thread_id.clone();
+        self.put_back(&key, &SendingDraft::of(&message));
+        if self.draft_key() != key {
+            return;
+        }
+        let activity = self.activity.clone();
+        let is_empty = self.transcript.update(cx, |transcript, cx| {
+            transcript.set_pending(None);
+            transcript.set_activity(activity);
+            cx.notify();
+            transcript.is_empty()
+        });
+        self.transcript_is_empty = is_empty;
+    }
+
+    /// Puts a message back in the composer of `key`, before what was written there since.
+    fn put_back(&mut self, key: &str, message: &SendingDraft) {
+        let written = self.drafts.get(key).map(|text| text.trim().to_string()).unwrap_or_default();
+        let text = if written.is_empty() { message.text.clone() } else { format!("{}\n\n{written}", message.text) };
+        self.set_text(text, key);
+        self.draft_version += 1;
+        let mut back: Vec<Attachment> = message
+            .paths
             .iter()
-            .filter(|(id, _)| !self.sent_drafts.contains(*id) && !self.threads.contains_key(*id))
-            .map(|(id, sending)| (id.clone(), sending.server_id.clone()))
+            .zip(message.attachments.iter().map(Some).chain(std::iter::repeat(None)))
+            .map(|(path, shown)| Attachment::from_server(path, shown, &message.server_id))
             .collect();
-        for (draft_id, server_id) in waiting {
-            let Some(server) = self.server(Some(&server_id)).filter(|server| !server.removed).cloned() else {
-                if !self.servers.is_empty() {
-                    self.unsend(&draft_id, cx);
-                }
-                continue;
-            };
-            if !server.connected() || !server.known {
-                continue;
-            }
-            if server.protocol_version >= 36 {
-                self.send_draft(&draft_id);
-            } else {
-                self.unsend(&draft_id, cx);
-            }
+        back.extend(self.attachments_by_key.remove(key).unwrap_or_default());
+        if !back.is_empty() {
+            self.attachments_by_key.insert(key.to_string(), back);
         }
     }
 
     /// Puts a draft's first message back in its composer, before what was written there since.
     fn unsend(&mut self, draft_id: &str, cx: &mut Context<Self>) {
-        let Some(sending) = self.sending_drafts.get(draft_id).cloned() else { return };
-        self.set_sending(draft_id, None);
-        let written = self.drafts.get(draft_id).map(|text| text.trim().to_string()).unwrap_or_default();
-        let text = if written.is_empty() { sending.text.clone() } else { format!("{}\n\n{written}", sending.text) };
-        self.set_text(text, draft_id);
-        self.draft_version += 1;
-        let mut back: Vec<Attachment> = sending
-            .paths
-            .iter()
-            .zip(&sending.attachments)
-            .map(|(path, shown)| Attachment::from_server(path, Some(shown), &sending.server_id))
-            .collect();
-        back.extend(self.attachments_by_key.remove(draft_id).unwrap_or_default());
-        if !back.is_empty() {
-            self.attachments_by_key.insert(draft_id.to_string(), back);
-        }
+        let Some(sending) = self.sending_drafts.remove(draft_id) else { return };
+        self.put_back(draft_id, &sending);
         if self.draft_key() != draft_id {
             return;
         }
@@ -498,8 +533,7 @@ impl Store {
     /// open, the thread opens in its place with the message kept on screen.
     fn open_new_thread(&mut self, id: String, server_id: String, draft_id: String, cx: &mut Context<Self>) {
         let was_open = self.selection == Selection::Draft(draft_id.clone());
-        self.set_sending(&draft_id, None);
-        self.sent_drafts.remove(&draft_id);
+        self.sending_drafts.remove(&draft_id);
         self.thread_drafts.retain(|draft| draft.id != draft_id);
         self.save_thread_drafts();
         if id != draft_id {
@@ -795,4 +829,10 @@ impl Store {
             }
         });
     }
+}
+
+/// What the client shows of a message's attachments while it travels, kept with it in the outbox.
+fn shown_value(attached: &[Attachment]) -> serde_json::Value {
+    let files: Vec<AttachedFile> = attached.iter().map(Attachment::attached).collect();
+    serde_json::to_value(files).unwrap_or_default()
 }

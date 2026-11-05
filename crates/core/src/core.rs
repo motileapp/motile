@@ -41,6 +41,7 @@ use crate::linear;
 use crate::link::{Link, LinkEvent, State, Status};
 use crate::mcp_servers;
 use crate::media::{self, MediaCache};
+use crate::outbox::{Outbox, Outgoing};
 use crate::pull_request;
 use crate::render::agents::{self, ThreadState};
 use crate::render::diff;
@@ -94,6 +95,8 @@ const GATEWAY_LIMITS_WAIT: Duration = Duration::from_secs(5);
 const LIMITS_STALE: Duration = Duration::from_secs(5 * 60);
 /// An endpoint that didn't run for this long isn't trusted to reach anything anymore.
 const STALE_AFTER: Duration = Duration::from_secs(10);
+/// How long a message that didn't reach its server waits before it is sent again.
+const OUTBOX_RETRY: Duration = Duration::from_secs(3);
 /// An endpoint that reached no server for this long is replaced, in case the fault is its own.
 const WEDGED_AFTER: Duration = Duration::from_secs(60);
 /// How long after a server connects or the account changes the servers' threads are copied.
@@ -251,6 +254,13 @@ enum Input {
         reply_to: Option<u64>,
         result: Result<GatewayState, String>,
     },
+    /// What the server answered a message of the outbox with.
+    Delivered {
+        message_id: String,
+        result: Result<Message, String>,
+    },
+    /// Time to send again what didn't reach its server.
+    SendOutbox,
     Render,
     Tick,
     Stop,
@@ -358,6 +368,7 @@ struct Core {
     link_events: mpsc::UnboundedSender<(String, LinkEvent)>,
     auth: AuthClient,
     cache: Cache,
+    outbox: Outbox,
     key: Arc<DeviceKey>,
     endpoint: Option<Endpoint>,
     /// When the core last ran. A gap says the system had the client paused: asleep or suspended.
@@ -504,6 +515,7 @@ pub fn start(config: Config, sink: EventSink) -> anyhow::Result<Handle> {
         sink,
         inputs: inputs.clone(),
         link_events,
+        outbox: Outbox::load(&cache),
         cache,
         key: Arc::new(key),
         endpoint: None,
@@ -625,6 +637,7 @@ impl Core {
         self.emit_keybindings();
         self.emit_account();
         self.sync_servers();
+        self.emit_outbox();
         self.emit(Event::Restored);
         self.bind_endpoint();
         self.check_account();
@@ -753,6 +766,8 @@ impl Core {
             Input::GatewaySignInEnded { sign_in, reply_to, result } => {
                 self.gateway_sign_in_ended(&sign_in, reply_to, result)
             }
+            Input::Delivered { message_id, result } => self.delivered(&message_id, result),
+            Input::SendOutbox => self.send_outbox(),
             Input::Render => self.render(),
             Input::Stop => {}
             Input::Tick => {
@@ -958,6 +973,8 @@ impl Core {
         self.open.clear();
         self.followed.clear();
         self.cache.clear();
+        self.outbox.clear();
+        self.emit_outbox();
         self.media.clear();
         if let Some(endpoint) = self.endpoint.take() {
             tokio::spawn(async move { endpoint.close().await });
@@ -980,6 +997,7 @@ impl Core {
         }
         for link in self.servers.iter().filter_map(|server| server.link.as_ref()) {
             link.retry_now();
+            link.check_now();
         }
         if let Some(link) = &self.gateway.link {
             link.retry_now();
@@ -1931,6 +1949,7 @@ impl Core {
         match event {
             LinkEvent::Status(status) => {
                 let refused = status.state == State::Refused;
+                let connected = status.state == State::Connected;
                 let Some(server) = self.server_mut(server_id) else { return };
                 server.away_since = match status.state {
                     State::Connected => None,
@@ -1938,6 +1957,9 @@ impl Core {
                 };
                 server.status = status;
                 self.emit_servers();
+                if connected {
+                    self.send_outbox();
+                }
                 // The server may have been removed from the account, or this device.
                 if refused {
                     self.check_account();
@@ -2458,12 +2480,93 @@ impl Core {
                     attachments: Vec::new(),
                     now: false,
                     context,
+                    message_id: None,
                 };
                 if let Err(error) = link.request(&request).await {
                     tracing::warn!("couldn't send a program's message: {error:#}");
                 }
             }
         });
+    }
+
+    fn emit_outbox(&self) {
+        self.emit(Event::Outbox { messages: self.outbox.messages().to_vec() });
+    }
+
+    /// Sends each server the next message of the outbox, if it is connected and has none on its
+    /// way. A message that may have reached a server already only goes again to one that knows it
+    /// by its id; to an older one it goes back to where it was written.
+    fn send_outbox(&mut self) {
+        for server_id in self.outbox.waiting_servers() {
+            let Some(message) = self.outbox.next(&server_id).cloned() else { continue };
+            let Some(server) = self.servers.iter().find(|server| server.device.public_key == server_id) else {
+                continue;
+            };
+            let link = match self.link(&server_id) {
+                Ok(link) => link,
+                Err(_) if !server.removed => continue,
+                Err(error) => {
+                    self.unsend(&message.id, error);
+                    continue;
+                }
+            };
+            if server.status.state != State::Connected {
+                continue;
+            }
+            let protocol = server.info.as_ref().map_or(0, |info| info.protocol);
+            if !message.can_send_again(protocol) {
+                let name = &server.device.name;
+                let error = format!(
+                    "Your message may not have reached {name}, which is too old to be sent it again safely, so it's back where you wrote it. Update {name}."
+                );
+                self.unsend(&message.id, error);
+                continue;
+            }
+            let Some(message) = self.outbox.start(&self.cache, &message.id) else { continue };
+            let inputs = self.inputs.clone();
+            tokio::spawn(async move {
+                let result = link.request(&message.request()).await.map_err(error_text);
+                let _ = inputs.send(Input::Delivered { message_id: message.id, result });
+            });
+        }
+    }
+
+    fn delivered(&mut self, message_id: &str, result: Result<Message, String>) {
+        match result {
+            Ok(Message::Sent { thread_id }) => {
+                let Some(message) = self.outbox.remove(&self.cache, message_id) else { return };
+                let draft_id = message.new_thread.is_some().then_some(message.thread_id);
+                self.emit(Event::Sent { message_id: message.id, thread_id, draft_id });
+                self.emit_outbox();
+            }
+            Ok(other) => {
+                let error =
+                    format!("Your server gave an unexpected answer. Update it and try again. It said: {other:?}");
+                self.unsend(message_id, error);
+            }
+            Err(error) if offline(&error) => {
+                tracing::warn!(message_id, "a message didn't reach its server: {error}");
+                let error = error.trim_end_matches(" Try again when it is back.");
+                let error = format!("{error} It is sent again once your server answers.");
+                self.outbox.failed(&self.cache, message_id, error);
+                self.emit_outbox();
+                let inputs = self.inputs.clone();
+                tokio::spawn(async move {
+                    tokio::time::sleep(OUTBOX_RETRY).await;
+                    let _ = inputs.send(Input::SendOutbox);
+                });
+            }
+            Err(error) => self.unsend(message_id, error),
+        }
+        self.send_outbox();
+    }
+
+    /// Takes the message out of the outbox, for the client to put back where it was written.
+    fn unsend(&mut self, message_id: &str, error: String) {
+        let Some(message) = self.outbox.remove(&self.cache, message_id) else { return };
+        tracing::warn!(message_id, "a message was given back: {error}");
+        self.emit(Event::Unsent { message: Box::new(message), error });
+        self.emit_outbox();
     }
 
     fn open_agent(&mut self, thread_id: &str, agent_id: &str) {
@@ -2828,26 +2931,36 @@ impl Core {
             Command::Collapses { text } => {
                 self.reply(id, Ok(json!({ "collapsible": collapses(&text, &[]) })));
             }
-            Command::Send { server_id, thread_id, new_thread, text, attachments, now } => {
-                let link = match self.link(&server_id) {
-                    Ok(link) => link,
-                    Err(error) => return self.reply(id, Err(error)),
+            Command::Send { server_id, thread_id, new_thread, text, attachments, now, shown } => {
+                if let Err(error) = self.link(&server_id) {
+                    return self.reply(id, Err(error));
+                }
+                let mut new_thread = new_thread;
+                let draft_id = new_thread
+                    .as_mut()
+                    .map(|new_thread| new_thread.id.get_or_insert_with(|| uuid::Uuid::new_v4().to_string()).clone());
+                let Some(thread_id) = thread_id.or(draft_id) else {
+                    return self.reply(id, Err("No thread was given.".to_string()));
                 };
-                let sink = self.sink.clone();
-                tokio::spawn(async move {
-                    let sent = async {
-                        match link
-                            .request(&Request::Send { thread_id, new_thread, text, attachments, now, context: None })
-                            .await?
-                        {
-                            Message::Sent { thread_id } => Ok(json!({ "thread_id": thread_id })),
-                            other => bail!(
-                                "Your server gave an unexpected answer. Update it and try again. It said: {other:?}"
-                            ),
-                        }
-                    };
-                    reply(&sink, id, sent.await.map_err(error_text));
-                });
+                let message_id = uuid::Uuid::new_v4().to_string();
+                let message = Outgoing {
+                    id: message_id.clone(),
+                    server_id,
+                    thread_id: thread_id.clone(),
+                    new_thread,
+                    text,
+                    attachments,
+                    now,
+                    shown,
+                    sent_at: motile_protocol::now(),
+                    tries: 0,
+                    error: None,
+                    on_the_way: false,
+                };
+                self.outbox.add(&self.cache, message);
+                self.reply(id, Ok(json!({ "message_id": message_id, "thread_id": thread_id })));
+                self.emit_outbox();
+                self.send_outbox();
             }
             Command::UpdateServer { server_id, when } => {
                 let link = match self.link(&server_id) {

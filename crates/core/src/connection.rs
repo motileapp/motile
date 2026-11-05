@@ -23,16 +23,17 @@ const MAX_FILE_BYTES: u64 = 64 * 1024 * 1024;
 /// and QUIC's default of 30s left a dead connection looking connected for half a minute.
 const IDLE_TIMEOUT: Duration = Duration::from_secs(15);
 
-const CONNECTION_LOST: &str = "The connection to your server was lost. Try again when it is back.";
+const CONNECTION_LOST: &str = "The connection to your server was lost";
 pub const NOT_CONNECTED: &str = "Your server isn't connected. Try again when it is back.";
 
-/// Whether an error only says the server can't be reached, which its state already shows.
+/// Whether an error says the server couldn't be reached, rather than that it refused.
 pub fn offline(error: &str) -> bool {
-    error.ends_with(CONNECTION_LOST) || error.ends_with(NOT_CONNECTED)
+    error.contains(CONNECTION_LOST) || error.ends_with(NOT_CONNECTED)
 }
 
-fn lost(_: impl std::error::Error) -> anyhow::Error {
-    anyhow!(CONNECTION_LOST)
+/// The connection failing, with what failed, so that it can be told apart.
+pub fn lost(error: impl std::fmt::Display) -> anyhow::Error {
+    anyhow!("{CONNECTION_LOST} ({error}). Try again when it is back.")
 }
 
 /// The connection failing, worded for a person. A malformed message keeps its own error.
@@ -183,6 +184,21 @@ impl Connection {
 
     pub async fn request(&self, request: &Request) -> anyhow::Result<Message> {
         self.ask(request).await?.context("Your server didn't answer. Try again.")
+    }
+
+    /// Whether the connection still carries a request there and back within `within`. A server
+    /// from before `Ping` ends the stream without an answer, which counts.
+    pub async fn ping(&self, within: Duration) -> Result<(), String> {
+        match tokio::time::timeout(within, self.ask::<_, Message>(&Request::Ping)).await {
+            Ok(Ok(_)) => Ok(()),
+            Ok(Err(error)) => Err(format!("a check failed: {error:#}")),
+            Err(_) => Err(format!("a check got no answer within {}s", within.as_secs())),
+        }
+    }
+
+    /// Whether `other` is this same connection.
+    pub fn is(&self, other: &Connection) -> bool {
+        self.inner.stable_id() == other.inner.stable_id()
     }
 
     /// Sends one message on a stream of its own and reads the one that answers it. `None` when the

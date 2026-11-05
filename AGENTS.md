@@ -198,7 +198,9 @@ shadcn's own colours, opacities and radii are gone from the theme.
   Code's process rests for ten minutes after a turn to take the thread's next message, and a new
   one holds its first prompt until its MCP servers, claude.ai's connectors too, have connected. Every
   server has a "No project" project, whose threads each work in a folder of their own under
-  `no-project` in its data folder, out of reach of any git repository above it.
+  `no-project` in its data folder, out of reach of any git repository above it. A message comes
+  with the id its client gave it, and one sent again that the thread already has, queued or in its
+  transcript, is only answered `Sent`.
 - `handoff.rs`: what an agent is told of a thread that went on without it. A thread keeps a
   session for each agent and sessions folder it ran in (`thread_sessions`); going back to one
   resumes it with what it missed, a new one is told everything before. Items are told whole, as
@@ -319,7 +321,14 @@ for tests.
   thread changes asks each server how far its own log and its copies go, and moves what each lacks,
   from the origin itself or, for a removed server, from the server whose copy goes furthest. On a
   metered network only what follows a copy is carried.
-- `link.rs`: keeps one server connected and follows its threads.
+- `link.rs`: keeps one server connected and follows its threads. A connection can look open while
+  nothing gets through, so the link pings its server (`Ping`) every half minute, when a request has
+  waited ten seconds, and when the client comes back or the network changes, and gives up one that
+  doesn't answer, saying why in the server's error.
+- `outbox.rs`: the messages on their way, kept in the cache before they are sent and until their
+  server has them, each with the id the server knows it by, so that a lost connection or a restart
+  sends it again and never twice. The clients show what waits, and put back in its composer a
+  message its server refused.
 - `follow.rs`: keeps the cached copy of an active thread that isn't open current.
 - `cache.rs`: the client's SQLite copy of its servers' threads, read a page of whole turns at a
   time.

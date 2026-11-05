@@ -15,7 +15,7 @@ use serde::Serialize;
 use tokio::sync::{Notify, mpsc};
 use tokio::task::AbortHandle;
 
-use crate::connection::{Closed, Connection, NOT_CONNECTED, PathKind, ServerAddr, offline};
+use crate::connection::{Closed, Connection, NOT_CONNECTED, PathKind, ServerAddr, lost, offline};
 
 const RETRY_DELAYS: [Duration; 4] =
     [Duration::from_millis(300), Duration::from_secs(1), Duration::from_secs(2), Duration::from_secs(5)];
@@ -30,6 +30,15 @@ const WELCOME_TIMEOUT: Duration = Duration::from_secs(20);
 const RECONNECT_WAIT: Duration = Duration::from_secs(15);
 /// How many times a file is sent from its start when the connection is lost on the way.
 const UPLOAD_TRIES: u32 = 3;
+/// A request that has had no answer for this long has the link check that the connection still
+/// carries requests at all.
+const SUSPECT_AFTER: Duration = Duration::from_secs(10);
+/// How often a connection that looks fine is checked anyway.
+const CHECK_EVERY: Duration = Duration::from_secs(30);
+/// How long a check waits for the server's `Pong`.
+const PING_WITHIN: Duration = Duration::from_secs(5);
+/// The first protocol whose servers answer `Ping`.
+const PING_PROTOCOL: u32 = 37;
 
 #[derive(Clone, Debug)]
 pub enum LinkEvent {
@@ -74,6 +83,8 @@ pub struct Link {
     restart: Notify,
     /// Tells the requests that wait for a connection that there is one.
     attached: Notify,
+    /// Ends the connection there is, which stopped carrying requests, for `Inner::given_up`.
+    give_up: Notify,
 }
 
 #[derive(Default)]
@@ -87,6 +98,10 @@ struct Inner {
     open: HashMap<String, OpenThread>,
     /// Where the server was last reached, for dialing it on a new endpoint.
     known: Vec<TransportAddr>,
+    /// Why the connection there is was given up.
+    given_up: Option<String>,
+    /// The protocol the server speaks, once it has said.
+    protocol: u32,
 }
 
 struct OpenThread {
@@ -109,6 +124,7 @@ impl Link {
             wake: Notify::new(),
             restart: Notify::new(),
             attached: Notify::new(),
+            give_up: Notify::new(),
         });
         let dialer = tokio::spawn(link.clone().dial_forever(server));
         link.lock().dialer = Some(dialer.abort_handle());
@@ -235,10 +251,49 @@ impl Link {
                 std::future::pending::<()>().await;
             }
         };
+        let checked = async {
+            loop {
+                tokio::time::sleep(CHECK_EVERY).await;
+                self.check(&connection).await;
+            }
+        };
         tokio::select! {
             closed = connection.closed() => closed,
             () = welcomed => Closed { refused: false, reason: "Your server didn't send its threads in time.".to_string() },
+            () = self.give_up.notified() => {
+                let reason = self.lock().given_up.take().unwrap_or_default();
+                Closed { refused: false, reason }
+            }
+            () = checked => unreachable!(),
         }
+    }
+
+    /// Checks the connection there is now, as when the client comes back or the network changes,
+    /// which may have cut it without a word.
+    pub fn check_now(self: &Arc<Self>) {
+        let Some(connection) = self.lock().connection.clone() else { return };
+        let link = self.clone();
+        tokio::spawn(async move { link.check(&connection).await });
+    }
+
+    /// Gives `connection` up when it no longer carries a request there and back, so that the link
+    /// dials again and says why. The connection can look open all along: QUIC keeps it alive
+    /// while nothing gets through.
+    async fn check(&self, connection: &Connection) -> Option<String> {
+        if self.lock().protocol < PING_PROTOCOL || connection.is_closed() {
+            return None;
+        }
+        let Err(error) = connection.ping(PING_WITHIN).await else { return None };
+        let path = connection.path().map(|(kind, _)| format!(", last over {}", format!("{kind:?}").to_lowercase()));
+        let reason = format!("Your server stopped answering: {error}{}.", path.unwrap_or_default());
+        tracing::warn!(server = self.server_id, reason, "gave up a connection");
+        let mut inner = self.lock();
+        if inner.connection.as_ref().is_some_and(|current| current.is(connection)) {
+            inner.given_up = Some(reason.clone());
+            drop(inner);
+            self.give_up.notify_waiters();
+        }
+        Some(reason)
     }
 
     /// Starts using a connection whose handshake is done. It counts as connected once the server
@@ -271,6 +326,9 @@ impl Link {
                     }
                 };
                 let welcomed = matches!(message, Message::Welcome { .. });
+                if let Message::Welcome { server, .. } = &message {
+                    self.lock().protocol = server.protocol;
+                }
                 self.emit(LinkEvent::List(message));
                 if !welcomed {
                     continue;
@@ -393,10 +451,26 @@ impl Link {
         tokio::time::timeout(RECONNECT_WAIT, next).await.map_err(|_| anyhow::anyhow!(NOT_CONNECTED))
     }
 
+    /// Asks the server and waits for its answer. One that takes long has the connection checked,
+    /// which ends the wait with an error if the connection no longer carries anything.
     pub async fn request(&self, request: &Request) -> anyhow::Result<Message> {
-        match self.connection().await?.request(request).await? {
-            Message::Error { message } => Err(anyhow::anyhow!(message)),
-            message => Ok(message),
+        let connection = self.connection().await?;
+        let asked = connection.request(request);
+        tokio::pin!(asked);
+        let answer = tokio::select! {
+            answer = &mut asked => answer,
+            () = tokio::time::sleep(SUSPECT_AFTER) => match self.check(&connection).await {
+                Some(reason) => Err(lost(reason)),
+                None => asked.await,
+            }
+        };
+        match answer {
+            Ok(Message::Error { message }) => Err(anyhow::anyhow!(message)),
+            Ok(message) => Ok(message),
+            Err(error) => {
+                tracing::warn!(server = self.server_id, "a request failed: {error:#}");
+                Err(error)
+            }
         }
     }
 
@@ -508,6 +582,70 @@ mod tests {
         let port = endpoint.bound_sockets().iter().find(|address| address.is_ipv4()).unwrap().port();
         let address = format!("{}@127.0.0.1:{port}", endpoint.id()).parse().unwrap();
         (endpoint, address)
+    }
+
+    /// A server that sends its threads, then takes every other stream and never answers it, as
+    /// a connection that looks open but carries nothing does.
+    async fn server_that_stops_answering() -> (Endpoint, ServerAddr) {
+        let endpoint =
+            Endpoint::builder(iroh::endpoint::presets::Minimal).alpns(vec![ALPN.to_vec()]).bind().await.unwrap();
+        let accepting = endpoint.clone();
+        tokio::spawn(async move {
+            while let Some(incoming) = accepting.accept().await {
+                let Ok(connection) = incoming.await else { continue };
+                tokio::spawn(async move {
+                    let mut streams = Vec::new();
+                    while let Ok((mut send, recv)) = connection.accept_bi().await {
+                        if streams.is_empty() {
+                            let server = serde_json::json!({
+                                "version": "1.0.0", "protocol": PING_PROTOCOL, "hostname": "studio", "home": "/",
+                                "agents": [], "models": [],
+                            });
+                            let server = serde_json::from_value(server).unwrap();
+                            let welcome = Message::Welcome { server, threads: Vec::new(), projects: Vec::new() };
+                            motile_protocol::frame::write_frame(&mut send, &welcome).await.unwrap();
+                        }
+                        streams.push((send, recv));
+                    }
+                });
+            }
+        });
+        let port = endpoint.bound_sockets().iter().find(|address| address.is_ipv4()).unwrap().port();
+        let address = format!("{}@127.0.0.1:{port}", endpoint.id()).parse().unwrap();
+        (endpoint, address)
+    }
+
+    #[tokio::test]
+    async fn a_connection_that_stops_carrying_requests_is_given_up_and_says_why() {
+        let (_server, address) = server_that_stops_answering().await;
+        let endpoint = bind(&DeviceKey::generate(), true).await.unwrap();
+        let (events, mut heard) = mpsc::unbounded_channel();
+        let link = Link::connect(endpoint, address, events);
+        while link.status().state != State::Connected {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+
+        let within = SUSPECT_AFTER + PING_WITHIN + Duration::from_secs(5);
+        let request = Request::Skills { project_id: "p".to_string() };
+        let failed = tokio::time::timeout(within, link.request(&request)).await.expect("the request waited forever");
+        let given_up = tokio::time::timeout(Duration::from_secs(5), async {
+            while let Some((_, event)) = heard.recv().await {
+                if let LinkEvent::Status(status) = event
+                    && status.state == State::Disconnected
+                {
+                    return status;
+                }
+            }
+            panic!("the link stopped");
+        })
+        .await
+        .expect("the link still says it is connected");
+
+        let error = failed.unwrap_err().to_string();
+        assert!(offline(&error), "{error}");
+        assert!(error.contains("Your server stopped answering"), "{error}");
+        assert!(given_up.error.unwrap().starts_with("Your server stopped answering: a check got no answer within 5s"));
+        link.shutdown();
     }
 
     #[tokio::test]

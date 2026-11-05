@@ -313,6 +313,7 @@ struct SidebarScreen: View {
                 ServerLines(servers: servers)
             }
         }
+        ServerErrors(servers: servers)
     }
 
     private func circleButton(_ symbol: Symbol, label: String, action: @escaping () -> Void) -> some View {

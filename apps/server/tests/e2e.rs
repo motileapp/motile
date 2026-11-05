@@ -7,8 +7,10 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use futures_util::{SinkExt, StreamExt};
+use motile_core::cache::Cache;
 use motile_core::connection::{Connection, Follow, ServerAddr, bind};
 use motile_core::link::{Link, LinkEvent, State};
+use motile_core::outbox::{Outbox, Outgoing};
 use motile_core::sync::{self as relay, Origin};
 use motile_protocol::frame::{read_frame, write_frame};
 use motile_protocol::gateway_wire::{AccountStatus, GatewayAccount, GatewayReply, GatewayRequest, WsMessage};
@@ -295,6 +297,7 @@ async fn send(connection: &Connection, thread_id: Option<String>, new_thread: Op
         attachments: Vec::new(),
         now: false,
         context: None,
+        message_id: None,
     };
     match connection.request(&request).await.unwrap() {
         Message::Sent { thread_id } => thread_id,
@@ -844,9 +847,66 @@ async fn a_thread_the_client_names_starts_once_however_often_it_is_sent() {
         attachments: Vec::new(),
         now: false,
         context: None,
+        message_id: None,
     };
     let refused = connection.request(&request).await.unwrap();
     assert!(matches!(refused, Message::Error { .. }), "{refused:?}");
+}
+
+fn outgoing(thread_id: &str, text: &str) -> Outgoing {
+    Outgoing {
+        id: uuid::Uuid::new_v4().to_string(),
+        server_id: "server".to_string(),
+        thread_id: thread_id.to_string(),
+        new_thread: None,
+        text: text.to_string(),
+        attachments: Vec::new(),
+        now: false,
+        shown: serde_json::Value::Null,
+        sent_at: 0.0,
+        tries: 0,
+        error: None,
+        on_the_way: false,
+    }
+}
+
+#[tokio::test]
+async fn a_message_sent_again_by_its_id_reaches_its_thread_once() {
+    let harness = Harness::start("fixtures/read-and-bash.jsonl", "0.05").await;
+    let connection = harness.connect().await;
+    let new_thread = harness.new_thread(&connection, Agent::Claude).await;
+    let thread_id = send(&connection, None, new_thread, "Tell me about README.md").await;
+    let sent = Message::Sent { thread_id: thread_id.clone() };
+    let folder = tempfile::tempdir().unwrap();
+    let cache = Cache::open(&folder.path().join("cache.sqlite")).unwrap();
+    let mut outbox = Outbox::load(&cache);
+
+    // Sent while the turn runs, so the server queues it, then again as if the answer was lost.
+    let queued = outgoing(&thread_id, "And the tests?");
+    outbox.add(&cache, queued.clone());
+    assert_eq!(connection.request(&queued.request()).await.unwrap(), sent);
+    assert_eq!(connection.request(&queued.request()).await.unwrap(), sent);
+
+    // The client restarted before it heard, and sends what its outbox kept on a new connection.
+    let restarted = Outbox::load(&cache);
+    let again = harness.connect().await;
+    assert_eq!(again.request(&restarted.messages()[0].request()).await.unwrap(), sent);
+    finished_transcript(&connection, &thread_id).await;
+
+    let after = outgoing(&thread_id, "Thanks");
+    assert_eq!(connection.request(&after.request()).await.unwrap(), sent);
+    assert_eq!(again.request(&after.request()).await.unwrap(), sent);
+
+    let transcript = finished_transcript(&connection, &thread_id).await;
+    assert_eq!(
+        messages_and_turn_ends(&transcript),
+        ["Tell me about README.md", "(turn end)", "And the tests?", "(turn end)", "Thanks", "(turn end)"]
+    );
+    let mut made_up = after.request();
+    if let Request::Send { message_id, .. } = &mut made_up {
+        *message_id = Some("not-a-uuid".to_string());
+    }
+    assert!(matches!(connection.request(&made_up).await.unwrap(), Message::Error { .. }));
 }
 
 #[tokio::test]
@@ -1285,6 +1345,7 @@ async fn a_message_sent_to_steer_is_taken_by_the_turn_that_runs() {
         attachments: Vec::new(),
         now: true,
         context: None,
+        message_id: None,
     };
     assert_eq!(connection.request(&steer).await.unwrap(), Message::Sent { thread_id: thread_id.clone() });
     transcript.follow_until_idle(&mut follow).await;
@@ -3382,8 +3443,15 @@ async fn attached_images_and_videos_are_shown_in_the_message_and_go_with_its_thr
 
     let attachments = vec![shot.clone(), video.clone(), notes.clone()];
     let new_thread = harness.new_thread(&connection, Agent::Claude).await;
-    let request =
-        Request::Send { thread_id: None, new_thread, text: "Look".to_string(), attachments, now: false, context: None };
+    let request = Request::Send {
+        thread_id: None,
+        new_thread,
+        text: "Look".to_string(),
+        attachments,
+        now: false,
+        context: None,
+        message_id: None,
+    };
     let Message::Sent { thread_id } = connection.request(&request).await.unwrap() else { panic!("not sent") };
     let transcript = finished_transcript(&connection, &thread_id).await;
 
@@ -3404,6 +3472,7 @@ async fn attached_images_and_videos_are_shown_in_the_message_and_go_with_its_thr
         attachments: vec![poster.clone() + "x"],
         now: false,
         context: None,
+        message_id: None,
     };
     assert!(matches!(connection.request(&gone).await.unwrap(), Message::Error { .. }));
 
@@ -4341,6 +4410,7 @@ async fn a_removed_servers_thread_goes_on_on_another_server_with_its_history() {
         attachments: Vec::new(),
         now: false,
         context: None,
+        message_id: None,
     };
     assert!(matches!(on_b.request(&request).await.unwrap(), Message::Error { .. }));
 }
@@ -4391,6 +4461,7 @@ async fn a_program_keeps_its_state_and_a_message_tells_the_agent_what_it_sent() 
         attachments: Vec::new(),
         now: false,
         context: Some(context.clone()),
+        message_id: None,
     };
     assert_eq!(connection.request(&request).await.unwrap(), Message::Sent { thread_id: thread_id.clone() });
     transcript.running = true;

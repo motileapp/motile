@@ -48,23 +48,61 @@ struct ListedDraft: Identifiable {
     var id: String { draft.id }
 }
 
-/// The first message of a draft, from when it is sent until the client has the thread it started,
-/// which takes the draft's id. It is kept across restarts and sent again when its server is back.
-struct SendingDraft: Codable {
+/// A message on its way to its server, which the core keeps until the server has it, across lost
+/// connections and restarts. A thread's first message goes under the id of its draft.
+struct OutgoingMessage: Equatable {
+    let id: String
+    let serverID: String
+    let threadID: String
+    let startsThread: Bool
     let text: String
+    let paths: [String]
     let attachments: [AttachedFile]
-    let startedAt: Double
-    /// The `send` command, as JSON.
-    let command: Data
+    let sentAt: Double
+    /// Why it hasn't reached its server yet.
+    let error: String?
 
-    var serverID: String? { json?["server_id"] as? String }
-    var paths: [String] { json?["attachments"] as? [String] ?? [] }
-    var json: JSON? { (try? JSONSerialization.jsonObject(with: command)) as? JSON }
+    init(json: JSON) {
+        id = json.string("id")
+        serverID = json.string("server_id")
+        threadID = json.string("thread_id")
+        startsThread = json.object("new_thread") != nil
+        text = json.string("text")
+        paths = json["attachments"] as? [String] ?? []
+        attachments = (json.object("shown") ?? [:]).objects("attachments").map(AttachedFile.init(json:))
+        sentAt = json.double("sent_at")
+        error = json.optionalString("error")
+    }
+
+    /// The message as it is sent, before the core has it.
+    init(text: String, paths: [String], attachments: [AttachedFile], serverID: String, threadID: String, startsThread: Bool) {
+        id = ""
+        self.serverID = serverID
+        self.threadID = threadID
+        self.startsThread = startsThread
+        self.text = text
+        self.paths = paths
+        self.attachments = attachments
+        sentAt = Date().timeIntervalSince1970
+        error = nil
+    }
+
+    /// What the core keeps with the message for the client to show it by.
+    static func shown(_ attachments: [AttachedFile]) -> JSON {
+        let files: [JSON] = attachments.map { file in
+            var json: JSON = ["name": file.name, "video": file.video]
+            json["media"] = file.media
+            json["poster"] = file.poster
+            return json
+        }
+        return ["attachments": files]
+    }
+
     var preview: String { AppStore.preview(text: text, attachments: attachments.count) ?? "" }
 
     var activity: Activity {
         var activity = Activity.starting
-        activity.startedAt = startedAt
+        activity.startedAt = sentAt
         return activity
     }
 }
@@ -327,9 +365,14 @@ final class AppStore {
     /// The agents each thread showed last, for the lists kept of threads that aren't open.
     @ObservationIgnored private var lastAgents: [String: [AgentInfo]] = [:]
     /// The drafts whose first message is on its way, until the client has the thread it started.
-    private(set) var sendingDrafts: [String: SendingDraft] = [:]
-    /// The drafts sent since the client started, which aren't sent again.
-    @ObservationIgnored private var sentDrafts: Set<String> = []
+    private(set) var sendingDrafts: [String: OutgoingMessage] = [:]
+    /// The messages on their way to their servers, as the core keeps them.
+    @ObservationIgnored private var outbox: [OutgoingMessage] = []
+    /// The error of each message of the outbox that was shown, so that it is shown once.
+    @ObservationIgnored private var shownOutboxErrors: [String: String] = [:]
+    /// The message of the outbox the open thread shows on its way since the client restarted, or
+    /// since its rows were replaced.
+    @ObservationIgnored private var restoredPendingID: String?
     /// The threads drafts started under another id than theirs, with their drafts.
     @ObservationIgnored private var awaitedThreads: [String: String] = [:]
     var errorMessage: String?
@@ -343,13 +386,7 @@ final class AppStore {
             : "The files the agent changed stay as they are."
     }
     func alert(_ error: CoreBridge.CoreError) {
-        guard !error.offline else { return }
         errorMessage = error.message
-    }
-    /// Says that a message didn't reach its server, even when only the connection was lost: it
-    /// went back to the composer, which is easy to miss.
-    private func alertUnsent(_ error: CoreBridge.CoreError) {
-        errorMessage = error.offline ? Self.unsent : error.message
     }
     /// The error's first sentence as the alert's title, and the rest below it.
     var errorAlert: (title: String, detail: String) {
@@ -506,7 +543,22 @@ final class AppStore {
         case "restored":
             return { [weak self] in
                 self?.ready = true
+                self?.dropEmptyDrafts()
                 self?.ensureDraftProject()
+            }
+        case "outbox":
+            let messages = event.objects("messages").map(OutgoingMessage.init(json:))
+            return { [weak self] in self?.apply(outbox: messages) }
+        case "sent":
+            let (messageID, threadID) = (event.string("message_id"), event.string("thread_id"))
+            let draftID = event.optionalString("draft_id")
+            return { [weak self] in self?.sent(messageID, threadID: threadID, draftID: draftID) }
+        case "unsent":
+            let message = OutgoingMessage(json: event.object("message") ?? [:])
+            let error = event.string("error")
+            return { [weak self] in
+                self?.putBack(message)
+                self?.errorMessage = error
             }
         case "servers":
             let servers = event.objects("servers").map { Server(json: $0) }
@@ -570,6 +622,7 @@ final class AppStore {
             return { [weak self] in
                 guard let self, self.transcript.threadID == threadID else { return }
                 self.transcript.apply(reset: reset, start: start, remove: remove, rows: rows, earlier: earlier, at: at)
+                if reset { self.restorePending() }
                 // Assigned only when it changes: every assignment makes the views that read it
                 // update, and rows arrive many times a second.
                 let isEmpty = self.transcript.isEmpty
@@ -702,7 +755,6 @@ final class AppStore {
         }
         showServerUpdates()
         ensureDraftProject()
-        resendDrafts()
         // The server has arrived; the install command has done its job.
         if showsAddServer, servers.count > addServerCount {
             showsAddServer = false
@@ -714,7 +766,6 @@ final class AppStore {
         for thread in new { kept[thread.id] = thread }
         setThreads(kept)
         openArrivedThreads()
-        resendDrafts()
         if case .thread(let id) = selection, anyThread(id) == nil {
             openEmptyDraft()
         }
@@ -1214,9 +1265,9 @@ final class AppStore {
         drafts = defaults.dictionary(forKey: "drafts") as? [String: String] ?? [:]
         lastSelection = defaults.string(forKey: "selection")
         let saved = defaults.data(forKey: "threadDrafts").flatMap { try? JSONDecoder().decode([ThreadDraft].self, from: $0) }
-        let sending = defaults.data(forKey: "sendingDrafts").flatMap { try? JSONDecoder().decode([String: SendingDraft].self, from: $0) }
-        threadDrafts = (saved ?? []).filter { preview(of: $0) != nil || sending?[$0.id] != nil || $0.id == lastSelection }
-        sendingDrafts = (sending ?? [:]).filter { id, _ in threadDrafts.contains { $0.id == id } }
+        // Drafts whose first message the core still sends are kept until it says which.
+        threadDrafts = saved ?? []
+        takeBackLegacySendingDrafts()
         let restored = threadDrafts.first { $0.id == lastSelection }
         let restoredPreview = defaults.string(forKey: "openedDraftPreview")
         let opened = restored ?? emptyDraft()
@@ -1230,9 +1281,26 @@ final class AppStore {
         defaults.set(try? JSONEncoder().encode(threadDrafts), forKey: "threadDrafts")
     }
 
-    private func setSending(_ sending: SendingDraft?, for draftID: String) {
-        sendingDrafts[draftID] = sending
-        defaults.set(try? JSONEncoder().encode(sendingDrafts), forKey: "sendingDrafts")
+    /// The first messages an earlier client kept itself, which the core doesn't have: they go back
+    /// to their drafts, to be sent again.
+    private func takeBackLegacySendingDrafts() {
+        struct Legacy: Decodable {
+            let text: String
+        }
+        guard let data = defaults.data(forKey: "sendingDrafts") else { return }
+        defaults.removeObject(forKey: "sendingDrafts")
+        let legacy = (try? JSONDecoder().decode([String: Legacy].self, from: data)) ?? [:]
+        for (draftID, sending) in legacy where threadDrafts.contains(where: { $0.id == draftID }) {
+            let written = (drafts[draftID] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            setText(written.isEmpty ? sending.text : "\(sending.text)\n\n\(written)", for: draftID)
+        }
+    }
+
+    /// Forgets the drafts left with nothing in them, once the outbox has said which are on their way.
+    private func dropEmptyDrafts() {
+        let before = threadDrafts.count
+        threadDrafts.removeAll { preview(of: $0) == nil && !isSending($0) && selection != .draft($0.id) }
+        if threadDrafts.count != before { saveThreadDrafts() }
     }
 
     /// A draft that starts with what the last one was set to.
@@ -2304,7 +2372,6 @@ final class AppStore {
     static let steersKey = "send.steers"
     /// It steers until the setting says otherwise.
     static let steersByDefault = true
-    static let unsent = "Your message wasn't sent. The connection to your server was lost, so it's back where you wrote it."
 
     /// Sends what is written. While the agent works, an `alternate` message steers when the
     /// setting queues, and queues when it steers.
@@ -2313,7 +2380,8 @@ final class AppStore {
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         let attached = attachments
         let key = draftKey
-        var command: JSON = ["text": text, "attachments": attached.compactMap(\.path)]
+        let (paths, shown) = (attached.compactMap(\.path), attached.map(\.attached))
+        var command: JSON = ["text": text, "attachments": paths, "shown": OutgoingMessage.shown(shown)]
         let existing = selectedThread
         let steers = existing != nil && (defaults.object(forKey: AppStore.steersKey) as? Bool ?? AppStore.steersByDefault) != alternate
         if let thread = existing {
@@ -2341,11 +2409,10 @@ final class AppStore {
             settings["id"] = draft.id
             command["server_id"] = project.serverID
             command["new_thread"] = settings
-            guard let data = try? JSONSerialization.data(withJSONObject: command) else { return }
-            let sending = SendingDraft(
-                text: text, attachments: attached.map(\.attached), startedAt: Date().timeIntervalSince1970, command: data
+            let sending = OutgoingMessage(
+                text: text, paths: paths, attachments: shown, serverID: project.serverID, threadID: draft.id, startsThread: true
             )
-            setSending(sending, for: draft.id)
+            sendingDrafts[draft.id] = sending
             activity = sending.activity
             transcript.setActivity(activity)
         }
@@ -2364,70 +2431,74 @@ final class AppStore {
             }
         }
         transcriptIsEmpty = false
-        guard existing != nil else { return sendDraft(key) }
-
+        let serverID = command["server_id"] as? String ?? ""
         core.send("send", command) { [weak self] result in
             guard let self, case .failure(let error) = result else { return }
-            // The message goes back to where it was written, wherever the client is now.
-            self.setText(text, for: key)
-            self.attachmentsByKey[key] = attached.isEmpty ? nil : attached
-            self.alertUnsent(error)
-            guard self.draftKey == key else { return }
-            self.transcript.setPending(nil)
-            self.transcriptIsEmpty = self.transcript.isEmpty
-            self.transcript.setActivity(self.activity)
+            // The core didn't take it, so it never left: it goes back to where it was written.
+            let message = OutgoingMessage(
+                text: text, paths: paths, attachments: shown, serverID: serverID, threadID: key, startsThread: existing == nil
+            )
+            self.putBack(message, attachments: attached)
+            self.errorMessage = error.message
         }
     }
 
-    /// Sends a draft's first message, which starts its thread under the draft's id. The draft
-    /// stays until the thread reaches the client, whether before the server answers or after.
-    private func sendDraft(_ draftID: String) {
-        guard let command = sendingDrafts[draftID]?.json, sentDrafts.insert(draftID).inserted else { return }
-        core.send("send", command) { [weak self] result in
-            guard let self else { return }
-            switch result {
-            case .failure(let error):
-                self.sentDrafts.remove(draftID)
-                self.unsend(draftID)
-                self.alertUnsent(error)
-            case .success(let value):
-                // A server from before thread ids picks its own, and one whose thread was deleted
-                // starts another.
-                let threadID = value.string("thread_id")
-                if threadID != draftID { self.awaitedThreads[threadID] = draftID }
-                self.openArrivedThreads()
-            }
+    /// Takes in what the core has on its way. A draft's first message marks the draft as sending,
+    /// a message that didn't reach its server yet says why once, and the open thread shows the
+    /// message it has on its way, as after a restart.
+    private func apply(outbox messages: [OutgoingMessage]) {
+        outbox = messages
+        for message in messages where message.startsThread && threadDrafts.contains(where: { $0.id == message.threadID }) {
+            if sendingDrafts[message.threadID] != message { sendingDrafts[message.threadID] = message }
         }
+        for message in messages {
+            guard let error = message.error, shownOutboxErrors[message.id] != error else { continue }
+            shownOutboxErrors[message.id] = error
+            errorMessage = error
+        }
+        shownOutboxErrors = shownOutboxErrors.filter { id, _ in messages.contains { $0.id == id } }
+        if !transcript.hasPending { showSendingMessage() }
+        restorePending()
     }
 
-    /// Sends again the first messages that were on their way when the client was last closed,
-    /// once their servers are back. A server from before thread ids could start them twice, so
-    /// they go back to their drafts there.
-    private func resendDrafts() {
-        for (draftID, sending) in sendingDrafts where !sentDrafts.contains(draftID) && anyThread(draftID) == nil {
-            guard let server = server(sending.serverID), !isRemoved(server.id) else {
-                if !servers.isEmpty { unsend(draftID) }
-                continue
-            }
-            guard server.state == .connected, server.known else { continue }
-            if server.protocolVersion >= 36 { sendDraft(draftID) } else { unsend(draftID) }
-        }
+    /// Shows the message the open thread has on its way, when nothing shows it.
+    private func restorePending() {
+        guard let threadID = openThreadID, transcript.threadID == threadID, !transcript.hasPending,
+              let message = outbox.last(where: { $0.threadID == threadID }) else { return }
+        restoredPendingID = message.id
+        transcript.setPending(message.text, attachments: message.attachments)
+        transcriptIsEmpty = false
     }
 
-    /// Puts a draft's first message back in its composer, before what was written there since.
-    private func unsend(_ draftID: String) {
-        guard let sending = sendingDrafts[draftID] else { return }
-        setSending(nil, for: draftID)
-        let written = (drafts[draftID] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        setText(written.isEmpty ? sending.text : "\(sending.text)\n\n\(written)", for: draftID)
-        let serverID = sending.serverID ?? ""
-        let back = zip(sending.paths, sending.attachments).map { Attachment(path: $0, shown: $1, serverID: serverID) }
-        attachmentsByKey[draftID] = back + (attachmentsByKey[draftID] ?? [])
-        if attachmentsByKey[draftID]?.isEmpty == true { attachmentsByKey[draftID] = nil }
-        guard draftKey == draftID else { return }
+    /// A message reached its server. A draft's first one waits for the thread it started.
+    private func sent(_ messageID: String, threadID: String, draftID: String?) {
+        if restoredPendingID == messageID {
+            restoredPendingID = nil
+            transcript.setPending(nil)
+            transcriptIsEmpty = transcript.isEmpty
+        }
+        guard let draftID else { return }
+        // A server from before thread ids picks its own, and one whose thread was deleted starts another.
+        if threadID != draftID { awaitedThreads[threadID] = draftID }
+        openArrivedThreads()
+    }
+
+    /// Puts a message that won't be sent back in the composer it was written in, before what was
+    /// written there since.
+    private func putBack(_ message: OutgoingMessage, attachments: [Attachment]? = nil) {
+        let key = message.threadID
+        if message.startsThread { sendingDrafts[key] = nil }
+        if restoredPendingID == message.id { restoredPendingID = nil }
+        let written = (drafts[key] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        setText(written.isEmpty ? message.text : "\(message.text)\n\n\(written)", for: key)
+        let back = attachments
+            ?? zip(message.paths, message.attachments).map { Attachment(path: $0, shown: $1, serverID: message.serverID) }
+        attachmentsByKey[key] = back + (attachmentsByKey[key] ?? [])
+        if attachmentsByKey[key]?.isEmpty == true { attachmentsByKey[key] = nil }
+        guard draftKey == key else { return }
         transcript.setPending(nil)
         transcriptIsEmpty = transcript.isEmpty
-        activity = Activity()
+        if message.startsThread { activity = Activity() }
         transcript.setActivity(activity)
     }
 
@@ -2446,8 +2517,7 @@ final class AppStore {
     /// open, the thread opens in its place with the message kept on screen.
     private func openNewThread(_ thread: ThreadInfo, draftID: String) {
         let wasOpen = selection == .draft(draftID)
-        setSending(nil, for: draftID)
-        sentDrafts.remove(draftID)
+        sendingDrafts[draftID] = nil
         threadDrafts.removeAll { $0.id == draftID }
         saveThreadDrafts()
         if thread.id != draftID {

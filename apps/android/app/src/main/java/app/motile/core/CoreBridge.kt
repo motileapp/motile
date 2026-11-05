@@ -6,7 +6,7 @@ import android.os.Looper
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.concurrent.thread
 
-/** Why a command failed. `offline`: the server couldn't be reached, which its state in the sidebar already shows. */
+/** Why a command failed. `offline`: the server couldn't be reached, rather than refusing. */
 class CoreError(override val message: String, val offline: Boolean = false) : Exception(message)
 
 /**
