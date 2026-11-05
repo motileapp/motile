@@ -21,6 +21,8 @@ use crate::ui::{ActionButton, Spinner, Variant, beside};
 pub const MARGIN: (f32, f32) = (64., 52.);
 /// The room between the corner's buttons' lights, which their clicks share.
 const CORNER_GAP: f32 = 8.;
+/// The room between the corner's buttons and the window's top and trailing edges.
+const CORNER_INSET: f32 = 16.;
 /// A small image is enlarged to fit the window, up to twice its size.
 const LARGEST_FIT: f32 = 2.;
 
@@ -327,13 +329,10 @@ impl Render for MediaViewer {
 
         let shortcuts = &self.store.read(cx).shortcuts;
         let (copy_keys, save_keys) = (shortcuts.keys_label("mod+c"), shortcuts.keys_label("mod+s"));
-        let button = ControlSize::Large.height();
-        let inset = (TOP_BAR - button) / 2.;
-        let trailing = inset + crate::window_frame::trailing_room(window, cx);
+        let trailing = CORNER_INSET + crate::window_frame::trailing_room(window, cx);
         let corner = div()
             .absolute()
-            .top_0()
-            .h(px(TOP_BAR))
+            .top(px(CORNER_INSET))
             .right(px(trailing))
             .flex()
             .items_center()

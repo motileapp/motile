@@ -35,9 +35,6 @@ struct MediaViewer: View {
     private func viewer(bar: CGFloat) -> some View {
         let item = viewing.item
         let count = file == nil ? 1 : 3
-        let buttonHeight = ControlSize.large.height
-        let row = max(bar, buttonHeight + 2 * Self.buttonGap)
-        let inset = (row - buttonHeight) / 2
         return ZStack {
             Color.themeScrim
                 .ignoresSafeArea()
@@ -83,8 +80,8 @@ struct MediaViewer: View {
                 }
                 roundButton(.x, help: "Close (Esc)", margin: .sharing(Self.buttonGap, at: count - 1, of: count)) { store.closeViewer() }
             }
-            .frame(height: row)
-            .padding(.trailing, inset)
+            .padding(.top, Self.cornerInset)
+            .padding(.trailing, Self.cornerInset)
             .offset(y: -bar)
         }
         .task(id: item) { load(item) }
@@ -145,6 +142,8 @@ struct MediaViewer: View {
 
     /// The room between the round buttons' lights, which their presses share.
     private static let buttonGap: CGFloat = 8
+    /// The room between the corner's buttons and the window's top and trailing edges.
+    private static let cornerInset: CGFloat = 16
 
     private static func copyTitle(_ item: ViewedMedia) -> String {
         item.video ? "Copy Video" : "Copy Image"
