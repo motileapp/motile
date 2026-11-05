@@ -17,8 +17,16 @@ const MAX_DEPTH: usize = 64;
 const GROUPS: [&str; 5] = ["Navigation", "Threads", "Composer", "Right Panel", "Usage"];
 
 /// What the conditions can ask about the client. Any other name is false.
-pub const CONDITIONS: [&str; 7] =
-    ["composerFocus", "editableFocus", "turnRunning", "threadOpen", "rightPanelOpen", "settingsOpen", "usagePageOpen"];
+pub const CONDITIONS: [&str; 8] = [
+    "composerFocus",
+    "editableFocus",
+    "turnRunning",
+    "threadOpen",
+    "rightPanelOpen",
+    "settingsOpen",
+    "usagePageOpen",
+    "modelPickerOpen",
+];
 
 /// Every command, by group, in the order the settings list them.
 const COMMANDS: &[(&str, &str, usize)] = &[
@@ -53,6 +61,17 @@ const COMMANDS: &[(&str, &str, usize)] = &[
     ("pullRequest.copyNumber", "Copy the Pull Request's Number", 1),
     ("composer.sendAlternate", "Send the Other Way: Queue or Steer", 2),
     ("modelPicker.toggle", "Choose the Model", 2),
+    ("modelPicker.previousProvider", "Model Picker: Previous Provider", 2),
+    ("modelPicker.nextProvider", "Model Picker: Next Provider", 2),
+    ("modelPicker.jump.1", "Model Picker: Jump: 1", 2),
+    ("modelPicker.jump.2", "Model Picker: Jump: 2", 2),
+    ("modelPicker.jump.3", "Model Picker: Jump: 3", 2),
+    ("modelPicker.jump.4", "Model Picker: Jump: 4", 2),
+    ("modelPicker.jump.5", "Model Picker: Jump: 5", 2),
+    ("modelPicker.jump.6", "Model Picker: Jump: 6", 2),
+    ("modelPicker.jump.7", "Model Picker: Jump: 7", 2),
+    ("modelPicker.jump.8", "Model Picker: Jump: 8", 2),
+    ("modelPicker.jump.9", "Model Picker: Jump: 9", 2),
     ("composer.effort", "Choose the Effort", 2),
     ("composer.access", "Choose the Access", 2),
     ("composer.server", "Choose the Server", 2),
@@ -96,15 +115,15 @@ const DEFAULTS: &[(&str, &str, Option<&str>)] = &[
     ("mod+alt+n", "chat.newWithoutProject", None),
     ("mod+shift+[", "thread.previous", None),
     ("mod+shift+]", "thread.next", None),
-    ("mod+1", "thread.jump.1", None),
-    ("mod+2", "thread.jump.2", None),
-    ("mod+3", "thread.jump.3", None),
-    ("mod+4", "thread.jump.4", None),
-    ("mod+5", "thread.jump.5", None),
-    ("mod+6", "thread.jump.6", None),
-    ("mod+7", "thread.jump.7", None),
-    ("mod+8", "thread.jump.8", None),
-    ("mod+9", "thread.jump.9", None),
+    ("mod+1", "thread.jump.1", Some("!modelPickerOpen")),
+    ("mod+2", "thread.jump.2", Some("!modelPickerOpen")),
+    ("mod+3", "thread.jump.3", Some("!modelPickerOpen")),
+    ("mod+4", "thread.jump.4", Some("!modelPickerOpen")),
+    ("mod+5", "thread.jump.5", Some("!modelPickerOpen")),
+    ("mod+6", "thread.jump.6", Some("!modelPickerOpen")),
+    ("mod+7", "thread.jump.7", Some("!modelPickerOpen")),
+    ("mod+8", "thread.jump.8", Some("!modelPickerOpen")),
+    ("mod+9", "thread.jump.9", Some("!modelPickerOpen")),
     ("mod+shift+s", "thread.done", None),
     ("mod+z", "thread.undo", Some("!editableFocus")),
     ("mod+.", "thread.stop", None),
@@ -114,6 +133,17 @@ const DEFAULTS: &[(&str, &str, Option<&str>)] = &[
     ("mod+shift+k", "pullRequest.copyNumber", None),
     ("mod+enter", "composer.sendAlternate", Some("composerFocus && turnRunning")),
     ("mod+shift+m", "modelPicker.toggle", None),
+    ("mod+shift+arrowup", "modelPicker.previousProvider", Some("modelPickerOpen")),
+    ("mod+shift+arrowdown", "modelPicker.nextProvider", Some("modelPickerOpen")),
+    ("mod+1", "modelPicker.jump.1", Some("modelPickerOpen")),
+    ("mod+2", "modelPicker.jump.2", Some("modelPickerOpen")),
+    ("mod+3", "modelPicker.jump.3", Some("modelPickerOpen")),
+    ("mod+4", "modelPicker.jump.4", Some("modelPickerOpen")),
+    ("mod+5", "modelPicker.jump.5", Some("modelPickerOpen")),
+    ("mod+6", "modelPicker.jump.6", Some("modelPickerOpen")),
+    ("mod+7", "modelPicker.jump.7", Some("modelPickerOpen")),
+    ("mod+8", "modelPicker.jump.8", Some("modelPickerOpen")),
+    ("mod+9", "modelPicker.jump.9", Some("modelPickerOpen")),
     ("mod+shift+e", "composer.effort", None),
     ("mod+shift+a", "composer.access", None),
     ("mod+shift+h", "composer.server", None),
@@ -948,6 +978,33 @@ mod tests {
         assert_eq!(view.rules.len(), DEFAULTS.len());
         assert!(view.issues.is_empty());
         assert!(!dir.path().join(FILE).exists());
+    }
+
+    #[test]
+    fn model_picker_keys_are_separate_from_thread_keys() {
+        let (_dir, mut bindings) = loaded(None);
+        let view = bindings.view();
+        assert!(view.conditions.iter().any(|name| name == "modelPickerOpen"));
+        for index in 1..=9 {
+            let thread = format!("thread.jump.{index}");
+            let model = format!("modelPicker.jump.{index}");
+            for (command, when) in [(&thread, "!modelPickerOpen"), (&model, "modelPickerOpen")] {
+                let row = view.groups.iter().flat_map(|group| &group.rows).find(|row| &row.command == command).unwrap();
+                assert_eq!(row.key, format!("mod+{index}"));
+                assert_eq!(row.when, when);
+                assert!(row.conflicts.is_empty());
+            }
+        }
+        assert_eq!(keys_of(&view, "modelPicker.previousProvider"), vec!["mod+shift+arrowup"]);
+        assert_eq!(keys_of(&view, "modelPicker.nextProvider"), vec!["mod+shift+arrowdown"]);
+        assert_eq!(bindings.check("mod+1", Some("modelPickerOpen"), None)["unknown"], serde_json::json!([]));
+
+        bindings.set("modelPicker.jump.1", "alt+1", Some("modelPickerOpen"), None).unwrap();
+        bindings.remove(&Rule::new("mod+1", "modelPicker.jump.1", Some("modelPickerOpen"))).unwrap();
+        assert_eq!(keys_of(&bindings.view(), "modelPicker.jump.1"), vec!["alt+1"]);
+        assert_eq!(keys_of(&bindings.view(), "thread.jump.1"), vec!["mod+1"]);
+        bindings.reset("modelPicker.jump.1").unwrap();
+        assert_eq!(keys_of(&bindings.view(), "modelPicker.jump.1"), vec!["mod+1"]);
     }
 
     #[test]

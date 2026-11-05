@@ -15,7 +15,12 @@ extension AppStore {
         if rightPanel.isOpen { context.insert("rightPanelOpen") }
         if settings != nil { context.insert("settingsOpen") }
         if showsUsage { context.insert("usagePageOpen") }
+        if modelPickerOpen { context.insert("modelPickerOpen") }
         return context
+    }
+
+    var modelPickerOpen: Bool {
+        composerPicker != nil || showsThreadSettings
     }
 
     /// The threads ⌘1 to ⌘9 and the next and previous thread go through: the sidebar's, as it
@@ -34,11 +39,13 @@ extension AppStore {
     /// whatever else takes them.
     func perform(_ command: String) -> Bool {
         if let place = command.wholeMatch(of: #/thread\.jump\.([1-9])/#).flatMap({ Int($0.1) }) {
-            guard composerPicker == nil else {
-                composerPickerJump = place - 1
-                return true
-            }
+            guard !modelPickerOpen else { return false }
             return showThread(at: place - 1)
+        }
+        if let place = command.wholeMatch(of: #/modelPicker\.jump\.([1-9])/#).flatMap({ Int($0.1) }) {
+            guard modelPickerOpen else { return false }
+            composerPickerJump = place - 1
+            return true
         }
         if let action = usageCommands[command] {
             guard showsUsage else { return false }
@@ -46,6 +53,9 @@ extension AppStore {
             return true
         }
         switch command {
+        case "modelPicker.previousProvider", "modelPicker.nextProvider":
+            guard modelPickerOpen else { return false }
+            composerPickerProviderStep = command == "modelPicker.nextProvider" ? 1 : -1
         case "commandPalette.toggle": return togglePanel(.commands)
         case "threadPicker.toggle": return togglePanel(.threads)
         case "settings.open":

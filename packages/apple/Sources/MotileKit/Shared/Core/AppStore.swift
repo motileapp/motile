@@ -192,6 +192,7 @@ final class AppStore {
     var composerAccessOpen = false
     /// The row of the picker's models that ⌘1 to ⌘9 asked for, until the picker takes it.
     var composerPickerJump: Int?
+    var composerPickerProviderStep: Int?
     var showsThreadSettings = false
     /// Files are being dragged over the window.
     var dropTargeted = false

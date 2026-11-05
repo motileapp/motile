@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.focusable
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -29,6 +30,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -39,12 +43,14 @@ import app.motile.LocalCloseSheet
 import app.motile.LocalStore
 import app.motile.composer.BranchPicker
 import app.motile.core.Access
+import app.motile.core.Agent
 import app.motile.core.AppStore
 import app.motile.core.ModelContext
 import app.motile.core.ModelInfo
 import app.motile.core.Preferences
 import app.motile.core.Project
 import app.motile.platform.Symbol
+import app.motile.layout.handleShortcut
 import app.motile.theme.IconSize
 import app.motile.theme.iconSize
 import app.motile.theme.LocalForeground
@@ -86,12 +92,19 @@ fun ThreadSettingsSheet() {
     val store = LocalStore.current
     val close = LocalCloseSheet.current
     var page by remember { mutableStateOf<SettingsPage?>(null) }
+    val keys = remember { FocusRequester() }
+    LaunchedEffect(Unit) { keys.requestFocus() }
+    LaunchedEffect(store.modelPickerProviderStep, store.modelPickerJump) {
+        if (store.modelPickerProviderStep == null && store.modelPickerJump == null) return@LaunchedEffect
+        page = null
+        store.showsBranches = false
+    }
     LaunchedEffect(Unit) { if (Preferences.bool("tmpReasoning")) page = SettingsPage.Reasoning }
     val branchesOf = store.composerProject?.takeIf { store.showsBranches }
     BackHandler(enabled = page != null || branchesOf != null) {
         if (branchesOf != null) store.showsBranches = false else page = null
     }
-    Column(Modifier.fillMaxSize().navigationBarsPadding()) {
+    Column(Modifier.fillMaxSize().navigationBarsPadding().onPreviewKeyEvent { store.handleShortcut(it) }.focusRequester(keys).focusable()) {
         when {
             branchesOf != null -> {
                 val base = if (store.draftUsesWorktree) store.draftBase else null
@@ -151,13 +164,35 @@ private fun Models() {
     val current = store.composerModel
     val account = store.composerAccount
     var listed by remember { mutableStateOf(setOfNotNull(account?.id)) }
+    var agent by remember { mutableStateOf(current?.agent) }
+    LaunchedEffect(store.modelPickerJump) {
+        val jump = store.modelPickerJump ?: return@LaunchedEffect
+        store.modelPickerJump = null
+        val rows = store.composerChoices.filter { it.account.id in listed }.flatMap { choice -> choice.models.map { choice.account to it } }
+        val row = rows.getOrNull(jump) ?: return@LaunchedEffect
+        store.setModel(row.second, row.first)
+    }
+    LaunchedEffect(store.modelPickerProviderStep) {
+        val step = store.modelPickerProviderStep ?: return@LaunchedEffect
+        store.modelPickerProviderStep = null
+        val choices = store.composerChoices.filter { it.models.isNotEmpty() }
+        val agents = Agent.entries.filter { candidate -> choices.any { it.account.agent == candidate } }
+        if (agents.isEmpty()) return@LaunchedEffect
+        val index = agents.indexOf(agent)
+        val next = if (index < 0) { if (step > 0) 0 else agents.lastIndex } else (index + step + agents.size) % agents.size
+        agent = agents[next]
+        listed = choices.filter { it.account.agent == agent }.map { it.account.id }.toSet()
+    }
     for (choices in store.composerChoices) {
         if (choices.models.isEmpty()) continue
         val id = choices.account.id
         val open = id in listed
         val turn by animateFloatAsState(if (open) 180f else 0f, label = "chevron")
         Column {
-            DimButton(onClick = { listed = if (open) listed - id else listed + id }) {
+            DimButton(onClick = {
+                agent = choices.account.agent
+                listed = if (open) listed - id else listed + id
+            }) {
                 Column(
                     Modifier.fillMaxWidth().heightIn(min = pressable(32f)).padding(horizontal = 4.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically),

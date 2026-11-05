@@ -94,7 +94,7 @@ impl ComposerPicker {
                 this.lit = (!this.rows(cx).is_empty()).then_some(0);
                 cx.notify();
             }),
-            cx.observe(&store, |this, _, cx| this.follow_store(cx)),
+            cx.observe_in(&store, window, |this, _, window, cx| this.follow_store(window, cx)),
         ];
         let state = store.read(cx);
         let part = state.composer_picker.unwrap_or(ComposerPickerPart::Model);
@@ -113,7 +113,7 @@ impl ComposerPicker {
             button,
             _subscriptions: subscriptions,
         };
-        picker.follow_store(cx);
+        picker.follow_store(window, cx);
         picker.lit = picker.chosen_index(part, cx);
         picker.scroll_to_lit(cx);
         picker
@@ -121,9 +121,10 @@ impl ComposerPicker {
 
     /// Follows the keys that open it on another part, or its access menu, and takes the row ⌘1
     /// to ⌘9 asked for.
-    fn follow_store(&mut self, cx: &mut Context<Self>) {
+    fn follow_store(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let store = self.store.read(cx);
         let (part, access_open, jump) = (store.composer_picker, store.composer_access_open, store.composer_picker_jump);
+        let step = store.composer_picker_provider_step;
         if let Some(part) = part.filter(|part| *part != self.part) {
             self.part = part;
             self.column = part;
@@ -141,6 +142,19 @@ impl ComposerPicker {
             self.store.update(cx, |store, _| store.composer_picker_jump = None);
             if let Some(row) = self.rows(cx).get(jump).cloned() {
                 self.choose(&row, cx);
+            }
+        }
+        if let Some(step) = step {
+            self.store.update(cx, |store, _| store.composer_picker_provider_step = None);
+            let agents = self.agents(cx);
+            if !agents.is_empty() {
+                let index = self.agent.and_then(|agent| agents.iter().position(|item| *item == agent));
+                let next = index.map_or_else(
+                    || if step > 0 { 0 } else { agents.len() - 1 },
+                    |index| (index as isize + step).rem_euclid(agents.len() as isize) as usize,
+                );
+                self.open_access(false, cx);
+                self.pick_agent(agents[next], window, cx);
             }
         }
         cx.notify();
@@ -479,7 +493,10 @@ impl ComposerPicker {
         let store = self.store.read(cx);
         let chosen = store.composer_model().is_some_and(|model| model.id == row.model.id)
             && store.composer_account().is_some_and(|account| account.id == row.account.id);
-        let key = (row.index < 9).then(|| store.shortcuts.label(&format!("thread.jump.{}", row.index + 1))).flatten();
+        let context = store.shortcut_context(false, true);
+        let key = (row.index < 9)
+            .then(|| store.shortcuts.label_in(&format!("modelPicker.jump.{}", row.index + 1), &context))
+            .flatten();
         let lit = self.column == ComposerPickerPart::Model && self.lit == Some(row.index);
         let group = SharedString::from(format!("picker-model-{}", row.index));
         let index = row.index;

@@ -590,6 +590,26 @@ mod tests {
     }
 
     #[test]
+    fn model_picker_defaults_route_keys_only_while_open() {
+        let path = std::env::temp_dir().join(uuid::Uuid::new_v4().to_string());
+        let keys: Shortcuts = motile_core::keybindings::Keybindings::load(&path, "macos").view().into();
+        for index in 1..=9 {
+            let digit = press(&format!("cmd-{index}"));
+            assert_eq!(keys.command_for(&digit, &[]), Some(format!("thread.jump.{index}").as_str()));
+            assert_eq!(
+                keys.command_for(&digit, &["modelPickerOpen"]),
+                Some(format!("modelPicker.jump.{index}").as_str())
+            );
+        }
+        for (key, command) in
+            [("cmd-shift-up", "modelPicker.previousProvider"), ("cmd-shift-down", "modelPicker.nextProvider")]
+        {
+            assert_eq!(keys.command_for(&press(key), &[]), None);
+            assert_eq!(keys.command_for(&press(key), &["modelPickerOpen"]), Some(command));
+        }
+    }
+
+    #[test]
     fn signs_match_by_their_key_with_or_without_shift() {
         let keys = shortcuts(vec![rule("thread.next", "]", "cmd-shift", None, &["⇧", "⌘", "]"])]);
         assert_eq!(keys.command_for(&press("cmd-shift-]"), &[]), Some("thread.next"));
