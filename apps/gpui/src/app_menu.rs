@@ -5,7 +5,10 @@ use gpui_kit::component::input;
 use gpui_kit::prelude::*;
 use gpui_kit::*;
 
+use motile_core::api::Section;
+
 use crate::store::integrations::Integration;
+use crate::store::snooze_presets;
 use crate::store::{PanelPage, Store};
 
 actions!(
@@ -30,6 +33,13 @@ actions!(
 #[derive(Clone, PartialEq, Debug, gpui_kit::Action)]
 #[action(namespace = motile, no_json)]
 pub struct Perform(pub &'static str);
+
+/// Snoozes the open thread until the time the Snooze menu offers at the index.
+#[derive(Clone, PartialEq, Debug, gpui_kit::Action)]
+#[action(namespace = motile, no_json)]
+pub struct SnoozeOpenThread(pub usize);
+
+actions!(motile, [CustomSnoozeOpenThread, WakeOpenThread]);
 
 /// Opens the command panel on the page of a command that toggles it: the menu only ever opens
 /// it, where its keys open and close it.
@@ -78,6 +88,15 @@ pub fn install(store: &Entity<Store>, cx: &mut App) {
         if store.has_live_servers() {
             store.add_project();
         }
+    });
+    on_store(store, cx, |action: &SnoozeOpenThread, store, cx| store.snooze_open_thread(action.0, cx));
+    on_store(store, cx, |_: &CustomSnoozeOpenThread, store, _| {
+        let Some(id) = store.changeable_thread().map(|thread| thread.id.clone()) else { return };
+        store.begin_custom_snooze(&[id], false);
+    });
+    on_store(store, cx, |_: &WakeOpenThread, store, _| {
+        let Some(id) = store.selected_thread().map(|thread| thread.id.clone()) else { return };
+        store.wake(&[id]);
     });
     on_store(store, cx, |_: &AddServer, store, _| {
         if store.account.signed_in {
@@ -175,7 +194,10 @@ struct State {
     /// The project of "New Thread in …", and whether it is a server's "No project".
     project: Option<(String, bool)>,
     no_projects: bool,
+    /// Whether a thread is open, and whether it is archived.
     thread: Option<bool>,
+    /// What the open thread's Snooze item offers.
+    snooze: Option<SnoozeItem>,
     /// The open thread's server was unlinked, so nothing can be done to it.
     read_only: bool,
     busy: bool,
@@ -211,7 +233,14 @@ fn follow(store: &Entity<Store>, shown: &mut Option<State>, cx: &mut App) {
             .filter(|project| store.is_live(project))
             .map(|project| (project.name, project.no_project)),
         no_projects: store.live_no_projects().next().is_some(),
-        thread: store.selected_thread().map(|thread| thread.is_done()),
+        thread: store.selected_thread().map(|thread| thread.is_archived()),
+        snooze: store.selected_thread().and_then(|thread| match thread.section {
+            Section::Snoozed => Some(SnoozeItem::Wake),
+            _ if store.snoozes(thread) => {
+                Some(SnoozeItem::Presets(snooze_presets().into_iter().map(|(title, _)| title).collect()))
+            }
+            _ => None,
+        }),
         read_only: store.open_thread_removed(),
         busy: store.activity.busy(),
         jumps: store.has_jump_threads(),
@@ -259,6 +288,29 @@ fn item(title: impl Into<SharedString>, command: &'static str) -> MenuItem {
         return MenuItem::action(title, OpenPanel(command));
     }
     MenuItem::action(title, Perform(command))
+}
+
+/// The open thread's Snooze item: the times to snooze it until, or the way to wake it.
+#[derive(Clone, PartialEq)]
+enum SnoozeItem {
+    Presets(Vec<String>),
+    Wake,
+}
+
+fn snooze_item(snooze: Option<&SnoozeItem>, read_only: bool) -> MenuItem {
+    match snooze {
+        Some(SnoozeItem::Wake) => MenuItem::action("Wake", WakeOpenThread).disabled(read_only),
+        Some(SnoozeItem::Presets(titles)) => MenuItem::submenu(
+            Menu::new("Snooze").items(
+                titles
+                    .iter()
+                    .enumerate()
+                    .map(|(index, title)| MenuItem::action(title.clone(), SnoozeOpenThread(index)))
+                    .chain([MenuItem::separator(), MenuItem::action("Custom…", CustomSnoozeOpenThread)]),
+            ),
+        ),
+        None => MenuItem::action("Snooze", WakeOpenThread).disabled(true),
+    }
 }
 
 fn menus(state: &State) -> Vec<Menu> {
@@ -334,8 +386,9 @@ fn menus(state: &State) -> Vec<Menu> {
             ]),
         ),
         Menu::new("Thread").items([
-            item(if state.thread == Some(true) { "Mark Undone" } else { "Mark Done" }, "thread.done")
+            item(if state.thread == Some(true) { "Unarchive" } else { "Archive" }, "thread.done")
                 .disabled(state.thread.is_none() || state.read_only),
+            snooze_item(state.snooze.as_ref(), state.read_only),
             item("Stop", "thread.stop").disabled(!state.busy || state.read_only),
             item("Previous Thread", "thread.previous").disabled(!state.jumps),
             item("Next Thread", "thread.next").disabled(!state.jumps),

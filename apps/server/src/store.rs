@@ -32,6 +32,7 @@ pub(crate) const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/0020_ui_photos.sql"),
     include_str!("../migrations/0021_gateway.sql"),
     include_str!("../migrations/0022_message_search.sql"),
+    include_str!("../migrations/0023_snooze.sql"),
 ];
 
 pub struct Store {
@@ -195,9 +196,10 @@ impl Store {
             "INSERT INTO threads (id, title, title_source, project_id, cwd, agent, model, effort, access,
                                   created_at, updated_at, done_at, needs_approval, turn_ended_at, position,
                                   worktree_branch, worktree_base, pull_request, watching, running, monitoring,
-                                  interruption, agent_account, parent_thread, parent_tool, reports)
+                                  interruption, agent_account, parent_thread, parent_tool, reports, snoozed_until,
+                                  woke_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22,
-                     ?23, ?24, ?25, ?26)
+                     ?23, ?24, ?25, ?26, ?27, ?28)
              ON CONFLICT(id) DO UPDATE SET
                  title = excluded.title,
                  title_source = excluded.title_source,
@@ -218,7 +220,9 @@ impl Store {
                  monitoring = excluded.monitoring,
                  interruption = excluded.interruption,
                  parent_tool = excluded.parent_tool,
-                 reports = excluded.reports",
+                 reports = excluded.reports,
+                 snoozed_until = excluded.snoozed_until,
+                 woke_at = excluded.woke_at",
             params![
                 thread.id,
                 thread.title,
@@ -231,7 +235,7 @@ impl Store {
                 as_text(&thread.access),
                 thread.created_at,
                 thread.updated_at,
-                thread.done_at,
+                thread.archived_at,
                 thread.needs_approval,
                 thread.turn_ended_at,
                 thread.position,
@@ -246,6 +250,8 @@ impl Store {
                 thread.parent.as_ref().map(|parent| &parent.thread_id),
                 thread.parent.as_ref().and_then(|parent| parent.tool_id.as_ref()),
                 stored.reports,
+                thread.snoozed_until,
+                thread.woke_at,
             ],
         )?;
         Ok(())
@@ -776,7 +782,7 @@ pub(crate) fn threads_where<P: rusqlite::Params>(
                 t.session_id, t.created_at, t.updated_at, t.done_at, t.needs_approval, t.turn_ended_at, t.position,
                 COALESCE(MAX(i.rev), 0), COALESCE(MAX(i.seq) + 1, 0), t.worktree_branch, t.worktree_base,
                 t.pull_request, t.watching, t.running, t.monitoring, t.interruption, t.agent_account, t.change,
-                t.parent_thread, t.parent_tool, t.reports
+                t.parent_thread, t.parent_tool, t.reports, t.snoozed_until, t.woke_at
          FROM threads t LEFT JOIN items i ON i.thread_id = t.id
          {filter}
          GROUP BY t.id {tail}"
@@ -802,7 +808,9 @@ pub(crate) fn threads_where<P: rusqlite::Params>(
                 access: from_text(&row.get::<_, String>(8)?).unwrap_or(Access::Full),
                 created_at: row.get(10)?,
                 updated_at: row.get(11)?,
-                done_at: row.get(12)?,
+                archived_at: row.get(12)?,
+                snoozed_until: row.get(30)?,
+                woke_at: row.get(31)?,
                 position: row.get(15)?,
                 running: row.get(22)?,
                 monitoring: row.get(23)?,

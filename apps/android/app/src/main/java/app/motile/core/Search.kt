@@ -49,7 +49,7 @@ val AppStore.searchResults: List<SearchResult>
     get() {
         val search = threadSearch.trim()
         if (search.isEmpty()) return emptyList()
-        val threads = activeThreads + doneThreads
+        val threads = allThreads
         val named = threads.filter { matches(it, search) }
         val namedIDs = named.map { it.id }.toSet()
         val found = messageSearch.matches

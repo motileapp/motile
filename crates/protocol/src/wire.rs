@@ -44,10 +44,19 @@ pub struct Thread {
     pub created_at: f64,
     /// When something last happened in the thread.
     pub updated_at: f64,
-    /// Set while the thread is marked done.
-    pub done_at: Option<f64>,
+    /// Set while the thread is archived.
+    #[serde(rename = "done_at")]
+    pub archived_at: Option<f64>,
+    /// The thread is snoozed until then: the sidebar keeps it apart until it wakes, or asks the
+    /// user something, or fails before.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub snoozed_until: Option<f64>,
+    /// When the thread last woke from a snooze by itself.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub woke_at: Option<f64>,
     /// Where the sidebar lists the thread among the active ones, the highest first: when it was
-    /// created or last came back from done, until the user moves it between two others.
+    /// created or last came back from the archive or a snooze, until the user moves it between
+    /// two others.
     #[serde(default)]
     pub position: f64,
     pub running: bool,
@@ -471,7 +480,11 @@ pub struct ThreadChange {
     /// An empty effort means the model's default.
     pub effort: Option<String>,
     pub access: Option<Access>,
-    pub done: Option<bool>,
+    #[serde(rename = "done")]
+    pub archived: Option<bool>,
+    /// Snoozes the thread until then; a time that has passed wakes it.
+    #[serde(default)]
+    pub snoozed_until: Option<f64>,
     /// Where the sidebar lists the thread among the active ones, as the user moved it.
     #[serde(default)]
     pub position: Option<f64>,
@@ -1779,7 +1792,7 @@ pub struct ContinueSettings {
 /// What the server does with pull requests by itself.
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub struct PullRequestSettings {
-    /// A thread is marked done when its pull request merges or closes.
+    /// A thread is archived when its pull request merges or closes.
     pub done_on_merge: bool,
     /// A thread's worktree is removed once its pull request merges, when nothing in it is lost.
     pub remove_merged_worktrees: bool,

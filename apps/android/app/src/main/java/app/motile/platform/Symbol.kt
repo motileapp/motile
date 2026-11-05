@@ -6,6 +6,10 @@ package app.motile.platform
  * lucide-static's `font/codepoints.json`. The few Lucide doesn't have are drawn by hand in `Icon.kt`.
  */
 enum class Symbol(val character: String?) {
+    AlarmClock("\uE03A"),
+    AlarmClockOff("\uE23B"),
+    Archive("\uE041"),
+    ArchiveRestore("\uE2CD"),
     ArrowDown("\uE042"),
     ArrowLeft("\uE048"),
     ArrowRight("\uE049"),

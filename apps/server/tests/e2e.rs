@@ -233,6 +233,7 @@ async fn serve(
     hub.keep_pull_requests_current(Duration::from_millis(200));
     hub.watch_pull_requests(Duration::from_millis(300));
     hub.keep_limits_continued(Duration::from_millis(200));
+    hub.keep_snoozes_woken(Duration::from_millis(100));
     hub.continue_interrupted();
     hub.keep_parents_told();
 
@@ -1501,7 +1502,7 @@ async fn an_agent_that_monitors_takes_messages_and_wakes_by_itself() {
 
     let monitoring = thread_where(&mut list, |thread| thread.monitoring).await;
     assert!(!monitoring.running && monitoring.turn_ended_at.is_some());
-    let done = ThreadChange { done: Some(true), ..Default::default() };
+    let done = ThreadChange { archived: Some(true), ..Default::default() };
     let refused = update(&connection, &thread_id, done).await;
     assert!(matches!(refused, Message::Error { message } if message.contains("still monitoring")));
 
@@ -1663,7 +1664,7 @@ async fn stopping_an_agent_that_monitors_ends_the_watch() {
 }
 
 #[tokio::test]
-async fn a_thread_is_marked_done_and_comes_back_with_new_activity() {
+async fn a_thread_is_archived_and_comes_back_with_new_activity() {
     let harness = Harness::start("fixtures/read-and-bash.jsonl", "0.1").await;
     let connection = harness.connect().await;
     let new_thread = harness.new_thread(&connection, Agent::Claude).await;
@@ -1671,28 +1672,64 @@ async fn a_thread_is_marked_done_and_comes_back_with_new_activity() {
     next(&mut list).await;
     let thread_id = send(&connection, None, new_thread, "What does the note say?").await;
 
-    let done = ThreadChange { done: Some(true), ..Default::default() };
+    let done = ThreadChange { archived: Some(true), ..Default::default() };
     let refused = update(&connection, &thread_id, done.clone()).await;
     assert!(matches!(refused, Message::Error { message } if message.contains("still working")));
 
     finished_transcript(&connection, &thread_id).await;
     assert_eq!(update(&connection, &thread_id, done).await, Message::Ok);
-    let marked = thread_where(&mut list, |thread| thread.done_at.is_some()).await;
+    let marked = thread_where(&mut list, |thread| thread.archived_at.is_some()).await;
     assert_eq!(marked.position, marked.created_at);
 
-    // Coming back from done puts the thread at the top of the active ones.
-    let undone = ThreadChange { done: Some(false), ..Default::default() };
+    // Coming back from the archive puts the thread at the top of the active ones.
+    let undone = ThreadChange { archived: Some(false), ..Default::default() };
     assert_eq!(update(&connection, &thread_id, undone).await, Message::Ok);
-    let back = thread_where(&mut list, |thread| thread.done_at.is_none()).await;
+    let back = thread_where(&mut list, |thread| thread.archived_at.is_none()).await;
     assert!(back.position > back.created_at);
 
-    let done = ThreadChange { done: Some(true), ..Default::default() };
+    let done = ThreadChange { archived: Some(true), ..Default::default() };
     assert_eq!(update(&connection, &thread_id, done).await, Message::Ok);
-    thread_where(&mut list, |thread| thread.done_at.is_some()).await;
+    thread_where(&mut list, |thread| thread.archived_at.is_some()).await;
     send(&connection, Some(thread_id.clone()), None, "One more thing").await;
     let reopened = thread_where(&mut list, |thread| thread.running).await;
-    assert_eq!(reopened.done_at, None);
+    assert_eq!(reopened.archived_at, None);
     assert!(reopened.position > back.position);
+}
+
+#[tokio::test]
+async fn a_snoozed_thread_wakes_on_time_or_when_written_to() {
+    let harness = Harness::start("fixtures/read-and-bash.jsonl", "0").await;
+    let connection = harness.connect().await;
+    let new_thread = harness.new_thread(&connection, Agent::Claude).await;
+    let mut list = connection.follow(&Request::Subscribe).await.unwrap();
+    next(&mut list).await;
+    let thread_id = send(&connection, None, new_thread, "What does the note say?").await;
+    finished_transcript(&connection, &thread_id).await;
+
+    let soon = ThreadChange { snoozed_until: Some(motile_protocol::now() + 0.5), ..Default::default() };
+    assert_eq!(update(&connection, &thread_id, soon).await, Message::Ok);
+    let snoozed = thread_where(&mut list, |thread| thread.snoozed_until.is_some()).await;
+    let woke = thread_where(&mut list, |thread| thread.snoozed_until.is_none()).await;
+    assert!(woke.woke_at.is_some_and(|at| at >= snoozed.snoozed_until.unwrap()));
+    assert!(woke.position > snoozed.position);
+
+    // Writing to a snoozed thread wakes it without saying it woke by itself.
+    let later = ThreadChange { snoozed_until: Some(motile_protocol::now() + 3600.0), ..Default::default() };
+    assert_eq!(update(&connection, &thread_id, later).await, Message::Ok);
+    thread_where(&mut list, |thread| thread.snoozed_until.is_some()).await;
+    send(&connection, Some(thread_id.clone()), None, "One more thing").await;
+    let written = thread_where(&mut list, |thread| thread.snoozed_until.is_none()).await;
+    assert_eq!(written.woke_at, woke.woke_at);
+
+    // Archiving ends a snooze.
+    finished_transcript(&connection, &thread_id).await;
+    let later = ThreadChange { snoozed_until: Some(motile_protocol::now() + 3600.0), ..Default::default() };
+    assert_eq!(update(&connection, &thread_id, later).await, Message::Ok);
+    thread_where(&mut list, |thread| thread.snoozed_until.is_some()).await;
+    let archive = ThreadChange { archived: Some(true), ..Default::default() };
+    assert_eq!(update(&connection, &thread_id, archive).await, Message::Ok);
+    let archived = thread_where(&mut list, |thread| thread.archived_at.is_some()).await;
+    assert_eq!(archived.snoozed_until, None);
 }
 
 #[tokio::test]
@@ -2466,7 +2503,7 @@ async fn changes_are_committed_pushed_and_opened_as_a_pull_request() {
     assert_eq!(done(end).0, "PR #7 is already open");
     let linked = thread_where(&mut list, |thread| thread.pull_request.is_some()).await;
     assert_eq!(linked.pull_request.map(|opened| (opened.number, opened.is_open())), Some((7, true)));
-    let done = ThreadChange { done: Some(true), ..Default::default() };
+    let done = ThreadChange { archived: Some(true), ..Default::default() };
     assert_eq!(update(&connection, &thread_id, done).await, Message::Ok);
     let branch = git_says(&repository, &["rev-parse", "--abbrev-ref", "HEAD"]);
     git(&repository, &["checkout", "-q", "main"]);
@@ -2488,7 +2525,7 @@ async fn changes_are_committed_pushed_and_opened_as_a_pull_request() {
     let (status, _) = git_status(&connection, &project.id, false).await;
     assert_eq!(status.pull_request.as_ref().map(|found| found.number), Some(8));
     assert_eq!(thread_now(&connection, &thread_id).await.pull_request.map(|found| found.number), Some(7));
-    let undone = ThreadChange { done: Some(false), ..Default::default() };
+    let undone = ThreadChange { archived: Some(false), ..Default::default() };
     assert_eq!(update(&connection, &thread_id, undone).await, Message::Ok);
     git_status(&connection, &project.id, false).await;
     let moved_on =
@@ -2703,7 +2740,7 @@ async fn a_linked_pull_request_is_watched_for_the_agent_until_it_merges_and_sett
     assert!(matches!(connection.request(&merge).await.unwrap(), Message::PullRequestDone { .. }));
     let merging = thread_where(&mut list, |thread| thread.git_stage.is_some()).await;
     assert_eq!(merging.git_stage, Some(GitStage::Merge));
-    let settled = thread_where(&mut list, |thread| thread.done_at.is_some()).await;
+    let settled = thread_where(&mut list, |thread| thread.archived_at.is_some()).await;
     assert!(!settled.watching && settled.pull_request.is_some_and(|found| found.merged));
 
     let unlink = Request::LinkPullRequest { thread_id: thread_id.clone(), number: None };
@@ -2845,7 +2882,7 @@ async fn a_worktree_whose_pull_request_merged_is_removed_when_nothing_in_it_is_l
     };
     assert!(matches!(connection.request(&merge).await.unwrap(), Message::PullRequestDone { .. }));
     let merged = thread_where(&mut list, |thread| thread.pull_request.as_ref().is_some_and(|found| found.merged)).await;
-    assert_eq!((merged.id, merged.done_at), (thread_id, None));
+    assert_eq!((merged.id, merged.archived_at), (thread_id, None));
     for _ in 0..50 {
         if !worktree.exists() {
             break;
@@ -3674,7 +3711,7 @@ async fn turn(connection: &Connection, thread_id: &str, text: &str) -> Transcrip
 
 /// Marks the thread done, which lets the process of its agent that rests go.
 async fn let_agent_go(connection: &Connection, thread_id: &str) {
-    let done = ThreadChange { done: Some(true), ..Default::default() };
+    let done = ThreadChange { archived: Some(true), ..Default::default() };
     assert_eq!(update(connection, thread_id, done).await, Message::Ok);
 }
 

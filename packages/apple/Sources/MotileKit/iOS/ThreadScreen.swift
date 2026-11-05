@@ -119,7 +119,7 @@ struct ThreadScreen: View {
     /// reply they haven't seen, or else the working colour while one works, or else the
     /// monitoring colour while one monitors.
     private var attention: Color? {
-        let others = store.activeThreads.filter { store.selection != .thread($0.id) }
+        let others = store.listedThreads.filter { store.selection != .thread($0.id) }
         if let color = others.lazy.compactMap(\.attentionColor).first { return color }
         if others.contains(where: { $0.working || $0.gitStage != nil }) { return .themeProcess }
         guard others.contains(where: \.monitoring) else { return nil }

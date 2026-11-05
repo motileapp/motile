@@ -4,7 +4,7 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use motile_core::api::{Children, ProjectView, ServerView, SyncState, SyncView, ThreadView};
+use motile_core::api::{Children, ProjectView, Section, ServerView, SyncState, SyncView, ThreadView};
 use motile_core::connection::PathKind;
 use motile_core::git::Control;
 use motile_core::link::State;
@@ -315,6 +315,11 @@ impl Server {
         self.protocol_version >= 21
     }
 
+    /// Whether its threads can be snoozed.
+    pub fn snoozes(&self) -> bool {
+        self.protocol_version >= 38
+    }
+
     /// Whether the server asks its agents for their models when asked to.
     pub fn refreshes_models(&self) -> bool {
         self.protocol_version >= 23
@@ -551,13 +556,24 @@ pub struct ThreadInfo {
     pub thread: Thread,
     pub server_id: String,
     pub unread: bool,
+    /// It woke from a snooze by itself since the user last looked at it.
+    pub woke: bool,
+    /// The part of the sidebar it is listed in.
+    pub section: Section,
     /// How the agents its agent started are doing, theirs too.
     pub children: Option<Children>,
 }
 
 impl From<ThreadView> for ThreadInfo {
     fn from(view: ThreadView) -> Self {
-        Self { thread: view.thread, server_id: view.server_id, unread: view.unread, children: view.children }
+        Self {
+            thread: view.thread,
+            server_id: view.server_id,
+            unread: view.unread,
+            woke: view.woke,
+            section: view.section,
+            children: view.children,
+        }
     }
 }
 
@@ -570,8 +586,8 @@ impl std::ops::Deref for ThreadInfo {
 }
 
 impl ThreadInfo {
-    pub fn is_done(&self) -> bool {
-        self.done_at.is_some()
+    pub fn is_archived(&self) -> bool {
+        self.archived_at.is_some()
     }
 
     /// The agent's process is still there, working or monitoring.
@@ -594,7 +610,7 @@ impl ThreadInfo {
         !self.running && self.children.as_ref().is_some_and(|children| children.running > 0)
     }
 
-    /// Its agent's process is still there or the agents it started work, so it can't be done yet.
+    /// Its agent's process is still there or the agents it started work, so it can't be archived yet.
     pub fn unfinished(&self) -> bool {
         self.busy() || self.waits_on_agents()
     }
@@ -605,16 +621,25 @@ impl ThreadInfo {
     }
 
     /// Where it is listed among the active threads, the highest first: when it was created or
-    /// last came back from done, until the user moves it. A server from before positions lists
+    /// last came back from the archive or a snooze, until the user moves it. A server from before positions lists
     /// its threads by when they were created.
     pub fn position(&self) -> f64 {
         if self.position > 0. { self.position } else { self.created_at }
     }
 
-    /// What its list is in order of, the highest first: when it was marked done, or else its
-    /// position. Active threads keep their place when something happens in them.
+    /// The section it is listed in once it is neither archived nor snoozed.
+    pub fn awake_section(&self) -> Section {
+        if self.unfinished() && self.waits_for().is_none() { Section::Working } else { Section::Active }
+    }
+
+    /// What its list is in order of, the highest first: when it was archived, how soon it wakes,
+    /// or else its position. Active threads keep their place when something happens in them.
     pub fn listed_at(&self) -> f64 {
-        if self.is_done() { self.done_at.unwrap_or(0.) } else { self.position() }
+        match self.section {
+            Section::Archived => self.archived_at.unwrap_or(0.),
+            Section::Snoozed => -self.snoozed_until.unwrap_or(0.),
+            Section::Active | Section::Working => self.position(),
+        }
     }
 
     /// The order of the sidebar's lists: the highest `listed_at` first, then the highest id.
@@ -630,6 +655,17 @@ impl ThreadInfo {
 
     pub fn monitoring_since(&self) -> f64 {
         self.turn_ended_at.unwrap_or(self.updated_at)
+    }
+}
+
+/// A part of the sidebar's name and its symbol: none for the active threads, which are the
+/// sidebar's own.
+pub fn section_label(section: Section) -> (&'static str, Option<&'static str>) {
+    match section {
+        Section::Active => ("Active", None),
+        Section::Working => ("Working", Some("circle-dashed")),
+        Section::Snoozed => ("Snoozed", Some("alarm-clock")),
+        Section::Archived => ("Archived", Some("archive")),
     }
 }
 
@@ -1029,6 +1065,21 @@ pub fn ago(timestamp: f64) -> String {
         return format!("{}h", (seconds / 3600.) as u64);
     }
     format!("{}d", (seconds / 86400.) as u64)
+}
+
+/// "5m", "3h", "2d": how long until then, rounded up, as short as a sidebar needs.
+pub fn left(timestamp: f64) -> String {
+    let seconds = (timestamp - now()).max(0.);
+    if seconds < 60. {
+        return "now".into();
+    }
+    if seconds < 3600. {
+        return format!("{}m", (seconds / 60.).ceil() as u64);
+    }
+    if seconds < 86400. {
+        return format!("{}h", (seconds / 3600.).ceil() as u64);
+    }
+    format!("{}d", (seconds / 86400.).ceil() as u64)
 }
 
 /// "850ms", "12s", "3m 05s", "1h 02m".

@@ -340,6 +340,9 @@ struct Server: Equatable, Identifiable {
     /// Whether the server keeps where the user moves its threads in the sidebar.
     var movesThreads: Bool { protocolVersion >= 21 }
 
+    /// Whether its threads can be snoozed.
+    var snoozes: Bool { protocolVersion >= 38 }
+
     /// Whether the server asks its agents for their models when asked to.
     var refreshesModels: Bool { protocolVersion >= 23 }
 
@@ -814,9 +817,15 @@ struct ThreadInfo: Equatable, Identifiable {
     var access: Access
     let createdAt: Double
     let updatedAt: Double
-    var doneAt: Double?
+    var archivedAt: Double?
+    /// It is snoozed until then.
+    var snoozedUntil: Double?
+    /// It woke from a snooze by itself since the user last looked at it.
+    let woke: Bool
+    /// The part of the sidebar it is listed in.
+    var section: ThreadSection
     /// Where the sidebar lists it among the active threads, the highest first: when it was
-    /// created or last came back from done, until the user moves it.
+    /// created or last came back from the archive or a snooze, until the user moves it.
     var position: Double
     let running: Bool
     /// The turn is over, but the agent still watches something it left running.
@@ -854,7 +863,10 @@ struct ThreadInfo: Equatable, Identifiable {
         access = Access(rawValue: json.string("access")) ?? .full
         createdAt = json.double("created_at")
         updatedAt = json.double("updated_at")
-        doneAt = json.optionalDouble("done_at")
+        archivedAt = json.optionalDouble("done_at")
+        snoozedUntil = json.optionalDouble("snoozed_until")
+        woke = json.bool("woke")
+        section = ThreadSection(rawValue: json.string("section")) ?? .active
         // A server from before positions lists its threads by when they were created.
         let position = json.double("position")
         self.position = position > 0 ? position : createdAt
@@ -874,7 +886,7 @@ struct ThreadInfo: Equatable, Identifiable {
         children = json.object("children").map(ThreadChildren.init(json:))
     }
 
-    var isDone: Bool { doneAt != nil }
+    var isArchived: Bool { archivedAt != nil }
 
     /// The agent's process is still there, working or monitoring.
     var busy: Bool { running || monitoring }
@@ -885,7 +897,7 @@ struct ThreadInfo: Equatable, Identifiable {
     /// Its agent ended its turn, and the agents it started work on.
     var waitsOnAgents: Bool { !running && (children?.running ?? 0) > 0 }
 
-    /// Its agent's process is still there or the agents it started work, so it can't be done yet.
+    /// Its agent's process is still there or the agents it started work, so it can't be archived yet.
     var unfinished: Bool { busy || waitsOnAgents }
 
     /// What it, or else an agent it started, waits for the user to answer.
@@ -893,9 +905,18 @@ struct ThreadInfo: Equatable, Identifiable {
 
     var monitoringSince: Double { turnEndedAt ?? updatedAt }
 
-    /// What its list is in order of, the highest first: when it was marked done, or else its
-    /// position. Active threads keep their place when something happens in them.
-    var listedAt: Double { isDone ? doneAt ?? 0 : position }
+    /// The section it is listed in once it is neither archived nor snoozed.
+    var awakeSection: ThreadSection { (busy || waitsOnAgents) && waitsFor == nil ? .working : .active }
+
+    /// What its list is in order of, the highest first: when it was archived, how soon it wakes,
+    /// or else its position. Active threads keep their place when something happens in them.
+    var listedAt: Double {
+        switch section {
+        case .archived: archivedAt ?? 0
+        case .snoozed: -(snoozedUntil ?? 0)
+        case .active, .working: position
+        }
+    }
 
     static func listed(_ one: ThreadInfo, before other: ThreadInfo) -> Bool {
         (one.listedAt, one.id) > (other.listedAt, other.id)
@@ -916,6 +937,33 @@ extension [ThreadInfo] {
     func index(of thread: ThreadInfo) -> Int? {
         let place = place(of: thread)
         return place < count && self[place].id == thread.id ? place : nil
+    }
+}
+
+/// The part of the sidebar a thread is listed in.
+enum ThreadSection: String {
+    case active
+    case working
+    case snoozed
+    case archived
+
+    var title: String {
+        switch self {
+        case .active: "Active"
+        case .working: "Working"
+        case .snoozed: "Snoozed"
+        case .archived: "Archived"
+        }
+    }
+
+    /// None for the active threads, which are the sidebar's own.
+    var symbol: Symbol? {
+        switch self {
+        case .active: nil
+        case .working: .circleDashed
+        case .snoozed: .alarmClock
+        case .archived: .archive
+        }
     }
 }
 
@@ -1474,6 +1522,15 @@ enum Time {
         if seconds < 3600 { return "\(Int(seconds / 60))m" }
         if seconds < 86400 { return "\(Int(seconds / 3600))h" }
         return "\(Int(seconds / 86400))d"
+    }
+
+    /// "5m", "3h", "2d": how long until then, rounded up, as short as a sidebar needs.
+    static func left(_ timestamp: Double, now: Double = Date().timeIntervalSince1970) -> String {
+        let seconds = max(0, timestamp - now)
+        if seconds < 60 { return "now" }
+        if seconds < 3600 { return "\(Int((seconds / 60).rounded(.up)))m" }
+        if seconds < 86400 { return "\(Int((seconds / 3600).rounded(.up)))h" }
+        return "\(Int((seconds / 86400).rounded(.up)))d"
     }
 
     /// The time of day, with the date before it when that isn't today.

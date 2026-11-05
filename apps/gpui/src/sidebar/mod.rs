@@ -1,5 +1,5 @@
-//! The drafts, then every active thread on every server in one list, with the ones marked done
-//! and the servers on shelves at the bottom, and the way to the settings and the usage under
+//! The drafts, then every active thread on every server in one list, with the working, the
+//! snoozed and the archived ones and the servers on shelves at the bottom, and the way to the settings and the usage under
 //! them: the Mac app's `SidebarView.swift`. While it searches, it is one flat list of what was
 //! found.
 
@@ -20,6 +20,7 @@ use std::time::Duration;
 use gpui_kit::component::input::{InputEvent, InputState};
 use gpui_kit::prelude::*;
 use gpui_kit::*;
+use motile_core::api::Section;
 
 pub use self::footer::SidebarFooter;
 use self::list::{Layout, RecycledList, place};
@@ -27,7 +28,7 @@ use self::rows::{DRAFTS_DIVIDER, EMPTY_LINE_HEIGHT, THREAD_ROW_HEIGHT};
 use self::search::RESULT_ROW_HEIGHT;
 pub use self::updates::{AppUpdateRow, ServerUpdateStatus};
 use crate::models::ThreadInfo;
-use crate::store::{ListedDraft, SearchResult, Store, UndoNotice};
+use crate::store::{ListedDraft, SearchResult, Store, UndoNotice, snooze_presets};
 use crate::theme::{self, ControlSize, Layer, colors};
 use crate::ui::menu::Menu;
 use crate::ui::modal::{Answer, Confirmation, confirmation, modal, presented};
@@ -58,6 +59,27 @@ fn button_inset() -> f32 {
     TOP_PADDING + (FIRST_LINE_HEIGHT - ControlSize::Small.height()) / 2.
 }
 
+/// The times to snooze a thread until, as the core offers them when the menu opens, then the way
+/// to pick another.
+fn snooze_menu(store: &Entity<Store>, thread_id: &str) -> Menu {
+    let menu = snooze_presets().into_iter().fold(Menu::new(), |menu, (title, until)| {
+        let (store, id) = (store.clone(), thread_id.to_string());
+        menu.item(title, move |_, cx| {
+            store.update(cx, |store, cx| {
+                store.snooze(std::slice::from_ref(&id), until, true, cx);
+                cx.notify();
+            })
+        })
+    });
+    let (store, id) = (store.clone(), thread_id.to_string());
+    menu.separator().item("Custom…", move |_, cx| {
+        store.update(cx, |store, cx| {
+            store.begin_custom_snooze(std::slice::from_ref(&id), true);
+            cx.notify();
+        })
+    })
+}
+
 /// The light a row's buttons lie on while the pointer is over them: the row's.
 fn row_layer(selected: bool) -> Option<Layer> {
     Some(if selected { Layer::RowSelected } else { Layer::Row })
@@ -75,7 +97,9 @@ fn stop_press(control: impl IntoElement) -> AnyElement {
 /// The shelves at the bottom of the sidebar.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 enum Shelf {
-    Done,
+    Working,
+    Snoozed,
+    Archived,
     Servers,
 }
 
@@ -106,7 +130,8 @@ struct Plan {
     row_threads: Vec<Option<String>>,
     /// Where each thread the jump keys go through is among them, while their keys show.
     jumps: HashMap<String, usize>,
-    done_layout: Layout,
+    /// The rows of each shelf of threads that holds any, in the order the shelves stand.
+    shelves: Vec<(Shelf, Layout)>,
     /// Some thread works, so the times in the rows go on every second.
     running: bool,
 }
@@ -131,8 +156,8 @@ pub struct Sidebar {
     highlighted: usize,
     result_ids: Vec<String>,
     list: RecycledList,
-    done_list: RecycledList,
-    servers_list: RecycledList,
+    /// The list of each shelf.
+    shelf_lists: HashMap<Shelf, RecycledList>,
     /// What the lists are made of, until the store changes.
     plan: Option<Rc<Plan>>,
     stale: bool,
@@ -222,8 +247,11 @@ impl Sidebar {
             highlighted: 0,
             result_ids: Vec::new(),
             list: RecycledList::new(),
-            done_list: RecycledList::new(),
-            servers_list: RecycledList::new(),
+            shelf_lists: Shelf::THREADS
+                .into_iter()
+                .chain([Shelf::Servers])
+                .map(|shelf| (shelf, RecycledList::new()))
+                .collect(),
             plan: None,
             stale: true,
             press: None,
@@ -240,7 +268,7 @@ impl Sidebar {
         }
     }
 
-    /// What follows the store: the search the store ended, Done opening on the thread it
+    /// What follows the store: the search the store ended, a shelf opening on the thread it
     /// reveals, and the card going when the window does.
     fn follow_store(&mut self, store: Entity<Store>, window: &mut Window, cx: &mut Context<Self>) {
         let (search, revealed, active, hidden) = {
@@ -257,10 +285,12 @@ impl Sidebar {
         }
         if revealed != self.revealed_seen {
             self.revealed_seen = revealed.clone();
-            let done =
-                revealed.as_ref().is_some_and(|id| store.read(cx).done_threads().iter().any(|thread| &thread.id == id));
-            if done {
-                store.update(cx, |store, _| store.prefs.set(Shelf::Done.expanded_key(), true));
+            let shelf = revealed
+                .as_ref()
+                .and_then(|id| store.read(cx).threads.get(id))
+                .and_then(|thread| Shelf::of(thread.section));
+            if let Some(shelf) = shelf {
+                store.update(cx, |store, _| shelf.open(&mut store.prefs, true));
             }
         }
         if !active || hidden {
@@ -307,6 +337,14 @@ impl Sidebar {
             }
             cx.notify();
         })
+    }
+
+    fn list(&self, shelf: Shelf) -> &RecycledList {
+        &self.shelf_lists[&shelf]
+    }
+
+    fn list_mut(&mut self, shelf: Shelf) -> &mut RecycledList {
+        self.shelf_lists.entry(shelf).or_insert_with(RecycledList::new)
     }
 
     fn hovering(&self, key: &str) -> bool {
@@ -362,30 +400,45 @@ impl Sidebar {
         cx.notify();
     }
 
-    /// What a thread's menu offers: marking it done or undone and renaming it, then deleting it.
-    /// A removed server's thread has none.
+    /// What a thread's menu offers: archiving it or bringing it back, snoozing or waking it and
+    /// renaming it, then deleting it. A removed server's thread has none.
     fn thread_menu(&mut self, thread_id: String, cx: &mut Context<Self>) -> Option<Menu> {
         self.peek.hide();
         let store = self.store.read(cx);
         let thread = store.threads.get(&thread_id).filter(|thread| !store.on_removed_server(thread))?;
-        let (done, unfinished) = (thread.is_done(), thread.unfinished());
+        let (archived, unfinished, snoozed) =
+            (thread.is_archived(), thread.unfinished(), thread.section == Section::Snoozed);
+        let snoozes = store.snoozes(thread);
         let this = cx.entity().downgrade();
         let handle = self.store.clone();
         let id = thread_id.clone();
-        let menu = if done {
-            Menu::new().item("Mark Undone", move |_, cx| {
+        let menu = if archived {
+            Menu::new().item("Unarchive", move |_, cx| {
                 handle.update(cx, |store, cx| {
-                    store.set_done(std::slice::from_ref(&id), false, false, cx);
+                    store.set_archived(std::slice::from_ref(&id), false, false, cx);
                     cx.notify();
                 })
             })
         } else {
-            Menu::new().item_if(!unfinished, "Mark Done", move |_, cx| {
+            Menu::new().item_if(!unfinished, "Archive", move |_, cx| {
                 handle.update(cx, |store, cx| {
-                    store.set_done(std::slice::from_ref(&id), true, true, cx);
+                    store.set_archived(std::slice::from_ref(&id), true, true, cx);
                     cx.notify();
                 })
             })
+        };
+        let menu = if snoozed {
+            let (store, id) = (self.store.clone(), thread_id.clone());
+            menu.item("Wake", move |_, cx| {
+                store.update(cx, |store, cx| {
+                    store.wake(std::slice::from_ref(&id));
+                    cx.notify();
+                })
+            })
+        } else if snoozes {
+            menu.submenu("Snooze", snooze_menu(&self.store, &thread_id))
+        } else {
+            menu
         };
         let (rename, delete) = (this.clone(), this);
         let (rename_id, delete_id) = (thread_id.clone(), thread_id);
@@ -480,9 +533,11 @@ impl Sidebar {
             self.cancel_lift();
             self.forget_pointer(cx);
         }
-        let done_ids = self.store.read(cx).done_threads().iter().map(|thread| thread.id.clone()).collect();
-        if self.done_list.set_ids(done_ids) {
-            self.forget_pointer(cx);
+        for shelf in Shelf::THREADS {
+            let ids = shelf.threads(self.store.read(cx)).iter().map(|thread| thread.id.clone()).collect();
+            if self.list_mut(shelf).set_ids(ids) {
+                self.forget_pointer(cx);
+            }
         }
         self.plan = Some(plan.clone());
         plan
@@ -538,12 +593,17 @@ impl Sidebar {
                 jumps.entry(thread.id.clone()).or_insert(at);
             }
         }
-        let done = store.done_threads();
+        let shelves = if searching { Vec::new() } else { Shelf::THREADS.to_vec() }
+            .into_iter()
+            .map(|shelf| (shelf, shelf.threads(store).len()))
+            .filter(|(_, count)| *count > 0)
+            .map(|(shelf, count)| (shelf, Layout::new(vec![DONE_ROW_HEIGHT + ROW_GAP; count], 0., 4. - ROW_GAP / 2.)))
+            .collect();
         Plan {
             searching,
             layout: Layout::new(heights, 4. - ROW_GAP / 2., 4. - ROW_GAP / 2.),
-            done_layout: Layout::new(vec![DONE_ROW_HEIGHT + ROW_GAP; done.len()], 0., 4. - ROW_GAP / 2.),
-            running: active.iter().chain(done).any(ThreadInfo::busy),
+            shelves,
+            running: store.listed_threads().any(ThreadInfo::busy),
             results,
             drafts,
             items,
@@ -725,12 +785,15 @@ impl Render for Sidebar {
         let room = f32::from(crate::window_frame::content_size(window).height) - theme::TOP_BAR - HEADER_HEIGHT;
         let plan = self.plan(cx);
         let has_servers = self.store.read(cx).has_live_servers();
-        let shows_done = !plan.done_layout.tops.is_empty() && !plan.searching;
         let header = self.header(cx);
         let threads = self.threads(&plan, window, cx);
         let undo = self.undo(cx);
-        let done = shows_done.then(|| self.done_shelf(&plan.done_layout, room * 0.5, window, cx));
-        let servers = has_servers.then(|| self.servers_shelf(room * 0.3, window, cx));
+        let shelves: Vec<Div> = plan
+            .shelves
+            .iter()
+            .map(|(shelf, layout)| self.thread_shelf(*shelf, layout, room * 0.25, window, cx))
+            .collect();
+        let servers = has_servers.then(|| self.servers_shelf(room * 0.25, window, cx));
         let pulling = self.pulling.is_some();
         div()
             .id("sidebar")
@@ -743,9 +806,9 @@ impl Render for Sidebar {
             .child(header)
             .child(threads)
             .children(undo)
-            .children(done)
+            .children(shelves)
             .children(servers)
-            .when(shows_done || has_servers, |sidebar| sidebar.child(divider(cx)))
+            .when(!plan.shelves.is_empty() || has_servers, |sidebar| sidebar.child(divider(cx)))
             .child(self.footer.clone())
             .children(self.follow_pointer(cx))
             .children(self.card_layer(cx))

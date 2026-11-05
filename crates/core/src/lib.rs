@@ -23,5 +23,6 @@ pub mod render;
 pub mod ricrac;
 pub mod search;
 pub mod skills;
+pub mod snooze;
 pub mod sync;
 pub mod usage;

@@ -194,7 +194,10 @@ shadcn's own colours, opacities and radii are gone from the theme.
   back to it.
 - `hub.rs`: the live state of every thread: turns, queued messages, approvals, monitoring,
   worktrees, snapshots and the agents an agent starts. It continues a thread once its usage limit
-  resets, and after a restart that cut its agent off, where the server's settings say so. Claude
+  resets, and after a restart that cut its agent off, where the server's settings say so. A
+  snoozed thread wakes at its time, or before when it asks the user something, reaches its limit
+  or fails, and goes back to the top of the active ones; writing to it or archiving it ends the
+  snooze too. Claude
   Code's process rests for ten minutes after a turn to take the thread's next message, and a new
   one holds its first prompt until its MCP servers, claude.ai's connectors too, have connected. Every
   server has a "No project" project, whose threads each work in a folder of their own under
@@ -343,6 +346,9 @@ for tests.
 - `browse.rs`: browsing a server's folders by typing a path.
 - `skills.rs`: the skills the composer offers while the word before its cursor starts with `$`
   or `/`, best match first, and the chips a message's `$name`s become.
+- `snooze.rs`: the times a snooze menu offers and a day and time the user writes, which the
+  clients ask through `motile_snooze` and `Native.snooze`. Each thread says which part of the
+  sidebar it is in (`section`: active, working, snoozed or archived) and whether it woke unseen.
 - `search.rs`: the sidebar's search through every server's messages, asked a moment after the
   search stops changing. What was found stays while it still fits the search, so the list never
   empties and fills again. Each server's answer shows as it comes, below what already shows, and

@@ -257,15 +257,21 @@ struct RecycledList<Item: Identifiable, Row: View>: UIViewRepresentable {
             let groups = list.menu(item)
             guard !groups.isEmpty else { return nil }
             return UIContextMenuConfiguration { _ in
-                UIMenu(children: groups.map { group in
-                    UIMenu(options: .displayInline, children: group.map { action in
-                        var attributes = UIMenuElement.Attributes()
-                        if action.destructive { attributes.insert(.destructive) }
-                        if action.disabled { attributes.insert(.disabled) }
-                        return UIAction(title: action.title, attributes: attributes) { _ in action.perform() }
-                    })
-                })
+                Self.menu(groups)
             }
+        }
+
+        /// The groups of a row's menu, each set apart by a line, and its submenus.
+        private static func menu(_ groups: [[RowAction]], title: String = "") -> UIMenu {
+            UIMenu(title: title, children: groups.map { group in
+                UIMenu(options: .displayInline, children: group.map { action -> UIMenuElement in
+                    guard action.children.isEmpty else { return menu(action.children, title: action.title) }
+                    var attributes = UIMenuElement.Attributes()
+                    if action.destructive { attributes.insert(.destructive) }
+                    if action.disabled { attributes.insert(.disabled) }
+                    return UIAction(title: action.title, attributes: attributes) { _ in action.perform() }
+                })
+            })
         }
 
         func collectionView(

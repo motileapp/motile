@@ -103,7 +103,7 @@ impl Store {
 
     /// Goes to the project's latest thread that is still going, or opens a new one in it.
     fn go_to(&mut self, project: &Project, cx: &mut Context<Self>) {
-        let latest = self.active_threads().iter().find(|thread| thread.project_id == project.id);
+        let latest = self.listed_threads().find(|thread| thread.project_id == project.id);
         let Some(id) = latest.map(|thread| thread.id.clone()) else { return self.open_thread_in(project, cx) };
         self.close_settings();
         self.select(Selection::Thread(id), cx);

@@ -9,7 +9,7 @@ use motile_protocol::identity::is_public_key;
 use motile_server::access::{Access, AccountSource};
 use motile_server::agents::environment::Environment;
 use motile_server::config::DataDir;
-use motile_server::hub::{Hub, LIMITS_CHECK, PULL_REQUEST_FRESH, PULL_REQUEST_WATCH};
+use motile_server::hub::{Hub, LIMITS_CHECK, PULL_REQUEST_FRESH, PULL_REQUEST_WATCH, SNOOZE_CHECK};
 use motile_server::serve::{BindOptions, Server, bind};
 use motile_server::store::Store;
 use motile_server::{pricing, service, setup, update};
@@ -157,6 +157,7 @@ async fn run(data_dir: &DataDir, allow_keys: Vec<String>, options: BindOptions) 
     hub.watch_pull_requests(PULL_REQUEST_WATCH);
     hub.pull_default_branches();
     hub.keep_limits_continued(LIMITS_CHECK);
+    hub.keep_snoozes_woken(SNOOZE_CHECK);
     hub.continue_interrupted();
     hub.keep_limits_current();
     hub.keep_prices_current(std::env::var("MOTILE_PRICES_URL").unwrap_or_else(|_| pricing::LIST_URL.to_string()));

@@ -19,13 +19,14 @@ use gpui_kit::component::Sizable;
 use gpui_kit::component::input::{Enter, InputEvent, Textarea, TextareaState};
 use gpui_kit::prelude::*;
 use gpui_kit::*;
+use motile_core::api::Section;
 use motile_core::link::State;
 use motile_protocol::wire::{Access, Interruption};
 
 use self::picker::ComposerPicker;
 use self::questions::Questions;
 use self::strips::{BranchPicker, agents_strip, context_strip, interruption_strip, monitoring_strip, waiting_strip};
-use crate::models::{ComposerPickerPart, ThreadInfo, access_label};
+use crate::models::{ComposerPickerPart, ThreadInfo, access_label, section_label};
 use crate::store::Store;
 use crate::theme::{self, ControlSize, IconSize, Surface, colors};
 use crate::ui::control::Look;
@@ -360,8 +361,11 @@ impl Composer {
     fn placeholder(&self, cx: &App) -> String {
         let store = self.store.read(cx);
         let Some(server) = store.composer_server() else { return "Ask anything".into() };
-        if store.selected_thread().is_some_and(ThreadInfo::is_done) {
+        if store.selected_thread().is_some_and(ThreadInfo::is_archived) {
             return "Message to bring it back".into();
+        }
+        if store.selected_thread().is_some_and(|thread| thread.section == Section::Snoozed) {
+            return "Message to wake it".into();
         }
         if !server.connected() {
             return format!("Waiting for {}", server.name);
@@ -375,30 +379,44 @@ impl Composer {
         "Ask anything".into()
     }
 
-    fn done_banner(&self, thread: &ThreadInfo, cx: &mut Context<Self>) -> impl IntoElement {
+    /// Says the open thread is archived or snoozed, with the way back.
+    fn put_away_banner(&self, thread: &ThreadInfo, cx: &mut Context<Self>) -> Option<impl IntoElement> {
         let c = colors(cx);
         let (store, id) = (self.store.clone(), thread.id.clone());
-        div()
-            .pl(px(16.))
-            .pr(px(16. - ControlSize::Small.padding()))
-            .pt(px(12.))
-            .flex()
-            .items_center()
-            .gap(px(8.))
-            .text_size(px(12.5))
-            .child(icons::symbol("circle-check", IconSize::Sm).text_color(c.success))
-            .child(div().font_weight(FontWeight::MEDIUM).child("Done"))
-            .child(div().flex_1())
-            .child(div().my(px(-4.)).child(
-                ActionButton::new("mark-undone", "Mark Undone").link().small().surface(Surface::Composer).on_click(
-                    move |_, _, cx| {
-                        store.update(cx, |store, cx| {
-                            store.set_done(std::slice::from_ref(&id), false, false, cx);
-                            cx.notify();
-                        })
-                    },
-                ),
-            ))
+        let (title, action) = match (thread.section, thread.snoozed_until) {
+            (Section::Archived, _) => ("Archived".to_string(), "Unarchive"),
+            (Section::Snoozed, Some(until)) => (format!("Snoozed until {}", crate::format::stamp(until)), "Wake"),
+            _ => return None,
+        };
+        let (_, symbol) = section_label(thread.section);
+        let section = thread.section;
+        Some(
+            div()
+                .pl(px(16.))
+                .pr(px(16. - ControlSize::Small.padding()))
+                .pt(px(12.))
+                .flex()
+                .items_center()
+                .gap(px(8.))
+                .text_size(px(12.5))
+                .children(symbol.map(|symbol| icons::symbol(symbol, IconSize::Sm).text_color(c.muted_foreground)))
+                .child(div().font_weight(FontWeight::MEDIUM).child(title))
+                .child(div().flex_1())
+                .child(div().my(px(-4.)).child(
+                    ActionButton::new("bring-back", action).link().small().surface(Surface::Composer).on_click(
+                        move |_, _, cx| {
+                            store.update(cx, |store, cx| {
+                                if section == Section::Snoozed {
+                                    store.wake(std::slice::from_ref(&id));
+                                } else {
+                                    store.set_archived(std::slice::from_ref(&id), false, false, cx);
+                                }
+                                cx.notify();
+                            })
+                        },
+                    ),
+                )),
+        )
     }
 
     /// Which parts of the settings under the text have room to say what they are set to, as the
@@ -743,9 +761,7 @@ impl Composer {
                 self.typing_area("typing-area", cx)
                     .flex()
                     .flex_col()
-                    .when_some(thread.filter(|thread| thread.is_done()), |composer, thread| {
-                        composer.child(self.done_banner(thread, cx))
-                    })
+                    .children(thread.and_then(|thread| self.put_away_banner(thread, cx)))
                     .when(has_attachments, |composer| composer.child(attachments::attachments(&self.store, cx)))
                     .child(
                         div()

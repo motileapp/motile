@@ -2,6 +2,25 @@
 import SwiftUI
 import UIKit
 
+/// A round button a swipe shows behind a sidebar row: it does something, or opens a menu.
+struct SwipeAction {
+    let symbol: Symbol
+    let label: String
+    let tint: Color
+    /// The row leaves when it is done, unless the button won't take it away.
+    var leaves = true
+    var perform: (() -> Void)?
+    var menu: AnyView?
+
+    static func button(_ symbol: Symbol, _ label: String, tint: Color, leaves: Bool = true, perform: @escaping () -> Void) -> SwipeAction {
+        SwipeAction(symbol: symbol, label: label, tint: tint, leaves: leaves, perform: perform)
+    }
+
+    static func menu(_ symbol: Symbol, _ label: String, tint: Color, @ViewBuilder content: () -> some View) -> SwipeAction {
+        SwipeAction(symbol: symbol, label: label, tint: tint, menu: AnyView(content()))
+    }
+}
+
 extension View {
     /// Lets a swipe to the right slide a sidebar row aside and show a round button behind it. A
     /// short swipe leaves the button there to tap, a long one does what the button does. The row
@@ -10,31 +29,36 @@ extension View {
         _ symbol: Symbol, _ label: String, tint: Color, size: CGFloat, leaves: Bool = true, isOpen: Binding<Bool>,
         action: @escaping () -> Void
     ) -> some View {
-        modifier(RowSwipe(symbol: symbol, label: label, tint: tint, size: size, leaves: leaves, isOpen: isOpen, action: action))
+        rowSwipe([.button(symbol, label, tint: tint, leaves: leaves, perform: action)], size: size, isOpen: isOpen)
+    }
+
+    /// The same with a button for each action, the first against the edge. A long swipe does what
+    /// the first does, when it is a button.
+    func rowSwipe(_ actions: [SwipeAction], size: CGFloat, isOpen: Binding<Bool>) -> some View {
+        modifier(RowSwipe(actions: actions, size: size, isOpen: isOpen))
     }
 }
 
 private struct RowSwipe: ViewModifier {
-    let symbol: Symbol
-    let label: String
-    let tint: Color
+    let actions: [SwipeAction]
     let size: CGFloat
-    let leaves: Bool
     @Binding var isOpen: Bool
-    let action: () -> Void
 
     @State private var offset = 0.0
     @State private var offsetAtStart: Double?
     @State private var width = 0.0
 
     private static let leading = sidebarEdge
+    private static let gap = 10.0
     private static let settle = Animation.spring(response: 0.29, dampingFraction: 0.86)
 
-    /// How far the row rests aside while its button shows.
-    private var openWidth: Double { size + 20 }
-    /// From here on, letting go does what the button does.
+    /// How far the row rests aside while its buttons show.
+    private var openWidth: Double { Double(actions.count) * (size + Self.gap) + 10 }
+    /// The first action, which a long swipe does.
+    private var swiped: SwipeAction? { actions.first.flatMap { $0.perform == nil ? nil : $0 } }
+    /// From here on, letting go does what the first button does.
     private var fullSwipe: Double { max(openWidth + 44, width * 0.3) }
-    private var armed: Bool { offset >= fullSwipe }
+    private var armed: Bool { swiped != nil && offset >= fullSwipe }
 
     func body(content: Content) -> some View {
         content
@@ -46,37 +70,54 @@ private struct RowSwipe: ViewModifier {
                 }
             }
             .offset(x: offset)
-            .background(alignment: .leading) { button }
+            .background(alignment: .leading) { buttons }
             .clipped()
             .onGeometryChange(for: Double.self) { $0.size.width } action: { width = $0 }
             .gesture(RowPan(isOpen: offset > 0, changed: dragged, ended: released))
             .onChange(of: isOpen) { _, open in
-                guard !open, offsetAtStart == nil, offset > 0 else { return }
-                withAnimation(Self.settle) { offset = 0 }
+                guard offsetAtStart == nil, open != (offset > 0) else { return }
+                withAnimation(Self.settle) { offset = open ? openWidth : 0 }
             }
             .sensoryFeedback(.impact(weight: .medium), trigger: armed) { _, armed in armed }
-            .accessibilityAction(named: label, action)
+            .accessibilityActions {
+                ForEach(actions.indices.filter { actions[$0].perform != nil }, id: \.self) { index in
+                    Button(actions[index].label) { commit(actions[index]) }
+                }
+            }
     }
 
-    /// The button comes in as the row leaves, and past its place stretches after the row.
-    private var button: some View {
-        let stretch = max(0, offset - openWidth)
+    /// The buttons come in as the row leaves, and past their place the first stretches after the row.
+    private var buttons: some View {
+        let stretch = swiped == nil ? 0 : max(0, offset - openWidth)
         let entry = min(1, max(0, (offset - 8) / (openWidth * 0.72 - 8)))
-        return Button(action: commit) {
-            Image(symbol, side: size * 0.44)
-                .foregroundStyle(Color.themeBackground)
-                .offset(x: armed ? stretch / 2 : 0)
-                .animation(.easeOut(duration: 0.15), value: armed)
-                .frame(width: size + stretch, height: size)
-                .background(tint, in: Capsule())
-                .padding(.leading, Self.leading)
-                .frame(maxHeight: .infinity)
-                .contentShape(Rectangle())
+        return HStack(spacing: Self.gap) {
+            ForEach(actions.indices, id: \.self) { index in
+                button(actions[index], stretch: index == 0 ? stretch : 0)
+            }
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel(label)
-        .scaleEffect(0.78 + 0.22 * entry)
+        .padding(.leading, Self.leading)
+        .frame(maxHeight: .infinity)
+        .scaleEffect(0.78 + 0.22 * entry, anchor: .leading)
         .opacity(entry)
+    }
+
+    @ViewBuilder
+    private func button(_ action: SwipeAction, stretch: Double) -> some View {
+        let face = Image(action.symbol, side: size * 0.44)
+            .foregroundStyle(Color.themeBackground)
+            .offset(x: armed && stretch > 0 ? stretch / 2 : 0)
+            .animation(.easeOut(duration: 0.15), value: armed)
+            .frame(width: size + stretch, height: size)
+            .background(action.tint, in: Capsule())
+            .contentShape(Capsule())
+        if let menu = action.menu {
+            Menu { menu } label: { face }
+                .accessibilityLabel(action.label)
+        } else {
+            Button { commit(action) } label: { face }
+                .buttonStyle(.plain)
+                .accessibilityLabel(action.label)
+        }
     }
 
     private func dragged(_ moved: Double) {
@@ -90,7 +131,7 @@ private struct RowSwipe: ViewModifier {
     private func released(_ moved: Double, speed: Double) {
         let end = max(0, (offsetAtStart ?? offset) + moved)
         offsetAtStart = nil
-        guard end < fullSwipe else { return commit() }
+        if let swiped, end >= fullSwipe { return commit(swiped) }
         settle(open: abs(speed) > 300 ? speed > 0 : end > openWidth / 2)
     }
 
@@ -100,15 +141,16 @@ private struct RowSwipe: ViewModifier {
     }
 
     /// The row leaves to the right, and then what the button does happens.
-    private func commit() {
-        guard leaves else {
+    private func commit(_ action: SwipeAction) {
+        guard let perform = action.perform else { return }
+        guard action.leaves else {
             settle(open: false)
-            return action()
+            return perform()
         }
         withAnimation(.easeOut(duration: 0.18)) {
             offset = max(width, offset)
         } completion: {
-            action()
+            perform()
             isOpen = false
             offset = 0
         }

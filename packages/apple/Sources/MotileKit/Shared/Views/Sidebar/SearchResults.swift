@@ -30,12 +30,12 @@ extension AppStore {
     var isSearchingThreads: Bool { !threadSearch.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
 
     /// What the sidebar lists while it searches, in one list: the drafts, the threads found by their
-    /// title, project or pull request, active before done, then the ones found by a message. What
+    /// title, project or pull request, active before archived, then the ones found by a message. What
     /// the servers find later only ever comes below.
     var searchResults: [SearchResult] {
         let search = threadSearch.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !search.isEmpty else { return [] }
-        let threads = activeThreads + doneThreads
+        let threads = allThreads
         let named = threads.filter { matches($0, search: search) }
         let namedIDs = Set(named.map(\.id))
         let found = messageSearch.matches
@@ -178,7 +178,7 @@ struct SearchResultRow: View {
         }
     }
 
-    private var isDone: Bool { result.thread?.isDone == true }
+    private var isDone: Bool { result.thread?.isArchived == true }
 
     @ViewBuilder private func status(project: Project?) -> some View {
         switch result {
@@ -192,15 +192,15 @@ struct SearchResultRow: View {
         case .thread(let thread, _):
             let readOnly = store.onRemovedServer(thread)
             if !readOnly, let pullRequest = project?.pullRequest(of: thread) {
-                PullRequestLabel(pullRequest: pullRequest, colored: !thread.isDone)
+                PullRequestLabel(pullRequest: pullRequest, colored: !thread.isArchived)
             }
             if let jump {
                 KeyCaps([jump])
                     .foregroundStyle(Color.themeForeground)
             } else if readOnly {
                 ThreadStatus(thread: thread, readOnly: true)
-            } else if thread.isDone {
-                Text(Time.ago(thread.doneAt ?? thread.updatedAt, now: AgoClock.shared.now))
+            } else if thread.isArchived {
+                Text(Time.ago(thread.archivedAt ?? thread.updatedAt, now: AgoClock.shared.now))
                     .font(.ui(size: 11))
                     .foregroundStyle(Color.themeMutedStrongerForeground)
             } else {

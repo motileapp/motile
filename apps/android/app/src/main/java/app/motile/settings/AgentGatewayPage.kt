@@ -451,7 +451,7 @@ private fun CaptureThreadSheet() {
     val close = LocalCloseModal.current
     var query by remember { mutableStateOf("") }
     val servers = store.servers.associateBy { it.id }
-    val threads = (store.activeThreads + store.doneThreads)
+    val threads = store.allThreads
         .filter { it.serverID in servers && (query.isBlank() || it.title.contains(query.trim(), ignoreCase = true)) }
         .sortedByDescending { it.updatedAt }
         .take(MOST_THREADS_LISTED)

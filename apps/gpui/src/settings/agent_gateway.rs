@@ -233,8 +233,7 @@ impl AgentGatewayPage {
         let c = colors(cx);
         let store = self.store.read(cx);
         let threads: Vec<(String, String, String)> = store
-            .active_threads()
-            .iter()
+            .listed_threads()
             .filter(|thread| !store.is_removed(&thread.server_id))
             .take(CAPTURE_THREADS)
             .map(|thread| (thread.server_id.clone(), thread.id.clone(), thread.title.clone()))

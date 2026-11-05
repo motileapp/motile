@@ -66,10 +66,7 @@ impl Store {
         }
         let search = self.sidebar.search.trim();
         let found = &self.sidebar.message_search.matches;
-        self.active_threads()
-            .iter()
-            .chain(self.done_threads())
-            .any(|thread| found.contains_key(&thread.id) || self.matches(thread, search))
+        self.all_threads().any(|thread| found.contains_key(&thread.id) || self.matches(thread, search))
     }
 
     /// The keys that open the thread at `index` among `jump_threads`, drawn on its row while
@@ -184,7 +181,7 @@ impl Store {
                 if self.changeable_thread().is_none() {
                     return false;
                 }
-                self.toggle_done(cx);
+                self.toggle_archived(cx);
             }
             "thread.undo" => {
                 if self.undo.is_none() {

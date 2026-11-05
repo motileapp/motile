@@ -134,7 +134,7 @@ fun SearchResultRow(
         is SearchResult.Draft -> result.listed.preview
         is SearchResult.Thread -> result.thread.title
     }
-    val isDone = result.threadInfo?.isDone == true
+    val isDone = result.threadInfo?.isArchived == true
     HighlightButton(onClick = { open(result) }, modifier = modifier, radius = Radius.md, lit = highlighted, inset = rowMargin, opaque = true, onLongClick = onLongClick) {
         Column(
             Modifier
@@ -182,11 +182,11 @@ private fun ResultStatus(result: SearchResult, jump: String?) {
         is SearchResult.Thread -> {
             val thread = result.thread
             val readOnly = store.onRemovedServer(thread)
-            if (!readOnly) store.project(thread.projectID)?.seen(thread)?.pullRequest(thread)?.let { PullRequestLabel(it, colored = !thread.isDone) }
+            if (!readOnly) store.project(thread.projectID)?.seen(thread)?.pullRequest(thread)?.let { PullRequestLabel(it, colored = !thread.isArchived) }
             when {
                 jump != null -> CompositionLocalProvider(LocalForeground provides palette.foreground) { KeyCaps(listOf(jump)) }
                 readOnly -> ThreadStatus(thread, readOnly = true)
-                thread.isDone -> Text(Time.ago(thread.doneAt ?: thread.updatedAt, AgoClock.now), size = 11f, color = palette.mutedStrongerForeground)
+                thread.isArchived -> Text(Time.ago(thread.archivedAt ?: thread.updatedAt, AgoClock.now), size = 11f, color = palette.mutedStrongerForeground)
                 else -> ThreadStatus(thread)
             }
         }

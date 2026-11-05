@@ -10,10 +10,11 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ModelsTest {
-    private fun thread(id: String, position: Double, doneAt: Double? = null) = ThreadInfo(
+    private fun thread(id: String, position: Double, section: String = "active", doneAt: Double? = null, snoozedUntil: Double? = null) = ThreadInfo(
         json(
             "id" to id, "server_id" to "s", "title" to id, "project_id" to "p", "cwd" to "/", "agent" to "claude",
             "access" to "full", "created_at" to 1.0, "updated_at" to 1.0, "position" to position, "done_at" to doneAt,
+            "snoozed_until" to snoozedUntil, "section" to section,
         ),
     )
 
@@ -57,10 +58,14 @@ class ModelsTest {
     }
 
     @Test
-    fun aDoneThreadIsListedByWhenItWasDone() {
-        val done = thread("d", 1.0, doneAt = 50.0)
-        assertTrue(done.isDone)
-        assertEquals(50.0, done.listedAt, 0.0)
+    fun anArchivedThreadIsListedByWhenItWasArchivedAndASnoozedOneBySoonestWake() {
+        val archived = thread("d", 1.0, section = "archived", doneAt = 50.0)
+        assertTrue(archived.isArchived)
+        assertEquals(ThreadSection.Archived, archived.section)
+        assertEquals(50.0, archived.listedAt, 0.0)
+        val soon = thread("s", 1.0, section = "snoozed", snoozedUntil = 100.0)
+        val later = thread("l", 1.0, section = "snoozed", snoozedUntil = 200.0)
+        assertTrue(ThreadInfo.listed(soon, later))
     }
 
     @Test

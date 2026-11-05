@@ -69,7 +69,8 @@ export type Thread = {
   diff: string
 }
 
-export type DoneThread = {
+/** A thread on the snoozed or the archived shelf, with how soon it wakes or how long ago it was archived. */
+export type ShelvedThread = {
   title: string
   project: Project
   branch: string
@@ -543,7 +544,19 @@ src/middleware.ts
   },
 ]
 
-export const doneThreads: DoneThread[] = [
+export const snoozedThreads: ShelvedThread[] = [
+  {
+    title: "Migrate the billing webhooks",
+    project: api,
+    branch: "billing-webhooks",
+    agent: "codex",
+    model: "6.1-Sol",
+    server: buildBox,
+    ago: "2h",
+  },
+]
+
+export const archivedThreads: ShelvedThread[] = [
   {
     title: "Add dark mode to settings",
     project: web,

@@ -138,7 +138,7 @@ struct GatewayCaptureThreads: View {
     @Environment(AppStore.self) private var store
 
     var body: some View {
-        let threads = store.activeThreads.filter { !store.isRemoved($0.serverID) }.prefix(GatewayText.captureThreads)
+        let threads = store.listedThreads.filter { !store.isRemoved($0.serverID) }.prefix(GatewayText.captureThreads)
         if threads.isEmpty {
             Text("No thread is working")
         }

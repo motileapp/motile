@@ -31,6 +31,7 @@ import androidx.compose.ui.window.DialogProperties
 import app.motile.commandpanel.CommandPanel
 import app.motile.core.AppStore
 import app.motile.core.Appearance
+import app.motile.core.CustomSnooze
 import app.motile.core.PanelPage
 import app.motile.core.Project
 import app.motile.layout.Drawer
@@ -48,6 +49,7 @@ import app.motile.theme.LocalSurface
 import app.motile.theme.Palette
 import app.motile.theme.Surface
 import app.motile.theme.Theme
+import app.motile.sidebar.CustomSnoozeSheet
 import app.motile.thread.CommitSheet
 import app.motile.thread.ThreadSettingsSheet
 import app.motile.transcript.canvas.ConfettiLayer
@@ -69,6 +71,7 @@ private sealed interface RootSheet {
     data object Settings : RootSheet
     data object Usage : RootSheet
     data object ThreadSettings : RootSheet
+    data class Snooze(val snooze: CustomSnooze) : RootSheet
 }
 
 private val AppStore.sheet: RootSheet?
@@ -79,6 +82,7 @@ private val AppStore.sheet: RootSheet?
         if (settings != null) return RootSheet.Settings
         if (showsUsage) return RootSheet.Usage
         if (showsThreadSettings) return RootSheet.ThreadSettings
+        customSnooze?.let { return RootSheet.Snooze(it) }
         return null
     }
 
@@ -89,6 +93,7 @@ private fun AppStore.closeSheet() {
         panel != null -> closePanel()
         settings != null -> closeSettings()
         showsUsage -> showsUsage = false
+        customSnooze != null -> customSnooze = null
         else -> {
             showsThreadSettings = false
             showsBranches = false
@@ -199,6 +204,7 @@ private fun Sheets(store: AppStore) {
                 RootSheet.Settings -> SettingsSheet()
                 RootSheet.Usage -> UsageSheet()
                 RootSheet.ThreadSettings -> ThreadSettingsSheet()
+                is RootSheet.Snooze -> CustomSnoozeSheet(sheet.snooze)
             }
         }
     }

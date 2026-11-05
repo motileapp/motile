@@ -65,6 +65,7 @@ import app.motile.core.SearchResult
 import app.motile.core.Selection
 import app.motile.core.Server
 import app.motile.core.ThreadInfo
+import app.motile.core.ThreadSection
 import app.motile.core.isSearchingThreads
 import app.motile.core.jumpHint
 import app.motile.core.jumpThreads
@@ -135,13 +136,13 @@ private sealed interface SidebarItem {
         override val id = "newThread"
     }
 
-    data object DoneHeader : SidebarItem {
-        override val id = "done"
+    data class Header(val section: ThreadSection, val count: Int) : SidebarItem {
+        override val id: String get() = "header:${section.raw}"
     }
 
-    /** A done thread's row has an id of its own, or the list keeps its active row for it. */
-    data class Done(val thread: ThreadInfo) : SidebarItem {
-        override val id: String get() = "done:${thread.id}"
+    /** A slim row has an id of its own, or the list keeps the thread's active row for it. */
+    data class Slim(val thread: ThreadInfo) : SidebarItem {
+        override val id: String get() = "slim:${thread.id}"
     }
 
     val activeThread: ThreadInfo? get() = (this as? Active)?.thread
@@ -149,15 +150,15 @@ private sealed interface SidebarItem {
     val rowThread: ThreadInfo?
         get() = when (this) {
             is Active -> thread
-            is Done -> thread
+            is Slim -> thread
             is Result -> result.threadInfo
             else -> null
         }
 }
 
 /**
- * The sidebar: the drafts, every active thread on every server, the ones marked done, the servers
- * and the account. On a phone it lies under the thread (`underThread`), which comes back over it
+ * The sidebar: the drafts, every active thread on every server, the working, the snoozed and the
+ * archived ones, the servers and the account. On a phone it lies under the thread (`underThread`), which comes back over it
  * when something is opened; in a wide window it is a column beside it.
  */
 @Composable
@@ -165,11 +166,13 @@ fun SidebarScreen(underThread: Boolean) {
     val store = LocalStore.current
     val drawer = LocalDrawer.current
     val focus = LocalFocusManager.current
-    var doneExpanded by remember { mutableStateOf(Preferences.bool("sidebar.doneExpanded")) }
+    var archivedExpanded by remember { mutableStateOf(Preferences.bool("sidebar.doneExpanded")) }
+    var workingExpanded by remember { mutableStateOf(Preferences.optionalBool("sidebar.workingExpanded") ?: true) }
+    var snoozedExpanded by remember { mutableStateOf(Preferences.bool("sidebar.snoozedExpanded")) }
     var serversExpanded by remember { mutableStateOf(Preferences.bool("sidebar.serversExpanded")) }
     var renaming by remember { mutableStateOf<ThreadInfo?>(null) }
     var deleting by remember { mutableStateOf<ThreadInfo?>(null) }
-    /** Why a swipe couldn't mark a thread done: its agent is still at it. */
+    /** Why a swipe couldn't archive a thread: its agent is still at it. */
     var busy by remember { mutableStateOf<String?>(null) }
     /** The row a swipe has slid aside, by its id in the list. */
     var swiped by remember { mutableStateOf<String?>(null) }
@@ -183,16 +186,27 @@ fun SidebarScreen(underThread: Boolean) {
 
     val searching = store.isSearchingThreads
     val active = if (searching) emptyList() else store.activeThreads
-    val done = if (searching) emptyList() else store.doneThreads
+    val sections = if (searching) emptyList() else listOf(
+        ThreadSection.Working to store.workingThreads, ThreadSection.Snoozed to store.snoozedThreads, ThreadSection.Archived to store.archivedThreads,
+    )
+    fun expanded(section: ThreadSection) = when (section) {
+        ThreadSection.Working -> workingExpanded
+        ThreadSection.Snoozed -> snoozedExpanded
+        else -> archivedExpanded
+    }
     val results = store.searchResults
     val highlightedID = results.getOrNull(highlighted.index)?.id
-    val items = if (searching) searchItems(results, store.messageSearch.searching) else items(store, active, done, doneExpanded)
+    val items = if (searching) searchItems(results, store.messageSearch.searching) else items(store, active, sections, ::expanded)
     val shown = reorder.arranged(items) { it.id }
     val places = if (store.showsJumpHints) jumpPlaces(store.jumpThreads) else emptyMap()
 
-    fun setDoneExpanded(expanded: Boolean) {
-        doneExpanded = expanded
-        Preferences.set("sidebar.doneExpanded", expanded)
+    fun setExpanded(section: ThreadSection, expanded: Boolean) {
+        when (section) {
+            ThreadSection.Working -> workingExpanded = expanded
+            ThreadSection.Snoozed -> snoozedExpanded = expanded
+            else -> archivedExpanded = expanded
+        }
+        Preferences.set(if (section == ThreadSection.Archived) "sidebar.doneExpanded" else "sidebar.${section.raw}Expanded", expanded)
     }
 
     fun setServersExpanded(expanded: Boolean) {
@@ -219,7 +233,7 @@ fun SidebarScreen(underThread: Boolean) {
         showThread()
     }
 
-    fun markDone(thread: ThreadInfo) {
+    fun archive(thread: ThreadInfo) {
         if (thread.unfinished) {
             busy = when {
                 thread.running -> "Still working"
@@ -228,7 +242,29 @@ fun SidebarScreen(underThread: Boolean) {
             }
             return
         }
-        store.setDone(listOf(thread.id), done = true, fromSidebar = true)
+        store.setArchived(listOf(thread.id), true, fromSidebar = true)
+    }
+
+    val palette = Theme.colors
+
+    /** What a swipe offers on a thread's row: an active one is archived, its tick first, or snoozed; a working one only snoozed; a snoozed one woken and an archived one brought back. */
+    fun swipeActions(thread: ThreadInfo): List<SwipeAction> {
+        val snooze = if (store.snoozes(thread)) {
+            listOf(SwipeAction(Symbol.AlarmClock, "Snooze", palette.warning, menu = { snoozeItems(store, listOf(thread.id), fromSidebar = true) }))
+        } else {
+            emptyList()
+        }
+        return when (thread.section) {
+            ThreadSection.Active -> {
+                val tint = if (thread.unfinished) palette.mutedForeground else palette.success
+                listOf(SwipeAction(Symbol.Check, "Archive", tint, leaves = !thread.unfinished, perform = { archive(thread) })) + snooze
+            }
+            ThreadSection.Working -> snooze
+            ThreadSection.Snoozed -> listOf(SwipeAction(Symbol.AlarmClockOff, "Wake", palette.warning, perform = { store.wake(listOf(thread.id)) }))
+            ThreadSection.Archived -> listOf(
+                SwipeAction(Symbol.Undo2, "Unarchive", palette.mutedForeground, perform = { store.setArchived(listOf(thread.id), false) }),
+            )
+        }
     }
 
     fun swipe(row: String) = SwipeState(swiped == row) { open ->
@@ -249,12 +285,20 @@ fun SidebarScreen(underThread: Boolean) {
         snapshotFlow { store.serversExpandedRequests }.drop(1).collect { serversExpanded = true }
     }
     LaunchedEffect(store.revealedThreadID) {
-        val revealed = store.revealedThreadID ?: return@LaunchedEffect
-        if (store.doneThreads.any { it.id == revealed }) setDoneExpanded(true)
+        val revealed = store.revealedThreadID?.let(store::anyThread) ?: return@LaunchedEffect
+        if (revealed.section != ThreadSection.Active) setExpanded(revealed.section, true)
+    }
+    LaunchedEffect(store.expandStep) {
+        val section = ThreadSection.entries.firstOrNull { it.raw == store.expandStep } ?: return@LaunchedEffect
+        setExpanded(section, true)
+    }
+    LaunchedEffect(store.swipeStep) {
+        val thread = store.swipeStep?.let(store::anyThread) ?: return@LaunchedEffect
+        swiped = if (thread.section == ThreadSection.Active) thread.id else "slim:${thread.id}"
     }
     val target = if (searching) highlightedID?.let { "result:$it" } else items.firstOrNull { it.rowThread?.id == store.revealedThreadID }?.id
     val targetIndex = target?.let { id -> shown.indexOfFirst { it.id == id } } ?: -1
-    val targetToTop = done.any { it.id == store.revealedThreadID }
+    val targetToTop = sections.any { (_, threads) -> threads.any { it.id == store.revealedThreadID } }
     LaunchedEffect(target) {
         if (targetIndex < 0) return@LaunchedEffect
         reveal(list, targetIndex, targetToTop)
@@ -315,11 +359,7 @@ fun SidebarScreen(underThread: Boolean) {
                             if (store.onRemovedServer(thread)) {
                                 row()
                             } else {
-                                RowSwipe(
-                                    Symbol.Check, "Mark Done", tint = if (thread.unfinished) Theme.colors.mutedForeground else Theme.colors.success, size = 36.dp,
-                                    isOpen = swiped == item.id, onOpenChange = swipe(item.id).onOpenChange, action = { markDone(thread) }, leaves = !thread.unfinished,
-                                    content = row,
-                                )
+                                RowSwipe(swipeActions(thread), 36.dp, isOpen = swiped == item.id, onOpenChange = swipe(item.id).onOpenChange, content = row)
                             }
                         }
                         is SidebarItem.Result -> {
@@ -337,31 +377,29 @@ fun SidebarScreen(underThread: Boolean) {
                             if (searching) {
                                 SearchEmptyLine(13f)
                             } else {
-                                Text(if (done.isEmpty()) "No threads yet" else "No active threads", size = 13f, color = Theme.colors.mutedStrongerForeground)
+                                Text(if (store.allThreads.isEmpty()) "No threads yet" else "No active threads", size = 13f, color = Theme.colors.mutedStrongerForeground)
                             }
                         }
                         SidebarItem.NewThread -> NewThreadRow(Modifier.fillMaxWidth().height(lineHeight))
-                        SidebarItem.DoneHeader -> DoneHeader(done.size, doneExpanded) { setDoneExpanded(!doneExpanded) }
-                        is SidebarItem.Done -> {
+                        is SidebarItem.Header -> SectionHeader(item.section, item.count, expanded(item.section)) {
+                            setExpanded(item.section, !expanded(item.section))
+                        }
+                        is SidebarItem.Slim -> {
                             val thread = item.thread
                             val readOnly = store.onRemovedServer(thread)
                             val row = @Composable {
                                 WithMenu(if (readOnly) null else ({ threadMenu(store, thread, ::beginRename) { deleting = it } })) { modifier, openMenu ->
-                                    DoneRow(
+                                    SlimThreadRow(
                                         thread, store.projectsByID[thread.projectID], selected = store.selection == Selection.Thread(thread.id),
                                         modifier = modifier.fillMaxWidth().height(lineHeight).peeks(thread.id, peek), onLongClick = openMenu, open = ::open,
                                     )
                                 }
                             }
-                            if (readOnly) {
+                            val actions = swipeActions(thread)
+                            if (readOnly || actions.isEmpty()) {
                                 row()
                             } else {
-                                RowSwipe(
-                                    Symbol.Undo2, "Mark Undone", tint = Theme.colors.mutedForeground, size = 28.dp,
-                                    isOpen = swiped == item.id, onOpenChange = swipe(item.id).onOpenChange,
-                                    action = { store.setDone(listOf(thread.id), done = false) },
-                                    content = row,
-                                )
+                                RowSwipe(actions, 28.dp, isOpen = swiped == item.id, onOpenChange = swipe(item.id).onOpenChange, content = row)
                             }
                         }
                     }
@@ -389,7 +427,7 @@ fun SidebarScreen(underThread: Boolean) {
     }
     ThreadPeekCard(peek)
     busy?.let { title ->
-        ConfirmationDialog(Confirmation(title, "Stop it first, then mark it done.", dismissal = "OK")) { busy = null }
+        ConfirmationDialog(Confirmation(title, "Stop it first, then archive it.", dismissal = "OK")) { busy = null }
     }
     renaming?.let { thread -> RenameDialog(thread) { renaming = null } }
     Asking(deleting, onDismiss = { deleting = null }) { thread ->
@@ -400,15 +438,22 @@ fun SidebarScreen(underThread: Boolean) {
     }
 }
 
-/** The drafts, the active threads, and under them the threads marked done: a line that opens into their list. */
-private fun items(store: AppStore, active: List<ThreadInfo>, done: List<ThreadInfo>, expanded: Boolean): List<SidebarItem> = buildList {
+/** The drafts, the active threads, and under them the working, the snoozed and the archived ones: each a line that opens into their list. */
+private fun items(
+    store: AppStore,
+    active: List<ThreadInfo>,
+    sections: List<Pair<ThreadSection, List<ThreadInfo>>>,
+    expanded: (ThreadSection) -> Boolean,
+): List<SidebarItem> = buildList {
     add(SidebarItem.Drafts)
     active.forEach { add(SidebarItem.Active(it)) }
     if (active.isEmpty()) add(SidebarItem.Empty)
     if (store.offersNewThread(store.listedDrafts, active)) add(SidebarItem.NewThread)
-    if (done.isEmpty()) return@buildList
-    add(SidebarItem.DoneHeader)
-    if (expanded) done.forEach { add(SidebarItem.Done(it)) }
+    for ((section, threads) in sections) {
+        if (threads.isEmpty()) continue
+        add(SidebarItem.Header(section, threads.size))
+        if (expanded(section)) threads.forEach { add(SidebarItem.Slim(it)) }
+    }
 }
 
 /** What the search found, then the line that says the servers still search, or that line alone when it found nothing. */
@@ -496,18 +541,9 @@ private fun ThreadRowWithMenu(
 }
 
 @Composable
-private fun DoneHeader(count: Int, expanded: Boolean, toggle: () -> Unit) {
+private fun SectionHeader(section: ThreadSection, count: Int, expanded: Boolean, toggle: () -> Unit) {
     DimButton(onClick = toggle, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
-        Row(
-            Modifier.fillMaxWidth().height(lineHeight).padding(horizontal = sidebarEdge),
-            horizontalArrangement = Arrangement.spacedBy(7.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            SidebarChevron(expanded)
-            ShelfTitle("Done", expanded)
-            Spacer(Modifier.weight(1f))
-            Text("$count", style = Theme.uiDigits(11f), color = Theme.colors.mutedStrongerForeground)
-        }
+        SectionLine(section, count, expanded, Modifier.fillMaxWidth().height(lineHeight).padding(horizontal = sidebarEdge))
     }
 }
 
@@ -585,8 +621,8 @@ private fun Servers(store: AppStore, expanded: Boolean, toggle: () -> Unit) {
             horizontalArrangement = Arrangement.spacedBy(7.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            SidebarChevron(expanded)
             AllServersLine(servers, expanded, Modifier.weight(1f))
+            SidebarChevron(expanded)
         }
     }
     if (expanded) ServerLines(store)

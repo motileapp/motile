@@ -457,12 +457,12 @@ private final class Demo {
         await shoot("09-panel-threads")
         store.closePanel()
 
-        // Marking the first thread done moves it to the Done shelf.
+        // Archiving the first thread moves it to the Archived shelf.
         UserDefaults.standard.set(true, forKey: "sidebar.doneExpanded")
         store.select(.thread(first))
         await wait(0.5)
-        store.setDone([first], done: true)
-        await expect("a thread marked done is listed as done") { store.doneThreads.map(\.id) == [first] }
+        store.setArchived([first], archived: true)
+        await expect("an archived thread is listed as archived") { store.archivedThreads.map(\.id) == [first] }
         await shoot("10-done")
         await shootScreen("10-screen-light")
 
@@ -472,8 +472,8 @@ private final class Demo {
         await shootSettings("11-dark-settings")
         await shoot("11-dark-thread")
         await shootScreen("11-screen-dark")
-        store.setDone([first], done: false)
-        await expect("a thread marked undone is active again") { store.doneThreads.isEmpty }
+        store.setArchived([first], archived: false)
+        await expect("an unarchived thread is active again") { store.archivedThreads.isEmpty }
         store.startNewThread()
         store.draft = "Why is the sync slow on large threads?\n\nLook at how the server answers `Open` first:\n- what it reads from SQLite\n- how many items it sends"
         store.attach([URL(fileURLWithPath: "/tmp/motile-demo/api/greet.py")])

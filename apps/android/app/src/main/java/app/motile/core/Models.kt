@@ -10,6 +10,7 @@ import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import java.util.UUID
 import kotlin.math.abs
+import kotlin.math.ceil
 import kotlin.math.max
 
 // What the core sends, read from its JSON. The shapes are defined in crates/core/src/api.rs and
@@ -232,6 +233,9 @@ data class Server(
 
     /** Whether the server keeps where the user moves its threads in the sidebar. */
     val movesThreads: Boolean get() = protocolVersion >= 21
+
+    /** Whether its threads can be snoozed. */
+    val snoozes: Boolean get() = protocolVersion >= 38
 
     /** Whether the server asks its agents for their models when asked to. */
     val refreshesModels: Boolean get() = protocolVersion >= 23
@@ -729,8 +733,14 @@ data class ThreadInfo(
     val access: Access,
     val createdAt: Double,
     val updatedAt: Double,
-    val doneAt: Double?,
-    /** Where the sidebar lists it among the active threads, the highest first: when it was created or last came back from done, until the user moves it. */
+    val archivedAt: Double?,
+    /** It is snoozed until then. */
+    val snoozedUntil: Double? = null,
+    /** It woke from a snooze by itself since the user last looked at it. */
+    val woke: Boolean = false,
+    /** The part of the sidebar it is listed in. */
+    val section: ThreadSection = ThreadSection.Active,
+    /** Where the sidebar lists it among the active threads, the highest first: when it was created or last came back from the archive or a snooze, until the user moves it. */
     val position: Double,
     val running: Boolean,
     /** The turn is over, but the agent still watches something it left running. */
@@ -755,7 +765,7 @@ data class ThreadInfo(
     /** How the agents its agent started are doing, theirs too. */
     val children: ThreadChildren? = null,
 ) {
-    val isDone: Boolean get() = doneAt != null
+    val isArchived: Boolean get() = archivedAt != null
 
     /** The agent's process is still there, working or monitoring. */
     val busy: Boolean get() = running || monitoring
@@ -766,7 +776,7 @@ data class ThreadInfo(
     /** Its agent ended its turn, and the agents it started work on. */
     val waitsOnAgents: Boolean get() = !running && (children?.running ?: 0) > 0
 
-    /** Its agent's process is still there or the agents it started work, so it can't be done yet. */
+    /** Its agent's process is still there or the agents it started work, so it can't be archived yet. */
     val unfinished: Boolean get() = busy || waitsOnAgents
 
     /** What it, or else an agent it started, waits for the user to answer. */
@@ -774,8 +784,16 @@ data class ThreadInfo(
 
     val monitoringSince: Double get() = turnEndedAt ?: updatedAt
 
-    /** What its list is in order of, the highest first: when it was marked done, or else its position. Active threads keep their place when something happens in them. */
-    val listedAt: Double get() = if (isDone) doneAt ?: 0.0 else position
+    /** The section it is listed in once it is neither archived nor snoozed. */
+    val awakeSection: ThreadSection get() = if ((busy || waitsOnAgents) && waitsFor == null) ThreadSection.Working else ThreadSection.Active
+
+    /** What its list is in order of, the highest first: when it was archived, how soon it wakes, or else its position. Active threads keep their place when something happens in them. */
+    val listedAt: Double
+        get() = when (section) {
+            ThreadSection.Archived -> archivedAt ?: 0.0
+            ThreadSection.Snoozed -> -(snoozedUntil ?: 0.0)
+            ThreadSection.Active, ThreadSection.Working -> position
+        }
 
     companion object {
         operator fun invoke(json: JSON): ThreadInfo {
@@ -797,7 +815,10 @@ data class ThreadInfo(
                 access = Access.of(json.string("access")) ?: Access.Full,
                 createdAt = createdAt,
                 updatedAt = json.double("updated_at"),
-                doneAt = json.optionalDouble("done_at"),
+                archivedAt = json.optionalDouble("done_at"),
+                snoozedUntil = json.optionalDouble("snoozed_until"),
+                woke = json.bool("woke"),
+                section = ThreadSection.of(json.string("section")),
                 position = if (position > 0) position else createdAt,
                 running = json.bool("running"),
                 monitoring = json.bool("monitoring"),
@@ -845,6 +866,32 @@ fun List<ThreadInfo>.place(of: ThreadInfo): Int {
 fun List<ThreadInfo>.indexOfListed(thread: ThreadInfo): Int? {
     val place = place(thread)
     return if (place < size && this[place].id == thread.id) place else null
+}
+
+/** The part of the sidebar a thread is listed in. */
+enum class ThreadSection(val raw: String) {
+    Active("active"), Working("working"), Snoozed("snoozed"), Archived("archived");
+
+    val title: String
+        get() = when (this) {
+            Active -> "Active"
+            Working -> "Working"
+            Snoozed -> "Snoozed"
+            Archived -> "Archived"
+        }
+
+    /** None for the active threads, which are the sidebar's own. */
+    val symbol: Symbol?
+        get() = when (this) {
+            Active -> null
+            Working -> Symbol.CircleDashed
+            Snoozed -> Symbol.AlarmClock
+            Archived -> Symbol.Archive
+        }
+
+    companion object {
+        fun of(raw: String?): ThreadSection = entries.firstOrNull { it.raw == raw } ?: Active
+    }
 }
 
 /** What a tool call that waits for the user asks of them. */
@@ -1420,6 +1467,17 @@ object Time {
             seconds < 3600 -> "${(seconds / 60).toInt()}m"
             seconds < 86400 -> "${(seconds / 3600).toInt()}h"
             else -> "${(seconds / 86400).toInt()}d"
+        }
+    }
+
+    /** "5m", "3h", "2d": how long until then, rounded up, as short as a sidebar needs. */
+    fun left(timestamp: Double, now: Double = now()): String {
+        val seconds = max(0.0, timestamp - now)
+        return when {
+            seconds < 60 -> "now"
+            seconds < 3600 -> "${ceil(seconds / 60).toInt()}m"
+            seconds < 86400 -> "${ceil(seconds / 3600).toInt()}h"
+            else -> "${ceil(seconds / 86400).toInt()}d"
         }
     }
 

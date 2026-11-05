@@ -22,7 +22,10 @@ struct MenuState: Equatable {
     var noProjects = true
     var signedIn = false
     var threadOpen = false
-    var threadDone = false
+    var threadArchived = false
+    var threadSnoozed = false
+    var snoozes = false
+    var openThreadIDs: [String] = []
     var removedServer = false
     var busy = false
     var hasJumps = false
@@ -50,7 +53,10 @@ struct MenuState: Equatable {
         noProjects = store.noProjects.isEmpty
         signedIn = store.account.signedIn
         threadOpen = store.selectedThread != nil
-        threadDone = store.selectedThread?.isDone == true
+        threadArchived = store.selectedThread?.isArchived == true
+        threadSnoozed = store.selectedThread?.section == .snoozed
+        snoozes = store.selectedThread.map(store.snoozes) == true
+        openThreadIDs = store.selectedThread.map { [$0.id] } ?? []
         removedServer = store.openThreadRemovedServer != nil
         busy = store.activity.busy
         hasJumps = !store.jumpThreads.isEmpty

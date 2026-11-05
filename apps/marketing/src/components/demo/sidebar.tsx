@@ -1,4 +1,6 @@
 import {
+  AlarmClockIcon,
+  ArchiveIcon,
   BotIcon,
   ChartColumnIcon,
   ChevronRightIcon,
@@ -17,7 +19,13 @@ import {
 } from "lucide-react"
 import { useEffect, useState, type ReactNode } from "react"
 import { AgentIcon, ProjectIcon } from "./icons"
-import { doneThreads, servers, type DoneThread, type Thread } from "./threads"
+import {
+  archivedThreads,
+  servers,
+  snoozedThreads,
+  type ShelvedThread,
+  type Thread,
+} from "./threads"
 import { cn } from "@/lib/utils"
 
 const serversPaths = new Set(servers.map((server) => server.path))
@@ -37,18 +45,22 @@ export function Sidebar({
   elapsed: (since: number) => string
   onSelect: (id: string) => void
   /** The pointer is on a thread's row, or on none. */
-  onPoint: (thread: Thread | DoneThread | null, row?: HTMLElement) => void
+  onPoint: (thread: Thread | ShelvedThread | null, row?: HTMLElement) => void
 }) {
   const [search, setSearch] = useState("")
-  const [doneOpen, setDoneOpen] = useState(false)
+  const [workingOpen, setWorkingOpen] = useState(true)
+  const [snoozedOpen, setSnoozedOpen] = useState(false)
+  const [archivedOpen, setArchivedOpen] = useState(false)
   const [serversOpen, setServersOpen] = useState(false)
   const [found, setFound] = useState<Found[]>([])
   const [searching, setSearching] = useState(false)
   const [highlighted, setHighlighted] = useState(0)
-  /** The done thread opened from the search, which the Done shelf shows. */
+  /** The shelved thread opened from the search, which its shelf shows. */
   const [revealed, setRevealed] = useState<string | null>(null)
   const query = normalized(search)
   const results = searchResults(threads, query, found)
+  const active = threads.filter((thread) => !isWorking(thread))
+  const working = threads.filter(isWorking)
 
   // What was found for the search before stays while it fits, until the messages are searched.
   const changeSearch = (text: string) => {
@@ -77,8 +89,9 @@ export function Sidebar({
   const open = (result: Result) => {
     onPoint(null)
     if (result.kind === "active") onSelect(result.thread.id)
-    if (result.kind === "done") setDoneOpen(true)
-    setRevealed(result.kind === "done" ? result.thread.title : null)
+    if (result.kind === "snoozed") setSnoozedOpen(true)
+    if (result.kind === "archived") setArchivedOpen(true)
+    setRevealed(result.kind === "active" ? null : result.thread.title)
     changeSearch("")
   }
 
@@ -134,7 +147,7 @@ export function Sidebar({
           </p>
         )}
         {!query &&
-          threads.map((thread) => (
+          active.map((thread) => (
             <ThreadRow
               key={thread.id}
               thread={thread}
@@ -149,72 +162,81 @@ export function Sidebar({
             />
           ))}
       </div>
-      {!query && (
-        <div className="border-t">
-          <button
-            type="button"
-            onClick={() => setDoneOpen(!doneOpen)}
-            className="group flex h-[36px] w-full items-center gap-[7px] pr-[18px] pl-[11px] text-left text-muted-foreground hover:bg-background-accent-larger hover:text-foreground"
-          >
-            <ChevronRightIcon
-              className={cn(
-                "size-2.5 w-[9px] text-muted-stronger-foreground transition-transform group-hover:text-muted-foreground",
-                doneOpen && "rotate-90 text-muted-foreground"
-              )}
-            />
-            <span
-              className={cn(
-                "text-[12px] font-medium",
-                doneOpen && "text-foreground"
-              )}
+      {!query && working.length > 0 && (
+        <Shelf
+          icon={CircleDashedIcon}
+          title="Working"
+          count={working.length}
+          open={workingOpen}
+          onToggle={() => setWorkingOpen(!workingOpen)}
+        >
+          {working.map((thread) => (
+            <SlimRow
+              key={thread.id}
+              thread={thread}
+              lit={thread.id === selectedId}
+              onSelect={() => {
+                onPoint(null)
+                setRevealed(null)
+                onSelect(thread.id)
+              }}
+              onPoint={onPoint}
             >
-              Done
-            </span>
-            <span className="ml-auto text-[11px] text-muted-stronger-foreground tabular-nums">
-              {doneThreads.length}
-            </span>
-          </button>
-          {doneOpen &&
-            doneThreads.map((thread) => (
-              <div
-                key={thread.title}
-                onPointerEnter={(event) => onPoint(thread, event.currentTarget)}
-                onPointerLeave={() => onPoint(null)}
-                className={cn(
-                  "mx-2.5 flex h-[30px] items-center gap-[7px] rounded-md px-2",
-                  thread.title === revealed
-                    ? "bg-background-accent-larger-stronger"
-                    : "hover:bg-background-accent-larger"
-                )}
-              >
-                <ProjectIcon project={thread.project} size={14} />
-                <span className="truncate text-[13px] text-muted-foreground">
-                  {thread.title}
-                </span>
-                <span className="ml-auto flex shrink-0 items-center gap-1.5 text-[11px] text-muted-stronger-foreground">
-                  {thread.pullRequest && (
-                    <PullRequest number={thread.pullRequest.number} quiet />
-                  )}
-                  {thread.ago}
-                </span>
-              </div>
-            ))}
-          {doneOpen && <div className="h-1" />}
-        </div>
+              <ThreadStatus thread={thread} elapsed={elapsed} />
+            </SlimRow>
+          ))}
+        </Shelf>
+      )}
+      {!query && (
+        <Shelf
+          icon={AlarmClockIcon}
+          title="Snoozed"
+          count={snoozedThreads.length}
+          open={snoozedOpen}
+          onToggle={() => setSnoozedOpen(!snoozedOpen)}
+        >
+          {snoozedThreads.map((thread) => (
+            <SlimRow
+              key={thread.title}
+              thread={thread}
+              lit={thread.title === revealed}
+              onPoint={onPoint}
+            >
+              <span className="flex items-center gap-[3px]">
+                <AlarmClockIcon className="size-3.5" />
+                {thread.ago}
+              </span>
+            </SlimRow>
+          ))}
+        </Shelf>
+      )}
+      {!query && (
+        <Shelf
+          icon={ArchiveIcon}
+          title="Archived"
+          count={archivedThreads.length}
+          open={archivedOpen}
+          onToggle={() => setArchivedOpen(!archivedOpen)}
+        >
+          {archivedThreads.map((thread) => (
+            <SlimRow
+              key={thread.title}
+              thread={thread}
+              lit={thread.title === revealed}
+              onPoint={onPoint}
+            >
+              {thread.ago}
+            </SlimRow>
+          ))}
+        </Shelf>
       )}
       <div className="border-t">
         <button
           type="button"
           onClick={() => setServersOpen(!serversOpen)}
-          className="group flex h-[36px] w-full items-center gap-[7px] pr-[18px] pl-[11px] text-left text-muted-foreground hover:bg-background-accent-larger hover:text-foreground"
+          className="group flex h-[36px] w-full items-center gap-[7px] px-[18px] text-left text-muted-foreground hover:bg-background-accent-larger hover:text-foreground"
         >
-          <ChevronRightIcon
-            className={cn(
-              "size-2.5 w-[9px] text-muted-stronger-foreground transition-transform group-hover:text-muted-foreground",
-              serversOpen && "rotate-90 text-muted-foreground"
-            )}
-          />
-          <span className="size-[7px] rounded-full bg-success" />
+          <StateRing />
           <span
             className={cn(
               "text-[12px] font-medium",
@@ -226,6 +248,7 @@ export function Sidebar({
           <span className="ml-auto text-[11px] text-muted-stronger-foreground tabular-nums">
             {serversReach}
           </span>
+          <Chevron open={serversOpen} />
         </button>
         {serversOpen && (
           <div className="pb-1">
@@ -234,9 +257,7 @@ export function Sidebar({
                 key={server.name}
                 className="mx-2.5 flex h-[30px] items-center gap-[7px] px-2"
               >
-                <span className="flex w-[9px] justify-center">
-                  <span className="size-[7px] rounded-full bg-success" />
-                </span>
+                <StateRing />
                 <span className="text-[12px] font-medium">{server.name}</span>
                 <span className="ml-auto text-[11px] text-muted-stronger-foreground tabular-nums">
                   {server.path} · {server.ms} ms
@@ -273,7 +294,7 @@ type Found = { threadId: string; byUser: boolean; excerpt: string }
 
 type Result =
   | { kind: "active"; thread: Thread; found?: Found }
-  | { kind: "done"; thread: DoneThread }
+  | { kind: "snoozed" | "archived"; thread: ShelvedThread }
 
 const normalized = (search: string) => search.trim().split(/\s+/).join(" ")
 
@@ -289,7 +310,7 @@ const searchable = (query: string) => words(query).some((word) => word.length >=
 const hasWords = (text: string, query: string) =>
   words(query).every((word) => text.toLowerCase().includes(word))
 
-/** The threads found by their title, project or pull request, active before done, then the ones
+/** The threads found by their title, project or pull request, active before snoozed and archived, then the ones
  * found by a message. */
 function searchResults(
   threads: Thread[],
@@ -297,7 +318,7 @@ function searchResults(
   found: Found[]
 ): Result[] {
   if (!query) return []
-  const named = (thread: Thread | DoneThread) =>
+  const named = (thread: Thread | ShelvedThread) =>
     [
       thread.title,
       thread.project.name,
@@ -314,9 +335,12 @@ function searchResults(
     ...threads
       .filter(named)
       .map((thread) => ({ kind: "active" as const, thread })),
-    ...doneThreads
+    ...snoozedThreads
       .filter(named)
-      .map((thread) => ({ kind: "done" as const, thread })),
+      .map((thread) => ({ kind: "snoozed" as const, thread })),
+    ...archivedThreads
+      .filter(named)
+      .map((thread) => ({ kind: "archived" as const, thread })),
     ...byMessage,
   ]
 }
@@ -388,7 +412,7 @@ function ResultRow({
   onPoint: (row?: HTMLElement) => void
 }) {
   const { thread } = result
-  const done = result.kind === "done"
+  const shelved = result.kind !== "active"
   const found = result.kind === "active" ? result.found : undefined
   return (
     <button
@@ -403,7 +427,7 @@ function ResultRow({
     >
       <span className="flex h-[22px] w-full items-center gap-1.5">
         <span
-          className={cn(done && !highlighted && "opacity-(--opacity-disabled)")}
+          className={cn(shelved && !highlighted && "opacity-(--opacity-disabled)")}
         >
           <ProjectIcon project={thread.project} size={14} />
         </span>
@@ -412,7 +436,7 @@ function ResultRow({
             "truncate text-[13px] font-medium",
             highlighted
               ? "text-foreground"
-              : done
+              : shelved
                 ? "text-muted-stronger-foreground"
                 : "text-muted-foreground"
           )}
@@ -421,14 +445,14 @@ function ResultRow({
         </span>
         <span className="ml-auto flex shrink-0 items-center gap-1.5">
           {thread.pullRequest && (
-            <PullRequest number={thread.pullRequest.number} quiet={done} />
+            <PullRequest number={thread.pullRequest.number} quiet={shelved} />
           )}
-          {result.kind === "done" ? (
+          {result.kind === "active" ? (
+            <ThreadStatus thread={result.thread} elapsed={elapsed} />
+          ) : (
             <span className="text-[11px] text-muted-stronger-foreground">
               {result.thread.ago}
             </span>
-          ) : (
-            <ThreadStatus thread={result.thread} elapsed={elapsed} />
           )}
         </span>
       </span>
@@ -445,6 +469,116 @@ function ResultRow({
         )}
       </span>
     </button>
+  )
+}
+
+/** A thread works there, or an agent it started does, and nothing waits for the user. */
+const isWorking = (thread: Thread) =>
+  thread.status.kind === "working" ||
+  thread.status.kind === "monitoring" ||
+  thread.status.kind === "agents"
+
+/** A shelf at the bottom: its symbol, its name, how many threads it holds and its chevron, then its rows. */
+function Shelf({
+  icon: Icon,
+  title,
+  count,
+  open,
+  onToggle,
+  children,
+}: {
+  icon: LucideIcon
+  title: string
+  count: number
+  open: boolean
+  onToggle: () => void
+  children: ReactNode
+}) {
+  return (
+    <div className="border-t">
+      <button
+        type="button"
+        onClick={onToggle}
+        className={cn(
+          "group flex h-[36px] w-full items-center gap-[7px] px-[18px] text-left hover:bg-background-accent-larger hover:text-foreground",
+          open ? "text-foreground" : "text-muted-foreground"
+        )}
+      >
+        <span className="flex w-4 shrink-0 justify-center">
+          <Icon className="size-3.5" />
+        </span>
+        <span className="text-[12px] font-medium">{title}</span>
+        <span className="text-[11px] text-muted-stronger-foreground tabular-nums">
+          {count}
+        </span>
+        <span className="ml-auto" />
+        <Chevron open={open} />
+      </button>
+      {open && <div className="pb-1">{children}</div>}
+    </div>
+  )
+}
+
+function Chevron({ open }: { open: boolean }) {
+  return (
+    <ChevronRightIcon
+      className={cn(
+        "size-2.5 w-[9px] text-muted-stronger-foreground transition-transform group-hover:text-muted-foreground",
+        open && "rotate-90 text-muted-foreground"
+      )}
+    />
+  )
+}
+
+/** A thread on a shelf: one quiet line, with what it is up to at its end. */
+function SlimRow({
+  thread,
+  lit,
+  onSelect,
+  onPoint,
+  children,
+}: {
+  thread: Thread | ShelvedThread
+  lit: boolean
+  onSelect?: () => void
+  onPoint: (thread: Thread | ShelvedThread | null, row?: HTMLElement) => void
+  children: ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      onPointerEnter={(event) => onPoint(thread, event.currentTarget)}
+      onPointerLeave={() => onPoint(null)}
+      className={cn(
+        "mx-2.5 flex h-[30px] w-[calc(100%-20px)] items-center gap-[7px] rounded-md px-2 text-left",
+        lit
+          ? "bg-background-accent-larger-stronger"
+          : "hover:bg-background-accent-larger"
+      )}
+    >
+      <ProjectIcon project={thread.project} size={16} />
+      <span className="truncate text-[13px] text-muted-foreground">
+        {thread.title}
+      </span>
+      <span className="ml-auto flex shrink-0 items-center gap-1.5 text-[11px] text-muted-stronger-foreground">
+        {thread.pullRequest && (
+          <PullRequest number={thread.pullRequest.number} quiet />
+        )}
+        {children}
+      </span>
+    </button>
+  )
+}
+
+/** A server's state: a dot in a ring of its colour's tint, as wide as a shelf's symbol. */
+function StateRing() {
+  return (
+    <span className="flex w-4 shrink-0 justify-center">
+      <span className="flex size-3 items-center justify-center rounded-full border border-success/(--opacity-color-tint-chart-stronger)">
+        <span className="size-1.5 rounded-full bg-success" />
+      </span>
+    </span>
   )
 }
 

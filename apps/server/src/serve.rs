@@ -149,6 +149,9 @@ impl Server {
             },
             Request::Send { thread_id, new_thread, text, attachments, now, context, message_id } => {
                 let message = NewMessage { text, attachments, now, context, message_id };
+                if let Some(thread_id) = &thread_id {
+                    hub.wake(thread_id).await;
+                }
                 hub.send(thread_id, new_thread, message).await.map(|thread_id| Message::Sent { thread_id })
             }
             Request::SetUi { thread_id, item_id, block, state } => {

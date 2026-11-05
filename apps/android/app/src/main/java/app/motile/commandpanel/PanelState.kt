@@ -458,7 +458,7 @@ internal class PanelState(start: PanelPage, private val store: AppStore, private
     private val threadItems: List<PanelItem>
         get() {
             val started = store.startedThreads.values.sortedByDescending { it.updatedAt }
-            return (store.activeThreads + store.doneThreads + started).map(::threadItem)
+            return (store.allThreads + started).map(::threadItem)
         }
 
     private fun threadItem(thread: ThreadInfo): PanelItem {
@@ -467,7 +467,8 @@ internal class PanelState(start: PanelPage, private val store: AppStore, private
         val from = thread.parentID?.let { store.anyThread(it)?.title }?.let { " · from $it" } ?: ""
         val waitsFor = thread.waitsFor
         val state = when {
-            thread.isDone -> "done"
+            thread.isArchived -> "archived"
+            thread.section == app.motile.core.ThreadSection.Snoozed -> "snoozed"
             waitsFor != null -> waitsFor.phrase
             thread.working -> "working"
             thread.monitoring -> "monitoring"

@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 
 use gpui_kit::prelude::*;
-use motile_core::api::Command;
+use motile_core::api::{Command, Section};
 use motile_core::outbox::Outgoing;
 use motile_protocol::wire::{
     Access, AgentAccount, CopiedThread, Interruption, ModelContext, ModelInfo, NewThread, NewWorktree, Request,
@@ -11,7 +11,8 @@ use motile_protocol::wire::{
 };
 
 use super::{
-    Continuation, PanelPage, Selection, SendingDraft, StopQuestion, Store, ThreadDraft, UndoNotice, shown_files,
+    Continuation, CustomSnooze, PanelPage, Selection, SendingDraft, StopQuestion, Store, ThreadDraft, UndoKind,
+    UndoNotice, shown_files,
 };
 use crate::models::*;
 use crate::panel::state::PanelTab;
@@ -52,7 +53,7 @@ impl Store {
         self.set_thread(Some(thread.clone()), &thread.id);
         self.mark_open_thread_seen();
         let Some(before) = before else { return };
-        if !before.is_done() && thread.is_done() && before.pull_request != thread.pull_request {
+        if !before.is_archived() && thread.is_archived() && before.pull_request != thread.pull_request {
             self.sidebar.revealed_thread_id = Some(thread.id.clone());
         }
         if self.selection != Selection::Thread(thread.id.clone()) {
@@ -68,7 +69,7 @@ impl Store {
         if !self.app_active {
             return;
         }
-        let Some(thread) = self.selected_thread().filter(|thread| thread.unread) else { return };
+        let Some(thread) = self.selected_thread().filter(|thread| thread.unread || thread.woke) else { return };
         let thread_id = thread.id.clone();
         self.send(Command::MarkSeen { thread_id });
     }
@@ -250,7 +251,8 @@ impl Store {
         if let Some(next) = next {
             return self.select(Selection::Draft(next.id), cx);
         }
-        if let Some(next) = self.active_threads().first().map(|thread| thread.id.clone()) {
+        let next = self.listed_threads().next().map(|thread| thread.id.clone());
+        if let Some(next) = next {
             return self.select(Selection::Thread(next), cx);
         }
         self.open_empty_draft(cx);
@@ -753,52 +755,124 @@ impl Store {
         });
     }
 
-    /// Marks threads done or brings them back. A thread that is working or monitoring can't be
-    /// marked done.
-    pub fn set_done(&mut self, ids: &[String], done: bool, from_sidebar: bool, cx: &mut Context<Self>) {
+    /// Archives threads or brings them back. A thread that is working or monitoring can't be
+    /// archived.
+    pub fn set_archived(&mut self, ids: &[String], archived: bool, from_sidebar: bool, cx: &mut Context<Self>) {
         let changed: Vec<ThreadInfo> = ids
             .iter()
             .filter_map(|id| self.threads.get(id))
             .filter(|thread| {
-                thread.is_done() != done && !(done && thread.unfinished()) && !self.on_removed_server(thread)
+                thread.is_archived() != archived
+                    && !(archived && thread.unfinished())
+                    && !self.on_removed_server(thread)
             })
             .cloned()
             .collect();
         if changed.is_empty() {
             return;
         }
-        // Leaving the thread that was just put away, for the next one that is still active.
-        if let (true, true, Selection::Thread(open)) = (done, from_sidebar, self.selection.clone())
-            && changed.iter().any(|thread| thread.id == open)
-        {
-            let active: Vec<String> = self.active_threads().iter().map(|thread| thread.id.clone()).collect();
-            let position = active.iter().position(|id| *id == open).unwrap_or(0);
-            let remaining: Vec<&String> =
-                active.iter().filter(|id| !changed.iter().any(|thread| &thread.id == *id)).collect();
-            let next = (!remaining.is_empty()).then(|| remaining[position.min(remaining.len() - 1)].clone());
-            match next {
-                Some(next) => self.select(Selection::Thread(next), cx),
-                None => self.open_empty_draft(cx),
-            }
+        if archived && from_sidebar {
+            self.leave(&changed, cx);
         }
         let now = now();
         for thread in &changed {
-            let change = ThreadChange { done: Some(done), ..Default::default() };
-            self.update_thread(thread, change, |thread| thread.thread.done_at = done.then_some(now));
+            let change = ThreadChange { archived: Some(archived), ..Default::default() };
+            self.update_thread(thread, change, |thread| {
+                thread.thread.archived_at = archived.then_some(now);
+                thread.thread.snoozed_until = None;
+                thread.section = if archived { Section::Archived } else { thread.awake_section() };
+            });
         }
-        if !done {
+        if !archived {
             self.clear_undo();
             return;
         }
         let text =
-            if changed.len() == 1 { "Done".to_string() } else { format!("Marked {} threads done", changed.len()) };
-        self.show_undo(UndoNotice { thread_ids: changed.iter().map(|thread| thread.id.clone()).collect(), text }, cx);
+            if changed.len() == 1 { "Archived".to_string() } else { format!("Archived {} threads", changed.len()) };
+        let thread_ids = changed.iter().map(|thread| thread.id.clone()).collect();
+        self.show_undo(UndoNotice { kind: UndoKind::Archive, thread_ids, text }, cx);
     }
 
-    pub fn toggle_done(&mut self, cx: &mut Context<Self>) {
+    /// Snoozes threads until `until`, out of the sidebar's way until then.
+    pub fn snooze(&mut self, ids: &[String], until: f64, from_sidebar: bool, cx: &mut Context<Self>) {
+        let changed: Vec<ThreadInfo> =
+            ids.iter().filter_map(|id| self.threads.get(id)).filter(|thread| self.snoozes(thread)).cloned().collect();
+        if changed.is_empty() {
+            return;
+        }
+        if from_sidebar {
+            self.leave(&changed, cx);
+        }
+        for thread in &changed {
+            let change = ThreadChange { snoozed_until: Some(until), ..Default::default() };
+            self.update_thread(thread, change, |thread| {
+                thread.thread.snoozed_until = Some(until);
+                thread.thread.archived_at = None;
+                thread.section = Section::Snoozed;
+            });
+        }
+        let text =
+            if changed.len() == 1 { "Snoozed".to_string() } else { format!("Snoozed {} threads", changed.len()) };
+        let thread_ids = changed.iter().map(|thread| thread.id.clone()).collect();
+        self.show_undo(UndoNotice { kind: UndoKind::Snooze, thread_ids, text }, cx);
+    }
+
+    /// Brings snoozed threads back among the active ones.
+    pub fn wake(&mut self, ids: &[String]) {
+        let now = now();
+        let snoozed: Vec<ThreadInfo> = ids
+            .iter()
+            .filter_map(|id| self.threads.get(id))
+            .filter(|thread| thread.section == Section::Snoozed && !self.on_removed_server(thread))
+            .cloned()
+            .collect();
+        for thread in &snoozed {
+            let change = ThreadChange { snoozed_until: Some(0.), ..Default::default() };
+            self.update_thread(thread, change, |thread| {
+                thread.thread.snoozed_until = None;
+                thread.thread.position = now;
+                thread.section = thread.awake_section();
+            });
+        }
+    }
+
+    /// Snoozes the open thread until the time the menus offer at `index`, as they offer them now.
+    pub fn snooze_open_thread(&mut self, index: usize, cx: &mut Context<Self>) {
         let Some(thread) = self.changeable_thread() else { return };
-        let (id, done) = (thread.id.clone(), thread.is_done());
-        self.set_done(&[id], !done, false, cx);
+        let Some((_, until)) = snooze_presets().get(index).cloned() else { return };
+        let id = thread.id.clone();
+        self.snooze(&[id], until, false, cx);
+    }
+
+    pub fn snoozes(&self, thread: &ThreadInfo) -> bool {
+        !self.on_removed_server(thread) && self.server(Some(&thread.server_id)).is_some_and(Server::snoozes)
+    }
+
+    /// Opens the modal that snoozes threads until a day and a time the user picks.
+    pub fn begin_custom_snooze(&mut self, ids: &[String], from_sidebar: bool) {
+        self.custom_snooze = Some(CustomSnooze { thread_ids: ids.to_vec(), from_sidebar });
+    }
+
+    /// Leaves the open thread when it is put away, for the next one the sidebar lists.
+    fn leave(&mut self, threads: &[ThreadInfo], cx: &mut Context<Self>) {
+        let Selection::Thread(open) = self.selection.clone() else { return };
+        if !threads.iter().any(|thread| thread.id == open) {
+            return;
+        }
+        let listed: Vec<String> = self.listed_threads().map(|thread| thread.id.clone()).collect();
+        let position = listed.iter().position(|id| *id == open).unwrap_or(0);
+        let remaining: Vec<&String> =
+            listed.iter().filter(|id| !threads.iter().any(|thread| &thread.id == *id)).collect();
+        match remaining.get(position.min(remaining.len().saturating_sub(1))) {
+            Some(next) => self.select(Selection::Thread((*next).clone()), cx),
+            None => self.open_empty_draft(cx),
+        }
+    }
+
+    pub fn toggle_archived(&mut self, cx: &mut Context<Self>) {
+        let Some(thread) = self.changeable_thread() else { return };
+        let (id, archived) = (thread.id.clone(), thread.is_archived());
+        self.set_archived(&[id], !archived, false, cx);
     }
 
     fn show_undo(&mut self, notice: UndoNotice, cx: &mut Context<Self>) {
@@ -808,7 +882,10 @@ impl Store {
 
     pub fn perform_undo(&mut self, cx: &mut Context<Self>) {
         let Some(notice) = self.clear_undo() else { return };
-        self.set_done(&notice.thread_ids, false, false, cx);
+        match notice.kind {
+            UndoKind::Archive => self.set_archived(&notice.thread_ids, false, false, cx),
+            UndoKind::Snooze => self.wake(&notice.thread_ids),
+        }
     }
 
     /// Changes a thread on its server, and here at once so the app doesn't wait for the answer.
@@ -834,6 +911,26 @@ impl Store {
             }
         });
     }
+}
+
+/// The times a snooze menu offers, as the core picks them, each with its title: "In 1 Hour
+/// (3:15 PM)", "Next Week (Mon 9:00 AM)".
+pub fn snooze_presets() -> Vec<(String, f64)> {
+    let today = chrono::Local::now().date_naive();
+    motile_core::snooze::presets(chrono::Local::now())
+        .into_iter()
+        .map(|preset| {
+            let day = chrono::DateTime::from_timestamp(preset.until as i64, 0)
+                .map(|time| time.with_timezone(&chrono::Local).date_naive());
+            let soon = day.is_some_and(|day| (day - today).num_days() <= 1);
+            let when = if soon {
+                crate::format::date(preset.until, "jmm", "%-I:%M %p")
+            } else {
+                crate::format::date(preset.until, "EEEjmm", "%a %-I:%M %p")
+            };
+            (format!("{} ({when})", preset.label), preset.until)
+        })
+        .collect()
 }
 
 /// What the client shows of a message's attachments while it travels, kept with it in the outbox.

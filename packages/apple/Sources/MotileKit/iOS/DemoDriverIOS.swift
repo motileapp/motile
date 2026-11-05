@@ -77,6 +77,8 @@ enum DemoDriver {
         let rest = parts.count > 1 ? parts[1] : ""
         switch verb {
         case "sidebar": drawer.isOpen = rest == "open"
+        case "swipe": store.swipeStep = store.allThreads.first { $0.title == rest }?.id
+        case "expand": UserDefaults.standard.set(true, forKey: "sidebar.\(rest == "archived" ? "done" : rest)Expanded")
         case "thread":
             let all = Array(store.threads.values) + Array(store.startedThreads.values)
             guard let thread = all.first(where: { $0.title.localizedCaseInsensitiveContains(rest) }) else { return }
@@ -170,7 +172,7 @@ enum DemoDriver {
         case "answer":
             guard let approval = store.activity.approvals.first else { return }
             store.answer(approval, allow: rest == "allow")
-        case "done": store.toggleDone()
+        case "done": store.toggleArchived()
         case "mcp": store.mcpStep = rest
         case "gateway":
             let words = rest.split(separator: " ", maxSplits: 1).map(String.init)
