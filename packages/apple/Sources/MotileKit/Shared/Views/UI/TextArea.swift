@@ -37,7 +37,7 @@ struct TextArea: View {
             .frame(minHeight: fills ? heights.lowerBound : nil, maxHeight: fills ? .infinity : nil)
             .padding(.horizontal, size.padding - 2)
             .padding(.vertical, max(0, size.padding - ComposerTextView.verticalInset))
-            .textPointer()
+            .background { TypingArea() }
             .fieldFrame(size)
     }
 }

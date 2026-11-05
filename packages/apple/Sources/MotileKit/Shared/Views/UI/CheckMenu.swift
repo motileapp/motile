@@ -154,7 +154,6 @@ extension View {
                     .shadow(.md)
             }
             .overlay { shape.strokeBorder(Color.themeBorderPopover, lineWidth: 1) }
-            .arrowPointer()
             .environment(\.surface, .popover)
     }
 }

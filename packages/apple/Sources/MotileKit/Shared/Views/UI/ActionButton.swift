@@ -354,26 +354,6 @@ private struct ControlBody<Label: View>: View {
             .contentShape(Rectangle())
             .opacity(.disabled, when: !enabled && !pending)
             .onHover { hovering = $0 }
-            .arrowPointer()
-    }
-}
-
-extension View {
-    /// Keeps the arrow over a control or a card that lies on what shows the cursor of text, also
-    /// while it is disabled.
-    func arrowPointer() -> some View {
-        background { ArrowPointer() }
-    }
-}
-
-private struct ArrowPointer: View {
-    var body: some View {
-        #if os(macOS)
-        Color.clear
-            .contentShape(Rectangle())
-            .textPointer(false)
-            .environment(\.isEnabled, true)
-        #endif
     }
 }
 
@@ -609,7 +589,6 @@ struct ActionMenu<Content: View>: View {
         #endif
         .opacity(.disabled, when: !enabled && !pending)
         .onHover { hovering = $0 }
-        .arrowPointer()
         .padding(reach.outset)
         .allowsHitTesting(!pending)
         .help(help ?? "")

@@ -26,7 +26,7 @@ final class FieldView: FlippedView, NSTextFieldDelegate {
     var editing: Bool { field.currentEditor() != nil }
 
     private let frameView = SurfaceView()
-    private let field = PointerTextField()
+    private let field = NSTextField()
 
     /// A `numeric` field asks for the keypad of numbers where there is one.
     init(placeholder: String, size: ControlSize = .regular, numeric: Bool = false, onChange: @escaping (String) -> Void) {
