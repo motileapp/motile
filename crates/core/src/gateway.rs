@@ -175,7 +175,8 @@ impl GatewayLink {
     }
 
     async fn connect_until_closed(self: &Arc<Self>, endpoint: &Endpoint, gateway: &ServerAddr) -> Closed {
-        let dialed = tokio::time::timeout(DIAL_TIMEOUT, Connection::dial_on(endpoint, gateway, GATEWAY_ALPN)).await;
+        let dialed =
+            tokio::time::timeout(DIAL_TIMEOUT, Connection::dial_on(endpoint, gateway, &[], GATEWAY_ALPN)).await;
         let connection = match dialed {
             Ok(Ok(connection)) => connection,
             Ok(Err(error)) => return Closed { refused: false, reason: format!("{error:#}") },

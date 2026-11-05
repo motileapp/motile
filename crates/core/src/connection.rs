@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 
 use anyhow::{Context, anyhow, bail};
 use iroh::endpoint::{ConnectionError, IdleTimeout, QuicTransportConfig, RecvStream, presets};
-use iroh::{Endpoint, EndpointAddr, EndpointId, SecretKey};
+use iroh::{Endpoint, EndpointAddr, EndpointId, RelayMode, RelayUrl, SecretKey, TransportAddr};
 use motile_protocol::frame::{read_frame, write_frame};
 use motile_protocol::identity::DeviceKey;
 use motile_protocol::wire::{FileKind, Message, Request};
@@ -92,6 +92,15 @@ pub async fn bind(key: &DeviceKey, local_only: bool) -> anyhow::Result<Endpoint>
         .context("The network endpoint couldn't be opened.")
 }
 
+/// Has an endpoint that is being replaced stop using the relays at once, instead of once its
+/// connections have closed.
+pub async fn leave_relays(endpoint: &Endpoint) {
+    let relays: Vec<RelayUrl> = RelayMode::Default.relay_map().urls();
+    for relay in &relays {
+        endpoint.remove_relay(relay).await;
+    }
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PathKind {
@@ -119,14 +128,20 @@ pub struct Connection {
 
 impl Connection {
     pub async fn dial(endpoint: &Endpoint, server: &ServerAddr) -> anyhow::Result<Self> {
-        Self::dial_on(endpoint, server, ALPN).await
+        Self::dial_on(endpoint, server, &[], ALPN).await
     }
 
-    /// Dials the device speaking `alpn`.
-    pub async fn dial_on(endpoint: &Endpoint, server: &ServerAddr, alpn: &[u8]) -> anyhow::Result<Self> {
+    /// Dials the device speaking `alpn`, trying the addresses it was last `known` at too, so that a
+    /// new endpoint doesn't have to look them up first.
+    pub async fn dial_on(
+        endpoint: &Endpoint,
+        server: &ServerAddr,
+        known: &[TransportAddr],
+        alpn: &[u8],
+    ) -> anyhow::Result<Self> {
         let dialed = Instant::now();
-        let inner =
-            endpoint.connect(server.endpoint_addr()?, alpn).await.map_err(|error| anyhow::anyhow!("{error:#}"))?;
+        let address = server.endpoint_addr()?.with_addrs(known.iter().cloned());
+        let inner = endpoint.connect(address, alpn).await.map_err(|error| anyhow::anyhow!("{error:#}"))?;
         Ok(Self { inner, _endpoint: endpoint.clone(), dialed, connect_time: dialed.elapsed() })
     }
 
@@ -136,6 +151,11 @@ impl Connection {
         let selected = paths.iter().find(|path| path.is_selected())?;
         let kind = if selected.is_relay() { PathKind::Relay } else { PathKind::Direct };
         Some((kind, selected.rtt()))
+    }
+
+    /// The addresses the server is reached at on this connection: its relay, and its own.
+    pub fn addresses(&self) -> Vec<TransportAddr> {
+        self.inner.paths().iter().map(|path| path.remote_addr().clone()).collect()
     }
 
     pub fn path_events(&self) -> iroh::endpoint::PathEventStream {
@@ -325,6 +345,19 @@ mod tests {
             format!("{}@127.0.0.1:{port}", endpoint.id()).parse().unwrap()
         });
         (runtime, address)
+    }
+
+    #[test]
+    fn a_server_is_dialed_at_the_addresses_it_was_known_at() {
+        let (_server, address) = server_that_can_vanish();
+        let client = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
+        let endpoint = client.block_on(bind(&DeviceKey::generate(), true)).unwrap();
+        let known = vec![TransportAddr::Ip(address.direct.unwrap())];
+        let unlisted = ServerAddr { direct: None, ..address };
+
+        let dialed = client.block_on(Connection::dial_on(&endpoint, &unlisted, &known, ALPN)).unwrap();
+
+        assert!(dialed.addresses().contains(&known[0]));
     }
 
     #[test]

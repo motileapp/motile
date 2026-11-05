@@ -8,8 +8,8 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use futures_lite::StreamExt;
-use iroh::Endpoint;
 use iroh::endpoint::PathEvent;
+use iroh::{Endpoint, TransportAddr};
 use motile_protocol::wire::{FileKind, GitStage, Item, Message, Request, RestartWhen};
 use serde::Serialize;
 use tokio::sync::{Notify, mpsc};
@@ -85,6 +85,8 @@ struct Inner {
     /// Tasks tied to the current connection.
     followers: Vec<AbortHandle>,
     open: HashMap<String, OpenThread>,
+    /// Where the server was last reached, for dialing it on a new endpoint.
+    known: Vec<TransportAddr>,
 }
 
 struct OpenThread {
@@ -219,7 +221,9 @@ impl Link {
     }
 
     async fn connect_until_closed(self: &Arc<Self>, endpoint: &Endpoint, server: &ServerAddr) -> Closed {
-        let connection = match tokio::time::timeout(DIAL_TIMEOUT, Connection::dial(endpoint, server)).await {
+        let known = self.lock().known.clone();
+        let dialed = Connection::dial_on(endpoint, server, &known, motile_protocol::ALPN);
+        let connection = match tokio::time::timeout(DIAL_TIMEOUT, dialed).await {
             Ok(Ok(connection)) => connection,
             Ok(Err(error)) => return Closed { refused: false, reason: format!("{error:#}") },
             Err(_) => return Closed { refused: false, reason: "Your server didn't answer in time.".to_string() },
@@ -273,6 +277,7 @@ impl Link {
                 }
                 // Said after the list itself, so whoever hears "connected" already has it.
                 let path = connection.path();
+                self.remember_addresses(&connection);
                 self.update_status(|status| {
                     status.state = State::Connected;
                     status.error = None;
@@ -338,10 +343,18 @@ impl Link {
                 continue;
             }
             let Some((kind, rtt)) = connection.path() else { continue };
+            self.remember_addresses(&connection);
             self.update_status(|status| {
                 status.path = Some(kind);
                 status.rtt_ms = Some(rtt.as_millis() as u64);
             });
+        }
+    }
+
+    fn remember_addresses(&self, connection: &Connection) {
+        let addresses = connection.addresses();
+        if !addresses.is_empty() {
+            self.lock().known = addresses;
         }
     }
 
