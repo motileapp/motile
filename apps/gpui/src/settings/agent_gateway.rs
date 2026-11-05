@@ -21,7 +21,7 @@ use crate::panel::state::{CodeDocument, CodeMarks, Loaded};
 use crate::store::Store;
 use crate::store::gateway::{Captured, Enroll, LogRow};
 use crate::store::usage::LimitWindow;
-use crate::theme::{ControlSize, IconSize, Layer, Opacity, Surface, colors};
+use crate::theme::{ControlSize, IconSize, LINE_HEIGHT, Layer, Opacity, Surface, colors};
 use crate::ui::menu::Menu;
 use crate::ui::modal::{Answer, Confirmation, confirmation, modal, present_sheet, presented};
 use crate::ui::parts::FadingScroll;
@@ -150,9 +150,9 @@ impl AgentGatewayPage {
         let switch = switch.margin(beside(if signs_in_again { TRAILING_GAP / 2. } else { 0. }, TRAILING_GAP / 2.));
         let menu = self.account_menu(index, account, count, cx).margin(beside(TRAILING_GAP / 2., 0.));
         let trailing = div().flex().items_center().children(sign_in_again).child(switch).child(menu);
-        // As far from the card's top as its limits' numbers are from theirs.
+        // As tall as an MCP server's card's top row, which has a tile beside the same two lines.
         let leading =
-            vec![div().flex_1().min_w_0().flex().py(px(6.)).child(account_label(account, cx)).into_any_element()];
+            vec![div().flex_1().min_w_0().flex().py(px(4.)).child(account_label(account, cx)).into_any_element()];
         let mut rows = vec![row(leading, vec![trailing.into_any_element()]).into_any_element()];
         let beside = width >= BESIDE_WIDTH;
         let windows = account.windows.iter().enumerate().map(|(place, window)| {
@@ -553,6 +553,14 @@ fn account_label(account: &AccountRow, cx: &App) -> AnyElement {
     // "Next" keeps its place while it is hidden, so that it never moves what is around it.
     let next =
         div().when(!account.next, |chip| chip.opacity(0.)).child(Chip::new("Next").tone(c.primary).compact(true));
+    // The badges stand past the name's line above and below, so that they never make it taller.
+    let chips = div()
+        .flex()
+        .items_center()
+        .gap(px(6.))
+        .my(px(-(Chip::COMPACT_HEIGHT - 13. * LINE_HEIGHT).max(0.) / 2.))
+        .children(status.map(|chip| chip.surface(Surface::Card).compact(true)))
+        .child(next);
     let description: Vec<String> =
         [account.email.clone(), account.plan.clone(), account.threads_text.clone()].into_iter().flatten().collect();
     div()
@@ -560,7 +568,7 @@ fn account_label(account: &AccountRow, cx: &App) -> AnyElement {
         .min_w_0()
         .flex()
         .flex_col()
-        .gap(px(4.))
+        .gap(px(2.))
         .child(
             div()
                 .flex()
@@ -575,8 +583,7 @@ fn account_label(account: &AccountRow, cx: &App) -> AnyElement {
                         .font_weight(FontWeight::MEDIUM)
                         .child(account.name.clone()),
                 )
-                .children(status.map(|chip| chip.surface(Surface::Card).compact(true)))
-                .child(next),
+                .child(chips),
         )
         .when(!description.is_empty(), |label| {
             label.child(

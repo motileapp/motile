@@ -145,10 +145,79 @@ fn row_with(leading: Vec<AnyElement>, trailing: Vec<AnyElement>, outset: f32) ->
             })
         }))
         .when(!trailing.is_empty(), |row| {
-            row.child(
-                div().flex_shrink_0().mr(px(-outset)).flex().items_center().gap(px(TRAILING_GAP)).children(trailing),
-            )
+            row.child(TallRowInset(
+                div()
+                    .self_stretch()
+                    .flex_shrink_0()
+                    .mr(px(-outset))
+                    .flex()
+                    .items_center()
+                    .gap(px(TRAILING_GAP))
+                    .children(trailing)
+                    .into_any_element(),
+            ))
         })
+}
+
+/// A row's controls, moved left by half of what the row is taller than `ROW_HEIGHT`, so that the last
+/// stays as far from the row's right as from its top and bottom.
+struct TallRowInset(AnyElement);
+
+impl IntoElement for TallRowInset {
+    type Element = Self;
+
+    fn into_element(self) -> Self {
+        self
+    }
+}
+
+impl Element for TallRowInset {
+    type RequestLayoutState = ();
+    type PrepaintState = ();
+
+    fn id(&self) -> Option<ElementId> {
+        None
+    }
+
+    fn source_location(&self) -> Option<&'static core::panic::Location<'static>> {
+        None
+    }
+
+    fn request_layout(
+        &mut self,
+        _: Option<&GlobalElementId>,
+        _: Option<&InspectorElementId>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> (LayoutId, ()) {
+        (self.0.request_layout(window, cx), ())
+    }
+
+    fn prepaint(
+        &mut self,
+        _: Option<&GlobalElementId>,
+        _: Option<&InspectorElementId>,
+        bounds: Bounds<Pixels>,
+        _: &mut (),
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        let shift = ((bounds.size.height - px(ROW_HEIGHT)) / 2.).max(px(0.));
+        window.with_element_offset(point(-shift, px(0.)), |window| self.0.prepaint(window, cx));
+    }
+
+    fn paint(
+        &mut self,
+        _: Option<&GlobalElementId>,
+        _: Option<&InspectorElementId>,
+        _: Bounds<Pixels>,
+        _: &mut (),
+        _: &mut (),
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        self.0.paint(window, cx);
+    }
 }
 
 /// How a description that doesn't fit its line is cut, where it isn't wrapped: a path at its

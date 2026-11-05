@@ -50,17 +50,17 @@ struct GatewayAccountLabel: View {
     }
 
     private func lines(badgesBeside: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 6) {
                 AgentIcon(agent: account.agent, size: .md)
                 name
-                if badgesBeside { chips }
+                if badgesBeside { chips(on: Self.titleLine) }
             }
             HStack(spacing: 6) {
                 // Its length never decides where the badges go: it is cut short instead.
                 description
                     .frame(minWidth: 0, idealWidth: 0, alignment: .leading)
-                if !badgesBeside { chips }
+                if !badgesBeside { chips(on: Self.descriptionLine) }
             }
         }
     }
@@ -72,13 +72,17 @@ struct GatewayAccountLabel: View {
             .lineLimit(1)
     }
 
-    @ViewBuilder private var chips: some View {
-        if let status = account.statusText {
-            Chip(status, tone: account.status.tone, muted: account.status.tone == nil, compact: true)
+    /// The badges, standing past the line above and below so that they never make it taller.
+    private func chips(on line: CGFloat) -> some View {
+        HStack(spacing: 6) {
+            if let status = account.statusText {
+                Chip(status, tone: account.status.tone, muted: account.status.tone == nil, compact: true)
+            }
+            Chip("Next", tone: .themePrimary, compact: true)
+                .opacity(account.next ? 1 : 0)
+                .accessibilityHidden(!account.next)
         }
-        Chip("Next", tone: .themePrimary, compact: true)
-            .opacity(account.next ? 1 : 0)
-            .accessibilityHidden(!account.next)
+        .padding(.vertical, -max(0, Chip.compactHeight - line) / 2)
     }
 
     @ViewBuilder private var description: some View {
@@ -93,9 +97,13 @@ struct GatewayAccountLabel: View {
     #if os(macOS)
     private static let titleFont = Font.ui(size: 13, weight: .medium)
     private static let descriptionFont = Font.ui(size: 11.5)
+    private static let titleLine = PlatformFont.ui(13, weight: .medium).textLineHeight
+    private static let descriptionLine = PlatformFont.ui(11.5).textLineHeight
     #else
     private static let titleFont = Font.body
     private static let descriptionFont = Font.footnote
+    private static let titleLine = UIFont.preferredFont(forTextStyle: .body).textLineHeight
+    private static let descriptionLine = UIFont.preferredFont(forTextStyle: .footnote).textLineHeight
     #endif
 }
 

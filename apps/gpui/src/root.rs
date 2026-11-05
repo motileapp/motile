@@ -207,7 +207,7 @@ impl Render for Root {
             .text_color(c.foreground)
             .font_family(theme::UI_FONT)
             .text_size(px(13.))
-            .line_height(relative(1.21))
+            .line_height(relative(theme::LINE_HEIGHT))
             .when(!own_top_bar, |root| {
                 root.child(crate::ui::window_drag_strip("page-top-bar", theme::TOP_BAR, &self.moving))
             })
