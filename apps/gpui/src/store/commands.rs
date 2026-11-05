@@ -44,6 +44,9 @@ impl Store {
         if self.shows_usage {
             context.push("usagePageOpen");
         }
+        if self.composer_picker.is_some() {
+            context.push("modelPickerOpen");
+        }
         context
     }
 
@@ -83,7 +86,7 @@ impl Store {
     pub fn hold_modifiers(&mut self, held: Modifiers, cx: &mut Context<Self>) {
         self.jump_hint_task = None;
         let held = Modifiers { function: false, ..held };
-        let route_open = self.panel.is_some() || self.settings.section.is_some();
+        let route_open = self.panel.is_some() || self.settings.section.is_some() || self.composer_picker.is_some();
         if !held.modified() || route_open || self.shortcuts.modifiers("thread.jump.1") != Some(held) {
             self.shows_jump_hints = false;
             return;
@@ -102,10 +105,23 @@ impl Store {
     pub fn perform(&mut self, command: &str, cx: &mut Context<Self>) -> bool {
         if let Some(place) = command.strip_prefix("thread.jump.").and_then(|place| place.parse::<usize>().ok()) {
             if self.composer_picker.is_some() {
-                self.composer_picker_jump = Some(place - 1);
-                return true;
+                return false;
             }
             return (1..=9).contains(&place) && self.show_thread_at(place - 1, cx);
+        }
+        if let Some(place) = command.strip_prefix("modelPicker.jump.").and_then(|place| place.parse::<usize>().ok()) {
+            if self.composer_picker.is_none() || !(1..=9).contains(&place) {
+                return false;
+            }
+            self.composer_picker_jump = Some(place - 1);
+            return true;
+        }
+        if matches!(command, "modelPicker.previousProvider" | "modelPicker.nextProvider") {
+            if self.composer_picker.is_none() {
+                return false;
+            }
+            self.composer_picker_provider_step = Some(if command == "modelPicker.nextProvider" { 1 } else { -1 });
+            return true;
         }
         if let Some(change) = usage_command(command) {
             if !self.shows_usage {

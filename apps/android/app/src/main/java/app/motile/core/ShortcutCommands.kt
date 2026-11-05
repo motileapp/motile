@@ -16,6 +16,7 @@ fun AppStore.shortcutContext(composerFocus: Boolean, editableFocus: Boolean): Se
     if (rightPanel.isOpen) add("rightPanelOpen")
     if (settings != null) add("settingsOpen")
     if (showsUsage) add("usagePageOpen")
+    if (showsThreadSettings) add("modelPickerOpen")
 }
 
 /** The threads the jump keys and the next and previous thread go through: the sidebar's, as it lists them, or what its search found. */
@@ -30,13 +31,29 @@ fun AppStore.jumpHint(index: Int): String? {
 
 /** Runs the command. Whether there was anything for it to do; without, the keys go on to whatever else takes them. */
 fun AppStore.perform(command: String): Boolean {
-    Regex("""thread\.jump\.([1-9])""").matchEntire(command)?.let { return showThread(it.groupValues[1].toInt() - 1) }
+    Regex("""thread\.jump\.([1-9])""").matchEntire(command)?.let {
+        if (showsThreadSettings) return false
+        return showThread(it.groupValues[1].toInt() - 1)
+    }
+    Regex("""modelPicker\.jump\.([1-9])""").matchEntire(command)?.let {
+        if (!showsThreadSettings) return false
+        modelPickerJump = it.groupValues[1].toInt() - 1
+        return true
+    }
     usageCommands[command]?.let { action ->
         if (!showsUsage) return false
         action()
         return true
     }
     when (command) {
+        "modelPicker.toggle" -> {
+            if (composerModels.isEmpty()) return false
+            showsThreadSettings = !showsThreadSettings
+        }
+        "modelPicker.previousProvider", "modelPicker.nextProvider" -> {
+            if (!showsThreadSettings) return false
+            modelPickerProviderStep = if (command == "modelPicker.nextProvider") 1 else -1
+        }
         "commandPalette.toggle" -> return togglePanel(PanelPage.Commands)
         "threadPicker.toggle" -> return togglePanel(PanelPage.Threads)
         "settings.open" -> {

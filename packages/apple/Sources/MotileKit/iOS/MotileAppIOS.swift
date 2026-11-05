@@ -163,13 +163,28 @@ struct MotileCommands: Commands {
                 .shortcut("usage.open", in: keys)
                 .disabled(!store.account.signedIn)
         }
+        CommandMenu("Model") {
+            Button("Choose the Model") { _ = store.perform("modelPicker.toggle") }
+                .shortcut("modelPicker.toggle", in: keys)
+            let context = store.shortcutContext(composerFocus: false, editableFocus: false)
+            ForEach(keys.commands.filter { $0.id.hasPrefix("modelPicker.") && $0.id != "modelPicker.toggle" }, id: \.id) { command in
+                ForEach(Array(keys.effective(command.id, in: context).enumerated()), id: \.offset) { _, rule in
+                    if let shortcut = rule.keys.keyboardShortcut {
+                        Button(command.label) { _ = store.perform(command.id) }
+                            .keyboardShortcut(shortcut)
+                    }
+                }
+            }
+        }
     }
 }
 
 extension AppStore {
     /// An iPad's menus run the commands of its keys themselves.
     func performOnThisSystem(_ command: String) -> Bool {
-        false
+        guard command == "modelPicker.toggle", !composerModels.isEmpty else { return false }
+        showsThreadSettings.toggle()
+        return true
     }
 }
 

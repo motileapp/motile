@@ -8,6 +8,7 @@ struct ThreadSettingsSheet: View {
     @Environment(\.surface) private var surface
     /// The accounts whose models are listed. The others are only their names until they are tapped.
     @State private var listed: Set<String> = []
+    @State private var agent: Agent?
     @State private var tmpReasoning = false
     private static let titleGap: CGFloat = 6
     /// The agent's logo in an account's header, and the gateway's symbol beside it.
@@ -48,7 +49,31 @@ struct ThreadSettingsSheet: View {
             }
         }
         .presentationDragIndicator(.visible)
-        .onAppear { listed = Set([store.composerAccount?.id].compactMap { $0 }) }
+        .onAppear {
+            listed = Set([store.composerAccount?.id].compactMap { $0 })
+            agent = store.composerModel?.agent
+        }
+        .onChange(of: store.composerPickerJump) { _, jump in
+            guard let jump else { return }
+            store.composerPickerJump = nil
+            let rows = store.composerChoices.filter { listed.contains($0.account.id) }
+                .flatMap { choice in choice.models.map { (choice.account, $0) } }
+            guard rows.indices.contains(jump) else { return }
+            store.setModel(rows[jump].1, account: rows[jump].0)
+        }
+        .onChange(of: store.composerPickerProviderStep) { _, step in
+            guard let step else { return }
+            store.composerPickerProviderStep = nil
+            let choices = store.composerChoices.filter { !$0.models.isEmpty }
+            let agents = Agent.allCases.filter { agent in choices.contains { $0.account.agent == agent } }
+            guard !agents.isEmpty else { return }
+            let index = agent.flatMap { agents.firstIndex(of: $0) }
+            let next = index.map { ($0 + step + agents.count) % agents.count } ?? (step > 0 ? 0 : agents.count - 1)
+            agent = agents[next]
+            listed = Set(choices.filter { $0.account.agent == agent }.map(\.account.id))
+            tmpReasoning = false
+            store.showsBranches = false
+        }
     }
 
     @ViewBuilder private var models: some View {
@@ -75,6 +100,7 @@ struct ThreadSettingsSheet: View {
                     }
                 } header: {
                     Button {
+                        agent = choices.account.agent
                         withAnimation { _ = listed.remove(id) ?? listed.insert(id).memberAfterInsert }
                     } label: {
                         VStack(alignment: .leading, spacing: 12) {

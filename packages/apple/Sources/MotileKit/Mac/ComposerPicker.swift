@@ -215,6 +215,21 @@ private struct ComposerPicker: View {
             guard rows.indices.contains(jump) else { return }
             choose(rows[jump])
         }
+        .onChange(of: store.composerPickerProviderStep) { _, step in
+            guard let step else { return }
+            store.composerPickerProviderStep = nil
+            let agents = self.agents
+            guard !agents.isEmpty else { return }
+            let index = agent.flatMap { agents.firstIndex(of: $0) }
+            let next = index.map { ($0 + step + agents.count) % agents.count } ?? (step > 0 ? 0 : agents.count - 1)
+            agent = agents[next]
+            query = ""
+            column = .model
+            lit = 0
+            scrollTarget = 0
+            store.composerAccessOpen = false
+            searching = true
+        }
     }
 
     // MARK: Models
@@ -380,7 +395,7 @@ private struct ComposerPicker: View {
 
     private func modelRow(_ row: Row) -> some View {
         let chosen = row.model.id == store.composerModel?.id && row.account.id == store.composerAccount?.id
-        let key = row.index < 9 ? store.shortcuts.label("thread.jump.\(row.index + 1)") : nil
+        let key = row.index < 9 ? store.shortcuts.label("modelPicker.jump.\(row.index + 1)", in: store.shortcutContext(composerFocus: false, editableFocus: true)) : nil
         return HStack(spacing: 8) {
             AgentIcon(agent: row.model.agent, size: .md)
             Text(row.model.shortName)

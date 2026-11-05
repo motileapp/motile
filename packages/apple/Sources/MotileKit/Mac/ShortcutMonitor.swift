@@ -59,7 +59,7 @@ final class ShortcutMonitor {
         hint = nil
         guard let store else { return }
         let down = flags.intersection([.command, .control, .option, .shift])
-        guard !down.isEmpty, store.panel == nil, store.settings == nil, let keys = store.shortcuts.effective("thread.jump.1").first?.keys,
+        guard !down.isEmpty, !store.modelPickerOpen, store.panel == nil, store.settings == nil, let keys = store.shortcuts.effective("thread.jump.1").first?.keys,
             down == keys.modifierFlags
         else {
             if store.showsJumpHints { store.showsJumpHints = false }

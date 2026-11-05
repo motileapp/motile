@@ -252,6 +252,7 @@ pub struct Store {
     pub composer_access_open: bool,
     /// The row of the picker's models that ⌘1 to ⌘9 asked for, until the picker takes it.
     pub composer_picker_jump: Option<usize>,
+    pub composer_picker_provider_step: Option<isize>,
     pub listed_branches: Option<Result<Vec<Branch>, String>>,
     branches_project_id: Option<String>,
     /// Each project's branches as last listed, which the picker opens on while it lists them again.
@@ -417,6 +418,7 @@ impl Store {
             composer_picker: None,
             composer_access_open: false,
             composer_picker_jump: None,
+            composer_picker_provider_step: None,
             listed_branches: None,
             branches_project_id: None,
             known_branches: HashMap::new(),

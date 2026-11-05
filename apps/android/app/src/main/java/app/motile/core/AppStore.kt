@@ -182,6 +182,8 @@ class AppStore(private val context: Context) {
     var mcpStep by mutableStateOf<String?>(null)
     /** The thread's settings are open over the client, where they aren't around the composer. */
     var showsThreadSettings by mutableStateOf(false)
+    var modelPickerJump by mutableStateOf<Int?>(null)
+    var modelPickerProviderStep by mutableStateOf<Int?>(null)
     /** Files are being dragged over the thread. */
     var dropTargeted by mutableStateOf(false)
     /** Files are being dragged over the composer's text, which takes drops itself. */
