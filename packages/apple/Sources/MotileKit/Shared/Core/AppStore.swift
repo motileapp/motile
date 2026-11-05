@@ -2357,7 +2357,12 @@ final class AppStore {
         guard sendingDrafts[draftKey] == nil, let server = composerServer, server.state == .connected else { return false }
         if selectedThread == nil && project(selectedDraft?.projectID) == nil { return false }
         guard attachments.allSatisfy({ $0.state == .ready && $0.serverID == server.id }) else { return false }
-        return !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !attachments.isEmpty
+        return hasMessage
+    }
+
+    /// Whether the composer holds something to send, whether or not it can be sent now.
+    var hasMessage: Bool {
+        !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !attachments.isEmpty
     }
 
     /// Why a message with these attachments can't be sent yet.

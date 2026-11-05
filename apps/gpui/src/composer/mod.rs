@@ -19,6 +19,7 @@ use gpui_kit::component::Sizable;
 use gpui_kit::component::input::{Enter, InputEvent, Textarea, TextareaState};
 use gpui_kit::prelude::*;
 use gpui_kit::*;
+use motile_core::link::State;
 use motile_protocol::wire::{Access, Interruption};
 
 use self::picker::ComposerPicker;
@@ -596,13 +597,17 @@ impl Composer {
         )
     }
 
-    /// Stops the turn that runs, and sends what is written or queues it behind that turn.
+    /// Stops the turn that runs, and sends what is written or queues it behind that turn. While the
+    /// server connects neither works, and the last of them waits for it, sending signals.
     fn send_buttons(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let c = colors(cx);
         let store = self.store.read(cx);
         let running = store.activity.running && store.selected_thread().is_some();
         let can_send = store.can_send();
-        let sends = !running || can_send;
+        let sends = !running || store.has_message();
+        let state = store.composer_server().map(|server| server.state);
+        let connecting = state == Some(State::Connecting);
+        let stop_waits = connecting && !sends;
         let steers = store.steers();
         let stop_help = store.shortcuts.help("Stop", "thread.stop");
         let help = store.attachments_hold().map(String::from).unwrap_or_else(|| {
@@ -623,12 +628,18 @@ impl Composer {
             .when(running, |buttons| {
                 buttons.child(
                     ActionButton::new("stop", "")
-                        .picture(div().size(px(11.)).rounded(px(2.5)).bg(c.destructive_foreground))
+                        .picture(div().size(px(11.)).rounded(px(2.5)).bg(if stop_waits {
+                            c.pending_foreground
+                        } else {
+                            c.destructive_foreground
+                        }))
                         .help(stop_help)
-                        .danger()
+                        .variant(if stop_waits { Variant::Waiting } else { Variant::Danger })
+                        .signals(stop_waits)
                         .round(true)
                         .surface(Surface::Composer)
                         .margin(margin(4., if sends { 4. } else { 8. }))
+                        .disabled(state != Some(State::Connected))
                         .on_click(move |_, _, cx| {
                             stop.update(cx, |store, cx| {
                                 store.stop_thread(cx);
@@ -640,7 +651,8 @@ impl Composer {
             .when(sends, |buttons| {
                 buttons.child(
                     ActionButton::icon("send", "arrow-up", help)
-                        .variant(Variant::Primary)
+                        .variant(if connecting { Variant::Waiting } else { Variant::Primary })
+                        .signals(connecting)
                         .symbol_size(IconSize::Md)
                         .round(true)
                         .surface(Surface::Composer)

@@ -313,28 +313,33 @@ struct ComposerView: View {
 }
 
 /// Stops the turn that runs, and sends what is written: into that turn, or queued behind it.
+/// While the server connects neither works, and the last of them waits for it, sending signals.
 struct ComposerSendButtons: View {
     @Environment(AppStore.self) private var store
     @AppStorage(AppStore.steersKey) private var steers = AppStore.steersByDefault
 
     var body: some View {
         let running = store.activity.running && store.selectedThread != nil
-        let sends = !running || store.canSend
+        let sends = !running || store.hasMessage
+        let state = store.composerServer?.state
+        let connecting = state == .connecting
         HStack(spacing: 0) {
             if running {
+                let waits = connecting && !sends
                 ActionButton(
                     "", picture: AnyView(RoundedRectangle(cornerRadius: 2.5).frame(width: 11, height: 11)),
-                    help: store.shortcuts.help("Stop", "thread.stop"), variant: .danger, round: true,
-                    margin: ComposerView.margin(leading: 4, trailing: sends ? 4 : 8)
+                    help: store.shortcuts.help("Stop", "thread.stop"), variant: waits ? .waiting : .danger, round: true,
+                    signals: waits, margin: ComposerView.margin(leading: 4, trailing: sends ? 4 : 8)
                 ) {
                     store.stop()
                 }
+                .disabled(state != .connected)
                 .accessibilityLabel("Stop")
             }
             if sends {
                 ActionButton(
-                    icon: .arrowUp, help: store.attachmentsHold ?? (running ? whileRunning : "Send"), variant: .primary, symbolSize: .md, round: true,
-                    margin: ComposerView.margin(leading: 4, trailing: 8)
+                    icon: .arrowUp, help: store.attachmentsHold ?? (running ? whileRunning : "Send"), variant: connecting ? .waiting : .primary,
+                    symbolSize: .md, round: true, signals: connecting, margin: ComposerView.margin(leading: 4, trailing: 8)
                 ) {
                     store.send()
                 }

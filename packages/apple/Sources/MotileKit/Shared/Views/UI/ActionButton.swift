@@ -14,6 +14,8 @@ enum ButtonVariant {
     case success
     /// What the user is asked to let happen.
     case warning
+    /// What waits for something else, as the composer's buttons while their server connects.
+    case waiting
     /// Nothing until the pointer is over it: the buttons of bars and rows.
     case ghost
     /// In the colour of a link.
@@ -57,6 +59,7 @@ struct ControlLook {
         case .danger: return .themeDestructiveForeground
         case .success: return .themeSuccessForeground
         case .warning: return .themeWarningForeground
+        case .waiting: return .themePendingForeground
         case .ghost: return selected || lit ? .themeForeground : .themeMutedForeground
         case .link, .accent: return .themePrimary
         case .overlay: return .themeForegroundOverPicture
@@ -72,6 +75,7 @@ struct ControlLook {
         case .danger: filled(.themeDestructive)
         case .success: filled(.themeSuccess)
         case .warning: filled(.themeWarning)
+        case .waiting: filled(.themePending)
         case .ghost: AnyShapeStyle(selected ? surface.color(.controlLit) : lit ? ghostLit : .clear)
         case .link: lit ? AnyShapeStyle(Color.themePrimary.wash()) : AnyShapeStyle(Color.clear)
         case .accent: AnyShapeStyle(Color.themePrimary.wash(lit: lit))
@@ -93,14 +97,18 @@ struct ControlLook {
         }
     }
 
+    var radius: CGFloat { round ? size.height / 2 : size.radius }
+
     private var shape: UnevenRoundedRectangle {
-        let radius = round ? size.height / 2 : size.radius
         let leading = joined.contains(.leading) ? 0 : radius
         let trailing = joined.contains(.trailing) ? 0 : radius
         return UnevenRoundedRectangle(
             topLeadingRadius: leading, bottomLeadingRadius: leading, bottomTrailingRadius: trailing, topTrailingRadius: trailing,
             style: .continuous)
     }
+
+    /// The colour it is filled with, which its signal rings take.
+    var fillColor: AnyShapeStyle { fill }
 
     var background: some View {
         shape.fill(fill)
@@ -125,6 +133,7 @@ extension ControlLook {
         case .danger: return Theme.destructiveForeground
         case .success: return Theme.successForeground
         case .warning: return Theme.warningForeground
+        case .waiting: return Theme.pendingForeground
         case .ghost: return selected || lit ? Theme.foreground : Theme.mutedForeground
         case .link, .accent: return Theme.primary
         case .overlay: return Theme.foregroundOverPicture
@@ -140,6 +149,7 @@ extension ControlLook {
         case .danger: return filled(Theme.destructive)
         case .success: return filled(Theme.success)
         case .warning: return filled(Theme.warning)
+        case .waiting: return filled(Theme.pending)
         case .ghost: return selected ? surface.platform(.controlLit) : lit ? platformGhostLit : .clear
         case .link: return lit ? Theme.primaryTint : .clear
         case .accent: return lit ? Theme.primaryTintStronger : Theme.primaryTint
@@ -325,10 +335,12 @@ extension EdgeInsets {
 struct ControlButtonStyle: ButtonStyle {
     let look: ControlLook
     var pending = false
+    var signals = false
     var margin = EdgeInsets()
 
     func makeBody(configuration: Configuration) -> some View {
-        ControlBody(label: configuration.label, pressed: configuration.isPressed, look: look, pending: pending, margin: margin)
+        ControlBody(
+            label: configuration.label, pressed: configuration.isPressed, look: look, pending: pending, signals: signals, margin: margin)
     }
 }
 
@@ -337,6 +349,7 @@ private struct ControlBody<Label: View>: View {
     let pressed: Bool
     let look: ControlLook
     let pending: Bool
+    let signals: Bool
     let margin: EdgeInsets
     @State private var hovering = false
     @Environment(\.isEnabled) private var enabled
@@ -350,7 +363,13 @@ private struct ControlBody<Label: View>: View {
         look.lit = enabled && !pending && (hovering || pressed)
         return label
             .foregroundStyle(look.foreground)
-            .background { look.background.padding(margin) }
+            .background {
+                ZStack {
+                    if signals { SignalRings(look: look) }
+                    look.background
+                }
+                .padding(margin)
+            }
             .contentShape(Rectangle())
             .opacity(.disabled, when: !enabled && !pending)
             .onHover { hovering = $0 }
@@ -389,6 +408,8 @@ struct ActionButton: View {
     private var tinted: String?
     private var proxied = false
     private let margin: EdgeInsets
+    /// Rings move out from it, while what it does waits for something else.
+    private var signals = false
     /// It stands in a line of text: its symbol or words start where the line does, and it is no
     /// taller than its words, so that nothing moves for it. Its light and its press reach around.
     private var inline = false
@@ -401,9 +422,10 @@ struct ActionButton: View {
         padding: CGFloat? = nil, pending: Bool = false, pendingTitle: String? = nil,
         selected: Bool = false, round: Bool = false,
         fills: Bool = false, alignment: HorizontalAlignment = .center, opens: Bool = false, open: Bool = false, joined: HorizontalEdge.Set = [],
-        tint: Color? = nil, margin: EdgeInsets = EdgeInsets(), inline: Bool = false, action: @escaping () -> Void
+        signals: Bool = false, tint: Color? = nil, margin: EdgeInsets = EdgeInsets(), inline: Bool = false, action: @escaping () -> Void
     ) {
         chevron = opens
+        self.signals = signals
         self.open = open
         self.inline = inline
         self.title = title
@@ -429,10 +451,11 @@ struct ActionButton: View {
     /// symbol in another size in a button of the same size.
     init(
         icon: Symbol, help: String, variant: ButtonVariant = .ghost, size: ControlSize = .regular, symbolSize: IconSize? = nil,
-        pending: Bool = false, selected: Bool = false, round: Bool = false, joined: HorizontalEdge.Set = [], tint: Color? = nil,
-        margin: EdgeInsets = EdgeInsets(), inline: Bool = false, action: @escaping () -> Void
+        pending: Bool = false, selected: Bool = false, round: Bool = false, joined: HorizontalEdge.Set = [], signals: Bool = false,
+        tint: Color? = nil, margin: EdgeInsets = EdgeInsets(), inline: Bool = false, action: @escaping () -> Void
     ) {
         title = nil
+        self.signals = signals
         self.inline = inline
         self.icon = .symbol(icon)
         detail = nil
@@ -475,7 +498,7 @@ struct ActionButton: View {
             )
             .padding(reach.around)
         }
-        .buttonStyle(ControlButtonStyle(look: look, pending: pending, margin: light))
+        .buttonStyle(ControlButtonStyle(look: look, pending: pending, signals: signals, margin: light))
         .padding(reach.outset)
         .padding(inline ? inlineBleed : EdgeInsets())
         .allowsHitTesting(!pending)
@@ -499,6 +522,42 @@ struct ActionButton: View {
             ? (size.height - size.symbolSide) / 2
             : (padding ?? size.padding) - (icon == nil ? 0 : size.symbolOutset)
         return EdgeInsets(top: -inlineVertical, leading: -leading, bottom: -inlineVertical, trailing: 0)
+    }
+}
+
+/// Two rings in the button's colour that move out from behind it, half a beat apart.
+private struct SignalRings: View {
+    let look: ControlLook
+    private static let beat: TimeInterval = 2.2
+    private static let spread: CGFloat = 0.16
+    private static let lineWidth: CGFloat = 2
+    private static let opacity = 0.6
+
+    var body: some View {
+        if !Platform.reducesMotion {
+            GeometryReader { proxy in
+                TimelineView(.animation) { context in
+                    let time = context.date.timeIntervalSinceReferenceDate / Self.beat
+                    ZStack {
+                        ring(at: time, side: min(proxy.size.width, proxy.size.height))
+                        ring(at: time + 0.5, side: min(proxy.size.width, proxy.size.height))
+                    }
+                }
+            }
+        }
+    }
+
+    private func ring(at time: Double, side: CGFloat) -> some View {
+        let out = Self.easeOut(time - time.rounded(.down))
+        let grown = side * Self.spread * out
+        return RoundedRectangle(cornerRadius: look.radius + grown, style: .continuous)
+            .strokeBorder(look.fillColor, lineWidth: Self.lineWidth)
+            .padding(-grown)
+            .opacity(Self.opacity * (1 - out))
+    }
+
+    private static func easeOut(_ progress: Double) -> Double {
+        1 - pow(1 - progress, 3)
     }
 }
 

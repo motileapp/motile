@@ -1,5 +1,10 @@
 package app.motile.ui
 
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
@@ -28,8 +33,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -43,13 +53,14 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.offset
 import androidx.compose.ui.unit.dp
-import kotlin.math.roundToInt
+import androidx.compose.ui.unit.offset
+import app.motile.platform.Platform
 import app.motile.platform.Symbol
 import app.motile.theme.ControlSize
 import app.motile.theme.IconSize
 import app.motile.theme.LocalDark
+import app.motile.theme.LocalForeground
 import app.motile.theme.LocalPalette
 import app.motile.theme.LocalRow
 import app.motile.theme.LocalSurface
@@ -61,7 +72,8 @@ import app.motile.theme.Theme
 import app.motile.theme.at
 import app.motile.theme.opacity
 import app.motile.theme.symbolSide
-import app.motile.theme.LocalForeground
+import kotlin.math.pow
+import kotlin.math.roundToInt
 
 /** What a button is for, which is how it looks. */
 enum class ButtonVariant {
@@ -77,6 +89,8 @@ enum class ButtonVariant {
     Success,
     /** What the user is asked to let happen. */
     Warning,
+    /** What waits for something else, as the composer's buttons while their server connects. */
+    Waiting,
     /** Nothing until it is pressed: the buttons of bars and rows. */
     Ghost,
     /** In the colour of a link. */
@@ -141,6 +155,7 @@ data class ControlLook(
             ButtonVariant.Danger -> palette.destructiveForeground
             ButtonVariant.Success -> palette.successForeground
             ButtonVariant.Warning -> palette.warningForeground
+            ButtonVariant.Waiting -> palette.pendingForeground
             ButtonVariant.Ghost -> when {
                 selected || lit -> palette.foreground
                 quiet -> palette.mutedStrongerForeground
@@ -162,6 +177,7 @@ data class ControlLook(
             ButtonVariant.Danger -> filled(palette.destructive)
             ButtonVariant.Success -> filled(palette.success)
             ButtonVariant.Warning -> filled(palette.warning)
+            ButtonVariant.Waiting -> filled(palette.pending)
             ButtonVariant.Ghost -> when {
                 selected -> surface.color(Surface.Layer.ControlLit, palette)
                 lit -> ghostLit(palette)
@@ -195,6 +211,34 @@ data class ControlLook(
             return RoundedCornerShape(topStart = leading, topEnd = trailing, bottomEnd = trailing, bottomStart = leading)
         }
 }
+
+/** Two rings in the look's fill that move out from behind it, half a beat apart. */
+@Composable
+private fun Modifier.signalRings(look: ControlLook): Modifier {
+    val color = look.fill(LocalPalette.current, LocalDark.current)
+    val beat by rememberInfiniteTransition(label = "signal").animateFloat(
+        0f, 1f, infiniteRepeatable(tween(SIGNAL_BEAT_MILLIS, easing = LinearEasing)), label = "beat",
+    )
+    return drawBehind {
+        val line = SIGNAL_LINE.toPx()
+        val radius = if (look.round) size.height / 2 else look.size.radius.toPx()
+        for (offset in listOf(0f, 0.5f)) {
+            val progress = (beat + offset) % 1f
+            val out = 1f - (1f - progress).pow(3)
+            val grown = size.height * SIGNAL_SPREAD * out
+            drawRoundRect(
+                color, topLeft = Offset(-grown + line / 2, -grown + line / 2),
+                size = Size(size.width + grown * 2 - line, size.height + grown * 2 - line),
+                cornerRadius = CornerRadius(radius + grown - line / 2), alpha = SIGNAL_OPACITY * (1f - out), style = Stroke(line),
+            )
+        }
+    }
+}
+
+private const val SIGNAL_BEAT_MILLIS = 2200
+private const val SIGNAL_SPREAD = 0.16f
+private const val SIGNAL_OPACITY = 0.6f
+private val SIGNAL_LINE = 2.dp
 
 /** The look's fill and, for an outline or over a picture, its border. */
 @Composable
@@ -412,6 +456,8 @@ fun ControlButton(
     role: Role = Role.Button,
     /** Its press reaches across the room it stands in, while its light keeps its own width. */
     stretches: Boolean = false,
+    /** Rings move out from it, while what it does waits for something else. */
+    signals: Boolean = false,
     content: @Composable () -> Unit,
 ) {
     val enabled = LocalEnabled.current && !disabled
@@ -440,6 +486,7 @@ fun ControlButton(
             )
             .padding(margin)
             .then(if (stretches) Modifier.wrapContentWidth(Alignment.Start) else Modifier)
+            .then(if (signals && !Platform.reducesMotion) Modifier.signalRings(shown) else Modifier)
             .controlBackground(shown),
         contentAlignment = Alignment.Center,
     ) {
@@ -491,6 +538,8 @@ fun ActionButton(
     /** Its words are the prose's, as the text it stands under. */
     prose: Boolean = false,
     stretches: Boolean = false,
+    /** Rings move out from it, while what it does waits for something else. */
+    signals: Boolean = false,
     onLongClick: (() -> Unit)? = null,
     onClick: () -> Unit,
 ) {
@@ -503,7 +552,12 @@ fun ActionButton(
             tinted = tinted?.let { tail -> tint?.let { tail to it } }, proxied = proxied, chevronUp = expanded == true, prose = prose,
         )
     }
-    if (!inline) return ControlButton(look, onClick, modifier, pending, disabled, margin, words?.let { listOfNotNull(it, tinted).joinToString(" ") } ?: help, onLongClick, stretches = stretches, content = label)
+    if (!inline) {
+        return ControlButton(
+            look, onClick, modifier, pending, disabled, margin, words?.let { listOfNotNull(it, tinted).joinToString(" ") } ?: help, onLongClick,
+            stretches = stretches, signals = signals, content = label,
+        )
+    }
     val line = with(LocalDensity.current) { rememberTextMeasurer().measure("M", size.font).size.height.toDp() }
     val vertical = ((size.height - line) / 2).coerceAtLeast(0.dp)
     val leading = when {
