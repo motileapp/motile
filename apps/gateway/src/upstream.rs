@@ -31,7 +31,7 @@ const CAPTURE_KEPT: usize = 32 * 1024 * 1024;
 /// How much of a response that isn't a stream is kept to read its usage from.
 const BODY_KEPT: usize = 16 * 1024 * 1024;
 /// Headers that belong to one hop, or carry the agent's own credentials, and never go on.
-pub const NOT_PASSED: [&str; 17] = [
+pub const NOT_PASSED: [&str; 18] = [
     "host",
     "content-length",
     "connection",
@@ -43,6 +43,7 @@ pub const NOT_PASSED: [&str; 17] = [
     "proxy-authorization",
     "proxy-connection",
     "authorization",
+    "x-openai-actor-authorization",
     "x-api-key",
     "accept-encoding",
     "sec-websocket-key",
@@ -561,11 +562,16 @@ mod tests {
 
     #[test]
     fn codex_is_given_the_accounts_chatgpt_account() {
-        let incoming =
-            pairs(&[("authorization", "Bearer thread-token"), ("session-id", "s"), ("originator", "codex_exec")]);
+        let incoming = pairs(&[
+            ("authorization", "Bearer thread-token"),
+            ("X-OpenAI-Actor-Authorization", "Bearer thread-token"),
+            ("session-id", "s"),
+            ("originator", "codex_exec"),
+        ]);
         let headers = upstream_headers(Agent::Codex, &incoming, &tokens(Some("acct-1")));
         assert_eq!(header(&headers, "authorization"), Some("Bearer account-token"));
         assert_eq!(header(&headers, "chatgpt-account-id"), Some("acct-1"));
+        assert_eq!(header(&headers, "x-openai-actor-authorization"), None);
         assert_eq!((header(&headers, "session-id"), header(&headers, "originator")), (Some("s"), Some("codex_exec")));
     }
 

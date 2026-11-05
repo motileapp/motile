@@ -209,6 +209,11 @@ impl Parser {
             servers.insert(crate::mcp::SERVER_NAME.to_string(), server(&mcp.url));
             thread["config"] = json!({"mcp_servers": servers});
         }
+        if let Some(token) = turn.gateway_token {
+            // Codex exposes native image tools for delegated OpenAI actor authentication.
+            let headers = json!({(crate::gateway::CODEX_ACTOR_HEADER): format!("Bearer {token}")});
+            thread["config"]["model_providers"]["motile"]["http_headers"] = headers;
+        }
         Self {
             thread,
             resumes: turn.session_id.is_some(),
@@ -688,6 +693,7 @@ mod tests {
             session_id: None,
             handoff: None,
             mcp: None,
+            gateway_token: None,
         }
     }
 
@@ -810,6 +816,39 @@ mod tests {
         let asked = written(&self::parser(resumed).parse(r#"{"id":1,"result":{}}"#));
         assert_eq!((&asked[1]["method"], &asked[1]["params"]["threadId"]), (&json!("thread/resume"), &json!("t0")));
         assert_eq!(asked[1]["params"]["sandbox"], "danger-full-access");
+    }
+
+    #[test]
+    fn gateway_sessions_delegate_openai_auth_and_direct_sessions_keep_their_own() {
+        let mcp = crate::mcp::McpAccess {
+            url: "http://127.0.0.1:9/mcp".into(),
+            token: "thread-token".into(),
+            mcp_servers: vec![],
+        };
+        for session_id in [None, Some("existing-session")] {
+            for gateway_token in [None, Some("thread-token")] {
+                let turn = Turn { session_id, gateway_token, mcp: Some(&mcp), ..turn(Access::Full) };
+                let asked = written(&parser(turn).parse(r#"{"id":1,"result":{}}"#));
+                let config = &asked[1]["params"]["config"];
+                assert_eq!(config["mcp_servers"]["motile"]["http_headers"]["Authorization"], "Bearer thread-token");
+                let provider = &config["model_providers"]["motile"];
+                match gateway_token {
+                    Some(_) => {
+                        assert_eq!(provider["http_headers"][crate::gateway::CODEX_ACTOR_HEADER], "Bearer thread-token")
+                    }
+                    None => assert!(provider.is_null()),
+                }
+            }
+        }
+        let asked = written(
+            &parser(Turn { gateway_token: Some("thread-token"), ..turn(Access::Full) })
+                .parse(r#"{"id":1,"result":{}}"#),
+        );
+        assert_eq!(
+            asked[1]["params"]["config"]["model_providers"]["motile"]["http_headers"]
+                [crate::gateway::CODEX_ACTOR_HEADER],
+            "Bearer thread-token"
+        );
     }
 
     #[test]

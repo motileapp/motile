@@ -958,6 +958,7 @@ mod tests {
             session_id: None,
             handoff: None,
             mcp: Some(&mcp),
+            gateway_token: None,
         };
         let arguments = arguments(&turn);
         let at = arguments.iter().position(|argument| argument == "--mcp-config").unwrap();
@@ -988,6 +989,7 @@ mod tests {
             session_id: None,
             handoff: None,
             mcp,
+            gateway_token: None,
         };
         let pointed = super::super::instructions(&turn(Some(&mcp)));
         assert!(pointed.contains("before you decide it's missing.\n\nYou can show an answer with openui-lang"));

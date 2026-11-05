@@ -38,16 +38,18 @@ use crate::mcp::Tokens;
 pub const SERVER_THREAD: &str = "server";
 /// What Codex reads the thread's token from, as `config.toml` says.
 pub const CODEX_TOKEN_VARIABLE: &str = "MOTILE_GATEWAY_TOKEN";
+pub const CODEX_ACTOR_HEADER: &str = "x-openai-actor-authorization";
 const NO_GATEWAY: &str = "Your account has no gateway. Add one in Settings, or switch the thread to another account.";
 const DIAL_WITHIN: Duration = Duration::from_secs(20);
 const ANSWER_WITHIN: Duration = Duration::from_secs(30);
 const CHUNK: usize = 64 * 1024;
 const MAX_MCP_REQUEST: usize = 16 * 1024 * 1024;
 /// What isn't the request's own, or would give the token away.
-const NOT_PASSED: [&str; 15] = [
+const NOT_PASSED: [&str; 16] = [
     "host",
     MCP_APPROVED,
     "authorization",
+    CODEX_ACTOR_HEADER,
     "x-api-key",
     "connection",
     "keep-alive",
@@ -573,6 +575,7 @@ mod tests {
             "/claude/v1/messages",
             &[
                 ("authorization", "Bearer secret"),
+                (CODEX_ACTOR_HEADER, "Bearer secret"),
                 ("x-api-key", "secret"),
                 ("host", "127.0.0.1"),
                 ("anthropic-version", "2023-06-01"),

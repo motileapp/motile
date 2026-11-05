@@ -226,6 +226,8 @@ pub struct Turn<'a> {
     pub handoff: Option<&'a Handoff>,
     /// Where the agent reads the thread from.
     pub mcp: Option<&'a McpAccess>,
+    /// Delegates this thread's OpenAI requests to the account's gateway.
+    pub gateway_token: Option<&'a str>,
 }
 
 /// What a turn of a process that runs already is started with.

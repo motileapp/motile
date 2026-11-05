@@ -3297,6 +3297,7 @@ impl Hub {
             session_id: live.stored.session_id.as_deref(),
             handoff: handoff.as_ref(),
             mcp: mcp.as_ref(),
+            gateway_token: account.gateway.then_some(token.as_str()),
         };
         let child = match self.spawn(&turn, &thread.cwd, &account, &token) {
             Ok(child) => child,

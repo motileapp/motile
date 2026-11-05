@@ -10,7 +10,7 @@ use std::time::Duration;
 
 use axum::body::{Body, Bytes};
 use axum::extract::ws::{Message as WsFrame, WebSocket, WebSocketUpgrade};
-use axum::extract::{Form, State};
+use axum::extract::{Form, OriginalUri, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
@@ -252,6 +252,16 @@ async fn codex_http(State(fake): Shared, headers: HeaderMap, body: Bytes) -> Res
     (headers, format!("event: response.completed\ndata: {completed}\n\n")).into_response()
 }
 
+async fn codex_image(
+    State(fake): Shared,
+    OriginalUri(uri): OriginalUri,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Json<Value> {
+    fake.see(uri.path(), &headers, &body);
+    Json(json!({"created": 0, "data": [{"b64_json": "aW1hZ2U="}]}))
+}
+
 async fn codex_socket(State(fake): Shared, headers: HeaderMap, upgrade: WebSocketUpgrade) -> Response {
     fake.see("/backend-api/codex/responses (ws)", &headers, b"");
     upgrade.on_upgrade(move |socket| answer_socket(fake, socket))
@@ -390,6 +400,8 @@ async fn serve_fake(fake: Arc<Fake>) -> String {
         .route("/api/accounts/deviceauth/token", post(device_token))
         .route("/oauth/token", post(openai_token))
         .route("/backend-api/codex/responses", get(codex_socket).post(codex_http))
+        .route("/backend-api/codex/images/generations", post(codex_image))
+        .route("/backend-api/codex/images/edits", post(codex_image))
         .route("/backend-api/wham/usage", get(codex_usage))
         .with_state(fake.clone());
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -868,6 +880,30 @@ async fn a_codex_account_signs_in_with_a_device_code_and_its_websocket_is_bridge
     assert_eq!((entry.input_tokens, entry.cache_read_tokens, entry.output_tokens), (200, 100, 30));
     let windows = harness.account(&harness.state().await, "acct-1").windows;
     assert_eq!((windows[0].label.as_str(), windows[0].used_percent), ("Session", 7.0));
+}
+
+#[tokio::test]
+async fn codex_images_reuse_the_threads_login_without_forwarding_its_local_credentials() {
+    let harness = Harness::start().await;
+    harness.sign_in_codex().await;
+    let server = harness.server().await;
+    let account = harness.codex(&server, "image-thread", json!([])).await;
+    for path in ["/images/generations", "/images/edits"] {
+        let body = json!({"model": "gpt-image-2", "prompt": "A neon glass whale"}).to_string();
+        let headers = vec![
+            ("authorization".into(), "Bearer thread-token".into()),
+            ("x-openai-actor-authorization".into(), "Bearer thread-token".into()),
+        ];
+        let (head, response) = http(&server, "image-thread", Agent::Codex, path, headers, body.clone()).await;
+        assert!(matches!(head, GatewayReply::HttpHead { status: 200, .. }), "{head:?}");
+        assert_eq!(serde_json::from_str::<Value>(&response).unwrap()["data"][0]["b64_json"], "aW1hZ2U=");
+        let seen = harness.fake.seen(&format!("/backend-api/codex{path}"));
+        let seen = seen.last().unwrap();
+        assert_eq!(seen.body, body);
+        assert_eq!(seen.header("authorization"), format!("Bearer {}", jwt_access(&harness)));
+        assert_eq!(seen.header("chatgpt-account-id"), account);
+        assert_eq!(seen.header("x-openai-actor-authorization"), "");
+    }
 }
 
 fn jwt_access(harness: &Harness) -> String {

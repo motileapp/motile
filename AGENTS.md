@@ -285,8 +285,10 @@ shadcn's own colours, opacities and radii are gone from the theme.
   deleted completely, and which device is its gateway.
 - `gateway.rs`: how the Gateway accounts' agents reach the gateway: an HTTP listener on the loopback
   interface, called with the thread's token, and the iroh connection to the gateway that carries each
-  request. The token never leaves the server; the gateway is told the thread. Every agent, on any
-  account, reaches the gateway's MCP servers there too (`/mcp/<slug>`), which `hub.rs` adds
+  request. Codex's gateway sessions declare OpenAI actor authorization with that token so native
+  image tools are available; the header is stripped before forwarding. The token never leaves the
+  server; the gateway is told the thread. Every agent, on any account, reaches the gateway's MCP
+  servers there too (`/mcp/<slug>`), which `hub.rs` adds
   beside `motile` to its MCP servers while the account has a gateway. A call the gateway says needs
   approval is asked of the user in the thread, under any access, and sent again approved; the agents
   themselves never ask for those servers' tools.
