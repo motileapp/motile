@@ -1113,6 +1113,41 @@ data class QueuedMessage(
     )
 }
 
+/** A message on its way to its server, as the core's outbox keeps it until the server has it. A thread's first message has the draft it was written in, whose id the thread takes. */
+data class OutgoingMessage(
+    val id: String,
+    val serverID: String,
+    val threadID: String,
+    val startsThread: Boolean,
+    val text: String,
+    val paths: List<String>,
+    /** The attachments as the client showed them when it was sent. */
+    val attachments: List<AttachedFile>,
+    val draft: ThreadDraft?,
+    val sentAt: Double,
+    /** Why it hasn't reached its server yet. */
+    val error: String?,
+) {
+    constructor(json: JSON) : this(
+        id = json.string("id"),
+        serverID = json.string("server_id"),
+        threadID = json.string("thread_id"),
+        startsThread = json.obj("new_thread") != null,
+        text = json.string("text"),
+        paths = json.strings("attachments"),
+        attachments = json.obj("shown")?.objects("attachments")?.map(::AttachedFile).orEmpty(),
+        draft = json.obj("shown")?.obj("draft")?.let(ThreadDraft::of),
+        sentAt = json.double("sent_at"),
+        error = json.optionalString("error"),
+    )
+
+    /** What the client keeps with it in the outbox to show it again. */
+    companion object {
+        fun shown(attachments: List<AttachedFile>, draft: ThreadDraft?): Map<String, Any?> =
+            mapOf("attachments" to attachments.map { it.json }, "draft" to draft?.json)
+    }
+}
+
 /** A file attached to a message, as the transcript shows it. An image or a video names the file the core has it under, and a video the image that stands for it until it plays. */
 data class AttachedFile(val name: String, val media: String?, val video: Boolean, val poster: String?) {
     constructor(json: JSON) : this(json.string("name"), json.optionalString("media"), json.bool("video"), json.optionalString("poster"))

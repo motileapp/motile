@@ -27,6 +27,7 @@ use futures::StreamExt;
 use gpui_kit::prelude::*;
 use gpui_kit::*;
 use motile_core::api::{AccountView, Command, Config, Event};
+use motile_core::outbox::Outgoing;
 use motile_core::render::agents::AgentView;
 use motile_protocol::wire::{
     Access, AgentAccount, Branch, ChangedFile, GitHubState, GitStage, ModelContext, ModelInfo, NewThread, Repo, Request,
@@ -47,9 +48,6 @@ use crate::panel::state::{PanelTabs, PanelTarget, RightPanel};
 use crate::prefs::Prefs;
 use crate::transcript::model::{Prepared, Transcript};
 use crate::updater::Updater;
-
-const UNSENT: &str =
-    "Your message wasn't sent. The connection to your server was lost, so it's back where you wrote it.";
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum Selection {
@@ -85,6 +83,21 @@ pub struct Continuation {
 }
 
 impl ThreadDraft {
+    /// The draft a message on its way was sent from, for one the client no longer kept.
+    fn of(id: &str, new_thread: &NewThread) -> Self {
+        Self {
+            id: id.to_string(),
+            project_id: Some(new_thread.project_id.clone()),
+            model: new_thread.model.clone(),
+            agent_account: new_thread.agent_account.clone(),
+            effort: new_thread.effort.clone(),
+            access: new_thread.access,
+            worktree: new_thread.worktree.as_ref().map(|_| true),
+            base: new_thread.worktree.as_ref().map(|worktree| worktree.base.clone()),
+            from: None,
+        }
+    }
+
     fn new() -> Self {
         Self {
             id: uuid::Uuid::new_v4().to_string().to_uppercase(),
@@ -126,14 +139,13 @@ pub struct UiConfirm {
 }
 
 /// The first message of a draft, from when it is sent until the client has the thread it started,
-/// which takes the draft's id. It is kept across restarts and sent again when its server is back.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+/// which takes the draft's id. The core's outbox keeps it across restarts and sends it again.
+#[derive(Clone, Debug)]
 pub struct SendingDraft {
     pub text: String,
     pub attachments: Vec<AttachedFile>,
     pub started_at: f64,
     pub server_id: String,
-    pub new_thread: NewThread,
     pub paths: Vec<String>,
 }
 
@@ -146,16 +158,20 @@ impl SendingDraft {
         Activity { started_at: Some(self.started_at), ..Activity::starting() }
     }
 
-    fn command(&self) -> Command {
-        Command::Send {
-            server_id: self.server_id.clone(),
-            thread_id: None,
-            new_thread: Some(self.new_thread.clone()),
-            text: self.text.clone(),
-            attachments: self.paths.clone(),
-            now: false,
+    fn of(message: &Outgoing) -> Self {
+        Self {
+            text: message.text.clone(),
+            attachments: shown_files(&message.shown),
+            started_at: message.sent_at,
+            server_id: message.server_id.clone(),
+            paths: message.attachments.clone(),
         }
     }
+}
+
+/// The attachments of a message in the outbox, as the client gave them to be shown.
+fn shown_files(shown: &Value) -> Vec<AttachedFile> {
+    serde_json::from_value(shown.clone()).unwrap_or_default()
 }
 
 /// The first line of what was written, or what is attached. Nothing for a draft that is empty.
@@ -312,8 +328,10 @@ pub struct Store {
     pub agents: Vec<AgentView>,
     /// The drafts whose first message is on its way, until the client has the thread it started.
     pub sending_drafts: HashMap<String, SendingDraft>,
-    /// The drafts sent since the client started, which aren't sent again.
-    sent_drafts: HashSet<String>,
+    /// The messages on their way to their servers, as the core's outbox has them.
+    outbox: Vec<Outgoing>,
+    /// The error of each message of the outbox the user was last told about, so that it is told once.
+    told_outbox_errors: HashMap<String, String>,
     /// The threads drafts started under another id than theirs, with their drafts.
     awaited_threads: HashMap<String, String>,
     pub error_message: Option<String>,
@@ -453,7 +471,8 @@ impl Store {
             transcript_is_empty: true,
             agents: Vec::new(),
             sending_drafts: HashMap::new(),
-            sent_drafts: HashSet::new(),
+            outbox: Vec::new(),
+            told_outbox_errors: HashMap::new(),
             awaited_threads: HashMap::new(),
             error_message: None,
             stopping: None,
@@ -769,6 +788,17 @@ impl Store {
                 });
             }
             Event::ThreadError { message, .. } => self.error_message = Some(message),
+            Event::Outbox { messages } => self.apply_outbox(messages, cx),
+            Event::Sent { thread_id, draft_id, .. } => {
+                let Some(draft_id) = draft_id else { return };
+                // A server from before thread ids picks its own, and one whose thread was deleted
+                // starts another.
+                if thread_id != draft_id {
+                    self.awaited_threads.insert(thread_id, draft_id);
+                }
+                self.open_arrived_threads(cx);
+            }
+            Event::Unsent { message, error } => self.unsent(*message, error, cx),
             Event::Reply { id, ok, value } => {
                 let Some(answer) = self.answers.remove(&id) else { return };
                 let result = if ok { Ok(value) } else { Err(CoreError::of(&value)) };
@@ -1297,20 +1327,29 @@ impl Store {
 
     // Preferences
 
+    /// The first messages an earlier client kept itself, which the core doesn't have: they go back
+    /// to their drafts, to be sent again.
+    fn take_back_legacy_sending_drafts(&mut self) {
+        let Some(legacy) = self.prefs.get::<HashMap<String, serde_json::Value>>("sendingDrafts") else { return };
+        self.prefs.remove("sendingDrafts");
+        for (draft_id, sending) in legacy {
+            let Some(text) = sending.get("text").and_then(|text| text.as_str()) else { continue };
+            let written = self.drafts.get(&draft_id).map(|written| written.trim().to_string()).unwrap_or_default();
+            let text = if written.is_empty() { text.to_string() } else { format!("{text}\n\n{written}") };
+            self.set_text(text, &draft_id);
+        }
+    }
+
     fn load_preferences(&mut self) {
         self.drafts = self.prefs.get("drafts").unwrap_or_default();
+        self.take_back_legacy_sending_drafts();
         self.last_selection = self.prefs.string("selection");
         let saved: Vec<ThreadDraft> = self.prefs.get("threadDrafts").unwrap_or_default();
-        let mut sending: HashMap<String, SendingDraft> = self.prefs.get("sendingDrafts").unwrap_or_default();
         let last = self.last_selection.clone();
         self.thread_drafts = saved
             .into_iter()
-            .filter(|draft| {
-                self.preview(draft).is_some() || sending.contains_key(&draft.id) || Some(&draft.id) == last.as_ref()
-            })
+            .filter(|draft| self.preview(draft).is_some() || Some(&draft.id) == last.as_ref())
             .collect();
-        sending.retain(|id, _| self.thread_drafts.iter().any(|draft| &draft.id == id));
-        self.sending_drafts = sending;
         let restored = self.thread_drafts.iter().find(|draft| Some(&draft.id) == last.as_ref()).cloned();
         let restored_preview = self.prefs.string("openedDraftPreview");
         let opened = match &restored {
@@ -1340,15 +1379,6 @@ impl Store {
     fn save_thread_drafts(&mut self) {
         let drafts = self.thread_drafts.clone();
         self.prefs.set("threadDrafts", drafts);
-    }
-
-    fn set_sending(&mut self, draft_id: &str, sending: Option<SendingDraft>) {
-        match sending {
-            Some(sending) => self.sending_drafts.insert(draft_id.to_string(), sending),
-            None => self.sending_drafts.remove(draft_id),
-        };
-        let kept = self.sending_drafts.clone();
-        self.prefs.set("sendingDrafts", kept);
     }
 
     /// A draft that starts with what the last one was set to.
@@ -1549,20 +1579,9 @@ impl Store {
         self.select(Selection::Thread(wanted), cx);
     }
 
-    /// Shows an alert that says what went wrong, unless it is that a server couldn't be reached,
-    /// which its state in the sidebar already shows.
+    /// Shows an alert that says what went wrong, a server that couldn't be reached too.
     pub fn fail(&mut self, error: impl Into<CoreError>) {
-        let error = error.into();
-        if error.offline {
-            return;
-        }
-        self.error_message = Some(error.message);
-    }
-
-    /// Says that a message didn't reach its server, even when only the connection was lost: it
-    /// went back to the composer, which is easy to miss.
-    pub fn fail_send(&mut self, error: CoreError) {
-        self.error_message = Some(if error.offline { UNSENT.to_string() } else { error.message });
+        self.error_message = Some(error.into().message);
     }
 
     /// The account's name, when its sign-in gave one.

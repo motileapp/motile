@@ -63,6 +63,7 @@ import app.motile.core.PanelPage
 import app.motile.core.Preferences
 import app.motile.core.SearchResult
 import app.motile.core.Selection
+import app.motile.core.Server
 import app.motile.core.ThreadInfo
 import app.motile.core.isSearchingThreads
 import app.motile.core.jumpHint
@@ -575,6 +576,7 @@ private fun Servers(store: AppStore, expanded: Boolean, toggle: () -> Unit) {
     val servers = store.servers
     if (servers.size == 1) {
         ServerLine(servers[0], Modifier.fillMaxWidth().height(lineHeight).padding(horizontal = sidebarEdge))
+        ServerErrors(servers)
         return
     }
     HighlightButton(onClick = toggle, radius = 0.dp, contentAlignment = Alignment.CenterStart) {
@@ -588,6 +590,23 @@ private fun Servers(store: AppStore, expanded: Boolean, toggle: () -> Unit) {
         }
     }
     if (expanded) ServerLines(store)
+    ServerErrors(servers)
+}
+
+/** Why each server that isn't connected couldn't be reached, as its link last said, under the servers' lines. */
+@Composable
+private fun ServerErrors(servers: List<Server>) {
+    val failing = servers.filter { it.state != Server.State.Connected && it.error != null }
+    for (server in failing) {
+        val error = server.error ?: continue
+        Text(
+            if (servers.size == 1) error else "${server.name}: $error",
+            Modifier.fillMaxWidth().padding(start = sidebarEdge + 16.dp, end = sidebarEdge, bottom = 6.dp),
+            size = 11f,
+            color = Theme.colors.mutedStrongerForeground,
+            maxLines = 3,
+        )
+    }
 }
 
 /** A line for each server, under the line of them all. A long list scrolls, and rests between two lines. */

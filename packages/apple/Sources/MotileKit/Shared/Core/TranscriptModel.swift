@@ -57,6 +57,7 @@ final class TranscriptModel {
     private var owner: ObjectIdentifier?
 
     var isEmpty: Bool { rows.isEmpty && pending == nil }
+    var hasPending: Bool { pending != nil }
 
     /// The turns that changed files, the first one first.
     var turns: [TurnChange] {

@@ -127,6 +127,7 @@ async fn main() -> anyhow::Result<()> {
                 text: prompt.to_string(),
                 attachments: Vec::new(),
                 now: false,
+                shown: serde_json::Value::Null,
             })
             .await?;
         let thread_id = sent["thread_id"].as_str().unwrap_or_default().to_string();

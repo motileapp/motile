@@ -66,6 +66,11 @@ fn shelf_title(title: &'static str, lit: bool, cx: &App) -> Div {
         .child(title)
 }
 
+/// A server's error, under its name, in lines of this size.
+const ERROR_SIZE: f32 = 11.;
+const ERROR_LINE_HEIGHT: f32 = 15.;
+const ERROR_LINES: usize = 3;
+
 fn state_dot(tint: Hsla) -> Div {
     div().size(px(7.)).flex_shrink_0().rounded_full().bg(tint)
 }
@@ -84,6 +89,23 @@ fn server_detail(server: &Server) -> String {
         State::Disconnected => "Offline".into(),
         State::Refused => "Refused".into(),
     }
+}
+
+/// Why a server that isn't connected isn't, as its link last said.
+fn server_error(server: &Server) -> Option<&str> {
+    if server.state == State::Connected {
+        return None;
+    }
+    server.error.as_deref().filter(|error| !error.is_empty())
+}
+
+/// How many lines a server's error takes under its name in `width`, at most `ERROR_LINES`.
+fn error_lines(server: &Server, width: f32, cx: &App) -> usize {
+    let Some(error) = server_error(server) else { return 0 };
+    let font = crate::transcript::rows::font(theme::UI_FONT, FontWeight::NORMAL, false);
+    let mut wrapper = cx.text_system().line_wrapper(font, px(ERROR_SIZE));
+    let breaks = wrapper.wrap_line(&[LineFragment::text(error)], px(width), IndentAdjustment::NoIndent).count();
+    (breaks + 1).min(ERROR_LINES)
 }
 
 fn capitalized(word: &str) -> String {
@@ -391,10 +413,13 @@ impl Sidebar {
     pub(super) fn servers_shelf(&mut self, max: f32, window: &mut Window, cx: &mut Context<Self>) -> Div {
         let c = colors(cx);
         let servers: Vec<Server> = self.store.read(cx).live_servers().cloned().collect();
+        let window_width = f32::from(window.viewport_size().width);
+        let room = crate::main_view::shown_sidebar_width(self.store.read(cx), window_width) - 2. * SIDEBAR_EDGE - 16.;
+        let height = |server: &Server| DONE_ROW_HEIGHT + error_lines(server, room, cx) as f32 * ERROR_LINE_HEIGHT;
         if let [server] = servers.as_slice() {
             return div().flex().flex_col().flex_shrink_0().child(divider(cx)).child(
                 div()
-                    .h(px(DONE_ROW_HEIGHT))
+                    .h(px(height(server)))
                     .my(px(3.))
                     .px(px(SIDEBAR_EDGE))
                     .flex()
@@ -423,7 +448,8 @@ impl Sidebar {
             )
             .into_any_element();
         self.servers_list.set_ids(servers.iter().map(|server| server.id.clone()).collect());
-        let layout = Layout::new(vec![DONE_ROW_HEIGHT + ROW_GAP; servers.len()], 0., 4. - ROW_GAP / 2.);
+        let heights = servers.iter().map(|server| height(server) + ROW_GAP).collect();
+        let layout = Layout::new(heights, 0., 4. - ROW_GAP / 2.);
         let mut rows = Vec::new();
         if expanded {
             let margin = row_margin();
@@ -447,8 +473,7 @@ impl Sidebar {
         let c = colors(cx);
         let detail = server_detail(server);
         let tint = server.state_tint(c).unwrap_or(c.success);
-        div()
-            .id(SharedString::from(format!("server-{}", server.id)))
+        let line = div()
             .w_full()
             .flex()
             .items_center()
@@ -472,7 +497,23 @@ impl Sidebar {
                         .whitespace_nowrap()
                         .child(detail.clone()),
                 ),
-            )
+            );
+        let error = server_error(server).map(|error| {
+            div()
+                .pl(px(16.))
+                .text_size(px(ERROR_SIZE))
+                .line_height(px(ERROR_LINE_HEIGHT))
+                .text_color(c.muted_stronger_foreground)
+                .line_clamp(ERROR_LINES)
+                .child(error.to_string())
+        });
+        div()
+            .id(SharedString::from(format!("server-{}", server.id)))
+            .w_full()
+            .flex()
+            .flex_col()
+            .child(line)
+            .children(error)
             .tooltip(tooltip(server.error.clone().unwrap_or(detail)))
             .into_any_element()
     }

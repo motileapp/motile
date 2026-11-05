@@ -510,7 +510,13 @@ pub enum Request {
         /// <context>]`.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         context: Option<Value>,
+        /// The message's id, a UUID the client chose, so that sending it again doesn't send it
+        /// twice. The server answers `Sent` for one it already has.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        message_id: Option<String>,
     },
+    /// Whether the connection still carries requests. `Pong` answers at once.
+    Ping,
     /// Keeps the state of the program in the block `block` of an assistant item; `null` forgets
     /// it. `Ok` answers.
     SetUi {
@@ -2301,6 +2307,7 @@ pub enum Message {
     },
 
     Ok,
+    Pong,
     Sent {
         thread_id: String,
     },

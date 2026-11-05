@@ -81,25 +81,28 @@ data class ListedDraft(
     val id: String get() = draft.id
 }
 
-/** The first message of a draft, from when it is sent until the client has the thread it started, which takes the draft's id. It is kept across restarts and sent again when its server is back. */
+/** The first message of a draft, from when it is sent until the client has the thread it started, which takes the draft's id. The core's outbox keeps it across restarts and sends it again until its server has it. */
 data class SendingDraft(
     val text: String,
     val attachments: List<AttachedFile>,
+    val paths: List<String>,
+    val serverID: String,
     val startedAt: Double,
-    /** The `send` command. */
-    val command: JSON,
 ) {
     val preview: String get() = AppStore.preview(text, attachments.size) ?: ""
-    val serverID: String? get() = command.optionalString("server_id")
-    val paths: List<String> get() = command.strings("attachments")
     val activity: Activity get() = Activity.starting.copy(startedAt = startedAt)
-    val json: Map<String, Any?>
-        get() = mapOf("text" to text, "attachments" to attachments.map { it.json }, "startedAt" to startedAt, "command" to command)
 
     companion object {
-        fun of(json: JSON) = SendingDraft(
-            json.string("text"), json.objects("attachments").map(::AttachedFile), json.double("startedAt"), json.obj("command") ?: EmptyJSON,
-        )
+        fun of(message: OutgoingMessage) = SendingDraft(message.text, message.attachments, message.paths, message.serverID, message.sentAt)
+
+        /** What a client from before the outbox kept of it. */
+        fun ofSaved(json: JSON): SendingDraft {
+            val command = json.obj("command") ?: EmptyJSON
+            return SendingDraft(
+                json.string("text"), json.objects("attachments").map(::AttachedFile), command.strings("attachments"),
+                command.string("server_id"), json.double("startedAt"),
+            )
+        }
     }
 }
 
@@ -326,8 +329,11 @@ class AppStore(private val context: Context) {
     /** The drafts whose first message is on its way, until the client has the thread it started. */
     var sendingDrafts by mutableStateOf(mapOf<String, SendingDraft>())
         private set
-    /** The drafts sent since the client started, which aren't sent again. */
-    private val sentDrafts = mutableSetOf<String>()
+    /** The messages on their way to their servers, as the core's outbox keeps them. */
+    var outbox by mutableStateOf(emptyList<OutgoingMessage>())
+        private set
+    /** The errors of the outbox's messages already shown, by message and error. */
+    private val alertedOutbox = mutableSetOf<String>()
     /** The threads drafts started under another id than theirs, with their drafts. */
     private val awaitedThreads = mutableMapOf<String, String>()
     var errorMessage by mutableStateOf<String?>(null)
@@ -346,17 +352,11 @@ class AppStore(private val context: Context) {
     }
 
     fun alert(error: CoreError) {
-        if (error.offline) return
         errorMessage = error.message
     }
 
     fun alert(result: Result<*>) {
         result.coreError?.let(::alert)
-    }
-
-    /** Says that a message didn't reach its server, even when only the connection was lost: it went back to the composer, which is easy to miss. */
-    private fun alertUnsent(error: CoreError) {
-        errorMessage = if (error.offline) UNSENT else error.message
     }
 
     /** The error's first sentence as the alert's title, and the rest below it. */
@@ -507,6 +507,20 @@ class AppStore(private val context: Context) {
                 val account = Account(event.obj("account") ?: EmptyJSON)
                 return { apply(account) }
             }
+            "outbox" -> {
+                val messages = event.objects("messages").map(::OutgoingMessage)
+                return { applyOutbox(messages) }
+            }
+            "sent" -> {
+                val threadID = event.string("thread_id")
+                val draftID = event.optionalString("draft_id")
+                return { messageSent(threadID, draftID) }
+            }
+            "unsent" -> {
+                val message = OutgoingMessage(event.obj("message") ?: EmptyJSON)
+                val error = event.string("error")
+                return { messageUnsent(message, error) }
+            }
             "restored" -> return {
                 ready = true
                 ensureDraftProject()
@@ -586,6 +600,7 @@ class AppStore(private val context: Context) {
                 return {
                     if (transcript.threadID == threadID) {
                         transcript.apply(reset, start, remove, rows, earlier, at)
+                        if (outbox.isNotEmpty()) showOutboxPending()
                         // Assigned only when it changes: rows arrive many times a second.
                         val isEmpty = transcript.isEmpty
                         if (transcriptIsEmpty != isEmpty) transcriptIsEmpty = isEmpty
@@ -754,7 +769,6 @@ class AppStore(private val context: Context) {
         }
         showServerUpdates()
         ensureDraftProject()
-        resendDrafts()
         // The server has arrived; the install command has done its job.
         if (showsAddServer && servers.size > addServerCount) showsAddServer = false
     }
@@ -764,7 +778,6 @@ class AppStore(private val context: Context) {
         for (thread in new) kept[thread.id] = thread
         replaceThreads(kept)
         openArrivedThreads()
-        resendDrafts()
         (selection as? Selection.Thread)?.let { if (anyThread(it.id) == null) openEmptyDraft() }
         markOpenThreadSeen()
         restoreSelection()
@@ -1226,11 +1239,8 @@ class AppStore(private val context: Context) {
             runCatching { kotlinx.serialization.json.Json.parseToJsonElement(text) as? kotlinx.serialization.json.JsonArray }.getOrNull()
                 ?.mapNotNull { (it as? JSON)?.let(ThreadDraft::of) }
         } ?: emptyList()
-        val sending = Preferences.string("sendingDrafts")?.let(::parseJSON)?.mapNotNull { (id, value) ->
-            (value as? JSON)?.let { id to SendingDraft.of(it) }
-        }?.toMap() ?: emptyMap()
-        threadDrafts = saved.filter { preview(it) != null || it.id in sending || it.id == lastSelection }
-        sendingDrafts = sending.filterKeys { id -> threadDrafts.any { it.id == id } }
+        takeBackSavedSends()
+        threadDrafts = saved.filter { preview(it) != null || it.id == lastSelection }
         val restored = threadDrafts.firstOrNull { it.id == lastSelection }
         val restoredPreview = Preferences.string("openedDraftPreview")
         val opened = restored ?: emptyDraft()
@@ -1246,7 +1256,16 @@ class AppStore(private val context: Context) {
 
     private fun setSending(draftID: String, sending: SendingDraft?) {
         sendingDrafts = if (sending == null) sendingDrafts - draftID else sendingDrafts + (draftID to sending)
-        Preferences.set("sendingDrafts", jsonOf(sendingDrafts.mapValues { it.value.json }).toString())
+    }
+
+    /** Puts the first messages a client from before the outbox kept back in their drafts, since nothing sends them now. A thread one of them started still replaces its draft once it arrives. */
+    private fun takeBackSavedSends() {
+        val saved = Preferences.string("sendingDrafts")?.let(::parseJSON) ?: return
+        Preferences.remove("sendingDrafts")
+        for ((draftID, value) in saved) {
+            val sending = (value as? JSON)?.let(SendingDraft::ofSaved) ?: continue
+            putBack(draftID, sending.text, sending.paths, sending.attachments, sending.serverID)
+        }
     }
 
     /** A draft that starts with what the last one was set to. */
@@ -2168,6 +2187,7 @@ class AppStore(private val context: Context) {
         openThreadID = thread.id
         activity = Activity.of(thread)
         transcript.begin(thread.id, keepingRows = true)
+        showOutboxPending()
         core.send("open_thread", json("server_id" to thread.serverID, "thread_id" to thread.id)) { result ->
             if (result.isFailure && transcript.threadID == thread.id) transcript.dropKeptRows()
         }
@@ -2285,11 +2305,13 @@ class AppStore(private val context: Context) {
             }
             command["server_id"] = project.serverID
             command["new_thread"] = settings
-            val sending = SendingDraft(text, attached.map { it.attached }, Time.now(), json(*command.toList().toTypedArray()))
+            command["shown"] = OutgoingMessage.shown(attached.map { it.attached }, draft)
+            val sending = SendingDraft(text, attached.map { it.attached }, attached.mapNotNull { it.path }, project.serverID, Time.now())
             setSending(draft.id, sending)
             activity = sending.activity
             transcript.changeActivity(activity)
         }
+        if (existing != null) command["shown"] = OutgoingMessage.shown(attached.map { it.attached }, null)
         this.draft = ""
         attachmentsByKey = attachmentsByKey - key
         // The server queues what is sent while the agent works, unless the message steers it.
@@ -2303,14 +2325,15 @@ class AppStore(private val context: Context) {
             }
         }
         transcriptIsEmpty = false
-        if (existing == null) return sendDraft(key)
 
+        // The core keeps the message in its outbox until the server has it; `unsent` says if it won't be sent.
         core.send("send", command) { result ->
             val error = result.coreError ?: return@send
+            alert(error)
+            if (existing == null) return@send unsend(key)
             // The message goes back to where it was written, wherever the client is now.
             setText(text, key)
             attachmentsByKey = if (attached.isEmpty()) attachmentsByKey - key else attachmentsByKey + (key to attached)
-            alertUnsent(error)
             if (draftKey != key) return@send
             transcript.setPending(null)
             transcriptIsEmpty = transcript.isEmpty
@@ -2318,53 +2341,75 @@ class AppStore(private val context: Context) {
         }
     }
 
-    /** Sends a draft's first message, which starts its thread under the draft's id. The draft stays until the thread reaches the client, whether before the server answers or after. */
-    private fun sendDraft(draftID: String) {
-        val sending = sendingDrafts[draftID] ?: return
-        if (!sentDrafts.add(draftID)) return
-        core.send("send", sending.command) { result ->
-            val error = result.coreError
-            if (error != null) {
-                sentDrafts.remove(draftID)
-                unsend(draftID)
-                alertUnsent(error)
-                return@send
+    /** The core's outbox changed. After a restart it is what tells which drafts are being sent; an error a message met is shown once. */
+    private fun applyOutbox(messages: List<OutgoingMessage>) {
+        outbox = messages
+        for (message in messages) {
+            if (!message.startsThread || sendingDrafts[message.threadID] != null || anyThread(message.threadID) != null) continue
+            if (threadDrafts.none { it.id == message.threadID }) message.draft?.let { draft ->
+                threadDrafts = threadDrafts + draft
+                saveThreadDrafts()
             }
-            // A server from before thread ids picks its own, and one whose thread was deleted starts another.
-            val threadID = result.getOrNull()!!.string("thread_id")
-            if (threadID != draftID) awaitedThreads[threadID] = draftID
-            openArrivedThreads()
+            setSending(message.threadID, SendingDraft.of(message))
+            if (selection == Selection.Draft(message.threadID)) showSendingMessage()
         }
+        openArrivedThreads()
+        for (message in messages) {
+            val error = message.error ?: continue
+            if (alertedOutbox.add("${message.id}\n$error")) errorMessage = error
+        }
+        showOutboxPending()
     }
 
-    /** Sends again the first messages that were on their way when the client was last closed, once their servers are back. A server from before thread ids could start them twice, so they go back to their drafts there. */
-    private fun resendDrafts() {
-        for ((draftID, sending) in sendingDrafts) {
-            if (draftID in sentDrafts || anyThread(draftID) != null) continue
-            val server = server(sending.serverID)
-            if (server == null || isRemoved(server.id)) {
-                if (servers.isNotEmpty()) unsend(draftID)
-                continue
-            }
-            if (server.state != Server.State.Connected || !server.known) continue
-            if (server.protocolVersion >= 36) sendDraft(draftID) else unsend(draftID)
+    /** A message of the outbox reached its server. A draft's waits for its thread to arrive, which a server from before thread ids gives another id. */
+    private fun messageSent(threadID: String, draftID: String?) {
+        draftID ?: return
+        if (threadID != draftID) awaitedThreads[threadID] = draftID
+        openArrivedThreads()
+    }
+
+    /** A message of the outbox won't be sent: it goes back to where it was written, and the user is told why. */
+    private fun messageUnsent(message: OutgoingMessage, error: String) {
+        errorMessage = error
+        if (message.startsThread) {
+            if (sendingDrafts[message.threadID] == null) setSending(message.threadID, SendingDraft.of(message))
+            return unsend(message.threadID)
         }
+        putBack(message.threadID, message.text, message.paths, message.attachments, message.serverID)
+        if (draftKey != message.threadID) return
+        transcript.setPending(null)
+        transcriptIsEmpty = transcript.isEmpty
+        transcript.changeActivity(activity)
+    }
+
+    /** The open thread's newest message still in the outbox, on screen as it travels: after a restart, or once the thread's rows took the copy shown away before the server had it. */
+    private fun showOutboxPending() {
+        val threadID = (selection as? Selection.Thread)?.id ?: return
+        if (transcript.threadID != threadID || transcript.pending != null) return
+        val message = outbox.lastOrNull { it.threadID == threadID && !it.startsThread } ?: return
+        if (transcript.has(message.id)) return
+        transcript.setPending(message.text, message.attachments)
+        transcriptIsEmpty = false
     }
 
     /** Puts a draft's first message back in its composer, before what was written there since. */
     private fun unsend(draftID: String) {
         val sending = sendingDrafts[draftID] ?: return
         setSending(draftID, null)
-        val written = drafts[draftID].orEmpty().trim()
-        setText(if (written.isEmpty()) sending.text else "${sending.text}\n\n$written", draftID)
-        val serverID = sending.serverID.orEmpty()
-        val back = sending.paths.zip(sending.attachments) { path, shown -> Attachment.of(path, shown, serverID) } + attachmentsByKey[draftID].orEmpty()
-        attachmentsByKey = if (back.isEmpty()) attachmentsByKey - draftID else attachmentsByKey + (draftID to back)
+        putBack(draftID, sending.text, sending.paths, sending.attachments, sending.serverID)
         if (draftKey != draftID) return
         transcript.setPending(null)
         transcriptIsEmpty = transcript.isEmpty
         activity = Activity()
         transcript.changeActivity(activity)
+    }
+
+    /** Puts a message back in the composer under `key`, before what was written there since. */
+    private fun putBack(key: String, text: String, paths: List<String>, shown: List<AttachedFile>, serverID: String) {
+        val written = drafts[key].orEmpty().trim()
+        setText(if (written.isEmpty()) text else "$text\n\n$written", key)
+        val back = paths.zip(shown) { path, file -> Attachment.of(path, file, serverID) } + attachmentsByKey[key].orEmpty()
+        attachmentsByKey = if (back.isEmpty()) attachmentsByKey - key else attachmentsByKey + (key to back)
     }
 
     /** Replaces the drafts whose threads the client now has with them. */
@@ -2381,7 +2426,6 @@ class AppStore(private val context: Context) {
     private fun openNewThread(thread: ThreadInfo, draftID: String) {
         val wasOpen = selection == Selection.Draft(draftID)
         setSending(draftID, null)
-        sentDrafts.remove(draftID)
         threadDrafts = threadDrafts.filter { it.id != draftID }
         saveThreadDrafts()
         if (thread.id != draftID) {
@@ -2753,7 +2797,6 @@ class AppStore(private val context: Context) {
         const val STEERS_KEY = "send.steers"
         /** It steers until the setting says otherwise. */
         const val STEERS_BY_DEFAULT = true
-        const val UNSENT = "Your message wasn't sent. The connection to your server was lost, so it's back where you wrote it."
 
         fun preview(text: String, attachments: Int): String? {
             val trimmed = text.trim()

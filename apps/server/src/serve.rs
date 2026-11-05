@@ -18,7 +18,7 @@ use tokio::sync::broadcast::error::RecvError;
 use tokio::sync::{Notify, watch};
 
 use crate::access::Access;
-use crate::hub::{GitRun, Hub, ListSubscription, ThreadSubscription};
+use crate::hub::{GitRun, Hub, ListSubscription, NewMessage, ThreadSubscription};
 use crate::media::MediaStore;
 use crate::{files, linear, ricrac, ui_tools, update};
 
@@ -30,6 +30,8 @@ const RESTART_AFTER: Duration = Duration::from_millis(500);
 const IDLE_CHECK: Duration = Duration::from_secs(2);
 /// A long transcript is sent in pieces so the client can show the first ones while the rest travel.
 const ITEMS_PER_MESSAGE: usize = 200;
+/// A request that takes longer than this to answer is logged.
+const SLOW_REQUEST: Duration = Duration::from_secs(10);
 
 #[derive(Default)]
 pub struct BindOptions {
@@ -122,7 +124,9 @@ impl Server {
     async fn handle_stream(self, mut send: SendStream, mut recv: RecvStream) -> anyhow::Result<()> {
         let request: Request = read_frame(&mut recv).await?.context("The stream ended before a request.")?;
         let hub = &self.hub;
+        let (kind, asked) = (kind_of(&request), Instant::now());
         let reply = match request {
+            Request::Ping => Ok(Message::Pong),
             Request::Subscribe => {
                 hub.refresh_models_soon();
                 let asked = Instant::now();
@@ -143,10 +147,10 @@ impl Server {
                 Ok(subscription) => return follow_thread(send, subscription).await,
                 Err(error) => Err(error),
             },
-            Request::Send { thread_id, new_thread, text, attachments, now, context } => hub
-                .send(thread_id, new_thread, text, attachments, now, context)
-                .await
-                .map(|thread_id| Message::Sent { thread_id }),
+            Request::Send { thread_id, new_thread, text, attachments, now, context, message_id } => {
+                let message = NewMessage { text, attachments, now, context, message_id };
+                hub.send(thread_id, new_thread, message).await.map(|thread_id| Message::Sent { thread_id })
+            }
             Request::SetUi { thread_id, item_id, block, state } => {
                 hub.set_ui(&thread_id, &item_id, block, state).await.map(|_| Message::Ok)
             }
@@ -372,10 +376,19 @@ impl Server {
             }
         };
         let reply = reply.unwrap_or_else(|error| Message::Error { message: error_text(&error) });
+        if asked.elapsed() > SLOW_REQUEST {
+            tracing::warn!(kind, took_ms = asked.elapsed().as_millis() as u64, "answered a request slowly");
+        }
         write_frame(&mut send, &reply).await?;
         send.finish()?;
         Ok(())
     }
+}
+
+/// The name a request goes by on the wire, for the log.
+fn kind_of(request: &Request) -> String {
+    let value = serde_json::to_value(request).unwrap_or_default();
+    value.get("type").and_then(|kind| kind.as_str()).unwrap_or_default().to_string()
 }
 
 /// The update is in place: the server restarts once its agents have finished.

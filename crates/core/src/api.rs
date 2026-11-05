@@ -19,6 +19,7 @@ use crate::git::Control;
 use crate::keybindings::{Rule, View as KeybindingsView};
 use crate::limits;
 use crate::link::State;
+use crate::outbox::Outgoing;
 use crate::render::agents::AgentView;
 use crate::render::highlight::Spans;
 use crate::render::openui::UiOp;
@@ -168,6 +169,9 @@ pub enum Command {
     /// Sends the message with `attachments`, the paths `upload` answered with. Answers with
     /// `thread_id`. With `now`, a turn that runs takes the message at once instead of the next
     /// turn starting with it.
+    /// Keeps the message in the outbox and answers with its `message_id` at once; the core sends
+    /// it as soon as its server is connected, and again after a lost connection or a restart, until
+    /// its server has it. `sent` and `unsent` say how it went, `outbox` what still waits.
     Send {
         server_id: String,
         thread_id: Option<String>,
@@ -177,6 +181,9 @@ pub enum Command {
         attachments: Vec<String>,
         #[serde(default)]
         now: bool,
+        /// What the client shows of the message while it travels, kept with it as given.
+        #[serde(default)]
+        shown: Value,
     },
     /// Sends a file of this device to the server, for a message to be sent with. Answers with
     /// its `path` there, and for an image or a video with `media`, the name the `media` command
@@ -779,6 +786,24 @@ pub enum Event {
     /// The account's gateway, as the Gateway page shows it, whenever that changes.
     Gateway {
         gateway: Box<gateway::View>,
+    },
+    /// The messages on their way to their servers, oldest first, at start and whenever that
+    /// changes. One that couldn't be sent yet says why in `error`.
+    Outbox {
+        messages: Vec<Outgoing>,
+    },
+    /// A message of the outbox reached its server, in `thread_id`. `draft_id` is the draft the
+    /// thread was started from, whose id a server from before thread ids doesn't give it.
+    Sent {
+        message_id: String,
+        thread_id: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        draft_id: Option<String>,
+    },
+    /// A message of the outbox won't be sent, for `error`: it goes back to where it was written.
+    Unsent {
+        message: Box<Outgoing>,
+        error: String,
     },
     Reply {
         id: u64,

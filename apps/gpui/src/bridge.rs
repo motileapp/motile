@@ -95,16 +95,11 @@ impl Bridge {
 #[derive(Clone, PartialEq, Debug)]
 pub struct CoreError {
     pub message: String,
-    /// The server couldn't be reached, which its state in the sidebar already shows.
-    pub offline: bool,
 }
 
 impl CoreError {
     pub fn of(value: &Value) -> Self {
-        Self {
-            message: value["error"].as_str().unwrap_or("Something went wrong.").to_string(),
-            offline: value["offline"].as_bool() == Some(true),
-        }
+        Self { message: value["error"].as_str().unwrap_or("Something went wrong.").to_string() }
     }
 }
 
@@ -116,7 +111,7 @@ impl std::fmt::Display for CoreError {
 
 impl From<String> for CoreError {
     fn from(message: String) -> Self {
-        Self { message, offline: false }
+        Self { message }
     }
 }
 

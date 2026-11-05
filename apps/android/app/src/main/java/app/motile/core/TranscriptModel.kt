@@ -113,6 +113,9 @@ class TranscriptModel {
         version += 1
     }
 
+    /** Whether the thread's rows show the message `itemID`, sent or queued. */
+    fun has(itemID: String): Boolean = rows.any { it.itemID == itemID }
+
     /** The thread's rows aren't coming: the view lets go of the ones it kept. */
     fun dropKeptRows() {
         if (keepsRows) showOpened()

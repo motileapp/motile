@@ -126,6 +126,7 @@ impl Client {
             Event::Activity { activity, .. } => self.running = activity.running,
             Event::Live { live, .. } => self.live = live,
             Event::ThreadError { message, .. } => panic!("a thread couldn't be opened: {message}"),
+            Event::Unsent { error, .. } => panic!("a message was given back: {error}"),
             Event::ThreadSearch { query, searching, matches } => self.search = (query, searching, matches),
             Event::Restored
             | Event::Keybindings { .. }
@@ -141,6 +142,8 @@ impl Client {
             | Event::OpenUrl { .. }
             | Event::Copy { .. }
             | Event::UploadProgress { .. }
+            | Event::Outbox { .. }
+            | Event::Sent { .. }
             | Event::Gateway { .. } => {}
         }
     }
@@ -313,6 +316,7 @@ async fn a_client_signs_in_links_a_server_and_runs_a_thread_it_still_has_after_a
         text: "Add a rate limiter to the API".into(),
         attachments: Vec::new(),
         now: false,
+        shown: serde_json::Value::Null,
     };
     let sent = client.ask(send).await.unwrap();
     let thread_id = sent["thread_id"].as_str().unwrap().to_string();
@@ -404,6 +408,7 @@ async fn a_client_signs_in_links_a_server_and_runs_a_thread_it_still_has_after_a
         text: "Show the screenshot".into(),
         attachments: Vec::new(),
         now: false,
+        shown: serde_json::Value::Null,
     };
     let showing = client.ask(send).await.unwrap()["thread_id"].as_str().unwrap().to_string();
     client.ask(Command::CloseThread { thread_id: thread_id.clone() }).await.unwrap();
@@ -457,6 +462,7 @@ async fn a_client_signs_in_links_a_server_and_runs_a_thread_it_still_has_after_a
         text: "Show the screenshot".into(),
         attachments: Vec::new(),
         now: false,
+        shown: serde_json::Value::Null,
     };
     client.ask(more).await.unwrap();
     client
@@ -478,6 +484,7 @@ async fn a_client_signs_in_links_a_server_and_runs_a_thread_it_still_has_after_a
         text: "Add a rate limiter to the API".into(),
         attachments: Vec::new(),
         now: false,
+        shown: serde_json::Value::Null,
     };
     let unopened = client.ask(send).await.unwrap()["thread_id"].as_str().unwrap().to_string();
     client
@@ -596,6 +603,7 @@ async fn a_removed_servers_threads_stay_readable_from_the_copies_until_it_is_del
         text: "Add a rate limiter to the API".into(),
         attachments: Vec::new(),
         now: false,
+        shown: serde_json::Value::Null,
     };
     let thread_id = client.ask(send).await.unwrap()["thread_id"].as_str().unwrap().to_string();
     client.ask(Command::OpenThread { server_id: build.clone(), thread_id: thread_id.clone() }).await.unwrap();
@@ -637,6 +645,7 @@ async fn a_removed_servers_threads_stay_readable_from_the_copies_until_it_is_del
         text: "Go on".into(),
         attachments: Vec::new(),
         now: false,
+        shown: serde_json::Value::Null,
     };
     let refused =
         "“build-box” is unlinked, so its threads are read-only. You can delete “build-box” in settings to remove them.";
@@ -658,6 +667,7 @@ async fn a_removed_servers_threads_stay_readable_from_the_copies_until_it_is_del
         text: "Now test it".into(),
         attachments: Vec::new(),
         now: false,
+        shown: serde_json::Value::Null,
     };
     let continued = client.ask(send).await.unwrap()["thread_id"].as_str().unwrap().to_string();
     client.ask(Command::OpenThread { server_id: spare.clone(), thread_id: continued.clone() }).await.unwrap();
