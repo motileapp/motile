@@ -1,9 +1,9 @@
 package app.motile.ui
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.EaseOut
 import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -27,9 +27,16 @@ import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -38,8 +45,11 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.addOutline
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -70,10 +80,13 @@ import app.motile.theme.Palette
 import app.motile.theme.Surface
 import app.motile.theme.Theme
 import app.motile.theme.at
-import app.motile.theme.opacity
 import app.motile.theme.symbolSide
+import app.motile.theme.value
+import kotlin.math.floor
 import kotlin.math.pow
 import kotlin.math.roundToInt
+import kotlin.math.sqrt
+import kotlinx.coroutines.delay
 
 /** What a button is for, which is how it looks. */
 enum class ButtonVariant {
@@ -212,40 +225,90 @@ data class ControlLook(
         }
 }
 
-/** Two rings in the look's fill that move out from behind it, half a beat apart. */
+/** The rings a button draws: in its waiting look, and once it no longer signals, from when it `stopped`. */
+private class Rings(val look: ControlLook, val stopped: Long?)
+
+/**
+ * The rings to draw and the clock they move by: while the button signals, and for as long as a ring takes after, so
+ * that the rings on their way still go out and no more start.
+ */
 @Composable
-private fun Modifier.signalRings(look: ControlLook): Modifier {
-    val color = look.fill(LocalPalette.current, LocalDark.current)
-    val beat by rememberInfiniteTransition(label = "signal").animateFloat(
-        0f, 1f, infiniteRepeatable(tween(SIGNAL_BEAT_MILLIS, easing = LinearEasing)), label = "beat",
-    )
+private fun rememberRings(signals: Boolean, look: ControlLook): Pair<Rings, State<Long>>? {
+    val clock = remember { mutableLongStateOf(0L) }
+    val waiting = remember { arrayOfNulls<ControlLook>(1) }
+    var lingering by remember { mutableStateOf<Rings?>(null) }
+    SideEffect { if (signals) waiting[0] = look }
+    LaunchedEffect(signals) {
+        if (signals) {
+            lingering = null
+            return@LaunchedEffect
+        }
+        val last = waiting[0] ?: return@LaunchedEffect
+        lingering = Rings(last, clock.longValue)
+        delay(SIGNAL_TRAVEL_MILLIS.toLong())
+        waiting[0] = null
+        lingering = null
+    }
+    if (Platform.reducesMotion) return null
+    val rings = when {
+        signals -> Rings(look, null)
+        else -> lingering ?: waiting[0]?.let { Rings(it, clock.longValue) }
+    } ?: return null
+    LaunchedEffect(Unit) { while (true) withFrameNanos { clock.longValue = it } }
+    return rings to clock
+}
+
+/**
+ * Rings in the look's fill that move out from behind it, a new one each `SIGNAL_EVERY_MILLIS` while the last is still
+ * on its way, seen only outside it: a ring's line is what has come out past the edge, up to its full width.
+ */
+@Composable
+private fun Modifier.signalRings(rings: Rings, clock: State<Long>): Modifier {
+    val color = rings.look.fill(LocalPalette.current, LocalDark.current)
+    val look = rings.look
     return drawBehind {
         val line = SIGNAL_LINE.toPx()
         val radius = if (look.round) size.height / 2 else look.size.radius.toPx()
-        for (offset in listOf(0f, 0.5f)) {
-            val progress = (beat + offset) % 1f
+        val now = clock.value / 1e6f
+        val newest = floor((rings.stopped?.let { it / 1e6f } ?: now) / SIGNAL_EVERY_MILLIS) * SIGNAL_EVERY_MILLIS
+        for (older in 0..SIGNAL_TRAVEL_MILLIS / SIGNAL_EVERY_MILLIS) {
+            val progress = (now - newest + older * SIGNAL_EVERY_MILLIS) / SIGNAL_TRAVEL_MILLIS
+            if (progress >= 1f) continue
             val out = 1f - (1f - progress).pow(3)
             val grown = size.height * SIGNAL_SPREAD * out
+            val width = line.coerceAtMost(grown)
+            if (width <= 0f) continue
+            val middle = grown - width / 2
             drawRoundRect(
-                color, topLeft = Offset(-grown + line / 2, -grown + line / 2),
-                size = Size(size.width + grown * 2 - line, size.height + grown * 2 - line),
-                cornerRadius = CornerRadius(radius + grown - line / 2), alpha = SIGNAL_OPACITY * (1f - out), style = Stroke(line),
+                color, topLeft = Offset(-middle, -middle), size = Size(size.width + middle * 2, size.height + middle * 2),
+                cornerRadius = CornerRadius(radius + middle), alpha = SIGNAL_OPACITY * (1f - out), style = Stroke(width),
             )
         }
     }
 }
 
-private const val SIGNAL_BEAT_MILLIS = 2200
-private const val SIGNAL_SPREAD = 0.16f
+private const val SIGNAL_TRAVEL_MILLIS = 1500
+private const val SIGNAL_EVERY_MILLIS = 1000
+private const val SIGNAL_SPREAD = 0.22f
 private const val SIGNAL_OPACITY = 0.6f
-private val SIGNAL_LINE = 2.dp
+private val SIGNAL_LINE = 3.dp
 
-/** The look's fill and, for an outline or over a picture, its border. */
+/**
+ * The look's fill and, for an outline or over a picture, its border. With an `under` fill, the look's grows from the
+ * centre over it, `revealed` of the way.
+ */
 @Composable
-fun Modifier.controlBackground(look: ControlLook): Modifier {
+fun Modifier.controlBackground(look: ControlLook, under: Color? = null, revealed: () -> Float = { 1f }): Modifier {
     val palette = LocalPalette.current
     val shape = look.shape
-    val filled = background(look.fill(palette, LocalDark.current), shape)
+    val fill = look.fill(palette, LocalDark.current)
+    val filled = if (under == null) background(fill, shape) else drawBehind {
+        clipPath(Path().apply { addOutline(shape.createOutline(size, layoutDirection, this@drawBehind)) }) {
+            drawRect(under)
+            val reach = sqrt(size.width * size.width + size.height * size.height) / 2
+            drawCircle(fill, radius = reach * RevealEasing.transform(revealed()))
+        }
+    }
     val border = when (look.variant) {
         ButtonVariant.Outline -> look.surface.border(palette)
         ButtonVariant.Overlay -> OverPicture.controlBorder
@@ -470,10 +533,12 @@ fun ControlButton(
         lit = enabled && !pending && (pressed || hovered),
     )
     val palette = LocalPalette.current
+    val reveal = rememberReveal(shown.variant, if (!enabled && !pending) Opacity.Disabled.value(LocalDark.current) else 1f)
+    val rings = rememberRings(signals, shown)
     Box(
         modifier
             .then(if (stretches) Modifier.fillMaxWidth() else Modifier)
-            .opacity(Opacity.Disabled, on = !enabled && !pending)
+            .then(if (reveal.alpha < 1f) Modifier.alpha(reveal.alpha) else Modifier)
             .semantics { if (help != null) contentDescription = help }
             .arrowPointer()
             .combinedClickable(
@@ -486,13 +551,59 @@ fun ControlButton(
             )
             .padding(margin)
             .then(if (stretches) Modifier.wrapContentWidth(Alignment.Start) else Modifier)
-            .then(if (signals && !Platform.reducesMotion) Modifier.signalRings(shown) else Modifier)
-            .controlBackground(shown),
+            .then(rings?.let { (rings, clock) -> Modifier.signalRings(rings, clock) } ?: Modifier)
+            .controlBackground(shown, reveal.under?.let { shown.copy(variant = it, lit = false).fill(palette, LocalDark.current) }, reveal.revealed),
         contentAlignment = Alignment.Center,
     ) {
         CompositionLocalProvider(LocalForeground provides shown.foreground(palette), content = content)
     }
 }
+
+/** What a button was for, which its new fill grows over, how far it has grown, and its opacity while it does. */
+private class RevealState(variant: ButtonVariant, alpha: Float) {
+    var settled by mutableStateOf(variant)
+    var from by mutableStateOf<ButtonVariant?>(null)
+    var revealedAt = 0L
+    val progress = Animatable(1f)
+    val alpha = Animatable(alpha)
+}
+
+/** The fill a button's new one grows over, how far it has grown, and the button's opacity. */
+private class Reveal(val under: ButtonVariant?, val revealed: () -> Float, val alpha: Float)
+
+/**
+ * When what a button is for changes, as from waiting to sending, its new fill grows from the centre over the old one
+ * and its opacity eases, over `RECOLOR_MILLIS`. Until the change is taken up the old fill stays whole, so that the new
+ * one never shows whole first.
+ */
+@Composable
+private fun rememberReveal(variant: ButtonVariant, alpha: Float): Reveal {
+    val state = remember { RevealState(variant, alpha) }
+    LaunchedEffect(variant) {
+        if (state.settled == variant) return@LaunchedEffect
+        state.progress.snapTo(0f)
+        state.from = state.settled
+        state.settled = variant
+        state.revealedAt = System.nanoTime()
+        state.progress.animateTo(1f, tween(RECOLOR_MILLIS, easing = LinearEasing))
+        state.from = null
+    }
+    LaunchedEffect(variant, alpha) {
+        val easing = System.nanoTime() - state.revealedAt < RECOLOR_MILLIS * 1_000_000L
+        if (easing) state.alpha.animateTo(alpha, tween(RECOLOR_MILLIS, easing = EaseOut)) else state.alpha.snapTo(alpha)
+    }
+    val changing = state.settled != variant
+    return Reveal(
+        under = if (changing) state.settled else state.from,
+        revealed = { if (changing) 0f else state.progress.value },
+        alpha = if (changing || state.alpha.isRunning) state.alpha.value else alpha,
+    )
+}
+
+private const val RECOLOR_MILLIS = 200
+
+/** How the new fill's circle grows: fast out of the centre, slowly to the edge. */
+private val RevealEasing = CubicBezierEasing(0.25f, 1f, 0.5f, 1f)
 
 /**
  * The button. It says what it does with words, a symbol or both, in one of three sizes. While

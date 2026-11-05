@@ -36,7 +36,7 @@ enum ControlIcon {
 
 /// The colours and the shape of a button or a menu. Pressed looks as under the pointer does.
 struct ControlLook {
-    let variant: ButtonVariant
+    var variant: ButtonVariant
     let size: ControlSize
     var selected = false
     var lit = false
@@ -122,6 +122,18 @@ struct ControlLook {
 }
 
 extension ControlLook {
+    /// How long a button's new colour takes to grow from its centre over the old one, when what it
+    /// is for changes, as from waiting to sending.
+    static let recolor: TimeInterval = 0.2
+
+    /// The same look for another purpose, unlit.
+    func `as`(_ variant: ButtonVariant) -> ControlLook {
+        var look = self
+        look.variant = variant
+        look.lit = false
+        return look
+    }
+
     /// Whether a tint colours its words and symbol.
     var takesTint: Bool { variant == .ghost || variant == .secondary || variant == .outline }
 
@@ -352,6 +364,13 @@ private struct ControlBody<Label: View>: View {
     let signals: Bool
     let margin: EdgeInsets
     @State private var hovering = false
+    /// What it was for, which its new colour grows over: the variant it last settled on, and the one
+    /// before while the new one grows.
+    @State private var settled: ButtonVariant?
+    @State private var grownOver: ButtonVariant?
+    @State private var revealedAt: Date?
+    /// The rings' look, and when they stopped starting, so that the last ones still go out.
+    @State private var rings: (look: ControlLook, stopped: Date?)?
     @Environment(\.isEnabled) private var enabled
     @Environment(\.surface) private var surface
     @Environment(\.row) private var row
@@ -365,14 +384,72 @@ private struct ControlBody<Label: View>: View {
             .foregroundStyle(look.foreground)
             .background {
                 ZStack {
-                    if signals { SignalRings(look: look) }
-                    look.background
+                    if let rings { SignalRings(look: rings.look, stopped: rings.stopped) }
+                    let changing = settled != nil && settled != look.variant
+                    if let old = changing ? settled : grownOver {
+                        look.as(old).background
+                            .appearing(.identity)
+                    }
+                    if changing || revealedAt != nil {
+                        TimelineView(.animation) { context in
+                            let since = revealedAt.map { context.date.timeIntervalSince($0) } ?? 0
+                            look.background.mask { Reveal(revealed: changing ? 0 : min(1, since / ControlLook.recolor)) }
+                        }
+                        .transaction { $0.animation = nil }
+                        .appearing(.identity)
+                    } else {
+                        look.background
+                            .transaction { $0.animation = nil }
+                            .appearing(.identity)
+                    }
                 }
+                .compositingGroup()
                 .padding(margin)
             }
             .contentShape(Rectangle())
             .opacity(.disabled, when: !enabled && !pending)
+            .animation(.easeOut(duration: ControlLook.recolor), value: look.variant)
             .onHover { hovering = $0 }
+            .onChange(of: look.variant, initial: true) { old, new in reveal(new, over: old) }
+            .onChange(of: signals, initial: true) { _, signals in signal(signals, look: look) }
+    }
+
+    private func reveal(_ variant: ButtonVariant, over old: ButtonVariant) {
+        settled = variant
+        guard old != variant else { return }
+        grownOver = old
+        revealedAt = .now
+        DispatchQueue.main.asyncAfter(deadline: .now() + ControlLook.recolor) {
+            guard settled == variant else { return }
+            grownOver = nil
+            revealedAt = nil
+        }
+    }
+
+    private func signal(_ signals: Bool, look: ControlLook) {
+        guard !signals else { return rings = (look, nil) }
+        guard let started = rings, started.stopped == nil else { return }
+        let stopped = Date.now
+        rings = (started.look, stopped)
+        DispatchQueue.main.asyncAfter(deadline: .now() + SignalRings.travel) {
+            if rings?.stopped == stopped { rings = nil }
+        }
+    }
+}
+
+/// A circle that grows from the middle until it covers the whole of what it masks.
+private struct Reveal: View {
+    let revealed: CGFloat
+    /// Quick to start, then slowly settling as it reaches the edge.
+    private static let curve = UnitCurve.bezier(startControlPoint: UnitPoint(x: 0.25, y: 1), endControlPoint: UnitPoint(x: 0.5, y: 1))
+
+    var body: some View {
+        GeometryReader { proxy in
+            let side = hypot(proxy.size.width, proxy.size.height) * Self.curve.value(at: revealed)
+            Circle()
+                .frame(width: side, height: side)
+                .position(x: proxy.size.width / 2, y: proxy.size.height / 2)
+        }
     }
 }
 
@@ -525,33 +602,50 @@ struct ActionButton: View {
     }
 }
 
-/// Two rings in the button's colour that move out from behind it, half a beat apart.
+/// Rings in the button's colour that move out from behind it, a new one each `every` while the
+/// last is still on its way, seen only outside it: a ring's line is what has come out past the
+/// edge, up to its full width. Once they are `stopped`, the ones on their way still go out and no
+/// more start.
 private struct SignalRings: View {
     let look: ControlLook
-    private static let beat: TimeInterval = 2.2
-    private static let spread: CGFloat = 0.16
-    private static let lineWidth: CGFloat = 2
+    let stopped: Date?
+    /// How long a ring takes to go out, and how often a new one starts.
+    static let travel: TimeInterval = 1.5
+    private static let every: TimeInterval = 1
+    private static let spread: CGFloat = 0.22
+    private static let lineWidth: CGFloat = 3
     private static let opacity = 0.6
 
     var body: some View {
         if !Platform.reducesMotion {
             GeometryReader { proxy in
                 TimelineView(.animation) { context in
-                    let time = context.date.timeIntervalSinceReferenceDate / Self.beat
                     ZStack {
-                        ring(at: time, side: min(proxy.size.width, proxy.size.height))
-                        ring(at: time + 0.5, side: min(proxy.size.width, proxy.size.height))
+                        ForEach(Self.progresses(at: context.date, stopped: stopped), id: \.self) { progress in
+                            ring(at: progress, side: min(proxy.size.width, proxy.size.height))
+                        }
                     }
                 }
             }
         }
     }
 
-    private func ring(at time: Double, side: CGFloat) -> some View {
-        let out = Self.easeOut(time - time.rounded(.down))
+    /// How far each ring on its way is along it: the newest started at the last `every` before now,
+    /// or before they stopped.
+    private static func progresses(at date: Date, stopped: Date?) -> [Double] {
+        let now = date.timeIntervalSinceReferenceDate
+        let newest = ((stopped ?? date).timeIntervalSinceReferenceDate / every).rounded(.down) * every
+        return (0...Int(travel / every)).compactMap { older in
+            let progress = (now - newest + Double(older) * every) / travel
+            return progress < 1 ? progress : nil
+        }
+    }
+
+    private func ring(at progress: Double, side: CGFloat) -> some View {
+        let out = Self.easeOut(progress)
         let grown = side * Self.spread * out
         return RoundedRectangle(cornerRadius: look.radius + grown, style: .continuous)
-            .strokeBorder(look.fillColor, lineWidth: Self.lineWidth)
+            .strokeBorder(look.fillColor, lineWidth: min(Self.lineWidth, grown))
             .padding(-grown)
             .opacity(Self.opacity * (1 - out))
     }

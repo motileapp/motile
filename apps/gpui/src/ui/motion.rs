@@ -141,9 +141,48 @@ pub fn ease_in_out(delta: f32) -> f32 {
     if delta < 0.5 { 2. * delta * delta } else { 1. - (-2. * delta + 2.).powi(2) / 2. }
 }
 
+/// CSS's `cubic-bezier(x1, y1, x2, y2)` at `t` of the way through: the curve's height where its
+/// horizontal position is `t`, found by Newton's method with bisection where that stalls.
+pub fn cubic_bezier(first: (f32, f32), second: (f32, f32), t: f32) -> f32 {
+    let along = |a: f32, b: f32, s: f32| 3. * a * s * (1. - s).powi(2) + 3. * b * s * s * (1. - s) + s.powi(3);
+    let slope =
+        |a: f32, b: f32, s: f32| 3. * a * (1. - s).powi(2) + 6. * (b - a) * s * (1. - s) + 3. * (1. - b) * s * s;
+    let t = t.clamp(0., 1.);
+    let mut s = t;
+    for _ in 0..8 {
+        let error = along(first.0, second.0, s) - t;
+        let gradient = slope(first.0, second.0, s);
+        if error.abs() < 1e-5 || gradient.abs() < 1e-6 {
+            break;
+        }
+        s = (s - error / gradient).clamp(0., 1.);
+    }
+    if (along(first.0, second.0, s) - t).abs() > 1e-3 {
+        let (mut low, mut high) = (0., 1.);
+        for _ in 0..30 {
+            s = (low + high) / 2.;
+            if along(first.0, second.0, s) < t { low = s } else { high = s }
+        }
+    }
+    along(first.1, second.1, s)
+}
+
 /// The colour `t` of the way from `from` to `to`.
 pub fn mix(from: Hsla, to: Hsla, t: f32) -> Hsla {
     let (from, to) = (Rgba::from(from), Rgba::from(to));
     let at = |a: f32, b: f32| a + (b - a) * t;
     Hsla::from(Rgba { r: at(from.r, to.r), g: at(from.g, to.g), b: at(from.b, to.b), a: at(from.a, to.a) })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::cubic_bezier;
+
+    #[test]
+    fn a_cubic_bezier_runs_from_start_to_end_along_its_curve() {
+        assert_eq!(cubic_bezier((0.16, 1.), (0.3, 1.), 0.), 0.);
+        assert!((cubic_bezier((0.16, 1.), (0.3, 1.), 1.) - 1.).abs() < 1e-4);
+        assert!((cubic_bezier((1. / 3., 1. / 3.), (2. / 3., 2. / 3.), 0.3) - 0.3).abs() < 1e-3);
+        assert!(cubic_bezier((0.16, 1.), (0.3, 1.), 0.25) > 0.75);
+    }
 }

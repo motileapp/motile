@@ -577,6 +577,31 @@ impl RenderOnce for TurningSymbol {
     }
 }
 
+/// How long a button's new colour takes to grow from its centre over the old one when what it is
+/// for changes, as from waiting to sending.
+const RECOLOR: std::time::Duration = std::time::Duration::from_millis(200);
+
+/// What a button keeps between frames for its colour and its signal rings: the variant it shows,
+/// its fill and opacity then, the fill and opacity a new one grows over and since when, and the
+/// rings' colour with when they stopped starting, so that the last ones still go out.
+#[derive(Clone, Copy)]
+struct ButtonMotion {
+    variant: Variant,
+    fill: Hsla,
+    opacity: f32,
+    grown_over: Option<(Hsla, f32, std::time::Instant)>,
+    rings: Option<(Hsla, Option<std::time::Instant>)>,
+}
+
+impl ButtonMotion {
+    /// How far the new colour has grown, when one grows.
+    fn revealed(&self) -> Option<f32> {
+        let (_, _, since) = self.grown_over?;
+        let progress = since.elapsed().as_secs_f32() / RECOLOR.as_secs_f32();
+        (progress < 1.).then(|| motion::cubic_bezier((0.25, 1.), (0.5, 1.), progress))
+    }
+}
+
 /// How long a chevron takes to turn over as what it opens opens.
 const CHEVRON_TURN: std::time::Duration = std::time::Duration::from_millis(200);
 
@@ -935,6 +960,38 @@ impl ActionButton {
         self.on_click = Some(Rc::new(handler));
         self
     }
+
+    /// Its colour and rings this frame: a new variant starts its colour growing over the old one,
+    /// and rings that stop go on until the last ones are out.
+    fn motion(&self, fill: Hsla, opacity: f32, signals: bool, window: &mut Window, cx: &mut App) -> ButtonMotion {
+        let id = ElementId::NamedChild(std::sync::Arc::new(self.id.clone()), "motion".into());
+        let variant = self.look.variant;
+        let state = window.use_keyed_state(id, cx, |_, _| ButtonMotion {
+            variant,
+            fill,
+            opacity,
+            grown_over: None,
+            rings: None,
+        });
+        state.update(cx, |motion, _| {
+            let now = std::time::Instant::now();
+            if motion.variant != variant {
+                motion.grown_over = Some((motion.fill, motion.opacity, now));
+                motion.variant = variant;
+            } else if motion.revealed().is_none() {
+                motion.grown_over = None;
+            }
+            motion.fill = fill;
+            motion.opacity = opacity;
+            motion.rings = match motion.rings {
+                _ if signals => Some((fill, None)),
+                Some((color, None)) => Some((color, Some(now))),
+                Some((_, Some(stopped))) if now.duration_since(stopped).as_secs_f32() >= SIGNAL_TRAVEL => None,
+                rings => rings,
+            };
+            *motion
+        })
+    }
 }
 
 impl RenderOnce for ActionButton {
@@ -950,6 +1007,19 @@ impl RenderOnce for ActionButton {
         let fill = look.fill(false, c);
         let lit = look.fill(true, c);
         let foreground = look.foreground(active && *hovered.read(cx), c);
+        let opacity = if self.disabled && !pending { c.opacity(Opacity::Disabled) } else { 1. };
+        let signals = self.signals && !crate::media::native::reduces_motion();
+        let motion = self.motion(fill, opacity, signals, window, cx);
+        let revealed = motion.revealed();
+        let opacity = match (motion.grown_over, revealed) {
+            (Some((_, from, _)), Some(revealed)) => from + (opacity - from) * revealed,
+            _ => opacity,
+        };
+        // Only a round face clips the growing circle to itself; another changes colour at once.
+        let reveal = revealed.filter(|_| look.round).zip(motion.grown_over.map(|(old, _, _)| old));
+        if revealed.is_some() || motion.rings.is_some() {
+            window.request_animation_frame();
+        }
         let corners = look.corners();
         let truncates = self.truncates;
         let bleed = self.inline.then(|| self.inline_bleed(window));
@@ -976,7 +1046,20 @@ impl RenderOnce for ActionButton {
             .rounded_tr(corners.top_right)
             .rounded_bl(corners.bottom_left)
             .rounded_br(corners.bottom_right)
-            .bg(fill)
+            .bg(reveal.map_or(fill, |(_, old)| old))
+            .when_some(reveal, |inner, (revealed, _)| {
+                let side = look.size.height() * revealed;
+                inner.relative().child(
+                    div()
+                        .absolute()
+                        .top(px((look.size.height() - side) / 2.))
+                        .left(relative(0.5))
+                        .ml(px(-side / 2.))
+                        .size(px(side))
+                        .rounded_full()
+                        .bg(fill),
+                )
+            })
             .when_some(border, |inner, border| inner.border_1().border_color(border))
             .when_some(look.shadow(c), |inner, shadow| inner.shadow(shadow))
             .text_color(foreground)
@@ -986,11 +1069,11 @@ impl RenderOnce for ActionButton {
                     .group_active(group.clone(), move |inner| inner.bg(lit))
             })
             .child(label);
-        let face = if self.signals && !crate::media::native::reduces_motion() {
-            window.request_animation_frame();
-            div().relative().children(signal_rings(&look, fill)).child(face).into_any_element()
-        } else {
-            face.into_any_element()
+        let face = match motion.rings {
+            Some((color, stopped)) => {
+                div().relative().children(signal_rings(&look, color, stopped)).child(face).into_any_element()
+            }
+            None => face.into_any_element(),
         };
         div()
             .id(self.id.clone())
@@ -1004,7 +1087,7 @@ impl RenderOnce for ActionButton {
             .pb(px(self.margin.bottom))
             .pr(px(self.margin.right))
             .when_some(bleed, |button, (leading, vertical)| button.ml(px(-leading)).my(px(-vertical)))
-            .when(self.disabled && !pending, |button| button.opacity(c.opacity(Opacity::Disabled)))
+            .when(opacity < 1., |button| button.opacity(opacity))
             .cursor_default()
             .child(face)
             .on_hover(crate::ui::track_hover(&hovered))
@@ -1033,31 +1116,48 @@ impl RenderOnce for ActionButton {
     }
 }
 
-/// How long a signal ring takes to move out from a button, and how far it goes, of the button's height.
-const SIGNAL_BEAT: f32 = 2.2;
-const SIGNAL_SPREAD: f32 = 0.16;
-const SIGNAL_LINE: f32 = 2.;
+/// How long a signal ring takes to move out from a button, how often a new one starts, and how far
+/// it goes, of the button's height.
+const SIGNAL_TRAVEL: f32 = 1.5;
+const SIGNAL_EVERY: f32 = 1.;
+const SIGNAL_SPREAD: f32 = 0.22;
+const SIGNAL_LINE: f32 = 3.;
 const SIGNAL_OPACITY: f32 = 0.6;
 
-/// Two rings in the button's colour that move out from behind it, half a beat apart.
-fn signal_rings(look: &Look, color: Hsla) -> [Div; 2] {
-    static START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
-    let beats = START.get_or_init(std::time::Instant::now).elapsed().as_secs_f32() / SIGNAL_BEAT;
+/// The clock every button's signal rings keep, so that they start alike.
+static SIGNAL_START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+
+/// The seconds since the rings' clock started, at `at`.
+fn signal_clock(at: std::time::Instant) -> f32 {
+    at.saturating_duration_since(*SIGNAL_START.get_or_init(std::time::Instant::now)).as_secs_f32()
+}
+
+/// Rings in the button's colour that move out from behind it, a new one each `SIGNAL_EVERY` while
+/// the last is still on its way, seen only outside it: a ring's line is what has come out past the
+/// edge, up to its full width. Once they `stopped`, the ones on their way still go out and no more
+/// start.
+fn signal_rings(look: &Look, color: Hsla, stopped: Option<std::time::Instant>) -> Vec<Div> {
+    let now = signal_clock(std::time::Instant::now());
+    let newest = (stopped.map_or(now, signal_clock) / SIGNAL_EVERY).floor() * SIGNAL_EVERY;
     let side = look.size.height();
     let radius = look.radius();
-    [0., 0.5].map(|offset| {
-        let out = 1. - (1. - (beats + offset).fract()).powi(3);
-        let grown = side * SIGNAL_SPREAD * out;
-        div()
-            .absolute()
-            .top(px(-grown))
-            .left(px(-grown))
-            .right(px(-grown))
-            .bottom(px(-grown))
-            .rounded(px(radius + grown))
-            .border(px(SIGNAL_LINE))
-            .border_color(color.opacity(SIGNAL_OPACITY * (1. - out)))
-    })
+    (0..=(SIGNAL_TRAVEL / SIGNAL_EVERY) as usize)
+        .map(|older| (now - newest + older as f32 * SIGNAL_EVERY) / SIGNAL_TRAVEL)
+        .filter(|progress| *progress < 1.)
+        .map(|progress| {
+            let out = 1. - (1. - progress).powi(3);
+            let grown = side * SIGNAL_SPREAD * out;
+            div()
+                .absolute()
+                .top(px(-grown))
+                .left(px(-grown))
+                .right(px(-grown))
+                .bottom(px(-grown))
+                .rounded(px(radius + grown))
+                .border(px(SIGNAL_LINE.min(grown)))
+                .border_color(color.opacity(SIGNAL_OPACITY * (1. - out)))
+        })
+        .collect()
 }
 
 type BuildMenu = Rc<dyn Fn(&mut Window, &mut App) -> Menu>;

@@ -598,7 +598,8 @@ impl Composer {
     }
 
     /// Stops the turn that runs, and sends what is written or queues it behind that turn. While the
-    /// server connects neither works, and the last of them waits for it, sending signals.
+    /// client tries to reach the server neither works, and the last of them waits for it, sending
+    /// signals.
     fn send_buttons(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let c = colors(cx);
         let store = self.store.read(cx);
@@ -606,7 +607,7 @@ impl Composer {
         let can_send = store.can_send();
         let sends = !running || store.has_message();
         let state = store.composer_server().map(|server| server.state);
-        let connecting = state == Some(State::Connecting);
+        let connecting = matches!(state, Some(State::Connecting | State::Disconnected));
         let stop_waits = connecting && !sends;
         let steers = store.steers();
         let stop_help = store.shortcuts.help("Stop", "thread.stop");

@@ -313,7 +313,8 @@ struct ComposerView: View {
 }
 
 /// Stops the turn that runs, and sends what is written: into that turn, or queued behind it.
-/// While the server connects neither works, and the last of them waits for it, sending signals.
+/// While the client tries to reach the server neither works, and the last of them waits for it,
+/// sending signals.
 struct ComposerSendButtons: View {
     @Environment(AppStore.self) private var store
     @AppStorage(AppStore.steersKey) private var steers = AppStore.steersByDefault
@@ -322,7 +323,7 @@ struct ComposerSendButtons: View {
         let running = store.activity.running && store.selectedThread != nil
         let sends = !running || store.hasMessage
         let state = store.composerServer?.state
-        let connecting = state == .connecting
+        let connecting = state == .connecting || state == .disconnected
         HStack(spacing: 0) {
             if running {
                 let waits = connecting && !sends

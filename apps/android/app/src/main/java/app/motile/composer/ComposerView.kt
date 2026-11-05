@@ -270,7 +270,7 @@ private fun Attachments() {
 
 /**
  * Stops the turn that runs, and sends what is written: into that turn, or queued behind it, as the settings say.
- * While the server connects neither works, and the last of them waits for it, sending signals.
+ * While the client tries to reach the server neither works, and the last of them waits for it, sending signals.
  */
 @Composable
 fun ComposerSendButtons() {
@@ -278,7 +278,7 @@ fun ComposerSendButtons() {
     val running = store.activity.running && store.selectedThread != null
     val sends = !running || store.hasMessage
     val state = store.composerServer?.state
-    val connecting = state == Server.State.Connecting
+    val connecting = state == Server.State.Connecting || state == Server.State.Disconnected
     Row(verticalAlignment = Alignment.CenterVertically) {
         if (running) {
             val waits = connecting && !sends
