@@ -56,6 +56,8 @@ struct McpToolGroupRow: View {
     var inset = EdgeInsets()
     var toggle: () -> Void = {}
     @State private var hovered = false
+    /// The pointer is on its menu, which the row's light would hide, so the row stays unlit.
+    @State private var onMenu = false
 
     var body: some View {
         let row = HStack(spacing: 8) {
@@ -63,6 +65,7 @@ struct McpToolGroupRow: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .allowsHitTesting(false)
             McpPermissionMenu(permission: group.permission) { store.setMcpServerGroup(mcpServer, group, to: $0) }
+                .onHover { onMenu = $0 }
         }
         .padding(inset)
         if open == nil {
@@ -71,7 +74,7 @@ struct McpToolGroupRow: View {
             row
                 .background {
                     Button(action: toggle) { Color.clear }
-                        .buttonStyle(.highlight(radius: 0, hovered: hovered))
+                        .buttonStyle(.highlight(radius: 0, hovered: hovered && !onMenu))
                         .accessibilityLabel(group.title)
                 }
                 .onHover { hovered = $0 }

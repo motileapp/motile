@@ -216,11 +216,18 @@ fun SettingsRow(modifier: Modifier = Modifier, content: @Composable RowScope.() 
     )
 }
 
-/** A row that does something when pressed, lit while it is. */
+/** A row that does something when pressed, lit while it is, and under the pointer unless `hovered` says otherwise. */
 @Composable
-fun SettingsPressRow(onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true, onLongClick: (() -> Unit)? = null, content: @Composable RowScope.() -> Unit) {
+fun SettingsPressRow(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    hovered: Boolean? = null,
+    onLongClick: (() -> Unit)? = null,
+    content: @Composable RowScope.() -> Unit,
+) {
     val usable = enabled && LocalEnabled.current
-    HighlightButton(onClick, modifier.fillMaxWidth().opacity(Opacity.Disabled, on = !usable), enabled = enabled, radius = 0.dp, onLongClick = onLongClick) {
+    HighlightButton(onClick, modifier.fillMaxWidth().opacity(Opacity.Disabled, on = !usable), enabled = enabled, radius = 0.dp, hovered = hovered, onLongClick = onLongClick) {
         SettingsRow(content = content)
     }
 }
