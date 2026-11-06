@@ -135,6 +135,17 @@ struct SettingsPage: View {
                     .disabled((store.mediaStorage?.used ?? 0) == 0)
             }
         }
+
+        SettingsGroup("log", "Troubleshooting") {
+            SettingsRow {
+                SettingsLabel("Log", description: logDescription)
+            } trailing: {
+                ActionButton("Show in Finder", variant: .outline, size: .large) {
+                    guard let file = store.logFile else { return }
+                    NSWorkspace.shared.activateFileViewerSelecting([file])
+                }
+            }
+        }
     }
 
     @ViewBuilder private var servers: some View {

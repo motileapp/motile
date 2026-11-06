@@ -126,8 +126,3 @@ impl From<CoreError> for String {
         error.message
     }
 }
-
-pub fn init_logging() {
-    let filter = std::env::var("MOTILE_LOG").unwrap_or_else(|_| "warn,motile_core=info".to_string());
-    let _ = tracing_subscriber::fmt().with_env_filter(filter).with_writer(std::io::stderr).with_ansi(false).try_init();
-}

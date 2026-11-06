@@ -45,7 +45,6 @@ use crate::root::Root;
 use crate::store::Store;
 
 fn main() {
-    bridge::init_logging();
     #[cfg(target_os = "linux")]
     if std::env::args().skip(1).any(|arg| arg == instance::REGISTER) {
         instance::register_scheme();
@@ -55,6 +54,7 @@ fn main() {
     if !updater::relaunched() && instance::hand_over(&instance::opened_urls()) {
         return;
     }
+    motile_core::log::init(&store::data_dir());
     updater::remove_replaced();
     let app = gpui_kit::application().with_assets(assets::Assets);
     let (url_sender, mut opened_urls) = futures::channel::mpsc::unbounded::<Vec<String>>();

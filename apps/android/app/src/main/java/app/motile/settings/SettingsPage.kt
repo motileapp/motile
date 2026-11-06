@@ -33,12 +33,14 @@ import app.motile.core.Integration
 import app.motile.core.Preferences
 import app.motile.core.Server
 import app.motile.core.SettingsSection
+import app.motile.core.logDescription
 import app.motile.core.managesNewThreadsDescription
 import app.motile.core.workingShelfDescription
 import app.motile.core.pullDefaultBranchCaption
 import app.motile.onboarding.ConnectServerView
 import app.motile.platform.Platform
 import app.motile.platform.scaled
+import app.motile.transcript.MediaFiles
 import app.motile.sidebar.ServerUpdateStatus
 import app.motile.theme.iconSize
 import app.motile.theme.IconSize
@@ -132,6 +134,11 @@ private fun SettingsGroups.general(
         row { SettingsLabeled("Images and videos", store.mediaStorageUsed) }
         row {
             SettingsButton("Clear Images and Videos", destructive = true, enabled = (store.mediaStorage?.used ?: 0) > 0) { store.clearMedia() }
+        }
+    }
+    store.logFile?.let { logFile ->
+        group("log", header = "Troubleshooting", footer = logDescription) {
+            row { SettingsButton("Share Log") { MediaFiles.share(logFile, "motile-log.txt") } }
         }
     }
     group("updates", header = "Updates") {

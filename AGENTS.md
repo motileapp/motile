@@ -335,6 +335,10 @@ for tests.
 - `follow.rs`: keeps the cached copy of an active thread that isn't open current.
 - `cache.rs`: the client's SQLite copy of its servers' threads, read a page of whole turns at a
   time.
+- `log.rs`: the client's log, `client.log` in its data folder, which starts over at 5 MB and keeps
+  the one before as `client.old.log`: how each server's link connects and fails, when the endpoint
+  is replaced, panics, and inputs that kept the core busy. Settings → General → Troubleshooting
+  shows it in the Mac's Finder and the GPUI app's file manager, and shares it on iOS and Android.
 - `media.rs`: the images and videos the client has fetched, as files, with a size limit.
 - `git.rs`: which git action a project's status calls for.
 - `pull_request.rs`: the pull request tabs: a pull request's statuses, the button its state calls

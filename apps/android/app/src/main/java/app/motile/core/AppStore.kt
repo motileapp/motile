@@ -407,6 +407,9 @@ class AppStore(private val context: Context) {
     /** Unknown until Settings asks for it. */
     var mediaStorage by mutableStateOf<MediaStorage?>(null)
         private set
+    /** The core's log, `client.log` in the data folder. */
+    var logFile: File? = null
+        private set
     private var drafts by mutableStateOf(mapOf<String, String>())
     private var attachmentsByKey by mutableStateOf(mapOf<String, List<Attachment>>())
     /** The images and videos the viewer has open over the window. */
@@ -476,6 +479,7 @@ class AppStore(private val context: Context) {
     fun start(environment: Map<String, String>) {
         core.decode = ::decode
         val dataDir = environment["MOTILE_DATA_DIR"] ?: dataFolder().path
+        logFile = File(dataDir, "client.log")
         val authURL = environment["MOTILE_AUTH_URL"] ?: BuildConfig.AUTH_URL
         val config = buildMap<String, Any?> {
             put("data_dir", dataDir)

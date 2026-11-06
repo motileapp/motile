@@ -95,6 +95,8 @@ const GATEWAY_LIMITS_WAIT: Duration = Duration::from_secs(5);
 const LIMITS_STALE: Duration = Duration::from_secs(5 * 60);
 /// An endpoint that didn't run for this long isn't trusted to reach anything anymore.
 const STALE_AFTER: Duration = Duration::from_secs(10);
+/// How long the core may take over one input before the log says so.
+const BUSY_AFTER: Duration = Duration::from_secs(1);
 /// How long a message that didn't reach its server waits before it is sent again.
 const OUTBOX_RETRY: Duration = Duration::from_secs(3);
 /// An endpoint that reached no server for this long is replaced, in case the fault is its own.
@@ -545,7 +547,11 @@ pub fn start(config: Config, sink: EventSink) -> anyhow::Result<Handle> {
             if matches!(input, Input::Stop) {
                 break;
             }
+            let started = Instant::now();
             core.handle(input);
+            if started.elapsed() >= BUSY_AFTER {
+                tracing::warn!(took_ms = started.elapsed().as_millis() as u64, "the core was busy");
+            }
         }
         core.stop().await;
     });
@@ -1014,6 +1020,7 @@ impl Core {
         if paused < STALE_AFTER || self.endpoint.is_none() {
             return false;
         }
+        tracing::info!(paused_ms = paused.as_millis() as u64, "replacing the endpoint after a pause");
         self.bind_endpoint();
         true
     }
@@ -1031,6 +1038,7 @@ impl Core {
             return;
         }
         self.reached_at = Instant::now();
+        tracing::warn!("replacing the endpoint, which reached no server for a minute");
         self.bind_endpoint();
     }
 
@@ -1062,6 +1070,7 @@ impl Core {
         }
         match result {
             Ok(endpoint) => {
+                tracing::info!("the endpoint is open");
                 for link in self.servers.iter().filter_map(|server| server.link.as_ref()) {
                     link.redial_on(endpoint.clone());
                 }
@@ -2648,6 +2657,7 @@ impl Core {
                 self.reply(id, Ok(json!({})));
             }
             Command::Foreground => {
+                tracing::info!("came back");
                 let backgrounded_at = self.backgrounded_at.take();
                 let away = backgrounded_at.and_then(|at| SystemTime::now().duration_since(at).ok());
                 if !self.replace_stale_endpoint(away.unwrap_or_default()) {
@@ -2657,6 +2667,7 @@ impl Core {
                 self.reply(id, Ok(json!({})));
             }
             Command::NetworkChanged => {
+                tracing::info!("the network changed");
                 self.network_changed();
                 self.reply(id, Ok(json!({})));
             }

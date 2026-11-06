@@ -436,6 +436,8 @@ final class AppStore {
     var revealedThreadID: String?
     /// Unknown until Settings asks for it.
     private(set) var mediaStorage: MediaStorage?
+    /// The core's log, `client.log` in the data folder.
+    private(set) var logFile: URL?
     private var drafts: [String: String] = [:]
     private var attachmentsByKey: [String: [Attachment]] = [:]
     /// The images and videos the viewer has open over the window.
@@ -494,6 +496,7 @@ final class AppStore {
         core.decode = { [weak self] event in self?.decode(event) }
         let environment = ProcessInfo.processInfo.environment
         let dataDir = environment["MOTILE_DATA_DIR"] ?? Self.dataFolder()
+        logFile = URL(fileURLWithPath: dataDir).appendingPathComponent("client.log")
         let bundled = Bundle.main.object(forInfoDictionaryKey: "MotileAuthURL") as? String
         let authURL = environment["MOTILE_AUTH_URL"] ?? bundled.flatMap { $0.isEmpty ? nil : $0 } ?? "https://auth.motile.app"
         var config: JSON = [

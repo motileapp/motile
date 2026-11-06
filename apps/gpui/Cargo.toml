@@ -26,7 +26,6 @@ chrono = "0.4"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "webp", "bmp", "tiff"] }
 reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider", "json", "form", "query"] }
 tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 kurbo = "0.13"
 mvt-reader = "2.5"
 geo-types = { version = "0.7", default-features = false }

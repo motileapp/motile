@@ -48,6 +48,9 @@ enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
 let managesNewThreadsDescription = "Picks the account for each new thread."
 let workingShelfDescription = "Show working threads on their own shelf."
 
+/// What the log is, said beside the way to it.
+let logDescription = "What Motile did on this \(Platform.device), such as connecting to your servers. It helps look into a problem."
+
 /// What automatically pulling does, said under its switch.
 let pullDefaultBranchCaption = "Keeps each project's folder current while it is on its default branch with no changes or commits of its own."
 
@@ -67,6 +70,7 @@ struct SettingsEntry: Identifiable, Hashable {
         SettingsEntry(id: "working-shelf", title: "Working shelf", section: .general, keywords: "sidebar working threads shelf section running monitoring"),
         SettingsEntry(id: "manage-new-threads", title: "Manage new threads automatically", section: .general, keywords: "provider limits usage accounts switch quota rate"),
         SettingsEntry(id: "storage", title: "Images and videos", section: .general, keywords: "storage cache clear media disk"),
+        SettingsEntry(id: "log", title: "Log", section: .general, keywords: "troubleshooting debug problem connecting logs file"),
         SettingsEntry(id: "agent-accounts", title: "Provider Accounts", section: .accounts, keywords: "agents claude codex sign in account folder subscription plan api key router"),
         SettingsEntry(id: "servers", title: "Servers", section: .servers, keywords: "add remove unlink unlinked delete copies machine agents connected"),
         SettingsEntry(id: "continue-limits", title: "Continue after usage limits", section: .servers, keywords: "rate limit reset resume quota wait"),

@@ -43,7 +43,7 @@ pub extern "C" fn motile_start(config_json: *const c_char, callback: EventCallba
     let Some(config) = text(config_json).and_then(|json| serde_json::from_str::<Config>(&json).ok()) else {
         return false;
     };
-    init_logging();
+    crate::log::init(&config.data_dir);
     let Ok(runtime) = tokio::runtime::Builder::new_multi_thread().worker_threads(4).enable_all().build() else {
         return false;
     };
@@ -132,9 +132,4 @@ pub unsafe extern "C" fn motile_free_string(string: *mut c_char) {
         return;
     }
     drop(unsafe { CString::from_raw(string) });
-}
-
-fn init_logging() {
-    let filter = std::env::var("MOTILE_LOG").unwrap_or_else(|_| "warn,motile_core=info".to_string());
-    let _ = tracing_subscriber::fmt().with_env_filter(filter).with_writer(std::io::stderr).with_ansi(false).try_init();
 }

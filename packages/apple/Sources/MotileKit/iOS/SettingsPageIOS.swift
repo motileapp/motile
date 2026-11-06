@@ -179,6 +179,18 @@ struct SettingsPage: View {
         }
         .id("storage")
 
+        if let logFile = store.logFile {
+            Section {
+                ShareLink("Share Log", item: logFile)
+            } header: {
+                Text("Troubleshooting")
+            } footer: {
+                Text(logDescription)
+                    .foregroundStyle(Color.themeMutedForeground)
+            }
+            .id("log")
+        }
+
         Section("About") {
             LabeledContent("Version", value: store.updater.current)
         }
