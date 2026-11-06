@@ -26,7 +26,7 @@ extension View {
     /// short swipe leaves the button there to tap, a long one does what the button does. The row
     /// leaves with a long swipe unless the button won't take it away.
     func rowSwipe(
-        _ symbol: Symbol, _ label: String, tint: Color, size: CGFloat, leaves: Bool = true, isOpen: Binding<Bool>,
+        _ symbol: Symbol, _ label: String, tint: Color, size: ControlSize, leaves: Bool = true, isOpen: Binding<Bool>,
         action: @escaping () -> Void
     ) -> some View {
         rowSwipe([.button(symbol, label, tint: tint, leaves: leaves, perform: action)], size: size, isOpen: isOpen)
@@ -34,14 +34,14 @@ extension View {
 
     /// The same with a button for each action, the first against the edge. A long swipe does what
     /// the first does, when it is a button.
-    func rowSwipe(_ actions: [SwipeAction], size: CGFloat, isOpen: Binding<Bool>) -> some View {
+    func rowSwipe(_ actions: [SwipeAction], size: ControlSize, isOpen: Binding<Bool>) -> some View {
         modifier(RowSwipe(actions: actions, size: size, isOpen: isOpen))
     }
 }
 
 private struct RowSwipe: ViewModifier {
     let actions: [SwipeAction]
-    let size: CGFloat
+    let size: ControlSize
     @Binding var isOpen: Bool
 
     @State private var offset = 0.0
@@ -53,7 +53,7 @@ private struct RowSwipe: ViewModifier {
     private static let settle = Animation.spring(response: 0.29, dampingFraction: 0.86)
 
     /// How far the row rests aside while its buttons show.
-    private var openWidth: Double { Double(actions.count) * (size + Self.gap) + 10 }
+    private var openWidth: Double { Double(actions.count) * (size.height + Self.gap) + 10 }
     /// The first action, which a long swipe does.
     private var swiped: SwipeAction? { actions.first.flatMap { $0.perform == nil ? nil : $0 } }
     /// From here on, letting go does what the first button does.
@@ -103,11 +103,11 @@ private struct RowSwipe: ViewModifier {
 
     @ViewBuilder
     private func button(_ action: SwipeAction, stretch: Double) -> some View {
-        let face = Image(action.symbol, side: size * 0.44)
+        let face = Image(action.symbol, size: size.filledSymbol)
             .foregroundStyle(Color.themeBackground)
             .offset(x: armed && stretch > 0 ? stretch / 2 : 0)
             .animation(.easeOut(duration: 0.15), value: armed)
-            .frame(width: size + stretch, height: size)
+            .frame(width: size.height + stretch, height: size.height)
             .background(action.tint, in: Capsule())
             .contentShape(Capsule())
         if let menu = action.menu {

@@ -220,6 +220,15 @@ enum class ControlSize {
             Large -> IconSize.Sm
         }
 
+    /** A symbol alone on a filled circle as tall as the control, which reads smaller than one beside text. */
+    val filledSymbol: IconSize
+        get() = when (this) {
+            Small -> IconSize.Sm
+            Inset -> IconSize.Md
+            Regular -> IconSize.Lg
+            Large -> IconSize.Xl
+        }
+
     /** The chevron that opens a menu, trimmed to what it draws. */
     val chevron: IconSize
         get() = when (this) {

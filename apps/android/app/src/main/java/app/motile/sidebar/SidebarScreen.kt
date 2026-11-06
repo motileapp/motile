@@ -373,7 +373,7 @@ fun SidebarScreen(underThread: Boolean) {
                             if (store.onRemovedServer(thread)) {
                                 row()
                             } else {
-                                RowSwipe(swipeActions(thread), 36.dp, isOpen = swiped == item.id, onOpenChange = swipe(item.id).onOpenChange, content = row)
+                                RowSwipe(swipeActions(thread), ControlSize.Regular, isOpen = swiped == item.id, onOpenChange = swipe(item.id).onOpenChange, content = row)
                             }
                         }
                         is SidebarItem.Result -> {
@@ -415,7 +415,7 @@ fun SidebarScreen(underThread: Boolean) {
                             if (readOnly || actions.isEmpty()) {
                                 row()
                             } else {
-                                RowSwipe(actions, 28.dp, isOpen = swiped == item.id, onOpenChange = swipe(item.id).onOpenChange, content = row)
+                                RowSwipe(actions, ControlSize.Small, isOpen = swiped == item.id, onOpenChange = swipe(item.id).onOpenChange, content = row)
                             }
                         }
                     }

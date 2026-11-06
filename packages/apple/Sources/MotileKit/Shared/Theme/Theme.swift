@@ -235,6 +235,16 @@ enum ControlSize {
         }
     }
 
+    /// A symbol alone on a filled circle as tall as the control, which reads smaller than one beside text.
+    var filledSymbol: IconSize {
+        switch self {
+        case .small: .sm
+        case .inset: .md
+        case .regular: .lg
+        case .large: .xl
+        }
+    }
+
     /// The chevron that opens a menu, trimmed to what it draws.
     var chevron: IconSize {
         switch self {
