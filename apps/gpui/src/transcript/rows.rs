@@ -1778,11 +1778,8 @@ pub fn started_by(end: bool, parent: &str, ctx: &RowContext, cx: &App) -> AnyEle
         .hover(|pill| pill.bg(c.border_accent))
         .active(|pill| pill.bg(c.border_accent))
         .cursor_default()
-        // The arrow stands on the baseline, lower than the caps' middle it is raised to. Its
-        // square leaves room around its ink, so it needs little more from the words.
-        .child(
-            div().mt(px(-2.)).mr(px(4.)).child(icons::symbol("corner-left-up", size.symbol()).text_color(c.foreground)),
-        )
+        // The arrow's square leaves room around its ink, so it needs little more from the words.
+        .child(div().mr(px(4.)).child(icons::symbol("corner-left-up", size.symbol()).text_color(c.foreground)))
         .child(
             div()
                 .min_w_0()
