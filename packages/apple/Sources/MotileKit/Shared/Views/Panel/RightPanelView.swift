@@ -189,7 +189,7 @@ struct PanelTabStrip: View {
                         }
                     }
                     if store.panelUnavailable == nil, !tabs.isBlank {
-                        ActionButton(icon: .plus, help: "New tab") { store.rightPanel.openBlank() }
+                        ActionButton(icon: .plus, help: "New tab", margin: .beside(leading: PanelTabChip.margin)) { store.rightPanel.openBlank() }
                     }
                 }
                 .padding(.leading, leading - PanelTabChip.margin)
