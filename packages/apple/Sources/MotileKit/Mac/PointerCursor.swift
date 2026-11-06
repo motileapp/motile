@@ -1,5 +1,6 @@
 #if os(macOS)
 import AppKit
+import ObjectiveC
 import SwiftUI
 import WebKit
 
@@ -17,9 +18,9 @@ protocol CursorOwner: NSView {
 }
 
 /// The one place the cursor is set. After AppKit has handled an event of the pointer, the view on
-/// top under it says the cursor, or the view a drag started on while it drags. What AppKit's text,
-/// SwiftUI and the system set while the event went through is set over, so nothing shows its
-/// cursor through what lies over it. Views never set the cursor themselves.
+/// top under it says the cursor, or the view a drag started on while it drags. Wherever it says
+/// one, any other cursor set is dropped before it shows, like the I-beam AppKit's text sets
+/// under a dropdown, and the cursor is said again. Views never set the cursor themselves.
 enum PointerCursor {
     private static let events: Set<NSEvent.EventType> = [
         .mouseMoved, .mouseEntered, .mouseExited, .cursorUpdate, .scrollWheel,
@@ -28,22 +29,54 @@ enum PointerCursor {
     /// How far in from its edges a window is resized, under the system's cursor.
     private static let resizeEdge: CGFloat = 4
     private static weak var dragged: NSView?
+    private static var setting = false
+    private static var refreshing = false
+
+    /// Has every cursor set go through `allows` first.
+    static func install() {
+        guard let set = class_getInstanceMethod(NSCursor.self, #selector(NSCursor.set)),
+            let gated = class_getInstanceMethod(NSCursor.self, #selector(NSCursor.gatedSet))
+        else { return }
+        method_exchangeImplementations(set, gated)
+        let center = NotificationCenter.default
+        for name in [NSApplication.didBecomeActiveNotification, NSWindow.didBecomeKeyNotification] {
+            center.addObserver(forName: name, object: nil, queue: .main) { _ in update(again: true) }
+        }
+    }
+
+    /// Whether a cursor set may show: the one set here, or any where nothing here says the cursor.
+    fileprivate static func allows() -> Bool {
+        guard !setting, Thread.isMainThread, NSApp.isActive, let hit = hit(),
+            cursor(of: hit.view, at: hit.location) != nil
+        else { return true }
+        refresh()
+        return false
+    }
 
     static func update(after event: NSEvent) {
         guard events.contains(event.type) else { return }
         if event.type == .leftMouseDown { dragged = hit()?.view }
-        update(dragging: event.type == .leftMouseDragged)
+        update()
     }
 
     /// Sets the cursor for what lies under the pointer now, as after a dropdown opens or closes.
     static func refresh() {
-        DispatchQueue.main.async { update() }
+        guard !refreshing else { return }
+        refreshing = true
+        DispatchQueue.main.async {
+            refreshing = false
+            update()
+        }
     }
 
-    private static func update(dragging: Bool = false) {
+    /// `again` sets the cursor even where it seems set, as when another app's may show.
+    private static func update(again: Bool = false) {
         guard NSApp.isActive, let hit = hit() else { return }
+        let dragging = NSEvent.pressedMouseButtons & 1 != 0
         let view = dragging ? dragged ?? hit.view : hit.view
-        guard let cursor = cursor(of: view, at: hit.location), cursor != NSCursor.current else { return }
+        guard let cursor = cursor(of: view, at: hit.location), again || cursor != NSCursor.current else { return }
+        setting = true
+        defer { setting = false }
         cursor.set()
     }
 
@@ -80,6 +113,15 @@ enum PointerCursor {
             }
         }
         return .arrow
+    }
+}
+
+extension NSCursor {
+    /// Takes `set`'s place once `PointerCursor.install` swapped them, and calls AppKit's own `set`
+    /// where `PointerCursor` allows it.
+    @objc dynamic fileprivate func gatedSet() {
+        guard PointerCursor.allows() else { return }
+        gatedSet()
     }
 }
 
