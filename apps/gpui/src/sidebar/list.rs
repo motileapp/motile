@@ -40,6 +40,16 @@ impl Layout {
         self.content
     }
 
+    /// The same rows with one of them `height` tall, those under it moved along.
+    pub fn with_height(&self, index: usize, height: f32) -> Self {
+        let change = height - self.heights[index];
+        let mut moved = self.clone();
+        moved.heights[index] = height;
+        moved.tops.iter_mut().skip(index + 1).for_each(|top| *top += change);
+        moved.content += change;
+        moved
+    }
+
     pub fn bottom(&self, index: usize) -> f32 {
         self.tops[index] + self.heights[index]
     }

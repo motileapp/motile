@@ -29,6 +29,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListLayoutInfo
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -36,6 +37,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -44,6 +46,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.geometry.Offset
@@ -145,6 +148,11 @@ private sealed interface SidebarItem {
         override val id: String get() = "slim:${thread.id}"
     }
 
+    /** The room that holds the sections at the bottom of the list while everything fits. */
+    data object Gap : SidebarItem {
+        override val id = "gap"
+    }
+
     val activeThread: ThreadInfo? get() = (this as? Active)?.thread
 
     val rowThread: ThreadInfo?
@@ -181,6 +189,7 @@ fun SidebarScreen(underThread: Boolean) {
     val searchFocus = remember { FocusRequester() }
     var searchFocused by remember { mutableStateOf(false) }
     val list = rememberLazyListState()
+    val gap by remember(list) { derivedStateOf { gapHeight(list.layoutInfo) } }
     val reorder = remember(list) { Reorder(list) }
     val peek = remember { ThreadPeek() }
 
@@ -289,8 +298,9 @@ fun SidebarScreen(underThread: Boolean) {
         if (revealed.section != ThreadSection.Active) setExpanded(revealed.section, true)
     }
     LaunchedEffect(store.expandStep) {
-        val section = ThreadSection.entries.firstOrNull { it.raw == store.expandStep } ?: return@LaunchedEffect
-        setExpanded(section, true)
+        val step = store.expandStep ?: return@LaunchedEffect
+        val section = ThreadSection.entries.firstOrNull { it.raw == step.removePrefix("-") } ?: return@LaunchedEffect
+        setExpanded(section, !step.startsWith("-"))
     }
     LaunchedEffect(store.swipeStep) {
         val thread = store.swipeStep?.let(store::anyThread) ?: return@LaunchedEffect
@@ -381,6 +391,7 @@ fun SidebarScreen(underThread: Boolean) {
                             }
                         }
                         SidebarItem.NewThread -> NewThreadRow(Modifier.fillMaxWidth().height(lineHeight))
+                        SidebarItem.Gap -> Spacer(Modifier.height(with(LocalDensity.current) { gap.toDp() }.coerceAtLeast(1.dp)))
                         is SidebarItem.Header -> SectionHeader(item.section, item.count, expanded(item.section)) {
                             setExpanded(item.section, !expanded(item.section))
                         }
@@ -449,11 +460,23 @@ private fun items(
     active.forEach { add(SidebarItem.Active(it)) }
     if (active.isEmpty()) add(SidebarItem.Empty)
     if (store.offersNewThread(store.listedDrafts, active)) add(SidebarItem.NewThread)
+    if (sections.any { it.second.isNotEmpty() }) add(SidebarItem.Gap)
     for ((section, threads) in sections) {
         if (threads.isEmpty()) continue
         add(SidebarItem.Header(section, threads.size))
         if (expanded(section)) threads.forEach { add(SidebarItem.Slim(it)) }
     }
+}
+
+/**
+ * How tall the gap is: the room the other rows leave while they all fit, read from how the list
+ * last laid them out. The gap's own size takes no part, so this settles after one layout.
+ */
+private fun gapHeight(info: LazyListLayoutInfo): Int {
+    val shown = info.visibleItemsInfo
+    if (shown.isEmpty() || shown.size < info.totalItemsCount) return 0
+    val others = shown.filter { it.key != SidebarItem.Gap.id }.sumOf { it.size }
+    return maxOf(0, info.viewportSize.height - info.beforeContentPadding - info.afterContentPadding - others)
 }
 
 /** What the search found, then the line that says the servers still search, or that line alone when it found nothing. */
@@ -542,7 +565,7 @@ private fun ThreadRowWithMenu(
 
 @Composable
 private fun SectionHeader(section: ThreadSection, count: Int, expanded: Boolean, toggle: () -> Unit) {
-    DimButton(onClick = toggle, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+    DimButton(onClick = toggle, modifier = Modifier.fillMaxWidth()) {
         SectionLine(section, count, expanded, Modifier.fillMaxWidth().height(lineHeight).padding(horizontal = sidebarEdge))
     }
 }
@@ -577,7 +600,7 @@ private fun Footer(
         // A new version of the client, where the sidebar ends, as on the Mac.
         val update = store.updater.state
         if (update != AppUpdater.State.Idle && update != AppUpdater.State.Checking && update != AppUpdater.State.UpToDate) {
-            AppUpdateRow(store.updater, Modifier.padding(horizontal = sidebarEdge, vertical = 8.dp))
+            AppUpdateRow(store.updater, Modifier.padding(start = sidebarEdge, end = sidebarEdge - serverButtonOutset, top = 8.dp, bottom = 8.dp))
             ThemeDivider()
         }
         if (store.servers.isNotEmpty()) {
@@ -611,7 +634,7 @@ private fun Footer(
 private fun Servers(store: AppStore, expanded: Boolean, toggle: () -> Unit) {
     val servers = store.servers
     if (servers.size == 1) {
-        ServerLine(servers[0], Modifier.fillMaxWidth().height(lineHeight).padding(horizontal = sidebarEdge))
+        ServerLine(servers[0], Modifier.fillMaxWidth().height(lineHeight).padding(start = sidebarEdge, end = sidebarEdge - serverButtonOutset))
         ServerErrors(servers)
         return
     }
@@ -656,7 +679,7 @@ private fun ServerLines(store: AppStore) {
         flingBehavior = rememberSnapFlingBehavior(state, SnapPosition.Start),
     ) {
         items(servers, key = { it.id }) { server ->
-            ServerLine(server, Modifier.fillMaxWidth().height(lineHeight).padding(horizontal = sidebarEdge))
+            ServerLine(server, Modifier.fillMaxWidth().height(lineHeight).padding(start = sidebarEdge, end = sidebarEdge - serverButtonOutset))
         }
     }
 }

@@ -3,6 +3,7 @@ import {
   ArchiveIcon,
   BotIcon,
   ChartColumnIcon,
+  ChevronDownIcon,
   ChevronRightIcon,
   CircleDashedIcon,
   CircleDotDashedIcon,
@@ -97,7 +98,7 @@ export function Sidebar({
 
   return (
     <div className="flex h-full flex-col">
-      <div className="mx-2.5 mt-0.5 mb-1.5 flex shrink-0 gap-2">
+      <div className="mx-2 mt-0.5 mb-1.5 flex shrink-0 gap-2">
         <label className="flex h-7 min-w-0 flex-1 items-center gap-1.5 rounded-md bg-input px-[9px]">
           <SearchIcon className="size-3 text-muted-stronger-foreground" />
           <input
@@ -122,7 +123,7 @@ export function Sidebar({
         <div className="flex">{actions}</div>
       </div>
       <div
-        className="min-h-0 flex-1 overflow-y-auto py-[3px]"
+        className="flex min-h-0 flex-1 flex-col overflow-y-auto py-[3px]"
         onScroll={() => onPoint(null)}
       >
         {query &&
@@ -141,7 +142,7 @@ export function Sidebar({
             />
           ))}
         {query && (results.length === 0 || searching) && (
-          <p className="flex items-center gap-1.5 px-[18px] py-[7px] text-[12px] text-muted-stronger-foreground">
+          <p className="flex items-center gap-1.5 px-4 py-[7px] text-[12px] text-muted-stronger-foreground">
             {searching && <LoaderIcon className="size-3 animate-spin" />}
             {searching ? "Searching messages" : "No threads found"}
           </p>
@@ -161,80 +162,84 @@ export function Sidebar({
               onPoint={onPoint}
             />
           ))}
+        {!query && (working.length > 0 || snoozedThreads.length > 0 || archivedThreads.length > 0) && (
+          <div className="mt-auto pt-px pb-0.5">
+          {!query && working.length > 0 && (
+            <Section
+              icon={CircleDashedIcon}
+              title="Working"
+              count={working.length}
+              open={workingOpen}
+              onToggle={() => setWorkingOpen(!workingOpen)}
+            >
+              {working.map((thread) => (
+                <SlimRow
+                  key={thread.id}
+                  thread={thread}
+                  lit={thread.id === selectedId}
+                  onSelect={() => {
+                    onPoint(null)
+                    setRevealed(null)
+                    onSelect(thread.id)
+                  }}
+                  onPoint={onPoint}
+                >
+                  <ThreadStatus thread={thread} elapsed={elapsed} />
+                </SlimRow>
+              ))}
+            </Section>
+          )}
+          {!query && (
+            <Section
+              icon={AlarmClockIcon}
+              title="Snoozed"
+              count={snoozedThreads.length}
+              open={snoozedOpen}
+              onToggle={() => setSnoozedOpen(!snoozedOpen)}
+            >
+              {snoozedThreads.map((thread) => (
+                <SlimRow
+                  key={thread.title}
+                  thread={thread}
+                  lit={thread.title === revealed}
+                  onPoint={onPoint}
+                >
+                  <span className="flex items-center gap-[3px]">
+                    <AlarmClockIcon className="size-3.5" />
+                    {thread.ago}
+                  </span>
+                </SlimRow>
+              ))}
+            </Section>
+          )}
+          {!query && (
+            <Section
+              icon={ArchiveIcon}
+              title="Archived"
+              count={archivedThreads.length}
+              open={archivedOpen}
+              onToggle={() => setArchivedOpen(!archivedOpen)}
+            >
+              {archivedThreads.map((thread) => (
+                <SlimRow
+                  key={thread.title}
+                  thread={thread}
+                  lit={thread.title === revealed}
+                  onPoint={onPoint}
+                >
+                  {thread.ago}
+                </SlimRow>
+              ))}
+            </Section>
+          )}
+          </div>
+        )}
       </div>
-      {!query && working.length > 0 && (
-        <Shelf
-          icon={CircleDashedIcon}
-          title="Working"
-          count={working.length}
-          open={workingOpen}
-          onToggle={() => setWorkingOpen(!workingOpen)}
-        >
-          {working.map((thread) => (
-            <SlimRow
-              key={thread.id}
-              thread={thread}
-              lit={thread.id === selectedId}
-              onSelect={() => {
-                onPoint(null)
-                setRevealed(null)
-                onSelect(thread.id)
-              }}
-              onPoint={onPoint}
-            >
-              <ThreadStatus thread={thread} elapsed={elapsed} />
-            </SlimRow>
-          ))}
-        </Shelf>
-      )}
-      {!query && (
-        <Shelf
-          icon={AlarmClockIcon}
-          title="Snoozed"
-          count={snoozedThreads.length}
-          open={snoozedOpen}
-          onToggle={() => setSnoozedOpen(!snoozedOpen)}
-        >
-          {snoozedThreads.map((thread) => (
-            <SlimRow
-              key={thread.title}
-              thread={thread}
-              lit={thread.title === revealed}
-              onPoint={onPoint}
-            >
-              <span className="flex items-center gap-[3px]">
-                <AlarmClockIcon className="size-3.5" />
-                {thread.ago}
-              </span>
-            </SlimRow>
-          ))}
-        </Shelf>
-      )}
-      {!query && (
-        <Shelf
-          icon={ArchiveIcon}
-          title="Archived"
-          count={archivedThreads.length}
-          open={archivedOpen}
-          onToggle={() => setArchivedOpen(!archivedOpen)}
-        >
-          {archivedThreads.map((thread) => (
-            <SlimRow
-              key={thread.title}
-              thread={thread}
-              lit={thread.title === revealed}
-              onPoint={onPoint}
-            >
-              {thread.ago}
-            </SlimRow>
-          ))}
-        </Shelf>
-      )}
       <div className="border-t">
         <button
           type="button"
           onClick={() => setServersOpen(!serversOpen)}
-          className="group flex h-[36px] w-full items-center gap-[7px] px-[18px] text-left text-muted-foreground hover:bg-background-accent-larger hover:text-foreground"
+          className="group flex h-[36px] w-full items-center gap-[7px] px-4 text-left text-muted-foreground hover:bg-background-accent-larger hover:text-foreground"
         >
           <StateRing />
           <span
@@ -255,7 +260,7 @@ export function Sidebar({
             {servers.map((server) => (
               <div
                 key={server.name}
-                className="mx-2.5 flex h-[30px] items-center gap-[7px] px-2"
+                className="mx-2 flex h-[30px] items-center gap-[7px] px-2"
               >
                 <StateRing />
                 <span className="text-[12px] font-medium">{server.name}</span>
@@ -421,7 +426,7 @@ function ResultRow({
       onPointerEnter={(event) => onPoint(event.currentTarget)}
       onPointerLeave={() => onPoint()}
       className={cn(
-        "mx-2.5 my-px flex w-[calc(100%-20px)] flex-col rounded-md px-2 pt-[5px] pb-[7px] text-left",
+        "mx-2 my-px flex w-[calc(100%-16px)] flex-col rounded-md px-2 pt-[5px] pb-[7px] text-left",
         highlighted && "bg-background-accent-larger"
       )}
     >
@@ -478,8 +483,9 @@ const isWorking = (thread: Thread) =>
   thread.status.kind === "monitoring" ||
   thread.status.kind === "agents"
 
-/** A shelf at the bottom: its symbol, its name, how many threads it holds and its chevron, then its rows. */
-function Shelf({
+/** A part of the list at its bottom: its line, laid out as a row, with its symbol and name lit only under the
+ * pointer, how many threads it holds, always the quietest, and its chevron, then its rows. */
+function Section({
   icon: Icon,
   title,
   count,
@@ -495,42 +501,35 @@ function Shelf({
   children: ReactNode
 }) {
   return (
-    <div className="border-t">
+    <>
       <button
         type="button"
         onClick={onToggle}
-        className={cn(
-          "group flex h-[36px] w-full items-center gap-[7px] px-[18px] text-left hover:bg-background-accent-larger hover:text-foreground",
-          open ? "text-foreground" : "text-muted-foreground"
-        )}
+        className="group mx-2 my-px flex h-[30px] w-[calc(100%-16px)] items-center gap-[7px] rounded-md px-2 text-left text-muted-stronger-foreground hover:bg-background-accent-larger hover:text-foreground"
       >
         <span className="flex w-4 shrink-0 justify-center">
           <Icon className="size-3.5" />
         </span>
         <span className="text-[12px] font-medium">{title}</span>
-        <span className="text-[11px] text-muted-stronger-foreground tabular-nums">
+        <span className="text-[11px] text-muted-strongest-foreground tabular-nums">
           {count}
         </span>
         <span className="ml-auto" />
         <Chevron open={open} />
       </button>
-      {open && <div className="pb-1">{children}</div>}
-    </div>
+      {open && children}
+    </>
   )
 }
 
 function Chevron({ open }: { open: boolean }) {
+  const Icon = open ? ChevronDownIcon : ChevronRightIcon
   return (
-    <ChevronRightIcon
-      className={cn(
-        "size-2.5 w-[9px] text-muted-stronger-foreground transition-transform group-hover:text-muted-foreground",
-        open && "rotate-90 text-muted-foreground"
-      )}
-    />
+    <Icon className="-mr-[3px] size-3 text-muted-stronger-foreground group-hover:text-muted-foreground" />
   )
 }
 
-/** A thread on a shelf: one quiet line, with what it is up to at its end. */
+/** A thread in one of those parts: one quiet line, with what it is up to at its end, lit under the pointer. */
 function SlimRow({
   thread,
   lit,
@@ -551,14 +550,19 @@ function SlimRow({
       onPointerEnter={(event) => onPoint(thread, event.currentTarget)}
       onPointerLeave={() => onPoint(null)}
       className={cn(
-        "mx-2.5 flex h-[30px] w-[calc(100%-20px)] items-center gap-[7px] rounded-md px-2 text-left",
+        "group mx-2 my-px flex h-[30px] w-[calc(100%-16px)] items-center gap-[7px] rounded-md px-2 text-left",
         lit
           ? "bg-background-accent-larger-stronger"
           : "hover:bg-background-accent-larger"
       )}
     >
       <ProjectIcon project={thread.project} size={16} />
-      <span className="truncate text-[13px] text-muted-foreground">
+      <span
+        className={cn(
+          "truncate text-[13px] group-hover:text-foreground",
+          lit ? "text-foreground" : "text-muted-foreground"
+        )}
+      >
         {thread.title}
       </span>
       <span className="ml-auto flex shrink-0 items-center gap-1.5 text-[11px] text-muted-stronger-foreground">
@@ -621,7 +625,7 @@ function ThreadRow({
       onPointerEnter={(event) => onPoint(thread, event.currentTarget)}
       onPointerLeave={() => onPoint(null)}
       className={cn(
-        "group mx-2.5 my-px flex w-[calc(100%-20px)] flex-col rounded-md px-2 pt-[5px] pb-[7px] text-left",
+        "group mx-2 my-px flex w-[calc(100%-16px)] flex-col rounded-md px-2 pt-[5px] pb-[7px] text-left",
         selected
           ? "bg-background-accent-larger-stronger"
           : "hover:bg-background-accent-larger"

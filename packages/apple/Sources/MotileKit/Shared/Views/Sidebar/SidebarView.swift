@@ -3,11 +3,19 @@ import SwiftUI
 /// The space between the rows' highlights, and around each one: it looks empty but is the row's.
 private let rowGap = 2.0
 /// How far the rows' highlights stay from the sidebar's edges.
+#if os(macOS)
+let sidebarRowInset: CGFloat = 8
+#else
 let sidebarRowInset: CGFloat = 10
+#endif
 let rowMargin = EdgeInsets(top: rowGap / 2, leading: sidebarRowInset, bottom: rowGap / 2, trailing: sidebarRowInset)
+/// How far a row's content stays from its highlight's sides.
+let sidebarRowPadding: CGFloat = 8
 /// How far everything the sidebar shows stays from its sides, a row's content as well as a line's.
-let sidebarEdge = sidebarRowInset + 8
+let sidebarEdge = sidebarRowInset + sidebarRowPadding
 let doneRowHeight = Double(scaled(30))
+/// How far an Update button on a server's line reaches past the rows' edge, to look in line with it.
+let serverButtonOutset: CGFloat = 4
 /// One clock for every "5m" in the sidebar, so that they all change at once.
 @Observable
 final class AgoClock {
@@ -29,6 +37,8 @@ struct SidebarView: View {
     @AppStorage("sidebar.doneExpanded") private var archivedExpanded = false
     @AppStorage("sidebar.workingExpanded") private var workingExpanded = true
     @AppStorage("sidebar.snoozedExpanded") private var snoozedExpanded = false
+    /// The list's height as last laid out, which the gap over the sections is worked out from.
+    @State private var listHeight: CGFloat = 0
     @State private var renaming: ThreadInfo?
     @State private var deleting: ThreadInfo?
     /// The search's result the arrow keys are on.
@@ -50,7 +60,7 @@ struct SidebarView: View {
                     .steersSearch(highlighted: highlighted, open: store.openSearchResult)
                 ProjectButtons()
             }
-            .padding(.horizontal, 10)
+            .padding(.horizontal, sidebarRowInset)
                 .padding(.top, 2)
                 .padding(.bottom, 6)
             GeometryReader { list in
@@ -79,18 +89,21 @@ struct SidebarView: View {
         let searching = store.isSearchingThreads
         let drafts = searching ? [] : store.listedDrafts
         let active = lists.active
-        let items = searching ? searchItems(results) : items(drafts: drafts, lists: lists)
         let jumps = store.jumpThreads
         let places = store.showsJumpHints ? Dictionary(jumps.enumerated().map { ($1.id, $0) }, uniquingKeysWith: { first, _ in first }) : [:]
         return VStack(spacing: 0) {
+            let items = searching ? searchItems(results) : items(drafts: drafts, lists: lists)
             // A table, which picks its rows up and moves them itself.
             RecycledList(
-                items: items, height: { height(of: $0, drafts: drafts.count) }, topInset: 4 - rowGap / 2, bottomInset: 4 - rowGap / 2,
+                items: items, height: { height(of: $0, drafts: drafts.count) }, topInset: 4 - rowGap / 2,
+                // The sections at the bottom stand a little apart from the line under them.
+                bottomInset: 4 - rowGap / 2 + (items.contains { $0.isHeader } ? 2 : 0),
                 scrollTarget: searching ? highlighted.shown.flatMap { results.indices.contains($0) ? results[$0].id : nil } : store.revealedThreadID,
                 clicked: { item in
                     switch item {
-                    case .active(let thread): store.select(.thread(thread.id))
+                    case .active(let thread), .shelved(let thread): store.select(.thread(thread.id))
                     case .result(let result): store.openSearchResult(result)
+                    case .header(let section, _): expanded(section).wrappedValue.toggle()
                     default: break
                     }
                 },
@@ -106,7 +119,7 @@ struct SidebarView: View {
                 },
                 pointed: { item, row, view in
                     if case .result(let result) = item, let index = results.firstIndex(where: { $0.id == result.id }) { highlighted.point(index) }
-                    ThreadPeek.shared.point(at: item?.activeThread, row: row, in: view, store: store)
+                    ThreadPeek.shared.point(at: item?.thread, row: row, in: view, store: store)
                 }
             ) { item in
                 switch item {
@@ -143,28 +156,27 @@ struct SidebarView: View {
                     .padding(.vertical, 6 + rowGap / 2)
                 case .newThread:
                     NewThreadRow()
+                case .gap:
+                    Color.clear
+                case .header(let section, let count):
+                    SectionHeaderRow(section: section, count: count, expanded: expanded(section).wrappedValue)
+                case .shelved(let thread):
+                    SlimThreadRow(
+                        thread: thread, project: projects[thread.projectID], selected: selection == .thread(thread.id),
+                        rename: beginRename, delete: { deleting = $0 }
+                    ) { store.select($0) }
+                    .equatable()
                 }
             }
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { listHeight = $0 }
             if let undo = store.undo {
                 UndoRow(notice: undo)
                     .appearing()
             }
-            ForEach(lists.shelves, id: \.section) { shelf in
-                ThreadShelf(
-                    section: shelf.section,
-                    threads: shelf.threads,
-                    projects: projects,
-                    selection: selection,
-                    maxHeight: sidebarHeight * 0.25,
-                    expanded: expanded(shelf.section),
-                    rename: beginRename,
-                    delete: { deleting = $0 }
-                )
-            }
             if !store.servers.isEmpty {
                 ServersShelf(maxHeight: sidebarHeight * 0.25)
             }
-            if !lists.shelves.isEmpty || !store.servers.isEmpty {
+            if !store.servers.isEmpty {
                 ThemeDivider()
             }
             SidebarFooter()
@@ -175,13 +187,22 @@ struct SidebarView: View {
 
     private static let emptyLineHeight = scaled(15)
 
-    /// The drafts as one row, then the active threads.
+    /// The drafts as one row and the active threads, then the working, the snoozed and the
+    /// archived ones, each under its line. A gap holds those at the bottom while everything fits.
     private func items(drafts: [ListedDraft], lists: SidebarLists) -> [SidebarItem] {
         var items: [SidebarItem] = drafts.isEmpty ? [] : [.drafts]
         items += lists.active.map(SidebarItem.active)
         if lists.active.isEmpty { items.append(.empty) }
         if store.offersNewThread(drafts: drafts, active: lists.active) { items.append(.newThread) }
-        return items
+        var shelved: [SidebarItem] = []
+        for (section, threads) in lists.shelves {
+            shelved.append(.header(section, threads.count))
+            if expanded(section).wrappedValue { shelved += threads.map(SidebarItem.shelved) }
+        }
+        guard !shelved.isEmpty else { return items }
+        let insets = 4 - rowGap / 2 + 4 - rowGap / 2 + 2
+        let used = (items + shelved).reduce(insets) { $0 + height(of: $1, drafts: drafts.count) }
+        return items + [.gap(max(1, (listHeight - used).rounded()))] + shelved
     }
 
     private func expanded(_ section: ThreadSection) -> Binding<Bool> {
@@ -203,6 +224,9 @@ struct SidebarView: View {
         switch item {
         case .drafts: CGFloat(drafts) * (DraftRow.height + rowGap) + DraftRows.dividerHeight
         case .active: ThreadRow.height + rowGap
+        case .gap(let height): height
+        case .header: SectionHeaderRow.height
+        case .shelved: doneRowHeight + rowGap
         case .result: SearchResultRow.height + rowGap
         case .empty: Self.emptyLineHeight + 2 * (6 + rowGap / 2)
         case .newThread: doneRowHeight + rowGap
@@ -246,6 +270,27 @@ private struct RenameThread: View {
     }
 }
 
+/// A section's line in the list, which opens and closes it. It is laid out as a row is: the gap
+/// around it is its own.
+private struct SectionHeaderRow: View {
+    let section: ThreadSection
+    let count: Int
+    let expanded: Bool
+    @State private var hovering = false
+
+    static let height = doneRowHeight + rowGap
+
+    var body: some View {
+        SectionLine(section: section, count: count, expanded: expanded, lit: hovering)
+            .padding(.horizontal, sidebarEdge - rowMargin.leading)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding(rowMargin)
+            .contentShape(Rectangle())
+            .hoverHighlight(radius: Radius.md, inset: rowMargin, hovered: hovering, opaque: true)
+            .onHover { hovering = $0 }
+    }
+}
+
 private struct SidebarLists {
     let active: [ThreadInfo]
     let working: [ThreadInfo]
@@ -264,15 +309,33 @@ private enum SidebarItem: Identifiable {
     case result(SearchResult)
     case empty
     case newThread
+    /// The room that holds the sections at the bottom of the list.
+    case gap(CGFloat)
+    case header(ThreadSection, Int)
+    case shelved(ThreadInfo)
 
     var id: String {
         switch self {
         case .drafts: "drafts"
-        case .active(let thread): thread.id
+        case .active(let thread), .shelved(let thread): thread.id
         case .result(let result): result.id
         case .empty: "empty"
         case .newThread: "newThread"
+        case .gap: "gap"
+        case .header(let section, _): "header-\(section.rawValue)"
         }
+    }
+
+    var thread: ThreadInfo? {
+        switch self {
+        case .active(let thread), .shelved(let thread): thread
+        default: nil
+        }
+    }
+
+    var isHeader: Bool {
+        guard case .header = self else { return false }
+        return true
     }
 
     var activeThread: ThreadInfo? {
@@ -442,7 +505,7 @@ struct ThreadRow: View, Equatable {
     var open: (Selection) -> Void = { _ in }
     @State private var hovering = false
 
-    static let sidePadding: CGFloat = 8
+    static let sidePadding = sidebarRowPadding
     static let topPadding: CGFloat = 5
     static let bottomPadding: CGFloat = 7
     static let titleHeight = scaled(16)
@@ -762,7 +825,9 @@ struct UndoRow: View {
 /// makes taller or shorter.
 private struct Shelf<Item: Identifiable, Header: View, Row: View>: View {
     private static var rowHeight: Double { doneRowHeight }
-    private static var minHeight: Double { 4 * (rowHeight + rowGap) + 4 }
+    /// The room over the list's first row, under the shelf's line.
+    private static var listTop: Double { 2 }
+    private static var minHeight: Double { 4 * (rowHeight + rowGap) + 4 + listTop }
 
     let items: [Item]
     let maxHeight: Double
@@ -775,7 +840,7 @@ private struct Shelf<Item: Identifiable, Header: View, Row: View>: View {
     @State private var pulledUp = 0.0
 
     var body: some View {
-        let contentHeight = Double(items.count) * (Self.rowHeight + rowGap) + 4
+        let contentHeight = Double(items.count) * (Self.rowHeight + rowGap) + 4 + Self.listTop
         let tallest = min(maxHeight, contentHeight)
         let heights = min(Self.minHeight, tallest)...tallest
         VStack(spacing: 0) {
@@ -797,7 +862,8 @@ private struct Shelf<Item: Identifiable, Header: View, Row: View>: View {
 
             if expanded {
                 RecycledList(
-                    items: items, height: { _ in Self.rowHeight + rowGap }, bottomInset: 4 - rowGap / 2, scrollTarget: scrollTarget,
+                    items: items, height: { _ in Self.rowHeight + rowGap }, topInset: Self.listTop, bottomInset: 4 - rowGap / 2,
+                    scrollTarget: scrollTarget,
                     scrollsTargetToTop: true, pointed: pointed, row: row
                 )
                 .frame(height: listHeight(in: heights, pulledUp: pulledUp) + rowGap / 2)
@@ -828,50 +894,6 @@ private struct Shelf<Item: Identifiable, Header: View, Row: View>: View {
     }
 }
 
-/// The working, the snoozed or the archived threads.
-private struct ThreadShelf: View {
-    @Environment(AppStore.self) private var store
-    let section: ThreadSection
-    let threads: [ThreadInfo]
-    let projects: [String: Project]
-    let selection: Selection
-    let maxHeight: Double
-    @Binding var expanded: Bool
-    let rename: (ThreadInfo) -> Void
-    let delete: (ThreadInfo) -> Void
-    @AppStorage private var height: Double
-
-    init(
-        section: ThreadSection, threads: [ThreadInfo], projects: [String: Project], selection: Selection, maxHeight: Double,
-        expanded: Binding<Bool>, rename: @escaping (ThreadInfo) -> Void, delete: @escaping (ThreadInfo) -> Void
-    ) {
-        self.section = section
-        self.threads = threads
-        self.projects = projects
-        self.selection = selection
-        self.maxHeight = maxHeight
-        _expanded = expanded
-        self.rename = rename
-        self.delete = delete
-        _height = AppStorage(wrappedValue: 250, section == .archived ? "sidebar.doneHeight" : "sidebar.\(section.rawValue)Height")
-    }
-
-    var body: some View {
-        Shelf(
-            items: threads, maxHeight: maxHeight, expanded: $expanded, height: $height, scrollTarget: store.revealedThreadID,
-            pointed: { thread, row, view in ThreadPeek.shared.point(at: thread, row: row, in: view, store: store) }
-        ) {
-            SectionLine(section: section, count: threads.count, expanded: expanded)
-        } row: { thread in
-            SlimThreadRow(
-                thread: thread, project: projects[thread.projectID], selected: selection == .thread(thread.id),
-                rename: rename, delete: delete
-            ) { store.select($0) }
-            .equatable()
-        }
-    }
-}
-
 /// The servers: one line for them all that opens into a line for each, or the one server's line.
 private struct ServersShelf: View {
     @Environment(AppStore.self) private var store
@@ -885,7 +907,8 @@ private struct ServersShelf: View {
             VStack(spacing: 0) {
                 ThemeDivider()
                 ServerLine(server: servers[0])
-                    .padding(.horizontal, sidebarEdge)
+                    .padding(.leading, sidebarEdge)
+                    .padding(.trailing, sidebarEdge - serverButtonOutset)
                     .frame(height: doneRowHeight)
                     .padding(.vertical, 3)
                 ServerErrors(servers: servers)
@@ -899,7 +922,8 @@ private struct ServersShelf: View {
                     }
                 } row: { server in
                     ServerLine(server: server)
-                        .padding(.horizontal, 8)
+                        .padding(.leading, sidebarRowPadding)
+                        .padding(.trailing, sidebarRowPadding - serverButtonOutset)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .padding(rowMargin)
                 }
@@ -923,7 +947,7 @@ struct SlimThreadRow: View, Equatable {
     var open: (Selection) -> Void = { _ in }
     @State private var hovering = false
 
-    private static let sidePadding = 8.0
+    private static let sidePadding = sidebarRowPadding
     /// The undo button is as far from the row's side as from its top.
     private static let buttonInset = (doneRowHeight - ControlSize.small.height) / 2
 
@@ -940,7 +964,7 @@ struct SlimThreadRow: View, Equatable {
             Text(thread.title)
                 .font(.ui(size: 13))
                 .lineLimit(1)
-                .foregroundStyle(Color.themeMutedForeground)
+                .foregroundStyle(selected || hovering ? Color.themeForeground : Color.themeMutedForeground)
             Spacer(minLength: 6)
             if let pullRequest {
                 ThreadPullRequestLabel(thread: thread, pullRequest: pullRequest, colored: false, open: open)
@@ -968,7 +992,9 @@ struct SlimThreadRow: View, Equatable {
             }
         }
         .padding(rowMargin)
-        .button(.highlight(radius: Radius.md, selected: selected, inset: rowMargin, hovered: hovering, opaque: true)) { open(.thread(thread.id)) }
+        .button(.highlight(radius: Radius.md, selected: selected, inset: rowMargin, hovered: hovering, opaque: true)) {
+            open(.thread(thread.id))
+        }
         .onHover { hovering = $0 }
         #if os(macOS)
         .contextMenu { ThreadMenu(thread: thread, rename: rename, delete: delete) }
@@ -1007,7 +1033,7 @@ struct NewThreadRow: View {
                 .lineLimit(1)
             Spacer(minLength: 6)
         }
-        .padding(.horizontal, 8)
+        .padding(.horizontal, sidebarRowPadding)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         .padding(rowMargin)
         .button(.highlight(radius: Radius.md, inset: rowMargin, faded: true, opaque: true)) { store.newThread() }
@@ -1141,27 +1167,31 @@ struct ThreadStatus: View {
     }
 }
 
-/// The line of a shelf: its symbol and its name in one colour, how many threads it holds, and the
-/// chevron that opens and closes it. Its name lines up with the slim rows' titles.
+/// The line of a part of the list: its symbol and its name in one colour, lit only under the
+/// pointer, how many threads it holds, always the quietest, and the chevron that opens and closes it.
 struct SectionLine: View {
     let section: ThreadSection
     let count: Int
     let expanded: Bool
-    @Environment(\.row) private var row
+    var lit = false
 
     var body: some View {
         HStack(spacing: 7) {
-            if let symbol = section.symbol {
-                ShelfLineMark { Image(symbol, size: .sm) }
-                    .foregroundStyle(expanded || row != nil ? Color.themeForeground : Color.themeMutedForeground)
+            Group {
+                if let symbol = section.symbol {
+                    ShelfLineMark { Image(symbol, size: .sm) }
+                }
+                Text(section.title)
+                    .font(.ui(size: 12, weight: .medium))
+                    .lineLimit(1)
             }
-            ShelfTitle(section.title, expanded: expanded)
+            .foregroundStyle(lit ? Color.themeForeground : Color.themeMutedStrongerForeground)
             Text("\(count)")
                 .font(.ui(size: 11))
-                .foregroundStyle(Color.themeMutedStrongerForeground)
+                .foregroundStyle(Color.themeMutedStrongestForeground)
                 .monospacedDigit()
             Spacer(minLength: 4)
-            SidebarChevron(expanded: expanded)
+            SidebarChevron(expanded: expanded, lit: lit)
         }
     }
 }
@@ -1193,40 +1223,19 @@ struct StateRing: View {
     }
 }
 
-/// What a sidebar line starts with, against its edge, in a column that lines up the words after it.
-struct SidebarMark<Mark: View>: View {
-    let mark: Mark
-
-    init(_ mark: Mark) {
-        self.mark = mark
-    }
-
-    var body: some View {
-        mark.frame(width: 9, alignment: .leading)
-    }
-}
-
-/// The mark of a sidebar line like Done's, a step quieter than its `ShelfTitle`.
-struct ShelfMark<Mark: View>: View {
-    let lit: Bool
-    @ViewBuilder let mark: () -> Mark
+/// Opens or closes a sidebar line's list, at the line's end. Open or closed, it ends where the
+/// rows end, in a box as wide as when it is open, so that what comes before it stays put.
+struct SidebarChevron: View {
+    let expanded: Bool
+    var lit = false
     @Environment(\.row) private var row
 
     var body: some View {
-        SidebarMark(mark())
-            .foregroundStyle(lit || row != nil ? Color.themeMutedForeground : Color.themeMutedStrongerForeground)
-    }
-}
-
-/// Opens or closes a sidebar line's list.
-struct SidebarChevron: View {
-    let expanded: Bool
-
-    var body: some View {
-        ShelfMark(lit: expanded) {
-            Image(.chevronRight, size: .xs, trimmed: true)
-                .rotationEffect(.degrees(expanded ? 90 : 0))
+        ZStack(alignment: .trailing) {
+            Image(.chevronDown, size: .xs, trimmed: true).hidden()
+            Image(expanded ? .chevronDown : .chevronRight, size: .xs, trimmed: true)
         }
+        .foregroundStyle(lit || row != nil ? Color.themeMutedForeground : Color.themeMutedStrongerForeground)
     }
 }
 
@@ -1358,12 +1367,18 @@ struct SidebarFooter: View {
         return ((ControlSize.regular.height - side) / 2 + side / 12).rounded()
     }()
 
+    /// Its buttons are as far from its sides as from the line over it. It keeps its own distance
+    /// from the sides, apart from the list's.
+    private static let edge: CGFloat = 16
+
     @Environment(AppStore.self) private var store
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             if ![.idle, .checking, .upToDate].contains(store.updater.state) {
                 AppUpdateRow(updater: store.updater)
+                    .padding(.leading, sidebarEdge - Self.edge)
+                    .padding(.trailing, sidebarEdge - Self.edge - serverButtonOutset)
             }
             HStack(spacing: 0) {
                 AccountMenu(margin: Self.reach)
@@ -1396,8 +1411,8 @@ struct SidebarFooter: View {
             .padding(.horizontal, -Self.symbolInset - Self.reach.leading)
             .padding(.vertical, -Self.reach.top)
         }
-        .padding(.horizontal, sidebarEdge)
-        .padding(.vertical, sidebarEdge - 2 - Self.symbolInset)
+        .padding(.horizontal, Self.edge)
+        .padding(.vertical, Self.edge - Self.symbolInset)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 }

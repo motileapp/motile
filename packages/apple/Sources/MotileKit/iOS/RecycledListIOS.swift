@@ -24,6 +24,9 @@ struct RecycledList<Item: Identifiable, Row: View>: UIViewRepresentable {
     var menu: (Item) -> [[RowAction]] = { _ in [] }
     /// A pointer came to rest on a row, its rect in the view given, or left the rows.
     var pointed: (Item?, CGRect, UIView) -> Void = { _, _, _ in }
+    /// The row that takes the room the others leave, so that the rows after it lie at the bottom
+    /// while they all fit. The list draws it itself, never lower than a point.
+    var stretched: Item.ID?
     @ViewBuilder let row: (Item) -> Row
     @Environment(AppStore.self) private var store
 
@@ -87,6 +90,29 @@ struct RecycledList<Item: Identifiable, Row: View>: UIViewRepresentable {
             source.reorderingHandlers.canReorderItem = { [weak self] id in self?.movable(id) == true }
             source.reorderingHandlers.didReorder = { [weak self] transaction in self?.reordered(to: transaction.finalSnapshot.itemIdentifiers) }
             self.source = source
+            (view as? FadingCollectionView)?.laidOut = { [weak self, weak view] in
+                guard let view else { return }
+                self?.stretch(in: view)
+            }
+        }
+
+        private var stretchedHeight: CGFloat = 1
+
+        /// Gives the stretched row the room the other rows leave, after the layout that changed
+        /// it, since resizing a row lays the list out again.
+        private func stretch(in view: UICollectionView) {
+            guard let stretched = list?.stretched, let index = ids.firstIndex(of: stretched) else { return }
+            let room = view.bounds.height - view.adjustedContentInset.top - view.adjustedContentInset.bottom
+            let height = max(1, (room - (view.contentSize.height - stretchedHeight)).rounded())
+            guard abs(height - stretchedHeight) >= 1 else { return }
+            DispatchQueue.main.async { [weak self, weak view] in
+                guard let self, let view else { return }
+                self.stretchedHeight = height
+                if let cell = view.cellForItem(at: IndexPath(item: index, section: 0)) as? RecycledCell {
+                    self.configure(cell, at: index)
+                }
+                view.collectionViewLayout.invalidateLayout()
+            }
         }
 
         /// Applies the rows when they are others, and redraws the rows on screen.
@@ -157,6 +183,13 @@ struct RecycledList<Item: Identifiable, Row: View>: UIViewRepresentable {
         private func configure(_ cell: RecycledCell, at index: Int) {
             guard let list, let store, let item = list.items[safe: index] else { return }
             cell.generation = generation
+            if item.id == list.stretched {
+                let height = stretchedHeight
+                cell.contentConfiguration = UIHostingConfiguration { Color.clear.frame(height: height) }
+                    .margins(.all, 0)
+                    .minSize(width: 0, height: 0)
+                return
+            }
             let row = RecycledRow(row: list.row(item), store: store, surface: surface)
             cell.contentConfiguration = UIHostingConfiguration { row }
                 .margins(.all, 0)
@@ -304,11 +337,15 @@ private final class FadingCollectionView: UICollectionView {
 
     required init?(coder: NSCoder) { fatalError("not used") }
 
+    /// Told after each layout.
+    var laidOut: () -> Void = {}
+
     override func layoutSubviews() {
         super.layoutSubviews()
         let above = contentOffset.y + adjustedContentInset.top
         let below = contentSize.height + adjustedContentInset.bottom - bounds.maxY
         fade.update(frame: bounds, above: above, below: below)
+        laidOut()
     }
 }
 

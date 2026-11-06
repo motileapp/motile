@@ -8,7 +8,7 @@ use motile_core::search::MatchView;
 use motile_protocol::wire::Speaker;
 
 use super::rows::{quieted, thread_status};
-use super::{BOTTOM_PADDING, FIRST_LINE_HEIGHT, SIDE_PADDING, Sidebar, TOP_PADDING, row_margin};
+use super::{BOTTOM_PADDING, FIRST_LINE_HEIGHT, ROW_PADDING, Sidebar, TOP_PADDING, row_margin};
 use crate::models::{ago, last_component};
 use crate::store::SearchResult;
 use crate::theme::{IconSize, Radius, colors};
@@ -139,7 +139,7 @@ impl Sidebar {
                 div()
                     .relative()
                     .size_full()
-                    .px(px(SIDE_PADDING))
+                    .px(px(ROW_PADDING))
                     .pt(px(TOP_PADDING))
                     .pb(px(BOTTOM_PADDING))
                     .flex()

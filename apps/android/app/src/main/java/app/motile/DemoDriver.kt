@@ -216,6 +216,7 @@ object DemoDriver {
             "done" -> store.toggleArchived()
             "swipe" -> store.swipeStep = store.allThreads.firstOrNull { it.title == rest }?.id
             "expand" -> store.expandStep = rest
+            "collapse" -> store.expandStep = "-$rest"
             "mcp" -> store.mcpStep = rest
             "gateway" -> {
                 val argument = rest.substringAfter(' ', "")

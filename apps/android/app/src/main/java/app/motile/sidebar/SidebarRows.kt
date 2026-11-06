@@ -7,7 +7,6 @@ import app.motile.core.ThreadSection
 import app.motile.theme.at
 import android.os.Handler
 import android.os.Looper
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -37,7 +36,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.vector.PathParser
@@ -108,6 +106,9 @@ val doneRowHeight = scaled(30f).dp
 
 /** The height of a sidebar line that opens, or of one server's line. */
 internal val lineHeight = 44.dp
+
+/** How far the buttons of the server and update lines reach past the rows' edge, to look in line with it. */
+internal val serverButtonOutset = 4.dp
 
 /** One clock for every "5m" in the sidebar, so that they all change at once. */
 object AgoClock {
@@ -453,7 +454,7 @@ fun SlimThreadRow(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             ProjectIcon(project, size = iconSize(text = 13f))
-            Text(thread.title, Modifier.weight(1f).padding(start = 7.dp, end = 6.dp), size = 13f, maxLines = 1, color = palette.mutedForeground)
+            Text(thread.title, Modifier.weight(1f).padding(start = 7.dp, end = 6.dp), size = 13f, maxLines = 1, color = if (selected || hovering) palette.foreground else palette.mutedForeground)
             Row(horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically) {
                 project?.pullRequest(thread)?.let { ThreadPullRequestLabel(thread, it, colored = false, open = open) }
                 val until = thread.snoozedUntil
@@ -580,35 +581,28 @@ fun StateRing(tint: Color) {
 @Composable
 fun SectionLine(section: ThreadSection, count: Int, expanded: Boolean, modifier: Modifier = Modifier) {
     val palette = Theme.colors
-    val color = if (expanded || LocalRow.current != null) palette.foreground else palette.mutedForeground
+    val lit = LocalRow.current != null
+    val color = if (lit) palette.foreground else palette.mutedStrongerForeground
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically) {
         section.symbol?.let { ShelfLineMark { Icon(it, IconSize.Sm, color = color) } }
-        ShelfTitle(section.title, expanded)
-        Text("$count", style = Theme.uiDigits(11f), color = palette.mutedStrongerForeground)
+        Text(section.title, size = 12f, weight = FontWeight.Medium, color = color, maxLines = 1)
+        Text("$count", style = Theme.uiDigits(11f), color = palette.mutedStrongestForeground)
         Spacer(Modifier.weight(1f))
-        SidebarChevron(expanded)
+        SidebarChevron(expanded, lit)
     }
 }
 
-/** What a sidebar line starts with, against its edge, in a column that lines up the words after it. */
+/** Opens or closes a sidebar line's list, at the line's end. Open or closed, it ends where the rows end, in a box as wide as when it is open, so that what comes before it stays put. */
 @Composable
-fun SidebarMark(content: @Composable () -> Unit) {
-    Box(Modifier.width(9.dp), contentAlignment = Alignment.CenterStart) { content() }
-}
-
-/** The mark of a sidebar line like Done's, a step quieter than its `ShelfTitle`. */
-@Composable
-fun ShelfMark(lit: Boolean, content: @Composable () -> Unit) {
+fun SidebarChevron(expanded: Boolean, lit: Boolean = false) {
     val palette = Theme.colors
     val color = if (lit || LocalRow.current != null) palette.mutedForeground else palette.mutedStrongerForeground
-    CompositionLocalProvider(LocalForeground provides color) { SidebarMark(content) }
-}
-
-/** Opens or closes a sidebar line's list. */
-@Composable
-fun SidebarChevron(expanded: Boolean) {
-    val angle by animateFloatAsState(if (expanded) 90f else 0f, label = "chevron")
-    ShelfMark(lit = expanded) { Icon(Symbol.ChevronRight, IconSize.Xs, Modifier.rotate(angle), trimmed = true) }
+    CompositionLocalProvider(LocalForeground provides color) {
+        Box(contentAlignment = Alignment.CenterEnd) {
+            Icon(Symbol.ChevronDown, IconSize.Xs, Modifier.alpha(0f), trimmed = true)
+            Icon(if (expanded) Symbol.ChevronDown else Symbol.ChevronRight, IconSize.Xs, trimmed = true)
+        }
+    }
 }
 
 /** The name of a sidebar line like Done's: muted while it is closed and not lit. */

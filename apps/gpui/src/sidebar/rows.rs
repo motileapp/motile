@@ -8,7 +8,7 @@ use motile_core::api::Section;
 use motile_protocol::wire::PullRequest;
 
 use super::{
-    BOTTOM_PADDING, DONE_ROW_HEIGHT, FIRST_LINE_HEIGHT, ROW_GAP, SIDE_PADDING, SIDEBAR_EDGE, Sidebar, TITLE_HEIGHT,
+    BOTTOM_PADDING, DONE_ROW_HEIGHT, FIRST_LINE_HEIGHT, ROW_GAP, ROW_PADDING, SIDEBAR_EDGE, Sidebar, TITLE_HEIGHT,
     TOP_PADDING, button_inset, row_layer, row_margin, snooze_menu, stop_press,
 };
 use crate::models::{
@@ -109,19 +109,19 @@ impl Sidebar {
         let pull_request = project.as_ref().and_then(|project| project.pull_request(thread)).filter(|_| !read_only);
         let status = if let Some(jump) = jump {
             div()
-                .mr(px(button_inset() - SIDE_PADDING))
+                .mr(px(button_inset() - ROW_PADDING))
                 .text_color(c.foreground)
                 .child(KeyCaps::new([jump]))
                 .into_any_element()
         } else if hovering && (!thread.unfinished() || store.snoozes(thread)) && !read_only {
-            div().mr(px(button_inset() - SIDE_PADDING)).child(self.row_buttons(thread, selected, cx)).into_any_element()
+            div().mr(px(button_inset() - ROW_PADDING)).child(self.row_buttons(thread, selected, cx)).into_any_element()
         } else {
             thread_status(thread, read_only, cx)
         };
         div()
             .relative()
             .size_full()
-            .px(px(SIDE_PADDING))
+            .px(px(ROW_PADDING))
             .pt(px(TOP_PADDING))
             .pb(px(BOTTOM_PADDING))
             .flex()
@@ -313,7 +313,7 @@ impl Sidebar {
                         cx.notify();
                     })
                 });
-            div().mr(px(button_inset() - SIDE_PADDING)).child(button).into_any_element()
+            div().mr(px(button_inset() - ROW_PADDING)).child(button).into_any_element()
         } else {
             div()
                 .flex()
@@ -340,7 +340,7 @@ impl Sidebar {
                 div()
                     .relative()
                     .size_full()
-                    .px(px(SIDE_PADDING))
+                    .px(px(ROW_PADDING))
                     .pt(px(TOP_PADDING))
                     .pb(px(BOTTOM_PADDING))
                     .flex()
@@ -464,7 +464,7 @@ impl Sidebar {
                 div()
                     .relative()
                     .size_full()
-                    .px(px(SIDE_PADDING))
+                    .px(px(ROW_PADDING))
                     .flex()
                     .items_center()
                     .gap(px(7.))
@@ -473,7 +473,7 @@ impl Sidebar {
                         div()
                             .min_w_0()
                             .text_size(px(13.))
-                            .text_color(c.muted_foreground)
+                            .text_color(if selected || hovering { c.foreground } else { c.muted_foreground })
                             .truncate()
                             .child(thread.title.clone()),
                     )
@@ -568,7 +568,7 @@ impl Sidebar {
                     div()
                         .relative()
                         .size_full()
-                        .px(px(SIDE_PADDING))
+                        .px(px(ROW_PADDING))
                         .flex()
                         .items_center()
                         .gap(px(7.))

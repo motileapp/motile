@@ -5,17 +5,16 @@ use gpui_kit::component::input::{InputEvent, InputState};
 use gpui_kit::prelude::*;
 use gpui_kit::*;
 
-use crate::sidebar::SidebarFooter;
+use crate::sidebar::{ROW_INSET, ROW_PADDING, SidebarFooter};
 use crate::store::Store;
 use crate::store::settings::{SettingsEntry, SettingsSection};
 use crate::theme::{self, IconSize, Radius, colors};
 use crate::ui::{Highlight, InputField, InputVariant, edges, hover_state, icons, track_hover};
 
-const ROW_INSET: f32 = 10.;
 const SECTION_HEIGHT: f32 = 32.;
 const RESULT_HEIGHT: f32 = 30.;
 /// Where the sidebar's text starts: past the rows' inset and their padding.
-const SIDEBAR_EDGE: f32 = ROW_INSET + 8.;
+const SIDEBAR_EDGE: f32 = ROW_INSET + ROW_PADDING;
 
 pub struct SettingsSidebar {
     store: Entity<Store>,

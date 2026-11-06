@@ -1,6 +1,6 @@
-//! The shelves at the bottom of the sidebar: a line that opens into a list, which the line above
-//! it makes taller or shorter. The working, the snoozed and the archived threads are on one each
-//! and the servers on another, and the offer to undo archiving or snoozing stands above them.
+//! The lines of the working, the snoozed and the archived threads in the list, and the shelf of
+//! the servers under it: a line that opens into a list, which the line above it makes taller or
+//! shorter. The offer to undo archiving or snoozing stands above the servers.
 
 use std::time::Duration;
 
@@ -10,8 +10,11 @@ use motile_core::api::Section;
 use motile_core::link::State;
 
 use super::list::{Layout, place};
+use super::rows::row_light;
 use super::updates::ServerUpdateStatus;
-use super::{DONE_ROW_HEIGHT, ROW_GAP, SIDEBAR_EDGE, Shelf, Sidebar, row_margin};
+use super::{
+    BUTTON_OUTSET, DONE_ROW_HEIGHT, ROW_GAP, ROW_PADDING, SHELF_LIST_TOP, SIDEBAR_EDGE, Shelf, Sidebar, row_margin,
+};
 use crate::models::{Server, ThreadInfo, section_label};
 use crate::prefs::Prefs;
 use crate::store::{Store, UndoKind, UndoNotice};
@@ -26,7 +29,7 @@ pub const UNDO_FADE: Duration = Duration::from_millis(150);
 const UNDO_HEIGHT: f32 = 1. + DONE_ROW_HEIGHT + 8.;
 
 impl Shelf {
-    /// The shelves of threads, in the order they stand, the highest first.
+    /// The parts of the list under the active threads, in the order they stand.
     pub const THREADS: [Shelf; 3] = [Shelf::Working, Shelf::Snoozed, Shelf::Archived];
 
     fn height_key(self) -> &'static str {
@@ -47,7 +50,7 @@ impl Shelf {
         }
     }
 
-    /// Whether the shelf is open. The working threads are, until the user closes them.
+    /// Whether the part is open. The working threads are, until the user closes them.
     pub fn expanded(self, prefs: &Prefs) -> bool {
         prefs.get(self.expanded_key()).unwrap_or(self == Shelf::Working)
     }
@@ -56,7 +59,7 @@ impl Shelf {
         prefs.set(self.expanded_key(), open);
     }
 
-    /// The shelf the threads of a part of the sidebar are on.
+    /// The part of the list the threads of a section are in.
     pub fn of(section: Section) -> Option<Shelf> {
         match section {
             Section::Working => Some(Shelf::Working),
@@ -83,7 +86,7 @@ impl Shelf {
         }
     }
 
-    fn group(self) -> &'static str {
+    pub fn group(self) -> &'static str {
         match self {
             Shelf::Working => "working-shelf",
             Shelf::Snoozed => "snoozed-shelf",
@@ -118,17 +121,29 @@ fn heights(count: usize, max: f32) -> (f32, f32) {
     (SHELF_MIN_HEIGHT.min(tallest), tallest)
 }
 
-/// The chevron that opens and closes a shelf, at the end of its line, a step quieter than its
-/// title: muted while it is open or lit.
+/// The chevron that opens and closes a line's list, at the line's end, a step quieter than its
+/// title: muted only under the pointer. Open or closed, it ends where the rows end, in a box as
+/// wide as when it is open, so that what comes before it stays put.
 fn shelf_chevron(expanded: bool, lit: bool, cx: &App) -> Div {
     let c = colors(cx);
-    let color = if expanded || lit { c.muted_foreground } else { c.muted_stronger_foreground };
+    let color = if lit { c.muted_foreground } else { c.muted_stronger_foreground };
+    let shown = if expanded { "chevron-down" } else { "chevron-right" };
     div()
-        .w(px(9.))
+        .relative()
         .flex_shrink_0()
         .flex()
         .items_center()
-        .child(icons::trimmed("chevron-right", IconSize::Xs).text_color(color).rotate(if expanded { 90. } else { 0. }))
+        .child(div().invisible().child(icons::trimmed("chevron-down", IconSize::Xs)))
+        .child(
+            div()
+                .absolute()
+                .top_0()
+                .bottom_0()
+                .right_0()
+                .flex()
+                .items_center()
+                .child(icons::trimmed(shown, IconSize::Xs).text_color(color)),
+        )
 }
 
 /// What a line at the bottom of the sidebar starts with: a symbol, or a server's state, in a
@@ -151,30 +166,6 @@ pub fn state_ring(tint: Hsla, cx: &App) -> Div {
         .border_1()
         .border_color(ring)
         .child(div().size(px(6.)).rounded_full().bg(tint))
-}
-
-/// The line of a shelf of threads: its symbol and its name in one colour, and how many threads
-/// it holds. Its name lines up with the slim rows' titles.
-fn section_line(section: Section, count: usize, lit: bool, cx: &App) -> Div {
-    let c = colors(cx);
-    let (title, symbol) = section_label(section);
-    let color = if lit { c.foreground } else { c.muted_foreground };
-    div()
-        .flex_1()
-        .min_w_0()
-        .flex()
-        .items_center()
-        .gap(px(7.))
-        .children(symbol.map(|symbol| line_mark(icons::symbol(symbol, IconSize::Sm).text_color(color))))
-        .child(shelf_title(title, lit, cx))
-        .child(
-            div()
-                .text_size(px(11.))
-                .text_color(c.muted_stronger_foreground)
-                .font_features(tabular_numbers())
-                .child(count.to_string()),
-        )
-        .child(div().flex_1().min_w(px(4.)))
 }
 
 /// The name of a sidebar line: muted while it is closed and not lit.
@@ -339,6 +330,67 @@ impl Sidebar {
         .into_any_element()
     }
 
+    /// The working, the snoozed or the archived threads' line in the list, which opens and closes
+    /// them. It is laid out as a row is: the gap around it is its own. Its symbol and its name
+    /// light up only under the pointer, never because it is open; its count stays the quietest.
+    pub(super) fn section_row(&self, shelf: Shelf, cx: &mut Context<Self>) -> AnyElement {
+        let c = colors(cx);
+        let store = self.store.read(cx);
+        let (count, expanded) = (shelf.threads(store).len(), shelf.expanded(&store.prefs));
+        let key = shelf.group();
+        let lit = self.hovering(key);
+        let (title, symbol) = section_label(shelf.section());
+        let color = if lit { c.foreground } else { c.muted_stronger_foreground };
+        let margin = row_margin();
+        let handle = self.store.clone();
+        div()
+            .id(key)
+            .group(key)
+            .relative()
+            .size_full()
+            .pt(px(margin.top))
+            .pb(px(margin.bottom))
+            .px(px(margin.left))
+            .child(row_light(key, false, false, cx))
+            .child(
+                div()
+                    .relative()
+                    .size_full()
+                    .px(px(ROW_PADDING))
+                    .flex()
+                    .items_center()
+                    .gap(px(7.))
+                    .children(symbol.map(|symbol| line_mark(icons::symbol(symbol, IconSize::Sm).text_color(color))))
+                    .child(
+                        div()
+                            .min_w_0()
+                            .text_size(px(12.))
+                            .font_weight(FontWeight::MEDIUM)
+                            .truncate()
+                            .text_color(color)
+                            .child(title),
+                    )
+                    .child(
+                        div()
+                            .text_size(px(11.))
+                            .text_color(c.muted_strongest_foreground)
+                            .font_features(tabular_numbers())
+                            .child(count.to_string()),
+                    )
+                    .child(div().flex_1().min_w(px(4.)))
+                    .child(shelf_chevron(expanded, lit, cx)),
+            )
+            .on_hover(self.row_hover(key.into(), None, cx))
+            .on_click(move |_, _, cx| {
+                handle.update(cx, |store, cx| {
+                    let open = !shelf.expanded(&store.prefs);
+                    shelf.open(&mut store.prefs, open);
+                    cx.notify();
+                })
+            })
+            .into_any_element()
+    }
+
     /// A shelf's line, which opens and closes its list, with the chevron at its end.
     fn shelf_header(
         &self,
@@ -467,37 +519,6 @@ impl Sidebar {
             })
     }
 
-    /// The working, the snoozed or the archived threads, on a shelf that opens into their list.
-    pub(super) fn thread_shelf(
-        &mut self,
-        shelf: Shelf,
-        layout: &Layout,
-        max: f32,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> Div {
-        let count = layout.tops.len();
-        let (expanded, revealed) = {
-            let store = self.store.read(cx);
-            (shelf.expanded(&store.prefs), store.sidebar.revealed_thread_id.clone())
-        };
-        let lit = expanded || self.hovering(shelf.group());
-        let header = section_line(shelf.section(), count, lit, cx).into_any_element();
-        let mut rows = Vec::new();
-        if expanded {
-            let visible = {
-                let list = self.list_mut(shelf);
-                list.follow(revealed.as_deref(), true, layout, window);
-                list.visible(layout, window)
-            };
-            for index in visible {
-                let Some(thread) = shelf.threads(self.store.read(cx)).get(index).cloned() else { continue };
-                rows.push(place(layout, index, 0., self.slim_row(&thread, cx)));
-            }
-        }
-        self.shelf(shelf, layout, max, expanded, header, rows, cx)
-    }
-
     /// The servers of the account: one line for them all that opens into a line for each, or the
     /// one server's line.
     pub(super) fn servers_shelf(&mut self, max: f32, window: &mut Window, cx: &mut Context<Self>) -> Div {
@@ -514,7 +535,8 @@ impl Sidebar {
                 div()
                     .h(px(height(server)))
                     .my(px(3.))
-                    .px(px(SIDEBAR_EDGE))
+                    .pl(px(SIDEBAR_EDGE))
+                    .pr(px(SIDEBAR_EDGE - BUTTON_OUTSET))
                     .flex()
                     .items_center()
                     .child(self.server_line(server, cx)),
@@ -542,7 +564,7 @@ impl Sidebar {
             .into_any_element();
         self.list_mut(Shelf::Servers).set_ids(servers.iter().map(|server| server.id.clone()).collect());
         let heights = servers.iter().map(|server| height(server) + ROW_GAP).collect();
-        let layout = Layout::new(heights, 0., 4. - ROW_GAP / 2.);
+        let layout = Layout::new(heights, SHELF_LIST_TOP, 4. - ROW_GAP / 2.);
         let mut rows = Vec::new();
         if expanded {
             let margin = row_margin();
@@ -552,7 +574,8 @@ impl Sidebar {
                     .size_full()
                     .pt(px(margin.top))
                     .pb(px(margin.bottom))
-                    .px(px(margin.left + 8.))
+                    .pl(px(margin.left + ROW_PADDING))
+                    .pr(px(margin.right + ROW_PADDING - BUTTON_OUTSET))
                     .flex()
                     .items_center()
                     .child(self.server_line(&servers[index], cx));

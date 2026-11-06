@@ -59,7 +59,8 @@ struct SidebarScreen: View {
                 pointed: { item, row, view in
                     if case .result(let result) = item, let index = results.firstIndex(where: { $0.id == result.id }) { highlighted.point(index) }
                     ThreadPeek.shared.point(at: item?.thread, row: row, in: view, store: store)
-                }
+                },
+                stretched: "gap"
             ) { item in
                 row(item, shown: shown)
             }
@@ -148,7 +149,11 @@ struct SidebarScreen: View {
         if store.offersNewThread(drafts: store.listedDrafts, active: active) {
             items.append(.newThread)
         }
-        for (section, threads) in sections where !threads.isEmpty {
+        let shown = sections.filter { !$0.threads.isEmpty }
+        guard !shown.isEmpty else { return items }
+        // The gap holds the sections at the bottom while everything fits.
+        items.append(.gap)
+        for (section, threads) in shown {
             items.append(.header(section, threads.count))
             if expanded(section).wrappedValue { items += threads.map(SidebarItem.slim) }
         }
@@ -214,6 +219,8 @@ struct SidebarScreen: View {
         case .newThread:
             NewThreadRow()
                 .frame(height: 44)
+        case .gap:
+            Color.clear
         case .header(let section, let count):
             sectionHeader(section, count: count)
         case .slim(let thread):
@@ -262,7 +269,6 @@ struct SidebarScreen: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .padding(.top, 8)
     }
 
     /// The servers and how the client reaches them, and under them the account, which leads to the
@@ -317,7 +323,8 @@ struct SidebarScreen: View {
         let servers = store.servers
         if servers.count == 1 {
             ServerLine(server: servers[0])
-                .padding(.horizontal, sidebarEdge)
+                .padding(.leading, sidebarEdge)
+                .padding(.trailing, sidebarEdge - serverButtonOutset)
                 .frame(height: ServerLines.lineHeight)
         } else if servers.count > 1 {
             Button {
@@ -403,7 +410,8 @@ private struct ServerLines: View {
             VStack(spacing: 0) {
                 ForEach(servers) {
                     ServerLine(server: $0)
-                        .padding(.horizontal, sidebarEdge)
+                        .padding(.leading, sidebarEdge)
+                        .padding(.trailing, sidebarEdge - serverButtonOutset)
                         .frame(height: Self.lineHeight)
                 }
             }
@@ -422,6 +430,7 @@ private enum SidebarItem: Identifiable {
     case result(SearchResult)
     case empty
     case newThread
+    case gap
     case header(ThreadSection, Int)
     case slim(ThreadInfo)
 
@@ -432,6 +441,7 @@ private enum SidebarItem: Identifiable {
         case .result(let result): "result:\(result.id)"
         case .empty: "empty"
         case .newThread: "newThread"
+        case .gap: "gap"
         case .header(let section, _): "header:\(section.rawValue)"
         // A slim row has an id of its own, or the list keeps the thread's active row for it.
         case .slim(let thread): "slim:\(thread.id)"

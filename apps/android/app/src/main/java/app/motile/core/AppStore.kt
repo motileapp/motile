@@ -190,7 +190,7 @@ class AppStore(private val context: Context) {
     var mcpStep by mutableStateOf<String?>(null)
     /** The thread whose sidebar row `do.sh` has slid aside, to show what its swipe offers. */
     var swipeStep by mutableStateOf<String?>(null)
-    /** The sidebar's part `do.sh` has opened: "working", "snoozed" or "archived". */
+    /** The sidebar's part `do.sh` has opened ("working", "snoozed" or "archived"), or closed, with a "-" before it. */
     var expandStep by mutableStateOf<String?>(null)
     /** The thread's settings are open over the client, where they aren't around the composer. */
     var showsThreadSettings by mutableStateOf(false)

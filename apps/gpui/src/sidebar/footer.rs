@@ -4,8 +4,12 @@
 use gpui_kit::prelude::*;
 use gpui_kit::*;
 
-use super::SIDEBAR_EDGE;
 use super::updates::{AppUpdateRow, UpdateLabel};
+use super::{BUTTON_OUTSET, SIDEBAR_EDGE};
+
+/// Its buttons are as far from its sides as from the line over it. It keeps its own distance from
+/// the sides, apart from the list's.
+const FOOTER_EDGE: f32 = 16.;
 use crate::store::Store;
 use crate::theme::{ControlSize, IconSize, colors};
 use crate::ui::control::Alignment;
@@ -180,12 +184,19 @@ impl Render for SidebarFooter {
             });
         div()
             .w_full()
-            .px(px(SIDEBAR_EDGE))
-            .py(px(SIDEBAR_EDGE - 2. - symbol_inset()))
+            .px(px(FOOTER_EDGE))
+            .py(px(FOOTER_EDGE - symbol_inset()))
             .flex()
             .flex_col()
             .gap(px(8.))
-            .when(state.shows_row(), |footer| footer.child(AppUpdateRow::new(&self.store)))
+            .when(state.shows_row(), |footer| {
+                footer.child(
+                    div()
+                        .ml(px(SIDEBAR_EDGE - FOOTER_EDGE))
+                        .mr(px(SIDEBAR_EDGE - FOOTER_EDGE - BUTTON_OUTSET))
+                        .child(AppUpdateRow::new(&self.store)),
+                )
+            })
             .child(buttons)
     }
 }

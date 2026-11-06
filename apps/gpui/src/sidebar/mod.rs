@@ -1,7 +1,8 @@
 //! The drafts, then every active thread on every server in one list, with the working, the
-//! snoozed and the archived ones and the servers on shelves at the bottom, and the way to the settings and the usage under
-//! them: the Mac app's `SidebarView.swift`. While it searches, it is one flat list of what was
-//! found.
+//! snoozed and the archived ones in the same list under their lines, held at its bottom while
+//! everything fits; the servers on a shelf under it, and the way to the settings and the usage
+//! under them: the Mac app's `SidebarView.swift`. While it searches, it is one flat list of what
+//! was found.
 
 mod card;
 mod drag;
@@ -12,7 +13,7 @@ mod search;
 mod shelves;
 mod updates;
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::time::Duration;
@@ -36,13 +37,22 @@ use crate::ui::{ActionButton, InputField, InputVariant, TOOLBAR_SYMBOL, beside, 
 
 /// The space between the rows' highlights, and around each one: it looks empty but is the row's.
 const ROW_GAP: f32 = 2.;
-/// How far the rows' highlights stay from the sidebar's edges.
-pub const ROW_INSET: f32 = 10.;
+/// How far the rows' highlights stay from the sidebar's edges: every row of the list, the search
+/// over it and the lines under it take it.
+pub const ROW_INSET: f32 = 8.;
+/// How far a row's content stays from its highlight's sides.
+pub const ROW_PADDING: f32 = 8.;
 /// How far everything the sidebar shows stays from its sides, a row's content as well as a line's.
-const SIDEBAR_EDGE: f32 = ROW_INSET + 8.;
+const SIDEBAR_EDGE: f32 = ROW_INSET + ROW_PADDING;
+/// How far a line's button reaches past the rows' edge, to look in line with it.
+const BUTTON_OUTSET: f32 = 4.;
+/// The room over the servers' list, under their line.
+const SHELF_LIST_TOP: f32 = 2.;
 const DONE_ROW_HEIGHT: f32 = 30.;
-/// How far a row's lines stand from its highlight's sides, top and bottom.
-const SIDE_PADDING: f32 = 8.;
+/// The least the gap over the sections takes, when the list is fuller than its room: never
+/// nothing, as a row of no height is no row.
+const GAP_LEAST: f32 = 1.;
+/// How far a row's lines stand from its highlight's top and bottom.
 const TOP_PADDING: f32 = 5.;
 const BOTTOM_PADDING: f32 = 7.;
 const FIRST_LINE_HEIGHT: f32 = 22.;
@@ -94,7 +104,7 @@ fn stop_press(control: impl IntoElement) -> AnyElement {
         .into_any_element()
 }
 
-/// The shelves at the bottom of the sidebar.
+/// The parts of the list under the active threads, and the shelf of the servers under the list.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 enum Shelf {
     Working,
@@ -104,8 +114,9 @@ enum Shelf {
 }
 
 /// A row of the list: the drafts as one, an active thread, what the search found, the line that
-/// says there is nothing, and the offer to start a thread. Threads and results are by their
-/// place in the store's list and in the search's.
+/// says there is nothing, the offer to start a thread, the room that holds the working, the
+/// snoozed and the archived threads at the bottom, a line over them, and one of them. Threads and
+/// results are by their place in the store's list and in the search's.
 #[derive(Clone, Copy)]
 enum Item {
     Drafts,
@@ -113,6 +124,9 @@ enum Item {
     Result(usize),
     Empty,
     NewThread,
+    Gap,
+    Section(Shelf),
+    Shelved(Shelf, usize),
 }
 
 /// What the lists are made of, worked out again only once the store changed, so that a frame that
@@ -123,15 +137,15 @@ struct Plan {
     results: Vec<SearchResult>,
     drafts: Vec<ListedDraft>,
     items: Vec<Item>,
-    /// Where the rows of the list above the shelves are, which of them can move, and the thread
-    /// of each, for a row being moved.
+    /// Where the rows of the list are, with the gap at its least, which of them can move, and the
+    /// thread of each, for a row being moved.
     layout: Layout,
+    /// The gap's row, while the list has sections under the active threads.
+    gap: Option<usize>,
     movable: Vec<bool>,
     row_threads: Vec<Option<String>>,
     /// Where each thread the jump keys go through is among them, while their keys show.
     jumps: HashMap<String, usize>,
-    /// The rows of each shelf of threads that holds any, in the order the shelves stand.
-    shelves: Vec<(Shelf, Layout)>,
     /// Some thread works, so the times in the rows go on every second.
     running: bool,
 }
@@ -156,7 +170,9 @@ pub struct Sidebar {
     highlighted: usize,
     result_ids: Vec<String>,
     list: RecycledList,
-    /// The list of each shelf.
+    /// The list's height its gap was last fitted to, measured as it is laid out.
+    fitted_to: Rc<Cell<f32>>,
+    /// The servers' list.
     shelf_lists: HashMap<Shelf, RecycledList>,
     /// What the lists are made of, until the store changes.
     plan: Option<Rc<Plan>>,
@@ -247,11 +263,8 @@ impl Sidebar {
             highlighted: 0,
             result_ids: Vec::new(),
             list: RecycledList::new(),
-            shelf_lists: Shelf::THREADS
-                .into_iter()
-                .chain([Shelf::Servers])
-                .map(|shelf| (shelf, RecycledList::new()))
-                .collect(),
+            fitted_to: Rc::default(),
+            shelf_lists: HashMap::from([(Shelf::Servers, RecycledList::new())]),
             plan: None,
             stale: true,
             press: None,
@@ -463,7 +476,7 @@ impl Sidebar {
         );
         let (add_project, new_thread) = (self.store.clone(), self.store.clone());
         div()
-            .px(px(10.))
+            .px(px(ROW_INSET))
             .pt(px(2.))
             .pb(px(6.))
             .flex()
@@ -511,7 +524,8 @@ impl Sidebar {
             Item::Active(_) => THREAD_ROW_HEIGHT + ROW_GAP,
             Item::Result(_) => RESULT_ROW_HEIGHT + ROW_GAP,
             Item::Empty => EMPTY_LINE_HEIGHT + 2. * (6. + ROW_GAP / 2.),
-            Item::NewThread => DONE_ROW_HEIGHT + ROW_GAP,
+            Item::NewThread | Item::Section(_) | Item::Shelved(..) => DONE_ROW_HEIGHT + ROW_GAP,
+            Item::Gap => GAP_LEAST,
         }
     }
 
@@ -532,12 +546,6 @@ impl Sidebar {
         if self.list.set_ids(ids) {
             self.cancel_lift();
             self.forget_pointer(cx);
-        }
-        for shelf in Shelf::THREADS {
-            let ids = shelf.threads(self.store.read(cx)).iter().map(|thread| thread.id.clone()).collect();
-            if self.list_mut(shelf).set_ids(ids) {
-                self.forget_pointer(cx);
-            }
         }
         self.plan = Some(plan.clone());
         plan
@@ -567,6 +575,22 @@ impl Sidebar {
                 items.push(Item::NewThread);
             }
         }
+        let mut sections = Vec::new();
+        for shelf in if searching { [].as_slice() } else { Shelf::THREADS.as_slice() } {
+            let count = shelf.threads(store).len();
+            if count == 0 {
+                continue;
+            }
+            sections.push(Item::Section(*shelf));
+            if shelf.expanded(&store.prefs) {
+                sections.extend((0..count).map(|at| Item::Shelved(*shelf, at)));
+            }
+        }
+        let gap = (!sections.is_empty()).then(|| {
+            items.push(Item::Gap);
+            items.len() - 1
+        });
+        items.extend(sections);
         let heights = items.iter().map(|item| Self::item_height(*item, drafts.len())).collect();
         let movable = items
             .iter()
@@ -593,16 +617,12 @@ impl Sidebar {
                 jumps.entry(thread.id.clone()).or_insert(at);
             }
         }
-        let shelves = if searching { Vec::new() } else { Shelf::THREADS.to_vec() }
-            .into_iter()
-            .map(|shelf| (shelf, shelf.threads(store).len()))
-            .filter(|(_, count)| *count > 0)
-            .map(|(shelf, count)| (shelf, Layout::new(vec![DONE_ROW_HEIGHT + ROW_GAP; count], 0., 4. - ROW_GAP / 2.)))
-            .collect();
+        // The sections at the bottom stand a little apart from the line under them.
+        let bottom = 4. - ROW_GAP / 2. + if gap.is_some() { 2. } else { 0. };
         Plan {
             searching,
-            layout: Layout::new(heights, 4. - ROW_GAP / 2., 4. - ROW_GAP / 2.),
-            shelves,
+            layout: Layout::new(heights, 4. - ROW_GAP / 2., bottom),
+            gap,
             running: store.listed_threads().any(ThreadInfo::busy),
             results,
             drafts,
@@ -622,12 +642,46 @@ impl Sidebar {
             Item::Result(index) => results[index].id(),
             Item::Empty => "empty".into(),
             Item::NewThread => "new-thread".into(),
+            Item::Gap => "gap".into(),
+            Item::Section(shelf) => shelf.group().into(),
+            Item::Shelved(shelf, at) => {
+                shelf.threads(self.store.read(cx)).get(at).map(|thread| thread.id.clone()).unwrap_or_default()
+            }
         }
     }
 
-    /// The list above the shelves: the drafts and the active threads, or what the search found.
+    /// The list's rows with the gap taking the room the others leave, never less than its least,
+    /// so that the sections lie at its bottom while everything fits.
+    fn fitted_layout(&self, plan: &Plan) -> Layout {
+        let Some(gap) = plan.gap else { return plan.layout.clone() };
+        let room = self.fitted_to.get() - plan.layout.content() + plan.layout.heights[gap];
+        plan.layout.with_height(gap, room.max(GAP_LEAST))
+    }
+
+    /// Lays the gap out again when the list's height turns out to be another than it was fitted
+    /// to, as the window or what is under the list changes.
+    fn refit(&self) -> AnyElement {
+        let fitted_to = self.fitted_to.clone();
+        canvas(
+            move |bounds, window, _| {
+                let height = f32::from(bounds.size.height);
+                if (height - fitted_to.get()).abs() > 0.5 {
+                    fitted_to.set(height);
+                    window.refresh();
+                }
+            },
+            |_, _, _, _| {},
+        )
+        .absolute()
+        .inset_0()
+        .into_any_element()
+    }
+
+    /// The list: the drafts, the active threads and the sections under them, or what the search
+    /// found.
     fn threads(&mut self, plan: &Plan, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
-        let layout = &plan.layout;
+        let fitted = self.fitted_layout(plan);
+        let layout = &fitted;
         let target = if plan.searching {
             plan.results.get(self.highlighted).map(SearchResult::id)
         } else {
@@ -652,13 +706,21 @@ impl Sidebar {
                 }
                 Item::Empty => self.empty_line(cx),
                 Item::NewThread => self.new_thread_row(cx),
+                Item::Gap => div().into_any_element(),
+                Item::Section(shelf) => self.section_row(shelf, cx),
+                Item::Shelved(shelf, at) => {
+                    let Some(thread) = shelf.threads(self.store.read(cx)).get(at).cloned() else { continue };
+                    self.slim_row(&thread, cx)
+                }
             };
             rows.push(place(layout, index, shift, element));
         }
         let element = self.list.element("threads", layout, rows, colors(cx).background);
         div()
+            .relative()
             .flex_1()
             .min_h_0()
+            .child(self.refit())
             .on_scroll_wheel(cx.listener(|this, _, _, cx| {
                 this.list.stop_scrolling();
                 this.forget_pointer(cx);
@@ -788,11 +850,6 @@ impl Render for Sidebar {
         let header = self.header(cx);
         let threads = self.threads(&plan, window, cx);
         let undo = self.undo(cx);
-        let shelves: Vec<Div> = plan
-            .shelves
-            .iter()
-            .map(|(shelf, layout)| self.thread_shelf(*shelf, layout, room * 0.25, window, cx))
-            .collect();
         let servers = has_servers.then(|| self.servers_shelf(room * 0.25, window, cx));
         let pulling = self.pulling.is_some();
         div()
@@ -806,9 +863,8 @@ impl Render for Sidebar {
             .child(header)
             .child(threads)
             .children(undo)
-            .children(shelves)
             .children(servers)
-            .when(!plan.shelves.is_empty() || has_servers, |sidebar| sidebar.child(divider(cx)))
+            .when(has_servers, |sidebar| sidebar.child(divider(cx)))
             .child(self.footer.clone())
             .children(self.follow_pointer(cx))
             .children(self.card_layer(cx))
