@@ -17,7 +17,7 @@ use super::{
 };
 use crate::models::{Server, ThreadInfo, section_label};
 use crate::prefs::Prefs;
-use crate::store::{Store, UndoKind, UndoNotice};
+use crate::store::{Store, UndoNotice};
 use crate::theme::{self, IconSize, Opacity, colors};
 use crate::ui::{Highlight, divider, ease_out, icons, tabular_numbers, tooltip};
 
@@ -170,14 +170,19 @@ pub fn state_ring(tint: Hsla, cx: &App) -> Div {
 
 /// The name of a sidebar line: muted while it is closed and not lit.
 fn shelf_title(title: &'static str, lit: bool, cx: &App) -> Div {
-    let c = colors(cx);
     div()
         .min_w_0()
         .text_size(px(12.))
         .font_weight(FontWeight::MEDIUM)
         .truncate()
-        .text_color(if lit { c.foreground } else { c.muted_foreground })
+        .text_color(shelf_tint(lit, cx))
         .child(title)
+}
+
+/// The colour of a sidebar line's name, and of a mark that goes with it.
+fn shelf_tint(lit: bool, cx: &App) -> Hsla {
+    let c = colors(cx);
+    if lit { c.foreground } else { c.muted_foreground }
 }
 
 /// A server's error, under its name, in lines of this size.
@@ -290,26 +295,16 @@ impl Sidebar {
                             .flex()
                             .items_center()
                             .gap(px(7.))
-                            .child(line_mark(
-                                icons::symbol("undo-2", IconSize::Sm).text_color(c.muted_stronger_foreground),
-                            ))
+                            .child(line_mark(icons::symbol("undo-2", IconSize::Sm).text_color(shelf_tint(lit, cx))))
                             .child(shelf_title("Undo", lit, cx))
                             .child(div().flex_1())
                             .child(
                                 div()
                                     .min_w_0()
-                                    .flex()
-                                    .items_center()
-                                    .gap(px(4.))
+                                    .text_size(px(11.))
                                     .text_color(c.muted_stronger_foreground)
-                                    .child(icons::symbol(
-                                        match notice.kind {
-                                            UndoKind::Archive => "archive",
-                                            UndoKind::Snooze => "alarm-clock",
-                                        },
-                                        IconSize::Sm,
-                                    ))
-                                    .child(div().min_w_0().text_size(px(11.)).truncate().child(notice.text.clone())),
+                                    .truncate()
+                                    .child(notice.text.clone()),
                             ),
                     )
                     .on_click(move |_, _, cx| {

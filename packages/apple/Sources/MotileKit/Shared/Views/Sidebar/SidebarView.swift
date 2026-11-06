@@ -815,16 +815,13 @@ struct UndoRow: View {
             } label: {
                 HStack(spacing: 7) {
                     ShelfLineMark { Image(.undo2, size: .sm) }
-                        .foregroundStyle(Color.themeMutedStrongerForeground)
+                        .modifier(ShelfTint(expanded: false))
                     ShelfTitle("Undo", expanded: false)
                     Spacer()
-                    HStack(spacing: 4) {
-                        Image(notice.kind == .snooze ? .alarmClock : .archive, size: .sm)
-                        Text(notice.text)
-                            .font(.ui(size: 11))
-                            .lineLimit(1)
-                    }
-                    .foregroundStyle(Color.themeMutedStrongerForeground)
+                    Text(notice.text)
+                        .font(.ui(size: 11))
+                        .lineLimit(1)
+                        .foregroundStyle(Color.themeMutedStrongerForeground)
                 }
                 .padding(.horizontal, sidebarEdge)
                 .frame(height: doneRowHeight + 8)
@@ -1254,7 +1251,6 @@ struct SidebarChevron: View {
 struct ShelfTitle: View {
     let title: String
     let expanded: Bool
-    @Environment(\.row) private var row
 
     init(_ title: String, expanded: Bool) {
         self.title = title
@@ -1265,7 +1261,17 @@ struct ShelfTitle: View {
         Text(title)
             .font(.ui(size: 12, weight: .medium))
             .lineLimit(1)
-            .foregroundStyle(expanded || row != nil ? Color.themeForeground : Color.themeMutedForeground)
+            .modifier(ShelfTint(expanded: expanded))
+    }
+}
+
+/// The colour of a sidebar line's name, and of a mark that goes with it.
+struct ShelfTint: ViewModifier {
+    let expanded: Bool
+    @Environment(\.row) private var row
+
+    func body(content: Content) -> some View {
+        content.foregroundStyle(expanded || row != nil ? Color.themeForeground : Color.themeMutedForeground)
     }
 }
 
