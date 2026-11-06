@@ -103,10 +103,7 @@ private struct ComposerPicker: View {
     private static let settingsWidth: CGFloat = 196
     private static let height: CGFloat = 348
     private static let shortest: CGFloat = 180
-    private static let rowHeight: CGFloat = 28
-    private static let padding: CGFloat = 4
-    /// The room between two rows' lights: only drawn, so that the rows' clicks meet.
-    private static let rowLight = EdgeInsets(top: 1, leading: 0, bottom: 1, trailing: 0)
+    private static let padding = DropdownList.padding
     private static let headerGap: CGFloat = 6
     private static let railLight = EdgeInsets(top: 2, leading: 0, bottom: 2, trailing: 0)
 
@@ -295,14 +292,14 @@ private struct ComposerPicker: View {
     }
 
     private func search(rows: [Row], settings: [Setting]) -> some View {
-        HStack(spacing: 8) {
-            Image(.search, size: .md)
+        HStack(spacing: DropdownList.gap) {
+            Image(.search, size: DropdownList.symbol)
                 .foregroundStyle(Color.themeMutedStrongerForeground)
                 .allowsHitTesting(false)
             TextField("", text: $query)
                 .placeholder("Search models", shown: query.isEmpty)
                 .textFieldStyle(.plain)
-                .font(.ui(size: 13))
+                .font(DropdownList.font)
                 .focused($searching)
                 .onChange(of: query) {
                     column = .model
@@ -314,8 +311,8 @@ private struct ComposerPicker: View {
                 .onKeyPress(.rightArrow) { move(1, rows: rows, settings: settings) }
                 .onKeyPress(.leftArrow) { move(-1, rows: rows, settings: settings) }
         }
-        .padding(.horizontal, 12)
-        .frame(height: 38)
+        .padding(.horizontal, DropdownList.searchPadding)
+        .frame(height: DropdownList.searchHeight)
         // All of the row is the field: a click anywhere on it, its icon too, types there.
         .background { TypingArea { searching = true } }
     }
@@ -336,10 +333,8 @@ private struct ComposerPicker: View {
                     }
                     if groups.isEmpty {
                         Text("No model matches")
-                            .font(.ui(size: 13))
                             .foregroundStyle(Color.themeMutedForeground)
-                            .padding(.horizontal, 8)
-                            .frame(height: Self.rowHeight)
+                            .dropdownRow()
                     }
                 }
                 .padding(Self.padding)
@@ -386,17 +381,17 @@ private struct ComposerPicker: View {
                 LimitPills(windows: group.windows)
             }
         }
-        .padding(.horizontal, 8)
+        .padding(.horizontal, DropdownList.rowPadding)
         .padding(.top, 8)
         // The chips stand as far from a lit row as from the words above them.
-        .padding(.bottom, group.windows.isEmpty ? 4 : Self.headerGap - Self.rowLight.top)
+        .padding(.bottom, group.windows.isEmpty ? 4 : Self.headerGap - DropdownList.light.top)
     }
 
     private func modelRow(_ row: Row) -> some View {
         let chosen = row.model.id == store.composerModel?.id && row.account.id == store.composerAccount?.id
         let key = row.index < 9 ? store.shortcuts.label("modelPicker.jump.\(row.index + 1)", in: store.shortcutContext(composerFocus: false, editableFocus: true)) : nil
-        return HStack(spacing: 8) {
-            AgentIcon(agent: row.model.agent, size: .md)
+        return HStack(spacing: DropdownList.gap) {
+            AgentIcon(agent: row.model.agent, size: DropdownList.symbol)
             Text(row.model.shortName)
                 .lineLimit(1)
             Spacer(minLength: 8)
@@ -404,14 +399,11 @@ private struct ComposerPicker: View {
                 KeyCaps([key])
                     .foregroundStyle(Color.themeMutedForeground)
             }
-            Image(.check, size: .sm)
+            Image(.check, size: DropdownList.check)
                 .opacity(chosen ? 1 : 0)
         }
-        .font(.ui(size: 13))
-        .foregroundStyle(Color.themeForeground)
-        .padding(.horizontal, 8)
-        .frame(height: Self.rowHeight)
-        .button(.highlight(radius: Radius.sm, lit: column == .model && lit == row.index, inset: Self.rowLight)) { choose(row) }
+        .dropdownRow()
+        .button(.dropdownLight(lit: column == .model && lit == row.index)) { choose(row) }
         .onHover { inside in
             guard inside else { return }
             column = .model
@@ -446,13 +438,13 @@ private struct ComposerPicker: View {
         VStack(alignment: .leading, spacing: 0) {
             ForEach(Array(settings.enumerated()), id: \.offset) { index, setting in
                 if index == 0, case .effort = setting {
-                    sectionTitle("Reasoning", of: model?.shortName)
+                    DropdownTitle("Reasoning", about: model?.shortName)
                 }
                 if case .context = setting, isFirstContext(at: index, in: settings) {
                     if index > 0 {
                         sectionDivider
                     }
-                    sectionTitle("Context window")
+                    DropdownTitle("Context window")
                 }
                 settingRow(setting, index: index, model: model)
             }
@@ -473,24 +465,6 @@ private struct ComposerPicker: View {
         return true
     }
 
-    /// A section's title, and at its end the model it is about.
-    private func sectionTitle(_ title: String, of model: String? = nil) -> some View {
-        HStack(spacing: 8) {
-            Text(title)
-                .foregroundStyle(Color.themeMutedForeground)
-            Spacer(minLength: 0)
-            if let model {
-                Text(model)
-                    .foregroundStyle(Color.themeMutedStrongerForeground)
-                    .lineLimit(1)
-            }
-        }
-        .font(ControlSize.regular.font)
-        .padding(.horizontal, 8)
-        .padding(.top, 8)
-        .padding(.bottom, 4)
-    }
-
     private func settingRow(_ setting: Setting, index: Int, model: ModelInfo?) -> some View {
         let (title, symbol, isDefault, chosen): (String, Symbol?, Bool, Bool) = switch setting {
         case .effort(let effort):
@@ -498,9 +472,9 @@ private struct ComposerPicker: View {
         case .context(let context):
             (context.label, nil, context.isDefault, context == store.composerContext)
         }
-        return HStack(spacing: 6) {
+        return HStack(spacing: DropdownList.gap) {
             if let symbol {
-                Image(symbol, size: .md)
+                Image(symbol, size: DropdownList.symbol)
                     .foregroundStyle(Color.themeMutedForeground)
             }
             Text(title)
@@ -508,15 +482,12 @@ private struct ComposerPicker: View {
             if isDefault {
                 Chip("Default", muted: true)
             }
-            Spacer(minLength: 6)
-            Image(.check, size: .sm)
+            Spacer(minLength: DropdownList.gap)
+            Image(.check, size: DropdownList.check)
                 .opacity(chosen ? 1 : 0)
         }
-        .font(.ui(size: 13))
-        .foregroundStyle(Color.themeForeground)
-        .padding(.horizontal, 8)
-        .frame(height: Self.rowHeight)
-        .button(.highlight(radius: Radius.sm, lit: column == .effort && lit == index, inset: Self.rowLight)) { pick(setting) }
+        .dropdownRow()
+        .button(.dropdownLight(lit: column == .effort && lit == index)) { pick(setting) }
         .onHover { inside in
             guard inside else { return }
             column = .effort

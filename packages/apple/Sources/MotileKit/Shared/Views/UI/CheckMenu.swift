@@ -11,8 +11,6 @@ struct Check: Identifiable {
 /// A menu of things to turn on and off. It stays open while they are picked, which no system
 /// menu does on the Mac, so it is drawn by the view with `dropdowns()` around it.
 struct CheckMenu: View {
-    private static let padding: CGFloat = 4
-
     private let title: String
     private let icon: Symbol?
     private let help: String
@@ -70,25 +68,21 @@ struct CheckMenu: View {
         VStack(spacing: 0) {
             ForEach(checks) { check in
                 row(check)
-                    .button(.highlight(radius: Radius.sm)) { check.toggle() }
+                    .button(.dropdownLight()) { check.toggle() }
             }
         }
-        .padding(Self.padding)
+        .padding(DropdownList.padding)
     }
 
     private func row(_ check: Check) -> some View {
-        HStack(spacing: 8) {
-            Image(.check, size: .md)
-                .opacity(check.checked ? 1 : 0)
+        HStack(spacing: DropdownList.gap) {
             Text(check.title)
                 .lineLimit(1)
             Spacer(minLength: 12)
+            Image(.check, size: DropdownList.check)
+                .opacity(check.checked ? 1 : 0)
         }
-        .font(.ui(size: 13))
-        .foregroundStyle(Color.themeForeground)
-        .padding(.horizontal, 8)
-        .frame(height: pressable(28))
-        .contentShape(Rectangle())
+        .dropdownRow()
     }
 }
 

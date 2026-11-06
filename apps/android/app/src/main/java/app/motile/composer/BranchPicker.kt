@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -41,9 +42,8 @@ import app.motile.LocalStore
 import app.motile.core.Branch
 import app.motile.core.Project
 import app.motile.core.coreError
-import app.motile.platform.Platform
 import app.motile.platform.Symbol
-import app.motile.theme.iconSize
+import app.motile.theme.symbolSide
 import app.motile.theme.LocalSurface
 import app.motile.theme.Opacity
 import app.motile.theme.Radius
@@ -52,7 +52,8 @@ import app.motile.theme.Theme
 import app.motile.theme.opacity
 import app.motile.theme.value
 import app.motile.theme.LocalDark
-import app.motile.ui.HighlightButton
+import app.motile.ui.DropdownList
+import app.motile.ui.DropdownRow
 import app.motile.ui.Highlight
 import app.motile.ui.Icon
 import app.motile.ui.InputField
@@ -66,8 +67,6 @@ import app.motile.ui.ThemeDivider
  * settings, which draw its bar: the search field is at its bottom.
  */
 object BranchPicker {
-    val rowHeight = if (Platform.scale > 1) 44.dp else 30.dp
-    val listPadding = 8.dp
     const val placeholderCount = 5
 }
 
@@ -135,7 +134,7 @@ fun BranchPicker(project: Project, base: String? = null) {
         Column(Modifier.fillMaxSize().background(palette.background)) {
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 when {
-                    listed == null -> Column(Modifier.padding(BranchPicker.listPadding)) {
+                    listed == null -> Column(Modifier.padding(DropdownList.padding)) {
                         repeat(BranchPicker.placeholderCount) { BranchPlaceholder(it) }
                     }
                     listed.isFailure -> Text(
@@ -176,42 +175,37 @@ private fun BranchList(choices: List<BranchChoice>, base: String?, working: Bool
     LazyColumn(
         Modifier.fillMaxSize(),
         state = list,
-        contentPadding = PaddingValues(start = BranchPicker.listPadding, end = BranchPicker.listPadding, top = BranchPicker.listPadding, bottom = BranchPicker.listPadding + 24.dp),
+        contentPadding = PaddingValues(start = DropdownList.padding, end = DropdownList.padding, top = DropdownList.padding, bottom = DropdownList.padding + 24.dp),
     ) {
         itemsIndexed(choices, key = { _, choice -> choice.id }) { index, choice ->
-            HighlightButton({ choose(index) }, Modifier.fillMaxWidth(), radius = Radius.md, lit = index == highlighted.index) {
-                BranchRow(choice, base, working)
+            DropdownRow({ choose(index) }, Modifier.opacity(Opacity.Disabled, on = working), lit = index == highlighted.index) {
+                BranchRow(choice, base)
             }
         }
     }
 }
 
 @Composable
-private fun BranchRow(choice: BranchChoice, base: String?, working: Boolean) {
+private fun RowScope.BranchRow(choice: BranchChoice, base: String?) {
     val palette = Theme.colors
-    Row(
-        Modifier.fillMaxWidth().height(BranchPicker.rowHeight).padding(horizontal = 8.dp).opacity(Opacity.Disabled, on = working),
-        horizontalArrangement = Arrangement.spacedBy(7.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        when (choice) {
-            is BranchChoice.Existing -> {
-                val branch = choice.branch
-                val chosen = if (base != null) base == branch.name else branch.current
-                Icon(if (chosen) Symbol.Check else Symbol.GitBranch, iconSize(text = 12.5f), color = if (chosen) palette.foreground else palette.mutedStrongerForeground)
-                Text(branch.name, Modifier.weight(1f), size = 12.5f, color = palette.foreground, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
-                val tag = when {
-                    base != null && branch.current -> "current"
-                    branch.isDefault -> "default"
-                    branch.remote -> "remote"
-                    else -> null
-                }
-                if (tag != null) Text(tag, size = 11f, color = palette.mutedStrongerForeground)
+    when (choice) {
+        is BranchChoice.Existing -> {
+            val branch = choice.branch
+            val chosen = if (base != null) base == branch.name else branch.current
+            Icon(Symbol.GitBranch, DropdownList.symbol, color = palette.mutedStrongerForeground)
+            Text(branch.name, Modifier.weight(1f), size = DropdownList.textSize, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
+            val tag = when {
+                base != null && branch.current -> "current"
+                branch.isDefault -> "default"
+                branch.remote -> "remote"
+                else -> null
             }
-            is BranchChoice.Create -> {
-                Icon(Symbol.Plus, iconSize(text = 12.5f), color = palette.mutedStrongerForeground)
-                Text("Create branch “${choice.name}”", Modifier.weight(1f), size = 12.5f, color = palette.foreground, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
-            }
+            if (tag != null) Text(tag, size = 11f, color = palette.mutedStrongerForeground)
+            Icon(Symbol.Check, DropdownList.check, Modifier.alpha(if (chosen) 1f else 0f))
+        }
+        is BranchChoice.Create -> {
+            Icon(Symbol.Plus, DropdownList.symbol, color = palette.mutedStrongerForeground)
+            Text("Create branch “${choice.name}”", Modifier.weight(1f), size = DropdownList.textSize, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
         }
     }
 }
@@ -225,12 +219,12 @@ private fun BranchPlaceholder(index: Int) {
     val pulse = rememberInfiniteTransition(label = "placeholder")
     val alpha by pulse.animateFloat(1f, faded, infiniteRepeatable(tween(800), RepeatMode.Reverse), label = "fade")
     Row(
-        Modifier.fillMaxWidth().height(BranchPicker.rowHeight).padding(horizontal = 8.dp).alpha(alpha),
-        horizontalArrangement = Arrangement.spacedBy(7.dp),
+        Modifier.fillMaxWidth().height(DropdownList.rowHeight).padding(horizontal = DropdownList.rowPadding).alpha(alpha),
+        horizontalArrangement = Arrangement.spacedBy(DropdownList.gap),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.width(14.dp), contentAlignment = Alignment.Center) {
-            Box(Modifier.size(11.dp).background(fill, RoundedCornerShape(Radius.xs)))
+        Box(Modifier.width(symbolSide(DropdownList.symbol)), contentAlignment = Alignment.Center) {
+            Box(Modifier.size(12.dp).background(fill, RoundedCornerShape(Radius.xs)))
         }
         Box(Modifier.width(widths[index % widths.size].dp).height(8.dp).background(fill, CircleShape))
     }

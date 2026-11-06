@@ -131,7 +131,7 @@ struct ContextStrip: View {
                         let server = store.server(copy.serverID)
                         return DropdownChoice(
                             id: copy.id, title: server?.name ?? "",
-                            icon: server.map { .picture(AnyView(ServerSymbol(server: $0, size: ControlSize.regular.symbol))) },
+                            icon: server.map { .picture(AnyView(ServerSymbol(server: $0, size: DropdownList.symbol))) },
                             chosen: store.selectedDraft?.projectID == copy.id
                         ) { store.setNewThreadProject(copy.id) }
                     },
@@ -275,8 +275,8 @@ struct BranchPicker: View {
     @State private var switching = false
     @FocusState private var searching: Bool
 
-    private static let rowHeight: CGFloat = Platform.scale > 1 ? 44 : 30
-    private static let listPadding: CGFloat = 8
+    private static let rowHeight = DropdownList.rowHeight
+    private static let listPadding = DropdownList.padding
     private static let maxListHeight: CGFloat = Platform.scale > 1 ? 420 : 300
     private static let placeholderCount = 5
 
@@ -325,13 +325,13 @@ struct BranchPicker: View {
         let choices = self.choices
         VStack(spacing: 0) {
             #if os(macOS)
-            HStack(spacing: 8) {
-                Image(.search, size: .md)
+            HStack(spacing: DropdownList.gap) {
+                Image(.search, size: DropdownList.symbol)
                     .foregroundStyle(Color.themeMutedStrongerForeground)
                 TextField("", text: $query)
                     .placeholder(prompt, shown: query.isEmpty)
                     .textFieldStyle(.plain)
-                    .font(.ui(size: 13))
+                    .font(DropdownList.font)
                     .focused($searching)
                     .onSubmit { choose(choices, at: highlighted.index) }
                     .onKeyPress(.downArrow) {
@@ -347,8 +347,8 @@ struct BranchPicker: View {
                         return .handled
                     }
             }
-            .padding(.horizontal, 16)
-            .frame(height: 38)
+            .padding(.horizontal, DropdownList.searchPadding)
+            .frame(height: DropdownList.searchHeight)
             ThemeDivider()
             #endif
             list(choices)
@@ -414,7 +414,7 @@ struct BranchPicker: View {
                     LazyVStack(spacing: 0) {
                         ForEach(Array(choices.enumerated()), id: \.element.id) { index, choice in
                             row(choice, index: index)
-                                .button(.highlight(radius: Radius.md, lit: index == highlighted.index)) { choose(choices, at: index) }
+                                .button(.dropdownLight(lit: index == highlighted.index)) { choose(choices, at: index) }
                                 .onHover { if $0 { highlighted.point(index) } }
                                 .id(choice.id)
                         }
@@ -435,12 +435,12 @@ struct BranchPicker: View {
     }
 
     private func row(_ choice: Choice, index: Int) -> some View {
-        HStack(spacing: 7) {
+        HStack(spacing: DropdownList.gap) {
             switch choice {
             case .branch(let branch):
                 let chosen = base.map { $0 == branch.name } ?? branch.current
-                Image(chosen ? .check : .gitBranch, size: .sm)
-                    .foregroundStyle(chosen ? Color.themeForeground : Color.themeMutedStrongerForeground)
+                Image(.gitBranch, size: DropdownList.symbol)
+                    .foregroundStyle(Color.themeMutedStrongerForeground)
                 Text(branch.name)
                     .lineLimit(1)
                     .truncationMode(.middle)
@@ -452,8 +452,10 @@ struct BranchPicker: View {
                         .font(.ui(size: 11))
                         .foregroundStyle(Color.themeMutedStrongerForeground)
                 }
+                Image(.check, size: DropdownList.check)
+                    .opacity(chosen ? 1 : 0)
             case .create(let name):
-                Image(.plus, size: .sm)
+                Image(.plus, size: DropdownList.symbol)
                     .foregroundStyle(Color.themeMutedStrongerForeground)
                 Text("Create branch “\(name)”")
                     .lineLimit(1)
@@ -461,10 +463,7 @@ struct BranchPicker: View {
                 Spacer(minLength: 8)
             }
         }
-        .font(.ui(size: 12.5))
-        .foregroundStyle(Color.themeForeground)
-        .padding(.horizontal, 8)
-        .frame(height: Self.rowHeight)
+        .dropdownRow()
         .frame(maxWidth: .infinity)
         .opacity(.disabled, when: working)
     }
@@ -507,17 +506,17 @@ private struct BranchPlaceholder: View {
     private static let widths: [CGFloat] = [90, 150, 120, 170, 105]
 
     var body: some View {
-        HStack(spacing: 7) {
+        HStack(spacing: DropdownList.gap) {
             RoundedRectangle(cornerRadius: Radius.xs, style: .continuous)
                 .fill(surface.color(.control))
-                .frame(width: 11, height: 11)
-                .frame(width: 14)
+                .frame(width: 12, height: 12)
+                .frame(width: DropdownList.symbol.rawValue)
             Capsule()
                 .fill(surface.color(.control))
                 .frame(width: Self.widths[index % Self.widths.count], height: 8)
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, 8)
+        .padding(.horizontal, DropdownList.rowPadding)
         .frame(height: height)
         .opacity(.disabled, when: faded)
         .animation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true), value: faded)
