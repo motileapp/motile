@@ -121,7 +121,9 @@ struct AgentGatewaySettings: View {
         if !account.windows.isEmpty {
             VStack(spacing: 0) {
                 ForEach(account.windows) { window in
-                    ThemeDivider().padding(.horizontal, LimitRow.inset)
+                    if window.id != account.windows.first?.id {
+                        ThemeDivider().padding(.horizontal, LimitRow.inset)
+                    }
                     LimitRow(window: window, beside: width - 2 * Self.listInset >= LimitsView.besideWidth)
                 }
             }
