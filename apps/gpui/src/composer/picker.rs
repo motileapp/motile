@@ -23,7 +23,8 @@ use crate::ui::{ActionButton, Chip, Highlight, KeyCaps, Segmented, divider_on, e
 
 const RAIL_WIDTH: f32 = 44.;
 const LIST_WIDTH: f32 = 232.;
-const SETTINGS_WIDTH: f32 = 196.;
+const SETTINGS_WIDTH: f32 = 200.;
+const CHECK_GAP: f32 = 12.;
 const HEIGHT: f32 = 348.;
 const SHORTEST: f32 = 180.;
 const HEADER_GAP: f32 = 6.;
@@ -31,9 +32,14 @@ const HEADER_GAP: f32 = 6.;
 pub const WIDTH: f32 = RAIL_WIDTH + LIST_WIDTH + SETTINGS_WIDTH + 4.;
 /// The room between the picker and the button it opens from.
 pub const GAP: f32 = 4.;
-const FOOTER_HEIGHT: f32 = ControlSize::Small.height() + 2. * PADDING;
+const FOOTER_HEIGHT: f32 = ControlSize::Regular.height() + 2. * PADDING;
+/// The search's symbol stands this much closer to the edge than the rows' symbols, which it looks aligned with.
+const SEARCH_NUDGE: f32 = 2.;
 const ACCESS_MENU_WIDTH: f32 = 288.;
-const ACCESS_MENU_PADDING: f32 = 10.;
+/// The access menu's room above and below its parts, and at their sides.
+const ACCESS_MENU_PADDING: (f32, f32) = (12., 14.);
+/// How far the tabs reach past the words' edges, into the menu's padding.
+const ACCESS_TABS_OUTSET: f32 = 4.;
 /// Over the columns, just above the footer's button, as a menu opens above what opened it.
 const ACCESS_MENU_LIFT: f32 = FOOTER_HEIGHT + 4.;
 
@@ -430,7 +436,7 @@ impl ComposerPicker {
     }
 
     fn search(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        list::search("picker-search", &self.query, cx)
+        list::search("picker-search", &self.query, cx).pl(px(list::SEARCH_PADDING - SEARCH_NUDGE))
     }
 
     fn list(&self, groups: &[Group], cx: &mut Context<Self>) -> impl IntoElement {
@@ -579,16 +585,22 @@ impl ComposerPicker {
         let lit = self.column == ComposerPickerPart::Effort && self.lit == Some(index);
         let group = SharedString::from(format!("picker-setting-{index}"));
         let picked = setting.clone();
-        list::row(group.clone(), group.clone(), cx)
-            .child(list::light(group, lit, cx))
-            .when_some(symbol, |row, symbol| {
-                row.child(
-                    div().relative().flex().child(icons::symbol(symbol, list::SYMBOL).text_color(c.muted_foreground)),
-                )
+        let label = div()
+            .relative()
+            .flex_1()
+            .min_w_0()
+            .flex()
+            .items_center()
+            .gap(px(list::GAP))
+            .when_some(symbol, |label, symbol| {
+                label.child(div().flex().child(icons::symbol(symbol, list::SYMBOL).text_color(c.muted_foreground)))
             })
-            .child(div().relative().whitespace_nowrap().child(title))
-            .when(default, |row| row.child(div().relative().child(Chip::new("Default").muted(true))))
-            .child(div().flex_1().min_w(px(6.)))
+            .child(div().min_w_0().overflow_hidden().text_ellipsis().whitespace_nowrap().child(title))
+            .when(default, |label| label.child(div().flex_shrink_0().child(Chip::new("Default").muted(true))));
+        list::row(group.clone(), group.clone(), cx)
+            .gap(px(CHECK_GAP))
+            .child(list::light(group, lit, cx))
+            .child(label)
             .child(list::check(chosen))
             .on_hover(cx.listener(move |this, hovered: &bool, _, cx| {
                 if *hovered {
@@ -609,7 +621,6 @@ impl ComposerPicker {
                 .symbol(access_symbol(current))
                 .help(access_detail(current))
                 .ghost()
-                .small()
                 .selected(open || self.column == ComposerPickerPart::Access)
                 .opens(true)
                 .open(open)
@@ -681,7 +692,8 @@ impl ComposerPicker {
             .right(px(PADDING))
             .bottom(px(ACCESS_MENU_LIFT))
             .w(px(ACCESS_MENU_WIDTH))
-            .p(px(ACCESS_MENU_PADDING))
+            .py(px(ACCESS_MENU_PADDING.0))
+            .px(px(ACCESS_MENU_PADDING.1))
             .flex()
             .flex_col()
             .gap(px(8.))
@@ -694,7 +706,7 @@ impl ComposerPicker {
                     .text_color(c.muted_foreground)
                     .child("Access"),
             )
-            .child(switcher)
+            .child(div().mx(px(-ACCESS_TABS_OUTSET)).child(switcher))
             .child(
                 div()
                     .flex()
@@ -744,8 +756,8 @@ fn header(group: &Group, cx: &App) -> Div {
         .flex_shrink_0()
         .px(px(list::ROW_PADDING))
         .pt(px(8.))
-        // The chips stand as far from a lit row as from the words above them.
-        .pb(px(if group.windows.is_empty() { 4. } else { HEADER_GAP - list::LIGHT_INSET }))
+        // The bars stand as far from a lit row as from the words above them.
+        .pb(px(if group.windows.is_empty() { 4. } else { HEADER_GAP + title_descent(cx) - list::LIGHT_INSET }))
         .flex()
         .flex_col()
         .gap(px(HEADER_GAP))
@@ -776,6 +788,17 @@ fn header(group: &Group, cx: &App) -> Div {
                 }),
         )
         .when(!group.windows.is_empty(), |header| header.child(limit_pills(&group.account.id, &group.windows, cx)))
+}
+
+/// The room on the header's title line below its baseline, which makes the bars look further from
+/// the title than `HEADER_GAP`.
+fn title_descent(cx: &App) -> f32 {
+    let system = cx.text_system();
+    let font = crate::transcript::rows::font(crate::theme::UI_FONT, FontWeight::MEDIUM, false);
+    let (id, size) = (system.resolve_font(&font), px(ControlSize::Regular.text_size()));
+    let (ascent, descent) = (f32::from(system.ascent(id, size)), f32::from(system.descent(id, size)).abs());
+    let line = ControlSize::Regular.text_size() * crate::theme::LINE_HEIGHT;
+    (line - ascent - descent) / 2. + descent
 }
 
 /// An account's windows as thin pills side by side, each filled as far as it was used.

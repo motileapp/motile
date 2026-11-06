@@ -701,9 +701,9 @@ enum class Access(val raw: String) {
     val detail: String
         get() = when (this) {
             Supervised -> "Ask before commands and file changes."
-            AcceptEdits -> "Auto-approve edits, ask before other actions."
+            AcceptEdits -> "Approve edits, ask before the rest."
             Auto -> "The agent approves routine actions itself."
-            Full -> "Allow commands and edits without prompts."
+            Full -> "Run commands and edits without asking."
         }
 
     val symbol: Symbol
