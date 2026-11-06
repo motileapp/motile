@@ -613,10 +613,13 @@ fun SidebarChevron(expanded: Boolean, lit: Boolean = false) {
 /** The name of a sidebar line like Done's: muted while it is closed and not lit. */
 @Composable
 fun ShelfTitle(title: String, expanded: Boolean) {
-    val palette = Theme.colors
-    val color = if (expanded || LocalRow.current != null) palette.foreground else palette.mutedForeground
-    Text(title, size = 12f, weight = FontWeight.Medium, color = color, maxLines = 1)
+    Text(title, size = 12f, weight = FontWeight.Medium, color = shelfTint(expanded), maxLines = 1)
 }
+
+/** The colour of a sidebar line's name, and of a mark that goes with it. */
+@Composable
+fun shelfTint(expanded: Boolean): Color =
+    if (expanded || LocalRow.current != null) Theme.colors.foreground else Theme.colors.mutedForeground
 
 /** The offer to undo archiving or snoozing threads, held while a finger or the pointer is on it. */
 @Composable
@@ -632,15 +635,10 @@ fun UndoRow(notice: UndoNotice, modifier: Modifier = Modifier) {
                 horizontalArrangement = Arrangement.spacedBy(7.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                ShelfLineMark { Icon(Symbol.Undo2, IconSize.Sm, color = palette.mutedStrongerForeground) }
+                ShelfLineMark { Icon(Symbol.Undo2, IconSize.Sm, color = shelfTint(expanded = false)) }
                 ShelfTitle("Undo", expanded = false)
                 Spacer(Modifier.weight(1f))
-                CompositionLocalProvider(LocalForeground provides palette.mutedStrongerForeground) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(if (notice.kind == UndoNotice.Kind.Snooze) Symbol.AlarmClock else Symbol.Archive, iconSize(text = 11f))
-                        Text(notice.text, size = 11f, maxLines = 1)
-                    }
-                }
+                Text(notice.text, size = 11f, color = palette.mutedStrongerForeground, maxLines = 1)
             }
         }
     }
