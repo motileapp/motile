@@ -741,9 +741,9 @@ pub fn access_label(access: Access) -> &'static str {
 pub fn access_detail(access: Access) -> &'static str {
     match access {
         Access::Supervised => "Ask before commands and file changes.",
-        Access::AcceptEdits => "Auto-approve edits, ask before other actions.",
+        Access::AcceptEdits => "Approve edits, ask before the rest.",
         Access::Auto => "The agent approves routine actions itself.",
-        Access::Full => "Allow commands and edits without prompts.",
+        Access::Full => "Run commands and edits without asking.",
     }
 }
 

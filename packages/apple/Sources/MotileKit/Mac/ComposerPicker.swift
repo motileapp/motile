@@ -100,11 +100,16 @@ struct ComposerSettings: View {
 private struct ComposerPicker: View {
     private static let railWidth: CGFloat = 44
     private static let listWidth: CGFloat = 232
-    private static let settingsWidth: CGFloat = 196
+    private static let settingsWidth: CGFloat = 200
+    private static let checkGap: CGFloat = 12
     private static let height: CGFloat = 348
     private static let shortest: CGFloat = 180
     private static let padding = DropdownList.padding
     private static let headerGap: CGFloat = 6
+    /// The search's symbol stands this much closer to the edge than the rows' symbols, which it looks aligned with.
+    private static let searchNudge: CGFloat = 2
+    /// The room below the title's baseline, which makes the bars look further from the title than `headerGap`.
+    private static let titleDescent = -PlatformFont.ui(ControlSize.regular.textSize, weight: .medium).descender
     private static let railLight = EdgeInsets(top: 2, leading: 0, bottom: 2, trailing: 0)
 
     @Environment(AppStore.self) private var store
@@ -180,6 +185,9 @@ private struct ComposerPicker: View {
                 PressCatcherView { openAccess(false) }
             }
         }
+        .fixedSize(horizontal: true, vertical: false)
+        .dropdownCard()
+        // Over the card rather than inside it, which would clip the menu's shadow.
         .overlay(alignment: .bottomTrailing) {
             if store.composerAccessOpen {
                 accessMenu
@@ -187,8 +195,6 @@ private struct ComposerPicker: View {
                     .padding(.bottom, Self.accessMenuLift)
             }
         }
-        .fixedSize(horizontal: true, vertical: false)
-        .dropdownCard()
         .onAppear {
             column = part
             lit = chosenIndex(in: part, rows: rows, settings: settings)
@@ -311,7 +317,8 @@ private struct ComposerPicker: View {
                 .onKeyPress(.rightArrow) { move(1, rows: rows, settings: settings) }
                 .onKeyPress(.leftArrow) { move(-1, rows: rows, settings: settings) }
         }
-        .padding(.horizontal, DropdownList.searchPadding)
+        .padding(.leading, DropdownList.searchPadding - Self.searchNudge)
+        .padding(.trailing, DropdownList.searchPadding)
         .frame(height: DropdownList.searchHeight)
         // All of the row is the field: a click anywhere on it, its icon too, types there.
         .background { TypingArea { searching = true } }
@@ -383,8 +390,8 @@ private struct ComposerPicker: View {
         }
         .padding(.horizontal, DropdownList.rowPadding)
         .padding(.top, 8)
-        // The chips stand as far from a lit row as from the words above them.
-        .padding(.bottom, group.windows.isEmpty ? 4 : Self.headerGap - DropdownList.light.top)
+        // The bars stand as far from a lit row as from the words above them.
+        .padding(.bottom, group.windows.isEmpty ? 4 : Self.headerGap + Self.titleDescent - DropdownList.light.top)
     }
 
     private func modelRow(_ row: Row) -> some View {
@@ -472,17 +479,20 @@ private struct ComposerPicker: View {
         case .context(let context):
             (context.label, nil, context.isDefault, context == store.composerContext)
         }
-        return HStack(spacing: DropdownList.gap) {
-            if let symbol {
-                Image(symbol, size: DropdownList.symbol)
-                    .foregroundStyle(Color.themeMutedForeground)
+        return HStack(spacing: Self.checkGap) {
+            HStack(spacing: DropdownList.gap) {
+                if let symbol {
+                    Image(symbol, size: DropdownList.symbol)
+                        .foregroundStyle(Color.themeMutedForeground)
+                }
+                Text(title)
+                    .lineLimit(1)
+                if isDefault {
+                    Chip("Default", muted: true)
+                        .fixedSize()
+                }
             }
-            Text(title)
-                .lineLimit(1)
-            if isDefault {
-                Chip("Default", muted: true)
-            }
-            Spacer(minLength: DropdownList.gap)
+            .frame(maxWidth: .infinity, alignment: .leading)
             Image(.check, size: DropdownList.check)
                 .opacity(chosen ? 1 : 0)
         }
@@ -506,14 +516,16 @@ private struct ComposerPicker: View {
     // MARK: Access
 
     private static let accessMenuWidth: CGFloat = 288
-    private static let accessMenuPadding: CGFloat = 10
+    private static let accessMenuPadding = EdgeInsets(top: 12, leading: 14, bottom: 12, trailing: 14)
+    /// How far the tabs reach past the words' edges, into the menu's padding.
+    private static let accessTabsOutset: CGFloat = 4
 
     private var footer: some View {
         let current = store.composerAccess
         let open = store.composerAccessOpen
         return HStack(spacing: 0) {
             Spacer(minLength: 0)
-            ActionButton(current.label, icon: current.symbol, help: current.detail, variant: .ghost, size: .small, selected: open || column == .access, opens: true, open: open, tint: .themeForeground) {
+            ActionButton(current.label, icon: current.symbol, help: current.detail, variant: .ghost, size: .regular, selected: open || column == .access, opens: true, open: open, tint: .themeForeground) {
                 openAccess(!open)
             }
         }
@@ -521,7 +533,7 @@ private struct ComposerPicker: View {
     }
 
     /// Over the columns, just above the footer's button, as a menu opens above what opened it.
-    private static let accessMenuLift = ControlSize.small.height + 2 * padding + 4
+    private static let accessMenuLift = ControlSize.regular.height + 2 * padding + 4
 
     /// The access modes as one row of their symbols, the one under the pointer or the arrow keys
     /// named and told about under it.
@@ -537,6 +549,7 @@ private struct ComposerPicker: View {
                 selection: Binding { current } set: { setAccess($0) },
                 fills: true, compact: true, lit: litAccess, hovered: $shownAccess
             )
+            .padding(.horizontal, -Self.accessTabsOutset)
             VStack(alignment: .leading, spacing: 2) {
                 Text(shown.label)
                     .font(.ui(size: 13))

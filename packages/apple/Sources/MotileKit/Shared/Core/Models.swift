@@ -787,9 +787,9 @@ enum Access: String, CaseIterable, Identifiable, Codable {
     var detail: String {
         switch self {
         case .supervised: "Ask before commands and file changes."
-        case .acceptEdits: "Auto-approve edits, ask before other actions."
+        case .acceptEdits: "Approve edits, ask before the rest."
         case .auto: "The agent approves routine actions itself."
-        case .full: "Allow commands and edits without prompts."
+        case .full: "Run commands and edits without asking."
         }
     }
 
