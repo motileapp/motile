@@ -13,7 +13,7 @@ let rowMargin = EdgeInsets(top: rowGap / 2, leading: sidebarRowInset, bottom: ro
 let sidebarRowPadding: CGFloat = 8
 /// How far everything the sidebar shows stays from its sides, a row's content as well as a line's.
 let sidebarEdge = sidebarRowInset + sidebarRowPadding
-let doneRowHeight = Double(scaled(30))
+let doneRowHeight = Double(ControlSize.regular.height)
 /// How far an Update button on a server's line reaches past the rows' edge, to look in line with it.
 let serverButtonOutset: CGFloat = 4
 /// One clock for every "5m" in the sidebar, so that they all change at once.
@@ -961,8 +961,6 @@ struct SlimThreadRow: View, Equatable {
     @State private var hovering = false
 
     private static let sidePadding = sidebarRowPadding
-    /// The undo button is as far from the row's side as from its top.
-    private static let buttonInset = (doneRowHeight - ControlSize.small.height) / 2
 
     static func == (one: SlimThreadRow, other: SlimThreadRow) -> Bool {
         one.thread == other.thread && one.project?.iconPath == other.project?.iconPath && one.pullRequest == other.pullRequest
@@ -994,12 +992,12 @@ struct SlimThreadRow: View, Equatable {
             if !store.onRemovedServer(thread) && thread.section != .working {
                 OnRowSurface {
                     if thread.section == .snoozed {
-                        ActionButton(icon: .alarmClockOff, help: "Wake", size: .small) { store.wake([thread.id]) }
+                        ActionButton(icon: .alarmClockOff, help: "Wake", size: .inset) { store.wake([thread.id]) }
                     } else {
-                        ActionButton(icon: .undo2, help: "Unarchive", size: .small) { store.setArchived([thread.id], archived: false) }
+                        ActionButton(icon: .undo2, help: "Unarchive", size: .inset) { store.setArchived([thread.id], archived: false) }
                     }
                 }
-                .padding(.trailing, Self.buttonInset)
+                .padding(.trailing, ControlSize.insetMargin)
                 .opacity(hovering ? 1 : 0)
                 .allowsHitTesting(hovering)
             }

@@ -8,8 +8,8 @@ use motile_core::api::Section;
 use motile_protocol::wire::PullRequest;
 
 use super::{
-    BOTTOM_PADDING, DONE_ROW_HEIGHT, FIRST_LINE_HEIGHT, ROW_GAP, ROW_PADDING, SIDEBAR_EDGE, Sidebar, TITLE_HEIGHT,
-    TOP_PADDING, button_inset, row_layer, row_margin, snooze_menu, stop_press,
+    BOTTOM_PADDING, FIRST_LINE_HEIGHT, ROW_GAP, ROW_PADDING, SIDEBAR_EDGE, Sidebar, TITLE_HEIGHT, TOP_PADDING,
+    button_inset, row_layer, row_margin, snooze_menu, stop_press,
 };
 use crate::models::{
     Project, ThreadInfo, ago, ask_label, elapsed, interruption_detail, interruption_label, last_component, left, now,
@@ -490,7 +490,7 @@ impl Sidebar {
                                 .absolute()
                                 .top_0()
                                 .bottom_0()
-                                .right(px((DONE_ROW_HEIGHT - ControlSize::Small.height()) / 2.))
+                                .right(px(ControlSize::INSET_MARGIN))
                                 .flex()
                                 .items_center()
                                 .pl(px(6.))
@@ -527,7 +527,7 @@ impl Sidebar {
         };
         let section = thread.section;
         let button = ActionButton::icon(SharedString::from(format!("back-{id}")), symbol, help)
-            .small()
+            .size(ControlSize::Inset)
             .row(Some(layer))
             .on_click(move |_, _, cx| {
                 store.update(cx, |store, cx| {

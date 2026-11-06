@@ -189,6 +189,8 @@ fun iconSize(text: Float): IconSize = when {
 enum class ControlSize {
     /** Inside a row, a tab, a chip or a card. */
     Small,
+    /** At the end of a regular row, tab or field, [insetMargin] from its edges. */
+    Inset,
     /** Everywhere else. */
     Regular,
     /** What a screen is about, and the bars fingers press. */
@@ -197,7 +199,8 @@ enum class ControlSize {
     val height: Dp
         get() = when (this) {
             Small -> scaled(24f).dp
-            Regular -> scaled(28f).dp
+            Inset -> Regular.height - insetMargin * 2
+            Regular -> scaled(32f).dp
             Large -> scaled(36f).dp
         }
 
@@ -207,20 +210,20 @@ enum class ControlSize {
     /** A symbol that should weigh less than the others, like the x that closes a tab. */
     val smallSymbol: IconSize
         get() = when (this) {
-            Small, Regular -> IconSize.Xs
+            Small, Inset, Regular -> IconSize.Xs
             Large -> IconSize.Sm
         }
 
     /** The chevron that opens a menu, trimmed to what it draws. */
     val chevron: IconSize
         get() = when (this) {
-            Small, Regular -> IconSize.Sm
+            Small, Inset, Regular -> IconSize.Sm
             Large -> IconSize.Md
         }
 
     val textSize: Float
         get() = when (this) {
-            Small -> 11.5f
+            Small, Inset -> 11.5f
             Regular -> 12f
             Large -> 13f
         }
@@ -230,7 +233,7 @@ enum class ControlSize {
     /** The room between what it says and its sides. */
     val padding: Dp
         get() = when (this) {
-            Small -> 8.dp
+            Small, Inset -> 8.dp
             Regular -> 11.dp
             Large -> 14.dp
         }
@@ -241,14 +244,14 @@ enum class ControlSize {
     /** The room between its symbol and its words. */
     val gap: Dp
         get() = when (this) {
-            Small -> 5.dp
+            Small, Inset -> 5.dp
             Regular -> 6.dp
             Large -> 8.dp
         }
 
     val radius: Dp
         get() = when (this) {
-            Small -> Radius.sm
+            Small, Inset -> Radius.sm
             Regular, Large -> Radius.md
         }
 
@@ -257,6 +260,11 @@ enum class ControlSize {
 
     /** How much nearer its side a symbol stands than words do, so that both look as far from it. */
     val symbolOutset: Dp get() = ((symbolSide.value / 5 * 2).roundToInt() / 2f).dp
+
+    companion object {
+        /** How far an [Inset] control stands from the edges of what it is inside. */
+        val insetMargin = 2.dp
+    }
 }
 
 /** The side of an icon's square, given as on the Mac and enlarged. */

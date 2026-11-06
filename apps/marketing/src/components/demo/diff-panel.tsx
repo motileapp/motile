@@ -47,24 +47,24 @@ export function DiffPanel({
           pastWindowButtons ? "pl-[116px]" : "pl-2"
         )}
       >
-        <span className="flex h-7 items-center gap-1.5 rounded-md bg-background-accent-stronger pr-0.5 pl-[9px] text-[12px] font-medium">
+        <span className="flex h-8 items-center gap-1.5 rounded-md bg-background-accent-stronger pr-0.5 pl-[9px] text-[12px] font-medium">
           <DiffIcon className="size-3.5" />
           Diff
           <button
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="flex size-6 items-center justify-center rounded-sm text-muted-foreground hover:bg-background-accent-strongest hover:text-foreground"
+            className="flex size-7 items-center justify-center rounded-sm text-muted-foreground hover:bg-background-accent-strongest hover:text-foreground"
           >
             <XIcon className="size-3" />
           </button>
         </span>
-        <span className="flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-background-accent hover:text-foreground">
+        <span className="flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-background-accent hover:text-foreground">
           <PlusIcon className="size-3.5" />
         </span>
       </div>
       <div className="flex h-9 shrink-0 items-center gap-1 border-t border-b pr-1 pl-3">
-        <span className="-ml-2 flex h-7 items-center gap-1.5 rounded-md px-[11px] text-[12px] font-medium text-muted-foreground hover:bg-background-accent hover:text-foreground">
+        <span className="-ml-2 flex h-8 items-center gap-1.5 rounded-md px-[11px] text-[12px] font-medium text-muted-foreground hover:bg-background-accent hover:text-foreground">
           Uncommitted
           <MenuChevron />
         </span>
@@ -80,7 +80,7 @@ export function DiffPanel({
               setClosed(allClosed ? [] : files.map((file) => file.path))
             }
             aria-label={allClosed ? "Open every file" : "Close every file"}
-            className="ml-auto flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-background-accent hover:text-foreground"
+            className="ml-auto flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-background-accent hover:text-foreground"
           >
             {allClosed ? (
               <UnfoldVerticalIcon className="size-3.5" />
@@ -91,7 +91,7 @@ export function DiffPanel({
         )}
         <span
           className={cn(
-            "flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-background-accent hover:text-foreground",
+            "flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-background-accent hover:text-foreground",
             files.length < 2 && "ml-auto"
           )}
         >

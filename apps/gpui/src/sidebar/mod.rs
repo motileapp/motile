@@ -48,7 +48,7 @@ const SIDEBAR_EDGE: f32 = ROW_INSET + ROW_PADDING;
 const BUTTON_OUTSET: f32 = 4.;
 /// The room over the servers' list, under their line.
 const SHELF_LIST_TOP: f32 = 2.;
-const DONE_ROW_HEIGHT: f32 = 30.;
+const DONE_ROW_HEIGHT: f32 = ControlSize::Regular.height();
 /// The least the gap over the sections takes, when the list is fuller than its room: never
 /// nothing, as a row of no height is no row.
 const GAP_LEAST: f32 = 1.;
@@ -58,7 +58,7 @@ const BOTTOM_PADDING: f32 = 7.;
 const FIRST_LINE_HEIGHT: f32 = 22.;
 const TITLE_HEIGHT: f32 = 16.;
 /// The search field's line above the list.
-const HEADER_HEIGHT: f32 = 2. + 28. + 6.;
+const HEADER_HEIGHT: f32 = 2. + ControlSize::Regular.height() + 6.;
 
 fn row_margin() -> Edges<f32> {
     edges(ROW_GAP / 2., ROW_INSET, ROW_GAP / 2., ROW_INSET)

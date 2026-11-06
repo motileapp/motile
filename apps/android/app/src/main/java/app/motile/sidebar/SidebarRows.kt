@@ -102,7 +102,7 @@ val rowMargin = PaddingValues(start = sidebarRowInset, top = rowGap / 2, end = s
 
 /** How far everything the sidebar shows stays from its sides, a row's content as well as a line's. */
 val sidebarEdge = sidebarRowInset + 8.dp
-val doneRowHeight = scaled(30f).dp
+val doneRowHeight = ControlSize.Regular.height
 
 /** The height of a sidebar line that opens, or of one server's line. */
 internal val lineHeight = 44.dp
@@ -443,7 +443,6 @@ fun SlimThreadRow(
     val palette = Theme.colors
     val hover = remember { MutableInteractionSource() }
     val hovering by hover.collectIsHoveredAsState()
-    val buttonInset = (doneRowHeight - ControlSize.Small.height) / 2
     HighlightButton(
         onClick = { open(Selection.Thread(thread.id)) },
         modifier = modifier.hoverable(hover),
@@ -477,11 +476,11 @@ fun SlimThreadRow(
             }
         }
         if (hovering && !store.onRemovedServer(thread) && thread.section != ThreadSection.Working) {
-            OnRowSurface(Modifier.align(Alignment.CenterEnd).padding(end = sidebarRowInset + buttonInset)) {
+            OnRowSurface(Modifier.align(Alignment.CenterEnd).padding(end = sidebarRowInset + ControlSize.insetMargin)) {
                 if (thread.section == ThreadSection.Snoozed) {
-                    ActionButton(icon = Symbol.AlarmClockOff, help = "Wake", size = ControlSize.Small) { store.wake(listOf(thread.id)) }
+                    ActionButton(icon = Symbol.AlarmClockOff, help = "Wake", size = ControlSize.Inset) { store.wake(listOf(thread.id)) }
                 } else {
-                    ActionButton(icon = Symbol.Undo2, help = "Unarchive", size = ControlSize.Small) { store.setArchived(listOf(thread.id), false) }
+                    ActionButton(icon = Symbol.Undo2, help = "Unarchive", size = ControlSize.Inset) { store.setArchived(listOf(thread.id), false) }
                 }
             }
         }

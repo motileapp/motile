@@ -245,7 +245,7 @@ function WindowButton({
       aria-label={label}
       title={label}
       className={cn(
-        "flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-background-accent hover:text-foreground",
+        "flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-background-accent hover:text-foreground",
         !inline && "m-0.5"
       )}
     >
@@ -256,7 +256,7 @@ function WindowButton({
 
 function GitButton() {
   return (
-    <span className="mx-1.5 ml-auto flex h-7 shrink-0 items-center overflow-hidden rounded-md border border-border text-[12px] font-medium">
+    <span className="mx-1.5 ml-auto flex h-8 shrink-0 items-center overflow-hidden rounded-md border border-border text-[12px] font-medium">
       <span className="flex h-full items-center gap-1.5 pr-[11px] pl-[9px] hover:bg-background-accent">
         <GitCommitHorizontalIcon className="size-3.5" />
         Commit

@@ -9,13 +9,11 @@ struct SettingsSidebar: View {
     var selected: SettingsSection?
     let choose: (SettingsSection) -> Void
 
-    private static let rowMargin = EdgeInsets(top: 1, leading: sidebarRowInset, bottom: 1, trailing: sidebarRowInset)
-
     var body: some View {
         @Bindable var store = store
         VStack(spacing: 0) {
             SearchField(text: $store.settingsQuery)
-                .padding(.horizontal, 10)
+                .padding(.horizontal, sidebarRowInset)
                 .padding(.top, 2)
                 .padding(.bottom, 6)
             ScrollView {
@@ -37,23 +35,23 @@ struct SettingsSidebar: View {
     }
 
     private func row(_ section: SettingsSection) -> some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 7) {
             Image(section.symbol, size: .md)
             Text(section.title)
                 .font(.ui(size: 13))
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, 9)
-        .frame(height: pressable(32))
-        .padding(Self.rowMargin)
+        .padding(.horizontal, sidebarRowPadding)
+        .frame(height: ControlSize.regular.height)
+        .padding(rowMargin)
         .contentShape(Rectangle())
-        .button(.highlight(radius: Radius.md, selected: selected == section, inset: Self.rowMargin, faded: true)) { choose(section) }
+        .button(.highlight(radius: Radius.md, selected: selected == section, inset: rowMargin, faded: true)) { choose(section) }
     }
 
     @ViewBuilder private var results: some View {
         let found = SettingsEntry.matching(store.settingsQuery, shortcuts: store.shortcuts)
         ForEach(found) { entry in
-            HStack(spacing: 8) {
+            HStack(spacing: 7) {
                 Image(entry.section.symbol, size: .md)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(entry.title)
@@ -65,12 +63,12 @@ struct SettingsSidebar: View {
                 .lineLimit(1)
                 Spacer(minLength: 0)
             }
-            .padding(.horizontal, 8)
-            .frame(minHeight: pressable(30))
+            .padding(.horizontal, sidebarRowPadding)
+            .frame(minHeight: ControlSize.regular.height)
             .padding(.vertical, 4)
-            .padding(Self.rowMargin)
+            .padding(rowMargin)
             .contentShape(Rectangle())
-            .button(.highlight(radius: Radius.md, inset: Self.rowMargin, faded: true)) {
+            .button(.highlight(radius: Radius.md, inset: rowMargin, faded: true)) {
                 store.settingsTarget = entry.id
                 choose(entry.section)
             }

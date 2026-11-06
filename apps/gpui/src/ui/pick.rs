@@ -294,7 +294,7 @@ mod tests {
 
     #[test]
     fn a_pick_row_is_as_tall_as_its_words_or_its_size() {
-        assert_eq!(PickRow::height(ControlSize::Regular, 24., None), 28.);
+        assert_eq!(PickRow::height(ControlSize::Regular, 24., None), 32.);
         assert_eq!(PickRow::height(ControlSize::Regular, 48., Some(20.)), 70.);
         assert_eq!(PickRow::text_width(300.), 276.);
     }

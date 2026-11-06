@@ -514,7 +514,7 @@ function Changes({
         <button
           type="button"
           onClick={onOpenDiff}
-          className="h-7 rounded-md px-2 text-[12.5px] font-medium text-foreground hover:bg-background-secondary-accent"
+          className="h-8 rounded-md px-2 text-[12.5px] font-medium text-foreground hover:bg-background-secondary-accent"
         >
           Open diff
         </button>

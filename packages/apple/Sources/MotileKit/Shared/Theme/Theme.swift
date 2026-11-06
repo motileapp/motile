@@ -201,6 +201,8 @@ extension IconSize {
 enum ControlSize {
     /// Inside a row, a tab, a chip or a card.
     case small
+    /// At the end of a regular row, tab or field, `insetMargin` from its edges.
+    case inset
     /// Everywhere else.
     case regular
     /// What a screen is about, and the bars fingers press.
@@ -209,10 +211,14 @@ enum ControlSize {
     var height: CGFloat {
         switch self {
         case .small: scaled(24)
-        case .regular: scaled(28)
+        case .inset: ControlSize.regular.height - 2 * ControlSize.insetMargin
+        case .regular: scaled(32)
         case .large: scaled(36)
         }
     }
+
+    /// How far an `inset` control stands from the edges of what it is inside.
+    static let insetMargin: CGFloat = 2
 
     /// Its symbol, as large as an icon beside its text is.
     var symbol: IconSize { IconSize(text: textSize) }
@@ -220,7 +226,7 @@ enum ControlSize {
     /// A symbol that should weigh less than the others, like the x that closes a tab.
     var smallSymbol: IconSize {
         switch self {
-        case .small, .regular: .xs
+        case .small, .inset, .regular: .xs
         case .large: .sm
         }
     }
@@ -228,14 +234,14 @@ enum ControlSize {
     /// The chevron that opens a menu, trimmed to what it draws.
     var chevron: IconSize {
         switch self {
-        case .small, .regular: .sm
+        case .small, .inset, .regular: .sm
         case .large: .md
         }
     }
 
     var textSize: CGFloat {
         switch self {
-        case .small: 11.5
+        case .small, .inset: 11.5
         case .regular: 12
         case .large: 13
         }
@@ -246,7 +252,7 @@ enum ControlSize {
     /// The room between what it says and its sides.
     var padding: CGFloat {
         switch self {
-        case .small: 8
+        case .small, .inset: 8
         case .regular: 11
         case .large: 14
         }
@@ -258,7 +264,7 @@ enum ControlSize {
     /// The room between its symbol and its words.
     var gap: CGFloat {
         switch self {
-        case .small: 5
+        case .small, .inset: 5
         case .regular: 6
         case .large: 8
         }
@@ -266,7 +272,7 @@ enum ControlSize {
 
     var radius: CGFloat {
         switch self {
-        case .small: Radius.sm
+        case .small, .inset: Radius.sm
         case .regular, .large: Radius.md
         }
     }

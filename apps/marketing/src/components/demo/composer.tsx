@@ -52,7 +52,7 @@ export function Composer({
           <button
             type="button"
             onClick={onStop}
-            className="mr-[2px] ml-auto h-7 rounded-md px-[11px] text-[12px] font-medium text-muted-foreground hover:bg-border-composer hover:text-foreground"
+            className="mr-[2px] ml-auto h-8 rounded-md px-[11px] text-[12px] font-medium text-muted-foreground hover:bg-border-composer hover:text-foreground"
           >
             Stop
           </button>
@@ -63,7 +63,7 @@ export function Composer({
           <Strip edge="top">
             <button
               type="button"
-              className="ml-[3px] flex h-7 min-w-0 items-center gap-1 rounded-md pr-[11px] pl-[7.5px] text-[12px] font-medium text-process hover:bg-border-composer"
+              className="ml-[3px] flex h-8 min-w-0 items-center gap-1 rounded-md pr-[11px] pl-[7.5px] text-[12px] font-medium text-process hover:bg-border-composer"
             >
               <BotIcon className="size-3.5 shrink-0" />
               <span className="truncate">{working.length} working</span>
@@ -71,7 +71,7 @@ export function Composer({
             {status.kind === "agents" && (
               <button
                 type="button"
-                className="mr-[2px] ml-auto h-7 shrink-0 rounded-md px-[11px] text-[12px] font-medium text-muted-foreground hover:bg-border-composer hover:text-foreground"
+                className="mr-[2px] ml-auto h-8 shrink-0 rounded-md px-[11px] text-[12px] font-medium text-muted-foreground hover:bg-border-composer hover:text-foreground"
               >
                 Stop
               </button>
@@ -128,10 +128,10 @@ export function Composer({
           }}
           className="flex cursor-text items-center px-1.5 py-2"
         >
-          <span className="mx-[3px] flex size-7 cursor-default items-center justify-center rounded-full text-foreground hover:bg-border-composer">
+          <span className="mx-[3px] flex size-8 cursor-default items-center justify-center rounded-full text-foreground hover:bg-border-composer">
             <PlusIcon className="size-[18px]" />
           </span>
-          <span className="mr-0.5 ml-auto flex h-7 cursor-default items-center rounded-md px-[11px] text-[12px] font-medium text-muted-foreground hover:bg-border-composer hover:text-foreground">
+          <span className="mr-0.5 ml-auto flex h-8 cursor-default items-center rounded-md px-[11px] text-[12px] font-medium text-muted-foreground hover:bg-border-composer hover:text-foreground">
             <Setting icon={<AgentIcon agent={thread.agent} size={14} />}>
               <Dotted text={thread.model} />
             </Setting>
@@ -155,7 +155,7 @@ export function Composer({
             onClick={send}
             aria-label="Send"
             className={cn(
-              "flex size-7 cursor-default items-center justify-center rounded-full bg-primary text-primary-foreground",
+              "flex size-8 cursor-default items-center justify-center rounded-full bg-primary text-primary-foreground",
               text.trim()
                 ? "hover:bg-primary/(--opacity-lit)"
                 : "opacity-(--opacity-disabled)"
@@ -210,7 +210,7 @@ function Control({
   return (
     <span
       className={cn(
-        "flex h-7 cursor-default items-center gap-1.5 rounded-md text-[12px] font-medium text-muted-foreground",
+        "flex h-8 cursor-default items-center gap-1.5 rounded-md text-[12px] font-medium text-muted-foreground",
         !plain && "hover:bg-border-composer hover:text-foreground",
         icon ? "pl-[9px]" : "pl-[11px]",
         plain ? "pr-[11px]" : "pr-[9px]"
@@ -254,7 +254,7 @@ function Strip({
     <div
       className={cn(
         "mx-[22px] border border-border-composer bg-composer text-[12px] text-muted-foreground",
-        tall ? "p-3 text-[12.5px]" : "flex h-[35px] items-center",
+        tall ? "p-3 text-[12.5px]" : "flex h-[39px] items-center",
         edge === "top"
           ? cn(
               "-mb-px rounded-t-lg text-foreground",

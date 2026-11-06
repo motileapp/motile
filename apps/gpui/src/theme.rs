@@ -237,6 +237,8 @@ impl IconSize {
 pub enum ControlSize {
     /// Inside a row, a tab, a chip or a card.
     Small,
+    /// At the end of a regular row, tab or field, `INSET_MARGIN` from its edges.
+    Inset,
     /// Everywhere else.
     #[default]
     Regular,
@@ -245,10 +247,14 @@ pub enum ControlSize {
 }
 
 impl ControlSize {
+    /// How far an `Inset` control stands from the edges of what it is inside.
+    pub const INSET_MARGIN: f32 = 2.;
+
     pub const fn height(self) -> f32 {
         match self {
             ControlSize::Small => 24.,
-            ControlSize::Regular => 28.,
+            ControlSize::Inset => ControlSize::Regular.height() - 2. * Self::INSET_MARGIN,
+            ControlSize::Regular => 32.,
             ControlSize::Large => 36.,
         }
     }
@@ -261,7 +267,7 @@ impl ControlSize {
     /// A symbol that should weigh less than the others, like the x that closes a tab.
     pub fn small_symbol(self) -> IconSize {
         match self {
-            ControlSize::Small | ControlSize::Regular => IconSize::Xs,
+            ControlSize::Small | ControlSize::Inset | ControlSize::Regular => IconSize::Xs,
             ControlSize::Large => IconSize::Sm,
         }
     }
@@ -269,14 +275,14 @@ impl ControlSize {
     /// The chevron that opens a menu, trimmed to what it draws.
     pub fn chevron(self) -> IconSize {
         match self {
-            ControlSize::Small | ControlSize::Regular => IconSize::Sm,
+            ControlSize::Small | ControlSize::Inset | ControlSize::Regular => IconSize::Sm,
             ControlSize::Large => IconSize::Md,
         }
     }
 
     pub fn text_size(self) -> f32 {
         match self {
-            ControlSize::Small => 11.5,
+            ControlSize::Small | ControlSize::Inset => 11.5,
             ControlSize::Regular => 12.,
             ControlSize::Large => 13.,
         }
@@ -285,7 +291,7 @@ impl ControlSize {
     /// The room between what it says and its sides.
     pub fn padding(self) -> f32 {
         match self {
-            ControlSize::Small => 8.,
+            ControlSize::Small | ControlSize::Inset => 8.,
             ControlSize::Regular => 11.,
             ControlSize::Large => 14.,
         }
@@ -299,7 +305,7 @@ impl ControlSize {
     /// The room between its symbol and its words.
     pub fn gap(self) -> f32 {
         match self {
-            ControlSize::Small => 5.,
+            ControlSize::Small | ControlSize::Inset => 5.,
             ControlSize::Regular => 6.,
             ControlSize::Large => 8.,
         }
@@ -307,7 +313,7 @@ impl ControlSize {
 
     pub const fn radius(self) -> f32 {
         match self {
-            ControlSize::Small => Radius::SM,
+            ControlSize::Small | ControlSize::Inset => Radius::SM,
             ControlSize::Regular | ControlSize::Large => Radius::MD,
         }
     }

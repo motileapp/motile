@@ -636,7 +636,7 @@ mod tests {
 
     #[test]
     fn a_shelf_is_as_tall_as_its_rows_up_to_its_room() {
-        assert_eq!(heights(2, 400.), (68., 68.));
+        assert_eq!(heights(2, 400.), (72., 72.));
         assert_eq!(heights(20, 400.), (SHELF_MIN_HEIGHT, 400.));
         assert_eq!(heights(20, 100.), (100., 100.));
     }

@@ -75,7 +75,8 @@ fun InputField(
     val capsule = variant == InputVariant.Capsule
     val focus = focusRequester ?: remember { FocusRequester() }
     val clears = clearable && text.isNotEmpty()
-    val clearInset = (size.height - ControlSize.Small.height) / 2
+    val clearSize = if (size == ControlSize.Regular) ControlSize.Inset else ControlSize.Small
+    val clearInset = (size.height - clearSize.height) / 2
     val enabled = LocalEnabled.current
     val height = if (bare) Modifier.fillMaxHeight() else Modifier.height(size.height)
     Row(
@@ -127,7 +128,7 @@ fun InputField(
                 ActionButton(icon = Symbol.X, help = "Clear", round = true) { onTextChange("") }
             }
         } else if (clears) {
-            ActionButton(icon = Symbol.X, help = "Clear", size = ControlSize.Small) { onTextChange("") }
+            ActionButton(icon = Symbol.X, help = "Clear", size = clearSize) { onTextChange("") }
         }
     }
 }

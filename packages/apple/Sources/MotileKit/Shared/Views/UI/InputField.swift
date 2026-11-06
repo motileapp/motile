@@ -47,7 +47,8 @@ struct InputField: View {
     /// A button inside the field is as far from its top and bottom as from its side.
     private var bare: Bool { variant != .filled }
 
-    private var clearInset: CGFloat { (size.height - ControlSize.small.height) / 2 }
+    private var clearSize: ControlSize { size == .regular ? .inset : .small }
+    private var clearInset: CGFloat { (size.height - clearSize.height) / 2 }
 
     var body: some View {
         HStack(spacing: size.gap) {
@@ -86,7 +87,7 @@ extension InputField {
                 .aspectRatio(1, contentMode: .fit)
                 .overlay { ActionButton(icon: .x, help: "Clear", round: true) { text = "" } }
         } else {
-            ActionButton(icon: .x, help: "Clear", size: .small) { text = "" }
+            ActionButton(icon: .x, help: "Clear", size: clearSize) { text = "" }
                 .padding(.trailing, clearInset - size.padding + 2)
         }
     }
