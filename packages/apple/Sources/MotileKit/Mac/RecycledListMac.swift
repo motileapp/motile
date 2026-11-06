@@ -140,7 +140,7 @@ struct RecycledList<Item: Identifiable, Row: View>: NSViewRepresentable {
         }
 
         /// Reloads the table when its rows are others, or else only redraws the rows it has,
-        /// resized where their heights changed.
+        /// resized at once where their heights changed.
         func show(in table: NSTableView) {
             let ids = list?.items.map(\.id) ?? []
             let heights = list?.items.map { list?.height($0) ?? 0 } ?? []
@@ -155,7 +155,10 @@ struct RecycledList<Item: Identifiable, Row: View>: NSViewRepresentable {
             if heights != self.heights {
                 let changed = IndexSet(heights.indices.filter { heights[$0] != self.heights[safe: $0] })
                 self.heights = heights
-                table.noteHeightOfRows(withIndexesChanged: changed)
+                NSAnimationContext.runAnimationGroup { context in
+                    context.duration = 0
+                    table.noteHeightOfRows(withIndexesChanged: changed)
+                }
             }
             table.enumerateAvailableRowViews { rowView, row in
                 guard let cell = rowView.view(atColumn: 0) as? Cell, let content = content(row) else { return }
