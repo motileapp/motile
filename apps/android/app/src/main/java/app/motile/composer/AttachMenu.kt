@@ -59,7 +59,7 @@ fun AttachMenu() {
 
     ActionMenu(
         icon = Symbol.Plus, help = "Attach files", symbolSize = IconSize.Xl, round = true, tint = Theme.colors.foreground,
-        margin = ComposerView.margin(leading = 8.dp),
+        margin = ComposerView.margin(leading = ComposerView.edge),
     ) {
         item("Photo Library", Symbol.Images) {
             photos.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))

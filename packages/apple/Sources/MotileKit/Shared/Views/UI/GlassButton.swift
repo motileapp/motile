@@ -4,7 +4,7 @@ import SwiftUI
 /// A symbol's button that floats on glass over a picture: on a glass circle of its own, or beside
 /// others on one glass capsule that `glassButton(in:)` draws around them.
 struct GlassButtonStyle: ButtonStyle {
-    static let side: CGFloat = 46
+    static let side = floatingHeight
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label

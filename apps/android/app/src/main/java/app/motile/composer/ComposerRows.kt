@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.lerp
 import app.motile.LocalStore
+import app.motile.theme.floatingHeight
 import app.motile.thread.effortSymbol
 import app.motile.ui.ActionButton
 import app.motile.ui.AgentIcon
@@ -28,8 +29,8 @@ import kotlin.math.roundToInt
 
 private val sideInset = 14.dp
 private val topInset = 4.dp
-/** The room the attach button takes at the row's start, and the send button at its end. */
-private val buttonRoom = 46.dp
+/** The room the attach button takes at the row's start, and the send button at its end: a square as tall as the folded composer. */
+private val buttonRoom = floatingHeight
 
 /**
  * Places the composer's text and the row of its buttons. Collapsed, they are one line: the text

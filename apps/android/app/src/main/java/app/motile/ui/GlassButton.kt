@@ -34,6 +34,7 @@ import app.motile.theme.LocalSurface
 import app.motile.theme.Opacity
 import app.motile.theme.ShadowSize
 import app.motile.theme.Surface
+import app.motile.theme.floatingHeight
 import app.motile.theme.shadow
 
 /** The surface of a button that floats over the client, with a shadow under it. */
@@ -70,7 +71,7 @@ object GlassButton {
  * transcript shows, like a map, where they cast a smaller, stronger shadow.
  */
 enum class GlassSize(val side: Dp, val shadow: ShadowSize, val shadowStrength: Opacity) {
-    Regular(46.dp, ShadowSize.Md, Opacity.Shadow),
+    Regular(floatingHeight, ShadowSize.Md, Opacity.Shadow),
     Inline(34.dp, ShadowSize.Sm, Opacity.ShadowStronger),
     Compact(28.dp, ShadowSize.Sm, Opacity.ShadowStronger),
 }

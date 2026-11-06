@@ -25,7 +25,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -520,7 +519,7 @@ private fun Header(store: AppStore) {
     ) {
         LogoMark(motileMark, 24f, Theme.colors.foreground, Modifier.semantics { contentDescription = "Motile" })
         Spacer(Modifier.weight(1f))
-        GlassButton(Symbol.Command, "Commands", onClick = { store.openPanel(PanelPage.Commands) }, modifier = Modifier.size(42.dp))
+        GlassButton(Symbol.Command, "Commands", onClick = { store.openPanel(PanelPage.Commands) })
     }
 }
 
@@ -621,7 +620,7 @@ private fun Footer(
                 store.threadSearch, { store.threadSearch = it },
                 Modifier
                     .weight(1f)
-                    .height(46.dp)
+                    .height(GlassButton.side)
                     .glassButton(CircleShape)
                     .padding(start = 6.dp)
                     .steersSearch(store, highlighted),

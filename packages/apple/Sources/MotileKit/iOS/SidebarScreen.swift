@@ -127,7 +127,7 @@ struct SidebarScreen: View {
             } label: {
                 Image(.command, size: .lg)
                     .foregroundStyle(Color.themeForeground)
-                    .frame(width: 42, height: 42)
+                    .frame(width: GlassButtonStyle.side, height: GlassButtonStyle.side)
                     .contentShape(Circle())
             }
             .buttonStyle(.plain)
@@ -294,7 +294,7 @@ struct SidebarScreen: View {
                 SearchField(text: $store.threadSearch, capsule: true, clearable: false, focus: $searchFocused)
                     .steersSearch(highlighted: highlighted, open: openSearchResult)
                     .padding(.leading, 6)
-                    .frame(height: 46)
+                    .frame(height: GlassButtonStyle.side)
                     .glassButton(in: Capsule())
                 if searching {
                     circleButton(.x, label: "Close search") {
@@ -354,7 +354,7 @@ struct SidebarScreen: View {
         Button(action: action) {
             Image(symbol, size: .lg)
                 .foregroundStyle(Color.themeForeground)
-                .frame(width: 46, height: 46)
+                .frame(width: GlassButtonStyle.side, height: GlassButtonStyle.side)
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
