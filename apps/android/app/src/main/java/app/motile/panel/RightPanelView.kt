@@ -52,6 +52,7 @@ import app.motile.ui.Icon
 import app.motile.ui.MenuPopup
 import app.motile.ui.Spinner
 import app.motile.ui.Text
+import app.motile.ui.beside
 import app.motile.ui.pressPosition
 import app.motile.ui.pressable
 import app.motile.ui.rememberMenuState
@@ -179,7 +180,7 @@ fun PanelTabStrip(tabs: PanelTabs, modifier: Modifier = Modifier) {
             items(tabs.tabs, key = { it.id }) { tab -> PanelTabChip(tab, active = tab == tabs.active) }
         }
         if (store.panelUnavailable == null && !tabs.isBlank) {
-            item(key = "new") { ActionButton(icon = Symbol.Plus, help = "New tab") { store.rightPanel.openBlank() } }
+            item(key = "new") { ActionButton(icon = Symbol.Plus, help = "New tab", margin = beside(start = PanelTabChip.margin)) { store.rightPanel.openBlank() } }
         }
     }
 }

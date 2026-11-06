@@ -262,6 +262,7 @@ impl RightPanelView {
                     .when(available && !blank, |strip| {
                         strip.child(
                             ActionButton::icon("add-tab", "plus", "New tab")
+                                .margin(beside(TAB_MARGIN, 0.))
                                 .on_click(act(&self.store, |store, _| store.open_blank_tab())),
                         )
                     }),
