@@ -34,6 +34,7 @@ import app.motile.core.Preferences
 import app.motile.core.Server
 import app.motile.core.SettingsSection
 import app.motile.core.managesNewThreadsDescription
+import app.motile.core.workingShelfDescription
 import app.motile.core.pullDefaultBranchCaption
 import app.motile.onboarding.ConnectServerView
 import app.motile.platform.Platform
@@ -110,6 +111,14 @@ private fun SettingsGroups.general(
     }
     group("messages", header = "Messages", footer = steersDescription(steers)) {
         row { SettingsPicker("Sent while the agent works", listOf("Queue" to false, "Steer" to true), steers, setSteers) }
+    }
+    group("working-shelf", header = "Sidebar") {
+        row {
+            SettingsRow {
+                SettingsItem("Working shelf", workingShelfDescription, lines = Int.MAX_VALUE)
+                Switch(store.workingShelf, store::changeWorkingShelf)
+            }
+        }
     }
     group("manage-new-threads", header = "Provider Limits") {
         row {
@@ -270,7 +279,7 @@ private fun SettingsGroups.textGeneration(store: AppStore, navigator: SettingsNa
 private fun SettingsGroups.pullRequests(store: AppStore) {
     val servers = store.servers.filter { it.state == Server.State.Connected && it.protocolVersion >= 9 }
     if (servers.isEmpty()) return note("What your servers do once a thread's pull request merges is set on each of them, once one is connected.")
-    val merged = "Mark the thread done after merge or close"
+    val merged = "Archive the thread after merge or close"
     val worktrees = "Remove the thread's worktree after merge"
     val pull = "Automatically pull"
     val only = servers.singleOrNull()

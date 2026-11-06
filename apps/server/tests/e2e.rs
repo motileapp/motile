@@ -3709,7 +3709,7 @@ async fn turn(connection: &Connection, thread_id: &str, text: &str) -> Transcrip
     finished_transcript(connection, thread_id).await
 }
 
-/// Marks the thread done, which lets the process of its agent that rests go.
+/// Archives the thread, which lets the process of its agent that rests go.
 async fn let_agent_go(connection: &Connection, thread_id: &str) {
     let done = ThreadChange { archived: Some(true), ..Default::default() };
     assert_eq!(update(connection, thread_id, done).await, Message::Ok);

@@ -44,6 +44,7 @@ enum class SettingsSection(val raw: String) {
 
 /** What managing new threads does, said under its switch. */
 const val managesNewThreadsDescription = "Picks the account for each new thread."
+const val workingShelfDescription = "Show working threads on their own shelf."
 
 /** What automatically pulling does, said under its switch. */
 const val pullDefaultBranchCaption = "Keeps each project's folder current while it is on its default branch with no changes or commits of its own."
@@ -62,6 +63,7 @@ data class SettingsEntry(
             SettingsEntry("updates", "Updates", SettingsSection.General, "version check for updates release download install"),
             SettingsEntry("appearance", "Theme", SettingsSection.General, "appearance light dark system mode"),
             SettingsEntry("messages", "Sent while the agent works", SettingsSection.General, "messages queue steer interrupt"),
+            SettingsEntry("working-shelf", "Working shelf", SettingsSection.General, "sidebar working threads shelf section running monitoring"),
             SettingsEntry("manage-new-threads", "Manage new threads automatically", SettingsSection.General, "provider limits usage accounts switch quota rate"),
             SettingsEntry("storage", "Images and videos", SettingsSection.General, "storage cache clear media disk"),
             SettingsEntry("agent-accounts", "Provider Accounts", SettingsSection.Accounts, "agents claude codex sign in account folder subscription plan api key router"),
@@ -74,7 +76,7 @@ data class SettingsEntry(
             SettingsEntry("mcp-servers", "MCP Servers", SettingsSection.McpGateway, "mcp tools connectors linear github notion sentry"),
             SettingsEntry("mcp-activity", "Activity", SettingsSection.McpGateway, "calls tools log errors"),
             SettingsEntry("projects", "Projects", SettingsSection.Projects, "add remove folder icon setup worktree script"),
-            SettingsEntry("merged", "Mark the thread done after merge or close", SettingsSection.PullRequests, "merge close finished"),
+            SettingsEntry("merged", "Archive the thread after merge or close", SettingsSection.PullRequests, "merge close finished archive"),
             SettingsEntry("worktrees", "Remove the thread's worktree after merge", SettingsSection.PullRequests, "merge pushed branch clean up"),
             SettingsEntry("pull", "Automatically pull", SettingsSection.PullRequests, "default branch main merge sync fetch fast-forward"),
             SettingsEntry("text-model", "Model", SettingsSection.TextGeneration, "titles branch names commit messages pull requests writer"),

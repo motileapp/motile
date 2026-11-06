@@ -46,6 +46,7 @@ enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
 
 /// What managing new threads does, said under its switch.
 let managesNewThreadsDescription = "Picks the account for each new thread."
+let workingShelfDescription = "Show working threads on their own shelf."
 
 /// What automatically pulling does, said under its switch.
 let pullDefaultBranchCaption = "Keeps each project's folder current while it is on its default branch with no changes or commits of its own."
@@ -63,6 +64,7 @@ struct SettingsEntry: Identifiable, Hashable {
         SettingsEntry(id: "updates", title: Platform.name == "macos" ? "Updates" : "Version", section: .general, keywords: "version check for updates release"),
         SettingsEntry(id: "appearance", title: "Theme", section: .general, keywords: "appearance light dark system mode"),
         SettingsEntry(id: "messages", title: "Sent while the agent works", section: .general, keywords: "messages queue steer interrupt"),
+        SettingsEntry(id: "working-shelf", title: "Working shelf", section: .general, keywords: "sidebar working threads shelf section running monitoring"),
         SettingsEntry(id: "manage-new-threads", title: "Manage new threads automatically", section: .general, keywords: "provider limits usage accounts switch quota rate"),
         SettingsEntry(id: "storage", title: "Images and videos", section: .general, keywords: "storage cache clear media disk"),
         SettingsEntry(id: "agent-accounts", title: "Provider Accounts", section: .accounts, keywords: "agents claude codex sign in account folder subscription plan api key router"),
@@ -75,7 +77,7 @@ struct SettingsEntry: Identifiable, Hashable {
         SettingsEntry(id: "mcp-servers", title: "MCP Servers", section: .mcpGateway, keywords: "mcp tools connectors linear github notion sentry"),
         SettingsEntry(id: "mcp-activity", title: "Activity", section: .mcpGateway, keywords: "calls tools log errors"),
         SettingsEntry(id: "projects", title: "Projects", section: .projects, keywords: "add remove folder icon setup worktree script"),
-        SettingsEntry(id: "merged", title: "Mark the thread done after merge or close", section: .pullRequests, keywords: "merge close finished"),
+        SettingsEntry(id: "merged", title: "Archive the thread after merge or close", section: .pullRequests, keywords: "merge close finished archive"),
         SettingsEntry(id: "worktrees", title: "Remove the thread's worktree after merge", section: .pullRequests, keywords: "merge pushed branch clean up"),
         SettingsEntry(id: "pull", title: "Automatically pull", section: .pullRequests, keywords: "default branch main merge sync fetch fast-forward"),
         SettingsEntry(id: "text-model", title: "Model", section: .textGeneration, keywords: "titles branch names commit messages pull requests writer"),

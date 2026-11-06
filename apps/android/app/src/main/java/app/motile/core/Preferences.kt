@@ -32,6 +32,11 @@ object Preferences {
         get() = bool("providerLimits.manageNewThreads")
         set(on) = set("providerLimits.manageNewThreads", on)
 
+    /** Whether working threads have a shelf of their own, or stay among the active ones. */
+    var workingShelf: Boolean
+        get() = optionalBool("sidebar.workingShelf") ?: true
+        set(on) = set("sidebar.workingShelf", on)
+
     /** A map of strings, kept as JSON. */
     fun strings(key: String): Map<String, String> {
         val json = string(key)?.let(::parseJSON) ?: return emptyMap()

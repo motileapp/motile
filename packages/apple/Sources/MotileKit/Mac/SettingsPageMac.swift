@@ -111,6 +111,14 @@ struct SettingsPage: View {
             }
         }
 
+        SettingsGroup("working-shelf", "Sidebar") {
+            SettingsRow(control: Switch.height) {
+                SettingsLabel("Working shelf", description: workingShelfDescription)
+            } trailing: {
+                Switch(isOn: Bindable(store).workingShelf)
+            }
+        }
+
         SettingsGroup("manage-new-threads", "Provider Limits") {
             SettingsRow(control: Switch.height) {
                 SettingsLabel("Manage new threads automatically", description: managesNewThreadsDescription)
@@ -257,7 +265,7 @@ struct SettingsPage: View {
         if servers.isEmpty {
             SettingsNote("What your servers do once a thread's pull request merges is set on each of them, once one is connected.")
         } else {
-            SettingsGroup("merged", "Mark the thread done after merge or close") {
+            SettingsGroup("merged", "Archive the thread after merge or close") {
                 ForEach(servers) { server in
                     SettingsRow(control: Switch.height) {
                         serverName(server)

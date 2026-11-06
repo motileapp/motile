@@ -402,7 +402,7 @@ class AppStore(private val context: Context) {
         }
     var undo by mutableStateOf<UndoNotice?>(null)
         private set
-    /** The thread the sidebar brings into sight, opening Done if it is there: the one its pull request's end last marked done, or the one opened from the search. It stays until another is opened. */
+    /** The thread the sidebar brings into sight, opening Archived if it is there: the one its pull request's end last archived, or the one opened from the search. It stays until another is opened. */
     var revealedThreadID by mutableStateOf<String?>(null)
     /** Unknown until Settings asks for it. */
     var mediaStorage by mutableStateOf<MediaStorage?>(null)
@@ -877,8 +877,25 @@ class AppStore(private val context: Context) {
 
     // Lookups
 
+    /** Whether working threads have a shelf of their own, or stay among the active ones. */
+    var workingShelf by mutableStateOf(Preferences.workingShelf)
+        private set
+
+    fun changeWorkingShelf(on: Boolean) {
+        Preferences.workingShelf = on
+        workingShelf = on
+        replaceThreads(everyThread)
+    }
+
+    /** The thread in the part of the sidebar it is listed in here: a working one among the active ones while working threads have no shelf. */
+    private fun shelved(thread: ThreadInfo): ThreadInfo {
+        if (thread.section != ThreadSection.Active && thread.section != ThreadSection.Working) return thread
+        return thread.copy(section = if (workingShelf) thread.awakeSection else ThreadSection.Active)
+    }
+
     /** The lists leave out the threads agents started, which their parents show. */
-    private fun replaceThreads(new: Map<String, ThreadInfo>) {
+    private fun replaceThreads(all: Map<String, ThreadInfo>) {
+        val new = all.mapValues { shelved(it.value) }
         threads = new.filterValues { it.parentID == null }
         startedThreads = new.filterValues { it.parentID != null }
         val listed = threads.values.sortedWith(ThreadInfo.order)
@@ -890,7 +907,8 @@ class AppStore(private val context: Context) {
     }
 
     /** Changes one thread, and moves it in its list only when its place there changed. */
-    private fun setThread(thread: ThreadInfo?, id: String) {
+    private fun setThread(given: ThreadInfo?, id: String) {
+        val thread = given?.let(::shelved)
         val before = anyThread(id)
         if ((thread ?: before)?.parentID != null) {
             startedThreads = if (thread == null) startedThreads - id else startedThreads + (id to thread)

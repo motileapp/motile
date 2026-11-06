@@ -399,7 +399,7 @@ pub enum Command {
         #[serde(default)]
         model: Option<String>,
     },
-    /// What the server does with pull requests by itself: marking threads done and removing
+    /// What the server does with pull requests by itself: archiving threads and removing
     /// worktrees once their pull requests merge.
     SetPullRequestSettings {
         server_id: String,

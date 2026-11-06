@@ -85,11 +85,19 @@ pub struct SettingsEntry {
     pub keywords: &'static str,
 }
 
-const ENTRIES: [(&str, &str, SettingsSection, &str); 24] = [
+const WORKING_SHELF: &str = "sidebar.workingShelf";
+
+const ENTRIES: [(&str, &str, SettingsSection, &str); 25] = [
     ("account", "Account", SettingsSection::General, "signed in email sign out"),
     ("updates", "Updates", SettingsSection::General, "version check for updates release"),
     ("appearance", "Theme", SettingsSection::General, "appearance light dark system mode"),
     ("messages", "Sent while the agent works", SettingsSection::General, "messages queue steer interrupt"),
+    (
+        "working-shelf",
+        "Working shelf",
+        SettingsSection::General,
+        "sidebar working threads shelf section running monitoring",
+    ),
     (
         "manage-new-threads",
         "Manage new threads automatically",
@@ -142,7 +150,12 @@ const ENTRIES: [(&str, &str, SettingsSection, &str); 24] = [
     ),
     ("mcp-activity", "Activity", SettingsSection::McpGateway, "calls tools log errors"),
     ("projects", "Projects", SettingsSection::Projects, "add remove folder icon setup worktree script"),
-    ("merged", "Mark the thread done after merge or close", SettingsSection::PullRequests, "merge close finished"),
+    (
+        "merged",
+        "Archive the thread after merge or close",
+        SettingsSection::PullRequests,
+        "merge close finished archive",
+    ),
     (
         "worktrees",
         "Remove the thread's worktree after merge",
@@ -229,6 +242,16 @@ impl Store {
 
     pub fn set_manages_new_threads(&mut self, on: bool) {
         self.prefs.set("manageNewThreads", on);
+    }
+
+    /// Whether working threads have a shelf of their own, or stay among the active ones.
+    pub fn working_shelf(&self) -> bool {
+        self.prefs.get(WORKING_SHELF).unwrap_or(true)
+    }
+
+    pub fn set_working_shelf(&mut self, on: bool) {
+        self.prefs.set(WORKING_SHELF, on);
+        self.set_threads(self.threads.clone());
     }
 
     /// What the server does with pull requests by itself.

@@ -175,6 +175,7 @@ impl SettingsPage {
             self.updates(cx),
             self.appearance(cx),
             self.messages(cx),
+            self.sidebar(cx),
             self.provider_limits(cx),
             self.storage(cx),
         ]
@@ -271,6 +272,22 @@ impl SettingsPage {
         let leading = label("Sent while the agent works", Some(description.into()), None, Cut::Wraps, cx);
         let rows = vec![row(vec![leading], vec![picker.into_any_element()]).into_any_element()];
         group("messages", "Messages", None, true, rows, cx)
+    }
+
+    /// Whether working threads have a shelf of their own at the bottom of the sidebar.
+    fn sidebar(&self, cx: &mut Context<Self>) -> AnyElement {
+        let on = self.store.read(cx).working_shelf();
+        let store = self.store.clone();
+        let switch = Switch::new("working-shelf", on).on_change(move |on, _, cx| {
+            store.update(cx, |store, cx| {
+                store.set_working_shelf(on);
+                cx.notify();
+            })
+        });
+        let description = "Show working threads on their own shelf.";
+        let leading = label("Working shelf", Some(description.into()), None, Cut::Wraps, cx);
+        let rows = vec![switch_row(vec![leading], switch).into_any_element()];
+        group("working-shelf", "Sidebar", None, true, rows, cx)
     }
 
     /// Whether a new thread starts on the account that has used the least of its limits.
@@ -720,7 +737,7 @@ impl SettingsPage {
             cx,
         );
         let mut groups = vec![
-            group("merged", "Mark the thread done after merge or close", None, true, merged, cx),
+            group("merged", "Archive the thread after merge or close", None, true, merged, cx),
             group("worktrees", "Remove the thread's worktree after merge", None, true, worktrees, cx),
         ];
         let pulling: Vec<Server> = servers.into_iter().filter(Server::pulls_default_branch).collect();

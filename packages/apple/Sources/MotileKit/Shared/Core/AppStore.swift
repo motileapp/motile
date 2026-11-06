@@ -358,6 +358,14 @@ final class AppStore {
     private(set) var workingThreads: [ThreadInfo] = []
     private(set) var snoozedThreads: [ThreadInfo] = []
     private(set) var archivedThreads: [ThreadInfo] = []
+    /// Whether working threads have a shelf of their own, or stay among the active ones.
+    var workingShelf = UserDefaults.standard.object(forKey: AppStore.workingShelfKey) as? Bool ?? true {
+        didSet {
+            UserDefaults.standard.set(workingShelf, forKey: AppStore.workingShelfKey)
+            setThreads(threads.merging(startedThreads) { listed, _ in listed })
+        }
+    }
+    static let workingShelfKey = "sidebar.workingShelf"
     /// The threads the sidebar lists above its shelf, in its order.
     var listedThreads: [ThreadInfo] { activeThreads + workingThreads }
     var allThreads: [ThreadInfo] { activeThreads + workingThreads + snoozedThreads + archivedThreads }
@@ -423,7 +431,7 @@ final class AppStore {
     }
     private(set) var undo: UndoNotice?
     /// The thread the sidebar brings into sight, opening Done if it is there: the one its pull
-    /// request's end last marked done, or the one opened from the search. It stays until another
+    /// request's end last archived, or the one opened from the search. It stays until another
     /// is opened.
     var revealedThreadID: String?
     /// Unknown until Settings asks for it.
@@ -868,6 +876,7 @@ final class AppStore {
 
     /// The lists leave out the threads agents started, which their parents show.
     private func setThreads(_ new: [String: ThreadInfo]) {
+        let new = new.mapValues(shelved)
         threads = new.filter { $0.value.parentID == nil }
         startedThreads = new.filter { $0.value.parentID != nil }
         let listed = Array(threads.values).sorted(by: ThreadInfo.listed)
@@ -880,6 +889,7 @@ final class AppStore {
 
     /// Changes one thread, and moves it in its list only when its place there changed.
     private func setThread(_ thread: ThreadInfo?, id: String) {
+        let thread = thread.map(shelved)
         let before = anyThread(id)
         defer { showSelectedThread() }
         guard (thread ?? before)?.parentID == nil else {
@@ -903,6 +913,15 @@ final class AppStore {
         if let thread {
             changeList(thread.section) { $0.insert(thread, at: $0.place(of: thread)) }
         }
+    }
+
+    /// The thread in the part of the sidebar it is listed in here: a working one among the active
+    /// ones while working threads have no shelf.
+    private func shelved(_ thread: ThreadInfo) -> ThreadInfo {
+        guard thread.section == .working || thread.section == .active else { return thread }
+        var shelved = thread
+        shelved.section = workingShelf ? thread.awakeSection : .active
+        return shelved
     }
 
     private func changeList(_ section: ThreadSection, _ change: (inout [ThreadInfo]) -> Void) {

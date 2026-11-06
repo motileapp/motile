@@ -147,6 +147,16 @@ struct SettingsPage: View {
         .id("messages")
 
         Section {
+            Toggle("Working shelf", isOn: Bindable(store).workingShelf)
+        } header: {
+            Text("Sidebar")
+        } footer: {
+            Text(workingShelfDescription)
+                .foregroundStyle(Color.themeMutedForeground)
+        }
+        .id("working-shelf")
+
+        Section {
             Toggle("Manage new threads automatically", isOn: $managesNewThreads)
         } header: {
             Text("Provider Limits")
@@ -408,7 +418,7 @@ struct SettingsPage: View {
             let pulling = servers.filter(\.pullsDefaultBranch)
             if servers.count == 1, let server = servers.first {
                 Section {
-                    Toggle("Mark the thread done after merge or close", isOn: doneOnMerge(server))
+                    Toggle("Archive the thread after merge or close", isOn: doneOnMerge(server))
                         .id("merged")
                     Toggle("Remove the thread's worktree after merge", isOn: removesWorktrees(server))
                         .id("worktrees")
@@ -422,7 +432,7 @@ struct SettingsPage: View {
                     .id("pull")
                 }
             } else {
-                SettingsToggles("Mark the thread done after merge or close", servers: servers, isOn: doneOnMerge)
+                SettingsToggles("Archive the thread after merge or close", servers: servers, isOn: doneOnMerge)
                     .id("merged")
                 SettingsToggles("Remove the thread's worktree after merge", servers: servers, isOn: removesWorktrees)
                     .id("worktrees")

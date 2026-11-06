@@ -896,7 +896,7 @@ impl Store {
 
     /// The lists leave out the threads agents started, which their parents show.
     fn set_threads(&mut self, threads: HashMap<String, ThreadInfo>) {
-        self.threads = threads;
+        self.threads = threads.into_iter().map(|(id, thread)| (id, self.shelved(thread))).collect();
         let mut listed: Vec<ThreadInfo> =
             self.threads.values().filter(|thread| thread.parent_id().is_none()).cloned().collect();
         listed.sort_by(ThreadInfo::listed_order);
@@ -909,6 +909,7 @@ impl Store {
 
     /// Changes one thread, and moves it in its list only when its place there changed.
     fn set_thread(&mut self, thread: Option<ThreadInfo>, id: &str) {
+        let thread = thread.map(|thread| self.shelved(thread));
         let before = match &thread {
             Some(thread) => self.threads.insert(id.to_string(), thread.clone()),
             None => self.threads.remove(id),
@@ -937,6 +938,15 @@ impl Store {
             let place = place_of(list, &thread);
             list.insert(place, thread);
         }
+    }
+
+    /// The thread in the part of the sidebar it is listed in here: a working one among the active
+    /// ones while working threads have no shelf.
+    fn shelved(&self, mut thread: ThreadInfo) -> ThreadInfo {
+        if matches!(thread.section, Section::Active | Section::Working) {
+            thread.section = if self.working_shelf() { thread.awake_section() } else { Section::Active };
+        }
+        thread
     }
 
     fn list_mut(&mut self, section: Section) -> &mut Vec<ThreadInfo> {

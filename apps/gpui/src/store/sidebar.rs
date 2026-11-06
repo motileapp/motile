@@ -19,7 +19,7 @@ const UNDO_FOR: Duration = Duration::from_secs(5);
 #[derive(Default)]
 pub struct SidebarState {
     /// The thread the sidebar brings into sight, opening Done if it is there: the one its pull
-    /// request's end last marked done, or the one opened from the search. It stays until another
+    /// request's end last archived, or the one opened from the search. It stays until another
     /// is opened.
     pub revealed_thread_id: Option<String>,
     /// What the threads are searched for. Their messages are searched on the servers.
