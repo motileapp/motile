@@ -18,6 +18,7 @@ public func runMotile() {
     #endif
     adoptFormerSettings()
     _ = MotileApplication.shared
+    PointerCursor.install()
     MotileApp.main()
 }
 
