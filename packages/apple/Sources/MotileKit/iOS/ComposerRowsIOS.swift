@@ -8,8 +8,9 @@ struct ComposerRows: Layout {
 
     private static let sideInset: CGFloat = 14
     private static let topInset: CGFloat = 4
-    /// The room the attach button takes at the row's start, and the send button at its end.
-    private static let buttonRoom: CGFloat = 46
+    /// The room the attach button takes at the row's start, and the send button at its end: a square
+    /// as tall as the folded composer.
+    private static let buttonRoom = floatingHeight
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
         let width = proposal.width ?? 0

@@ -19,7 +19,7 @@ struct AccountMenu: View {
         Menu { items } label: {
             AccountPicture(account: store.account)
                 .frame(width: 34, height: 34)
-                .frame(width: 46, height: 46)
+                .frame(width: GlassButtonStyle.side, height: GlassButtonStyle.side)
                 .contentShape(Circle())
         }
         .menuStyle(.button)

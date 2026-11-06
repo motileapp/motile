@@ -287,8 +287,12 @@ struct ComposerView: View {
         }
     }
 
+    /// How far the buttons at the ends of the row stand from the composer's edges, as from its top
+    /// and bottom, so that the row is `floatingHeight` tall.
+    static let edge = (floatingHeight - ControlSize.regular.height) / 2
+
     static func margin(leading: CGFloat = 1, trailing: CGFloat = 1) -> EdgeInsets {
-        EdgeInsets(top: 8, leading: leading, bottom: 8, trailing: trailing)
+        EdgeInsets(top: edge, leading: leading, bottom: edge, trailing: trailing)
     }
 
     #if os(macOS)
@@ -298,7 +302,7 @@ struct ComposerView: View {
     /// is their margins, so each takes clicks up to the next one and to the composer's edges.
     private func controls(settingsLabels: Bool, modelLabel: Bool) -> some View {
         HStack(spacing: 0) {
-            ActionButton(icon: .plus, help: "Attach files", symbolSize: .lg, round: true, tint: .themeForeground, margin: Self.margin(leading: 8)) { chooseFiles() }
+            ActionButton(icon: .plus, help: "Attach files", symbolSize: .lg, round: true, tint: .themeForeground, margin: Self.margin(leading: Self.edge)) { chooseFiles() }
             typingArea
                 .frame(minWidth: 10, maxWidth: .infinity, maxHeight: .infinity)
             ComposerSettings(labeled: settingsLabels, modelLabeled: modelLabel)
@@ -335,7 +339,7 @@ struct ComposerSendButtons: View {
                 ActionButton(
                     "", picture: AnyView(RoundedRectangle(cornerRadius: 2.5).frame(width: 11, height: 11)),
                     help: store.shortcuts.help("Stop", "thread.stop"), variant: waits ? .waiting : .danger, round: true,
-                    signals: waits, margin: ComposerView.margin(leading: 4, trailing: sends ? 4 : 8)
+                    signals: waits, margin: ComposerView.margin(leading: 4, trailing: sends ? 4 : ComposerView.edge)
                 ) {
                     store.stop()
                 }
@@ -345,7 +349,7 @@ struct ComposerSendButtons: View {
             if sends {
                 ActionButton(
                     icon: .arrowUp, help: store.attachmentsHold ?? (running ? whileRunning : "Send"), variant: connecting ? .waiting : .primary,
-                    symbolSize: .md, round: true, signals: connecting, margin: ComposerView.margin(leading: 4, trailing: 8)
+                    symbolSize: .md, round: true, signals: connecting, margin: ComposerView.margin(leading: 4, trailing: ComposerView.edge)
                 ) {
                     store.send()
                 }

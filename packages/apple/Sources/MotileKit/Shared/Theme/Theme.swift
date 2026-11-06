@@ -196,6 +196,10 @@ extension IconSize {
     }
 }
 
+/// How tall what floats over the client is: a glass button, a search bar on glass, and the composer's
+/// row of buttons, which is the whole composer when it is folded to one line.
+let floatingHeight: CGFloat = 48
+
 /// How large a control is. Its height, symbol, text, padding and corners go together, so that
 /// no view picks them one by one. Sizes are as on the Mac; iOS enlarges them.
 enum ControlSize {

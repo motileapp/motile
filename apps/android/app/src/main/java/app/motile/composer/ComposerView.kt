@@ -54,6 +54,7 @@ import app.motile.theme.Radius
 import app.motile.theme.ShadowSize
 import app.motile.theme.Surface
 import app.motile.theme.Theme
+import app.motile.theme.floatingHeight
 import app.motile.ui.ActionButton
 import app.motile.ui.ButtonVariant
 import app.motile.ui.Disabled
@@ -69,8 +70,11 @@ import kotlinx.coroutines.delay
 object ComposerView {
     val radius = Radius.xxl
 
+    /** How far the buttons at the ends of the row stand from the composer's edges, as from its top and bottom, so that the row is [floatingHeight] tall. */
+    val edge = (floatingHeight - ControlSize.Regular.height) / 2
+
     /** The room around a control in the composer's rows, which is the control's to press. */
-    fun margin(leading: Dp = 1.dp, trailing: Dp = 1.dp) = PaddingValues(start = leading, top = 8.dp, end = trailing, bottom = 8.dp)
+    fun margin(leading: Dp = 1.dp, trailing: Dp = 1.dp) = PaddingValues(start = leading, top = edge, end = trailing, bottom = edge)
 }
 
 @Composable
@@ -291,7 +295,7 @@ fun ComposerSendButtons() {
             val waits = connecting && !sends
             ActionButton(
                 "", picture = { StopMark() }, help = "Stop", variant = if (waits) ButtonVariant.Waiting else ButtonVariant.Danger, round = true,
-                margin = ComposerView.margin(leading = 4.dp, trailing = if (sends) 4.dp else 8.dp), disabled = state != Server.State.Connected,
+                margin = ComposerView.margin(leading = 4.dp, trailing = if (sends) 4.dp else ComposerView.edge), disabled = state != Server.State.Connected,
                 signals = waits,
             ) { store.stop() }
         }
@@ -299,7 +303,7 @@ fun ComposerSendButtons() {
             Disabled(!store.canSend) {
                 ActionButton(
                     icon = Symbol.ArrowUp, help = "Send", variant = if (connecting) ButtonVariant.Waiting else ButtonVariant.Primary,
-                    symbolSize = IconSize.Md, round = true, margin = ComposerView.margin(leading = 4.dp, trailing = 8.dp), signals = connecting,
+                    symbolSize = IconSize.Md, round = true, margin = ComposerView.margin(leading = 4.dp, trailing = ComposerView.edge), signals = connecting,
                 ) { store.send() }
             }
         }
