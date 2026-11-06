@@ -52,6 +52,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import app.motile.platform.Symbol
+import app.motile.theme.ControlSize
 import app.motile.theme.Theme
 import app.motile.ui.Icon
 import kotlinx.coroutines.launch
@@ -84,7 +85,7 @@ fun RowSwipe(
     symbol: Symbol,
     label: String,
     tint: Color,
-    size: Dp,
+    size: ControlSize,
     isOpen: Boolean,
     onOpenChange: (Boolean) -> Unit,
     action: () -> Unit,
@@ -99,7 +100,7 @@ fun RowSwipe(
 @Composable
 fun RowSwipe(
     actions: List<SwipeAction>,
-    size: Dp,
+    size: ControlSize,
     isOpen: Boolean,
     onOpenChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
@@ -115,7 +116,7 @@ fun RowSwipe(
     val currentOpenChange by rememberUpdatedState(onOpenChange)
 
     /** How far the row rests aside while its buttons show. */
-    val openWidth = with(density) { ((size + swipeGap) * actions.size + 10.dp).toPx() }
+    val openWidth = with(density) { ((size.height + swipeGap) * actions.size + 10.dp).toPx() }
     /** The first action, which a long swipe does. */
     val swiped = actions.firstOrNull()?.takeIf { it.perform != null }
     /** From here on, letting go does what the first button does. */
@@ -215,7 +216,7 @@ private val swipeGap = 10.dp
 @Composable
 private fun SwipeButtons(
     actions: List<SwipeAction>,
-    size: Dp,
+    size: ControlSize,
     offset: Float,
     openWidth: Float,
     armed: Boolean,
@@ -251,18 +252,18 @@ private fun SwipeButtons(
 }
 
 @Composable
-private fun SwipeButton(action: SwipeAction, size: Dp, stretch: Dp, shift: Dp, onClick: () -> Unit) {
+private fun SwipeButton(action: SwipeAction, size: ControlSize, stretch: Dp, shift: Dp, onClick: () -> Unit) {
     val menu = rememberMenuState()
     Box {
         Box(
             Modifier
-                .size(width = size + stretch, height = size)
+                .size(width = size.height + stretch, height = size.height)
                 .background(action.tint, CircleShape)
                 .clickable(interactionSource = null, indication = null) { if (action.menu != null) menu.open() else onClick() }
                 .semantics { contentDescription = action.label },
             contentAlignment = Alignment.Center,
         ) {
-            Icon(action.symbol, size * 0.44f, Modifier.offset { IntOffset(shift.roundToPx(), 0) }, color = Theme.colors.background)
+            Icon(action.symbol, size.filledSymbol, Modifier.offset { IntOffset(shift.roundToPx(), 0) }, color = Theme.colors.background)
         }
         action.menu?.let { MenuPopup(menu, it) }
     }

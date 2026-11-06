@@ -201,7 +201,7 @@ struct SidebarScreen: View {
             if store.onRemovedServer(thread) {
                 row
             } else {
-                row.rowSwipe(swipeActions(thread), size: 36, isOpen: swipe(item.id, swiped: shown.swiped))
+                row.rowSwipe(swipeActions(thread), size: .regular, isOpen: swipe(item.id, swiped: shown.swiped))
             }
         case .result(let result):
             SearchResultRow(result: result, highlighted: result.id == shown.highlighted, open: openSearchResult)
@@ -238,7 +238,7 @@ struct SidebarScreen: View {
             if store.onRemovedServer(thread) || actions.isEmpty {
                 row
             } else {
-                row.rowSwipe(actions, size: 28, isOpen: swipe(item.id, swiped: shown.swiped))
+                row.rowSwipe(actions, size: .small, isOpen: swipe(item.id, swiped: shown.swiped))
             }
         }
     }

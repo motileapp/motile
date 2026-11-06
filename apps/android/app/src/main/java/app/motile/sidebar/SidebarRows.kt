@@ -336,7 +336,7 @@ fun DraftRows(
             }
             val swiped = swipe(draft.id)
             RowSwipe(
-                Symbol.Trash2, "Discard Draft", tint = Theme.colors.destructive, size = 36.dp, isOpen = swiped.isOpen, onOpenChange = swiped.onOpenChange,
+                Symbol.Trash2, "Discard Draft", tint = Theme.colors.destructive, size = ControlSize.Regular, isOpen = swiped.isOpen, onOpenChange = swiped.onOpenChange,
                 action = { store.discard(draft.draft) },
             ) {
                 WithMenu({ item("Discard Draft", destructive = true) { store.discard(draft.draft) } }) { modifier, openMenu ->
