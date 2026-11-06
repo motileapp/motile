@@ -4,7 +4,7 @@
 //! goes through every agent's models, and finds each of its words in a model's name or its
 //! account's, in any order.
 
-use gpui_kit::component::input::{Enter, Escape, Input, InputEvent, InputState, MoveDown, MoveLeft, MoveRight, MoveUp};
+use gpui_kit::component::input::{Enter, Escape, InputEvent, InputState, MoveDown, MoveLeft, MoveRight, MoveUp};
 use gpui_kit::prelude::*;
 use gpui_kit::*;
 use motile_core::limits;
@@ -16,6 +16,7 @@ use crate::models::{ACCESSES, AGENTS, ComposerPickerPart, ModelInfoExt, access_d
 use crate::store::Store;
 use crate::theme::{ControlSize, IconSize, Layer, Opacity, Radius, Surface, colors};
 use crate::ui::dropdown::{backdrop, over_content};
+use crate::ui::dropdown_list::{self as list, PADDING};
 use crate::ui::menu::Anchor;
 use crate::ui::parts::{hidden_edges, with_edge_fades};
 use crate::ui::{ActionButton, Chip, Highlight, KeyCaps, Segmented, divider_on, edges, icons, logos, tooltip};
@@ -25,11 +26,7 @@ const LIST_WIDTH: f32 = 232.;
 const SETTINGS_WIDTH: f32 = 196.;
 const HEIGHT: f32 = 348.;
 const SHORTEST: f32 = 180.;
-const ROW_HEIGHT: f32 = 28.;
-const ROW_LIGHT_INSET: f32 = 1.;
 const HEADER_GAP: f32 = 6.;
-const PADDING: f32 = 4.;
-const SEARCH_HEIGHT: f32 = 38.;
 /// The picker and its lines, as wide as its columns make it.
 pub const WIDTH: f32 = RAIL_WIDTH + LIST_WIDTH + SETTINGS_WIDTH + 4.;
 /// The room between the picker and the button it opens from.
@@ -433,20 +430,7 @@ impl ComposerPicker {
     }
 
     fn search(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let c = colors(cx);
-        let query = self.query.clone();
-        div()
-            .id("picker-search")
-            .h(px(SEARCH_HEIGHT))
-            .flex_shrink_0()
-            .px(px(12.))
-            .flex()
-            .items_center()
-            .gap(px(8.))
-            .cursor_text()
-            .on_click(move |_, window, cx| query.update(cx, |query, cx| query.focus(window, cx)))
-            .child(icons::symbol("search", IconSize::Md).text_color(c.muted_stronger_foreground))
-            .child(div().flex_1().child(Input::new(&self.query).appearance(false).px_0().py_0().text_size(px(13.))))
+        list::search("picker-search", &self.query, cx)
     }
 
     fn list(&self, groups: &[Group], cx: &mut Context<Self>) -> impl IntoElement {
@@ -464,11 +448,11 @@ impl ComposerPicker {
         if groups.is_empty() {
             children.push(
                 div()
-                    .h(px(ROW_HEIGHT))
-                    .px(px(8.))
+                    .h(px(list::ROW_HEIGHT))
+                    .px(px(list::ROW_PADDING))
                     .flex()
                     .items_center()
-                    .text_size(px(13.))
+                    .text_size(px(list::TEXT_SIZE))
                     .text_color(c.muted_foreground)
                     .child("No model matches")
                     .into_any_element(),
@@ -501,20 +485,9 @@ impl ComposerPicker {
         let group = SharedString::from(format!("picker-model-{}", row.index));
         let index = row.index;
         let chosen_row = row.clone();
-        div()
-            .id(group.clone())
-            .group(group.clone())
-            .relative()
-            .flex_shrink_0()
-            .h(px(ROW_HEIGHT))
-            .px(px(8.))
-            .flex()
-            .items_center()
-            .gap(px(8.))
-            .text_size(px(13.))
-            .text_color(c.foreground)
-            .child(row_light(group, lit, cx))
-            .child(div().relative().flex().child(logos::agent_icon(row.model.agent, IconSize::Md, cx)))
+        list::row(group.clone(), group.clone(), cx)
+            .child(list::light(group, lit, cx))
+            .child(div().relative().flex().child(logos::agent_icon(row.model.agent, list::SYMBOL, cx)))
             .child(
                 div()
                     .relative()
@@ -528,7 +501,7 @@ impl ComposerPicker {
             .when_some(key, |row, key| {
                 row.child(div().relative().text_color(c.muted_foreground).child(KeyCaps::new([key])))
             })
-            .child(check(chosen))
+            .child(list::check(chosen))
             .on_hover(cx.listener(move |this, hovered: &bool, _, cx| {
                 if *hovered {
                     this.column = ComposerPickerPart::Model;
@@ -606,28 +579,17 @@ impl ComposerPicker {
         let lit = self.column == ComposerPickerPart::Effort && self.lit == Some(index);
         let group = SharedString::from(format!("picker-setting-{index}"));
         let picked = setting.clone();
-        div()
-            .id(group.clone())
-            .group(group.clone())
-            .relative()
-            .flex_shrink_0()
-            .h(px(ROW_HEIGHT))
-            .px(px(8.))
-            .flex()
-            .items_center()
-            .gap(px(6.))
-            .text_size(px(13.))
-            .text_color(c.foreground)
-            .child(row_light(group, lit, cx))
+        list::row(group.clone(), group.clone(), cx)
+            .child(list::light(group, lit, cx))
             .when_some(symbol, |row, symbol| {
                 row.child(
-                    div().relative().flex().child(icons::symbol(symbol, IconSize::Md).text_color(c.muted_foreground)),
+                    div().relative().flex().child(icons::symbol(symbol, list::SYMBOL).text_color(c.muted_foreground)),
                 )
             })
             .child(div().relative().whitespace_nowrap().child(title))
             .when(default, |row| row.child(div().relative().child(Chip::new("Default").muted(true))))
             .child(div().flex_1().min_w(px(6.)))
-            .child(check(chosen))
+            .child(list::check(chosen))
             .on_hover(cx.listener(move |this, hovered: &bool, _, cx| {
                 if *hovered {
                     this.column = ComposerPickerPart::Effort;
@@ -754,63 +716,36 @@ impl ComposerPicker {
 /// The line height of the access menu's description.
 const DETAIL_LINE: f32 = 15.;
 
-/// The light of a row, drawn a point in from its top and bottom so that two lit rows look apart
-/// while their clicks meet.
-fn row_light(group: SharedString, lit: bool, cx: &App) -> Div {
-    Highlight::new()
-        .radius(Radius::SM)
-        .surface(Surface::Popover)
-        .inset(edges(ROW_LIGHT_INSET, 0., ROW_LIGHT_INSET, 0.))
-        .lit(lit)
-        .render(group, cx)
-}
-
-fn check(chosen: bool) -> Div {
-    div().relative().flex().when(!chosen, |mark| mark.opacity(0.)).child(icons::symbol("check", IconSize::Sm))
-}
-
 /// Between two sections, as far from the last row's words as from the next title's, which has
 /// room of its own above it.
 fn section_divider(cx: &App) -> Div {
-    div().flex_shrink_0().px(px(8.)).pt(px(6.)).pb(px(2.)).child(divider_on(Surface::Popover, cx))
+    div().flex_shrink_0().px(px(list::ROW_PADDING)).pt(px(6.)).pb(px(2.)).child(divider_on(Surface::Popover, cx))
 }
 
 /// A section's title, and at its end the model it is about.
 fn section_title(title: &'static str, model: Option<String>, cx: &App) -> Div {
     let c = colors(cx);
-    div()
-        .flex_shrink_0()
-        .px(px(8.))
-        .pt(px(8.))
-        .pb(px(4.))
-        .flex()
-        .items_center()
-        .gap(px(8.))
-        .text_size(px(ControlSize::Regular.text_size()))
-        .font_weight(FontWeight::MEDIUM)
-        .child(div().text_color(c.muted_foreground).child(title))
-        .child(div().flex_1())
-        .when_some(model, |row, model| {
-            row.child(
-                div()
-                    .min_w_0()
-                    .whitespace_nowrap()
-                    .overflow_hidden()
-                    .text_ellipsis()
-                    .text_color(c.muted_stronger_foreground)
-                    .child(model),
-            )
-        })
+    let about = model.map(|model| {
+        div()
+            .min_w_0()
+            .whitespace_nowrap()
+            .overflow_hidden()
+            .text_ellipsis()
+            .text_color(c.muted_stronger_foreground)
+            .child(model)
+            .into_any_element()
+    });
+    list::title(title, about, cx)
 }
 
 fn header(group: &Group, cx: &App) -> Div {
     let c = colors(cx);
     div()
         .flex_shrink_0()
-        .px(px(8.))
+        .px(px(list::ROW_PADDING))
         .pt(px(8.))
         // The chips stand as far from a lit row as from the words above them.
-        .pb(px(if group.windows.is_empty() { 4. } else { HEADER_GAP - ROW_LIGHT_INSET }))
+        .pb(px(if group.windows.is_empty() { 4. } else { HEADER_GAP - list::LIGHT_INSET }))
         .flex()
         .flex_col()
         .gap(px(HEADER_GAP))

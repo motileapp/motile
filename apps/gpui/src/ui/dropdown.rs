@@ -7,9 +7,10 @@ use std::rc::Rc;
 use gpui_kit::prelude::*;
 use gpui_kit::*;
 
-use crate::theme::{IconSize, Radius, Surface, colors};
+use crate::theme::colors;
+use crate::ui::dropdown_list as list;
 use crate::ui::menu::Anchor;
-use crate::ui::{ActionButton, Highlight, Variant, dropdown_card, edges, icons};
+use crate::ui::{ActionButton, Variant, dropdown_card, icons};
 use crate::window_frame::content_bounds;
 
 type Run = Rc<dyn Fn(&mut Window, &mut App)>;
@@ -98,7 +99,7 @@ impl DropdownChoice {
     }
 
     pub fn symbol(mut self, symbol: &'static str) -> Self {
-        self.icon = Some(icons::symbol(symbol, IconSize::Md).into_any_element());
+        self.icon = Some(icons::symbol(symbol, list::SYMBOL).into_any_element());
         self
     }
 
@@ -130,9 +131,6 @@ struct Dropped {
 }
 
 impl ChoiceDropdown {
-    const PADDING: f32 = 4.;
-    const ROW_HEIGHT: f32 = 28.;
-
     pub fn new(
         id: impl Into<ElementId>,
         label: impl Into<SharedString>,
@@ -177,23 +175,9 @@ impl ChoiceDropdown {
         let c = colors(cx);
         let group = SharedString::from(format!("choice-{index}"));
         let choose = choice.choose;
-        div()
-            .id(("choice", index))
-            .group(group.clone())
-            .relative()
-            .min_h(px(Self::ROW_HEIGHT))
-            .px(px(8.))
-            .when(choice.detail.is_some(), |row| row.py(px(6.)))
-            .flex()
-            .items_center()
-            .gap(px(8.))
-            .child(
-                Highlight::new()
-                    .radius(Radius::SM)
-                    .inset(edges(1., 0., 1., 0.))
-                    .surface(Surface::Popover)
-                    .render(group, cx),
-            )
+        list::row(("choice", index), group.clone(), cx)
+            .when(choice.detail.is_some(), |row| row.py(px(list::DETAIL_PADDING)))
+            .child(list::light(group, false, cx))
             .children(
                 choice
                     .icon
@@ -207,22 +191,14 @@ impl ChoiceDropdown {
                     .flex_col()
                     .gap(px(1.))
                     .whitespace_nowrap()
-                    .child(div().text_size(px(13.)).text_color(c.foreground).child(choice.title))
+                    .child(choice.title)
                     .children(
                         choice
                             .detail
                             .map(|detail| div().text_size(px(12.)).text_color(c.muted_foreground).child(detail)),
                     ),
             )
-            .child(
-                div()
-                    .relative()
-                    .flex_shrink_0()
-                    .ml(px(4.))
-                    .text_color(c.foreground)
-                    .when(!choice.chosen, |mark| mark.opacity(0.))
-                    .child(icons::symbol("check", IconSize::Sm)),
-            )
+            .child(list::check(choice.chosen).ml(px(4.)))
             .on_click(move |_, window, cx| {
                 cx.stop_propagation();
                 choose(window, cx);
@@ -274,27 +250,17 @@ impl RenderOnce for ChoiceDropdown {
                 let show = show.clone();
                 Rc::new(move |window, cx| show(false, window, cx))
             };
-            let c = colors(cx);
             let rows =
                 self.choices.into_iter().enumerate().map(|(index, choice)| Self::row(index, choice, close.clone(), cx));
             let card = dropdown_card(div(), cx)
                 .id("choice-dropdown")
                 .min_w(px(200.))
-                .p(px(Self::PADDING))
+                .p(px(list::PADDING))
                 .flex()
                 .flex_col()
                 .occlude()
                 .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                .child(
-                    div()
-                        .px(px(8.))
-                        .pt(px(6.))
-                        .pb(px(4.))
-                        .text_size(px(11.5))
-                        .font_weight(FontWeight::MEDIUM)
-                        .text_color(c.muted_foreground)
-                        .child(self.title),
-                )
+                .child(list::title(self.title, None, cx))
                 .children(rows);
             let escape = close.clone();
             let layer = backdrop("choice-dropdown-layer", move |window, cx| close(window, cx), window)

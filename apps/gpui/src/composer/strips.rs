@@ -4,7 +4,7 @@
 
 use std::rc::Rc;
 
-use gpui_kit::component::input::{Input, InputEvent, InputState};
+use gpui_kit::component::input::{InputEvent, InputState};
 use gpui_kit::component::scroll::Scrollbar;
 use gpui_kit::prelude::*;
 use gpui_kit::*;
@@ -22,6 +22,7 @@ use crate::store::Store;
 use crate::theme::{self, ControlSize, IconSize, Radius, Surface, colors};
 use crate::ui::control::{ControlIcon, ControlLabel};
 use crate::ui::dropdown::{backdrop, drop_from, light, over_content};
+use crate::ui::dropdown_list as list;
 use crate::ui::menu::Anchor;
 use crate::ui::parts::{hidden_edges, with_edge_fades};
 use crate::ui::rich_text::RichText;
@@ -959,10 +960,7 @@ pub struct BranchPicker {
     _subscriptions: Vec<Subscription>,
 }
 
-const ROW_HEIGHT: f32 = 30.;
-const LIST_PADDING: f32 = 8.;
 const MAX_LIST_HEIGHT: f32 = 300.;
-const SEARCH_HEIGHT: f32 = 38.;
 const PLACEHOLDERS: usize = 5;
 const PLACEHOLDER_WIDTHS: [f32; PLACEHOLDERS] = [90., 150., 120., 170., 105.];
 
@@ -1022,7 +1020,7 @@ impl BranchPicker {
             Some(Ok(branches)) => branches.len(),
             Some(Err(_)) => 0,
         };
-        MAX_LIST_HEIGHT.min(rows as f32 * ROW_HEIGHT + 2. * LIST_PADDING)
+        MAX_LIST_HEIGHT.min(rows as f32 * list::ROW_HEIGHT + 2. * list::PADDING)
     }
 
     fn choices(&self, cx: &App) -> Vec<Choice> {
@@ -1105,19 +1103,10 @@ impl BranchPicker {
         cx: &mut Context<Self>,
     ) -> Stateful<Div> {
         let c = colors(cx);
-        let lit = Surface::Popover.layer(theme::Layer::Row, c);
-        let row = div()
-            .id(("branch-choice", index))
+        let group = SharedString::from(format!("branch-choice-{index}"));
+        let row = list::row(("branch-choice", index), group.clone(), cx)
             .w_full()
-            .h(px(ROW_HEIGHT))
-            .px(px(8.))
-            .flex()
-            .items_center()
-            .gap(px(7.))
-            .rounded(px(Radius::MD))
-            .text_size(px(12.5))
-            .text_color(c.foreground)
-            .when(index == self.highlighted, |row| row.bg(lit))
+            .child(list::light(group, index == self.highlighted, cx))
             .when(working, |row| row.opacity(c.opacity(theme::Opacity::Disabled)))
             .on_hover(cx.listener(move |this, hovered: &bool, _, cx| {
                 if *hovered {
@@ -1126,13 +1115,12 @@ impl BranchPicker {
                 }
             }))
             .on_click(cx.listener(move |this, _, _, cx| this.choose(index, cx)));
-        let mark = |symbol: &'static str, color: Hsla| {
+        let mark = |symbol: &'static str| {
             div()
-                .w(px(IconSize::Sm.side()))
+                .relative()
                 .flex_shrink_0()
                 .flex()
-                .justify_center()
-                .child(icons::symbol(symbol, IconSize::Sm).text_color(color))
+                .child(icons::symbol(symbol, list::SYMBOL).text_color(c.muted_stronger_foreground))
         };
         match choice {
             Choice::Branch(branch) => {
@@ -1146,19 +1134,19 @@ impl BranchPicker {
                 } else {
                     None
                 };
-                row.child(mark(
-                    if chosen { "check" } else { "git-branch" },
-                    if chosen { c.foreground } else { c.muted_stronger_foreground },
-                ))
-                .child(crate::ui::middle_truncated(branch.name.clone()))
-                .child(div().flex_1().min_w(px(8.)))
-                .when_some(tag, |row, tag| {
-                    row.child(div().text_size(px(11.)).text_color(c.muted_stronger_foreground).child(tag))
-                })
+                row.child(mark("git-branch"))
+                    .child(crate::ui::middle_truncated(branch.name.clone()).relative())
+                    .child(div().flex_1().min_w(px(8.)))
+                    .when_some(tag, |row, tag| {
+                        row.child(
+                            div().relative().text_size(px(11.)).text_color(c.muted_stronger_foreground).child(tag),
+                        )
+                    })
+                    .child(list::check(chosen))
             }
             Choice::Create(name) => row
-                .child(mark("plus", c.muted_stronger_foreground))
-                .child(crate::ui::middle_truncated(format!("Create branch “{name}”")))
+                .child(mark("plus"))
+                .child(crate::ui::middle_truncated(format!("Create branch “{name}”")).relative())
                 .child(div().flex_1().min_w(px(8.))),
         }
     }
@@ -1170,18 +1158,18 @@ fn placeholder(index: usize, cx: &App) -> impl IntoElement {
     let fill = Surface::Popover.layer(theme::Layer::Control, colors(cx));
     let faded = colors(cx).opacity(theme::Opacity::Disabled);
     div()
-        .h(px(ROW_HEIGHT))
-        .px(px(8.))
+        .h(px(list::ROW_HEIGHT))
+        .px(px(list::ROW_PADDING))
         .flex()
         .items_center()
-        .gap(px(7.))
+        .gap(px(list::GAP))
         .child(
             div()
-                .w(px(14.))
+                .w(px(list::SYMBOL.side()))
                 .flex_shrink_0()
                 .flex()
                 .justify_center()
-                .child(div().size(px(11.)).rounded(px(Radius::XS)).bg(fill)),
+                .child(div().size(px(12.)).rounded(px(Radius::XS)).bg(fill)),
         )
         .child(div().w(px(PLACEHOLDER_WIDTHS[index % PLACEHOLDERS])).h(px(8.)).rounded_full().bg(fill))
         .with_animation(
@@ -1203,7 +1191,7 @@ impl Render for BranchPicker {
         let list: AnyElement = match &listed {
             None => div()
                 .h(px(list_height))
-                .p(px(LIST_PADDING))
+                .p(px(list::PADDING))
                 .children((0..PLACEHOLDERS).map(|index| placeholder(index, cx)))
                 .into_any_element(),
             Some(Err(error)) => {
@@ -1226,7 +1214,7 @@ impl Render for BranchPicker {
                 )
                 .track_scroll(&self.scroll)
                 .size_full()
-                .p(px(LIST_PADDING));
+                .p(px(list::PADDING));
                 let hidden = hidden_edges(&self.scroll.0.borrow().base_handle);
                 let list = div().relative().h(px(list_height)).child(rows).child(
                     div()
@@ -1253,20 +1241,7 @@ impl Render for BranchPicker {
                 }
                 _ => {}
             }))
-            .child(
-                div()
-                    .h(px(SEARCH_HEIGHT))
-                    .px(px(16.))
-                    .flex()
-                    .items_center()
-                    .gap(px(8.))
-                    .child(icons::symbol("search", IconSize::Md).text_color(c.muted_stronger_foreground))
-                    .child(
-                        div()
-                            .flex_1()
-                            .child(Input::new(&self.query).appearance(false).px_0().py_0().text_size(px(13.))),
-                    ),
-            )
+            .child(list::search("branch-search", &self.query, cx))
             .child(crate::ui::divider_on(Surface::Popover, cx))
             .child(list)
             .when_some(note, |picker, note| {

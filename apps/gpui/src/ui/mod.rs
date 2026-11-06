@@ -5,6 +5,7 @@ pub mod agent_avatar;
 pub mod control;
 pub mod date_field;
 pub mod dropdown;
+pub mod dropdown_list;
 pub mod icons;
 pub mod logos;
 pub mod menu;

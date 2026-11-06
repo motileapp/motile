@@ -12,6 +12,7 @@ use gpui_kit::*;
 
 use crate::theme::{Colors, ControlSize, IconSize, Layer, Opacity, Radius, ShadowSize, Surface, colors};
 use crate::ui::control::{ActionButton, Variant, dotted};
+use crate::ui::dropdown_list as list;
 use crate::ui::menu::Anchor;
 use crate::ui::{edges, icons, motion};
 
@@ -744,9 +745,7 @@ pub struct CheckMenu {
 }
 
 impl CheckMenu {
-    const PADDING: f32 = 4.;
     const GAP: f32 = 4.;
-    const ROW_HEIGHT: f32 = 28.;
 
     pub fn new(
         id: impl Into<ElementId>,
@@ -848,7 +847,6 @@ impl RenderOnce for CheckMenu {
         }
         // Under the button, always: it scrolls when there is too little room below it.
         let dropdown = (shown > 0.).then(|| {
-            let c = colors(cx);
             let bounds = anchor.bounds();
             let content = crate::window_frame::content_bounds(window);
             let viewport = content.size;
@@ -857,25 +855,10 @@ impl RenderOnce for CheckMenu {
             let rows = self.checks.into_iter().enumerate().map(|(index, check)| {
                 let group = SharedString::from(format!("check-{index}"));
                 let toggle = check.toggle;
-                div()
-                    .id(("check", index))
-                    .group(group.clone())
-                    .relative()
-                    .h(px(Self::ROW_HEIGHT))
-                    .px(px(8.))
-                    .flex()
-                    .items_center()
-                    .gap(px(8.))
-                    .text_size(px(13.))
-                    .text_color(c.foreground)
-                    .child(crate::ui::Highlight::new().radius(Radius::SM).surface(Surface::Popover).render(group, cx))
-                    .child(
-                        div()
-                            .relative()
-                            .when(!check.checked, |mark| mark.opacity(0.))
-                            .child(icons::symbol("check", IconSize::Md)),
-                    )
+                list::row(("check", index), group.clone(), cx)
+                    .child(list::light(group, false, cx))
                     .child(div().relative().flex_1().whitespace_nowrap().pr(px(12.)).child(check.title))
+                    .child(list::check(check.checked))
                     .when(open, |row| {
                         row.on_click(move |_, window, cx| {
                             cx.stop_propagation();
@@ -891,7 +874,7 @@ impl RenderOnce for CheckMenu {
                 .min_w(px(160.))
                 .max_h(room)
                 .overflow_y_scroll()
-                .p(px(Self::PADDING))
+                .p(px(list::PADDING))
                 .opacity(shown)
                 .occlude()
                 .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
