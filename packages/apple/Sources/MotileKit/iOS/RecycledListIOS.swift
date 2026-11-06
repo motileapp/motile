@@ -91,28 +91,26 @@ struct RecycledList<Item: Identifiable, Row: View>: UIViewRepresentable {
             source.reorderingHandlers.didReorder = { [weak self] transaction in self?.reordered(to: transaction.finalSnapshot.itemIdentifiers) }
             self.source = source
             (view as? FadingCollectionView)?.laidOut = { [weak self, weak view] in
-                guard let view else { return }
-                self?.stretch(in: view)
+                guard let self, let view else { return false }
+                return self.stretch(in: view)
             }
         }
 
         private var stretchedHeight: CGFloat = 1
 
         /// Gives the stretched row the room the other rows leave, after the layout that changed
-        /// it, since resizing a row lays the list out again.
-        private func stretch(in view: UICollectionView) {
-            guard let stretched = list?.stretched, let index = ids.firstIndex(of: stretched) else { return }
+        /// them, and says whether it did, so that the list is laid out again before it is drawn.
+        private func stretch(in view: UICollectionView) -> Bool {
+            guard let stretched = list?.stretched, let index = ids.firstIndex(of: stretched) else { return false }
             let room = view.bounds.height - view.adjustedContentInset.top - view.adjustedContentInset.bottom
             let height = max(1, (room - (view.contentSize.height - stretchedHeight)).rounded())
-            guard abs(height - stretchedHeight) >= 1 else { return }
-            DispatchQueue.main.async { [weak self, weak view] in
-                guard let self, let view else { return }
-                self.stretchedHeight = height
-                if let cell = view.cellForItem(at: IndexPath(item: index, section: 0)) as? RecycledCell {
-                    self.configure(cell, at: index)
-                }
-                view.collectionViewLayout.invalidateLayout()
+            guard abs(height - stretchedHeight) >= 1 else { return false }
+            stretchedHeight = height
+            if let cell = view.cellForItem(at: IndexPath(item: index, section: 0)) as? RecycledCell {
+                configure(cell, at: index)
             }
+            view.collectionViewLayout.invalidateLayout()
+            return true
         }
 
         /// Applies the rows when they are others, and redraws the rows on screen.
@@ -337,11 +335,12 @@ private final class FadingCollectionView: UICollectionView {
 
     required init?(coder: NSCoder) { fatalError("not used") }
 
-    /// Told after each layout.
-    var laidOut: () -> Void = {}
+    /// Told after each layout; when it changed the rows, they are laid out again.
+    var laidOut: () -> Bool = { false }
 
     override func layoutSubviews() {
         super.layoutSubviews()
+        if laidOut() { super.layoutSubviews() }
         let above = contentOffset.y + adjustedContentInset.top
         let below = contentSize.height + adjustedContentInset.bottom - bounds.maxY
         fade.update(frame: bounds, above: above, below: below)

@@ -78,7 +78,7 @@ enum DemoDriver {
         switch verb {
         case "sidebar": drawer.isOpen = rest == "open"
         case "swipe": store.swipeStep = store.allThreads.first { $0.title == rest }?.id
-        case "expand": UserDefaults.standard.set(true, forKey: "sidebar.\(rest == "archived" ? "done" : rest)Expanded")
+        case "expand", "collapse": UserDefaults.standard.set(verb == "expand", forKey: "sidebar.\(rest == "archived" ? "done" : rest)Expanded")
         case "thread":
             let all = Array(store.threads.values) + Array(store.startedThreads.values)
             guard let thread = all.first(where: { $0.title.localizedCaseInsensitiveContains(rest) }) else { return }

@@ -1329,7 +1329,7 @@ struct ServerErrors: View {
             }
             .textSelection(.enabled)
             .padding(.horizontal, sidebarEdge)
-            .padding(.bottom, 8)
+            .padding(.bottom, 12)
         }
     }
 }
