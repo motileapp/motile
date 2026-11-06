@@ -21,8 +21,8 @@ use crate::ui::logos::{self, PullRequestLabel};
 use crate::ui::menu::Menu;
 use crate::ui::{ActionButton, ActionMenu, Highlight, KeyCaps, Spinner, divider, icons, tabular_numbers, tooltip};
 
-/// How tall the line under the drafts is, with the room around it.
-pub const DRAFTS_DIVIDER: f32 = 1. + 2. * (4. + ROW_GAP / 2.);
+/// How tall the line under the drafts or an open section is, with the room around it.
+pub const LIST_DIVIDER: f32 = 1. + 2. * (4. + ROW_GAP / 2.);
 pub const EMPTY_LINE_HEIGHT: f32 = 15.;
 /// The room between the parts of a row's status, and of its last line.
 const STATUS_GAP: f32 = 9.;
@@ -274,12 +274,7 @@ impl Sidebar {
     /// The threads that haven't been sent yet, above the others, with a line under them.
     pub(super) fn draft_rows(&self, drafts: &[ListedDraft], cx: &mut Context<Self>) -> AnyElement {
         let rows: Vec<AnyElement> = drafts.iter().map(|listed| self.draft_row(listed, cx)).collect();
-        div()
-            .flex()
-            .flex_col()
-            .children(rows)
-            .child(div().mx(px(SIDEBAR_EDGE)).my(px(4. + ROW_GAP / 2.)).child(divider(cx)))
-            .into_any_element()
+        div().flex().flex_col().children(rows).child(list_divider(cx)).into_any_element()
     }
 
     /// A draft, laid out like a thread's row: its project and "Draft", or "Sending" while its
@@ -718,4 +713,10 @@ pub fn quieted(element: AnyElement, quiet: bool, cx: &App) -> AnyElement {
         return element;
     }
     div().opacity(colors(cx).opacity(Opacity::Disabled)).child(element).into_any_element()
+}
+
+/// The line that sets a group of the list's rows off from the rows under it: the drafts, or an
+/// open section.
+pub fn list_divider(cx: &App) -> AnyElement {
+    div().mx(px(SIDEBAR_EDGE)).my(px(4. + ROW_GAP / 2.)).child(divider(cx)).into_any_element()
 }

@@ -25,7 +25,7 @@ use motile_core::api::Section;
 
 pub use self::footer::SidebarFooter;
 use self::list::{Layout, RecycledList, place};
-use self::rows::{DRAFTS_DIVIDER, EMPTY_LINE_HEIGHT, THREAD_ROW_HEIGHT};
+use self::rows::{EMPTY_LINE_HEIGHT, LIST_DIVIDER, THREAD_ROW_HEIGHT, list_divider};
 use self::search::RESULT_ROW_HEIGHT;
 pub use self::updates::{AppUpdateRow, ServerUpdateStatus};
 use crate::models::ThreadInfo;
@@ -115,7 +115,8 @@ enum Shelf {
 
 /// A row of the list: the drafts as one, an active thread, what the search found, the line that
 /// says there is nothing, the offer to start a thread, the room that holds the working, the
-/// snoozed and the archived threads at the bottom, a line over them, and one of them. Threads and
+/// snoozed and the archived threads at the bottom, a line over them, one of them, and the line
+/// under an open one that has another below it. Threads and
 /// results are by their place in the store's list and in the search's.
 #[derive(Clone, Copy)]
 enum Item {
@@ -127,6 +128,7 @@ enum Item {
     Gap,
     Section(Shelf),
     Shelved(Shelf, usize),
+    SectionEnd(Shelf),
 }
 
 /// What the lists are made of, worked out again only once the store changed, so that a frame that
@@ -520,12 +522,13 @@ impl Sidebar {
 
     fn item_height(item: Item, drafts: usize) -> f32 {
         match item {
-            Item::Drafts => drafts as f32 * (THREAD_ROW_HEIGHT + ROW_GAP) + DRAFTS_DIVIDER,
+            Item::Drafts => drafts as f32 * (THREAD_ROW_HEIGHT + ROW_GAP) + LIST_DIVIDER,
             Item::Active(_) => THREAD_ROW_HEIGHT + ROW_GAP,
             Item::Result(_) => RESULT_ROW_HEIGHT + ROW_GAP,
             Item::Empty => EMPTY_LINE_HEIGHT + 2. * (6. + ROW_GAP / 2.),
             Item::NewThread | Item::Section(_) | Item::Shelved(..) => DONE_ROW_HEIGHT + ROW_GAP,
             Item::Gap => GAP_LEAST,
+            Item::SectionEnd(_) => LIST_DIVIDER,
         }
     }
 
@@ -576,14 +579,23 @@ impl Sidebar {
             }
         }
         let mut sections = Vec::new();
-        for shelf in if searching { [].as_slice() } else { Shelf::THREADS.as_slice() } {
-            let count = shelf.threads(store).len();
-            if count == 0 {
+        let shown: Vec<(Shelf, usize)> = if searching {
+            Vec::new()
+        } else {
+            Shelf::THREADS
+                .iter()
+                .map(|shelf| (*shelf, shelf.threads(store).len()))
+                .filter(|(_, count)| *count > 0)
+                .collect()
+        };
+        for (index, (shelf, count)) in shown.iter().enumerate() {
+            sections.push(Item::Section(*shelf));
+            if !shelf.expanded(&store.prefs) {
                 continue;
             }
-            sections.push(Item::Section(*shelf));
-            if shelf.expanded(&store.prefs) {
-                sections.extend((0..count).map(|at| Item::Shelved(*shelf, at)));
+            sections.extend((0..*count).map(|at| Item::Shelved(*shelf, at)));
+            if index < shown.len() - 1 {
+                sections.push(Item::SectionEnd(*shelf));
             }
         }
         let gap = (!sections.is_empty()).then(|| {
@@ -643,6 +655,7 @@ impl Sidebar {
             Item::Empty => "empty".into(),
             Item::NewThread => "new-thread".into(),
             Item::Gap => "gap".into(),
+            Item::SectionEnd(shelf) => format!("end-{}", shelf.group()),
             Item::Section(shelf) => shelf.group().into(),
             Item::Shelved(shelf, at) => {
                 shelf.threads(self.store.read(cx)).get(at).map(|thread| thread.id.clone()).unwrap_or_default()
@@ -707,6 +720,7 @@ impl Sidebar {
                 Item::Empty => self.empty_line(cx),
                 Item::NewThread => self.new_thread_row(cx),
                 Item::Gap => div().into_any_element(),
+                Item::SectionEnd(_) => list_divider(cx),
                 Item::Section(shelf) => self.section_row(shelf, cx),
                 Item::Shelved(shelf, at) => {
                     let Some(thread) = shelf.threads(self.store.read(cx)).get(at).cloned() else { continue };

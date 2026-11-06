@@ -344,8 +344,14 @@ fun DraftRows(
                 }
             }
         }
-        ThemeDivider(Modifier.padding(horizontal = sidebarEdge, vertical = 4.dp + rowGap / 2))
+        ListDivider()
     }
+}
+
+/** The line that sets a group of the list's rows off from the rows under it: the drafts, or an open section. */
+@Composable
+fun ListDivider() {
+    ThemeDivider(Modifier.padding(horizontal = sidebarEdge, vertical = 4.dp + rowGap / 2))
 }
 
 /** Whether a row is slid aside to show its button, and what changes that. */

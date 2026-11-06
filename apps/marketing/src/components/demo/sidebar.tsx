@@ -168,6 +168,7 @@ export function Sidebar({
               title="Working"
               count={working.length}
               open={workingOpen}
+              divided
               onToggle={() => setWorkingOpen(!workingOpen)}
             >
               {working.map((thread) => (
@@ -192,6 +193,7 @@ export function Sidebar({
               title="Snoozed"
               count={snoozedThreads.length}
               open={snoozedOpen}
+              divided
               onToggle={() => setSnoozedOpen(!snoozedOpen)}
             >
               {snoozedThreads.map((thread) => (
@@ -479,18 +481,21 @@ const isWorking = (thread: Thread) =>
   thread.status.kind === "monitoring" ||
   thread.status.kind === "agents"
 
-/** A part of the list at its bottom: its line, laid out as a row, with its symbol and name lit only under the
- * pointer, how many threads it holds, always the quietest, and its chevron, then its rows. */
+/** A part of the list at its bottom: its line, laid out as a row, with its name lit only under the pointer, how
+ * many threads it holds, always the quietest, and its chevron, then its rows, with a line under them when
+ * another part follows. */
 function Section({
   title,
   count,
   open,
+  divided = false,
   onToggle,
   children,
 }: {
   title: string
   count: number
   open: boolean
+  divided?: boolean
   onToggle: () => void
   children: ReactNode
 }) {
@@ -509,6 +514,7 @@ function Section({
         <Chevron open={open} />
       </button>
       {open && children}
+      {open && divided && <div className="mx-4 my-[5px] h-px bg-border" />}
     </>
   )
 }

@@ -158,6 +158,8 @@ struct SidebarView: View {
                     NewThreadRow()
                 case .gap:
                     Color.clear
+                case .sectionEnd:
+                    ListDivider()
                 case .header(let section, let count):
                     SectionHeaderRow(section: section, count: count, expanded: expanded(section).wrappedValue)
                 case .shelved(let thread):
@@ -195,9 +197,12 @@ struct SidebarView: View {
         if lists.active.isEmpty { items.append(.empty) }
         if store.offersNewThread(drafts: drafts, active: lists.active) { items.append(.newThread) }
         var shelved: [SidebarItem] = []
-        for (section, threads) in lists.shelves {
+        let shelves = lists.shelves
+        for (index, (section, threads)) in shelves.enumerated() {
             shelved.append(.header(section, threads.count))
-            if expanded(section).wrappedValue { shelved += threads.map(SidebarItem.shelved) }
+            guard expanded(section).wrappedValue else { continue }
+            shelved += threads.map(SidebarItem.shelved)
+            if index < shelves.count - 1 { shelved.append(.sectionEnd(section)) }
         }
         guard !shelved.isEmpty else { return items }
         let insets = 4 - rowGap / 2 + 4 - rowGap / 2 + 2
@@ -222,10 +227,11 @@ struct SidebarView: View {
 
     private func height(of item: SidebarItem, drafts: Int) -> CGFloat {
         switch item {
-        case .drafts: CGFloat(drafts) * (DraftRow.height + rowGap) + DraftRows.dividerHeight
+        case .drafts: CGFloat(drafts) * (DraftRow.height + rowGap) + ListDivider.height
         case .active: ThreadRow.height + rowGap
         case .gap(let height): height
         case .header: SectionHeaderRow.height
+        case .sectionEnd: ListDivider.height
         case .shelved: doneRowHeight + rowGap
         case .result: SearchResultRow.height + rowGap
         case .empty: Self.emptyLineHeight + 2 * (6 + rowGap / 2)
@@ -313,6 +319,8 @@ private enum SidebarItem: Identifiable {
     case gap(CGFloat)
     case header(ThreadSection, Int)
     case shelved(ThreadInfo)
+    /// The line under an open section that has another below it.
+    case sectionEnd(ThreadSection)
 
     var id: String {
         switch self {
@@ -323,6 +331,7 @@ private enum SidebarItem: Identifiable {
         case .newThread: "newThread"
         case .gap: "gap"
         case .header(let section, _): "header-\(section.rawValue)"
+        case .sectionEnd(let section): "end-\(section.rawValue)"
         }
     }
 
@@ -673,9 +682,6 @@ struct DraftRows: View {
     var swiped: (String) -> Binding<Bool> = { _ in .constant(false) }
     var open: (Selection) -> Void = { _ in }
 
-    /// What the line under the drafts takes, with the room around it.
-    static let dividerHeight = 1 + 2 * (4 + rowGap / 2)
-
     var body: some View {
         let listed = store.listedDrafts
         if !listed.isEmpty {
@@ -693,10 +699,20 @@ struct DraftRows: View {
                 DraftRow(listed: listed, open: open)
                 #endif
             }
-            ThemeDivider()
-                .padding(.horizontal, sidebarEdge)
-                .padding(.vertical, 4 + rowGap / 2)
+            ListDivider()
         }
+    }
+}
+
+/// The line that sets a group of the list's rows off from the rows under it: the drafts, or an
+/// open section.
+struct ListDivider: View {
+    static let height = 1 + 2 * (4 + rowGap / 2)
+
+    var body: some View {
+        ThemeDivider()
+            .padding(.horizontal, sidebarEdge)
+            .padding(.vertical, 4 + rowGap / 2)
     }
 }
 

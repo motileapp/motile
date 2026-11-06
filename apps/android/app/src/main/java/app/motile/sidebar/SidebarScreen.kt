@@ -153,6 +153,11 @@ private sealed interface SidebarItem {
         override val id = "gap"
     }
 
+    /** The line under an open section that has another below it. */
+    data class SectionEnd(val section: ThreadSection) : SidebarItem {
+        override val id: String get() = "end:${section.raw}"
+    }
+
     val activeThread: ThreadInfo? get() = (this as? Active)?.thread
 
     val rowThread: ThreadInfo?
@@ -392,6 +397,7 @@ fun SidebarScreen(underThread: Boolean) {
                         }
                         SidebarItem.NewThread -> NewThreadRow(Modifier.fillMaxWidth().height(lineHeight))
                         SidebarItem.Gap -> Spacer(Modifier.height(with(LocalDensity.current) { gap.toDp() }.coerceAtLeast(1.dp)))
+                        is SidebarItem.SectionEnd -> ListDivider()
                         is SidebarItem.Header -> SectionHeader(item.section, item.count, expanded(item.section)) {
                             setExpanded(item.section, !expanded(item.section))
                         }
@@ -460,11 +466,13 @@ private fun items(
     active.forEach { add(SidebarItem.Active(it)) }
     if (active.isEmpty()) add(SidebarItem.Empty)
     if (store.offersNewThread(store.listedDrafts, active)) add(SidebarItem.NewThread)
-    if (sections.any { it.second.isNotEmpty() }) add(SidebarItem.Gap)
-    for ((section, threads) in sections) {
-        if (threads.isEmpty()) continue
+    val shown = sections.filter { it.second.isNotEmpty() }
+    if (shown.isNotEmpty()) add(SidebarItem.Gap)
+    shown.forEachIndexed { index, (section, threads) ->
         add(SidebarItem.Header(section, threads.size))
-        if (expanded(section)) threads.forEach { add(SidebarItem.Slim(it)) }
+        if (!expanded(section)) return@forEachIndexed
+        threads.forEach { add(SidebarItem.Slim(it)) }
+        if (index < shown.size - 1) add(SidebarItem.SectionEnd(section))
     }
 }
 

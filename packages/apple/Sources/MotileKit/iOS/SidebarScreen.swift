@@ -153,9 +153,11 @@ struct SidebarScreen: View {
         guard !shown.isEmpty else { return items }
         // The gap holds the sections at the bottom while everything fits.
         items.append(.gap)
-        for (section, threads) in shown {
+        for (index, (section, threads)) in shown.enumerated() {
             items.append(.header(section, threads.count))
-            if expanded(section).wrappedValue { items += threads.map(SidebarItem.slim) }
+            guard expanded(section).wrappedValue else { continue }
+            items += threads.map(SidebarItem.slim)
+            if index < shown.count - 1 { items.append(.sectionEnd(section)) }
         }
         return items
     }
@@ -221,6 +223,8 @@ struct SidebarScreen: View {
                 .frame(height: 44)
         case .gap:
             Color.clear
+        case .sectionEnd:
+            ListDivider()
         case .header(let section, let count):
             sectionHeader(section, count: count)
         case .slim(let thread):
@@ -433,6 +437,8 @@ private enum SidebarItem: Identifiable {
     case gap
     case header(ThreadSection, Int)
     case slim(ThreadInfo)
+    /// The line under an open section that has another below it.
+    case sectionEnd(ThreadSection)
 
     var id: String {
         switch self {
@@ -443,6 +449,7 @@ private enum SidebarItem: Identifiable {
         case .newThread: "newThread"
         case .gap: "gap"
         case .header(let section, _): "header:\(section.rawValue)"
+        case .sectionEnd(let section): "end:\(section.rawValue)"
         // A slim row has an id of its own, or the list keeps the thread's active row for it.
         case .slim(let thread): "slim:\(thread.id)"
         }
