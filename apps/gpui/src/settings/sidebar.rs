@@ -8,11 +8,12 @@ use gpui_kit::*;
 use crate::sidebar::{ROW_INSET, ROW_PADDING, SidebarFooter};
 use crate::store::Store;
 use crate::store::settings::{SettingsEntry, SettingsSection};
-use crate::theme::{self, IconSize, Radius, colors};
+use crate::theme::{self, ControlSize, IconSize, Radius, colors};
 use crate::ui::{Highlight, InputField, InputVariant, edges, hover_state, icons, track_hover};
 
-const SECTION_HEIGHT: f32 = 32.;
-const RESULT_HEIGHT: f32 = 30.;
+const ROW_HEIGHT: f32 = ControlSize::Regular.height();
+/// The room between a row's symbol and its words, as in the threads' sidebar.
+const ROW_GAP: f32 = 7.;
 /// Where the sidebar's text starts: past the rows' inset and their padding.
 const SIDEBAR_EDGE: f32 = ROW_INSET + ROW_PADDING;
 
@@ -76,11 +77,11 @@ impl SettingsSidebar {
             .enumerate()
             .map(|(index, section)| {
                 let content = div()
-                    .h(px(SECTION_HEIGHT))
-                    .px(px(9.))
+                    .h(px(ROW_HEIGHT))
+                    .px(px(ROW_PADDING))
                     .flex()
                     .items_center()
-                    .gap(px(8.))
+                    .gap(px(ROW_GAP))
                     .child(icons::symbol(section.symbol(), IconSize::Md))
                     .child(div().text_size(px(13.)).child(section.title()));
                 self.row(
@@ -115,12 +116,12 @@ impl SettingsSidebar {
             .enumerate()
             .map(|(index, entry)| {
                 let content = div()
-                    .min_h(px(RESULT_HEIGHT))
-                    .px(px(8.))
+                    .min_h(px(ROW_HEIGHT))
+                    .px(px(ROW_PADDING))
                     .py(px(4.))
                     .flex()
                     .items_center()
-                    .gap(px(8.))
+                    .gap(px(ROW_GAP))
                     .child(icons::symbol(entry.section.symbol(), IconSize::Md))
                     .child(
                         div()
@@ -165,7 +166,7 @@ impl Render for SettingsSidebar {
             .pt(px(theme::TOP_BAR))
             .child(
                 div()
-                    .px(px(10.))
+                    .px(px(ROW_INSET))
                     .pt(px(2.))
                     .pb(px(6.))
                     .child(InputField::new(&self.search).icon("search").variant(InputVariant::Filled).clearable(true)),

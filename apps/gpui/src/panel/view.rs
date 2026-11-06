@@ -272,9 +272,8 @@ impl RightPanelView {
     fn tab_chip(&self, tab: &PanelTab, active: bool, cx: &mut Context<Self>) -> AnyElement {
         let c = colors(cx);
         let height = ControlSize::Regular.height();
-        let close_size = ControlSize::Small.height();
-        // The close button is as far from the tab's side as from its top and bottom.
-        let close_margin = (height - close_size) / 2.;
+        let close_size = ControlSize::Inset.height();
+        let close_margin = ControlSize::INSET_MARGIN;
         let key = tab.id();
         let hovering = self.hovered_tab.as_ref() == Some(&key);
         let lit = hovering || active;
@@ -320,8 +319,8 @@ impl RightPanelView {
             .child(div().relative().size(px(close_size)).flex_shrink_0().when(lit, |close| {
                 close.child(
                     ActionButton::icon(SharedString::from(format!("close-{key}")), "x", close_help)
-                        .small()
-                        .symbol_size(ControlSize::Small.small_symbol())
+                        .size(ControlSize::Inset)
+                        .symbol_size(ControlSize::Inset.small_symbol())
                         .row(Some(if active { Layer::ControlLit } else { Layer::Control }))
                         .on_click(act(&self.store, move |store, _| store.close_tab(&close_tab))),
                 )
@@ -477,7 +476,7 @@ impl RightPanelView {
                 .group(group.clone())
                 .relative()
                 .w_full()
-                .h(px(34. + LAUNCHER_GAP))
+                .h(px(ControlSize::Regular.height() + LAUNCHER_GAP))
                 .px(px(10.))
                 .flex()
                 .items_center()

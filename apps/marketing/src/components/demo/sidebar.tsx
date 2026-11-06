@@ -98,7 +98,7 @@ export function Sidebar({
   return (
     <div className="flex h-full flex-col">
       <div className="mx-2 mt-0.5 mb-1.5 flex shrink-0 gap-2">
-        <label className="flex h-7 min-w-0 flex-1 items-center gap-1.5 rounded-md bg-input px-[9px]">
+        <label className="flex h-8 min-w-0 flex-1 items-center gap-1.5 rounded-md bg-input px-[9px]">
           <SearchIcon className="size-3 text-muted-stronger-foreground" />
           <input
             value={search}
@@ -258,7 +258,7 @@ export function Sidebar({
             {servers.map((server) => (
               <div
                 key={server.name}
-                className="mx-2 flex h-[30px] items-center gap-[7px] px-2"
+                className="mx-2 flex h-8 items-center gap-[7px] px-2"
               >
                 <StateRing />
                 <span className="text-[12px] font-medium">{server.name}</span>
@@ -276,7 +276,7 @@ export function Sidebar({
             type="button"
             aria-label="you@motile.app"
             title="you@motile.app"
-            className="ml-[3px] flex size-7 items-center justify-center rounded-md hover:bg-background-accent"
+            className="ml-[3px] flex size-8 items-center justify-center rounded-md hover:bg-background-accent"
           >
             <span className="flex size-5 items-center justify-center rounded-full bg-background-accent text-[10px] font-semibold text-foreground">
               Y
@@ -504,7 +504,7 @@ function Section({
       <button
         type="button"
         onClick={onToggle}
-        className="group mx-2 my-px flex h-[30px] w-[calc(100%-16px)] items-center gap-[7px] rounded-md px-2 text-left text-muted-foreground hover:bg-background-accent-larger hover:text-foreground"
+        className="group mx-2 my-px flex h-8 w-[calc(100%-16px)] items-center gap-[7px] rounded-md px-2 text-left text-muted-foreground hover:bg-background-accent-larger hover:text-foreground"
       >
         <span className="text-[12px] font-medium">{title}</span>
         <span className="text-[11px] text-muted-strongest-foreground tabular-nums">
@@ -547,7 +547,7 @@ function SlimRow({
       onPointerEnter={(event) => onPoint(thread, event.currentTarget)}
       onPointerLeave={() => onPoint(null)}
       className={cn(
-        "group mx-2 my-px flex h-[30px] w-[calc(100%-16px)] items-center gap-[7px] rounded-md px-2 text-left",
+        "group mx-2 my-px flex h-8 w-[calc(100%-16px)] items-center gap-[7px] rounded-md px-2 text-left",
         lit
           ? "bg-background-accent-larger-stronger"
           : "hover:bg-background-accent-larger"
@@ -595,7 +595,7 @@ function FooterButton({
       type="button"
       aria-label={label}
       title={label}
-      className="flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-background-accent hover:text-foreground"
+      className="flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-background-accent hover:text-foreground"
     >
       <Icon className="size-4" />
     </button>

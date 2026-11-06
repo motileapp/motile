@@ -194,9 +194,8 @@ fun PanelTabChip(tab: PanelTab, active: Boolean) {
     val store = LocalStore.current
     val panel = store.rightPanel
     val height = ControlSize.Regular.height
-    val closeSize = ControlSize.Small.height
-    // The close button is as far from the tab's side as from its top and bottom.
-    val closeMargin = (height - closeSize) / 2
+    val closeSize = ControlSize.Inset.height
+    val closeMargin = ControlSize.insetMargin
     // How far above and under the tab a finger still presses it.
     val reach = max(0f, (Platform.minimumPress - height.value) / 2).dp
     val menu = rememberMenuState()
@@ -236,7 +235,7 @@ fun PanelTabChip(tab: PanelTab, active: Boolean) {
         if (active) {
             CompositionLocalProvider(LocalRow provides Surface.Layer.ControlLit) {
                 ActionButton(
-                    icon = Symbol.X, help = store.shortcuts.help("Close", "rightPanel.close"), size = ControlSize.Small, symbolSize = ControlSize.Small.smallSymbol,
+                    icon = Symbol.X, help = store.shortcuts.help("Close", "rightPanel.close"), size = ControlSize.Inset, symbolSize = ControlSize.Inset.smallSymbol,
                     modifier = Modifier.padding(end = closeMargin + PanelTabChip.margin),
                 ) { panel.close(tab) }
             }
@@ -291,7 +290,7 @@ private fun LauncherRow(symbol: Symbol, title: String, reason: String?, count: I
             inset = PaddingValues(vertical = LAUNCHER_GAP / 2),
         ) {
             Row(
-                Modifier.fillMaxWidth().height(pressable(34f) + LAUNCHER_GAP).padding(horizontal = 10.dp),
+                Modifier.fillMaxWidth().height(maxOf(ControlSize.Regular.height, Platform.minimumPress.dp) + LAUNCHER_GAP).padding(horizontal = 10.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {

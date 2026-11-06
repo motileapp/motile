@@ -21,7 +21,7 @@ use std::rc::Rc;
 use gpui_kit::prelude::*;
 use gpui_kit::*;
 
-use crate::theme::{IconSize, Layer, Opacity, Radius, Surface, colors};
+use crate::theme::{ControlSize, IconSize, Layer, Opacity, Radius, Surface, colors};
 pub use agent_avatar::{AgentAvatar, AgentAvatars};
 pub use control::{
     ActionButton, ActionMenu, Chip, InputField, InputVariant, Segmented, Select, Spinner, Switch, TextArea, Variant,
@@ -551,7 +551,7 @@ impl Element for InertScope {
 
 /// A button in the window's top bar. The buttons touch: the space seen between them is theirs.
 pub const TOOLBAR_MARGIN: f32 = 2.;
-pub const TOOLBAR_WIDTH: f32 = 28. + 2. * TOOLBAR_MARGIN;
+pub const TOOLBAR_WIDTH: f32 = ControlSize::Regular.height() + 2. * TOOLBAR_MARGIN;
 /// Larger than a regular button's, which matches text these have none of.
 pub const TOOLBAR_SYMBOL: IconSize = IconSize::Md;
 

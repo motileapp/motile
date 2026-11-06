@@ -1953,7 +1953,8 @@ impl RenderOnce for InputField {
         let clear = self.state.clone();
         let escape = self.state.clone();
         let focus = self.state.read(cx).focus_handle(cx);
-        let clear_inset = (size.height() - ControlSize::Small.height()) / 2.;
+        let clear_size = if size == ControlSize::Regular { ControlSize::Inset } else { ControlSize::Small };
+        let clear_inset = (size.height() - clear_size.height()) / 2.;
         div()
             .w_full()
             .when(!bare, |field| field.h(px(size.height())))
@@ -1993,7 +1994,7 @@ impl RenderOnce for InputField {
             .when(clears, |field| {
                 field.child(
                     ActionButton::icon("clear", "x", "Clear")
-                        .small()
+                        .size(clear_size)
                         .surface(self.surface)
                         .margin(Edges {
                             top: 0.,

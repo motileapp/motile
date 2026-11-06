@@ -27,7 +27,7 @@ const RING_INSET: f32 = 5.;
 const INSET: f32 = (CARD_HEIGHT - TILE_SIDE) / 2.;
 const LINE_HEIGHT: f32 = 16.;
 /// The button is as far from the card's side as from its top and bottom.
-const BUTTON_MARGIN: f32 = (CARD_HEIGHT - 28.) / 2.;
+const BUTTON_MARGIN: f32 = (CARD_HEIGHT - ControlSize::Regular.height()) / 2.;
 const REVEAL_TITLE: &str = crate::models::REVEAL_IN_FOLDER;
 /// Where the downloads went, by the file's name on the server, in the preferences.
 const REMEMBERED: &str = "downloaded_files";

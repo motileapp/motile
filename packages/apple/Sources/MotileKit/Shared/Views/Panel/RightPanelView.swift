@@ -231,9 +231,8 @@ struct PanelTabChip: View {
     @Environment(\.surface) private var surface
 
     private static let height = ControlSize.regular.height
-    private static let closeSize = ControlSize.small.height
-    /// The close button is as far from the tab's side as from its top and bottom.
-    private static let closeMargin = (height - closeSize) / 2
+    private static let closeSize = ControlSize.inset.height
+    private static let closeMargin = ControlSize.insetMargin
     /// How far above and under the tab a finger still presses it.
     private static let reach = max(0, (Platform.minimumPress - height) / 2)
     /// The room on each side that looks empty but is the tab's, so no click falls between tabs.
@@ -263,7 +262,7 @@ struct PanelTabChip: View {
                 small: true)
         ) { panel.activate(tab) }
         .overlay(alignment: .trailing) {
-            ActionButton(icon: .x, help: store.shortcuts.help("Close", "rightPanel.close"), size: .small, symbolSize: ControlSize.small.smallSymbol) { panel.close(tab) }
+            ActionButton(icon: .x, help: store.shortcuts.help("Close", "rightPanel.close"), size: .inset, symbolSize: ControlSize.inset.smallSymbol) { panel.close(tab) }
                 .environment(\.row, active ? .controlLit : .control)
                 .padding(.trailing, Self.closeMargin + Self.margin)
                 .opacity(hovering || active ? 1 : 0)
@@ -355,7 +354,7 @@ private struct PanelLauncher: View {
             }
             .foregroundStyle(Color.themeForeground)
             .padding(.horizontal, 10)
-            .frame(height: pressable(34) + Self.gap)
+            .frame(height: max(ControlSize.regular.height, Platform.minimumPress) + Self.gap)
         }
         .buttonStyle(.highlight(inset: EdgeInsets(top: Self.gap / 2, leading: 0, bottom: Self.gap / 2, trailing: 0)))
         .disabled(reason != nil)
