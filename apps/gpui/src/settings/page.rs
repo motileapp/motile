@@ -41,6 +41,13 @@ const FADE: f32 = 20.;
 /// The side of an integration's logo tile, and the room between it and the integration's name.
 const LOGO_TILE: f32 = 32.;
 const LOGO_GAP: f32 = 12.;
+const SHOW_IN_FILES: &str = if cfg!(target_os = "macos") {
+    "Show in Finder"
+} else if cfg!(windows) {
+    "Show in Explorer"
+} else {
+    "Show in Files"
+};
 
 /// What the settings take away once the user says so: a server, a server with every copy of its
 /// threads, a project or an agent's account.
@@ -178,6 +185,7 @@ impl SettingsPage {
             self.sidebar(cx),
             self.provider_limits(cx),
             self.storage(cx),
+            self.log(cx),
         ]
     }
 
@@ -330,6 +338,18 @@ impl SettingsPage {
         let leading = label("Images and videos", Some(description), None, Cut::Wraps, cx);
         let rows = vec![row(vec![leading], vec![clear.into_any_element()]).into_any_element()];
         group("storage", "Storage", None, true, rows, cx)
+    }
+
+    fn log(&self, cx: &mut Context<Self>) -> AnyElement {
+        let file = motile_core::log::file(&self.store.read(cx).data_dir);
+        let show = large("show-log", SHOW_IN_FILES).on_click(move |_, _, cx| cx.reveal_path(&file));
+        let description = format!(
+            "What Motile did on {}, such as connecting to your servers. It helps look into a problem.",
+            crate::models::THIS_DEVICE
+        );
+        let leading = label("Log", Some(description), None, Cut::Wraps, cx);
+        let rows = vec![row(vec![leading], vec![show.into_any_element()]).into_any_element()];
+        group("log", "Troubleshooting", None, true, rows, cx)
     }
 
     fn servers(&self, cx: &mut Context<Self>) -> Vec<AnyElement> {

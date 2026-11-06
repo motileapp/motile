@@ -87,7 +87,7 @@ pub struct SettingsEntry {
 
 const WORKING_SHELF: &str = "sidebar.workingShelf";
 
-const ENTRIES: [(&str, &str, SettingsSection, &str); 25] = [
+const ENTRIES: [(&str, &str, SettingsSection, &str); 26] = [
     ("account", "Account", SettingsSection::General, "signed in email sign out"),
     ("updates", "Updates", SettingsSection::General, "version check for updates release"),
     ("appearance", "Theme", SettingsSection::General, "appearance light dark system mode"),
@@ -105,6 +105,7 @@ const ENTRIES: [(&str, &str, SettingsSection, &str); 25] = [
         "provider limits usage accounts switch quota rate",
     ),
     ("storage", "Images and videos", SettingsSection::General, "storage cache clear media disk"),
+    ("log", "Log", SettingsSection::General, "troubleshooting debug problem connecting logs file"),
     (
         "agent-accounts",
         "Provider Accounts",
