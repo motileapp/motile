@@ -339,8 +339,8 @@ impl Sidebar {
         let (count, expanded) = (shelf.threads(store).len(), shelf.expanded(&store.prefs));
         let key = shelf.group();
         let lit = self.hovering(key);
-        let (title, symbol) = section_label(shelf.section());
-        let color = if lit { c.foreground } else { c.muted_stronger_foreground };
+        let (title, _) = section_label(shelf.section());
+        let color = if lit { c.foreground } else { c.muted_foreground };
         let margin = row_margin();
         let handle = self.store.clone();
         div()
@@ -360,7 +360,6 @@ impl Sidebar {
                     .flex()
                     .items_center()
                     .gap(px(7.))
-                    .children(symbol.map(|symbol| line_mark(icons::symbol(symbol, IconSize::Sm).text_color(color))))
                     .child(
                         div()
                             .min_w_0()

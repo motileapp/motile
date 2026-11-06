@@ -577,14 +577,13 @@ fun StateRing(tint: Color) {
     }
 }
 
-/** The line of a part of the sidebar: its symbol and its name in one colour, how many threads it holds, and the chevron that opens and closes it. Its name lines up with the slim rows' titles. */
+/** The line of a part of the sidebar: its name, how many threads it holds, always the quietest, and the chevron that opens and closes it. */
 @Composable
 fun SectionLine(section: ThreadSection, count: Int, expanded: Boolean, modifier: Modifier = Modifier) {
     val palette = Theme.colors
     val lit = LocalRow.current != null
-    val color = if (lit) palette.foreground else palette.mutedStrongerForeground
+    val color = if (lit) palette.foreground else palette.mutedForeground
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically) {
-        section.symbol?.let { ShelfLineMark { Icon(it, IconSize.Sm, color = color) } }
         Text(section.title, size = 12f, weight = FontWeight.Medium, color = color, maxLines = 1)
         Text("$count", style = Theme.uiDigits(11f), color = palette.mutedStrongestForeground)
         Spacer(Modifier.weight(1f))

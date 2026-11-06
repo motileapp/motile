@@ -250,8 +250,8 @@ private fun PutAwayBanner(thread: ThreadInfo) {
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        thread.section.symbol?.let { Icon(it, iconSize(text = 12.5f), color = Theme.colors.mutedForeground) }
-        Text(title, size = 12.5f, weight = FontWeight.Medium)
+        thread.section.symbol?.let { Icon(it, iconSize(text = 12.5f), color = Theme.colors.foreground) }
+        Text(title, size = 12.5f, weight = FontWeight.Medium, color = Theme.colors.foreground)
         Spacer(Modifier.weight(1f))
         ActionButton(action, modifier = Modifier.overhang(vertical = 4.dp), variant = ButtonVariant.Link, size = ControlSize.Small, onClick = perform)
     }

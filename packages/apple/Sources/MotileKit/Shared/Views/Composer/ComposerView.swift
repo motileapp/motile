@@ -236,7 +236,6 @@ struct ComposerView: View {
         HStack(spacing: 8) {
             if let symbol = section.symbol {
                 Image(symbol, size: .sm)
-                    .foregroundStyle(Color.themeMutedForeground)
             }
             Text(title)
                 .fontWeight(.medium)

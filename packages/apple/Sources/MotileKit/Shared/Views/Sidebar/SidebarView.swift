@@ -1167,8 +1167,8 @@ struct ThreadStatus: View {
     }
 }
 
-/// The line of a part of the list: its symbol and its name in one colour, lit only under the
-/// pointer, how many threads it holds, always the quietest, and the chevron that opens and closes it.
+/// The line of a part of the list: its name, lit only under the pointer, how many threads it
+/// holds, always the quietest, and the chevron that opens and closes it.
 struct SectionLine: View {
     let section: ThreadSection
     let count: Int
@@ -1177,15 +1177,10 @@ struct SectionLine: View {
 
     var body: some View {
         HStack(spacing: 7) {
-            Group {
-                if let symbol = section.symbol {
-                    ShelfLineMark { Image(symbol, size: .sm) }
-                }
-                Text(section.title)
-                    .font(.ui(size: 12, weight: .medium))
-                    .lineLimit(1)
-            }
-            .foregroundStyle(lit ? Color.themeForeground : Color.themeMutedStrongerForeground)
+            Text(section.title)
+                .font(.ui(size: 12, weight: .medium))
+                .lineLimit(1)
+                .foregroundStyle(lit ? Color.themeForeground : Color.themeMutedForeground)
             Text("\(count)")
                 .font(.ui(size: 11))
                 .foregroundStyle(Color.themeMutedStrongestForeground)
@@ -1381,7 +1376,10 @@ struct SidebarFooter: View {
                     .padding(.trailing, sidebarEdge - Self.edge - serverButtonOutset)
             }
             HStack(spacing: 0) {
+                // The avatar sits 2 further in than the buttons beside it, which stay put.
                 AccountMenu(margin: Self.reach)
+                    .padding(.leading, 2)
+                    .padding(.trailing, -2)
                 if store.showsUsage || store.settings != nil {
                     ActionButton(
                         "Back", icon: .arrowLeft, help: "Back to the threads (Esc)", variant: .ghost, fills: true, alignment: .leading,

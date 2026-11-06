@@ -77,4 +77,4 @@ val AppStore.mediaStorageUsed: String
 private fun bytes(count: Long): String = Formatter.formatFileSize(Platform.context, count)
 
 fun steersDescription(steers: Boolean): String =
-    if (steers) "The agent reads it at once, in the turn that runs" else "Waits for the turn to end and starts the next one"
+    if (steers) "The agent reads it at once, in the turn that runs." else "Waits for the turn to end and starts the next one."

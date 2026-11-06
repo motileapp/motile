@@ -399,7 +399,8 @@ impl Composer {
                 .items_center()
                 .gap(px(8.))
                 .text_size(px(12.5))
-                .children(symbol.map(|symbol| icons::symbol(symbol, IconSize::Sm).text_color(c.muted_foreground)))
+                .text_color(c.foreground)
+                .children(symbol.map(|symbol| icons::symbol(symbol, IconSize::Sm).text_color(c.foreground)))
                 .child(div().font_weight(FontWeight::MEDIUM).child(title))
                 .child(div().flex_1())
                 .child(div().my(px(-4.)).child(

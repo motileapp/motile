@@ -117,7 +117,8 @@ impl Render for SidebarFooter {
             .items_center()
             .mx(px(-symbol_inset() - reach().left))
             .my(px(-reach().top))
-            .child(account)
+            // The avatar sits 2 further in than the buttons beside it, which stay put.
+            .child(div().ml(px(2.)).mr(px(-2.)).child(account))
             .when(route_open, |row| {
                 let store = handle.clone();
                 row.child(

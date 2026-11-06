@@ -74,6 +74,6 @@ extension AppStore {
     }
 
     static func steersDescription(_ steers: Bool) -> String {
-        steers ? "The agent reads it at once, in the turn that runs" : "Waits for the turn to end and starts the next one"
+        steers ? "The agent reads it at once, in the turn that runs." : "Waits for the turn to end and starts the next one."
     }
 }

@@ -1,6 +1,5 @@
 import {
   AlarmClockIcon,
-  ArchiveIcon,
   BotIcon,
   ChartColumnIcon,
   ChevronDownIcon,
@@ -166,7 +165,6 @@ export function Sidebar({
           <div className="mt-auto pt-px pb-0.5">
           {!query && working.length > 0 && (
             <Section
-              icon={CircleDashedIcon}
               title="Working"
               count={working.length}
               open={workingOpen}
@@ -191,7 +189,6 @@ export function Sidebar({
           )}
           {!query && (
             <Section
-              icon={AlarmClockIcon}
               title="Snoozed"
               count={snoozedThreads.length}
               open={snoozedOpen}
@@ -214,7 +211,6 @@ export function Sidebar({
           )}
           {!query && (
             <Section
-              icon={ArchiveIcon}
               title="Archived"
               count={archivedThreads.length}
               open={archivedOpen}
@@ -486,14 +482,12 @@ const isWorking = (thread: Thread) =>
 /** A part of the list at its bottom: its line, laid out as a row, with its symbol and name lit only under the
  * pointer, how many threads it holds, always the quietest, and its chevron, then its rows. */
 function Section({
-  icon: Icon,
   title,
   count,
   open,
   onToggle,
   children,
 }: {
-  icon: LucideIcon
   title: string
   count: number
   open: boolean
@@ -505,11 +499,8 @@ function Section({
       <button
         type="button"
         onClick={onToggle}
-        className="group mx-2 my-px flex h-[30px] w-[calc(100%-16px)] items-center gap-[7px] rounded-md px-2 text-left text-muted-stronger-foreground hover:bg-background-accent-larger hover:text-foreground"
+        className="group mx-2 my-px flex h-[30px] w-[calc(100%-16px)] items-center gap-[7px] rounded-md px-2 text-left text-muted-foreground hover:bg-background-accent-larger hover:text-foreground"
       >
-        <span className="flex w-4 shrink-0 justify-center">
-          <Icon className="size-3.5" />
-        </span>
         <span className="text-[12px] font-medium">{title}</span>
         <span className="text-[11px] text-muted-strongest-foreground tabular-nums">
           {count}

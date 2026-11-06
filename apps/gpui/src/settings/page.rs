@@ -251,9 +251,9 @@ impl SettingsPage {
     fn messages(&self, cx: &mut Context<Self>) -> AnyElement {
         let steers = self.store.read(cx).steers();
         let description = if steers {
-            "The agent reads it at once, in the turn that runs"
+            "The agent reads it at once, in the turn that runs."
         } else {
-            "Waits for the turn to end and starts the next one"
+            "Waits for the turn to end and starts the next one."
         };
         let store = self.store.clone();
         let picker = ActionMenu::new("steers", if steers { "Steer" } else { "Queue" }, move |_, _| {
