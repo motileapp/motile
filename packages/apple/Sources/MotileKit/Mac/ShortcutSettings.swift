@@ -16,11 +16,11 @@ struct ShortcutSettings: View {
             caption: "Click a shortcut to record new keys. Where two take the same keys, the one added last wins.", carded: false
         ) {
             HStack(spacing: 8) {
-                InputField("Search shortcuts", text: $query, icon: .search, size: .large, clearable: true)
+                SearchField(text: $query, prompt: "Search shortcuts")
                 HStack(spacing: 0) {
-                    ActionButton("Add Shortcut", icon: .plus, variant: .outline, size: .large, margin: .beside(trailing: 4)) { adding = .some(nil) }
+                    ActionButton("Add Shortcut", icon: .plus, variant: .outline, margin: .beside(trailing: 4)) { adding = .some(nil) }
                         .disabled(adding != nil)
-                    ActionButton(icon: .fileBraces, help: "Open keybindings.json", variant: .outline, size: .large, margin: .beside(leading: 4)) {
+                    ActionButton(icon: .fileBraces, help: "Open keybindings.json", variant: .outline, margin: .beside(leading: 4)) {
                         store.openShortcutsFile()
                     }
                 }
