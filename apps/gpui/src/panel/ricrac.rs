@@ -15,6 +15,7 @@ use motile_protocol::wire::{NewRicracIssue, RicracChange, RicracState, RicracSta
 use super::pull_request::text_blocks;
 use super::state::{Loaded, PanelTarget};
 use crate::models::ago;
+use crate::sidebar::{DONE_ROW_HEIGHT, ROW_INSET, ROW_PADDING};
 use crate::store::Store;
 use crate::store::ricrac::{
     Group, KINDS, PRIORITIES, Page, RicracChoice, RicracFilter, Row, priority_name, priority_symbol, state_symbol,
@@ -187,15 +188,24 @@ impl RicracView {
                 .flex_shrink_0()
                 .flex()
                 .flex_col()
-                .child(bar_row(cx).children(pickers).child(div().flex_1()))
-                .child(bar_row(cx).children(tools))
+                .child(list_bar_row().children(pickers).child(div().flex_1()))
+                .child(
+                    div()
+                        .px(px(ROW_INSET))
+                        .pt(px(BAR_GAP / 2.))
+                        .pb(px(ROW_INSET))
+                        .flex()
+                        .items_center()
+                        .gap(px(BAR_GAP))
+                        .children(tools),
+                )
                 .child(divider(cx))
         } else {
             div()
                 .flex_shrink_0()
                 .flex()
                 .flex_col()
-                .child(bar_row(cx).children(pickers).child(div().flex_1().min_w(px(4.))).children(tools))
+                .child(list_bar_row().children(pickers).child(div().flex_1().min_w(px(4.))).children(tools))
                 .child(divider(cx))
         };
         let content = self.issues_content(target, &choice, &search, narrow, cx);
@@ -295,7 +305,7 @@ impl RicracView {
         })
         .button(|button| button.help("Which team's issues to show"));
         let workspaces = workspaces.margin(beside(0., BAR_GAP));
-        vec![div().flex().items_center().child(div().ml(px(-8.)).child(workspaces)).child(team_menu).into_any_element()]
+        vec![div().flex().items_center().child(workspaces).child(team_menu).into_any_element()]
     }
 
     fn tools(&self, target: &PanelTarget, choice: &RicracChoice, narrow: bool, cx: &Context<Self>) -> Vec<AnyElement> {
@@ -447,10 +457,10 @@ impl RicracView {
                 Entry::Header { state, count, folded } => header(state, *count, *folded, &place, cx),
                 Entry::Issue { row, state, states } => issue_row(row, state, states, &place, cx),
             };
-            div().w_full().px(px(LIST_PADDING)).child(line).into_any_element()
+            div().w_full().px(px(ROW_INSET)).child(line).into_any_element()
         })
         .size_full()
-        .pt(px(LIST_PADDING))
+        .pt(px(ROW_INSET - HEADER_LEAD))
         .pb(px(super::END_ROOM))
         .into_any_element()
     }
@@ -1128,10 +1138,11 @@ impl Render for NewIssue {
 
 // The list
 
-/// The room around the list.
-const LIST_PADDING: f32 = 8.;
 /// The space between the rows' lights, and around each one: it looks empty but is the row's.
 const ROW_GAP: f32 = 2.;
+/// The room over a status's light, which parts it from the issues above. The list's top takes
+/// it off, so that the first light is as far below the bar as from the sides.
+const HEADER_LEAD: f32 = 6. + ROW_GAP / 2.;
 
 /// A line of the list: a status, or an issue under it with the statuses its team has.
 enum Entry {
@@ -1177,14 +1188,14 @@ fn header(state: &RicracState, count: usize, folded: bool, place: &ListPlace, cx
     let group = SharedString::from(format!("ricrac-header-{}", state.id));
     let light =
         div()
-            .h(px(30.))
+            .h(px(DONE_ROW_HEIGHT))
             .w_full()
             .rounded(px(Radius::MD))
             .bg(c.background_secondary)
             .group_hover(group.clone(), |header| header.bg(c.background_secondary_accent))
             .flex()
             .items_center()
-            .px(px(10.))
+            .px(px(ROW_PADDING))
             .gap(px(8.))
             .child(
                 div().w(px(IconSize::Sm.side())).flex().justify_center().child(
@@ -1212,7 +1223,7 @@ fn header(state: &RicracState, count: usize, folded: bool, place: &ListPlace, cx
         .id(group.clone())
         .group(group)
         .w_full()
-        .pt(px(6. + ROW_GAP / 2.))
+        .pt(px(HEADER_LEAD))
         .pb(px(ROW_GAP / 2.))
         .child(light)
         .on_click(move |_, _, cx| {
@@ -1300,14 +1311,14 @@ fn issue_row(row: &Row, state: &RicracState, states: &[RicracState], place: &Lis
     };
     let lit = Surface::Background.layer(Layer::Row, c);
     let light = div()
-        .h(px(34.))
+        .h(px(DONE_ROW_HEIGHT))
         .w_full()
         .rounded(px(Radius::MD))
         .group_hover(group.clone(), move |row| row.bg(lit))
         .flex()
         .items_center()
-        .pl(px(6.))
-        .pr(px(10.))
+        .pl(px((DONE_ROW_HEIGHT - ControlSize::Small.height()) / 2.))
+        .pr(px(ROW_PADDING))
         .gap(px(4.))
         .child(priority)
         .child(status)
@@ -1530,14 +1541,19 @@ fn initials_disc(initials: String, name: String, cx: &App) -> impl IntoElement {
         .tooltip(tooltip(name))
 }
 
-/// A row of the strip under the tabs with what the open tab is about and its buttons.
 /// The room between what a bar holds. Buttons side by side share it, so that it only looks empty.
 const BAR_GAP: f32 = 4.;
 /// The room between an issue's property menus, which they share.
 const PROPERTY_GAP: f32 = 6.;
 
+/// A row of the strip under the tabs with what the open tab is about and its buttons.
 fn bar_row(_: &App) -> Div {
     div().h(px(36.)).pl(px(12.)).pr(px(4.)).flex().items_center().gap(px(BAR_GAP))
+}
+
+/// A row of the bar over the list, which keeps its controls as far from the sides as the rows.
+fn list_bar_row() -> Div {
+    div().h(px(36.)).px(px(ROW_INSET)).flex().items_center().gap(px(BAR_GAP))
 }
 
 fn message(text: impl Into<SharedString>, failed: bool, cx: &App) -> AnyElement {

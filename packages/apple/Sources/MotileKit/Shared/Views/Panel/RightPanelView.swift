@@ -125,32 +125,36 @@ let panelBarGap: CGFloat = 4
 struct PanelBar<Content: View, Second: View>: View {
     private let content: Content
     private let second: Second?
+    /// How far a bar of controls over a list keeps them from the sides, and its second row from
+    /// the line under it: as far as the list keeps its rows.
+    private let edge: CGFloat?
 
-    init(@ViewBuilder content: () -> Content) where Second == EmptyView {
+    init(edge: CGFloat? = nil, @ViewBuilder content: () -> Content) where Second == EmptyView {
         self.content = content()
         second = nil
+        self.edge = edge
     }
 
-    init(@ViewBuilder content: () -> Content, @ViewBuilder second: () -> Second) {
+    init(edge: CGFloat, @ViewBuilder content: () -> Content, @ViewBuilder second: () -> Second) {
         self.content = content()
         self.second = second()
+        self.edge = edge
     }
 
     var body: some View {
         VStack(spacing: 0) {
-            row { content }
-            if let second {
-                row { second }
+            HStack(spacing: panelBarGap) { content }
+                .padding(.leading, edge ?? 12)
+                .padding(.trailing, edge ?? 4)
+                .frame(height: pressable(36))
+            if let second, let edge {
+                HStack(spacing: panelBarGap) { second }
+                    .padding(.horizontal, edge)
+                    .padding(.top, panelBarGap / 2)
+                    .padding(.bottom, edge)
             }
             PanelLine()
         }
-    }
-
-    private func row<Row: View>(@ViewBuilder _ row: () -> Row) -> some View {
-        HStack(spacing: panelBarGap) { row() }
-            .padding(.leading, 12)
-            .padding(.trailing, 4)
-            .frame(height: pressable(36))
     }
 }
 

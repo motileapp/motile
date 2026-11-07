@@ -28,6 +28,9 @@ import app.motile.core.RicracUser
 import app.motile.core.Time
 import app.motile.platform.Platform
 import app.motile.platform.Symbol
+import app.motile.sidebar.doneRowHeight
+import app.motile.sidebar.sidebarRowInset
+import app.motile.sidebar.sidebarRowPadding
 import app.motile.theme.iconSize
 import app.motile.theme.ControlSize
 import app.motile.theme.LocalPalette
@@ -41,7 +44,6 @@ import app.motile.ui.Icon
 import app.motile.ui.MenuPopup
 import app.motile.ui.Text
 import app.motile.ui.pressPosition
-import app.motile.ui.pressable
 import app.motile.ui.rememberMenuState
 
 /** A line of the Ricrac list: a status, or an issue under it with the statuses its team has. */
@@ -59,6 +61,9 @@ sealed interface RicracListEntry {
 
 /** The space between the rows' lights, and around each one: it looks empty but is the row's. */
 private val rowGap = 2.dp
+
+/** The room over a status's light, which parts it from the issues above. */
+private val headerLead = 6.dp + rowGap / 2
 
 /**
  * The issues under their statuses, in a list that only builds the rows on screen. A tap on an issue
@@ -78,7 +83,7 @@ fun RicracList(
     fold: (String) -> Unit,
     change: (RicracRow, Map<String, Any?>) -> Unit,
 ) {
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 8.dp, end = 8.dp, top = 8.dp, bottom = panelEndRoom)) {
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = sidebarRowInset, end = sidebarRowInset, top = sidebarRowInset - headerLead, bottom = panelEndRoom)) {
         items(entries, key = { it.key }, contentType = { it::class }) { entry ->
             when (entry) {
                 is RicracListEntry.Header -> HeaderRow(entry) { fold(entry.state.id) }
@@ -93,14 +98,14 @@ fun RicracList(
 private fun HeaderRow(entry: RicracListEntry.Header, fold: () -> Unit) {
     val palette = LocalPalette.current
     val shape = RoundedCornerShape(Radius.md)
-    Box(Modifier.padding(top = 6.dp + rowGap / 2, bottom = rowGap / 2)) {
+    Box(Modifier.padding(top = headerLead, bottom = rowGap / 2)) {
         HighlightButton(
             onClick = fold,
             modifier = Modifier.fillMaxWidth().background(palette.backgroundSecondary, shape).semantics { contentDescription = "${entry.state.name}, ${entry.count}" },
             radius = Radius.md,
             fill = palette.backgroundSecondaryAccent,
         ) {
-            Row(Modifier.height(pressable(30f)).padding(horizontal = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.height(doneRowHeight).padding(horizontal = sidebarRowPadding), verticalAlignment = Alignment.CenterVertically) {
                 Icon(entry.state.symbol, iconSize(text = 12f), color = entry.state.color)
                 Spacer(Modifier.width(8.dp))
                 Text(entry.state.name, size = 12f, weight = FontWeight.SemiBold, color = palette.foreground, maxLines = 1)
@@ -141,7 +146,7 @@ private fun IssueRow(
             onLongClick = { menu.openAtPress() },
         ) {
             Row(
-                Modifier.height(pressable(34f)).padding(start = 6.dp, end = 10.dp),
+                Modifier.height(doneRowHeight).padding(start = (doneRowHeight - ControlSize.Small.height) / 2, end = sidebarRowPadding),
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
