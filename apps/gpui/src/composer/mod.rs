@@ -50,6 +50,8 @@ const TEXT_SIDE: f32 = 12.;
 const MENU_GAP: f32 = 5.;
 /// The least room between the attach button and the settings.
 const SPACER: f32 = 10.;
+/// How far the archived or snoozed banner's round button stands from the composer's top and side.
+const BANNER_BUTTON_INSET: f32 = 4.;
 /// The room before a divider of the settings, after a part's words, and after it, before the next
 /// part's symbol, which stands closer to its edge than words do: both look 9 points wide.
 const ROOM_AFTER_WORDS: f32 = 8.;
@@ -379,7 +381,8 @@ impl Composer {
         "Ask anything".into()
     }
 
-    /// Says the open thread is archived or snoozed, with the way back.
+    /// Says the open thread is archived or snoozed, with the way back: a round button tucked into
+    /// the composer's corner.
     fn put_away_banner(&self, thread: &ThreadInfo, cx: &mut Context<Self>) -> Option<impl IntoElement> {
         let c = colors(cx);
         let (store, id) = (self.store.clone(), thread.id.clone());
@@ -393,8 +396,9 @@ impl Composer {
         Some(
             div()
                 .pl(px(16.))
-                .pr(px(16. - ControlSize::Small.padding()))
-                .pt(px(12.))
+                .pr(px(BANNER_BUTTON_INSET))
+                .pt(px(BANNER_BUTTON_INSET))
+                .mb(px(-BANNER_BUTTON_INSET))
                 .flex()
                 .items_center()
                 .gap(px(8.))
@@ -403,19 +407,17 @@ impl Composer {
                 .children(symbol.map(|symbol| icons::symbol(symbol, IconSize::Sm).text_color(c.foreground)))
                 .child(div().font_weight(FontWeight::MEDIUM).child(title))
                 .child(div().flex_1())
-                .child(div().my(px(-4.)).child(
-                    ActionButton::new("bring-back", action).link().small().surface(Surface::Composer).on_click(
-                        move |_, _, cx| {
-                            store.update(cx, |store, cx| {
-                                if section == Section::Snoozed {
-                                    store.wake(std::slice::from_ref(&id));
-                                } else {
-                                    store.set_archived(std::slice::from_ref(&id), false, false, cx);
-                                }
-                                cx.notify();
-                            })
-                        },
-                    ),
+                .child(ActionButton::new("bring-back", action).link().round(true).surface(Surface::Composer).on_click(
+                    move |_, _, cx| {
+                        store.update(cx, |store, cx| {
+                            if section == Section::Snoozed {
+                                store.wake(std::slice::from_ref(&id));
+                            } else {
+                                store.set_archived(std::slice::from_ref(&id), false, false, cx);
+                            }
+                            cx.notify();
+                        })
+                    },
                 )),
         )
     }

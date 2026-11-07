@@ -229,9 +229,11 @@ struct ComposerView: View {
         return "Ask anything"
     }
 
-    private static let undoneButtonPadding = ControlSize.small.padding
+    /// How far the archived or snoozed banner's round button stands from the composer's top and side.
+    private static let bannerButtonInset: CGFloat = 4
 
-    /// Says the open thread is archived or snoozed, with the way back.
+    /// Says the open thread is archived or snoozed, with the way back: a round button tucked into
+    /// the composer's corner.
     private func putAwayBanner(_ section: ThreadSection, title: String, action: String, perform: @escaping () -> Void) -> some View {
         HStack(spacing: 8) {
             if let symbol = section.symbol {
@@ -240,13 +242,15 @@ struct ComposerView: View {
             Text(title)
                 .fontWeight(.medium)
             Spacer()
-            ActionButton(action, variant: .link, size: .small, action: perform)
-                .padding(.vertical, -4)
+            ActionButton(action, variant: .link, round: true, action: perform)
         }
         .font(.ui(size: 12.5))
         .padding(.leading, 16)
-        .padding(.trailing, 16 - Self.undoneButtonPadding)
-        .padding(.top, 12)
+        .padding(.trailing, Self.bannerButtonInset)
+        .padding(.top, Self.bannerButtonInset)
+        #if os(macOS)
+        .padding(.bottom, -Self.bannerButtonInset)
+        #endif
     }
 
     private var attachments: some View {

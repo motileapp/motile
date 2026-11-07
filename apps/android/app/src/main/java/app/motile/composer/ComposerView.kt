@@ -239,7 +239,10 @@ private fun AgentsButton(text: String, children: ThreadChildren, modifier: Modif
     FirstThatFits(modifier, { button("${children.running} working") }, { button("${children.running}") })
 }
 
-/** Says the open thread is archived or snoozed, with the way back. */
+/** How far the archived or snoozed banner's round button stands from the composer's top and side. */
+private val bannerButtonInset = 4.dp
+
+/** Says the open thread is archived or snoozed, with the way back: a round button tucked into the composer's corner. */
 @Composable
 private fun PutAwayBanner(thread: ThreadInfo) {
     val store = LocalStore.current
@@ -250,14 +253,14 @@ private fun PutAwayBanner(thread: ThreadInfo) {
         else -> return
     }
     Row(
-        Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp - ControlSize.Small.padding, top = 12.dp),
+        Modifier.fillMaxWidth().padding(start = 16.dp, end = bannerButtonInset, top = bannerButtonInset),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         thread.section.symbol?.let { Icon(it, iconSize(text = 12.5f), color = Theme.colors.foreground) }
         Text(title, size = 12.5f, weight = FontWeight.Medium, color = Theme.colors.foreground)
         Spacer(Modifier.weight(1f))
-        ActionButton(action, modifier = Modifier.overhang(vertical = 4.dp), variant = ButtonVariant.Link, size = ControlSize.Small, onClick = perform)
+        ActionButton(action, variant = ButtonVariant.Link, round = true, onClick = perform)
     }
 }
 
