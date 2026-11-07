@@ -61,7 +61,7 @@ fun PanelScreen(beside: Boolean) {
                 )
             }
         }
-        Row(Modifier.fillMaxWidth().height(46.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().height(PanelTabStrip.height), verticalAlignment = Alignment.CenterVertically) {
             PanelTabStrip(tabs, Modifier.weight(1f))
             if (beside) PaneButtons()
         }

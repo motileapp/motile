@@ -44,7 +44,7 @@ export function DiffPanel({
       <div
         className={cn(
           "flex h-[52px] shrink-0 items-center gap-0.5 pr-[74px]",
-          pastWindowButtons ? "pl-[116px]" : "pl-2"
+          pastWindowButtons ? "pl-[116px]" : "pl-2.5"
         )}
       >
         <span className="flex h-8 items-center gap-1.5 rounded-md bg-background-accent-stronger pr-0.5 pl-[9px] text-[12px] font-medium">

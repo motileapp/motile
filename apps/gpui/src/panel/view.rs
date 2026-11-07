@@ -30,8 +30,8 @@ use crate::ui::agent_avatar::{AgentAvatar, state_color};
 use crate::ui::menu::Menu;
 use crate::ui::{ActionButton, ActionMenu, Highlight, KeyCaps, Spinner, TOOLBAR_WIDTH, Variant, beside, edges, icons};
 
-/// How far the tabs keep from the strip's ends.
-const TAB_EDGE: f32 = 8.;
+/// How far the tabs keep from the strip's ends, as far as from the top bar's top and bottom.
+const TAB_EDGE: f32 = (theme::TOP_BAR - ControlSize::Regular.height()) / 2.;
 /// The room on each side of a tab that looks empty but is the tab's, so no click falls between
 /// tabs.
 const TAB_MARGIN: f32 = 1.;
