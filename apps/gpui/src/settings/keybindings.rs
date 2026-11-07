@@ -242,17 +242,12 @@ impl KeybindingsPage {
             .flex()
             .items_center()
             .child(
-                div()
-                    .flex_1()
-                    .min_w_0()
-                    .mr(px(8.))
-                    .child(InputField::new(&self.query).icon("search").size(ControlSize::Large).clearable(true)),
+                div().flex_1().min_w_0().mr(px(8.)).child(InputField::new(&self.query).icon("search").clearable(true)),
             )
             .child(
                 ActionButton::new("add-shortcut", "Add Shortcut")
                     .symbol("plus")
                     .outline()
-                    .large()
                     .disabled(adding)
                     .margin(beside(0., 4.))
                     .on_click(cx.listener(|this, _, _, cx| this.start_adding(None, cx))),
@@ -260,7 +255,6 @@ impl KeybindingsPage {
             .child(
                 ActionButton::icon("open-keybindings", "file-braces", "Open keybindings.json")
                     .outline()
-                    .large()
                     .margin(beside(4., 0.))
                     .on_click(move |_, _, cx| store.update(cx, |store, _| store.open_shortcuts_file())),
             )
