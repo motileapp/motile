@@ -38,6 +38,7 @@ import app.motile.theme.LocalForeground
 import app.motile.theme.Opacity
 import app.motile.theme.Palette
 import app.motile.theme.Radius
+import app.motile.theme.LocalRow
 import app.motile.theme.Theme
 import app.motile.theme.opacity
 import app.motile.ui.HighlightButton
@@ -50,6 +51,7 @@ import app.motile.ui.ProjectIcon
 import app.motile.ui.PullRequestLabel
 import app.motile.ui.Spinner
 import app.motile.ui.Text
+import app.motile.ui.rowText
 
 /** The field the sidebar searches its threads with. `capsule` leaves out its background and height, for a field that lies on a glass capsule and reaches its trailing end. */
 @Composable
@@ -143,14 +145,11 @@ fun SearchResultRow(
                 .padding(start = ThreadRow.sidePadding, end = ThreadRow.sidePadding, top = ThreadRow.topPadding, bottom = ThreadRow.bottomPadding),
         ) {
             Row(Modifier.height(scaled(22f).dp), verticalAlignment = Alignment.CenterVertically) {
-                ProjectIcon(project, Modifier.opacity(Opacity.Disabled, on = isDone && !highlighted), size = iconSize(text = 13f))
+                val lit = LocalRow.current != null
+                ProjectIcon(project, Modifier.opacity(Opacity.Disabled, on = isDone && !lit), size = iconSize(text = 13f))
                 Text(
                     title, Modifier.weight(1f).padding(start = 6.dp, end = 6.dp), size = 13f, weight = FontWeight.Medium, maxLines = 1,
-                    color = when {
-                        highlighted -> palette.foreground
-                        isDone -> palette.mutedStrongerForeground
-                        else -> palette.mutedForeground
-                    },
+                    color = rowText(unlit = if (isDone) palette.mutedStrongerForeground else palette.mutedForeground),
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                     ResultStatus(result, jump)

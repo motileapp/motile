@@ -71,6 +71,11 @@ fun HoverHighlight(
     Lighted(modifier.then(tracking), radius, selected, lit, inset, faded, hovered ?: tracked, small, fill, opaque = false, contentAlignment, content)
 }
 
+/** The foreground colour while the row it lies on is lit, under a finger, a pointer or selected, and `unlit` otherwise. */
+@Composable
+fun rowText(unlit: Color = LocalPalette.current.mutedForeground): Color =
+    if (LocalRow.current != null) LocalPalette.current.foreground else unlit
+
 /**
  * A button that looks as `HoverHighlight` lights: the same light under a finger and a pointer. One
  * that is selected, or `lit` as the one the arrow keys are on, has it without either. All of it

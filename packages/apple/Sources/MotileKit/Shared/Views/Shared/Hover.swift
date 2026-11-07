@@ -74,6 +74,23 @@ extension View {
     }
 }
 
+/// Text in the foreground colour while the row it lies on is lit, under the pointer, under a
+/// finger or selected, and `unlit` otherwise.
+private struct RowText: ViewModifier {
+    let unlit: Color
+    @Environment(\.row) private var row
+
+    func body(content: Content) -> some View {
+        content.foregroundStyle(row != nil ? Color.themeForeground : unlit)
+    }
+}
+
+extension View {
+    func rowText(unlit: Color = .themeMutedForeground) -> some View {
+        modifier(RowText(unlit: unlit))
+    }
+}
+
 /// What a button looks like under the pointer and under a finger: the same light. A button that
 /// is selected, or `lit` as the one the arrow keys are on, has it without either. All of the
 /// label takes the click, so wherever it lights it can be pressed.
