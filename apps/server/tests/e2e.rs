@@ -25,6 +25,7 @@ use motile_protocol::wire::{
 };
 use motile_server::access::Access;
 use motile_server::agents::environment::Environment;
+use motile_server::backup::Backup;
 use motile_server::gateway;
 use motile_server::hub::Hub;
 use motile_server::mcp;
@@ -252,7 +253,9 @@ async fn serve(
     let address = format!("{}@127.0.0.1:{port}", server_key.public()).parse().unwrap();
 
     let access = Access::new(vec![app_key.public()], None);
-    let server = Server { hub: hub.clone(), access: access.clone(), attachments: dir.path().join("attachments") };
+    let backup = Backup::new(hub.clone(), access.clone(), server_key.public(), dir.path().join("media"));
+    let server =
+        Server { hub: hub.clone(), access: access.clone(), attachments: dir.path().join("attachments"), backup };
     tokio::spawn(server.run(endpoint.clone()));
     (endpoint, address, hub, access)
 }

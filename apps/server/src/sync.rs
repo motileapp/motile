@@ -114,21 +114,30 @@ pub struct LogPart {
 
 impl LogPart {
     pub fn encode(&self) -> anyhow::Result<ChangeBatch> {
-        let compressed = zstd::encode_all(serde_json::to_vec(&self.set)?.as_slice(), COMPRESSION_LEVEL)?;
         Ok(ChangeBatch {
             log_id: self.log_id.clone(),
             after: self.after,
             up_to: self.up_to,
             more: self.more,
-            data: STANDARD.encode(compressed),
+            data: STANDARD.encode(self.compress()?),
         })
     }
-}
 
-pub fn decode(batch: &ChangeBatch) -> anyhow::Result<ChangeSet> {
-    let compressed = STANDARD.decode(&batch.data).context("The batch isn't base64.")?;
-    let json = zstd::decode_all(compressed.as_slice()).context("The batch can't be decompressed.")?;
-    Ok(serde_json::from_slice(&json)?)
+    /// The set as zstd-compressed JSON.
+    pub fn compress(&self) -> anyhow::Result<Vec<u8>> {
+        Ok(zstd::encode_all(serde_json::to_vec(&self.set)?.as_slice(), COMPRESSION_LEVEL)?)
+    }
+
+    pub fn decompress(log_id: &str, after: u64, up_to: u64, compressed: &[u8]) -> anyhow::Result<Self> {
+        let json = zstd::decode_all(compressed).context("The batch can't be decompressed.")?;
+        let set = serde_json::from_slice(&json)?;
+        Ok(Self { log_id: log_id.to_string(), after, up_to, more: false, set })
+    }
+
+    pub fn decode(batch: &ChangeBatch) -> anyhow::Result<Self> {
+        let compressed = STANDARD.decode(&batch.data).context("The batch isn't base64.")?;
+        Self::decompress(&batch.log_id, batch.after, batch.up_to, &compressed)
+    }
 }
 
 fn own_watermark(connection: &Connection) -> rusqlite::Result<Watermark> {
@@ -156,6 +165,10 @@ fn drop_copies(transaction: &Transaction, origin: &str) -> rusqlite::Result<()> 
 impl Store {
     pub fn watermark(&self) -> rusqlite::Result<Watermark> {
         own_watermark(&self.connection())
+    }
+
+    pub fn origin_watermark(&self, origin: &str) -> rusqlite::Result<Option<Watermark>> {
+        origin_watermark(&self.connection(), origin)
     }
 
     pub fn origin_watermarks(&self) -> rusqlite::Result<Vec<OriginWatermark>> {
@@ -306,7 +319,18 @@ impl Store {
         batch: &ChangeBatch,
         reset: bool,
     ) -> anyhow::Result<()> {
-        let set = decode(batch)?;
+        self.apply_part(origin, name, platform, &LogPart::decode(batch)?, reset)
+    }
+
+    pub fn apply_part(
+        &self,
+        origin: &str,
+        name: &str,
+        platform: &str,
+        batch: &LogPart,
+        reset: bool,
+    ) -> anyhow::Result<()> {
+        let set = &batch.set;
         let mut connection = self.connection();
         let transaction = connection.transaction()?;
         if own_watermark(&transaction)?.log_id == batch.log_id {
@@ -517,7 +541,7 @@ mod tests {
     }
 
     fn set(part: &LogPart) -> ChangeSet {
-        decode(&part.encode().unwrap()).unwrap()
+        LogPart::decode(&part.encode().unwrap()).unwrap().set
     }
 
     /// Carries the whole log of `from` (its own, or its copy of `origin`) to `to`.

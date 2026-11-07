@@ -5,6 +5,7 @@
 
 mod account_sheet;
 mod agent_gateway;
+mod backup_sheet;
 mod keybindings;
 mod layout;
 mod mcp_gateway;

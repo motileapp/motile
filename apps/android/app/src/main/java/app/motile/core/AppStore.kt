@@ -278,6 +278,9 @@ class AppStore(private val context: Context) {
     /** The servers removed from the account, whose threads stay to read from the copies. */
     var removedServers by mutableStateOf(emptyList<Server>())
         private set
+    /** The account's S3 bucket, which every server backs up to and syncs through. */
+    var backup by mutableStateOf(Backup())
+        private set
     private val serverUpdates = mutableStateMapOf<String, ServerUpdate>()
     /** Every server's projects as the core sent them, the removed servers' too. */
     private var everyProject = emptyList<Project>()
@@ -553,6 +556,10 @@ class AppStore(private val context: Context) {
             "servers" -> {
                 val servers = event.objects("servers").map { Server(it) }
                 return { apply(servers) }
+            }
+            "backup" -> {
+                val backup = Backup(event.obj("backup") ?: EmptyJSON)
+                return { this.backup = backup }
             }
             "threads" -> {
                 val serverID = event.string("server_id")
@@ -1598,6 +1605,11 @@ class AppStore(private val context: Context) {
     fun setContinueSettings(afterLimits: Boolean, afterRestarts: Boolean, server: Server) {
         val settings = mapOf("after_limits" to afterLimits, "after_restarts" to afterRestarts)
         core.send("set_continue_settings", mapOf("server_id" to server.id, "settings" to settings)) { alert(it) }
+    }
+
+    /** Backs every server up to the bucket once one of them could write to it; null turns the backup off. `done` gets the error, or null. */
+    fun setBackup(bucket: BackupBucket?, done: (String?) -> Unit) {
+        core.send("set_backup", mapOf("bucket" to bucket?.json)) { done(it.coreError?.message) }
     }
 
     fun removeServer(server: Server) {

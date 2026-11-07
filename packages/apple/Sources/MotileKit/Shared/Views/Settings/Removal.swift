@@ -10,6 +10,7 @@ enum Removal: Identifiable {
     case gateway(name: String)
     case gatewayAccount(GatewayAccount)
     case mcpServer(McpServerRow)
+    case backup
 
     var id: String {
         switch self {
@@ -20,6 +21,7 @@ enum Removal: Identifiable {
         case .gateway: "gateway"
         case .gatewayAccount(let account): "gateway-account/\(account.id)"
         case .mcpServer(let mcpServer): "mcp-server/\(mcpServer.id)"
+        case .backup: "backup"
         }
     }
 
@@ -32,6 +34,7 @@ enum Removal: Identifiable {
         case .gateway: "Remove Your Gateway?"
         case .gatewayAccount(let account): "Remove “\(account.name)” from Your Gateway?"
         case .mcpServer(let mcpServer): "Remove the “\(mcpServer.name)” MCP Server?"
+        case .backup: "Turn Off the Backup?"
         }
     }
 
@@ -40,7 +43,7 @@ enum Removal: Identifiable {
         case .server(let server):
             "Your account lets go of \(server.name). Its threads stay readable, and can go on, from the copies your other servers keep. If it is your only server, nothing is kept. What is on it stays there."
         case .serverCompletely(let server):
-            "\(server.name) leaves your account and every copy of its threads is deleted, on all your servers and clients. What is on \(server.name) itself stays there."
+            "\(server.name) leaves your account and every copy of its threads is deleted, on all your servers and clients\(store.backup.bucket == nil ? "" : " and in your backup"). What is on \(server.name) itself stays there."
         case .project(let project):
             "\(project.name) leaves your clients. Its folder stays on \(store.server(project.serverID)?.name ?? "its server") with everything in it."
         case .account(_, let server):
@@ -51,6 +54,8 @@ enum Removal: Identifiable {
             "Your gateway forgets its sign-in, and its threads move to your other accounts."
         case .mcpServer:
             "Agents won't get its tools anymore, and your gateway forgets its login."
+        case .backup:
+            "Your servers stop backing up to the bucket and sync through your clients again. What is in the bucket stays there."
         }
     }
 
@@ -59,6 +64,7 @@ enum Removal: Identifiable {
         switch self {
         case .server: "Unlink"
         case .serverCompletely: "Delete"
+        case .backup: "Turn Off"
         default: "Remove"
         }
     }
@@ -72,6 +78,7 @@ enum Removal: Identifiable {
         case .gateway: store.removeGateway()
         case .gatewayAccount(let account): store.removeGatewayAccount(account)
         case .mcpServer(let mcpServer): store.removeMcpServer(mcpServer)
+        case .backup: store.setBackup(nil)
         }
     }
 }

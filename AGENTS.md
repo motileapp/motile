@@ -286,8 +286,14 @@ shadcn's own colours, opacities and radii are gone from the theme.
 - `ui_lookups.rs`: a program's photos from Wikipedia and Wikimedia Commons, kept as the thread's
   media (`UiImages`), and street routes from OSRM (`UiRoute`), both kept in memory a while.
 - `icons.rs`: finds a project's icon in its folder.
-- `access.rs`: asks the auth server which clients belong to the account, which servers it
-  deleted completely, and which device is its gateway.
+- `access.rs`: asks the auth server which clients belong to the account, which servers it has and
+  unlinked, which it deleted completely, and which device is its gateway.
+- `backup.rs`: the account's S3 bucket, which a client gives the server (`SetBackup`). The server
+  puts its log's batches (`<key>/log/<log id>/…`), its `server.json` and its media
+  (`<key>/media/…`) there under its own key, and every minute copies the account's other servers'
+  logs from it, the unlinked ones' too, through `sync.rs`'s `apply`; it deletes the prefix of a
+  server the account deleted completely. A copied thread's media it fetches from the bucket when a
+  client asks for it. Clients don't carry to a server what it copies from the bucket.
 - `gateway.rs`: how the Gateway accounts' agents reach the gateway: an HTTP listener on the loopback
   interface, called with the thread's token, and the iroh connection to the gateway that carries each
   request. Codex's gateway sessions declare OpenAI actor authorization with that token so native
@@ -323,7 +329,11 @@ for tests.
 - `sync.rs`: carries the threads between the servers: a round a moment after a server connects or a
   thread changes asks each server how far its own log and its copies go, and moves what each lacks,
   from the origin itself or, for a removed server, from the server whose copy goes furthest. On a
-  metered network only what follows a copy is carried.
+  metered network only what follows a copy is carried. A server copies from its bucket what it says
+  it does (`Watermarks`' `bucket`), and nothing of that is carried to it.
+- `backup.rs`: the account's S3 bucket as the client knows it: its keys, kept in `backup.json`
+  beside the device key and given to every server that connects without one, and what Settings →
+  Servers says of the backup and under each server.
 - `link.rs`: keeps one server connected and follows its threads. A connection can look open while
   nothing gets through, so the link pings its server (`Ping`) every half minute, when a request has
   waited ten seconds, and when the client comes back or the network changes, and gives up one that
@@ -778,6 +788,10 @@ name, it writes one.
 `MOTILE_GH_PATH`), whose project has a local `origin` to push to. It keeps its pull requests in
 `build/dev/github.json`; edit that file to see a pull request fail its checks, conflict, wait for
 a review, have conversations on its lines or sit in a stack, and set `delay` to see a client wait.
+
+`scripts/fake-s3` stands in for S3 in the dev apps: a backup set up in a client with the endpoint
+`http://127.0.0.1:<S3_PORT>` (from `build/dev/ports`) and any bucket and keys keeps it in
+`build/dev/s3`; an access key with "wrong" in it is refused.
 
 `scripts/fake-linear` stands in for Linear in the dev apps (through `MOTILE_LINEAR_URL`), whose
 server starts out connected to its workspace. It keeps its team, users and issues in

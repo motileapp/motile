@@ -11,6 +11,7 @@ use motile_protocol::wire::{Agent, AgentAccount, ContinueSettings, PullRequestSe
 
 use super::account_sheet::AccountSheet;
 use super::agent_gateway::AgentGatewayPage;
+use super::backup_sheet::BackupSheet;
 use super::keybindings::KeybindingsPage;
 use super::layout::{
     Cut, END_ROOM, GROUP_GAP, INSET, PAGE_PADDING, TRAILING_GAP, Targets, column, footed_label, group, label,
@@ -50,13 +51,14 @@ const SHOW_IN_FILES: &str = if cfg!(target_os = "macos") {
 };
 
 /// What the settings take away once the user says so: a server, a server with every copy of its
-/// threads, a project or an agent's account.
+/// threads, a project, an agent's account or the backup.
 #[derive(Clone)]
 enum Removal {
     Server(Box<Server>),
     ServerCompletely(Box<Server>),
     Project(Box<Project>),
     Account(Box<(AgentAccount, Server)>),
+    Backup,
 }
 
 impl Removal {
@@ -66,6 +68,7 @@ impl Removal {
             Removal::ServerCompletely(server) => format!("Delete “{}”?", server.name),
             Removal::Project(project) => format!("Remove “{}”?", project.name),
             Removal::Account(pair) => format!("Remove “{} · {}”?", agent_name(pair.0.agent), pair.0.name),
+            Removal::Backup => "Turn Off the Backup?".into(),
         }
     }
 
@@ -76,8 +79,9 @@ impl Removal {
                 server.name
             ),
             Removal::ServerCompletely(server) => format!(
-                "{name} leaves your account and every copy of its threads is deleted, on all your servers and clients. What is on {name} itself stays there.",
-                name = server.name
+                "{name} leaves your account and every copy of its threads is deleted, on all your servers and clients{backup}. What is on {name} itself stays there.",
+                name = server.name,
+                backup = if store.backup.as_ref().is_some_and(|backup| backup.bucket.is_some()) { " and in your backup" } else { "" },
             ),
             Removal::Project(project) => {
                 let server = store.server(Some(&project.server_id)).map_or("its server", |server| server.name.as_str());
@@ -87,6 +91,7 @@ impl Removal {
                 "Its threads move to the default account on {}. Its folder and its sign-in stay there.",
                 pair.1.name
             ),
+            Removal::Backup => "Your servers stop backing up to the bucket and sync through your clients again. What is in the bucket stays there.".into(),
         }
     }
 
@@ -94,6 +99,7 @@ impl Removal {
         match self {
             Removal::ServerCompletely(_) => "Delete",
             Removal::Server(_) => "Unlink",
+            Removal::Backup => "Turn Off",
             _ => "Remove",
         }
     }
@@ -104,6 +110,7 @@ impl Removal {
             Removal::ServerCompletely(server) => store.delete_server_completely(server),
             Removal::Project(project) => store.remove_project(project),
             Removal::Account(pair) => store.remove_agent_account(&pair.0, &pair.1),
+            Removal::Backup => store.set_backup(None, |_, _| {}),
         }
     }
 }
@@ -113,6 +120,7 @@ pub struct SettingsPage {
     branch_editors: HashMap<String, Entity<BranchInstructions>>,
     setup: Option<Entity<SetupSheet>>,
     account: Option<Entity<AccountSheet>>,
+    backup: Option<Entity<BackupSheet>>,
     removal: Option<Removal>,
     keybindings: Option<Entity<KeybindingsPage>>,
     agent_gateway: Option<Entity<AgentGatewayPage>>,
@@ -135,6 +143,7 @@ impl SettingsPage {
             branch_editors: HashMap::new(),
             setup: None,
             account: None,
+            backup: None,
             removal: None,
             keybindings: None,
             agent_gateway: None,
@@ -390,9 +399,47 @@ impl SettingsPage {
             row(vec![div().ml(px(-large_outset())).child(add).into_any_element()], Vec::new()).into_any_element(),
         );
         let mut groups = vec![group("servers", "Servers", None, true, rows, cx)];
+        groups.extend(self.backup(cx));
         groups.extend(self.removed_servers(&removed, cx));
         groups.extend(self.continuing(cx));
         groups
+    }
+
+    /// The account's S3 bucket, which every server backs up to and syncs through.
+    fn backup(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let backup = self.store.read(cx).backup.clone()?;
+        let on = backup.bucket.is_some();
+        let page = cx.weak_entity();
+        let open = large("backup-edit", if on { "Edit" } else { "Set Up" }).on_click(move |_, window, cx| {
+            let _ = page.update(cx, |page, cx| page.open_backup_sheet(window, cx));
+        });
+        let cut = if on { Cut::Middle } else { Cut::Wraps };
+        let leading = label("S3 bucket", Some(backup.description), Some("cloud-upload"), cut, cx);
+        let trailing = if on {
+            let turn_off = Self::ask_removal(&cx.weak_entity(), Removal::Backup);
+            let menu = more("backup-menu", "What to do with the backup", move |_, _| {
+                let turn_off = turn_off.clone();
+                Menu::new().danger_symbol_item("Turn Off", "ban", move |window, cx| turn_off(window, cx))
+            })
+            .margin(beside(TRAILING_GAP / 2., 0.));
+            div().flex().items_center().child(open.margin(beside(0., TRAILING_GAP / 2.))).child(menu).into_any_element()
+        } else {
+            open.into_any_element()
+        };
+        let caption = on.then_some("Your servers keep their threads, images and files in it, and sync through it.");
+        let rows = vec![row(vec![leading], vec![trailing]).into_any_element()];
+        Some(group("backup", "Backup", caption, true, rows, cx))
+    }
+
+    fn open_backup_sheet(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let (store, page) = (self.store.clone(), cx.weak_entity());
+        self.backup = Some(cx.new(|cx| BackupSheet::new(store, page, window, cx)));
+        cx.notify();
+    }
+
+    pub fn close_backup_sheet(&mut self, cx: &mut Context<Self>) {
+        self.backup = None;
+        cx.notify();
     }
 
     /// The servers removed from the account, whose threads the other servers keep copies of, to
@@ -918,6 +965,7 @@ impl Render for SettingsPage {
         let setup = present_sheet("setup", self.setup.clone(), |sheet, leaving| sheet.leaving = leaving, window, cx);
         let account =
             present_sheet("agent-account", self.account.clone(), |sheet, leaving| sheet.leaving = leaving, window, cx);
+        let backup = present_sheet("backup", self.backup.clone(), |sheet, leaving| sheet.leaving = leaving, window, cx);
         div()
             .size_full()
             .pt(px(theme::TOP_BAR))
@@ -941,6 +989,7 @@ impl Render for SettingsPage {
             .child(top_fade(c.background))
             .children(setup)
             .children(account)
+            .children(backup)
             .children(removal)
     }
 }

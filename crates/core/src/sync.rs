@@ -51,6 +51,8 @@ pub struct Origin {
 pub struct Marks {
     pub own: Watermark,
     pub copies: HashMap<String, Watermark>,
+    /// The servers whose logs it copies from its bucket by itself.
+    pub bucket: HashSet<String>,
 }
 
 impl Marks {
@@ -132,7 +134,9 @@ pub fn plan(marks: &HashMap<String, Marks>, origins: &[String], metered: bool) -
                 (holder, log)
             }
         };
-        for target in targets.iter().filter(|target| **target != origin && **target != &source) {
+        let carried =
+            |target: &&&String| **target != origin && **target != &source && !marks[**target].bucket.contains(origin);
+        for target in targets.iter().filter(carried) {
             let copy = marks[*target].copies.get(origin);
             let from_origin = &source == origin;
             let (after, reset) = match copy {
@@ -164,11 +168,11 @@ async fn ask<P: Ask>(peer: &P, request: Request) -> anyhow::Result<Message> {
 }
 
 async fn marks_of<P: Ask>(peer: &P) -> anyhow::Result<Marks> {
-    let Message::Watermarks { own, copies } = ask(peer, Request::Watermarks).await? else {
+    let Message::Watermarks { own, copies, bucket } = ask(peer, Request::Watermarks).await? else {
         anyhow::bail!("the server didn't say how far its logs go");
     };
     let copies = copies.into_iter().map(|copy| (copy.origin, copy.watermark)).collect();
-    Ok(Marks { own, copies })
+    Ok(Marks { own, copies, bucket: bucket.into_iter().collect() })
 }
 
 async fn batch<P: Ask>(source: &P, transfer: &Transfer, after: u64) -> anyhow::Result<ChangeBatch> {
@@ -312,7 +316,8 @@ mod tests {
     }
 
     fn server(own: Watermark, copies: &[(&str, Watermark)]) -> Marks {
-        Marks { own, copies: copies.iter().map(|(origin, mark)| (origin.to_string(), mark.clone())).collect() }
+        let copies = copies.iter().map(|(origin, mark)| (origin.to_string(), mark.clone())).collect();
+        Marks { own, copies, bucket: HashSet::new() }
     }
 
     fn transfers(plan: &[Transfer]) -> Vec<(&str, &str, &str, u64, bool)> {
@@ -417,7 +422,9 @@ mod tests {
     impl Ask for Busy {
         async fn ask(&self, request: Request) -> anyhow::Result<Message> {
             Ok(match request {
-                Request::Watermarks => Message::Watermarks { own: self.own.clone(), copies: Vec::new() },
+                Request::Watermarks => {
+                    Message::Watermarks { own: self.own.clone(), copies: Vec::new(), bucket: Vec::new() }
+                }
                 Request::Changes { after, .. } => Message::Changes {
                     batch: ChangeBatch {
                         log_id: self.own.log_id.clone(),
@@ -444,6 +451,30 @@ mod tests {
 
         assert_eq!(round.marks["b"].copies["a"], mark("la", 8));
         assert!(plan(&round.marks, &origins(&["a", "b"]), false).is_empty());
+    }
+
+    #[test]
+    fn a_server_that_copies_an_origin_from_its_bucket_is_carried_only_the_others() {
+        let mut b = server(mark("lb", 1), &[]);
+        b.bucket = HashSet::from(["a".to_string()]);
+        let marks = HashMap::from([
+            ("a".to_string(), server(mark("la", 10), &[])),
+            ("b".to_string(), b),
+            ("c".to_string(), server(mark("lc", 2), &[])),
+        ]);
+
+        let plan = plan(&marks, &origins(&["a", "b", "c"]), false);
+
+        assert_eq!(
+            transfers(&plan),
+            vec![
+                ("a", "a", "c", 0, false),
+                ("b", "b", "a", 0, false),
+                ("b", "b", "c", 0, false),
+                ("c", "c", "a", 0, false),
+                ("c", "c", "b", 0, false)
+            ]
+        );
     }
 
     #[test]

@@ -1022,6 +1022,12 @@ pub enum Request {
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         reset: bool,
     },
+    /// The account's S3 bucket, which the server backs its threads and media up to and copies the
+    /// other servers' threads from; `None` stops. The server checks that it can list, write, read and
+    /// delete in the bucket before it keeps it. `Ok` answers.
+    SetBackup {
+        bucket: Option<Bucket>,
+    },
     /// The projects and threads of a removed server, from this server's copy. `Copies` answers.
     Copies {
         origin: String,
@@ -1039,6 +1045,35 @@ pub enum Request {
 pub struct Watermark {
     pub log_id: String,
     pub change: u64,
+}
+
+/// An S3 bucket, at AWS or anywhere that speaks its API (R2, B2, MinIO).
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug, Default)]
+pub struct Bucket {
+    /// Empty for AWS itself.
+    pub endpoint: String,
+    pub region: String,
+    pub bucket: String,
+    pub access_key: String,
+    pub secret_key: String,
+}
+
+/// How a server's backup stands. The bucket comes without its secret.
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug, Default)]
+pub struct BackupState {
+    pub bucket: Bucket,
+    /// When the server last had everything of its own in the bucket.
+    pub backed_up_at: Option<f64>,
+    /// While it puts its threads in the bucket the first time, or copies another server's from it.
+    pub progress: Option<BackupProgress>,
+    pub error: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct BackupProgress {
+    /// Its own threads go up; otherwise another server's come down.
+    pub uploading: bool,
+    pub percent: u8,
 }
 
 /// How far a server's copy of another server's log goes.
@@ -2205,6 +2240,8 @@ pub struct ServerInfo {
     /// The update the server is putting in place, until it restarts.
     #[serde(default)]
     pub update: Option<ServerUpdate>,
+    #[serde(default)]
+    pub backup: Option<BackupState>,
 }
 
 /// Where an update of the server is.
@@ -2490,6 +2527,9 @@ pub enum Message {
     Watermarks {
         own: Watermark,
         copies: Vec<OriginWatermark>,
+        /// The servers whose logs it copies from its bucket, which no client needs to carry to it.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        bucket: Vec<String>,
     },
     Changes {
         batch: ChangeBatch,

@@ -8,6 +8,7 @@ use motile_protocol::auth_client::AuthClient;
 use motile_protocol::identity::is_public_key;
 use motile_server::access::{Access, AccountSource};
 use motile_server::agents::environment::Environment;
+use motile_server::backup::Backup;
 use motile_server::config::DataDir;
 use motile_server::hub::{Hub, LIMITS_CHECK, PULL_REQUEST_FRESH, PULL_REQUEST_WATCH, SNOOZE_CHECK};
 use motile_server::serve::{BindOptions, Server, bind};
@@ -170,7 +171,9 @@ async fn run(data_dir: &DataDir, allow_keys: Vec<String>, options: BindOptions) 
         tracing::info!("local only, at {:?}", endpoint.bound_sockets());
     }
 
-    let server = Server { hub: hub.clone(), access, attachments: data_dir.attachments() };
+    let backup = Backup::new(hub.clone(), access.clone(), key.public(), data_dir.media());
+    backup.start();
+    let server = Server { hub: hub.clone(), access, attachments: data_dir.attachments(), backup };
     tokio::select! {
         _ = server.run(endpoint.clone()) => {}
         _ = tokio::signal::ctrl_c() => hub.close(false).await,

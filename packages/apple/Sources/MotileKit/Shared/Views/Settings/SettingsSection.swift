@@ -73,6 +73,7 @@ struct SettingsEntry: Identifiable, Hashable {
         SettingsEntry(id: "log", title: "Log", section: .general, keywords: "troubleshooting debug problem connecting logs file"),
         SettingsEntry(id: "agent-accounts", title: "Provider Accounts", section: .accounts, keywords: "agents claude codex sign in account folder subscription plan api key router"),
         SettingsEntry(id: "servers", title: "Servers", section: .servers, keywords: "add remove unlink unlinked delete copies machine agents connected"),
+        SettingsEntry(id: "backup", title: "Backup", section: .servers, keywords: "s3 bucket r2 b2 minio storage sync media restore"),
         SettingsEntry(id: "continue-limits", title: "Continue after usage limits", section: .servers, keywords: "rate limit reset resume quota wait"),
         SettingsEntry(id: "continue-restarts", title: "Continue after restarts", section: .servers, keywords: "restart update crash resume interrupted"),
         SettingsEntry(id: "gateway", title: "Gateway", section: .agentGateway, keywords: "add remove replace enroll docker unbind image volume code connected"),

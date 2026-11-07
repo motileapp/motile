@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use motile_protocol::auth_api::User;
 use motile_protocol::gateway_wire::{AccountChange, Capture, McpChange};
 use motile_protocol::wire::{
-    Activity, Agent, ContinueSettings, DiffScope, GitAction, GitStage, LinearStateKind, MergeMethod, NewThread,
+    Activity, Agent, Bucket, ContinueSettings, DiffScope, GitAction, GitStage, LinearStateKind, MergeMethod, NewThread,
     Project, PullRequestAction, PullRequestEdit, PullRequestSettings, PullRequestState, Request, RestartWhen,
     RicracStateKind, ServerInfo, Thread,
 };
@@ -406,6 +406,11 @@ pub enum Command {
         server_id: String,
         settings: PullRequestSettings,
     },
+    /// Backs every server up to the bucket, and keeps its keys on this device to give a server
+    /// that has none; `None` stops. The first connected server checks the bucket before it is kept.
+    SetBackup {
+        bucket: Option<Bucket>,
+    },
     /// What the server goes on with by itself: threads that reached their usage limit, and
     /// threads whose agents worked when it restarted.
     SetContinueSettings {
@@ -688,6 +693,10 @@ pub enum Event {
     Servers {
         servers: Vec<ServerView>,
     },
+    /// The account's backup, which follows `Servers`.
+    Backup {
+        backup: BackupView,
+    },
     /// All of a server's threads, replacing what the client had for it.
     Threads {
         server_id: String,
@@ -899,6 +908,18 @@ pub struct ServerView {
     pub accounts_by_room: Vec<String>,
     /// How its copies of the account's other servers' threads stand. None for a removed server.
     pub sync: Option<SyncView>,
+}
+
+/// The account's S3 bucket, which every server backs up to and syncs through.
+#[derive(Serialize, Clone, Debug, PartialEq)]
+pub struct BackupView {
+    /// From this device, or from a server that uses it; its secret only when this device keeps it.
+    /// None while there is no backup.
+    pub bucket: Option<Bucket>,
+    /// "motile on 4f1c.r2.cloudflarestorage.com", or what a backup does while there is none.
+    pub description: String,
+    /// This device keeps the keys and gives them to a server that has none.
+    pub saved: bool,
 }
 
 /// What the settings say under a server of the copies it keeps of the others' threads.

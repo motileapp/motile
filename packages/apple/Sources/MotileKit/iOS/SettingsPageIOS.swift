@@ -217,6 +217,7 @@ struct SettingsPage: View {
             }
         }
         .id("servers")
+        backup
         if !store.removedServers.isEmpty {
             Section("Unlinked") {
                 ForEach(store.removedServers) { server in
@@ -252,6 +253,30 @@ struct SettingsPage: View {
             }
             .id("continue-restarts")
         }
+    }
+
+    /// The account's S3 bucket, which every server backs up to and syncs through.
+    @ViewBuilder private var backup: some View {
+        let on = store.backup.bucket != nil
+        Section {
+            Button {
+                store.editedBackup = EditedBackup(bucket: store.backup.bucket)
+            } label: {
+                SettingsItem("S3 bucket", description: on ? store.backup.description : "Not set up", truncates: .middle) {
+                    SettingsTile(symbol: .cloudUpload)
+                }
+            }
+            if on {
+                Button("Turn Off", role: .destructive) { removal = .backup }
+                    .foregroundStyle(Color.themeDestructive)
+            }
+        } header: {
+            Text("Backup")
+        } footer: {
+            Text(on ? "Your servers keep their threads, images and files in it, and sync through it." : store.backup.description)
+                .foregroundStyle(Color.themeMutedForeground)
+        }
+        .id("backup")
     }
 
     @ViewBuilder private var agentAccounts: some View {

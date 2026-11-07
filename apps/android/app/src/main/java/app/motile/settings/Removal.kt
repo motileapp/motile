@@ -4,6 +4,7 @@ import androidx.compose.runtime.Composable
 import app.motile.LocalStore
 import app.motile.core.AgentAccount
 import app.motile.core.AppStore
+import app.motile.core.CoreError
 import app.motile.core.GatewayAccount
 import app.motile.core.McpServerRow
 import app.motile.core.Project
@@ -15,7 +16,8 @@ import app.motile.ui.Confirmation
 
 /**
  * What the settings take away once the user says so: a server, every copy of a server's threads, a
- * project, an agent's account, the account's gateway, one of its accounts or one of its MCP servers.
+ * project, an agent's account, the account's gateway, one of its accounts or one of its MCP servers,
+ * or the backup.
  */
 sealed interface Removal {
     data class OfServer(val server: Server) : Removal
@@ -25,6 +27,7 @@ sealed interface Removal {
     data class OfGateway(val name: String) : Removal
     data class OfGatewayAccount(val account: GatewayAccount) : Removal
     data class OfMcpServer(val mcpServer: McpServerRow) : Removal
+    data object OfBackup : Removal
 
     val title: String
         get() = when (this) {
@@ -35,25 +38,28 @@ sealed interface Removal {
             is OfGateway -> "Remove Your Gateway?"
             is OfGatewayAccount -> "Remove “${account.name}” from Your Gateway?"
             is OfMcpServer -> "Remove the “${mcpServer.name}” MCP Server?"
+            OfBackup -> "Turn Off the Backup?"
         }
 
     fun message(store: AppStore): String = when (this) {
         is OfServer ->
             "Your account lets go of ${server.name}. Its threads stay readable, and can go on, from the copies your other servers keep. If it is your only server, nothing is kept. What is on it stays there."
         is OfServerCompletely ->
-            "${server.name} leaves your account and every copy of its threads is deleted, on all your servers and clients. What is on ${server.name} itself stays there."
+            "${server.name} leaves your account and every copy of its threads is deleted, on all your servers and clients${if (store.backup.bucket == null) "" else " and in your backup"}. What is on ${server.name} itself stays there."
         is OfProject -> "${project.name} leaves your clients. Its folder stays on ${store.server(project.serverID)?.name ?: "its server"} with everything in it."
         is OfAccount -> "Its threads move to the default account on ${server.name}. Its folder and its sign-in stay there."
         is OfGateway ->
             "“$name” leaves your account, and your servers stop using it. Its threads move to your default accounts."
         is OfGatewayAccount -> "Your gateway forgets its sign-in, and its threads move to your other accounts."
         is OfMcpServer -> "Agents won't get its tools anymore, and your gateway forgets its login."
+        OfBackup -> "Your servers stop backing up to the bucket and sync through your clients again. What is in the bucket stays there."
     }
 
     /** The button that goes ahead. */
     val answer: String get() = when (this) {
         is OfServer -> "Unlink"
         is OfServerCompletely -> "Delete"
+        OfBackup -> "Turn Off"
         else -> "Remove"
     }
 
@@ -65,6 +71,7 @@ sealed interface Removal {
         is OfGateway -> store.gateway.remove()
         is OfGatewayAccount -> store.gateway.removeAccount(account)
         is OfMcpServer -> store.gateway.mcpServers.remove(mcpServer)
+        OfBackup -> store.setBackup(null) { error -> error?.let { store.alert(CoreError(it)) } }
     }
 }
 

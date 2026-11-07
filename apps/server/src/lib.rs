@@ -1,6 +1,7 @@
 pub mod access;
 pub mod agent_accounts;
 pub mod agents;
+pub mod backup;
 pub mod config;
 pub mod drafts;
 pub mod files;

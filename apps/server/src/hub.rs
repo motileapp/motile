@@ -19,7 +19,7 @@ use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use motile_protocol::gateway_wire::GatewayAccount;
 use motile_protocol::wire::{
-    AccountSkills, Activity, Agent, AgentAccount, AgentLimits, AgentNotice, Approval, BranchInstructions,
+    AccountSkills, Activity, Agent, AgentAccount, AgentLimits, AgentNotice, Approval, BackupState, BranchInstructions,
     CONTINUE_PROMPT, ChangedFile, ContinueSettings, CopiedThread, DiffScope, FileKind, GitAction, GitHubState,
     GitStage, GitStatus, HandoffEnd, Interruption, Item, ItemKind, Media, MergeMethod, Message, ModelInfo, NewThread,
     NoticeEvent, OriginUsage, Project, PullRequest, PullRequestAction, Queued, RunsOn, ServerInfo, ServerUpdate,
@@ -162,6 +162,7 @@ pub struct Hub {
     /// The server is about to stop: its agents are let go, and nothing new starts.
     closing: AtomicBool,
     update: std::sync::Mutex<Option<ServerUpdate>>,
+    backup: std::sync::Mutex<Option<BackupState>>,
     /// What the models cost at the API's prices, as last fetched.
     prices: std::sync::Mutex<Prices>,
     /// What the agents' accounts had used of their plans, and when that was read.
@@ -435,6 +436,7 @@ impl Hub {
             to_continue: std::sync::Mutex::new(to_continue),
             closing: AtomicBool::new(false),
             update: std::sync::Mutex::default(),
+            backup: std::sync::Mutex::default(),
             prices: std::sync::Mutex::new(
                 store.setting(PRICES).and_then(|prices| serde_json::from_str(&prices).ok()).unwrap_or_default(),
             ),
@@ -675,12 +677,19 @@ impl Hub {
             pull_request_settings: self.pull_request_settings(),
             continue_settings: self.continue_settings(),
             update: *self.update.lock().unwrap_or_else(|poisoned| poisoned.into_inner()),
+            backup: self.backup.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).clone(),
         }
     }
 
     /// Tells every client where the server's update is.
     pub fn set_update(&self, update: Option<ServerUpdate>) {
         *self.update.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = update;
+        self.announce_server();
+    }
+
+    /// Tells every client how the server's backup stands.
+    pub fn set_backup(&self, backup: Option<BackupState>) {
+        *self.backup.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = backup;
         self.announce_server();
     }
 
@@ -2472,8 +2481,8 @@ impl Hub {
         Ok(Message::Changes { batch: part.encode()? })
     }
 
-    pub fn watermarks(&self) -> anyhow::Result<Message> {
-        Ok(Message::Watermarks { own: self.store.watermark()?, copies: self.store.origin_watermarks()? })
+    pub fn watermarks(&self, bucket: Vec<String>) -> anyhow::Result<Message> {
+        Ok(Message::Watermarks { own: self.store.watermark()?, copies: self.store.origin_watermarks()?, bucket })
     }
 
     /// What the agents' accounts had used of their plans when they were last read, read now if

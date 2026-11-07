@@ -1,0 +1,205 @@
+#!/usr/bin/env python3
+"""Stand-in for S3, for the dev apps.
+
+    scripts/fake-s3 <port>
+
+It keeps every bucket as a folder under FAKE_S3_DIR and answers what the servers ask of one:
+putting, reading and deleting objects, multipart uploads, and listing. It takes any keys but an
+access key with "wrong" in it, and checks no signature. Set a backup up in a client with the
+endpoint http://127.0.0.1:<port>, any region, any bucket and keys.
+"""
+
+import datetime
+import hashlib
+import os
+import re
+import shutil
+import sys
+import uuid
+from email.utils import formatdate
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import parse_qs, unquote, urlparse
+from xml.sax.saxutils import escape, unescape
+
+ROOT = os.environ.get("FAKE_S3_DIR") or os.path.join(os.path.dirname(os.path.abspath(__file__)), "s3")
+UPLOADS = ".uploads"
+
+
+def iso(seconds):
+    return datetime.datetime.fromtimestamp(seconds, datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+
+
+def etag(path):
+    digest = hashlib.md5()
+    with open(path, "rb") as file:
+        for chunk in iter(lambda: file.read(1 << 20), b""):
+            digest.update(chunk)
+    return f'"{digest.hexdigest()}"'
+
+
+def objects(bucket):
+    """Every key of the bucket, in order."""
+    found = []
+    for folder, folders, files in os.walk(bucket):
+        folders[:] = [name for name in folders if name != UPLOADS]
+        for name in files:
+            found.append(os.path.relpath(os.path.join(folder, name), bucket).replace(os.sep, "/"))
+    return sorted(found)
+
+
+class Handler(BaseHTTPRequestHandler):
+    protocol_version = "HTTP/1.1"
+
+    def log_message(self, format, *args):
+        sys.stderr.write("%s\n" % (format % args))
+
+    def target(self):
+        url = urlparse(self.path)
+        bucket, _, key = unquote(url.path).lstrip("/").partition("/")
+        return bucket, key, {name: values[0] for name, values in parse_qs(url.query, keep_blank_values=True).items()}
+
+    def body(self):
+        length = int(self.headers.get("content-length") or 0)
+        return self.rfile.read(length) if length else b""
+
+    def reply(self, status, body=b"", headers=None, content_type="application/xml"):
+        self.send_response(status)
+        for name, value in (headers or {}).items():
+            self.send_header(name, value)
+        if body or status != 204:
+            self.send_header("content-type", content_type)
+        self.send_header("content-length", str(len(body)))
+        self.end_headers()
+        if self.command != "HEAD":
+            self.wfile.write(body)
+
+    def error(self, status, code, message):
+        xml = f"<?xml version=\"1.0\" encoding=\"UTF-8\"?><Error><Code>{code}</Code><Message>{escape(message)}</Message></Error>"
+        self.reply(status, xml.encode())
+
+    def allowed(self):
+        if "wrong" in (self.headers.get("authorization") or ""):
+            self.body()
+            self.error(403, "InvalidAccessKeyId", "The AWS Access Key Id you provided does not exist in our records.")
+            return False
+        return True
+
+    def path_of(self, bucket, key):
+        path = os.path.normpath(os.path.join(ROOT, bucket, key))
+        if not path.startswith(os.path.join(ROOT, bucket) + os.sep):
+            raise ValueError(key)
+        return path
+
+    def do_PUT(self):
+        if not self.allowed():
+            return
+        bucket, key, query = self.target()
+        data = self.body()
+        if "uploadId" in query:
+            part = os.path.join(ROOT, bucket, UPLOADS, query["uploadId"], query["partNumber"])
+            os.makedirs(os.path.dirname(part), exist_ok=True)
+            with open(part, "wb") as file:
+                file.write(data)
+            return self.reply(200, headers={"etag": f'"{hashlib.md5(data).hexdigest()}"'})
+        path = self.path_of(bucket, key)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "wb") as file:
+            file.write(data)
+        self.reply(200, headers={"etag": etag(path)})
+
+    def do_POST(self):
+        if not self.allowed():
+            return
+        bucket, key, query = self.target()
+        data = self.body()
+        if "delete" in query:
+            keys = [unescape(found) for found in re.findall(r"<Key>(.*?)</Key>", data.decode())]
+            for found in keys:
+                path = self.path_of(bucket, found)
+                if os.path.isfile(path):
+                    os.remove(path)
+            deleted = "".join(f"<Deleted><Key>{escape(found)}</Key></Deleted>" for found in keys)
+            return self.reply(200, f"<?xml version=\"1.0\" encoding=\"UTF-8\"?><DeleteResult>{deleted}</DeleteResult>".encode())
+        if "uploads" in query:
+            upload = uuid.uuid4().hex
+            xml = f"<?xml version=\"1.0\" encoding=\"UTF-8\"?><InitiateMultipartUploadResult><Bucket>{bucket}</Bucket><Key>{escape(key)}</Key><UploadId>{upload}</UploadId></InitiateMultipartUploadResult>"
+            return self.reply(200, xml.encode())
+        if "uploadId" in query:
+            parts = os.path.join(ROOT, bucket, UPLOADS, query["uploadId"])
+            path = self.path_of(bucket, key)
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "wb") as whole:
+                for number in sorted(os.listdir(parts), key=int):
+                    with open(os.path.join(parts, number), "rb") as part:
+                        shutil.copyfileobj(part, whole)
+            shutil.rmtree(parts, ignore_errors=True)
+            xml = f"<?xml version=\"1.0\" encoding=\"UTF-8\"?><CompleteMultipartUploadResult><Bucket>{bucket}</Bucket><Key>{escape(key)}</Key><ETag>{etag(path)}</ETag></CompleteMultipartUploadResult>"
+            return self.reply(200, xml.encode())
+        self.error(400, "NotImplemented", "Only multipart uploads are posted.")
+
+    def do_DELETE(self):
+        if not self.allowed():
+            return
+        bucket, key, query = self.target()
+        if "uploadId" in query:
+            shutil.rmtree(os.path.join(ROOT, bucket, UPLOADS, query["uploadId"]), ignore_errors=True)
+            return self.reply(204)
+        path = self.path_of(bucket, key)
+        if os.path.isfile(path):
+            os.remove(path)
+        self.reply(204)
+
+    def do_HEAD(self):
+        self.do_GET()
+
+    def do_GET(self):
+        if not self.allowed():
+            return
+        bucket, key, query = self.target()
+        if not key:
+            return self.list(bucket, query)
+        path = self.path_of(bucket, key)
+        if not os.path.isfile(path):
+            return self.error(404, "NoSuchKey", "The specified key does not exist.")
+        with open(path, "rb") as file:
+            data = file.read()
+        modified = formatdate(os.path.getmtime(path), usegmt=True)
+        self.reply(200, data, {"etag": etag(path), "last-modified": modified}, "application/octet-stream")
+
+    def list(self, bucket, query):
+        prefix, delimiter = query.get("prefix", ""), query.get("delimiter", "")
+        after = query.get("continuation-token") or query.get("start-after") or ""
+        limit = int(query.get("max-keys") or 1000)
+        folder = os.path.join(ROOT, bucket)
+        keys = [key for key in objects(folder) if key.startswith(prefix) and key > after]
+        contents, prefixes, last, truncated = [], [], "", False
+        for key in keys:
+            if len(contents) + len(prefixes) >= limit:
+                truncated = True
+                break
+            rest = key[len(prefix):]
+            if delimiter and delimiter in rest:
+                common = prefix + rest.split(delimiter, 1)[0] + delimiter
+                if common not in prefixes:
+                    prefixes.append(common)
+                last = key
+                continue
+            path = os.path.join(folder, key)
+            contents.append(
+                f"<Contents><Key>{escape(key)}</Key><LastModified>{iso(os.path.getmtime(path))}</LastModified>"
+                f"<ETag>{escape(etag(path))}</ETag><Size>{os.path.getsize(path)}</Size><StorageClass>STANDARD</StorageClass></Contents>"
+            )
+            last = key
+        token = f"<NextContinuationToken>{escape(last)}</NextContinuationToken>" if truncated else ""
+        common = "".join(f"<CommonPrefixes><Prefix>{escape(name)}</Prefix></CommonPrefixes>" for name in prefixes)
+        xml = (
+            f"<?xml version=\"1.0\" encoding=\"UTF-8\"?><ListBucketResult><Name>{bucket}</Name><Prefix>{escape(prefix)}</Prefix>"
+            f"<KeyCount>{len(contents) + len(prefixes)}</KeyCount><MaxKeys>{limit}</MaxKeys>"
+            f"<IsTruncated>{'true' if truncated else 'false'}</IsTruncated>{token}{''.join(contents)}{common}</ListBucketResult>"
+        )
+        self.reply(200, xml.encode())
+
+
+if __name__ == "__main__":
+    os.makedirs(ROOT, exist_ok=True)
+    ThreadingHTTPServer(("127.0.0.1", int(sys.argv[1])), Handler).serve_forever()

@@ -371,6 +371,38 @@ data class ServerSync(
     }
 }
 
+/** The account's S3 bucket, which every server backs up to and syncs through. */
+data class Backup(
+    /** Null while there is no backup. Its secret is empty unless this device keeps the keys. */
+    val bucket: BackupBucket? = null,
+    /** "motile on 4f1c.r2.cloudflarestorage.com", or what a backup does while there is none. */
+    val description: String = "",
+    /** This device keeps the keys and gives them to a server that has none. */
+    val saved: Boolean = false,
+) {
+    constructor(json: JSON) : this(json.obj("bucket")?.let(::BackupBucket), json.string("description"), json.bool("saved"))
+}
+
+data class BackupBucket(
+    /** Empty for AWS itself. */
+    val endpoint: String,
+    val region: String,
+    val bucket: String,
+    val accessKey: String,
+    val secretKey: String,
+) {
+    constructor(json: JSON) : this(
+        json.string("endpoint"),
+        json.string("region"),
+        json.string("bucket"),
+        json.string("access_key"),
+        json.string("secret_key"),
+    )
+
+    val json: Map<String, String>
+        get() = mapOf("endpoint" to endpoint, "region" to region, "bucket" to bucket, "access_key" to accessKey, "secret_key" to secretKey)
+}
+
 data class ServerUpdate(
     /** The version it had when the update began. */
     val from: String,

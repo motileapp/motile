@@ -23,6 +23,7 @@ imagesize = "0.15"
 iroh.workspace = true
 libc.workspace = true
 lru = "0.18"
+object_store = { version = "0.14", default-features = false, features = ["aws-base", "reqwest", "ring", "tokio"] }
 pulldown-cmark = { version = "0.13", default-features = false }
 rand = "0.10"
 rmcp = { version = "3.5", features = ["server", "macros", "transport-streamable-http-server"] }
