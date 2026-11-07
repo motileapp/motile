@@ -38,7 +38,7 @@ const TAB_MARGIN: f32 = 1.;
 /// The space between two launcher rows' lights, which is the rows' own, so that it takes a click.
 const LAUNCHER_GAP: f32 = 2.;
 /// The room between what a bar holds. Buttons side by side share it, so that it only looks empty.
-const BAR_GAP: f32 = 4.;
+pub(super) const BAR_GAP: f32 = 2.;
 
 /// What makes a tab ask its server again: another folder or scope, a turn that ended there, or
 /// the button that asks.

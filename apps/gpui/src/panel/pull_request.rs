@@ -15,6 +15,7 @@ use motile_protocol::wire::{
 };
 
 use super::state::{Loaded, PanelTab, PanelTarget, file_symbol};
+use super::view::BAR_GAP;
 use crate::models::ago;
 use crate::store::Store;
 use crate::store::pull_requests::{
@@ -31,8 +32,6 @@ use crate::ui::{
 
 /// The height of a line of the panel's text, which the buttons beside it centre on.
 const LINE: f32 = 17.;
-/// The room between what a bar holds. Buttons side by side share it, so that it only looks empty.
-const BAR_GAP: f32 = 4.;
 
 // MARK: Pieces every pull request view uses
 

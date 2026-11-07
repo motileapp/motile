@@ -119,7 +119,7 @@ struct PanelLoading: View {
 
 /// The room between what a panel bar holds. Buttons side by side are put in a row of their own
 /// that gives it to them, so that it only looks empty.
-let panelBarGap: CGFloat = 4
+let panelBarGap: CGFloat = 2
 
 /// The strip under the tabs with what the open tab is about and its buttons, on one row or two.
 struct PanelBar<Content: View, Second: View>: View {
