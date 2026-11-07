@@ -1,5 +1,13 @@
 package app.motile.ui
 
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -69,8 +77,17 @@ fun InputField(
     onFocusChange: ((Boolean) -> Unit)? = null,
     keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
     onSubmit: (() -> Unit)? = null,
+    /** Selects all it has each time it changes, so that what is typed next replaces it. */
+    selectAllRequests: Int = 0,
 ) {
     val palette = LocalPalette.current
+    var field by remember { mutableStateOf(TextFieldValue(text, TextRange(text.length))) }
+    val value = if (field.text == text) field else TextFieldValue(text, TextRange(text.length))
+    val latest by rememberUpdatedState(text)
+    LaunchedEffect(selectAllRequests) {
+        if (selectAllRequests == 0) return@LaunchedEffect
+        field = TextFieldValue(latest, TextRange(0, latest.length))
+    }
     val bare = variant != InputVariant.Filled
     val capsule = variant == InputVariant.Capsule
     val focus = focusRequester ?: remember { FocusRequester() }
@@ -98,8 +115,11 @@ fun InputField(
         if (icon != null) Icon(icon, size.smallSymbol, color = if (bare) palette.foreground else palette.mutedStrongerForeground)
         val style = fieldStyle(size, monospaced, palette.foreground)
         BasicTextField(
-            value = text,
-            onValueChange = onTextChange,
+            value = value,
+            onValueChange = {
+                field = it
+                if (it.text != text) onTextChange(it.text)
+            },
             modifier = Modifier
                 .weight(1f)
                 .focusRequester(focus)

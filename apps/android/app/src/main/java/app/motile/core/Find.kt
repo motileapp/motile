@@ -1,5 +1,7 @@
 package app.motile.core
 
+import android.os.Handler
+import android.os.Looper
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -47,6 +49,9 @@ class FindState {
     /** Asks the bar's field to take the keys. */
     var focusRequests by mutableIntStateOf(0)
         private set
+    /** Counts each lighting of the sidebar's search and each close, so that a light fades only if it is still the one on. */
+    internal var lit = 0
+        private set
 
     /** "3/41", or "0/0" when nothing matches. */
     val label: String
@@ -66,9 +71,11 @@ class FindState {
     internal fun light(query: String) {
         this.query = query
         active = true
+        lit += 1
     }
 
     internal fun close() {
+        lit += 1
         shown = false
         active = false
         count = 0
@@ -91,12 +98,23 @@ fun AppStore.openFind(query: String? = null, itemID: String? = null) {
     sendFind(threadID, itemID)
 }
 
-/** Lights what the sidebar searched for in the open thread and scrolls to it in the message `itemID`, without the bar. Finding then opens the bar on it, back puts it away. */
-fun AppStore.lightFound(query: String, itemID: String) {
+/** How long the sidebar's search stays lit in the thread it opened, unless the bar opens on it. */
+private const val LIT_FOR = 5_000L
+private val fades = Handler(Looper.getMainLooper())
+
+/**
+ * Lights what the sidebar searched for in the open thread, without the bar, and scrolls to it in
+ * the message `itemID`, or to the message when the words are apart there. A server that doesn't say
+ * the message has it scroll to the first match. It fades after a while unless the bar opened on it;
+ * finding opens the bar on it, back puts it away.
+ */
+fun AppStore.lightFound(query: String, itemID: String?) {
     val threadID = transcript.threadID ?: return
-    if (selectedThread == null) return
+    if (selectedThread == null || query.isEmpty()) return
     find.light(query)
-    sendFind(threadID, itemID)
+    val lit = find.lit
+    sendFind(threadID, itemID, fromViewport = false)
+    fades.postDelayed({ if (find.lit == lit && !find.shown) closeFind() }, LIT_FOR)
 }
 
 fun AppStore.closeFind() {
@@ -122,14 +140,9 @@ fun AppStore.stepFind(back: Boolean) {
     core.send("find_step", mapOf("thread_id" to threadID, "back" to back))
 }
 
-/** Scrolls the thread to the message. */
-fun AppStore.revealItem(itemID: String, threadID: String) {
-    core.send("reveal_item", mapOf("thread_id" to threadID, "item_id" to itemID))
-}
-
-private fun AppStore.sendFind(threadID: String, itemID: String?) {
+private fun AppStore.sendFind(threadID: String, itemID: String?, fromViewport: Boolean = true) {
     val fields = mutableMapOf<String, Any?>("thread_id" to threadID, "query" to find.query)
-    transcript.viewport?.let { fields["from"] = it.json }
+    if (fromViewport) transcript.viewport?.let { fields["from"] = it.json }
     if (itemID != null) fields["item_id"] = itemID
     core.send("find", fields)
 }

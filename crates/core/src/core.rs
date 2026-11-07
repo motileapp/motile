@@ -2323,7 +2323,17 @@ impl Core {
         find.item = item_id.clone();
         let moved = find.search(query, place, item_id.as_deref());
         self.emit_found(thread_id);
-        if moved {
+        self.reveal_searched(thread_id, moved);
+    }
+
+    /// Brings the current match into sight when it moved, or the message the sidebar's search
+    /// found once the thread is searched and that has no match of its own.
+    fn reveal_searched(&mut self, thread_id: &str, moved: bool) {
+        let Some(find) = self.open.get(thread_id).and_then(|open| open.find.as_ref()) else { return };
+        let item = find.item.clone().filter(|_| find.ready && find.current_index().is_none());
+        if let Some(item) = item {
+            self.reveal_item(thread_id, &item);
+        } else if moved {
             self.reveal_found(thread_id);
         }
     }
@@ -2339,9 +2349,7 @@ impl Core {
         let (query, from, item) = (find.query().to_string(), find.from, find.item.clone());
         let moved = find.search(&query, from, item.as_deref());
         self.emit_found(thread_id);
-        if moved {
-            self.reveal_found(thread_id);
-        }
+        self.reveal_searched(thread_id, moved);
     }
 
     fn emit_found(&mut self, thread_id: &str) {
@@ -3731,10 +3739,6 @@ impl Core {
                 if let Some(open) = self.open.get_mut(&thread_id) {
                     open.find = None;
                 }
-                self.reply(id, Ok(json!({})));
-            }
-            Command::RevealItem { thread_id, item_id } => {
-                self.reveal_item(&thread_id, &item_id);
                 self.reply(id, Ok(json!({})));
             }
             Command::TrimEarlier { thread_id, keep_rows } => {

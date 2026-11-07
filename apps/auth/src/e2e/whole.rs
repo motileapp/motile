@@ -386,7 +386,6 @@ async fn a_client_signs_in_links_a_server_and_runs_a_thread_it_still_has_after_a
             part(" to the API", false),
         ],
         item_id: client.search.2[0].item_id.clone(),
-        phrase: true,
     };
     assert!(!found.item_id.is_empty(), "the thread opens at the message it was found by");
     assert_eq!(client.search.2, [found]);

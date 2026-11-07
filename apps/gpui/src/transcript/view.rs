@@ -72,6 +72,12 @@ pub struct TranscriptView {
     /// Room above the first row that the find bar covers while it shows, so that a match at the
     /// top can come out from under it.
     top_room: f32,
+    /// Room under the last row while there is room at the top, so that a thread shorter than the
+    /// viewport can scroll by that room instead of its rows moving down.
+    bottom_extra: f32,
+    /// The room at the top and the extra room at the bottom as the list last laid them out, which
+    /// its content's height still counts.
+    laid_room: (f32, f32),
     _ticks: Task<()>,
     _subscriptions: Vec<Subscription>,
 }
@@ -123,6 +129,8 @@ impl TranscriptView {
             scrolled: (0., None),
             revealing: None,
             top_room: 0.,
+            bottom_extra: 0.,
+            laid_room: (0., 0.),
             _ticks: ticks,
             _subscriptions: subscriptions,
         };
@@ -512,6 +520,47 @@ impl TranscriptView {
         cx.notify();
     }
 
+    /// Gives the rows room above them, keeping what is on screen still: the viewport moves by the
+    /// room, unless it follows the end, which stays where it is.
+    fn set_top_room(&mut self, room: f32, cx: &mut Context<Self>) {
+        let change = room - self.top_room;
+        if change == 0. {
+            return;
+        }
+        self.top_room = room;
+        self.fit_bottom_extra(cx);
+        let model = self.model.read(cx);
+        model.top_changed();
+        if self.pinned(cx) {
+            return;
+        }
+        let list = self.list(cx);
+        let top = list.logical_scroll_top();
+        if top.item_ix == 0 {
+            let offset = (f32::from(top.offset_in_item) + change).max(0.);
+            list.scroll_to(ListOffset { item_ix: 0, offset_in_item: px(offset) });
+        }
+    }
+
+    /// While there is room at the top, the content is at least the viewport and that room tall.
+    fn fit_bottom_extra(&mut self, cx: &mut Context<Self>) {
+        let extra = match self.top_room > 0. {
+            true => {
+                let list = self.list(cx);
+                let (room, extra) = self.laid_room;
+                let rows = f32::from(ScrollbarHandle::content_size(&list).height) - room - extra;
+                (self.viewport_height(cx) - rows).max(0.)
+            }
+            false => 0.,
+        };
+        if (extra - self.bottom_extra).abs() < 0.5 {
+            return;
+        }
+        self.bottom_extra = extra;
+        self.model.read(cx).bottom_changed();
+        cx.notify();
+    }
+
     /// Asks the core for the highlighting of the rows that came into view without it.
     fn request_highlights(&mut self, cx: &mut Context<Self>) {
         let waiting: Vec<String> = self.needs_highlight.borrow_mut().drain(..).collect();
@@ -565,10 +614,8 @@ impl Render for TranscriptView {
         self.model.update(cx, |model, _| model.set_started_by(started_by));
         self.show_bottom_inset(cx);
         let top_room = if !self.agent && self.store.read(cx).find.shown { crate::thread::find_bar::ROOM } else { 0. };
-        if top_room != self.top_room {
-            self.top_room = top_room;
-            self.model.read(cx).top_changed();
-        }
+        self.set_top_room(top_room, cx);
+        self.fit_bottom_extra(cx);
         let model = self.model.read(cx);
         let list_state = model.list.clone();
         let items = model.items.clone();
@@ -603,6 +650,8 @@ impl Render for TranscriptView {
         let requested = self.requested_highlight.clone();
         let entity = cx.entity().downgrade();
         let bottom = self.bottom_inset;
+        let bottom_extra = self.bottom_extra;
+        self.laid_room = (top_room, bottom_extra);
 
         let list = list(list_state.clone(), move |index, window, cx| {
             let Some(item) = items.get(index).cloned() else { return div().into_any_element() };
@@ -611,7 +660,7 @@ impl Render for TranscriptView {
             let key = |model: &RowModel| Some(rows::row_key(&model.row.id));
             let (element, pressed) = match &item {
                 Item::Top => return div().h(px(TOP_PADDING + top_room)).into_any_element(),
-                Item::Bottom => return div().h(px(bottom)).into_any_element(),
+                Item::Bottom => return div().h(px(bottom + bottom_extra)).into_any_element(),
                 Item::Row(row) => match rows.get(*row) {
                     Some(model) => {
                         if model.needs_highlight() && !requested.contains(&model.row.id) {

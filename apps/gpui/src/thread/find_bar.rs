@@ -74,8 +74,14 @@ impl Render for FindBar {
                 if input.value() != query.as_str() {
                     input.set_value(query, window, cx);
                 }
-                input.focus(window, cx);
-                input.select_all(window, cx);
+            });
+            // A tick later, once the bar is in the window and whatever had the keys let them go,
+            // so that what is typed replaces what the field has.
+            cx.on_next_frame(window, |this, window, cx| {
+                this.input.update(cx, |input, cx| {
+                    input.focus(window, cx);
+                    input.select_all(window, cx);
+                });
             });
         }
         let store = self.store.read(cx);

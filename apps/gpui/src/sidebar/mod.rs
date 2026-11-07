@@ -192,6 +192,8 @@ pub struct Sidebar {
     undo_leaving: Option<UndoNotice>,
     undo_serial: usize,
     revealed_seen: Option<String>,
+    /// The store's last ask for the search field to take the keys that was done.
+    search_focused_for: u64,
     _ticks: Task<()>,
     _subscriptions: Vec<Subscription>,
 }
@@ -279,6 +281,7 @@ impl Sidebar {
             undo_leaving: None,
             undo_serial: 0,
             revealed_seen: None,
+            search_focused_for: 0,
             _ticks: ticks,
             _subscriptions: subscriptions,
         }
@@ -287,15 +290,26 @@ impl Sidebar {
     /// What follows the store: the search the store ended, a shelf opening on the thread it
     /// reveals, and the card going when the window does.
     fn follow_store(&mut self, store: Entity<Store>, window: &mut Window, cx: &mut Context<Self>) {
-        let (search, revealed, active, hidden) = {
+        let (search, revealed, active, hidden, focus) = {
             let store = store.read(cx);
             (
                 store.sidebar.search.clone(),
                 store.sidebar.revealed_thread_id.clone(),
                 store.app_active,
                 store.prefs.bool("sidebar.hidden"),
+                store.search_focus_requests,
             )
         };
+        if focus != self.search_focused_for {
+            self.search_focused_for = focus;
+            // A tick later, once a sidebar that was hidden is in the window again.
+            cx.on_next_frame(window, |this, window, cx| {
+                this.search.update(cx, |input, cx| {
+                    input.focus(window, cx);
+                    input.select_all(window, cx);
+                });
+            });
+        }
         if search.is_empty() && !self.search.read(cx).value().is_empty() {
             self.search.update(cx, |input, cx| input.set_value("", window, cx));
         }

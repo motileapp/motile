@@ -103,11 +103,14 @@ final class TranscriptView: FlippedView, RowOwner {
         }
     }
 
-    /// What the find bar covers under `topInset`. The first row can be scrolled clear of it.
+    /// What the find bar covers under `topInset`. The first row can be scrolled clear of it. The
+    /// room comes above the rows and the viewport moves with them, so that nothing on screen
+    /// moves as the bar comes and goes.
     var findRoom: CGFloat = 0 {
         didSet {
             guard findRoom != oldValue else { return }
-            updateVisible()
+            let shown = viewportAnchor().map { Anchor(id: $0.id, delta: $0.delta + findRoom - oldValue) }
+            updateVisible(anchor: pinned ? nil : placed ?? shown)
         }
     }
 
@@ -323,9 +326,12 @@ final class TranscriptView: FlippedView, RowOwner {
         return index == end ? rows.count : index
     }
 
+    /// The rows' height with the room around them. While the find bar shows, a thread shorter than
+    /// the viewport scrolls by the bar's room too, so that its rows stay where they were.
     private var contentHeight: CGFloat {
         let workingHeight = showsWorking ? Self.workingHeight : 0
-        return topPadding + (offsets.last ?? 0) + workingHeight + endLineage + shownBottomInset
+        let height = topPadding + (offsets.last ?? 0) + workingHeight + endLineage + shownBottomInset
+        return findRoom > 0 ? max(height, viewportHeight + findRoom) : height
     }
 
     private func layoutFade() {

@@ -36,6 +36,11 @@ final class FindState {
     private(set) var ready = true
     /// Asks the bar's field to take the keys and select what it has.
     private(set) var focusRequests = 0
+    /// Counts each lighting and closing, so that a fade only ends the lighting it was set for.
+    fileprivate var lit = 0
+
+    /// How long what the sidebar's search found stays lit in the thread it opened.
+    static let litFor: TimeInterval = 5
 
     /// "3/41", or "0/0" when nothing matches.
     var label: String {
@@ -54,9 +59,11 @@ final class FindState {
     fileprivate func light(query: String) {
         self.query = query
         active = true
+        lit += 1
     }
 
     fileprivate func close() {
+        lit += 1
         shown = false
         active = false
         count = 0
@@ -80,12 +87,19 @@ extension AppStore {
         sendFind(threadID: threadID, itemID: itemID)
     }
 
-    /// Lights what the sidebar searched for in the open thread and scrolls to it in the message
-    /// `itemID`, without the bar. ⌘F then opens the bar on it, Esc puts it away.
-    func lightFound(_ query: String, itemID: String) {
-        guard let threadID = transcript.threadID, selectedThread != nil else { return }
+    /// Lights what the sidebar searched for in the open thread, without the bar, and scrolls to
+    /// it in the message `itemID`, or to the message when the words are apart there. A server
+    /// that doesn't say the message has it scroll to the first match. It fades after a while
+    /// unless the bar opened on it; ⌘F opens the bar on it, Esc puts it away.
+    func lightFound(_ query: String, itemID: String?) {
+        guard let threadID = transcript.threadID, selectedThread != nil, !query.isEmpty else { return }
         find.light(query: query)
-        sendFind(threadID: threadID, itemID: itemID)
+        let lit = find.lit
+        sendFind(threadID: threadID, itemID: itemID, fromViewport: false)
+        DispatchQueue.main.asyncAfter(deadline: .now() + FindState.litFor) { [weak self] in
+            guard let self, self.find.lit == lit, !self.find.shown else { return }
+            self.closeFind()
+        }
     }
 
     func closeFind() {
@@ -110,14 +124,9 @@ extension AppStore {
         core.send("find_step", ["thread_id": threadID, "back": back])
     }
 
-    /// Scrolls the thread to the message.
-    func revealItem(_ itemID: String, in threadID: String) {
-        core.send("reveal_item", ["thread_id": threadID, "item_id": itemID])
-    }
-
-    private func sendFind(threadID: String, itemID: String?) {
+    private func sendFind(threadID: String, itemID: String?, fromViewport: Bool = true) {
         var fields: [String: Any] = ["thread_id": threadID, "query": find.query]
-        if let place = transcript.viewport { fields["from"] = place.json }
+        if fromViewport, let place = transcript.viewport { fields["from"] = place.json }
         if let itemID { fields["item_id"] = itemID }
         core.send("find", fields)
     }

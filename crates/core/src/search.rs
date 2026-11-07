@@ -1,7 +1,7 @@
 //! The sidebar's search through the threads' messages: what each server found, kept while the
 //! search changes, and its excerpts in parts that set off what was searched for.
 
-use motile_protocol::search::{Folded, Matcher, ranges};
+use motile_protocol::search::{Matcher, ranges};
 use motile_protocol::wire::{Speaker, ThreadMatch};
 use serde::Serialize;
 
@@ -28,9 +28,6 @@ pub struct MatchView {
     /// The message it was found by, which the thread opens at.
     #[serde(skip_serializing_if = "String::is_empty")]
     pub item_id: String,
-    /// The search is in the message as it was written, so the thread opens finding it.
-    #[serde(skip_serializing_if = "std::ops::Not::not")]
-    pub phrase: bool,
 }
 
 /// A piece of an excerpt, `matched` where it is what was searched for.
@@ -77,7 +74,6 @@ pub fn view(found: &Found, query: &str) -> MatchView {
         speaker: found.thread.speaker,
         parts: parts(&found.thread.excerpt, query),
         item_id: found.thread.item_id.clone(),
-        phrase: !Folded::new(&found.thread.excerpt).find(&Folded::new(query)).is_empty(),
     }
 }
 

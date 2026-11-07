@@ -43,6 +43,7 @@ struct SidebarView: View {
     @State private var deleting: ThreadInfo?
     /// The search's result the arrow keys are on.
     @State private var highlighted = Highlight()
+    @FocusState private var searchFocused: Bool
 
     var body: some View {
         @Bindable var store = store
@@ -56,7 +57,7 @@ struct SidebarView: View {
         let selection = store.selection
         VStack(spacing: 0) {
             HStack(spacing: 8) {
-                SearchField(text: $store.threadSearch)
+                SearchField(text: $store.threadSearch, focus: $searchFocused)
                     .steersSearch(highlighted: highlighted, open: store.openSearchResult)
                 ProjectButtons()
             }
@@ -66,6 +67,10 @@ struct SidebarView: View {
             GeometryReader { list in
                 threads(lists: lists, results: results, projects: projects, selection: selection, sidebarHeight: list.size.height)
             }
+        }
+        .onChange(of: store.searchFocusRequests) {
+            UserDefaults.standard.set(false, forKey: MainView.sidebarHiddenKey)
+            FieldFocus.take { searchFocused = true }
         }
         .onChange(of: store.revealedThreadID) { _, revealed in
             guard let revealed, let thread = store.anyThread(revealed), thread.section != .active else { return }

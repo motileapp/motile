@@ -47,16 +47,14 @@ extension AppStore {
     }
 
     /// Opens what the search found and ends the search, then shows it in the sidebar. A thread
-    /// found by a message opens at that message, with what was searched for lit where the
-    /// message has it as it was written.
+    /// found by a message opens at that message with what was searched for lit.
     func openSearchResult(_ result: SearchResult) {
         let search = threadSearch.trimmingCharacters(in: .whitespacesAndNewlines)
         select(result.selection)
         threadSearch = ""
         revealedThreadID = result.thread?.id
-        guard case .thread(let thread, let found?) = result, let itemID = found.itemID else { return }
-        guard found.phrase else { return revealItem(itemID, in: thread.id) }
-        lightFound(search, itemID: itemID)
+        guard case .thread(_, let found?) = result else { return }
+        lightFound(search, itemID: found.itemID)
     }
 }
 

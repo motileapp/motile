@@ -41,6 +41,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -326,6 +327,12 @@ fun SidebarScreen(underThread: Boolean) {
         val kept = lastResults[0].take(highlighted.index + 1)
         if (resultIDs.take(kept.size) != kept) highlighted.index = 0
         lastResults[0] = resultIDs
+    }
+    LaunchedEffect(store.searchFocusRequests) {
+        if (store.searchFocusRequests == 0) return@LaunchedEffect
+        if (underThread) drawer.isOpen = true
+        withFrameNanos {}
+        runCatching { searchFocus.requestFocus() }
     }
     DisposableEffect(searchFocus) {
         val hook: (String) -> Unit = { text ->
@@ -632,6 +639,7 @@ private fun Footer(
                     .padding(start = 6.dp)
                     .steersSearch(store, highlighted),
                 capsule = true, clearable = false, focusRequester = searchFocus, onFocusChange = onFocusChange, onSubmit = openHighlighted,
+                selectAllRequests = store.searchFocusRequests,
             )
             Appearing(searching, enter = appear, exit = leave) { GlassButton(Symbol.X, "Close search", onClick = closeSearch) }
             Appearing(!searching, enter = appear, exit = leave) {

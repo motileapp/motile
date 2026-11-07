@@ -109,8 +109,9 @@ impl Find {
         self.match_all();
     }
 
-    /// Searches for `query`. The current match is the one in `item` when it has one, or else the
-    /// first at or after `from`, round from the start. Whether it moved.
+    /// Searches for `query`. With `item`, the message the sidebar's search found, the current match
+    /// is its first, once the whole thread is searched, and none when it has none. Without, it is
+    /// the first at or after `from`, round from the start. Whether it moved.
     pub fn search(&mut self, query: &str, from: Option<Place>, item: Option<&str>) -> bool {
         let before = self.current.clone();
         let from = self.current_place().or(from);
@@ -118,12 +119,16 @@ impl Find {
         self.phrase = Some(Folded::new(query.trim())).filter(|phrase| !phrase.is_empty());
         self.match_all();
         let hits = self.hits();
-        let in_item = item.and_then(|item| hits.iter().find(|hit| hit.item_id == item));
-        let next = in_item.or_else(|| {
+        if let Some(item) = item {
+            let in_item = hits.iter().find(|hit| hit.item_id == item).filter(|_| self.ready);
+            self.current = in_item.map(|hit| (hit.row_id.clone(), hit.start));
+            return self.current != before;
+        }
+        let next = {
             let from = from.unwrap_or((0, 0));
             let at = |hit: &&Hit| self.place_of(&hit.row_id).is_some_and(|place| place >= from);
             hits.iter().find(at).or(hits.first())
-        });
+        };
         self.current = next.map(|hit| (hit.row_id.clone(), hit.start));
         self.current != before
     }
@@ -333,6 +338,19 @@ mod tests {
         assert_eq!(find.current_index(), Some(1), "a longer search keeps the current match");
         find.search("deploy", None, Some("c"));
         assert_eq!(find.current_index(), Some(2), "the message it was found by comes first");
+    }
+
+    #[test]
+    fn the_message_it_was_found_by_has_the_current_match_or_none() {
+        let items = [user("a", 1, "deploy it"), user("b", 2, "it was a deploy")];
+        let mut find = Find::default();
+        find.search("deploy", None, Some("b"));
+        assert_eq!(find.current_index(), None, "it waits for the whole thread");
+        find.set_entries(index(&items, "/tmp"));
+        find.search("deploy", None, Some("b"));
+        assert_eq!(find.current_index(), Some(1));
+        find.search("deploy it", None, Some("b"));
+        assert_eq!((find.count(), find.current_index()), (1, None), "the words are apart in that message");
     }
 
     #[test]

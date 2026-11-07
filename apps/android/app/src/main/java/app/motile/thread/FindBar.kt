@@ -14,6 +14,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -66,7 +67,11 @@ fun FindBar(modifier: Modifier = Modifier) {
     val palette = Theme.colors
     val size = ControlSize.Regular
     val focus = remember { FocusRequester() }
-    LaunchedEffect(find.focusRequests) { runCatching { focus.requestFocus() } }
+    // A bar that has just come in takes the keys once it is placed.
+    LaunchedEffect(find.focusRequests) {
+        withFrameNanos {}
+        runCatching { focus.requestFocus() }
+    }
     CompositionLocalProvider(LocalSurface provides Surface.Popover, LocalRow provides null, LocalForeground provides palette.foreground) {
         Row(
             modifier
@@ -92,6 +97,7 @@ fun FindBar(modifier: Modifier = Modifier) {
                     focusRequester = focus,
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                     onSubmit = { store.stepFind(back = false) },
+                    selectAllRequests = find.focusRequests,
                 )
             }
             val label = find.label

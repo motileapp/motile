@@ -506,11 +506,6 @@ pub enum Command {
     FindEnd {
         thread_id: String,
     },
-    /// Brings the item's first row into sight, loading its turn and opening its fold.
-    RevealItem {
-        thread_id: String,
-        item_id: String,
-    },
     /// Asks for the turns before the first row, when the rows said there are some.
     LoadEarlier {
         thread_id: String,

@@ -136,6 +136,16 @@ impl Store {
         match command {
             "commandPalette.toggle" => return self.toggle_panel(PanelPage::Commands),
             "threadPicker.toggle" => return self.toggle_panel(PanelPage::Threads),
+            "search.focus" => {
+                if self.panel.is_some() {
+                    return false;
+                }
+                if self.settings.section.is_some() || self.shows_usage {
+                    self.close_route();
+                }
+                self.prefs.set("sidebar.hidden", false);
+                self.search_focus_requests += 1;
+            }
             "settings.open" => {
                 if !self.account.signed_in {
                     return false;

@@ -1687,8 +1687,6 @@ data class MessageMatch(
     val parts: List<Part>,
     /** The message, which the thread opens at. */
     val itemID: String? = null,
-    /** The search is in the message as it was written, so the thread opens finding it. */
-    val phrase: Boolean = false,
 ) {
     data class Part(val text: String, val matched: Boolean)
 
@@ -1696,6 +1694,5 @@ data class MessageMatch(
         byUser = json.string("speaker") == "user",
         parts = json.objects("parts").map { Part(it.string("text"), it.bool("matched")) },
         itemID = json.optionalString("item_id"),
-        phrase = json.bool("phrase"),
     )
 }

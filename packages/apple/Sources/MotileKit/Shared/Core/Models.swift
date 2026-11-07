@@ -1740,13 +1740,10 @@ struct MessageMatch: Equatable {
     let parts: [Part]
     /// The message, which the thread opens at.
     let itemID: String?
-    /// The search is in the message as it was written, so the thread opens finding it.
-    let phrase: Bool
 
     init(json: JSON) {
         byUser = json.string("speaker") == "user"
         parts = json.objects("parts").map { Part(text: $0.string("text"), matched: $0.bool("matched")) }
         itemID = json["item_id"] as? String
-        phrase = json.bool("phrase")
     }
 }

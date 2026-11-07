@@ -292,6 +292,7 @@ struct SidebarScreen: View {
                 }
                 SearchField(text: $store.threadSearch, capsule: true, clearable: false, focus: $searchFocused)
                     .steersSearch(highlighted: highlighted, open: openSearchResult)
+                    .onChange(of: store.searchFocusRequests) { FieldFocus.take { searchFocused = true } }
                     .padding(.leading, 6)
                     .frame(height: GlassButtonStyle.side)
                     .glassButton(in: Capsule())

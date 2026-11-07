@@ -2,6 +2,7 @@
 //! found for it. `Find.swift`.
 
 use std::collections::HashMap;
+use std::time::Duration;
 
 use gpui_kit::prelude::*;
 use gpui_kit::*;
@@ -23,7 +24,13 @@ pub struct FindState {
     pub current: Option<usize>,
     /// Counts up when the bar's field should take the keys with what it has selected.
     pub focus_requests: u64,
+    /// Counts up each time what the sidebar searched is lit, and when finding ends, so that a
+    /// light fades only if it is still the one lit.
+    lit: u64,
 }
+
+/// How long what the sidebar searched stays lit in the thread it opened, unless the bar opens on it.
+const LIT_FOR: Duration = Duration::from_secs(5);
 
 impl FindState {
     /// "3/41", or "0/0" when nothing matches.
@@ -54,22 +61,41 @@ impl Store {
         self.find.shown = true;
         self.find.active = true;
         self.find.focus_requests += 1;
-        self.send_find(thread_id, item_id, cx);
+        self.send_find(thread_id, item_id, true, cx);
     }
 
-    /// Lights what the sidebar searched for in the open thread and scrolls to it in the message
-    /// `item_id`, without the bar. ⌘F then opens the bar on it, Esc puts it away.
-    pub fn light_found(&mut self, query: String, item_id: String, cx: &mut Context<Self>) {
+    /// Lights what the sidebar searched for in the open thread, without the bar, and scrolls to it
+    /// in the message `item_id`, or to the message when the words are apart there. A server that
+    /// doesn't say the message has it scroll to the first match. It fades after a while unless
+    /// the bar opened on it; ⌘F opens the bar on it, Esc puts it away.
+    pub fn light_found(&mut self, query: String, item_id: Option<String>, cx: &mut Context<Self>) {
         let Some(thread_id) = self.open_transcript_thread(cx) else { return };
+        if query.is_empty() {
+            return;
+        }
         self.find.query = query;
         self.find.active = true;
-        self.send_find(thread_id, Some(item_id), cx);
+        self.find.lit += 1;
+        let lit = self.find.lit;
+        self.send_find(thread_id, item_id, false, cx);
+        cx.spawn(async move |this, cx| {
+            cx.background_executor().timer(LIT_FOR).await;
+            let _ = this.update(cx, |store, cx| {
+                if store.find.lit != lit || store.find.shown {
+                    return;
+                }
+                store.close_find(cx);
+                cx.notify();
+            });
+        })
+        .detach();
     }
 
     pub fn close_find(&mut self, cx: &mut Context<Self>) {
         if !self.find.active {
             return;
         }
+        self.find.lit += 1;
         self.find.shown = false;
         self.find.active = false;
         self.find.count = 0;
@@ -88,7 +114,7 @@ impl Store {
         }
         self.find.query = query;
         let Some(thread_id) = self.open_transcript_thread(cx) else { return };
-        self.send_find(thread_id, None, cx);
+        self.send_find(thread_id, None, true, cx);
     }
 
     /// Moves to the next match, or with `back` the one before. The bar opens first when it is closed.
@@ -100,13 +126,10 @@ impl Store {
         self.send(Command::FindStep { thread_id, back });
     }
 
-    /// Scrolls the thread to the message.
-    pub fn reveal_item(&mut self, thread_id: String, item_id: String) {
-        self.send(Command::RevealItem { thread_id, item_id });
-    }
-
-    fn send_find(&mut self, thread_id: String, item_id: Option<String>, cx: &App) {
-        let from = self.transcript.read(cx).viewport();
+    /// Asks the core to find the query, from where the transcript shows the rows when
+    /// `from_viewport`, else from the thread's start.
+    fn send_find(&mut self, thread_id: String, item_id: Option<String>, from_viewport: bool, cx: &App) {
+        let from = if from_viewport { self.transcript.read(cx).viewport() } else { None };
         self.send(Command::Find { thread_id, query: self.find.query.clone(), from, item_id });
     }
 

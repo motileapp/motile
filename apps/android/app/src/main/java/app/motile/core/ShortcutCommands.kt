@@ -57,6 +57,11 @@ fun AppStore.perform(command: String): Boolean {
         }
         "commandPalette.toggle" -> return togglePanel(PanelPage.Commands)
         "threadPicker.toggle" -> return togglePanel(PanelPage.Threads)
+        "search.focus" -> {
+            if (panel != null) return false
+            if (settings != null || showsUsage) closeRoute()
+            searchFocusRequests += 1
+        }
         "settings.open" -> {
             if (!account.signedIn) return false
             openSettings()

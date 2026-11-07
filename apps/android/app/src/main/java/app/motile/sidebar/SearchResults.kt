@@ -64,6 +64,7 @@ fun SearchField(
     focusRequester: FocusRequester? = null,
     onFocusChange: ((Boolean) -> Unit)? = null,
     onSubmit: (() -> Unit)? = null,
+    selectAllRequests: Int = 0,
 ) {
     InputField(
         "Search", text, onTextChange, modifier,
@@ -74,6 +75,7 @@ fun SearchField(
         focusRequester = focusRequester,
         onFocusChange = onFocusChange,
         onSubmit = onSubmit,
+        selectAllRequests = selectAllRequests,
     )
 }
 

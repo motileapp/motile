@@ -450,6 +450,8 @@ class AppStore(private val context: Context) {
     val core = CoreBridge()
     val transcript = TranscriptModel()
     val find = FindState()
+    /** Asks the sidebar's search field to take the keys with what it has selected. */
+    var searchFocusRequests by mutableIntStateOf(0)
     /** What the agent did that the right panel shows. */
     val agentTranscript = TranscriptModel()
     private var signInSession: SignInSession? = null

@@ -59,6 +59,10 @@ extension AppStore {
             composerPickerProviderStep = command == "modelPicker.nextProvider" ? 1 : -1
         case "commandPalette.toggle": return togglePanel(.commands)
         case "threadPicker.toggle": return togglePanel(.threads)
+        case "search.focus":
+            guard panel == nil else { return false }
+            if settings != nil || showsUsage { closeRoute() }
+            searchFocusRequests += 1
         case "settings.open":
             guard account.signedIn else { return false }
             openSettings()

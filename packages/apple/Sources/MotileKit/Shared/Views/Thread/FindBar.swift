@@ -54,8 +54,7 @@ struct FindBar: View {
         }
         .environment(\.surface, .popover)
         .onChange(of: find.focusRequests, initial: true) {
-            focused = true
-            Self.selectAll()
+            FieldFocus.take { focused = true }
         }
     }
 
@@ -66,12 +65,19 @@ struct FindBar: View {
         false
         #endif
     }
+}
 
-    /// The field takes the keys with what it has selected, so that what is typed replaces it.
-    private static func selectAll() {
-        #if os(macOS)
-        DispatchQueue.main.async { NSApp.sendAction(#selector(NSText.selectAll(_:)), to: nil, from: nil) }
-        #endif
+/// Gives a field the keys with what it has selected, so that what is typed replaces it, as a
+/// browser's find does. A field that has just come in takes the keys only once it is in the
+/// window, so it is asked a moment later, and what it selects waits for that.
+enum FieldFocus {
+    static func take(_ focus: @escaping () -> Void) {
+        DispatchQueue.main.async {
+            focus()
+            #if os(macOS)
+            DispatchQueue.main.async { NSApp.sendAction(#selector(NSText.selectAll(_:)), to: nil, from: nil) }
+            #endif
+        }
     }
 }
 

@@ -418,6 +418,8 @@ pub struct Store {
     jump_hint_task: Option<Task<()>>,
     /// The usage is open over the window, as a route of its own.
     pub shows_usage: bool,
+    /// Counts up when the sidebar's search field should take the keys with what it has selected.
+    pub search_focus_requests: u64,
     pub usage: usage::Usage,
     pub gateway: gateway::Gateway,
     pub mcp_servers: mcp_servers::McpServers,
@@ -540,6 +542,7 @@ impl Store {
             shows_jump_hints: false,
             jump_hint_task: None,
             shows_usage: false,
+            search_focus_requests: 0,
             usage: usage::Usage::default(),
             gateway: gateway::Gateway::default(),
             mcp_servers: mcp_servers::McpServers::default(),

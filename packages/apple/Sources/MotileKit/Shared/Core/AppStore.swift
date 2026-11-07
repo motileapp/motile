@@ -450,6 +450,8 @@ final class AppStore {
     private(set) var shortcuts = Shortcuts()
     /// The keys that open the sidebar's first threads are held, so their rows show them.
     var showsJumpHints = false
+    /// Asks the sidebar's search field to take the keys and select what it has.
+    var searchFocusRequests = 0
     /// What the sidebar's threads are searched for. Their messages are searched on the servers.
     var threadSearch = "" {
         didSet {
