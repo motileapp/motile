@@ -23,7 +23,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.motile.LocalStore
 import app.motile.core.Account
-import app.motile.theme.ControlSize
 import app.motile.theme.LocalPalette
 import java.net.URL
 
@@ -32,8 +31,8 @@ import java.net.URL
  * the way to sign out. It floats on glass beside the search, as the sidebar's buttons do.
  */
 object AccountMenu {
-    /** The picture's side in a button of the regular size, which it fills but for a margin. */
-    val side = ControlSize.Regular.height - 8.dp
+    /** The picture's side, 6 points inside its glass button. */
+    val side = GlassButton.side - 12.dp
 }
 
 @Composable
@@ -50,7 +49,7 @@ fun AccountMenu(modifier: Modifier = Modifier) {
         },
         modifier = modifier.size(GlassButton.side).glassButton(CircleShape).semantics(mergeDescendants = true) { contentDescription = "Account" },
     ) {
-        AccountPicture(store.account, Modifier.size(34.dp))
+        AccountPicture(store.account, Modifier.size(AccountMenu.side))
     }
 }
 
