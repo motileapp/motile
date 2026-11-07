@@ -18,7 +18,7 @@ struct PanelScreen: View {
                     paneButtons
                 }
             }
-            .frame(height: 46)
+            .frame(height: PanelTabStrip.height)
             PanelLine()
             PanelContent(active: tabs.active)
         }

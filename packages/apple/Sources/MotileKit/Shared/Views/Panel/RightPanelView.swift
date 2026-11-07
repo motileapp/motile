@@ -20,7 +20,8 @@ struct RightPanelView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .overlay(alignment: .top) {
-            PanelTabStrip(tabs: tabs, leading: tabInset ?? PanelTabStrip.edge)
+            let edge = PanelTabStrip.edge(in: topInset)
+            PanelTabStrip(tabs: tabs, edge: edge, leading: tabInset ?? edge)
                 // The buttons that maximize and hide the panel are at the window's edge.
                 .padding(.trailing, 2 * ToolbarButton.width + 14)
                 .frame(height: topInset)
@@ -172,12 +173,21 @@ struct PanelNote: View {
 }
 
 struct PanelTabStrip: View {
+    /// How far the tabs keep from the strip's ends, as far as from its top and bottom.
     static let edge: CGFloat = 8
+    /// A strip of its own, as tall as a tab and its edges.
+    static let height = PanelTabChip.height + 2 * edge
+
+    /// The edge in a bar of that height, which the tabs are centred in.
+    static func edge(in height: CGFloat) -> CGFloat {
+        (height - PanelTabChip.height) / 2
+    }
 
     @Environment(AppStore.self) private var store
     let tabs: PanelTabs
+    var edge = Self.edge
     /// Where the first tab starts.
-    var leading = edge
+    var leading = Self.edge
 
     var body: some View {
         ScrollViewReader { strip in
@@ -193,7 +203,7 @@ struct PanelTabStrip: View {
                     }
                 }
                 .padding(.leading, leading - PanelTabChip.margin)
-                .padding(.trailing, Self.edge - PanelTabChip.margin)
+                .padding(.trailing, edge - PanelTabChip.margin)
                 .frame(maxHeight: .infinity)
             }
             .onChange(of: tabs.active, initial: true) {
@@ -230,7 +240,7 @@ struct PanelTabChip: View {
     @State private var hovering = false
     @Environment(\.surface) private var surface
 
-    private static let height = ControlSize.regular.height
+    static let height = ControlSize.regular.height
     private static let closeSize = ControlSize.inset.height
     private static let closeMargin = ControlSize.insetMargin
     /// How far above and under the tab a finger still presses it.

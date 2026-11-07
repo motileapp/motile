@@ -160,7 +160,9 @@ fun PanelNote(text: String) {
 }
 
 object PanelTabStrip {
+    /** How far the tabs keep from the strip's ends, as far as from its top and bottom. */
     val edge = 8.dp
+    val height get() = ControlSize.Regular.height + edge * 2
 }
 
 /** The open tabs, side by side and scrolled sideways when they don't fit, and the button that adds one. */
