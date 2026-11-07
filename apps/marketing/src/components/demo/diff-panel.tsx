@@ -60,7 +60,7 @@ export function DiffPanel({
           </button>
         </span>
         <span className="flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-background-accent hover:text-foreground">
-          <PlusIcon className="size-3.5" />
+          <PlusIcon className="size-4" />
         </span>
       </div>
       <div className="flex h-9 shrink-0 items-center gap-1 border-t border-b pr-1 pl-3">
@@ -83,9 +83,9 @@ export function DiffPanel({
             className="ml-auto flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-background-accent hover:text-foreground"
           >
             {allClosed ? (
-              <UnfoldVerticalIcon className="size-3.5" />
+              <UnfoldVerticalIcon className="size-4" />
             ) : (
-              <FoldVerticalIcon className="size-3.5" />
+              <FoldVerticalIcon className="size-4" />
             )}
           </button>
         )}
@@ -95,7 +95,7 @@ export function DiffPanel({
             files.length < 2 && "ml-auto"
           )}
         >
-          <RotateCwIcon className="size-3.5" />
+          <RotateCwIcon className="size-4" />
         </span>
       </div>
       {files.length === 0 ? (

@@ -347,7 +347,9 @@ impl ControlLabel {
     }
 
     fn mark_size(&self) -> IconSize {
-        self.symbol_size.unwrap_or(self.size.symbol())
+        let wordless_symbol = self.wordless() && matches!(self.icon, Some(ControlIcon::Symbol(_)));
+        let fitting = if wordless_symbol { self.size.wordless_symbol() } else { self.size.symbol() };
+        self.symbol_size.unwrap_or(fitting)
     }
 
     /// How wide it is drawn when nothing cuts its words short, as `render` lays it out.
@@ -911,7 +913,7 @@ impl ActionButton {
         let line = window.text_style().line_height.to_pixels(px(size.text_size()).into(), window.rem_size());
         let vertical = (size.height() - f32::from(line)) / 2.;
         let leading = match self.label.wordless() {
-            true => (size.height() - size.symbol().side()) / 2.,
+            true => (size.height() - self.label.symbol_size.unwrap_or(size.wordless_symbol()).side()) / 2.,
             false => {
                 self.label.padding.unwrap_or(size.padding())
                     - if self.label.icon.is_some() { size.symbol_outset() } else { 0. }

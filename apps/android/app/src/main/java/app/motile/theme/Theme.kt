@@ -213,6 +213,13 @@ enum class ControlSize {
     /** Its symbol, as large as an icon beside its text is. */
     val symbol: IconSize get() = iconSize(text = textSize)
 
+    /** Its symbol when it has no words to match, which draws larger. */
+    val wordlessSymbol: IconSize
+        get() = when (this) {
+            Small, Inset -> symbol
+            Regular, Large -> IconSize.Md
+        }
+
     /** A symbol that should weigh less than the others, like the x that closes a tab. */
     val smallSymbol: IconSize
         get() = when (this) {

@@ -100,7 +100,7 @@ struct ThreadPane: View {
     /// the bar's top, beside the sidebar.
     private func backButton(help: String, bar: CGFloat, action: @escaping () -> Void) -> some View {
         let size = ControlSize.large
-        let light = (size.height - size.symbolSide) / 2
+        let light = (size.height - PlatformImage.symbolSide(size.wordlessSymbol)) / 2
         return ActionButton(icon: .cornerLeftUp, help: help, size: size, action: action)
             .padding(.leading, (bar - size.height) / 2 - Self.besideSidebarInset)
             .padding(.trailing, -light)

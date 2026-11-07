@@ -480,7 +480,7 @@ final class IconButton: UIButton {
 
     convenience init(symbol: Symbol, title: String = "", symbolSize: IconSize? = nil, tooltip: String, action: @escaping () -> Void) {
         self.init(type: .custom)
-        self.symbolSize = symbolSize ?? Self.metrics.symbol
+        self.symbolSize = symbolSize ?? (title.isEmpty ? Self.metrics.wordlessSymbol : Self.metrics.symbol)
         layer.cornerRadius = Self.metrics.radius
         layer.cornerCurve = .continuous
         tintColor = Theme.mutedForeground

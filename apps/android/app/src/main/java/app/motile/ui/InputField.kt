@@ -125,7 +125,7 @@ fun InputField(
         )
         if (clears && capsule) {
             Box(Modifier.fillMaxHeight().aspectRatio(1f), contentAlignment = Alignment.Center) {
-                ActionButton(icon = Symbol.X, help = "Clear", round = true) { onTextChange("") }
+                ActionButton(icon = Symbol.X, help = "Clear", symbolSize = ControlSize.Regular.symbol, round = true) { onTextChange("") }
             }
         } else if (clears) {
             ActionButton(icon = Symbol.X, help = "Clear", size = clearSize) { onTextChange("") }

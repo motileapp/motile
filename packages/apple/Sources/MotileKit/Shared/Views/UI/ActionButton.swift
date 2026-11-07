@@ -221,7 +221,15 @@ struct ControlLabel: View {
     var proxied = false
 
     private var wordless: Bool { title == nil && !chevron }
-    private var markSize: IconSize { symbolSize ?? size.symbol }
+    private var markSize: IconSize {
+        guard let symbolSize else { return wordlessSymbol ? size.wordlessSymbol : size.symbol }
+        return symbolSize
+    }
+
+    private var wordlessSymbol: Bool {
+        guard wordless, case .symbol = icon else { return false }
+        return true
+    }
     private var waitingTitle: String? { pending ? pendingTitle : nil }
 
     var body: some View {
@@ -596,7 +604,7 @@ struct ActionButton: View {
     private var inlineBleed: EdgeInsets {
         let size = look.size
         let leading = words == nil && !chevron
-            ? (size.height - size.symbolSide) / 2
+            ? (size.height - PlatformImage.symbolSide(symbolSize ?? size.wordlessSymbol)) / 2
             : (padding ?? size.padding) - (icon == nil ? 0 : size.symbolOutset)
         return EdgeInsets(top: -inlineVertical, leading: -leading, bottom: -inlineVertical, trailing: 0)
     }
