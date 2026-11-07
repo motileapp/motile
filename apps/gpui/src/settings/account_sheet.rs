@@ -474,7 +474,7 @@ fn folder_placeholder(agent: Agent) -> &'static str {
 }
 
 /// A field's title over it, and its caption under it.
-fn field(title: &str, caption: Option<String>, content: impl IntoElement, cx: &App) -> Div {
+pub(super) fn field(title: &str, caption: Option<String>, content: impl IntoElement, cx: &App) -> Div {
     failing_field(title, caption, None, content, cx)
 }
 

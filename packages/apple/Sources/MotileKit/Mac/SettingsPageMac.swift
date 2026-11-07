@@ -58,6 +58,9 @@ struct SettingsPage: View {
         .modal(item: $editedAccount) { edited in
             AgentAccountSheet(server: edited.server, account: edited.account)
         }
+        .modal(item: section == .servers ? Bindable(store).editedBackup : .constant(nil)) { edited in
+            BackupSheet(bucket: edited.bucket)
+        }
     }
 
     @ViewBuilder private var general: some View {
@@ -173,8 +176,30 @@ struct SettingsPage: View {
                 EmptyView()
             }
         }
+        backup
         removedServers
         continuing
+    }
+
+    /// The account's S3 bucket, which every server backs up to and syncs through.
+    @ViewBuilder private var backup: some View {
+        let on = store.backup.bucket != nil
+        SettingsGroup("backup", "Backup", caption: on ? "Your servers keep their threads, images and files in it, and sync through it." : nil) {
+            SettingsRow {
+                SettingsLabel("S3 bucket", description: store.backup.description, icon: .cloudUpload, truncates: on ? .middle : nil)
+            } trailing: {
+                if on {
+                    HStack(spacing: 0) {
+                        ActionButton("Edit", variant: .outline, size: .large, margin: .beside(trailing: settingsHalfGap)) { store.editedBackup = EditedBackup(bucket: store.backup.bucket) }
+                        more("What to do with the backup", margin: .beside(leading: settingsHalfGap)) {
+                            MenuItem("Turn Off", symbol: .ban, role: .destructive) { removal = .backup }
+                        }
+                    }
+                } else {
+                    ActionButton("Set Up", variant: .outline, size: .large) { store.editedBackup = EditedBackup(bucket: nil) }
+                }
+            }
+        }
     }
 
     /// The servers removed from the account, whose threads stay from the copies until they are

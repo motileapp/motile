@@ -18,8 +18,8 @@ use motile_protocol::gateway_wire::{GatewayReply, GatewaySignIn, GatewayState, M
 use motile_protocol::identity::{DeviceKey, random_token};
 use motile_protocol::now;
 use motile_protocol::wire::{
-    Access, AccountSkills, Activity, Agent, AgentLimits, ContinueSettings, FileKind, Item, ItemKind, Media, Message,
-    Project, PullRequestSettings, Request, ServerInfo, Skill, Thread, ThreadMatch, ToolStatus, Worktree,
+    Access, AccountSkills, Activity, Agent, AgentLimits, Bucket, ContinueSettings, FileKind, Item, ItemKind, Media,
+    Message, Project, PullRequestSettings, Request, ServerInfo, Skill, Thread, ThreadMatch, ToolStatus, Worktree,
 };
 use serde_json::{Value, json};
 use tokio::sync::mpsc;
@@ -29,6 +29,7 @@ use crate::api::{
     AccountView, Children, Command, Config, Event, ProjectView, ScrollAt, Section, ServerView, SyncState, SyncView,
     ThreadView, WaitingChild,
 };
+use crate::backup::{self, BACKUP_PROTOCOL};
 use crate::browse;
 use crate::cache::{Cache, Page};
 use crate::connection::{NOT_CONNECTED, ServerAddr, bind, leave_relays, offline};
@@ -190,6 +191,15 @@ enum Input {
         asked: String,
         found: Vec<search::Found>,
         last: bool,
+    },
+    /// A server took the bucket this device keeps, or couldn't.
+    BackupGiven {
+        server_id: String,
+        result: Result<(), String>,
+    },
+    /// The first server checked the bucket: this device keeps it now.
+    BackupChecked {
+        bucket: Option<Bucket>,
     },
     /// Time to copy the servers' threads between them.
     Relay,
@@ -428,6 +438,7 @@ struct Core {
     search: Search,
     relay: Relay,
     gateway: Gateway,
+    backup: Backup,
 }
 
 /// The account's gateway, as far as the client knows it.
@@ -442,6 +453,15 @@ struct Gateway {
     sign_in: Option<gateway::SignIn>,
     /// The account the sign-in being started signs in again.
     signing_in_again: Option<String>,
+}
+
+/// The account's bucket, as this device keeps it and gives it to the servers.
+struct Backup {
+    saved: backup::Saved,
+    /// The servers being given the bucket now.
+    giving: HashSet<String>,
+    /// Why a server couldn't take it, by server id, until it connects again.
+    failed: HashMap<String, String>,
 }
 
 /// The rounds that copy the servers' threads between them.
@@ -521,6 +541,7 @@ pub fn start(config: Config, sink: EventSink) -> anyhow::Result<Handle> {
         searched_images: SearchedImages::default(),
         skills: Skills::default(),
         keybindings: Keybindings::load(&config.data_dir, &config.platform),
+        backup: Backup { saved: backup::Saved::load(&config.data_dir), giving: HashSet::new(), failed: HashMap::new() },
         config,
         sink,
         inputs: inputs.clone(),
@@ -698,6 +719,20 @@ impl Core {
                 info.pull_request_settings = settings;
                 let info = info.clone();
                 self.cache.set_server_info(&server_id, &info);
+                self.emit_servers();
+            }
+            Input::BackupGiven { server_id, result } => {
+                self.backup.giving.remove(&server_id);
+                match result {
+                    Ok(()) => drop(self.backup.failed.remove(&server_id)),
+                    Err(error) => drop(self.backup.failed.insert(server_id, error)),
+                }
+                self.emit_servers();
+            }
+            Input::BackupChecked { bucket } => {
+                if let Err(error) = self.backup.saved.save(bucket) {
+                    tracing::warn!("couldn't keep the bucket's keys: {error}");
+                }
                 self.emit_servers();
             }
             Input::ContinueSettingsSet { server_id, settings } => {
@@ -991,6 +1026,10 @@ impl Core {
         self.outbox.clear();
         self.emit_outbox();
         self.media.clear();
+        if let Err(error) = self.backup.saved.save(None) {
+            tracing::warn!("couldn't forget the bucket's keys: {error}");
+        }
+        self.backup.failed.clear();
         if let Some(endpoint) = self.endpoint.take() {
             tokio::spawn(async move { endpoint.close().await });
         }
@@ -1485,6 +1524,8 @@ impl Core {
             sync: self.sync_view(server),
         };
         self.emit(Event::Servers { servers: self.servers.iter().map(view).collect() });
+        let infos = self.servers.iter().filter(|server| !server.removed).filter_map(|server| server.info.as_ref());
+        self.emit(Event::Backup { backup: backup::view(self.backup.saved.bucket.as_ref(), infos) });
     }
 
     /// Forgets the update of a server that has been away too long for it to still be under way.
@@ -1589,13 +1630,18 @@ impl Core {
             return self.reply(id, Err("That isn't the name of a file your server keeps.".to_string()));
         };
         let server = self.servers.iter().find(|server| server.device.public_key == server_id);
-        if let Some(server) = server.filter(|server| server.removed) {
-            let only_there = format!("Only “{}” had this, and it's unlinked.", server.device.name);
-            return self.reply(id, Err(only_there));
-        }
-        let link = match self.link(server_id) {
-            Ok(link) => link,
-            Err(error) => return self.reply(id, Err(error)),
+        let link = match server.filter(|server| server.removed) {
+            Some(server) => match self.bucket_holder(server_id) {
+                Some(link) => link,
+                None => {
+                    let only_there = format!("Only “{}” had this, and it's unlinked.", server.device.name);
+                    return self.reply(id, Err(only_there));
+                }
+            },
+            None => match self.link(server_id) {
+                Ok(link) => link,
+                Err(error) => return self.reply(id, Err(error)),
+            },
         };
         let (cache, inputs, sink, waiting_key) =
             (self.media.clone(), self.inputs.clone(), self.sink.clone(), media_id.clone());
@@ -1726,6 +1772,9 @@ impl Core {
         if server.removed {
             return None;
         }
+        if let Some(view) = self.backup_line(server) {
+            return Some(view);
+        }
         let id = &server.device.public_key;
         let synced_at = self.relay.synced_at.get(id).copied();
         let view = |state, text: &str| Some(SyncView { state, text: text.into(), error: None, synced_at });
@@ -1782,6 +1831,87 @@ impl Core {
             Some(_) => view(SyncState::Synced, "Synced"),
             None => view(SyncState::Copying, "Syncing"),
         }
+    }
+
+    fn backs_up(&self) -> bool {
+        let uses_it =
+            |server: &Server| !server.removed && server.info.as_ref().is_some_and(|info| info.backup.is_some());
+        self.backup.saved.bucket.is_some() || self.servers.iter().any(uses_it)
+    }
+
+    /// What the line under a connected server says of its backup, while the account has one and
+    /// no client carries threads to it.
+    fn backup_line(&self, server: &Server) -> Option<SyncView> {
+        let info = server.info.as_ref().filter(|_| self.backs_up() && server.status.state == State::Connected)?;
+        if info.protocol < BACKUP_PROTOCOL {
+            let view =
+                SyncView { state: SyncState::Off, text: "Update it to back up".into(), error: None, synced_at: None };
+            return Some(view);
+        }
+        let id = &server.device.public_key;
+        let carried =
+            self.relay.copying.iter().any(|(transfer, reached)| transfer.target == *id && *reached < transfer.until);
+        if carried || self.relay.failed.contains_key(id) {
+            return None;
+        }
+        Some(backup::line(info.backup.as_ref(), self.backup.failed.get(id), self.backup.saved.bucket.is_some()))
+    }
+
+    /// Gives the bucket this device keeps to a connected server that has none.
+    fn give_backup(&mut self, server_id: &str) {
+        let Some(bucket) = self.backup.saved.bucket.clone() else { return };
+        let Some(server) = self.servers.iter().find(|server| server.device.public_key == server_id) else { return };
+        let lacks = server.info.as_ref().is_some_and(|info| info.protocol >= BACKUP_PROTOCOL && info.backup.is_none());
+        let Some(link) = server.link.clone().filter(|_| lacks && !server.removed) else { return };
+        if self.backup.failed.contains_key(server_id) || !self.backup.giving.insert(server_id.to_string()) {
+            return;
+        }
+        let (inputs, server_id) = (self.inputs.clone(), server_id.to_string());
+        tokio::spawn(async move {
+            let result =
+                link.request(&Request::SetBackup { bucket: Some(bucket) }).await.map(|_| ()).map_err(error_text);
+            let _ = inputs.send(Input::BackupGiven { server_id, result });
+        });
+    }
+
+    /// The connected servers that can back up, the first one first.
+    fn backup_links(&self) -> Vec<(String, Arc<Link>)> {
+        let mut links: Vec<(String, Arc<Link>)> = self
+            .servers
+            .iter()
+            .filter(|server| !server.removed && server.status.state == State::Connected)
+            .filter(|server| server.info.as_ref().is_some_and(|info| info.protocol >= BACKUP_PROTOCOL))
+            .filter_map(|server| Some((server.device.public_key.clone(), server.link.clone()?)))
+            .collect();
+        links.sort_by(|a, b| a.0.cmp(&b.0));
+        links
+    }
+
+    /// Has the first connected server check the bucket, then keeps it and gives it to the others;
+    /// or stops every connected server's backup.
+    fn set_backup(&mut self, id: u64, bucket: Option<Bucket>) {
+        let links = self.backup_links();
+        if bucket.is_some() && links.is_empty() {
+            return self.reply(id, Err("Connect one of your servers so it can check the bucket.".into()));
+        }
+        let (sink, inputs) = (self.sink.clone(), self.inputs.clone());
+        tokio::spawn(async move {
+            let request = Request::SetBackup { bucket: bucket.clone() };
+            let mut links = links.into_iter();
+            if bucket.is_some() {
+                let Some((server_id, first)) = links.next() else { return };
+                if let Err(error) = first.request(&request).await {
+                    return reply(&sink, id, Err(error_text(error)));
+                }
+                let _ = inputs.send(Input::BackupGiven { server_id, result: Ok(()) });
+            }
+            let _ = inputs.send(Input::BackupChecked { bucket });
+            reply(&sink, id, Ok(json!({})));
+            for (server_id, link) in links {
+                let result = link.request(&request).await.map(|_| ()).map_err(error_text);
+                let _ = inputs.send(Input::BackupGiven { server_id, result });
+            }
+        });
     }
 
     fn schedule_relay(&mut self, delay: Duration) {
@@ -1862,6 +1992,17 @@ impl Core {
                 self.relay.synced_at.insert(server_id.clone(), now());
             }
         }
+        let furthest = |marks: &HashMap<String, relay::Marks>, origin: &str| {
+            let copies = marks.values().filter_map(|server| server.copies.get(origin));
+            copies.map(|copy| (copy.change, copy.log_id.clone())).max()
+        };
+        let mut changed = round.changed;
+        for server in self.servers.iter().filter(|server| server.removed) {
+            let origin = &server.device.public_key;
+            if furthest(&self.relay.marks, origin) != furthest(&round.marks, origin) {
+                changed.insert(origin.clone());
+            }
+        }
         self.relay.failed = round.failed;
         self.relay.marks = round.marks;
         self.emit_servers();
@@ -1872,7 +2013,7 @@ impl Core {
             .map(|server| server.device.public_key.clone())
             .collect();
         for origin in removed {
-            if round.changed.contains(&origin) || !self.relay.read.contains(&origin) {
+            if changed.contains(&origin) || !self.relay.read.contains(&origin) {
                 self.fetch_copies(&origin);
             }
         }
@@ -1890,6 +2031,21 @@ impl Core {
             ids.sort();
             ids.first().and_then(|id| peers.get(*id).cloned())
         })
+    }
+
+    /// The connected server that keeps a copy of the removed server's threads and can fetch its
+    /// media from the bucket.
+    fn bucket_holder(&self, origin: &str) -> Option<Arc<Link>> {
+        let peers = self.peers();
+        let backs_up = |id: &String| {
+            let server = self.servers.iter().find(|server| server.device.public_key == *id);
+            server.and_then(|server| server.info.as_ref()).is_some_and(|info| info.backup.is_some())
+        };
+        let best = relay::best_holder(&self.relay.marks, origin).filter(|id| backs_up(id) && peers.contains_key(id));
+        let mut ids: Vec<&String> = peers.keys().filter(|id| backs_up(id)).collect();
+        ids.sort();
+        let id = best.or_else(|| ids.first().map(|id| (*id).clone()))?;
+        peers.get(&id).cloned()
     }
 
     fn fetch_copies(&mut self, origin: &str) {
@@ -2012,13 +2168,20 @@ impl Core {
                 }
                 self.read_limits(server_id);
                 self.schedule_relay(RELAY_SOON);
+                self.backup.failed.remove(server_id);
+                self.give_backup(server_id);
             }
             Message::Server { server: info } => {
                 self.cache.set_server_info(server_id, &info);
                 let Some(server) = self.server_mut(server_id) else { return };
+                let backup_changed = server.info.as_ref().map(|before| &before.backup) != Some(&info.backup);
                 server.info = Some(info);
                 self.reprogram(server_id);
                 self.emit_servers();
+                self.give_backup(server_id);
+                if backup_changed {
+                    self.schedule_relay(RELAY_SOON);
+                }
             }
             Message::Projects { projects } => {
                 self.cache.set_projects(server_id, &projects);
@@ -3181,6 +3344,7 @@ impl Core {
                     reply(&sink, id, set.map(|_| json!({})).map_err(error_text));
                 });
             }
+            Command::SetBackup { bucket } => self.set_backup(id, bucket),
             Command::SetContinueSettings { server_id, settings } => {
                 let link = match self.link(&server_id) {
                     Ok(link) => link,

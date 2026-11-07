@@ -25,6 +25,10 @@ struct SettingsSheet: View {
             .onChange(of: store.settingsTarget) { follow(wide: wide) }
             .onChange(of: wide) { _, wide in follow(wide: wide) }
         }
+        .sheet(item: Bindable(store).editedBackup) { edited in
+            BackupSheet(bucket: edited.bucket)
+                .sheetSurface()
+        }
         .presentationSizing(.page)
         .presentationDragIndicator(.visible)
     }

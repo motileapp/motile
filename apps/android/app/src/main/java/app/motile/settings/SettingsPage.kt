@@ -70,6 +70,7 @@ fun SettingsPage(section: SettingsSection) {
     val navigator = LocalSettingsNavigator.current
     var edited by remember { mutableStateOf<EditedAccount?>(null) }
     var removal by remember { mutableStateOf<Removal?>(null) }
+    var editsBackup by remember { mutableStateOf(false) }
     var steers by remember { mutableStateOf(Preferences.optionalBool(AppStore.STEERS_KEY) ?: AppStore.STEERS_BY_DEFAULT) }
     var managesNewThreads by remember { mutableStateOf(Preferences.managesNewThreads) }
     LaunchedEffect(Unit) { store.refreshMediaStorage() }
@@ -82,7 +83,7 @@ fun SettingsPage(section: SettingsSection) {
                 managesNewThreads = it
                 Preferences.managesNewThreads = it
             }
-            SettingsSection.Servers -> servers(store, navigator)
+            SettingsSection.Servers -> servers(store, navigator, editBackup = { editsBackup = true }) { removal = it }
             SettingsSection.Accounts -> agentAccounts(store, edit = { server, account -> edited = EditedAccount(server, account) }) { removal = it }
             SettingsSection.Projects -> projects(store, navigator)
             SettingsSection.TextGeneration -> textGeneration(store, navigator)
@@ -93,6 +94,7 @@ fun SettingsPage(section: SettingsSection) {
     }
     ConfirmsRemoval(removal) { removal = null }
     Modal(edited, onDismiss = { edited = null }) { AgentAccountSheet(it.server, it.account) }
+    Modal(editsBackup, onDismiss = { editsBackup = false }) { BackupSheet() }
 }
 
 private fun SettingsGroups.general(
@@ -150,7 +152,7 @@ private fun SettingsGroups.general(
     }
 }
 
-private fun SettingsGroups.servers(store: AppStore, navigator: SettingsNavigator) {
+private fun SettingsGroups.servers(store: AppStore, navigator: SettingsNavigator, editBackup: () -> Unit, remove: (Removal) -> Unit) {
     group("servers") {
         for (server in store.servers) row {
             SettingsLink({ navigator.push(SettingsRoute.ServerPage(server.id)) }) {
@@ -161,6 +163,7 @@ private fun SettingsGroups.servers(store: AppStore, navigator: SettingsNavigator
         }
         row { SettingsLink({ navigator.push(SettingsRoute.AddServer) }) { SettingsActionLabel("Add a Server", Symbol.Plus) } }
     }
+    backup(store, editBackup, remove)
     group("removed-servers", header = "Unlinked") {
         for (server in store.removedServers) row {
             SettingsLink({ navigator.push(SettingsRoute.ServerPage(server.id, removed = true)) }) {
@@ -180,6 +183,20 @@ private fun SettingsGroups.servers(store: AppStore, navigator: SettingsNavigator
         caption = "When your server comes back from a restart, agents that were working carry on.",
         isOn = { it.continueAfterRestarts },
     ) { server, on -> store.setContinueSettings(afterLimits = server.continueAfterLimits, afterRestarts = on, server = server) }
+}
+
+/** The account's S3 bucket, which every server backs up to and syncs through. */
+private fun SettingsGroups.backup(store: AppStore, edit: () -> Unit, remove: (Removal) -> Unit) {
+    val on = store.backup.bucket != null
+    val footer = if (on) "Your servers keep their threads, images and files in it, and sync through it." else store.backup.description
+    group("backup", header = "Backup", footer = footer) {
+        row {
+            SettingsLink(edit) {
+                SettingsItem("S3 bucket", if (on) store.backup.description else "Not set up", TextOverflow.MiddleEllipsis) { SettingsTile(Symbol.CloudUpload) }
+            }
+        }
+        if (on) row { SettingsButton("Turn Off", destructive = true) { remove(Removal.OfBackup) } }
+    }
 }
 
 private fun SettingsGroups.agentAccounts(store: AppStore, edit: (Server, AgentAccount) -> Unit, remove: (Removal) -> Unit) {

@@ -2,7 +2,7 @@
 //! server, and the account's gateway, which the server's agents may reach. The list is kept on disk so
 //! the server still accepts its clients while the auth server is unreachable.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -22,6 +22,8 @@ pub struct Access {
     linked: RwLock<HashSet<String>>,
     /// The servers the account deleted completely, whose copies this server drops.
     deleted: RwLock<HashSet<String>>,
+    /// The account's servers, this one too, and the ones it unlinked, by key.
+    servers: RwLock<HashMap<String, Named>>,
     /// The key of the account's gateway, while it has one.
     gateway: watch::Sender<Option<String>>,
     account: Option<AccountAccess>,
@@ -54,6 +56,7 @@ impl Access {
             fixed: fixed.into_iter().collect(),
             linked: RwLock::new(cached.clients),
             deleted: RwLock::default(),
+            servers: RwLock::default(),
             gateway: watch::Sender::new(cached.gateway),
             account,
         })
@@ -79,6 +82,12 @@ impl Access {
 
     pub async fn deleted(&self) -> Vec<String> {
         self.deleted.read().await.iter().cloned().collect()
+    }
+
+    /// The account's servers and the ones it unlinked, as the auth server last listed them; empty
+    /// until it answered.
+    pub async fn servers(&self) -> HashMap<String, Named> {
+        self.servers.read().await.clone()
     }
 
     pub async fn is_deleted(&self, public_key: &str) -> bool {
@@ -123,6 +132,19 @@ impl Access {
             tracing::warn!("this server is no longer linked to an account; no client may connect");
         }
         *self.deleted.write().await = me.deleted.into_iter().collect();
+        let servers = me.devices.iter().filter(|device| device.kind == DeviceKind::Server);
+        let mut named: HashMap<String, Named> = servers
+            .map(|device| {
+                (device.public_key.clone(), Named { name: device.name.clone(), platform: device.platform.clone() })
+            })
+            .collect();
+        for removed in &me.removed {
+            named.insert(
+                removed.public_key.clone(),
+                Named { name: removed.name.clone(), platform: removed.platform.clone() },
+            );
+        }
+        *self.servers.write().await = named;
         let keys_of = |kind: DeviceKind| {
             let devices = me.devices.iter().filter(move |device| device.kind == kind);
             devices.map(|device| device.public_key.clone())
@@ -148,6 +170,13 @@ impl Access {
             }
         });
     }
+}
+
+/// A server as the account names it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Named {
+    pub name: String,
+    pub platform: String,
 }
 
 /// The account's devices as the auth server last listed them.

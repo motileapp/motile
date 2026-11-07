@@ -18,6 +18,7 @@ use tokio::sync::broadcast::error::RecvError;
 use tokio::sync::{Notify, watch};
 
 use crate::access::Access;
+use crate::backup::Backup;
 use crate::hub::{GitRun, Hub, ListSubscription, NewMessage, ThreadSubscription};
 use crate::media::MediaStore;
 use crate::{files, linear, ricrac, ui_tools, update};
@@ -57,6 +58,7 @@ pub struct Server {
     pub hub: Arc<Hub>,
     pub access: Arc<Access>,
     pub attachments: PathBuf,
+    pub backup: Arc<Backup>,
 }
 
 impl Server {
@@ -139,7 +141,15 @@ impl Server {
                 let run = GitRun { action, thread_id, message, paths, new_branch };
                 return git_run(send, hub.clone(), project_id, run).await;
             }
-            Request::Media { id } => return send_media(send, &hub.media, &id).await,
+            Request::Media { id } => {
+                if !hub.media.has(&id)
+                    && let Err(error) = self.backup.fetch_media(&id).await
+                {
+                    tracing::warn!(id, "couldn't fetch a file from the bucket: {error:#}");
+                }
+                return send_media(send, &hub.media, &id).await;
+            }
+            Request::SetBackup { bucket } => self.backup.set(bucket).await.map(|_| Message::Ok),
             Request::ReadFile { project_id, thread_id, path, blob } => {
                 return send_file(send, hub, &project_id, thread_id.as_deref(), &path, blob.as_deref()).await;
             }
@@ -236,10 +246,10 @@ impl Server {
                 found.map(|matches| Message::ThreadMatches { matches }).map_err(Into::into)
             }
             Request::Watermarks => {
-                let (hub, deleted) = (hub.clone(), self.access.deleted().await);
+                let (hub, deleted, bucket) = (hub.clone(), self.access.deleted().await, self.backup.origins());
                 tokio::task::spawn_blocking(move || {
                     hub.store().drop_origins(&deleted)?;
-                    hub.watermarks()
+                    hub.watermarks(bucket)
                 })
                 .await?
             }
@@ -251,10 +261,10 @@ impl Server {
                 if self.access.is_deleted(&origin).await {
                     Err(anyhow::anyhow!("That server was deleted completely."))
                 } else {
-                    let hub = hub.clone();
+                    let (hub, bucket) = (hub.clone(), self.backup.origins());
                     tokio::task::spawn_blocking(move || {
                         hub.store().apply(&origin, &name, &platform, &batch, reset)?;
-                        hub.watermarks()
+                        hub.watermarks(bucket)
                     })
                     .await?
                 }

@@ -4,13 +4,13 @@
 CLAIMS="$HOME/Library/Caches/motile-dev/ports"
 mkdir -p "$CLAIMS"
 
-# The first port from `$2` on that the claimant has, or that no one claims and nothing has, of
-# TCP's or UDP's.
+# `$2` if the claimant has it, or else the first port from it on that no one claims and nothing
+# has, of TCP's or UDP's. Another port the claimant has is another service's.
 claim_port() {
     local port="$2" owner
     while true; do
         owner="$(cat "$CLAIMS/$port" 2>/dev/null || true)"
-        [ "$owner" != "$CLAIMANT" ] || break
+        [ "$owner" != "$CLAIMANT" ] || [ "$port" != "$2" ] || break
         [ -z "$owner" ] || [ -d "$owner" ] || rm -f "$CLAIMS/$port"
         if ! lsof -nP -i"$1:$port" >/dev/null 2>&1 && (set -C; echo "$CLAIMANT" > "$CLAIMS/$port") 2>/dev/null; then
             break

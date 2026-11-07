@@ -16,6 +16,7 @@ use motile_protocol::identity::DeviceKey;
 use motile_protocol::wire::{Access as AgentAccess, Agent, NewThread, Request, Speaker, ToolStatus};
 use motile_server::access::{Access, AccountSource};
 use motile_server::agents::environment::Environment;
+use motile_server::backup::Backup;
 use motile_server::config::DataDir;
 use motile_server::hub::Hub;
 use motile_server::serve::{BindOptions, Server, bind};
@@ -129,6 +130,7 @@ impl Client {
             Event::Unsent { error, .. } => panic!("a message was given back: {error}"),
             Event::ThreadSearch { query, searching, matches } => self.search = (query, searching, matches),
             Event::Restored
+            | Event::Backup { .. }
             | Event::Keybindings { .. }
             | Event::Reply { .. }
             | Event::ServerUpdate { .. }
@@ -202,10 +204,12 @@ async fn run_server(data: &DataDir, endpoint: iroh::Endpoint, key: DeviceKey) {
     hub.refresh_models().await;
 
     let account = data.account().expect("setup linked the server");
+    let me = key.public();
     let access =
         Access::new(Vec::new(), Some(AccountSource { auth_url: account.auth_url, key, cache: data.account_keys() }));
     access.keep_fresh();
-    let server = Server { hub, access, attachments: data.attachments() };
+    let backup = Backup::new(hub.clone(), access.clone(), me, data.media());
+    let server = Server { hub, access, attachments: data.attachments(), backup };
     tokio::spawn(server.run(endpoint));
 }
 

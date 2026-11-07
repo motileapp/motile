@@ -2,7 +2,7 @@
 # server with the dev login, and a server whose agent is scripts/fake-agent, whose GitHub is
 # scripts/fake-gh, whose Linear is scripts/fake-linear and whose Ricrac is scripts/fake-ricrac, with
 # a project and a few threads, and the account's gateway, whose Anthropic and OpenAI are
-# scripts/fake-upstream. MOTILE_DEV_LINEAR=real leaves Linear the real one, and
+# scripts/fake-upstream, and a bucket to back up to on scripts/fake-s3. MOTILE_DEV_LINEAR=real leaves Linear the real one, and
 # MOTILE_DEV_RICRAC=real Ricrac, to connect a workspace of yours; it takes hold when the server
 # starts, so stop the stack first. It lives in apps/macos/build/dev and is left
 # running, so the Mac's and the iOS dev app in one tree share it. Sourced by their dev-app.sh;
@@ -27,14 +27,14 @@ source "$STACK_HOME/scripts/claims.sh"
 # claimed them; then the stack restarts on new ones.
 # shellcheck disable=SC1091
 [ ! -f "$DEV/ports" ] || source "$DEV/ports"
-KEPT="PG_PORT=${PG_PORT:-} AUTH_PORT=${AUTH_PORT:-} SERVER_PORT=${SERVER_PORT:-} LINEAR_PORT=${LINEAR_PORT:-} RICRAC_PORT=${RICRAC_PORT:-} GATEWAY_PORT=${GATEWAY_PORT:-} UPSTREAM_PORT=${UPSTREAM_PORT:-}"
-PORTS="PG_PORT=$(claim_port TCP "${PG_PORT:-5436}") AUTH_PORT=$(claim_port TCP "${AUTH_PORT:-3112}") SERVER_PORT=$(claim_port UDP "${SERVER_PORT:-47614}") LINEAR_PORT=$(claim_port TCP "${LINEAR_PORT:-3212}") RICRAC_PORT=$(claim_port TCP "${RICRAC_PORT:-3213}") GATEWAY_PORT=$(claim_port UDP "${GATEWAY_PORT:-47714}") UPSTREAM_PORT=$(claim_port TCP "${UPSTREAM_PORT:-3214}")"
+KEPT="PG_PORT=${PG_PORT:-} AUTH_PORT=${AUTH_PORT:-} SERVER_PORT=${SERVER_PORT:-} LINEAR_PORT=${LINEAR_PORT:-} RICRAC_PORT=${RICRAC_PORT:-} GATEWAY_PORT=${GATEWAY_PORT:-} UPSTREAM_PORT=${UPSTREAM_PORT:-} S3_PORT=${S3_PORT:-}"
+PORTS="PG_PORT=$(claim_port TCP "${PG_PORT:-5436}") AUTH_PORT=$(claim_port TCP "${AUTH_PORT:-3112}") SERVER_PORT=$(claim_port UDP "${SERVER_PORT:-47614}") LINEAR_PORT=$(claim_port TCP "${LINEAR_PORT:-3212}") RICRAC_PORT=$(claim_port TCP "${RICRAC_PORT:-3213}") GATEWAY_PORT=$(claim_port UDP "${GATEWAY_PORT:-47714}") UPSTREAM_PORT=$(claim_port TCP "${UPSTREAM_PORT:-3214}") S3_PORT=$(claim_port TCP "${S3_PORT:-3215}")"
 PORTS_MOVED=0
 if [ -n "${PG_PORT:-}" ] && [ "$PORTS" != "$KEPT" ]; then PORTS_MOVED=1; fi
 echo "$PORTS" > "$DEV/ports"
 # shellcheck disable=SC1091
 source "$DEV/ports"
-release_ports "$PG_PORT" "$AUTH_PORT" "$SERVER_PORT" "$LINEAR_PORT" "$RICRAC_PORT" "$GATEWAY_PORT" "$UPSTREAM_PORT"
+release_ports "$PG_PORT" "$AUTH_PORT" "$SERVER_PORT" "$LINEAR_PORT" "$RICRAC_PORT" "$GATEWAY_PORT" "$UPSTREAM_PORT" "$S3_PORT"
 AUTH_URL="http://127.0.0.1:$AUTH_PORT"
 
 # A pid file holds the process and the version of the program it runs.
@@ -121,6 +121,7 @@ stop_stack() {
     stop upstream
     stop linear
     stop ricrac
+    stop s3
     stop auth
     [ -d "$DEV/pg" ] && pg_ctl -D "$DEV/pg" stop -m fast >/dev/null 2>&1 || true
 }
@@ -184,6 +185,13 @@ start_stack() {
             FAKE_RICRAC_STATE="$DEV/ricrac.json" nohup "$ROOT/scripts/fake-ricrac" "$RICRAC_PORT" > "$DEV/ricrac.log" 2>&1 &
             started ricrac $! "$ROOT/scripts/fake-ricrac"
         fi
+    fi
+
+    # A backup is set up in a client with the endpoint http://127.0.0.1:$S3_PORT.
+    if ! current s3 "$ROOT/scripts/fake-s3"; then
+        stop s3
+        FAKE_S3_DIR="$DEV/s3" nohup "$ROOT/scripts/fake-s3" "$S3_PORT" > "$DEV/s3.log" 2>&1 &
+        started s3 $! "$ROOT/scripts/fake-s3"
     fi
 
     if ! current server "$BIN/motile"; then

@@ -2,7 +2,7 @@
 //! settings change on the servers.
 
 use motile_core::api::Command;
-use motile_protocol::wire::{AgentAccount, ContinueSettings, PullRequestSettings, Request};
+use motile_protocol::wire::{AgentAccount, Bucket, ContinueSettings, PullRequestSettings, Request};
 
 use super::Store;
 use super::shortcuts::Shortcuts;
@@ -87,7 +87,7 @@ pub struct SettingsEntry {
 
 const WORKING_SHELF: &str = "sidebar.workingShelf";
 
-const ENTRIES: [(&str, &str, SettingsSection, &str); 26] = [
+const ENTRIES: [(&str, &str, SettingsSection, &str); 27] = [
     ("account", "Account", SettingsSection::General, "signed in email sign out"),
     ("updates", "Updates", SettingsSection::General, "version check for updates release"),
     ("appearance", "Theme", SettingsSection::General, "appearance light dark system mode"),
@@ -118,6 +118,7 @@ const ENTRIES: [(&str, &str, SettingsSection, &str); 26] = [
         SettingsSection::Servers,
         "add remove unlink unlinked delete copies machine agents connected",
     ),
+    ("backup", "Backup", SettingsSection::Servers, "s3 bucket r2 b2 minio storage sync media restore"),
     ("continue-limits", "Continue after usage limits", SettingsSection::Servers, "rate limit reset resume quota wait"),
     (
         "continue-restarts",
@@ -273,6 +274,23 @@ impl Store {
             if let Err(error) = result {
                 store.fail(error);
             }
+        });
+    }
+
+    /// Has the first connected server check the bucket, then backs every server up to it; `None`
+    /// stops. `done` hears why it couldn't, if it couldn't.
+    pub fn set_backup(
+        &mut self,
+        bucket: Option<Bucket>,
+        done: impl FnOnce(Option<String>, &mut gpui_kit::App) + 'static,
+    ) {
+        let turns_off = bucket.is_none();
+        self.ask(Command::SetBackup { bucket }, move |store, result, cx| {
+            let Err(error) = result else { return done(None, cx) };
+            if turns_off {
+                store.fail(error.clone());
+            }
+            done(Some(error.message), cx);
         });
     }
 

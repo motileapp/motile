@@ -206,6 +206,8 @@ final class AppStore {
     var mcpServerSigningIn: String?
     @ObservationIgnored var mcpServerSession: SignInSession?
     var showsAddServer = false
+    /// The bucket the backup's sheet sets up or changes, while it is open.
+    var editedBackup: EditedBackup?
     /// The section of the settings open over the client, while they are.
     var settings: SettingsSection? {
         didSet { pageChanged() }
@@ -319,6 +321,8 @@ final class AppStore {
     private(set) var servers: [Server] = []
     /// The servers removed from the account, whose threads stay to read from the copies.
     private(set) var removedServers: [Server] = []
+    /// The account's S3 bucket, which every server backs up to and syncs through.
+    private(set) var backup = Backup()
     private var serverUpdates: [String: ServerUpdate] = [:]
     /// Every server's projects as the core sent them, the removed servers' too.
     @ObservationIgnored private var everyProject: [Project] = []
@@ -594,6 +598,12 @@ final class AppStore {
         case "servers":
             let servers = event.objects("servers").map { Server(json: $0) }
             return { [weak self] in self?.apply(servers: servers) }
+        case "backup":
+            let backup = Backup(json: event.object("backup") ?? [:])
+            return { [weak self] in
+                guard let self, self.backup != backup else { return }
+                self.backup = backup
+            }
         case "threads":
             let serverID = event.string("server_id")
             let threads = event.objects("threads").map { ThreadInfo(json: $0) }

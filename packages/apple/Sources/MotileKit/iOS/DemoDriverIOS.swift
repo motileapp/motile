@@ -138,6 +138,7 @@ enum DemoDriver {
             case "settings": store.openSettings()
             case "usage": store.openUsage()
             case "server": store.showsAddServer = true
+            case "backup": store.editedBackup = EditedBackup(bucket: store.backup.bucket)
             case "icon":
                 guard let project = store.projects.first(where: { !$0.noProject }) else { return }
                 store.openPanel(.icon(project.id))
@@ -150,6 +151,7 @@ enum DemoDriver {
                 store.closeSettings()
                 store.showsUsage = false
                 store.showsAddServer = false
+                store.editedBackup = nil
                 store.showsThreadSettings = false
                 store.committingProject = nil
             }

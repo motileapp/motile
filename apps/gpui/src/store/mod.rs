@@ -27,7 +27,7 @@ use std::path::PathBuf;
 use futures::StreamExt;
 use gpui_kit::prelude::*;
 use gpui_kit::*;
-use motile_core::api::{AccountView, Command, Config, Event, Section};
+use motile_core::api::{AccountView, BackupView, Command, Config, Event, Section};
 use motile_core::outbox::Outgoing;
 use motile_core::render::agents::AgentView;
 use motile_protocol::wire::{
@@ -423,6 +423,8 @@ pub struct Store {
     pub usage: usage::Usage,
     pub gateway: gateway::Gateway,
     pub mcp_servers: mcp_servers::McpServers,
+    /// The account's S3 bucket, once the core has said.
+    pub backup: Option<BackupView>,
     _events: Option<Task<()>>,
     /// The pages behind and ahead of this one, for Go Back and Go Forward.
     history: history::PageHistory,
@@ -546,6 +548,7 @@ impl Store {
             usage: usage::Usage::default(),
             gateway: gateway::Gateway::default(),
             mcp_servers: mcp_servers::McpServers::default(),
+            backup: None,
             _events: None,
             history: history::PageHistory::default(),
             _page_watch: Self::watch_page(cx),
@@ -868,6 +871,7 @@ impl Store {
                 self.apply_found(thread_id, query, count, current, rows, cx)
             }
             Event::Reveal { thread_id, row_id, range } => self.apply_reveal(thread_id, row_id, range, cx),
+            Event::Backup { backup } => self.backup = Some(backup),
         }
     }
 
