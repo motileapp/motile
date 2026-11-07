@@ -33,12 +33,18 @@ final class CodeBox: NSObject {
 
     override var hash: Int { index }
 
+    /// From the top of its header to under its last line. The bottom is measured from the last
+    /// line's text, not its paragraph's spacing, which TextKit leaves off the last paragraph of a text.
     func frame(of glyphs: NSRange, in layout: NSLayoutManager) -> CGRect {
         guard let container = layout.textContainers.first, glyphs.length > 0 else { return .zero }
-        var lines = CGRect.null
-        layout.enumerateLineFragments(forGlyphRange: glyphs) { rect, _, _, _, _ in lines = lines.union(rect) }
-        guard !lines.isNull else { return .zero }
-        return CGRect(x: indent, y: lines.minY, width: container.size.width - indent, height: lines.height - Self.marginBottom)
+        var top: CGFloat?
+        var bottom: CGFloat = 0
+        layout.enumerateLineFragments(forGlyphRange: glyphs) { rect, used, _, _, _ in
+            if top == nil { top = rect.minY }
+            bottom = used.maxY
+        }
+        guard let top else { return .zero }
+        return CGRect(x: indent, y: top, width: container.size.width - indent, height: bottom + Self.paddingBottom - top)
     }
 }
 
@@ -258,7 +264,14 @@ final class TextSystem {
         let size = CGSize(width: width, height: CGFloat.greatestFiniteMagnitude)
         if container.size != size { container.size = size }
         layout.ensureLayout(for: container)
-        return ceil(layout.usedRect(for: container).height)
+        var height = layout.usedRect(for: container).height
+        // A code box that ends the text reaches below its last line, with nothing after it to
+        // make the room.
+        var range = NSRange()
+        if let box = storage.attribute(.motileCode, at: storage.length - 1, effectiveRange: &range) as? CodeBox {
+            height = max(height, box.frame(of: layout.glyphRange(forCharacterRange: range, actualCharacterRange: nil), in: layout).maxY)
+        }
+        return ceil(height)
     }
 
     /// Where each code block's box is, `origin` from the view's corner, with its language and
