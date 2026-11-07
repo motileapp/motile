@@ -541,6 +541,7 @@ fun ControlButton(
             .then(if (reveal.alpha < 1f) Modifier.alpha(reveal.alpha) else Modifier)
             .semantics { if (help != null) contentDescription = help }
             .arrowPointer()
+            .pressesAtOnce(interaction, enabled && !pending)
             .combinedClickable(
                 interactionSource = interaction,
                 indication = null,

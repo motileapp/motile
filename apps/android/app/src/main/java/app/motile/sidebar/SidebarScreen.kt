@@ -98,7 +98,6 @@ import app.motile.ui.Asking
 import app.motile.ui.ButtonVariant
 import app.motile.ui.Confirmation
 import app.motile.ui.ConfirmationDialog
-import app.motile.ui.DimButton
 import app.motile.ui.GlassButton
 import app.motile.ui.GlassGroup
 import app.motile.ui.HighlightButton
@@ -572,8 +571,8 @@ private fun ThreadRowWithMenu(
 
 @Composable
 private fun SectionHeader(section: ThreadSection, count: Int, expanded: Boolean, toggle: () -> Unit) {
-    DimButton(onClick = toggle, modifier = Modifier.fillMaxWidth()) {
-        SectionLine(section, count, expanded, Modifier.fillMaxWidth().height(lineHeight).padding(horizontal = sidebarEdge))
+    HighlightButton(onClick = toggle, modifier = Modifier.fillMaxWidth().height(lineHeight), radius = Radius.md, inset = rowMargin, opaque = true) {
+        SectionLine(section, count, expanded, Modifier.fillMaxSize().padding(rowMargin).padding(horizontal = sidebarEdge - sidebarRowInset))
     }
 }
 

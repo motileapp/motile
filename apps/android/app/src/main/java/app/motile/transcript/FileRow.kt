@@ -48,6 +48,7 @@ import app.motile.ui.MenuPopup
 import app.motile.ui.Text
 import app.motile.ui.pressPosition
 import app.motile.ui.rememberMenuState
+import app.motile.ui.pressesAtOnce
 import java.io.File
 
 /**
@@ -81,6 +82,7 @@ fun FileRow(file: SentFile) {
                 .border(1.dp, palette.border, shape)
                 .pressPosition(menu)
                 .semantics { contentDescription = "${file.name}, ${file.detail}" }
+                .pressesAtOnce(card)
                 .combinedClickable(
                     interactionSource = card, indication = null, role = Role.Button,
                     onLongClick = { if (!gone) menu.openAtPress() },
@@ -98,7 +100,7 @@ fun FileRow(file: SentFile) {
                     .background(if (tileLit) palette.backgroundSecondaryAccentStronger else palette.backgroundSecondaryAccent, tileShape)
                     .then(
                         if (fetching) {
-                            Modifier.clickable(tile, null, role = Role.Button, onClickLabel = "Cancel Download") { FileDownloads.cancel(file.id, store) }
+                            Modifier.pressesAtOnce(tile).clickable(tile, null, role = Role.Button, onClickLabel = "Cancel Download") { FileDownloads.cancel(file.id, store) }
                         } else {
                             Modifier
                         },

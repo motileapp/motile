@@ -73,6 +73,7 @@ import app.motile.ui.Slider
 import app.motile.ui.Text
 import app.motile.ui.TextArea
 import app.motile.ui.arrowPointer
+import app.motile.ui.pressesAtOnce
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -179,11 +180,11 @@ fun UiPressable(node: UiNode, kind: UiKind.Pressable) {
         },
         tween(120), label = "light",
     )
-    val press = if (kind.selected != null) {
+    val press = Modifier.pressesAtOnce(interaction, enabled).then(if (kind.selected != null) {
         Modifier.selectable(kind.selected, interaction, indication = null, enabled = enabled, role = Role.Button) { host?.send(node.id, "press") }
     } else {
         Modifier.clickable(interaction, indication = null, enabled = enabled, role = Role.Button) { host?.send(node.id, "press") }
-    }
+    })
     val label = node.a11y?.label
     Box(
         Modifier

@@ -1185,13 +1185,14 @@ struct SectionLine: View {
     let count: Int
     let expanded: Bool
     var lit = false
+    @Environment(\.row) private var row
 
     var body: some View {
         HStack(spacing: 7) {
             Text(section.title)
                 .font(.ui(size: 12, weight: .medium))
                 .lineLimit(1)
-                .foregroundStyle(lit ? Color.themeForeground : Color.themeMutedForeground)
+                .foregroundStyle(lit || row != nil ? Color.themeForeground : Color.themeMutedForeground)
             Text("\(count)")
                 .font(.ui(size: 11))
                 .foregroundStyle(Color.themeMutedStrongestForeground)
