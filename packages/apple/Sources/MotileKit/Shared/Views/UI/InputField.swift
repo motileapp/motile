@@ -85,7 +85,7 @@ extension InputField {
         if variant == .capsule {
             Color.clear
                 .aspectRatio(1, contentMode: .fit)
-                .overlay { ActionButton(icon: .x, help: "Clear", round: true) { text = "" } }
+                .overlay { ActionButton(icon: .x, help: "Clear", symbolSize: ControlSize.regular.symbol, round: true) { text = "" } }
         } else {
             ActionButton(icon: .x, help: "Clear", size: clearSize) { text = "" }
                 .padding(.trailing, clearInset - size.padding + 2)

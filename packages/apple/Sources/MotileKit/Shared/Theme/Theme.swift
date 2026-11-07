@@ -227,6 +227,14 @@ enum ControlSize {
     /// Its symbol, as large as an icon beside its text is.
     var symbol: IconSize { IconSize(text: textSize) }
 
+    /// Its symbol when it has no words to match, which draws larger.
+    var wordlessSymbol: IconSize {
+        switch self {
+        case .small, .inset: symbol
+        case .regular, .large: .md
+        }
+    }
+
     /// A symbol that should weigh less than the others, like the x that closes a tab.
     var smallSymbol: IconSize {
         switch self {

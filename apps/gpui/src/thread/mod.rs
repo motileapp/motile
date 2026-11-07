@@ -215,7 +215,7 @@ impl ThreadPane {
             )
         };
         let size = ControlSize::Large;
-        let light = (size.height() - size.symbol().side()) / 2.;
+        let light = (size.height() - size.wordless_symbol().side()) / 2.;
         Some(
             div()
                 .flex_none()

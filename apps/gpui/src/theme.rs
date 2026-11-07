@@ -264,6 +264,14 @@ impl ControlSize {
         IconSize::text(self.text_size())
     }
 
+    /// Its symbol when it has no words to match, which draws larger.
+    pub fn wordless_symbol(self) -> IconSize {
+        match self {
+            ControlSize::Small | ControlSize::Inset => self.symbol(),
+            ControlSize::Regular | ControlSize::Large => IconSize::Md,
+        }
+    }
+
     /// A symbol that should weigh less than the others, like the x that closes a tab.
     pub fn small_symbol(self) -> IconSize {
         match self {

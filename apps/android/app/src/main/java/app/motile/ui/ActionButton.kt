@@ -356,7 +356,7 @@ fun ControlLabel(
     val font = if (prose) Theme.proseFont else size.font
     val (wordsShift, chevronShift) = if (prose) proseShifts(size.height) else 0.dp to 0.dp
     val wordless = title == null && !chevron
-    val markSize = symbolSize ?: size.symbol
+    val markSize = symbolSize ?: if (wordless && icon is ControlIcon.Glyph) size.wordlessSymbol else size.symbol
     val waitingTitle = if (pending) pendingTitle else null
     val sidePadding = padding ?: size.padding
     val pictureInset = if (icon is ControlIcon.Picture && symbolSize != null) (size.symbolSide - symbolSide(symbolSize)) / 2 else 0.dp
@@ -673,7 +673,7 @@ fun ActionButton(
     val line = with(LocalDensity.current) { rememberTextMeasurer().measure("M", size.font).size.height.toDp() }
     val vertical = ((size.height - line) / 2).coerceAtLeast(0.dp)
     val leading = when {
-        words == null && !opens -> (size.height - size.symbolSide) / 2
+        words == null && !opens -> (size.height - symbolSide(symbolSize ?: size.wordlessSymbol)) / 2
         else -> (padding ?: size.padding) - if (icon != null || picture != null || pictures != null) size.symbolOutset else 0.dp
     }
     // Its light hugs its words, while its press keeps the control's height.

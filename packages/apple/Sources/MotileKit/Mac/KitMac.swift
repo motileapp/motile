@@ -444,7 +444,7 @@ final class IconButton: NSButton {
 
     convenience init(symbol: Symbol, title: String = "", symbolSize: IconSize? = nil, tooltip: String, action: @escaping () -> Void) {
         self.init(frame: .zero)
-        self.symbolSize = symbolSize ?? Self.metrics.symbol
+        self.symbolSize = symbolSize ?? (title.isEmpty ? Self.metrics.wordlessSymbol : Self.metrics.symbol)
         isBordered = false
         bezelStyle = .inline
         wantsLayer = true
