@@ -51,7 +51,7 @@ const MENU_GAP: f32 = 5.;
 /// The least room between the attach button and the settings.
 const SPACER: f32 = 10.;
 /// How far the archived or snoozed banner's round button stands from the composer's top and side.
-const BANNER_BUTTON_INSET: f32 = 4.;
+const BANNER_BUTTON_INSET: f32 = 5.;
 /// The room before a divider of the settings, after a part's words, and after it, before the next
 /// part's symbol, which stands closer to its edge than words do: both look 9 points wide.
 const ROOM_AFTER_WORDS: f32 = 8.;

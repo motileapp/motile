@@ -240,7 +240,7 @@ private fun AgentsButton(text: String, children: ThreadChildren, modifier: Modif
 }
 
 /** How far the archived or snoozed banner's round button stands from the composer's top and side. */
-private val bannerButtonInset = 4.dp
+private val bannerButtonInset = 5.dp
 
 /** Says the open thread is archived or snoozed, with the way back: a round button tucked into the composer's corner. */
 @Composable
