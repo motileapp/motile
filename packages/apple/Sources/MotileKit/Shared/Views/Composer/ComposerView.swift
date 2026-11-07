@@ -230,7 +230,7 @@ struct ComposerView: View {
     }
 
     /// How far the archived or snoozed banner's round button stands from the composer's top and side.
-    private static let bannerButtonInset: CGFloat = 4
+    private static let bannerButtonInset: CGFloat = 5
 
     /// Says the open thread is archived or snoozed, with the way back: a round button tucked into
     /// the composer's corner.
