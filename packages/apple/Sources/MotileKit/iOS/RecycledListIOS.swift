@@ -344,6 +344,7 @@ private final class FadingCollectionView: UICollectionView {
         let above = contentOffset.y + adjustedContentInset.top
         let below = contentSize.height + adjustedContentInset.bottom - bounds.maxY
         fade.update(frame: bounds, above: above, below: below)
+        fade.follow(layer)
         laidOut()
     }
 }
