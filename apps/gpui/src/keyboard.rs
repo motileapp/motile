@@ -38,7 +38,7 @@ pub fn install(store: &Entity<Store>, cx: &mut App) {
             return;
         }
         escaping.update(cx, |store, cx| {
-            if store.escape() {
+            if store.escape(cx) {
                 cx.notify();
             }
         });
@@ -109,6 +109,19 @@ pub fn perform(store: &Entity<Store>, command: &str, window: &mut Window, cx: &m
             store.update(cx, |store, cx| {
                 store.composer_picker = (store.composer_picker != Some(part)).then_some(part);
                 store.composer_access_open = store.composer_picker == Some(ComposerPickerPart::Access);
+                cx.notify();
+            });
+            true
+        }
+        "find.open" => {
+            if !store.read(cx).finds() {
+                return false;
+            }
+            let selected = gpui_kit::base::TextSelection::selected_text(window, cx);
+            let line = selected.lines().next().unwrap_or_default().trim().to_string();
+            let query = (!line.is_empty() && line.len() <= 200).then_some(line);
+            store.update(cx, |store, cx| {
+                store.open_find(query, None, cx);
                 cx.notify();
             });
             true

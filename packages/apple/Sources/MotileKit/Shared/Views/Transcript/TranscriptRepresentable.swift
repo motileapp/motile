@@ -19,6 +19,7 @@ struct TranscriptRepresentable {
         let (store, model) = (store, model)
         view.startedBy = ofAgent ? nil : store.parentThread?.id
         view.topInset = topInset
+        view.findRoom = findRoom
         view.underComposer = ofAgent || store.openThreadRemovedServer == nil
         view.bottomInset = bottomInset
         view.bottomFade = bottomFade
@@ -69,7 +70,10 @@ struct TranscriptRepresentable {
             activity: { [weak view] activity in view?.setActivity(activity) },
             recolor: { [weak view] rowID, content in view?.recolor(rowID: rowID, content: content) },
             earlier: { [weak view] earlier in view?.setEarlier(earlier) },
-            live: { [weak view] live in view?.live = live }
+            live: { [weak view] live in view?.live = live },
+            viewport: { [weak view] in view?.viewport },
+            found: { [weak view] found in view?.setFound(found) },
+            reveal: { [weak view] rowID, range in view?.reveal(rowID: rowID, range: range) }
         )
         model.attach(hooks, owner: view)
         coordinator.model = model
@@ -79,10 +83,13 @@ struct TranscriptRepresentable {
     private func update(_ view: TranscriptView) {
         view.startedBy = ofAgent ? nil : store.parentThread?.id
         view.topInset = topInset
+        view.findRoom = findRoom
         view.underComposer = ofAgent || store.openThreadRemovedServer == nil
         view.bottomInset = bottomInset
         view.bottomFade = bottomFade
     }
+
+    private var findRoom: CGFloat { !ofAgent && store.find.shown ? FindBar.room : 0 }
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 

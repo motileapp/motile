@@ -15,7 +15,7 @@ use crate::models::{
     FolderListing, Project, ProjectImage, Server, ThreadInfo, ago, ask_phrase, interruption_label, last_component,
 };
 use crate::store::settings::SettingsSection;
-use crate::store::{AddingProject, PanelPage, Selection, Store};
+use crate::store::{AddingProject, PanelPage, Store};
 use crate::theme::{Colors, ControlSize, IconSize, Layer, Opacity, Radius, ShadowSize, Surface, colors};
 use crate::ui::parts::with_edge_fades;
 use crate::ui::{ActionButton, InputField, InputVariant, KeyCaps, Spinner, icons, logos};
@@ -778,7 +778,7 @@ impl CommandPanel {
                     ItemIcon::Project(Box::new(project)),
                     move |this, _, cx| {
                         let id = id.clone();
-                        this.store.update(cx, |store, cx| store.select(Selection::Thread(id), cx));
+                        this.store.update(cx, |store, cx| store.reveal_thread(id, cx));
                     },
                 )
             })
@@ -789,6 +789,11 @@ impl CommandPanel {
     fn thread_commands(&self, cx: &App) -> Vec<Item> {
         let store = self.store.read(cx);
         let Some(thread) = store.changeable_thread() else { return Vec::new() };
+        let find =
+            Item::new("find", "Find in thread", thread.title.clone(), ItemIcon::Symbol("search"), |this, _, cx| {
+                this.store.update(cx, |store, cx| store.open_find(None, None, cx))
+            });
+        let mut items = vec![find.keys(store.shortcuts.label("find.open"))];
         if thread.busy() {
             let stop = Item::new(
                 "stop",
@@ -797,9 +802,9 @@ impl CommandPanel {
                 ItemIcon::Symbol("circle-stop"),
                 |this, _, cx| this.store.update(cx, |store, cx| store.stop_thread(cx)),
             );
-            return vec![stop.keys(store.shortcuts.label("thread.stop"))];
+            items.push(stop.keys(store.shortcuts.label("thread.stop")));
+            return items;
         }
-        let mut items = Vec::new();
         if thread.interruption.is_some() {
             items.push(Item::new(
                 "continue",

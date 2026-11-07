@@ -172,11 +172,28 @@ impl Store {
         results
     }
 
-    /// Opens what the search found and ends the search, then shows it in the sidebar.
+    /// Opens what the search found and ends the search, then shows it in the sidebar. A thread
+    /// found by a message opens at that message, finding what was searched for when the message
+    /// has it as it was written.
     pub fn open_search_result(&mut self, result: &SearchResult, cx: &mut Context<Self>) {
+        let search = self.sidebar.search.trim().to_string();
         self.select(result.selection(), cx);
         self.set_thread_search(String::new());
         self.sidebar.revealed_thread_id = result.thread().map(|thread| thread.id.clone());
+        let SearchResult::Thread(thread, Some(found)) = result else { return };
+        if found.item_id.is_empty() {
+            return;
+        }
+        if !found.phrase {
+            return self.reveal_item(thread.id.clone(), found.item_id.clone());
+        }
+        self.light_found(search, found.item_id.clone(), cx);
+    }
+
+    /// Opens the thread and brings its row into sight in the sidebar.
+    pub fn reveal_thread(&mut self, thread_id: String, cx: &mut Context<Self>) {
+        self.select(Selection::Thread(thread_id.clone()), cx);
+        self.sidebar.revealed_thread_id = Some(thread_id);
     }
 
     /// Whether the sidebar offers to start a thread: there is somewhere to start it, and nothing

@@ -13,6 +13,7 @@ use motile_core::render::agents::AgentState;
 use motile_core::render::markdown::ParaKind;
 use motile_core::render::rows::{After, Row, RowKind};
 
+use super::find::Marks;
 use super::prose::{self, PreparedProse};
 use crate::models::{Activity, AttachedFile};
 
@@ -256,6 +257,10 @@ pub struct Transcript {
     grown: HashMap<String, Instant>,
     /// Counts up whenever the rows change, so views that keep state about them can tell.
     pub version: u64,
+    /// What finding in the thread found, by row.
+    pub found: Rc<HashMap<String, Marks>>,
+    /// The row to scroll to, and the part of its text, which the view takes.
+    pub revealing: Option<(String, Option<[u32; 2]>)>,
 }
 
 impl Transcript {
@@ -281,6 +286,8 @@ impl Transcript {
             fresh: HashMap::new(),
             grown: HashMap::new(),
             version: 0,
+            found: Rc::default(),
+            revealing: None,
         }
     }
 
@@ -423,6 +430,8 @@ impl Transcript {
     /// the rows shown stay until they do, so that the view isn't empty in between.
     pub fn begin(&mut self, thread_id: Option<String>, live: bool, keeping_rows: bool) {
         self.thread_id = thread_id;
+        self.found = Rc::default();
+        self.revealing = None;
         self.pending = None;
         self.earlier = false;
         self.live = live;
@@ -480,6 +489,33 @@ impl Transcript {
             .sum();
         let delta = f32::from(top.offset_in_item) - above;
         Some(ScrollAt { row_id: self.rows[row].row.id.clone(), delta: f64::from(delta) })
+    }
+
+    /// Where the viewport shows the rows, whether or not it follows the end.
+    pub fn viewport(&self) -> Option<ScrollAt> {
+        let top = self.list.logical_scroll_top();
+        let (shown, row) = self.items.iter().enumerate().skip(top.item_ix).find_map(|(shown, item)| match item {
+            Item::Row(row) => Some((shown, *row)),
+            _ => None,
+        })?;
+        let delta = if shown == top.item_ix { f32::from(top.offset_in_item) } else { 0. };
+        Some(ScrollAt { row_id: self.rows[row].row.id.clone(), delta: f64::from(delta) })
+    }
+
+    pub fn set_found(&mut self, found: HashMap<String, Marks>) {
+        if *self.found != found {
+            self.found = Rc::new(found);
+        }
+    }
+
+    pub fn reveal(&mut self, row_id: String, range: Option<[u32; 2]>) {
+        self.revealing = Some((row_id, range));
+    }
+
+    /// The list's item that shows the row.
+    pub fn item_of(&self, row_id: &str) -> Option<usize> {
+        let row = self.row_index(row_id)?;
+        self.items.iter().position(|item| *item == Item::Row(row))
     }
 
     /// Puts the viewport at the place, or at the end when its row isn't among the rows.
@@ -604,6 +640,13 @@ impl Transcript {
         let mut changed = HashSet::new();
         changed.insert(row_id.to_string());
         self.sync(&changed);
+    }
+
+    /// Has the list measure the room above the first row again, which changed.
+    pub fn top_changed(&self) {
+        if !self.items.is_empty() {
+            self.list.splice(0..1, 1);
+        }
     }
 
     /// Has the list measure the room under the last row again, which changed.

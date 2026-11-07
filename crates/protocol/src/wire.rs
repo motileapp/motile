@@ -1134,6 +1134,9 @@ pub struct ThreadMatch {
     pub thread_id: String,
     pub speaker: Speaker,
     pub excerpt: String,
+    /// The message it was found by. Older servers don't say.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub item_id: String,
     /// The removed server the thread is a copy of.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub origin: Option<String>,

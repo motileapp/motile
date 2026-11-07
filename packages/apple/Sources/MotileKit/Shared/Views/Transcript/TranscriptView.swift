@@ -103,9 +103,17 @@ final class TranscriptView: FlippedView, RowOwner {
         }
     }
 
+    /// What the find bar covers under `topInset`. The first row can be scrolled clear of it.
+    var findRoom: CGFloat = 0 {
+        didSet {
+            guard findRoom != oldValue else { return }
+            updateVisible()
+        }
+    }
+
     /// Room above the first row, which the transcript fades out in, and the way back to the
     /// thread that started this one once the first row is the thread's first.
-    private var topPadding: CGFloat { 20 + topInset + topLineage }
+    private var topPadding: CGFloat { 20 + topInset + findRoom + topLineage }
 
     /// The thread whose agent started this one, which a line above the first row and under the
     /// last leads back to.
@@ -160,6 +168,10 @@ final class TranscriptView: FlippedView, RowOwner {
     private var stale: Set<String> = []
     private var pool: [String: [RowView]] = [:]
     private var expanded: Set<String> = []
+    /// What finding in the thread found, by row.
+    private var found: [String: FoundMarks] = [:]
+    /// The match to scroll to once the view has a size.
+    private var revealing: (rowID: String, range: NSRange?)?
     private var requestedHighlight: Set<String> = []
     private var activity = Activity()
     /// Whether the thread has caught up with its server. What it had before that is simply
@@ -403,6 +415,11 @@ final class TranscriptView: FlippedView, RowOwner {
         currentAnchor().map { TranscriptPlace(rowID: $0.id, delta: $0.delta) }
     }
 
+    /// Where the viewport shows the rows, whether or not it follows the end.
+    var viewport: TranscriptPlace? {
+        viewportAnchor().map { TranscriptPlace(rowID: $0.id, delta: $0.delta) }
+    }
+
     private func viewportAnchor() -> Anchor? {
         guard !rows.isEmpty else { return nil }
         let top = scroller.offsetY - topPadding
@@ -543,6 +560,7 @@ final class TranscriptView: FlippedView, RowOwner {
                 continue
             }
             view.configure(row)
+            view.mark(found[row.id])
             view.fadesGrowth = animates
             stale.insert(row.id)
         }
@@ -658,6 +676,7 @@ final class TranscriptView: FlippedView, RowOwner {
             document.addSubview(view)
         }
         view.configure(row)
+        view.mark(found[row.id])
         view.showsMeta = !Platform.hoverReveals || row.id == metaRowID
         view.opacity = 1
         if fresh.remove(row.id) != nil {
@@ -830,6 +849,10 @@ final class TranscriptView: FlippedView, RowOwner {
             pendingHighlight.removeAll()
             onNeedHighlight?(ids)
         }
+        if let revealing, viewportHeight > 0, rows.contains(where: { $0.id == revealing.rowID }) {
+            self.revealing = nil
+            DispatchQueue.main.async { [weak self] in self?.reveal(rowID: revealing.rowID, range: revealing.range) }
+        }
     }
 
     /// Sizes the document and puts the viewport where it belongs.
@@ -929,6 +952,46 @@ final class TranscriptView: FlippedView, RowOwner {
         let step = max(2 * sixtieths, remaining * (1 - pow(0.78, sixtieths)))
         scroll(to: y + min(remaining, step))
         updateVisible(follows: false)
+    }
+
+    // MARK: Finding
+
+    func setFound(_ found: [String: FoundMarks]) {
+        guard found != self.found else { return }
+        let changed = Set(found.keys).union(self.found.keys).filter { found[$0] != self.found[$0] }
+        self.found = found
+        for id in changed { views[id]?.mark(found[id]) }
+    }
+
+    /// Scrolls to the row, and to that part of its text in the middle of the viewport unless it is
+    /// in sight already. A long message that hides it opens.
+    func reveal(rowID: String, range: NSRange?) {
+        guard bounds.width > 0, viewportHeight > 0, rows.contains(where: { $0.id == rowID }) else {
+            revealing = (rowID, range)
+            return
+        }
+        stopGlide()
+        pinned = false
+        placed = nil
+        let covered = topInset + findRoom
+        let visible = viewportHeight - covered - bottomInset
+        if views[rowID] == nil {
+            updateVisible(anchor: Anchor(id: rowID, delta: -(covered + visible * 0.4)), follows: false)
+        }
+        if let range, let view = views[rowID] as? UserRowView, view.hides(range), !expanded.contains(rowID) {
+            rowToggledExpansion(id: rowID)
+        }
+        guard let view = views[rowID] else { return }
+        let rect = range.flatMap { view.rect(of: $0) } ?? CGRect(x: 0, y: 0, width: view.bounds.width, height: min(view.bounds.height, visible))
+        let top = view.frame.minY + rect.minY
+        let bottom = view.frame.minY + rect.maxY
+        let margin = min(80, visible / 4)
+        let shownTop = scroller.offsetY + covered + margin
+        let shownBottom = scroller.offsetY + viewportHeight - bottomInset - margin
+        guard top < shownTop || bottom > shownBottom else { return updateJumpButton() }
+        let y = max(0, min(endY, (top + bottom) / 2 - covered - visible / 2))
+        scroll(to: y)
+        updateVisible(anchor: viewportAnchor(), follows: false)
     }
 
     // MARK: RowOwner

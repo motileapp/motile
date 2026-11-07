@@ -32,6 +32,13 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.text.TextLayoutResult
+import app.motile.core.FoundMarks
+import app.motile.core.FoundSpan
+import app.motile.core.within
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -96,14 +103,14 @@ fun TranscriptRow(row: RowModel) {
         is RowModel.Kind.User -> UserRow(row, kind)
         is RowModel.Kind.Queued -> QueuedRow(row, kind.content)
         is RowModel.Kind.Prose -> ProseRow(row, kind.content)
-        is RowModel.Kind.Code -> CodeRow(kind.content)
+        is RowModel.Kind.Code -> CodeRow(row, kind.content)
         is RowModel.Kind.Ui -> UiRow(row, kind.content)
         is RowModel.Kind.Tool, is RowModel.Kind.Thinking, is RowModel.Kind.Group, is RowModel.Kind.Fold -> ToolRow(row)
         is RowModel.Kind.Agent -> AgentRow(row, kind.content)
         is RowModel.Kind.Agents -> AgentsRow(row, kind.content)
         is RowModel.Kind.Media -> MediaRow(kind.content)
         is RowModel.Kind.File -> FileRow(kind.content)
-        is RowModel.Kind.Error -> ErrorRow(kind.message)
+        is RowModel.Kind.Error -> ErrorRow(row, kind.message)
         is RowModel.Kind.Changes -> ChangesRow(row, kind.content)
         is RowModel.Kind.TurnEnd -> TurnEndRow(row, kind.content)
         is RowModel.Kind.Handoff -> HandoffRow(kind.content)
@@ -204,7 +211,14 @@ private fun UserBubble(row: RowModel, user: RowModel.Kind.User, text: AnnotatedS
                 if (hasText) {
                     MessageWithMore(more) {
                         val shown = if (cut) Modifier.heightIn(max = cutHeight).clipToBounds().edgeFade(above = { 0f }, below = { Float.MAX_VALUE }, length = cutFade) else Modifier
-                        SelectionContainer(shown) { MarkedText(text, messageStyle) }
+                        val found = user.text.found(actions.model.found[row.id])
+                        val cutPx = with(LocalDensity.current) { cutHeight.toPx() }
+                        SelectionContainer(shown) {
+                            MarkedText(text, messageStyle, found = found, onCurrent = { local, window ->
+                                actions.currentMatch(row.id, window)
+                                if (cut && actions.revealing == row.id && local.bottom > cutPx) actions.toggleExpansion(row.id)
+                            })
+                        }
                         if (more) {
                             ActionButton(
                                 if (open) "Show less" else "Show more", variant = ButtonVariant.Ghost, prose = true, expanded = open,
@@ -283,16 +297,19 @@ private fun QueuedRow(row: RowModel, queued: QueuedContent) {
 @Composable
 private fun ProseRow(row: RowModel, prose: ProseContent) {
     val palette = LocalPalette.current
+    val actions = LocalTranscript.current
     val blocks = remember(prose, palette) { prose.blocks.get(palette) }
+    val marks = actions.model.found[row.id]
     SelectionContainer {
         Column(Modifier.fillMaxWidth().padding(top = (3 + row.above).dp, bottom = (Typesetter.PROSE_GAP - 3).dp)) {
-            for (block in blocks) ProseBlockView(block)
+            for (block in blocks) ProseBlockView(block, marks) { _, window -> actions.currentMatch(row.id, window) }
         }
     }
 }
 
+/** A block of prose, with finding's `marks` in the row's text drawn over it. */
 @Composable
-fun ProseBlockView(block: ProseBlock) {
+fun ProseBlockView(block: ProseBlock, marks: FoundMarks? = null, onCurrent: ((Rect, Rect) -> Unit)? = null) {
     val palette = LocalPalette.current
     val bars = Modifier.quoteBars(block.quote, palette.border)
     val placed = if (block.joined) bars.padding(top = block.top.dp) else Modifier.padding(top = block.top.dp).then(bars)
@@ -301,44 +318,72 @@ fun ProseBlockView(block: ProseBlock) {
             val style = TextStyle(lineHeight = block.lineHeight)
             Row(placed.fillMaxWidth().padding(start = (if (block.marker != null) block.markerIndent else block.indent).dp)) {
                 block.marker?.let { marker ->
-                    Box(Modifier.width((block.indent - block.markerIndent).dp)) { MarkedText(marker, style) }
+                    Box(Modifier.width((block.indent - block.markerIndent).dp)) {
+                        MarkedText(marker, style, found = marks.within(block.markerOffset, marker.length), onCurrent = onCurrent)
+                    }
                 }
-                MarkedText(block.text, style)
+                MarkedText(block.text, style, found = marks.within(block.offset, block.text.length), onCurrent = onCurrent)
             }
         }
-        is CodeBlock -> Box(placed.fillMaxWidth().padding(start = block.indent.dp)) { CodeBox(block.language, block.code, block.text) }
+        is CodeBlock -> Box(placed.fillMaxWidth().padding(start = block.indent.dp)) {
+            CodeBox(block.language, block.code, block.text, found = marks.within(block.offset, block.text.length), onCurrent = onCurrent)
+        }
         is RuleBlock -> Box(
             placed.fillMaxWidth().height(Theme.proseLineHeight.value.dp).drawBehind {
                 drawRect(palette.border, Offset(0f, size.height / 2), Size(size.width, 1.dp.toPx()))
             },
         )
-        is TableBlock -> TableView(block, placed)
+        is TableBlock -> TableView(block, placed, marks, onCurrent)
     }
 }
 
 /** Code in a box with its language and a button that copies it, which scrolls sideways when it is wider than the column, or `wraps`. */
 @Composable
-fun CodeBox(language: String, code: String, text: AnnotatedString, modifier: Modifier = Modifier, wraps: Boolean = false, radius: Dp = Radius.lg) {
+fun CodeBox(
+    language: String,
+    code: String,
+    text: AnnotatedString,
+    modifier: Modifier = Modifier,
+    wraps: Boolean = false,
+    radius: Dp = Radius.lg,
+    found: List<FoundSpan> = emptyList(),
+    onCurrent: ((Rect, Rect) -> Unit)? = null,
+) {
+    val palette = LocalPalette.current
+    val density = LocalDensity.current
+    val style = TextStyle(fontFamily = Theme.mono, fontSize = Theme.codeSize, lineHeight = Theme.codeLineHeight)
+    val shown = remember(text, found, palette) { text.withCurrent(found, palette) }
+    var layout by remember(text) { mutableStateOf<TextLayoutResult?>(null) }
     SurfaceBox(RoundedCornerShape(radius), modifier.fillMaxWidth(), bordered = true) {
         Column {
             CodeHeader(language, code)
+            val marked = if (found.isEmpty()) Modifier else Modifier.drawBehind { layout?.let { drawFound(it, found, style, palette) } }
             BasicText(
-                text,
-                (if (wraps) Modifier else Modifier.horizontalScroll(rememberScrollState())).padding(start = 14.dp, end = 14.dp, bottom = 12.dp),
-                style = TextStyle(fontFamily = Theme.mono, fontSize = Theme.codeSize, lineHeight = Theme.codeLineHeight),
+                shown,
+                (if (wraps) Modifier else Modifier.horizontalScroll(rememberScrollState()))
+                    .padding(start = 14.dp, end = 14.dp, bottom = 12.dp)
+                    .then(marked)
+                    .reportsCurrent(found, style, density, { layout }, onCurrent),
+                style = style,
                 softWrap = wraps,
+                onTextLayout = { layout = it },
             )
         }
     }
 }
 
 @Composable
-private fun CodeRow(content: CodeContent) {
+private fun CodeRow(row: RowModel, content: CodeContent) {
     val palette = LocalPalette.current
+    val actions = LocalTranscript.current
     val typeset = content.text
     val text = remember(typeset, palette) { typeset.get(palette) }
+    val found = actions.model.found[row.id].within(0, text.length)
     SelectionContainer {
-        CodeBox(content.language, content.code, text, Modifier.padding(top = 4.dp, bottom = 10.dp))
+        CodeBox(
+            content.language, content.code, text, Modifier.padding(top = 4.dp, bottom = 10.dp), found = found,
+            onCurrent = { _, window -> actions.currentMatch(row.id, window) },
+        )
     }
 }
 
@@ -592,7 +637,19 @@ private fun Modifier.bleed(by: Dp): Modifier = layout { measurable, constraints 
 }
 
 @Composable
-fun ErrorRow(message: String, modifier: Modifier = Modifier.padding(top = 4.dp, bottom = 10.dp)) {
+private fun ErrorRow(row: RowModel, message: String) {
+    val actions = LocalTranscript.current
+    val found = actions.model.found[row.id].within(0, message.length)
+    ErrorRow(message, found = found, onCurrent = { _, window -> actions.currentMatch(row.id, window) })
+}
+
+@Composable
+fun ErrorRow(
+    message: String,
+    modifier: Modifier = Modifier.padding(top = 4.dp, bottom = 10.dp),
+    found: List<FoundSpan> = emptyList(),
+    onCurrent: ((Rect, Rect) -> Unit)? = null,
+) {
     val palette = LocalPalette.current
     val shape = RoundedCornerShape(Radius.lg)
     Row(
@@ -606,7 +663,13 @@ fun ErrorRow(message: String, modifier: Modifier = Modifier.padding(top = 4.dp, 
             Icon(Symbol.CircleAlert, iconSize(text = 13f), color = palette.destructive)
         }
         SelectionContainer {
-            Text(message, style = Theme.ui(13f).copy(lineHeight = (13f * Platform.scale * 1.2f + 5).sp), color = palette.destructive)
+            val style = Theme.ui(13f).copy(lineHeight = (13f * Platform.scale * 1.2f + 5).sp, color = palette.destructive)
+            if (found.isEmpty()) {
+                Text(message, style = style, color = palette.destructive)
+            } else {
+                val text = remember(message, palette) { AnnotatedString(message, SpanStyle(color = palette.destructive)) }
+                MarkedText(text, style, found = found, onCurrent = onCurrent)
+            }
         }
     }
 }

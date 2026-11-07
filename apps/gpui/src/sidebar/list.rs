@@ -103,9 +103,18 @@ impl RecycledList {
         y - f32::from(self.bounds().origin.y) + self.scroll_top()
     }
 
-    /// Brings the target's row into sight once it is in the list: only into sight, or to the
-    /// top clear of the fade. A list only just made is laid out first.
-    pub fn follow(&mut self, target: Option<&str>, to_top: bool, layout: &Layout, window: &mut Window) {
+    /// Brings the target's row into sight once it is in the list: only into sight clear of the
+    /// fades, or to the top clear of the fade. Going to the top, `anchor`, a row above the target
+    /// such as its section's line, goes there in its place when both fit. A list only just made is
+    /// laid out first.
+    pub fn follow(
+        &mut self,
+        target: Option<&str>,
+        to_top: bool,
+        anchor: Option<&str>,
+        layout: &Layout,
+        window: &mut Window,
+    ) {
         if target == self.target.as_deref() {
             return;
         }
@@ -121,12 +130,16 @@ impl RecycledList {
         self.target = Some(target.to_string());
         let (top, bottom) = (layout.tops[index], layout.bottom(index));
         let (current, viewport) = (self.scroll_top(), self.viewport());
+        let anchor_top = anchor
+            .and_then(|anchor| self.ids.iter().position(|id| id == anchor))
+            .map(|at| layout.tops[at])
+            .filter(|&anchor_top| bottom - anchor_top <= viewport - 2. * EDGE_FADE);
         let goal = if to_top {
+            anchor_top.unwrap_or(top) - EDGE_FADE
+        } else if top < current + EDGE_FADE {
             top - EDGE_FADE
-        } else if top < current {
-            top
-        } else if bottom > current + viewport {
-            bottom - viewport
+        } else if bottom > current + viewport - EDGE_FADE {
+            bottom + EDGE_FADE - viewport
         } else {
             return;
         };

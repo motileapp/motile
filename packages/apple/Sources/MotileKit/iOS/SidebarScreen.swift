@@ -34,13 +34,15 @@ struct SidebarScreen: View {
         let highlightedID = results.indices.contains(highlighted.index) ? results[highlighted.index].id : nil
         let shown = Shown(projects: store.projectsByID, selection: store.selection, swiped: swiped, highlighted: highlightedID)
         let items = searching ? searchItems(results) : items(active: active, sections: sections)
+        let revealedSection = sections.first { $0.threads.contains { $0.id == store.revealedThreadID } }?.section
         VStack(spacing: 0) {
             header
             RecycledList(
                 items: items, bottomInset: 12,
                 scrollTarget: searching
                     ? highlighted.shown.flatMap { results.indices.contains($0) ? "result:\(results[$0].id)" : nil } : items.first { $0.thread?.id == store.revealedThreadID }?.id,
-                scrollsTargetToTop: sections.contains { $0.threads.contains { $0.id == store.revealedThreadID } },
+                scrollsTargetToTop: !searching && store.revealedThreadID != nil,
+                scrollAnchor: revealedSection.map { SidebarItem.header($0, 0).id },
                 scrolled: { self.swiped = nil },
                 rowInset: UIEdgeInsets(top: rowMargin.top, left: rowMargin.leading, bottom: rowMargin.bottom, right: rowMargin.trailing),
                 rowRadius: 8,

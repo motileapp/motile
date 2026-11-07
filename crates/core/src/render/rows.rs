@@ -498,6 +498,27 @@ impl Transcript {
         self.items.iter().rfind(|item| item.id == id)
     }
 
+    pub fn items(&self) -> &[Item] {
+        &self.items
+    }
+
+    pub fn cwd(&self) -> &str {
+        &self.cwd
+    }
+
+    /// Opens the fold a row is hidden in, so that the row shows.
+    pub fn show_row(&mut self, row_id: &str) -> Option<Splice> {
+        if self.rows.iter().any(|row| row.id == row_id) {
+            return None;
+        }
+        let item = self.rendered.iter().flatten().find(|row| row.id == row_id)?.item.clone();
+        let place = |id: &str| self.items.iter().position(|item| item.id == id);
+        let at = place(&item)?;
+        let mut closed = self.rows.iter().filter(|row| matches!(row.kind, RowKind::Fold { open: false, .. }));
+        let fold = closed.rfind(|row| place(&row.item).is_some_and(|start| start <= at))?.id.clone();
+        self.toggle(&fold)
+    }
+
     /// An empty transcript for something else that happened in the same folder.
     pub fn beside(&self) -> Self {
         Self::new(&self.cwd)
@@ -1295,6 +1316,20 @@ fn render(item: &Item, cwd: &str, started: &Started, streaming: Option<&mut Hash
             vec![row(0, RowKind::Agent { agent })]
         }
         ItemKind::Unknown => Vec::new(),
+    }
+}
+
+/// An item's own rows, as the transcript renders them when nothing streams.
+pub fn rendered(item: &Item, cwd: &str) -> Vec<Row> {
+    render(item, cwd, &Started::default(), None)
+}
+
+/// The text a row reads as, where it is a message's: what finding in a thread searches.
+pub fn searched_text(row: &Row) -> Option<&str> {
+    match &row.kind {
+        RowKind::User { text, .. } | RowKind::Code { code: text, .. } | RowKind::Error { message: text } => Some(text),
+        RowKind::Prose { prose } => Some(&prose.text),
+        _ => None,
     }
 }
 
@@ -2244,6 +2279,20 @@ mod tests {
         transcript.upsert(item("u2", 10, said("Thanks")), true);
         transcript.upsert(assistant("b1", 11, "Welcome."), true);
         assert_eq!(outline(&transcript), ["user", "fold", "Fixed.", "end folded", "user", "Welcome."]);
+    }
+
+    #[test]
+    fn showing_a_row_opens_the_fold_it_is_in() {
+        let mut transcript = working_turn();
+        transcript.upsert(assistant("a3", 8, "Fixed."), true);
+        let summary = motile_protocol::wire::TurnSummary::default();
+        transcript.upsert(item("e", 9, ItemKind::TurnEnd { summary }), true);
+        transcript.upsert(item("u2", 10, said("Thanks")), true);
+        transcript.upsert(assistant("b1", 11, "Welcome."), true);
+        assert!(transcript.show_row("b1/0").is_none(), "a row in sight stays as it is");
+
+        assert!(transcript.show_row("a2/0").is_some());
+        assert_eq!(outline(&transcript)[..4], ["user", "fold open", "Looking.", "[Read 2 files and changed 1 file]"]);
     }
 
     #[test]

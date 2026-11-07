@@ -35,6 +35,19 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.Paint
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
+import app.motile.theme.Opacity
+import app.motile.theme.ShadowSize
+import app.motile.theme.at
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -108,7 +121,10 @@ fun ThreadScreen(overSidebar: Boolean = true) {
                 val bottom = below.asPaddingValues().calculateBottomPadding() + if (removed) composerBottomGap else composerHeight
                 val model = if (agent != null) store.agentTranscript else store.transcript
                 key(model) {
-                    TranscriptView(model, Modifier.fillMaxSize(), contentPadding = PaddingValues(top = top, bottom = bottom), underComposer = !removed)
+                    val findRoom = if (agent == null && store.find.shown && store.selectedThread != null) FindBar.room else 0.dp
+                    TranscriptView(
+                        model, Modifier.fillMaxSize(), contentPadding = PaddingValues(top = top, bottom = bottom), underComposer = !removed, findRoom = findRoom,
+                    )
                 }
             }
             Column(Modifier.fillMaxSize()) {
@@ -127,7 +143,7 @@ fun ThreadScreen(overSidebar: Boolean = true) {
                     }
                 }
             }
-            OpenToast(Modifier.align(Alignment.TopEnd).padding(top = top + 6.dp, start = 14.dp, end = 14.dp))
+            ThreadCorner(Modifier.align(Alignment.TopEnd).padding(top = top + FindBar.gap, start = 14.dp, end = 14.dp))
         }
     }
 }
@@ -139,19 +155,65 @@ private val AppStore.isStart: Boolean
         return transcriptIsEmpty && !isSending(draft)
     }
 
-/** The toast over the top of the thread, which comes down a little as it appears. */
+/**
+ * The find bar and the toast at the top of the thread, one under the other on one plane: one shadow
+ * falls behind both, so neither shades the other. Each comes down a little as it appears.
+ */
 @Composable
-private fun OpenToast(modifier: Modifier) {
-    val toast = LocalStore.current.openToast
+private fun ThreadCorner(modifier: Modifier) {
+    val store = LocalStore.current
+    val toast = store.openToast
     val kept = remember { arrayOfNulls<Toast>(1) }
     if (toast != null) kept[0] = toast
     val rise = with(LocalDensity.current) { 6.dp.roundToPx() }
-    AnimatedVisibility(
-        toast != null, modifier,
-        enter = fadeIn(tween(150)) + slideInVertically(tween(150)) { -rise },
-        exit = fadeOut(tween(150)) + slideOutVertically(tween(150)) { -rise },
+    val enter = fadeIn(tween(150)) + slideInVertically(tween(150)) { -rise }
+    val exit = fadeOut(tween(150)) + slideOutVertically(tween(150)) { -rise }
+    val cards = remember { CornerCards() }
+    val palette = Theme.colors
+    val shadow = palette.shadow.at(Opacity.ShadowStronger)
+    Column(
+        modifier
+            .onGloballyPositioned { cards.column = it }
+            .drawBehind { cards.drawShadows(this, palette.popover, shadow) },
+        horizontalAlignment = Alignment.End,
+        verticalArrangement = Arrangement.spacedBy(FindBar.gap),
     ) {
-        kept[0]?.let { ToastView(it) }
+        AnimatedVisibility(store.find.shown && store.selectedThread != null, enter = enter, exit = exit) {
+            FindBar(Modifier.onGloballyPositioned { cards.placed("bar", it) })
+        }
+        AnimatedVisibility(toast != null, enter = enter, exit = exit) {
+            kept[0]?.let { ToastView(it, Modifier.onGloballyPositioned { coordinates -> cards.placed("toast", coordinates) }) }
+        }
+    }
+}
+
+/** Where the cards of the thread's corner lie, to draw their one shadow behind them all. */
+private class CornerCards {
+    var column: LayoutCoordinates? = null
+    private val placed = mutableStateMapOf<String, LayoutCoordinates>()
+    private var moves by mutableIntStateOf(0)
+
+    fun placed(key: String, coordinates: LayoutCoordinates) {
+        placed[key] = coordinates
+        moves += 1
+    }
+
+    fun drawShadows(scope: DrawScope, fill: Color, shadow: Color) {
+        moves
+        val column = column?.takeIf { it.isAttached } ?: return
+        val size = ShadowSize.Lg
+        with(scope) {
+            val paint = Paint().asFrameworkPaint().apply {
+                color = fill.toArgb()
+                setShadowLayer((size.blur / 2).dp.toPx(), 0f, size.down.dp.toPx(), shadow.toArgb())
+            }
+            val radius = Radius.lg.toPx()
+            for (card in placed.values) {
+                if (!card.isAttached) continue
+                val box = column.localBoundingBoxOf(card, clipBounds = false)
+                drawIntoCanvas { it.nativeCanvas.drawRoundRect(box.left, box.top, box.right, box.bottom, radius, radius, paint) }
+            }
+        }
     }
 }
 

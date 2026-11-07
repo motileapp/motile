@@ -4,7 +4,7 @@ use gpui_kit::prelude::*;
 use gpui_kit::*;
 
 use crate::store::{Store, Toast};
-use crate::theme::{ControlSize, IconSize, Layer, Opacity, Radius, ShadowSize, Surface, colors};
+use crate::theme::{ControlSize, IconSize, Layer, Radius, Surface, colors};
 use crate::ui::rich_text::RichText;
 use crate::ui::{ActionButton, FadingScroll, Spinner, Variant, icons, sharing};
 
@@ -75,7 +75,6 @@ pub fn toast_view(store: &Entity<Store>, toast: &Toast, cx: &App) -> impl IntoEl
         .rounded(px(NOTICE_RADIUS))
         .border_1()
         .border_color(c.border_popover)
-        .shadow(c.shadow(ShadowSize::Lg, Opacity::ShadowStronger))
         .block_mouse_except_scroll()
         .flex()
         .items_start()

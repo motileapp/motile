@@ -13,6 +13,9 @@ struct RecycledList<Item: Identifiable, Row: View>: NSViewRepresentable {
     var scrollTarget: Item.ID?
     /// Whether the target's row is scrolled to the top, clear of the fade, or only into sight.
     var scrollsTargetToTop = false
+    /// The row above the target that goes to the top in its place when both fit, such as its
+    /// section's line.
+    var scrollAnchor: Item.ID?
     /// A click on a row that doesn't take it itself.
     var clicked: (Item) -> Void = { _ in }
     /// The shape a row lifts in when it is dragged: its light, inset from the row's edges.
@@ -192,11 +195,13 @@ struct RecycledList<Item: Identifiable, Row: View>: NSViewRepresentable {
             let rect = table.rect(ofRow: row)
             var bounds = clip.bounds
             if list?.scrollsTargetToTop == true {
+                let anchor = list?.scrollAnchor.flatMap { id in list?.items.firstIndex { $0.id == id } }.map { table.rect(ofRow: $0) }
+                let top = anchor.flatMap { rect.maxY - $0.minY <= bounds.height - 2 * EdgeFade.length ? $0.minY : nil } ?? rect.minY
+                bounds.origin.y = top - EdgeFade.length
+            } else if rect.minY < bounds.minY + EdgeFade.length {
                 bounds.origin.y = rect.minY - EdgeFade.length
-            } else if rect.minY < bounds.minY {
-                bounds.origin.y = rect.minY
-            } else if rect.maxY > bounds.maxY {
-                bounds.origin.y = rect.maxY - bounds.height
+            } else if rect.maxY > bounds.maxY - EdgeFade.length {
+                bounds.origin.y = rect.maxY + EdgeFade.length - bounds.height
             } else {
                 return
             }

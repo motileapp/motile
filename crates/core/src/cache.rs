@@ -306,6 +306,11 @@ impl Cache {
         self.items_where(thread_id, "json_extract(payload, '$.parent') = ?2", Some(parent))
     }
 
+    /// The thread's own items, without what the agents its agent started said, in order.
+    pub fn thread_items(&self, thread_id: &str) -> Vec<Item> {
+        self.items_where(thread_id, "json_extract(payload, '$.parent') IS NULL", None)
+    }
+
     pub fn item(&self, thread_id: &str, id: &str) -> Option<Item> {
         self.items_where(thread_id, "id = ?2", Some(id)).pop()
     }

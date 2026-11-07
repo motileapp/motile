@@ -311,10 +311,11 @@ fun SidebarScreen(underThread: Boolean) {
     }
     val target = if (searching) highlightedID?.let { "result:$it" } else items.firstOrNull { it.rowThread?.id == store.revealedThreadID }?.id
     val targetIndex = target?.let { id -> shown.indexOfFirst { it.id == id } } ?: -1
-    val targetToTop = sections.any { (_, threads) -> threads.any { it.id == store.revealedThreadID } }
+    val revealedSection = sections.firstOrNull { (_, threads) -> threads.any { it.id == store.revealedThreadID } }?.first
+    val anchorIndex = revealedSection?.let { section -> shown.indexOfFirst { it.id == "header:${section.raw}" } } ?: -1
     LaunchedEffect(target) {
         if (targetIndex < 0) return@LaunchedEffect
-        reveal(list, targetIndex, targetToTop)
+        reveal(list, targetIndex, !searching && store.revealedThreadID != null, anchorIndex.takeIf { it in 0..targetIndex })
     }
     LaunchedEffect(list.isScrollInProgress) {
         if (list.isScrollInProgress) swiped = null
@@ -497,8 +498,15 @@ private fun jumpPlaces(threads: List<ThreadInfo>): Map<String, Int> = buildMap {
     threads.forEachIndexed { index, thread -> putIfAbsent(thread.id, index) }
 }
 
-/** Scrolls the row into view, or to the top of the list. */
-private suspend fun reveal(list: LazyListState, index: Int, toTop: Boolean) {
+/** Scrolls the row into view, or to the top of the list, with `anchor` there in its place when both fit: its section's line. */
+private suspend fun reveal(list: LazyListState, index: Int, toTop: Boolean, anchor: Int? = null) {
+    if (toTop && anchor != null) {
+        list.animateScrollToItem(anchor)
+        val info = list.layoutInfo
+        val row = info.visibleItemsInfo.firstOrNull { it.index == index }
+        if (row == null || row.offset + row.size > info.viewportEndOffset) list.animateScrollToItem(index)
+        return
+    }
     if (toTop) return list.animateScrollToItem(index)
     val info = list.layoutInfo
     val visible = info.visibleItemsInfo.firstOrNull { it.index == index } ?: return list.animateScrollToItem(index)

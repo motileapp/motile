@@ -60,9 +60,17 @@ val AppStore.searchResults: List<SearchResult>
             byMessage.map { SearchResult.Thread(it, found[it.id]) }
     }
 
-/** Opens what the search found and ends the search, then shows it in the sidebar. */
+/**
+ * Opens what the search found and ends the search, then shows it in the sidebar. A thread found by
+ * a message opens at that message, finding what was searched for when the message has it as it was written.
+ */
 fun AppStore.openSearchResult(result: SearchResult) {
+    val search = threadSearch.trim()
     show(result.selection)
     threadSearch = ""
     revealedThreadID = result.threadInfo?.id
+    val found = (result as? SearchResult.Thread)?.match ?: return
+    val itemID = found.itemID ?: return
+    if (!found.phrase) return revealItem(itemID, result.thread.id)
+    lightFound(search, itemID)
 }

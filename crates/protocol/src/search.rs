@@ -151,6 +151,35 @@ pub fn ranges(text: &str, query: &str) -> Vec<Range<usize>> {
     merged
 }
 
+/// A text folded as it is searched for, to find a phrase in as it is written but whatever its
+/// case and accents. Folding keeps every character, so places in it are places in the text.
+pub struct Folded(Vec<char>);
+
+impl Folded {
+    pub fn new(text: &str) -> Self {
+        Self(fold(text))
+    }
+
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    /// Where `phrase` starts in it, in characters, each time it is there without overlapping.
+    pub fn find(&self, phrase: &Folded) -> Vec<usize> {
+        let mut starts = Vec::new();
+        let mut from = 0;
+        while let Some(index) = position(&self.0, &phrase.0, from) {
+            starts.push(index);
+            from = index + phrase.0.len();
+        }
+        starts
+    }
+}
+
 /// The message on one line from a few words before `offset`, as a result's row shows it: without
 /// its emphasis and code marks, with "…" where it was cut.
 pub fn excerpt(text: &str, offset: usize) -> String {

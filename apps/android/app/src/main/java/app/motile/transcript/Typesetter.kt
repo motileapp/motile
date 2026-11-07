@@ -39,6 +39,9 @@ class TextBlock(
     override val top: Float,
     override val quote: Int,
     override val joined: Boolean,
+    /** Where its text and its marker start in the row's text. */
+    val offset: Int = 0,
+    val markerOffset: Int = 0,
 ) : ProseBlock
 
 /** Code inside a list or a quote, in a box of its own. */
@@ -50,6 +53,8 @@ class CodeBlock(
     override val top: Float,
     override val quote: Int,
     override val joined: Boolean,
+    /** Where its code starts in the row's text. */
+    val offset: Int = 0,
 ) : ProseBlock
 
 class RuleBlock(override val top: Float) : ProseBlock {
@@ -65,6 +70,8 @@ class TableBlock(
     /** The table as it is copied: its rows as lines, its cells apart by tabs. */
     val words: String,
     override val top: Float,
+    /** Where each cell starts in the row's text. */
+    val starts: List<List<Int>> = emptyList(),
 ) : ProseBlock {
     override val quote: Int get() = 0
     override val joined: Boolean get() = false
@@ -343,26 +350,29 @@ object Typesetter {
                     val all = piece(para.start, para.end)
                     val tab = all.text.indexOf('\t')
                     if (para.marker && tab >= 0) {
-                        TextBlock(all.subSequence(tab + 1, all.length), Theme.proseLineHeight, indent, all.subSequence(0, tab), markerIndent, top, quote, joined)
+                        TextBlock(
+                            all.subSequence(tab + 1, all.length), Theme.proseLineHeight, indent, all.subSequence(0, tab), markerIndent, top, quote, joined,
+                            offset = para.start + tab + 1, markerOffset = para.start,
+                        )
                     } else {
-                        TextBlock(all, Theme.proseLineHeight, indent, null, 0f, top, quote, joined)
+                        TextBlock(all, Theme.proseLineHeight, indent, null, 0f, top, quote, joined, offset = para.start)
                     }
                 }
-                "quote" -> TextBlock(piece(para.start, para.end), Theme.proseLineHeight, para.depth * QUOTE_INDENT, null, 0f, top, quote, joined)
+                "quote" -> TextBlock(piece(para.start, para.end), Theme.proseLineHeight, para.depth * QUOTE_INDENT, null, 0f, top, quote, joined, offset = para.start)
                 "heading" -> {
                     val size = Theme.heading(para.level).fontSize.value
-                    TextBlock(piece(para.start, para.end), (size * 1.2f + 3).sp, 0f, null, 0f, top, 0, false)
+                    TextBlock(piece(para.start, para.end), (size * 1.2f + 3).sp, 0f, null, 0f, top, 0, false, offset = para.start)
                 }
                 "pre" -> {
                     val code = source.slice(para.start, para.end).trimEnd('\n')
-                    CodeBlock(para.language, code, piece(para.start, para.end), para.depth * LIST_INDENT, top, quote, joined)
+                    CodeBlock(para.language, code, piece(para.start, para.end), para.depth * LIST_INDENT, top, quote, joined, offset = para.start)
                 }
                 "rule" -> RuleBlock(top)
                 "cell" -> {
                     tables += para.table
                     table(paras.filter { it.kind == "cell" && it.table == para.table }, ::piece, source, top)
                 }
-                else -> TextBlock(piece(para.start, para.end), Theme.proseLineHeight, 0f, null, 0f, top, 0, false)
+                else -> TextBlock(piece(para.start, para.end), Theme.proseLineHeight, 0f, null, 0f, top, 0, false, offset = para.start)
             }
             blocks += block
             previousQuote = quote
@@ -377,12 +387,14 @@ object Typesetter {
         val grid = MutableList(rows) { MutableList(columns) { AnnotatedString("") } }
         val words = MutableList(rows) { MutableList(columns) { "" } }
         val aligns = MutableList(columns) { 0 }
+        val starts = MutableList(rows) { MutableList(columns) { 0 } }
         for (cell in cells) {
             grid[cell.row][cell.column] = piece(cell.start, cell.end)
+            starts[cell.row][cell.column] = cell.start
             words[cell.row][cell.column] = source.slice(cell.start, cell.end).trimEnd('\n')
             aligns[cell.column] = cell.align.coerceIn(0, 2)
         }
         val headers = cells.filter { it.header }.map { it.row }.toSet().size
-        return TableBlock(grid, aligns, headers, words.joinToString("\n") { it.joinToString("\t") }, top)
+        return TableBlock(grid, aligns, headers, words.joinToString("\n") { it.joinToString("\t") }, top, starts)
     }
 }

@@ -642,13 +642,25 @@ impl Sidebar {
         }
     }
 
+    /// The shelf the thread the sidebar reveals is on.
+    fn revealed_shelf(&self, plan: &Plan, cx: &App) -> Option<Shelf> {
+        let store = self.store.read(cx);
+        let revealed = store.sidebar.revealed_thread_id.as_deref()?;
+        plan.items.iter().find_map(|item| match *item {
+            Item::Shelved(shelf, at) => {
+                shelf.threads(store).get(at).filter(|thread| thread.id == revealed).map(|_| shelf)
+            }
+            _ => None,
+        })
+    }
+
     fn item_id(&self, item: Item, results: &[SearchResult], cx: &App) -> String {
         match item {
             Item::Drafts => "drafts".into(),
             Item::Active(index) => {
                 self.store.read(cx).active_threads().get(index).map(|thread| thread.id.clone()).unwrap_or_default()
             }
-            Item::Result(index) => results[index].id(),
+            Item::Result(index) => result_item_id(&results[index]),
             Item::Empty => "empty".into(),
             Item::NewThread => "new-thread".into(),
             Item::Gap => "gap".into(),
@@ -693,11 +705,13 @@ impl Sidebar {
         let fitted = self.fitted_layout(plan);
         let layout = &fitted;
         let target = if plan.searching {
-            plan.results.get(self.highlighted).map(SearchResult::id)
+            plan.results.get(self.highlighted).map(result_item_id)
         } else {
             self.store.read(cx).sidebar.revealed_thread_id.clone()
         };
-        self.list.follow(target.as_deref(), false, layout, window);
+        let to_top = !plan.searching && target.is_some();
+        let shelf = self.revealed_shelf(plan, cx);
+        self.list.follow(target.as_deref(), to_top, shelf.map(Shelf::group), layout, window);
         let jump_hint = |id: &str, store: &Store| plan.jumps.get(id).and_then(|index| store.jump_hint(*index));
         let mut rows = Vec::new();
         for index in self.list.visible(layout, window) {
@@ -882,4 +896,10 @@ impl Render for Sidebar {
             .children(self.lift_layer(window, cx))
             .children(self.asking_alert(window, cx))
     }
+}
+
+/// A search result's row id, apart from the thread's own row, so that the list doesn't take the
+/// thread for one it already scrolled to once the search ends.
+fn result_item_id(result: &SearchResult) -> String {
+    format!("result:{}", result.id())
 }

@@ -14,6 +14,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::connection::PathKind;
+use crate::find::FoundRow;
 use crate::gateway;
 use crate::git::Control;
 use crate::keybindings::{Rule, View as KeybindingsView};
@@ -485,6 +486,31 @@ pub enum Command {
         #[serde(default)]
         at: Option<ScrollAt>,
     },
+    /// Finds `query` in the thread, as a browser finds in a page, and answers with `found`. The
+    /// current match is the one in `item_id` when it has one, or else the first from `from`, the
+    /// client's place. Each time the current match moves, `reveal` brings it into sight.
+    Find {
+        thread_id: String,
+        query: String,
+        #[serde(default)]
+        from: Option<ScrollAt>,
+        #[serde(default)]
+        item_id: Option<String>,
+    },
+    /// Moves to the next match, or with `back` the one before.
+    FindStep {
+        thread_id: String,
+        #[serde(default)]
+        back: bool,
+    },
+    FindEnd {
+        thread_id: String,
+    },
+    /// Brings the item's first row into sight, loading its turn and opening its fold.
+    RevealItem {
+        thread_id: String,
+        item_id: String,
+    },
     /// Asks for the turns before the first row, when the rows said there are some.
     LoadEarlier {
         thread_id: String,
@@ -716,6 +742,26 @@ pub enum Event {
         /// With `reset`, where the client left the transcript, which shows that in place of the end.
         #[serde(skip_serializing_if = "Option::is_none")]
         at: Option<ScrollAt>,
+    },
+    /// What finding in the thread found: how many matches, which is the current one, and where
+    /// they are in the rows the client has. Sent again whenever those rows change. `ready` once
+    /// the whole thread has been searched.
+    Found {
+        thread_id: String,
+        query: String,
+        count: usize,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        current: Option<usize>,
+        rows: Vec<FoundRow>,
+        ready: bool,
+    },
+    /// Scroll the row into sight, and with `range` that part of its text, `[start, length]` in
+    /// UTF-16 units.
+    Reveal {
+        thread_id: String,
+        row_id: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        range: Option<[u32; 2]>,
     },
     /// Whether the thread has caught up with its server, so that what arrives from now on is new.
     Live {

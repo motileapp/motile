@@ -68,9 +68,8 @@ struct SidebarView: View {
             }
         }
         .onChange(of: store.revealedThreadID) { _, revealed in
-            guard let revealed else { return }
-            if store.archivedThreads.contains(where: { $0.id == revealed }) { archivedExpanded = true }
-            if store.snoozedThreads.contains(where: { $0.id == revealed }) { snoozedExpanded = true }
+            guard let revealed, let thread = store.anyThread(revealed), thread.section != .active else { return }
+            expanded(thread.section).wrappedValue = true
         }
         .modal(item: $renaming) { thread in
             RenameThread(thread: thread)
@@ -98,7 +97,10 @@ struct SidebarView: View {
                 items: items, height: { height(of: $0, drafts: drafts.count) }, topInset: 4 - rowGap / 2,
                 // The sections at the bottom stand a little apart from the line under them.
                 bottomInset: 4 - rowGap / 2 + (items.contains { $0.isHeader } ? 2 : 0),
-                scrollTarget: searching ? highlighted.shown.flatMap { results.indices.contains($0) ? results[$0].id : nil } : store.revealedThreadID,
+                scrollTarget: searching
+                    ? highlighted.shown.flatMap { results.indices.contains($0) ? SidebarItem.result(results[$0]).id : nil } : store.revealedThreadID,
+                scrollsTargetToTop: !searching && store.revealedThreadID != nil,
+                scrollAnchor: revealedSection(lists).map { SidebarItem.header($0, 0).id },
                 clicked: { item in
                     switch item {
                     case .active(let thread), .shelved(let thread): store.select(.thread(thread.id))
@@ -208,6 +210,12 @@ struct SidebarView: View {
         let insets = 4 - rowGap / 2 + 4 - rowGap / 2 + 2
         let used = (items + shelved).reduce(insets) { $0 + height(of: $1, drafts: drafts.count) }
         return items + [.gap(max(1, (listHeight - used).rounded()))] + shelved
+    }
+
+    /// The shelf the thread the sidebar reveals is on.
+    private func revealedSection(_ lists: SidebarLists) -> ThreadSection? {
+        guard let revealed = store.revealedThreadID else { return nil }
+        return lists.shelves.first { $0.threads.contains { $0.id == revealed } }?.section
     }
 
     private func expanded(_ section: ThreadSection) -> Binding<Bool> {
@@ -326,7 +334,7 @@ private enum SidebarItem: Identifiable {
         switch self {
         case .drafts: "drafts"
         case .active(let thread), .shelved(let thread): thread.id
-        case .result(let result): result.id
+        case .result(let result): "result:\(result.id)"
         case .empty: "empty"
         case .newThread: "newThread"
         case .gap: "gap"

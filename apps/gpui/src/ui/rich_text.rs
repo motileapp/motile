@@ -30,6 +30,10 @@ pub struct RichText {
     tint_glyphs: Option<Pixels>,
     /// The names of skills, drawn on a chip's box with room left for it around them.
     skills: Vec<Range<usize>>,
+    /// The runs it was given, which the current match of finding recolours.
+    runs: Option<Vec<TextRun>>,
+    /// What finding in the thread found, on boxes behind it, and whether each is the current match.
+    found: Vec<(Range<usize>, bool)>,
     /// The transcript row it is in.
     row: Option<u64>,
     /// It lies in a control, whose cursor it keeps in place of the I-beam.
@@ -159,7 +163,9 @@ impl RichText {
     /// Text in runs of fonts and colours that cover all of it.
     pub fn with_runs(id: impl Into<ElementId>, text: impl Into<SharedString>, runs: Vec<TextRun>) -> Self {
         let text = text.into();
-        Self::styled(id, text.clone(), StyledText::new(text).with_runs(runs))
+        let mut rich = Self::styled(id, text.clone(), StyledText::new(text).with_runs(runs.clone()));
+        rich.runs = Some(runs);
+        rich
     }
 
     fn styled(id: impl Into<ElementId>, text: SharedString, styled: StyledText) -> Self {
@@ -173,6 +179,8 @@ impl RichText {
             tint: Hsla::transparent_black(),
             tint_glyphs: None,
             skills: Vec::new(),
+            runs: None,
+            found: Vec::new(),
             row: None,
             in_control: false,
             order: 0,
@@ -210,6 +218,22 @@ impl RichText {
 
     pub fn skills(mut self, names: Vec<Range<usize>>) -> Self {
         self.skills = names;
+        self
+    }
+
+    /// Sets off what finding in the thread found, by bytes of the text, the current match in its
+    /// own colours. Nothing that changes the layout.
+    pub fn found(mut self, found: Vec<(Range<usize>, bool)>, cx: &App) -> Self {
+        if found.is_empty() {
+            return self;
+        }
+        let current = found.iter().find(|(_, current)| *current).map(|(range, _)| range.clone());
+        if let (Some(current), Some(runs)) = (current, self.runs.as_ref()) {
+            let color = crate::theme::colors(cx).find_current_foreground;
+            let runs = recoloured(runs, current, color);
+            self.styled = StyledText::new(self.text.clone()).with_runs(runs);
+        }
+        self.found = found;
         self
     }
 
@@ -430,6 +454,17 @@ impl Element for RichText {
             self.tint_glyphs.unwrap_or_else(|| window.text_style().font_size.to_pixels(window.rem_size()) * 1.22);
         for range in self.tinted.clone() {
             Self::paint_tint(&self.text, &layout, range, glyphs, self.tint, window);
+        }
+        if !self.found.is_empty() {
+            let c = crate::theme::colors(cx);
+            let height = window.text_style().font_size.to_pixels(window.rem_size()) * 1.22 + px(2.);
+            for (range, current) in self.found.clone() {
+                let color = if current { c.find_current } else { c.find_match };
+                if current {
+                    note_current_match(&layout, range.clone());
+                }
+                Self::paint_tint(&self.text, &layout, range, height, color, window);
+            }
         }
         for name in &self.skills {
             let (Some(start), Some(end)) = (layout.position_for_index(name.start), layout.position_for_index(name.end))
@@ -901,4 +936,50 @@ mod tests {
         send(&mut cx, window, vec![released]);
         assert_eq!(*opened.borrow(), ["https://motile.app"]);
     }
+}
+
+/// The runs with the text in `range` in `color`, split where it starts and ends.
+fn recoloured(runs: &[TextRun], range: Range<usize>, color: Hsla) -> Vec<TextRun> {
+    let mut split = Vec::with_capacity(runs.len() + 2);
+    let mut at = 0;
+    for run in runs {
+        let end = at + run.len;
+        let cuts = [at, range.start.clamp(at, end), range.end.clamp(at, end), end];
+        for pair in cuts.windows(2).filter(|pair| pair[1] > pair[0]) {
+            let mut piece = run.clone();
+            piece.len = pair[1] - pair[0];
+            if pair[0] >= range.start && pair[1] <= range.end {
+                piece.color = color;
+            }
+            split.push(piece);
+        }
+        at = end;
+    }
+    split
+}
+
+thread_local! {
+    static CURRENT_MATCH: std::cell::Cell<Option<Bounds<Pixels>>> = const { std::cell::Cell::new(None) };
+}
+
+fn note_current_match(layout: &TextLayout, range: Range<usize>) {
+    let (Some(start), Some(end)) = (layout.position_for_index(range.start), layout.position_for_index(range.end))
+    else {
+        return;
+    };
+    let bounds = Bounds::from_corners(
+        point(start.x.min(end.x), start.y),
+        point(start.x.max(end.x), end.y + layout.line_height()),
+    );
+    CURRENT_MATCH.set(Some(bounds));
+}
+
+/// Where the current match of finding in the thread was last painted, in the window.
+pub fn painted_current_match() -> Option<Bounds<Pixels>> {
+    CURRENT_MATCH.get()
+}
+
+/// Forgets where the current match was painted, to learn where it is painted next.
+pub fn forget_current_match() {
+    CURRENT_MATCH.set(None);
 }

@@ -135,7 +135,7 @@ pub fn ui_row(model: &RowModel, ctx: &RowContext, window: &mut Window, cx: &mut 
     };
     let errors = (!ui.errors.is_empty()).then(|| {
         let id = format!("{}-errors", model.row.id);
-        error_box(&id, &ui.errors.join("\n"), key, cx)
+        error_box(&id, &ui.errors.join("\n"), &[], key, cx)
     });
     div()
         .pt(px(ABOVE))

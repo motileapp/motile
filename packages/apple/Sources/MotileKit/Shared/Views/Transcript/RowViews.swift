@@ -64,6 +64,12 @@ class RowView: FlippedView {
 
     func layout(width: CGFloat) -> CGFloat { 0 }
 
+    /// What finding in the thread found in the row, drawn over its text.
+    func mark(_ marks: FoundMarks?) {}
+
+    /// Where that part of the text the core sent is, in the row.
+    func rect(of range: NSRange) -> CGRect? { nil }
+
     /// The row left the screen: its view goes to the pool or away.
     func recycled() {}
 
@@ -215,6 +221,7 @@ final class UserRowView: RowView {
     private let clip = FlippedView()
     private let fade = EdgeFade()
     private let text = RowTextView.make()
+    private var found = FoundText()
     private var more: ExpandButton!
     private let attachments = AttachedFilesView()
     private let meta = MessageMeta(trailing: true, tooltip: "Copy message")
@@ -262,7 +269,7 @@ final class UserRowView: RowView {
         super.configure(row)
         guard case .user(let content, let files, let at, let collapsible) = row.kind else { return }
         meta.show(Time.stamp(at))
-        text.content = content
+        found.show(content, in: text)
         self.files = files
         self.collapsible = collapsible
         more.dim()
@@ -353,6 +360,18 @@ final class UserRowView: RowView {
         let bottom = clip.frame.maxY + Self.moreHeight + ExpandButton.below
         let height = max(bottom - clip.frame.maxY, Platform.minimumPress)
         more.frame = CGRect(x: 0, y: bottom - height, width: bubble.frame.width, height: height)
+    }
+
+    override func mark(_ marks: FoundMarks?) { found.mark(marks, in: text) }
+
+    override func rect(of range: NSRange) -> CGRect? {
+        found.rect(of: range, in: text).map { convert($0, from: text) }
+    }
+
+    /// Whether that part of the text is past where a long message is cut.
+    func hides(_ range: NSRange) -> Bool {
+        guard collapsible, !(owner?.isExpanded(id: rowID) ?? false), let rect = found.rect(of: range, in: text) else { return false }
+        return rect.maxY > clip.bounds.height
     }
 
     override func clearSelection() { text.clearSelection() }
@@ -476,6 +495,7 @@ final class ProseRowView: RowView {
     static let gap: CGFloat = 9
 
     private let text = RowTextView.make()
+    private var found = FoundText()
     private var above: CGFloat = 0
     private var headers: [CodeHeader] = []
     #if os(iOS)
@@ -496,8 +516,14 @@ final class ProseRowView: RowView {
     override func configure(_ row: RowModel) {
         super.configure(row)
         guard case .prose(let content, _) = row.kind else { return }
-        text.content = content
+        found.show(content, in: text)
         above = row.above
+    }
+
+    override func mark(_ marks: FoundMarks?) { found.mark(marks, in: text) }
+
+    override func rect(of range: NSRange) -> CGRect? {
+        found.rect(of: range, in: text).map { convert($0, from: text) }
     }
 
     override func layout(width: CGFloat) -> CGFloat {
@@ -582,6 +608,8 @@ final class CodeRowView: RowView {
     private let header = CodeHeader()
     private let scroll = SidewaysScrollView()
     private let text = RowTextView.make(wraps: false)
+    private var found = FoundText()
+    private var marks: FoundMarks?
     private var lines = 1
     private var widestLine = 0
 
@@ -613,13 +641,24 @@ final class CodeRowView: RowView {
         content = code
         lines = content.lineCount
         header.show(language: content.language, code: content.code)
-        text.content = content.attributed
+        found.show(content.attributed, in: text)
+        marks = nil
         widestLine = Self.columns(of: content.code)
     }
 
     /// Only the colours changed; the layout stays.
     func recolor(_ content: CodeContent) {
-        text.content = content.attributed
+        found.show(content.attributed, in: text)
+        found.mark(marks, in: text)
+    }
+
+    override func mark(_ marks: FoundMarks?) {
+        self.marks = marks
+        found.mark(marks, in: text)
+    }
+
+    override func rect(of range: NSRange) -> CGRect? {
+        found.rect(of: range, in: text).map { convert($0, from: text) }
     }
 
     /// The length of the longest line in columns, counting what is wider than a letter as two.
@@ -932,6 +971,7 @@ final class ErrorRowView: RowView {
     static let padding: CGFloat = ErrorBox.padding + 14
 
     private lazy var box = ErrorBox(in: self)
+    private var found = FoundText()
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -946,7 +986,13 @@ final class ErrorRowView: RowView {
     override func configure(_ row: RowModel) {
         super.configure(row)
         guard case .error(let message) = row.kind else { return }
-        box.text.content = message
+        found.show(message, in: box.text)
+    }
+
+    override func mark(_ marks: FoundMarks?) { found.mark(marks, in: box.text) }
+
+    override func rect(of range: NSRange) -> CGRect? {
+        found.rect(of: range, in: box.text).map { convert($0, from: box.text) }
     }
 
     override func layout(width: CGFloat) -> CGFloat {

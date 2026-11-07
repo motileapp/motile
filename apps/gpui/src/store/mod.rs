@@ -4,6 +4,7 @@
 mod account;
 mod attachments;
 mod commands;
+pub mod find;
 pub mod gateway;
 mod git;
 mod history;
@@ -393,6 +394,8 @@ pub struct Store {
     pub pull_requests: PullRequests,
     pub repo_listing: RepoListing,
     pub sidebar: SidebarState,
+    /// What the bar that finds in the open thread shows.
+    pub find: find::FindState,
     pub transcript: Entity<Transcript>,
     /// What the agent did that the right panel shows.
     pub agent_transcript: Entity<Transcript>,
@@ -523,6 +526,7 @@ impl Store {
             pull_requests: PullRequests::default(),
             repo_listing: RepoListing::default(),
             sidebar: SidebarState::default(),
+            find: find::FindState::default(),
             transcript: cx.new(|_| Transcript::new()),
             agent_transcript: cx.new(|_| Transcript::new()),
             open_thread_id: None,
@@ -857,6 +861,10 @@ impl Store {
                 self.apply_thread_search(sidebar::MessageSearch::new(query, searching, matches))
             }
             Event::Gateway { gateway } => self.apply_gateway(*gateway),
+            Event::Found { thread_id, query, count, current, rows, .. } => {
+                self.apply_found(thread_id, query, count, current, rows, cx)
+            }
+            Event::Reveal { thread_id, row_id, range } => self.apply_reveal(thread_id, row_id, range, cx),
         }
     }
 

@@ -30,13 +30,10 @@ import app.motile.theme.ControlSize
 import app.motile.theme.LocalForeground
 import app.motile.theme.LocalRow
 import app.motile.theme.LocalSurface
-import app.motile.theme.Opacity
 import app.motile.theme.Radius
-import app.motile.theme.ShadowSize
 import app.motile.theme.Surface
 import app.motile.theme.SurfaceBox
 import app.motile.theme.Theme
-import app.motile.theme.shadow
 import app.motile.ui.ActionButton
 import app.motile.ui.sharing
 import app.motile.ui.ButtonVariant
@@ -78,7 +75,6 @@ fun ToastView(toast: Toast, modifier: Modifier = Modifier) {
         Box(
             modifier
                 .widthIn(max = ToastView.maxWidth)
-                .shadow(ShadowSize.Lg, ToastView.shape, Opacity.ShadowStronger)
                 .background(palette.popover, ToastView.shape)
                 .border(1.dp, palette.borderPopover, ToastView.shape),
         ) {

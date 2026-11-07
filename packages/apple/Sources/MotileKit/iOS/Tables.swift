@@ -22,6 +22,8 @@ final class TableContent: NSObject {
     let size: CGSize
     /// The table as it is copied: its rows as lines, its cells apart by tabs.
     let words: String
+    /// Where its cells were in the reply's text.
+    var source = NSRange(location: 0, length: 0)
 
     init(cells: [[NSAttributedString]], headers: Int) {
         self.cells = cells
@@ -83,6 +85,7 @@ struct TableSetter {
             }
             let table = TableContent(cells: grid, headers: Set(cells.filter(\.header).map(\.row)).count)
             let whole = NSRange(location: first.range.location, length: NSMaxRange(last.range) - first.range.location)
+            table.source = whole
             let endsLine = (text.string as NSString).substring(with: whole).hasSuffix("\n")
             let style = NSMutableParagraphStyle()
             style.minimumLineHeight = table.size.height

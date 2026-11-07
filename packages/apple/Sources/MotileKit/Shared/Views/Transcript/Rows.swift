@@ -587,6 +587,8 @@ extension NSAttributedString.Key {
     static let motileCode = NSAttributedString.Key("motile.code")
     /// The text is a shell command, whose lines break between its words.
     static let motileShellWords = NSAttributedString.Key("motile.shellWords")
+    /// Finding in the thread matched the text; the value says whether it is the current match.
+    static let motileFound = NSAttributedString.Key("motile.found")
 }
 
 /// Turns the core's rows into attributed strings. Safe to call from any thread.
@@ -859,6 +861,42 @@ enum Typesetter {
 
         link(result, json)
         return tables.finished(result, paras: paras)
+    }
+
+    /// The text with what finding in the thread found set off: each match on its box, the
+    /// current one in its own colour. Nothing that changes the layout.
+    static func found(_ text: NSAttributedString, _ marks: FoundMarks) -> NSAttributedString {
+        let result = NSMutableAttributedString(attributedString: text)
+        for (index, range) in marks.ranges.enumerated() {
+            guard let shown = shownRange(range, in: text), NSMaxRange(shown) <= result.length else { continue }
+            let current = index == marks.current
+            result.addAttribute(.motileFound, value: current, range: shown)
+            if current { result.addAttribute(.foregroundColor, value: Theme.findCurrentForeground, range: shown) }
+        }
+        return result
+    }
+
+    /// Where a range of the text the core sent is in the text as it shows. On iOS a table keeps
+    /// one line in place of its cells, so what follows it moves up, and what is in it isn't there.
+    static func shownRange(_ range: NSRange, in text: NSAttributedString) -> NSRange? {
+        #if os(iOS)
+        var shift = 0
+        var shown: NSRange? = range
+        text.enumerateAttribute(.motileTable, in: NSRange(location: 0, length: text.length)) { value, place, stop in
+            guard let table = value as? TableContent else { return }
+            if NSMaxRange(range) <= table.source.location {
+                stop.pointee = true
+            } else if range.location >= NSMaxRange(table.source) {
+                shift += table.source.length - place.length
+            } else {
+                shown = nil
+                stop.pointee = true
+            }
+        }
+        return shown.map { NSRange(location: $0.location - shift, length: $0.length) }
+        #else
+        return range
+        #endif
     }
 
     /// The text as it is copied: what a table stands for instead of what holds its place.

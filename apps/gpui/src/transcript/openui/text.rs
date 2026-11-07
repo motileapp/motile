@@ -93,9 +93,10 @@ pub fn text(node: &UiNode, cx: &UiCx, window: &mut Window, app: &mut App) -> Sta
                 code: code.clone().into(),
                 spans: spans.as_ref().map(|spans| prose::code_spans(code, spans)),
                 indent: 0.,
+                source: 0,
             };
             let key = format!("{}:{}", cx.row, node.id);
-            let code = code_box(&key, &shown, true, cx.key, copy(&key, &shown.code, cx), cx.surface, app);
+            let code = code_box(&key, &shown, true, cx.key, copy(&key, &shown.code, cx), cx.surface, None, app);
             element.child(code.rounded(px(style::radius(radius))).mb(px(0.)))
         }
         _ => element,
@@ -585,7 +586,7 @@ fn markdown(element: Stateful<Div>, id: &str, blocks: &[MarkdownBlock], cx: &UiC
                 MarkdownBlock::Prose { prose: text } => {
                     let prepared = prose::prepare(text);
                     let copy = |id: &str, code: &SharedString| copy(id, code, cx);
-                    rows::prose_blocks(&key, &prepared, cx.key, &copy, cx.surface, app).into_any_element()
+                    rows::prose_blocks(&key, &prepared, cx.key, &copy, cx.surface, None, app).into_any_element()
                 }
                 MarkdownBlock::Code { language, code, spans } => {
                     let shown = CodeBox {
@@ -593,8 +594,9 @@ fn markdown(element: Stateful<Div>, id: &str, blocks: &[MarkdownBlock], cx: &UiC
                         code: code.clone().into(),
                         spans: spans.as_ref().map(|spans| prose::code_spans(code, spans)),
                         indent: 0.,
+                        source: 0,
                     };
-                    code_box(&key, &shown, true, cx.key, copy(&key, &shown.code, cx), cx.surface, app)
+                    code_box(&key, &shown, true, cx.key, copy(&key, &shown.code, cx), cx.surface, None, app)
                         .into_any_element()
                 }
             }

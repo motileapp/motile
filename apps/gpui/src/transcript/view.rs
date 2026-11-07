@@ -13,6 +13,8 @@ use gpui_kit::prelude::*;
 use gpui_kit::*;
 use motile_core::api::Command;
 
+use motile_core::render::rows::RowKind;
+
 use super::model::{FADE, Item, RowModel, Transcript};
 use super::rows::{self, META_FADE, RowContext};
 use crate::store::Store;
@@ -65,6 +67,11 @@ pub struct TranscriptView {
     glide: Option<Task<()>>,
     /// Where the user's last scroll left the viewport's top, and when it last moved it.
     scrolled: (f32, Option<Instant>),
+    /// The match of finding in the thread being scrolled to.
+    revealing: Option<Reveal>,
+    /// Room above the first row that the find bar covers while it shows, so that a match at the
+    /// top can come out from under it.
+    top_room: f32,
     _ticks: Task<()>,
     _subscriptions: Vec<Subscription>,
 }
@@ -114,6 +121,8 @@ impl TranscriptView {
             measures_after_layout: false,
             glide: None,
             scrolled: (0., None),
+            revealing: None,
+            top_room: 0.,
             _ticks: ticks,
             _subscriptions: subscriptions,
         };
@@ -430,6 +439,79 @@ impl TranscriptView {
         cx.notify();
     }
 
+    /// Scrolls to the row, and to the current match in it, a frame at a time: the row into the
+    /// viewport first, then the match to its middle unless it is in sight already. A long message
+    /// that hides the match opens.
+    fn advance_reveal(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(mut reveal) = self.revealing.take() else { return };
+        reveal.frames += 1;
+        let viewport = self.viewport_height(cx);
+        let model = self.model.read(cx);
+        let item = model.item_of(&reveal.row_id);
+        let collapsible = model
+            .row_index(&reveal.row_id)
+            .is_some_and(|row| matches!(model.rows[row].row.kind, RowKind::User { collapsible: true, .. }));
+        let (Some(item), true) = (item, viewport > 0.) else {
+            if reveal.frames < REVEAL_FRAMES {
+                self.revealing = Some(reveal);
+                cx.on_next_frame(window, |this, window, cx| this.advance_reveal(window, cx));
+            }
+            return;
+        };
+        let list = self.list(cx);
+        let area = list.viewport_bounds();
+        let shown_top = area.top() + px(self.top_room);
+        let shown_bottom = area.bottom() - px(self.bottom_inset);
+        let row = list.bounds_for_item(item);
+        let row_in_sight = row.is_some_and(|row| row.bottom() > shown_top && row.top() < shown_bottom);
+        if !reveal.placed {
+            self.hold_still(cx);
+            reveal.placed = true;
+            if !row_in_sight {
+                list.scroll_to(ListOffset { item_ix: item, offset_in_item: px(0.) });
+                list.scroll_by(px(-(self.top_room + (viewport - self.top_room - self.bottom_inset) * 0.4)));
+                crate::ui::rich_text::forget_current_match();
+                self.revealing = Some(reveal);
+                cx.notify();
+                cx.on_next_frame(window, |this, window, cx| this.advance_reveal(window, cx));
+                return;
+            }
+        }
+        let Some(row) = row else {
+            self.revealing = Some(reveal);
+            cx.on_next_frame(window, |this, window, cx| this.advance_reveal(window, cx));
+            return;
+        };
+        let painted = reveal.range.and_then(|_| crate::ui::rich_text::painted_current_match());
+        if reveal.range.is_some() && painted.is_none() && reveal.frames < REVEAL_FRAMES {
+            self.revealing = Some(reveal);
+            cx.notify();
+            cx.on_next_frame(window, |this, window, cx| this.advance_reveal(window, cx));
+            return;
+        }
+        if let Some(painted) = painted
+            && collapsible
+            && !self.expanded.contains(&reveal.row_id)
+            && painted.bottom() > row.bottom() - px(CUT_ROOM)
+        {
+            self.toggle_expanded(&reveal.row_id.clone(), cx);
+            crate::ui::rich_text::forget_current_match();
+            self.revealing = Some(reveal);
+            cx.on_next_frame(window, |this, window, cx| this.advance_reveal(window, cx));
+            return;
+        }
+        let target = painted.unwrap_or(row);
+        let visible = shown_bottom - shown_top;
+        let margin = px(80.).min(visible / 4.);
+        if target.top() >= shown_top + margin && target.bottom() <= shown_bottom - margin {
+            return;
+        }
+        let middle = shown_top + visible / 2.;
+        let center = if target.size.height > visible { target.top() + visible / 2. } else { target.center().y };
+        list.scroll_by(center - middle);
+        cx.notify();
+    }
+
     /// Asks the core for the highlighting of the rows that came into view without it.
     fn request_highlights(&mut self, cx: &mut Context<Self>) {
         let waiting: Vec<String> = self.needs_highlight.borrow_mut().drain(..).collect();
@@ -461,6 +543,11 @@ impl Render for TranscriptView {
         if !self.needs_highlight.borrow().is_empty() {
             self.request_highlights(cx);
         }
+        if let Some((row_id, range)) = self.model.update(cx, |model, _| model.revealing.take()) {
+            self.revealing = Some(Reveal { row_id, range, placed: false, frames: 0 });
+            crate::ui::rich_text::forget_current_match();
+            cx.on_next_frame(window, |this, window, cx| this.advance_reveal(window, cx));
+        }
         if std::mem::take(&mut self.measures_after_layout) {
             cx.on_next_frame(window, |this, _, cx| {
                 this.load_earlier_if_near(cx);
@@ -477,6 +564,11 @@ impl Render for TranscriptView {
         };
         self.model.update(cx, |model, _| model.set_started_by(started_by));
         self.show_bottom_inset(cx);
+        let top_room = if !self.agent && self.store.read(cx).find.shown { crate::thread::find_bar::ROOM } else { 0. };
+        if top_room != self.top_room {
+            self.top_room = top_room;
+            self.model.read(cx).top_changed();
+        }
         let model = self.model.read(cx);
         let list_state = model.list.clone();
         let items = model.items.clone();
@@ -505,6 +597,7 @@ impl Render for TranscriptView {
             agent: self.agent,
             removed,
             thread_id: model.thread_id.clone(),
+            found: model.found.clone(),
         };
         let needs_highlight = self.needs_highlight.clone();
         let requested = self.requested_highlight.clone();
@@ -517,7 +610,7 @@ impl Render for TranscriptView {
             // A press in a row keeps a selection to it, as the Mac's text view of a row does.
             let key = |model: &RowModel| Some(rows::row_key(&model.row.id));
             let (element, pressed) = match &item {
-                Item::Top => return div().h(px(TOP_PADDING)).into_any_element(),
+                Item::Top => return div().h(px(TOP_PADDING + top_room)).into_any_element(),
                 Item::Bottom => return div().h(px(bottom)).into_any_element(),
                 Item::Row(row) => match rows.get(*row) {
                     Some(model) => {
@@ -628,6 +721,20 @@ impl Render for TranscriptView {
                 )
             })
     }
+}
+
+/// How many frames a reveal waits for its row to arrive and its match to be painted.
+const REVEAL_FRAMES: u32 = 30;
+/// A match this near the end of a cut message is under its fade, so the message opens.
+const CUT_ROOM: f32 = 60.;
+
+/// The match of finding in the thread being scrolled to: its row and where it is in the row's
+/// text, whether the row was brought into the viewport yet, and for how many frames it waited.
+struct Reveal {
+    row_id: String,
+    range: Option<[u32; 2]>,
+    placed: bool,
+    frames: u32,
 }
 
 /// The list as its bounce sees it: at its top only once its first item is. The list counts the

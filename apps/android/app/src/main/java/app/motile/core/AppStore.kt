@@ -449,6 +449,7 @@ class AppStore(private val context: Context) {
         private set
     val core = CoreBridge()
     val transcript = TranscriptModel()
+    val find = FindState()
     /** What the agent did that the right panel shows. */
     val agentTranscript = TranscriptModel()
     private var signInSession: SignInSession? = null
@@ -613,6 +614,8 @@ class AppStore(private val context: Context) {
                 if (size <= 0) return null
                 return { mediaProgress[id] = received / size }
             }
+            "found" -> return takeFound(event)
+            "reveal" -> return takeReveal(event)
             "rows" -> {
                 val threadID = event.string("thread_id")
                 val reset = event.bool("reset")
@@ -2164,6 +2167,7 @@ class AppStore(private val context: Context) {
     /** What the back gesture does when nothing else claims it: leaves a route, restores the maximized right panel, or hides a right panel that only has its blank tab. Nothing while the command panel, the viewer or the branches have it. */
     val escapes: (() -> Unit)?
         get() {
+            if (find.active) return { closeFind() }
             if (panel != null || viewing != null || showsBranches) return null
             if (settings != null || showsUsage) return { closeRoute() }
             if (rightPanel.isMaximized) return { rightPanel.toggleMaximized() }
@@ -2213,6 +2217,7 @@ class AppStore(private val context: Context) {
         showsUsage = false
         val reopens = selectedThread != null && openThreadID == null
         if (new == selection && !reopens) return
+        closeFind()
         openThreadID?.let {
             transcript.leave { place -> keepPlace(place, it) }
             core.send("close_thread", json("thread_id" to it))
@@ -2303,6 +2308,12 @@ class AppStore(private val context: Context) {
     fun show(selection: Selection) {
         select(selection)
         threadsShown += 1
+    }
+
+    /** Opens the thread and brings its row into sight in the sidebar. */
+    fun reveal(threadID: String) {
+        show(Selection.Thread(threadID))
+        revealedThreadID = threadID
     }
 
     /** Where the client goes when what was open is gone. */

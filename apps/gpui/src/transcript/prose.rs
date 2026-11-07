@@ -32,6 +32,8 @@ pub struct TextPara {
     pub links: Vec<(Range<usize>, String)>,
     /// More room above it than its style keeps, where a list, a quote or a table ended.
     pub extra_above: f32,
+    /// Where its text starts in the row's, in UTF-16 units.
+    pub source: u32,
 }
 
 #[derive(Clone, Debug)]
@@ -42,6 +44,8 @@ pub struct CodeBox {
     /// has been highlighted.
     pub spans: Option<Vec<(Range<usize>, u32)>>,
     pub indent: f32,
+    /// Where the code starts in the row's text, in UTF-16 units.
+    pub source: u32,
 }
 
 #[derive(Clone, Debug)]
@@ -201,12 +205,20 @@ pub fn prepare(prose: &Prose) -> PreparedProse {
                     code: piece.text.into(),
                     spans,
                     indent: *depth as f32 * 22.,
+                    source: start,
                 }));
             }
             ParaKind::Rule => blocks.push(ProseBlock::Rule),
             ParaKind::Cell { row, column, columns, header, align, .. } => {
                 let cell = TableCell {
-                    para: TextPara { style: ParaStyle::Body, text: piece.text.into(), runs, links, extra_above: 0. },
+                    para: TextPara {
+                        style: ParaStyle::Body,
+                        text: piece.text.into(),
+                        runs,
+                        links,
+                        extra_above: 0.,
+                        source: start,
+                    },
                     header: *header,
                     align: *align,
                 };
@@ -231,11 +243,13 @@ pub fn prepare(prose: &Prose) -> PreparedProse {
                 let mut text = piece.text;
                 let mut runs = runs;
                 let mut links = links;
+                let mut source = start;
                 if let ParaStyle::ListItem { marker: Some(_), depth, quote } = &style {
                     // The text starts with the marker and a tab.
                     if let Some(tab) = text.find('\t') {
                         let marker: String = text[..tab].to_string();
                         let cut = tab + 1;
+                        source += text[..cut].encode_utf16().count() as u32;
                         text = text[cut..].to_string();
                         let shift =
                             |range: &Range<usize>| range.start.saturating_sub(cut)..range.end.saturating_sub(cut);
@@ -252,7 +266,7 @@ pub fn prepare(prose: &Prose) -> PreparedProse {
                         style = ParaStyle::ListItem { depth: *depth, marker: Some(marker.into()), quote: *quote };
                     }
                 }
-                blocks.push(ProseBlock::Para(TextPara { style, text: text.into(), runs, links, extra_above }));
+                blocks.push(ProseBlock::Para(TextPara { style, text: text.into(), runs, links, extra_above, source }));
             }
         }
     }
