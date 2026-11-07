@@ -100,14 +100,14 @@ private struct LinearIssues: View {
         let search = self.search.wrappedValue
         VStack(spacing: 0) {
             if narrow {
-                PanelBar {
+                PanelBar(edge: sidebarRowInset) {
                     pickers(choice)
                     Spacer(minLength: 0)
                 } second: {
                     tools(choice)
                 }
             } else {
-                PanelBar {
+                PanelBar(edge: sidebarRowInset) {
                     pickers(choice)
                     Spacer(minLength: 4)
                     tools(choice)
@@ -151,7 +151,6 @@ private struct LinearIssues: View {
                     Button("Disconnect \(workspace.workspace)", role: .destructive) { linear.disconnect(workspace.id, on: target.serverID) }
                 }
             }
-            .padding(.leading, -8)
             ActionMenu(teams.first { $0.id == choice.team }?.name ?? "All Teams", help: "Which team's issues to show") {
                 Toggle("All Teams", isOn: Binding { choice.team == nil } set: { _ in linear.pick(choice.workspace, for: target) })
                 ForEach(teams) { team in

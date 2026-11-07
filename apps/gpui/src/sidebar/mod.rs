@@ -48,7 +48,8 @@ const SIDEBAR_EDGE: f32 = ROW_INSET + ROW_PADDING;
 const BUTTON_OUTSET: f32 = 4.;
 /// The room over the servers' list, under their line.
 const SHELF_LIST_TOP: f32 = 2.;
-const DONE_ROW_HEIGHT: f32 = ControlSize::Regular.height();
+/// The height of a row of one line.
+pub const DONE_ROW_HEIGHT: f32 = ControlSize::Regular.height();
 /// The least the gap over the sections takes, when the list is fuller than its room: never
 /// nothing, as a row of no height is no row.
 const GAP_LEAST: f32 = 1.;

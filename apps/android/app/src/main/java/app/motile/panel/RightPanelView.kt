@@ -32,6 +32,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.motile.LocalStore
 import app.motile.core.Integration
@@ -126,20 +127,37 @@ fun PanelLoading() {
 /** The room between what a panel bar holds. Buttons side by side are put in a row of their own that gives it to them, so that it only looks empty. */
 val panelBarGap = 4.dp
 
-/** The strip under the tabs with what the open tab is about and its buttons, on one row or two. */
+/**
+ * The strip under the tabs with what the open tab is about and its buttons. A bar of controls over a
+ * list keeps them `edge` from the sides, as far as the list keeps its rows.
+ */
 @Composable
-fun PanelBar(second: (@Composable RowScope.() -> Unit)? = null, content: @Composable RowScope.() -> Unit) {
+fun PanelBar(edge: Dp? = null, content: @Composable RowScope.() -> Unit) {
     Column(Modifier.fillMaxWidth()) {
-        PanelBarRow(content)
-        if (second != null) PanelBarRow(second)
+        PanelBarRow(edge, content)
+        PanelLine()
+    }
+}
+
+/** A bar of controls over a list on two rows, the second `edge` from the line under it. */
+@Composable
+fun PanelBar(edge: Dp, second: @Composable RowScope.() -> Unit, content: @Composable RowScope.() -> Unit) {
+    Column(Modifier.fillMaxWidth()) {
+        PanelBarRow(edge, content)
+        Row(
+            Modifier.fillMaxWidth().padding(start = edge, end = edge, top = panelBarGap / 2, bottom = edge),
+            horizontalArrangement = Arrangement.spacedBy(panelBarGap),
+            verticalAlignment = Alignment.CenterVertically,
+            content = second,
+        )
         PanelLine()
     }
 }
 
 @Composable
-private fun PanelBarRow(content: @Composable RowScope.() -> Unit) {
+private fun PanelBarRow(edge: Dp?, content: @Composable RowScope.() -> Unit) {
     Row(
-        Modifier.fillMaxWidth().height(pressable(36f)).padding(start = 12.dp, end = 4.dp),
+        Modifier.fillMaxWidth().height(pressable(36f)).padding(start = edge ?: 12.dp, end = edge ?: 4.dp),
         horizontalArrangement = Arrangement.spacedBy(panelBarGap),
         verticalAlignment = Alignment.CenterVertically,
         content = content,

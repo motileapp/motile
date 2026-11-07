@@ -101,8 +101,11 @@ private val rowGap = 2.dp
 private val statusGap = 9.dp
 val rowMargin = PaddingValues(start = sidebarRowInset, top = rowGap / 2, end = sidebarRowInset, bottom = rowGap / 2)
 
+/** How far a row's content stays from the sides of its highlight. */
+val sidebarRowPadding = 8.dp
+
 /** How far everything the sidebar shows stays from its sides, a row's content as well as a line's. */
-val sidebarEdge = sidebarRowInset + 8.dp
+val sidebarEdge = sidebarRowInset + sidebarRowPadding
 val doneRowHeight = ControlSize.Regular.height
 
 /** The height of a sidebar line that opens, or of one server's line. */

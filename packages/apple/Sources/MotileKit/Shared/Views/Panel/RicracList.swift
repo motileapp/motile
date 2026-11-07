@@ -82,8 +82,10 @@ final class RicracListView: FlippedView {
     var onChange: ((RicracRow, JSON) -> Void)?
     var menuFor: ((RicracRow) -> [MenuAction])?
 
-    /// The room around the list.
-    private static let padding: CGFloat = 8
+    /// How far the rows stay from the panel's sides, as the sidebar's do.
+    private static let inset = sidebarRowInset
+    /// Room over the first status so that its light is as far below the bar as from the sides.
+    private static let top = inset - RicracHeaderCell.lead
 
     private let scroller = TranscriptScroller()
     private var entries: [RicracListEntry] = []
@@ -132,14 +134,14 @@ final class RicracListView: FlippedView {
 
     override func layoutNow() {
         scroller.frame = bounds
-        scroller.setDocument(width: bounds.width, height: Self.padding + (tops.last ?? 0) + panelEndRoom)
+        scroller.setDocument(width: bounds.width, height: Self.top + (tops.last ?? 0) + panelEndRoom)
         for (index, cell) in shown { place(cell, at: index) }
         updateVisible()
     }
 
     private func place(_ cell: RicracCell, at index: Int) {
-        let width = max(0, bounds.width - Self.padding * 2)
-        cell.frame = CGRect(x: Self.padding, y: Self.padding + tops[index], width: width, height: tops[index + 1] - tops[index])
+        let width = max(0, bounds.width - Self.inset * 2)
+        cell.frame = CGRect(x: Self.inset, y: Self.top + tops[index], width: width, height: tops[index + 1] - tops[index])
         cell.layoutNow()
     }
 
@@ -155,7 +157,7 @@ final class RicracListView: FlippedView {
     }
 
     private func updateVisible() {
-        let top = scroller.offsetY - Self.padding
+        let top = scroller.offsetY - Self.top
         let first = index(at: top)
         let last = min(entries.count - 1, index(at: top + scroller.viewportHeight))
         for index in shown.keys where index < first || index > last { recycle(index) }
@@ -216,7 +218,9 @@ private let rowGap: CGFloat = 2
 
 /// A status over its issues, on the secondary background, which a click folds up and out.
 private final class RicracHeaderCell: RicracCell {
-    static let height = pressable(30) + 6 + rowGap
+    /// The room over its light, which parts it from the issues above.
+    static let lead = 6 + rowGap / 2
+    static let height = lead + doneRowHeight + rowGap / 2
 
     private let light = SurfaceView()
     private let symbol = SymbolView(size: .sm)
@@ -261,24 +265,25 @@ private final class RicracHeaderCell: RicracCell {
     }
 
     override func layoutNow() {
-        let lit = CGRect(x: 0, y: 6 + rowGap / 2, width: bounds.width, height: max(0, bounds.height - 6 - rowGap))
+        let lit = CGRect(x: 0, y: Self.lead, width: bounds.width, height: max(0, bounds.height - Self.lead - rowGap / 2))
         light.frame = lit
-        symbol.frame = CGRect(x: 10, y: lit.minY, width: 16, height: lit.height)
-        var x: CGFloat = 10 + 16 + 8
+        symbol.frame = CGRect(x: sidebarRowPadding, y: lit.minY, width: 16, height: lit.height)
+        var x: CGFloat = sidebarRowPadding + 16 + 8
         for label in [name, count] {
             let size = label.natural
             label.frame = CGRect(x: x, y: lit.minY + ((lit.height - size.height) / 2).rounded(), width: size.width, height: size.height)
             x += size.width + 8
         }
-        chevron.frame = CGRect(x: bounds.width - 10 - 16, y: lit.minY, width: 16, height: lit.height)
+        chevron.frame = CGRect(x: bounds.width - sidebarRowPadding - 16, y: lit.minY, width: 16, height: lit.height)
     }
 }
 
 /// An issue on one line as Ricrac lists it: its priority and its status, which a click changes,
 /// its identifier and title, then its labels, who has it and when it last changed.
 private final class RicracIssueCell: RicracCell {
-    static let height = pressable(34) + rowGap
-    private static let inset: CGFloat = 6
+    static let height = doneRowHeight + rowGap
+    /// As far from the light's side as from its top and bottom.
+    private static let inset = (doneRowHeight - RicracRowButton.side) / 2
 
     private let light = SurfaceView()
     private let priority = RicracRowButton()
@@ -347,7 +352,7 @@ private final class RicracIssueCell: RicracCell {
         status.layoutNow()
         var x = status.frame.maxX + 8
         x += place(key, at: x, middle: middle) + 8
-        var right = bounds.width - 10
+        var right = bounds.width - sidebarRowPadding
         right -= place(time, endingAt: right, middle: middle)
         if !initials.isHidden {
             right -= 8 + RicracInitialsView.side

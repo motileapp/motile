@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -49,6 +48,7 @@ import app.motile.core.LinearUser
 import app.motile.platform.Platform
 import app.motile.platform.Symbol
 import app.motile.platform.scaled
+import app.motile.sidebar.sidebarRowInset
 import app.motile.theme.IconSize
 import app.motile.theme.ControlSize
 import app.motile.theme.LocalPalette
@@ -122,12 +122,12 @@ private fun LinearIssues(target: PanelTarget) {
         val narrow = !Platform.isTablet || maxWidth < wraps
         Column(Modifier.fillMaxSize()) {
             if (narrow) {
-                PanelBar(second = { Tools(target, choice, narrow, asked = { asked += 1 }) { filing = true } }) {
+                PanelBar(sidebarRowInset, second = { Tools(target, choice, narrow, asked = { asked += 1 }) { filing = true } }) {
                     Pickers(target, choice)
                     Spacer(Modifier.weight(1f))
                 }
             } else {
-                PanelBar {
+                PanelBar(sidebarRowInset) {
                     Pickers(target, choice)
                     Spacer(Modifier.weight(1f).widthIn(min = 4.dp))
                     Tools(target, choice, narrow, asked = { asked += 1 }) { filing = true }
@@ -155,7 +155,7 @@ private fun Pickers(target: PanelTarget, choice: LinearChoice) {
     val connected = linear.connected(target.serverID)
     val workspace = connected.firstOrNull { it.id == choice.workspace }
     val teams = linear.teams[choice.workspace ?: ""] ?: emptyList()
-    Row(Modifier.offset(x = (-8).dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
         ActionMenu(workspace?.workspace ?: "Linear", help = "Which workspace to show", margin = beside(end = panelBarGap)) {
             for (connection in connected) toggle(connection.workspace, connection.id == choice.workspace) { linear.pick(connection.id, target = target) }
             divider()
