@@ -130,11 +130,11 @@ struct SearchResultRow: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 6) {
                 ProjectIcon(project: project, size: .md)
-                    .opacity(.disabled, when: isDone && !highlighted)
+                    .modifier(FadedUnlit(faded: isDone))
                 Text(title)
                     .font(.ui(size: 13, weight: .medium))
                     .lineLimit(1)
-                    .foregroundStyle(highlighted ? Color.themeForeground : isDone ? Color.themeMutedStrongerForeground : Color.themeMutedForeground)
+                    .rowText(unlit: isDone ? .themeMutedStrongerForeground : .themeMutedForeground)
                     .layoutPriority(1)
                 Spacer(minLength: 6)
                 HStack(spacing: 6) {
@@ -230,5 +230,15 @@ struct SearchResultRow: View {
             line += piece
         }
         return line
+    }
+}
+
+/// Faded while the row it lies on is unlit.
+private struct FadedUnlit: ViewModifier {
+    let faded: Bool
+    @Environment(\.row) private var row
+
+    func body(content: Content) -> some View {
+        content.opacity(.disabled, when: faded && row == nil)
     }
 }

@@ -81,6 +81,7 @@ import app.motile.ui.MenuBuilder
 import app.motile.ui.MenuPopup
 import app.motile.ui.pressPosition
 import app.motile.ui.rememberMenuState
+import app.motile.ui.rowText
 import app.motile.ui.ProjectIcon
 import app.motile.ui.PullRequestLabel
 import app.motile.ui.ServerLabel
@@ -260,7 +261,7 @@ fun ThreadRow(
                 thread.title,
                 Modifier.height(ThreadRow.titleHeight).padding(top = 1.dp),
                 size = 13f, weight = FontWeight.Medium, maxLines = 1,
-                color = if (selected || hovering) palette.foreground else palette.mutedForeground,
+                color = rowText(),
             )
             Spacer(Modifier.height(5.dp))
             CompositionLocalProvider(LocalForeground provides palette.mutedStrongerForeground) {
@@ -407,7 +408,7 @@ private fun DraftRow(listed: ListedDraft, modifier: Modifier = Modifier, onLongC
                 listed.preview,
                 Modifier.height(ThreadRow.titleHeight).padding(top = 1.dp),
                 size = 13f, weight = FontWeight.Medium, maxLines = 1,
-                color = if (selected || hovering) palette.foreground else palette.mutedForeground,
+                color = rowText(),
             )
             Spacer(Modifier.height(5.dp))
             CompositionLocalProvider(LocalForeground provides palette.mutedStrongerForeground) {
@@ -459,7 +460,7 @@ fun SlimThreadRow(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             ProjectIcon(project, size = iconSize(text = 13f))
-            Text(thread.title, Modifier.weight(1f).padding(start = 7.dp, end = 6.dp), size = 13f, maxLines = 1, color = if (selected || hovering) palette.foreground else palette.mutedForeground)
+            Text(thread.title, Modifier.weight(1f).padding(start = 7.dp, end = 6.dp), size = 13f, maxLines = 1, color = rowText())
             Row(horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically) {
                 project?.pullRequest(thread)?.let { ThreadPullRequestLabel(thread, it, colored = false, open = open) }
                 val until = thread.snoozedUntil
