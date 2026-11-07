@@ -642,13 +642,6 @@ impl Transcript {
         self.sync(&changed);
     }
 
-    /// Has the list measure the room above the first row again, which changed.
-    pub fn top_changed(&self) {
-        if !self.items.is_empty() {
-            self.list.splice(0..1, 1);
-        }
-    }
-
     /// Has the list measure the room under the last row again, which changed.
     pub fn bottom_changed(&self) {
         let Some(last) = self.items.len().checked_sub(1) else { return };

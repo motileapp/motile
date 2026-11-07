@@ -184,12 +184,6 @@ private object Working
 /** The way back to the thread whose agent started this one, above the first row or, with `end`, under the last. */
 private data class StartedBy(val end: Boolean)
 
-/** The room the find bar covers, above the first row while it shows: the list keeps what shows where it is as it comes and goes. */
-private object FindRoom
-
-/** Room under the rows of a thread shorter than the list while the find bar shows, so that it can scroll by the bar's room too. */
-private object Filler
-
 private class Kept(var parent: String?, var bottom: Dp)
 
 object TranscriptView {
@@ -223,8 +217,8 @@ fun TranscriptView(
     modifier: Modifier = Modifier,
     contentPadding: PaddingValues = PaddingValues(),
     underComposer: Boolean = true,
-    /** What the find bar covers of the top, kept free above the first row, so that a match there can come out from under it. */
-    findRoom: Dp = 0.dp,
+    /** What the find bar covers of the top, which revealing a match scrolls it clear of. */
+    findCover: Dp = 0.dp,
 ) {
     val store = LocalStore.current
     val palette = LocalPalette.current
@@ -243,14 +237,11 @@ fun TranscriptView(
         kept.bottom = contentPadding.calculateBottomPadding()
     }
     val parent = kept.parent
-    val roomed = findRoom > 0.dp
-    val entries: List<Any> = remember(shown, model.showsWorking, parent != null, model.earlier, roomed) {
+    val entries: List<Any> = remember(shown, model.showsWorking, parent != null, model.earlier) {
         buildList {
-            if (roomed) add(FindRoom)
             if (parent != null && !model.earlier) add(StartedBy(end = false))
             addAll(if (!model.showsWorking) shown else shown.toMutableList<Any>().apply { add(workingIndex(shown, pending), Working) })
             if (parent != null) add(StartedBy(end = true))
-            if (roomed) add(Filler)
         }
     }
     val placed = remember(model, resets) { model.place?.let { entries.shownAt(it, density) } }
@@ -275,23 +266,7 @@ fun TranscriptView(
         }
     }
     // The way back at the end only shows while the one at the top is out of sight; its room stays, so that nothing moves when it does.
-    val topInSight by remember(state, entries) {
-        derivedStateOf {
-            val first = entries.indexOfFirst { it is StartedBy && !it.end }
-            first >= 0 && state.firstVisibleItemIndex <= first
-        }
-    }
-    // While every row shows, the filler makes the rows as tall as what the list shows, which a scroll by the bar's room needs.
-    val filler by remember(state) {
-        derivedStateOf {
-            val info = state.layoutInfo
-            val visible = info.visibleItemsInfo
-            val all = visible.isNotEmpty() && visible.first().index <= 1 && visible.last().index == info.totalItemsCount - 1
-            if (!all) return@derivedStateOf 0
-            val rows = visible.filter { it.key != ROOM_KEY && it.key != FILLER_KEY }.sumOf { it.size }
-            max(0, info.viewportSize.height - info.beforeContentPadding - info.afterContentPadding - rows)
-        }
-    }
+    val topInSight by remember(state, entries) { derivedStateOf { entries.firstOrNull() is StartedBy && state.firstVisibleItemIndex == 0 } }
     val actions = remember(model, resets) { TranscriptActions(store, model, ofAgent) }
     val scope = rememberCoroutineScope()
     val animates = model.activity.running && model.live && !Platform.reducesMotion
@@ -382,7 +357,7 @@ fun TranscriptView(
         follower.pinned = false
         follower.hold = null
         actions.revealing = request.rowID
-        reveal(state, shownEntries, request, actions, listTop[0], with(density) { findRoom.toPx() }, density)
+        reveal(state, shownEntries, request, actions, listTop[0], with(density) { findCover.toPx() }, density)
         actions.revealing = null
         model.revealed(request.serial)
     }
@@ -493,7 +468,6 @@ fun TranscriptView(
                         when (val entry = entries[index]) {
                             is RowModel -> entry.contentType
                             is StartedBy -> "started-by"
-                            FindRoom, Filler -> "room"
                             else -> "working"
                         }
                     },
@@ -505,8 +479,6 @@ fun TranscriptView(
                     Box(placed) {
                         when {
                             row != null -> TranscriptRow(row)
-                            entry === FindRoom -> Box(Modifier.height(findRoom))
-                            entry === Filler -> Box(Modifier.height(with(density) { filler.toDp() }))
                             entry is StartedBy && entry.end && topInSight -> Box(Modifier.height(ControlSize.Large.height))
                             entry is StartedBy && parent != null -> StartedByLine { store.openStartedThread(parent) }
                             else -> WorkingLine(model.activity, Modifier.padding(top = 2.dp))
@@ -628,14 +600,9 @@ private fun JumpButton(modifier: Modifier, onClick: () -> Unit) {
     }
 }
 
-private const val ROOM_KEY = "find-room"
-private const val FILLER_KEY = "find-filler"
-
 private fun entryKey(entry: Any): String = when (entry) {
     is RowModel -> entry.id
     is StartedBy -> "started-by-${entry.end}"
-    FindRoom -> ROOM_KEY
-    Filler -> FILLER_KEY
     else -> "working"
 }
 

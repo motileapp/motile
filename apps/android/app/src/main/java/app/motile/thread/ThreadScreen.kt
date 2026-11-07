@@ -121,9 +121,9 @@ fun ThreadScreen(overSidebar: Boolean = true) {
                 val bottom = below.asPaddingValues().calculateBottomPadding() + if (removed) composerBottomGap else composerHeight
                 val model = if (agent != null) store.agentTranscript else store.transcript
                 key(model) {
-                    val findRoom = if (agent == null && store.find.shown && store.selectedThread != null) FindBar.room else 0.dp
+                    val findCover = if (agent == null && store.find.shown && store.selectedThread != null) FindBar.cover else 0.dp
                     TranscriptView(
-                        model, Modifier.fillMaxSize(), contentPadding = PaddingValues(top = top, bottom = bottom), underComposer = !removed, findRoom = findRoom,
+                        model, Modifier.fillMaxSize(), contentPadding = PaddingValues(top = top, bottom = bottom), underComposer = !removed, findCover = findCover,
                     )
                 }
             }

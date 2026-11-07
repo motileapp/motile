@@ -20,8 +20,9 @@ const HEIGHT: f32 = ControlSize::Regular.height() + 2. * MARGIN;
 /// The room above the bar, and between it and the toast under it.
 pub const GAP: f32 = 6.;
 
-/// What the bar covers of the transcript's top: the gap above it, itself, and room under it.
-pub const ROOM: f32 = GAP + HEIGHT + 8.;
+/// What the bar covers of the transcript's top, which a match is scrolled clear of: the gap above
+/// it, itself, and room under it.
+pub const COVER: f32 = GAP + HEIGHT + 8.;
 
 pub struct FindBar {
     store: Entity<Store>,

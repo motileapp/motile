@@ -13,8 +13,8 @@ struct FindBar: View {
     /// How far it stands from the top of the thread.
     static let gap: CGFloat = 6
     static let height = ControlSize.regular.height + 2 * margin
-    /// What it covers of the top of the transcript, with the room under it.
-    static let room = gap + height + 8
+    /// What it covers of the top of the transcript, with a little room under it.
+    static let cover = gap + height + 8
 
     var body: some View {
         let find = store.find

@@ -49,8 +49,8 @@ object FindBar {
     /** Its last button's corner runs along the bar's. */
     internal val margin = radius - ControlSize.Regular.radius
     internal val shape = RoundedCornerShape(radius)
-    /** What the bar covers of the transcript's top, which the transcript keeps free above its first row while it shows. */
-    val room = 6.dp + ControlSize.Regular.height + margin * 2 + 8.dp
+    /** What the bar covers of the top of the transcript, with a little room under it. */
+    val cover = 6.dp + ControlSize.Regular.height + margin * 2 + 8.dp
     /** The room above the bar, and between it and the toast under it. */
     val gap = 6.dp
 }
