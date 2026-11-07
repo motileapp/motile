@@ -110,6 +110,8 @@ final class DecoratingLayoutManager: NSLayoutManager {
             }
         }
 
+        drawFound(in: characters, storage: storage, at: origin)
+
         storage.enumerateAttribute(.motileSkill, in: characters) { value, range, _ in
             guard value != nil else { return }
             let glyphs = glyphRange(forCharacterRange: range, actualCharacterRange: nil)
@@ -144,6 +146,28 @@ final class DecoratingLayoutManager: NSLayoutManager {
             enumerateLineFragments(forGlyphRange: glyphs) { rect, _, _, _, _ in
                 let line = CGRect(x: rect.minX, y: rect.midY, width: rect.width, height: 1)
                 line.offsetBy(dx: origin.x, dy: origin.y).fillCurrent()
+            }
+        }
+    }
+
+    /// A box behind each match of finding in the thread, as tall as its font around the baseline.
+    private func drawFound(in characters: NSRange, storage: NSTextStorage, at origin: CGPoint) {
+        storage.enumerateAttribute(.motileFound, in: characters) { value, range, _ in
+            guard let current = value as? Bool,
+                let font = storage.attribute(.font, at: range.location, effectiveRange: nil) as? PlatformFont
+            else { return }
+            let glyphs = glyphRange(forCharacterRange: range, actualCharacterRange: nil)
+            let unselected = NSRange(location: NSNotFound, length: 0)
+            (current ? Theme.findCurrent : Theme.findMatch).setFill()
+            enumerateLineFragments(forGlyphRange: glyphs) { line, _, container, lineGlyphs, _ in
+                guard let onLine = lineGlyphs.intersection(glyphs), onLine.length > 0 else { return }
+                let baseline = line.minY + self.location(forGlyphAt: onLine.location).y
+                let top = max(line.minY, (baseline - font.ascender - 1).rounded())
+                let bottom = min(line.maxY, (baseline - font.descender + 1).rounded())
+                self.enumerateEnclosingRects(forGlyphRange: onLine, withinSelectedGlyphRange: unselected, in: container) { rect, _ in
+                    let box = CGRect(x: rect.minX - 1, y: top, width: rect.width + 2, height: bottom - top)
+                    RoundedBox.fill(box.offsetBy(dx: origin.x, dy: origin.y), radius: Radius.xs)
+                }
             }
         }
     }
@@ -218,6 +242,13 @@ final class TextSystem {
             if tops.count == count { stop.pointee = true }
         }
         return tops
+    }
+
+    /// Where that part of the text is laid out, from the container's corner.
+    func rect(of range: NSRange) -> CGRect? {
+        guard range.length > 0, NSMaxRange(range) <= storage.length else { return nil }
+        let glyphs = layout.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
+        return layout.boundingRect(forGlyphRange: glyphs, in: container)
     }
 
     func height(forWidth width: CGFloat) -> CGFloat {
@@ -341,5 +372,30 @@ extension RowTextView {
         sample.append(NSAttributedString(string: "heading", attributes: [.font: Theme.heading(2)]))
         view.content = sample
         _ = view.height(forWidth: 400)
+    }
+}
+
+/// A row's text with what finding in the thread found drawn over it.
+struct FoundText {
+    private var base = NSAttributedString()
+    private var marks: FoundMarks?
+
+    /// Shows the row's text, without the marks of the row the view showed before.
+    mutating func show(_ text: NSAttributedString, in view: RowTextView) {
+        base = text
+        marks = nil
+        view.content = text
+    }
+
+    mutating func mark(_ marks: FoundMarks?, in view: RowTextView) {
+        guard marks != self.marks else { return }
+        self.marks = marks
+        view.content = marks.map { Typesetter.found(base, $0) } ?? base
+        view.redraw()
+    }
+
+    /// Where that part of the text the core sent is in the view.
+    func rect(of range: NSRange, in view: RowTextView) -> CGRect? {
+        Typesetter.shownRange(range, in: base).flatMap { view.rect(of: $0) }
     }
 }

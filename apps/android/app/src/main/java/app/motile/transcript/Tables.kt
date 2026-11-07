@@ -8,6 +8,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import app.motile.core.FoundMarks
+import app.motile.core.within
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.text.TextStyle
@@ -27,7 +30,7 @@ import app.motile.ui.ContextMenuArea
  * cell wraps, and it scrolls sideways when it is wider than the column. Held, it offers to copy it.
  */
 @Composable
-fun TableView(table: TableBlock, modifier: Modifier = Modifier) {
+fun TableView(table: TableBlock, modifier: Modifier = Modifier, marks: FoundMarks? = null, onCurrent: ((Rect, Rect) -> Unit)? = null) {
     val palette = LocalPalette.current
     /** Where each row ends, for the lines under them, as the last layout placed them. */
     val rowEnds = remember(table) { mutableListOf<Int>() }
@@ -36,14 +39,16 @@ fun TableView(table: TableBlock, modifier: Modifier = Modifier) {
         Box(Modifier.horizontalScroll(rememberScrollState())) {
             Layout(
                 content = {
-                    for (row in table.cells) {
+                    table.cells.forEachIndexed { rowIndex, row ->
                         row.forEachIndexed { column, cell ->
                             val align = when (table.aligns.getOrElse(column) { 0 }) {
                                 1 -> TextAlign.Center
                                 2 -> TextAlign.End
                                 else -> TextAlign.Start
                             }
-                            MarkedText(cell, style.copy(textAlign = align))
+                            val start = table.starts.getOrNull(rowIndex)?.getOrNull(column)
+                            val found = if (start == null) emptyList() else marks.within(start, cell.length)
+                            MarkedText(cell, style.copy(textAlign = align), found = found, onCurrent = onCurrent)
                         }
                     }
                 },

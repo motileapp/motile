@@ -54,15 +54,7 @@ struct ThreadScreen: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(.hidden, for: .navigationBar)
         .toolbar { bar }
-        .overlay(alignment: .topTrailing) {
-            if let toast = store.openToast {
-                ToastView(toast: toast)
-                    .padding(.top, 6)
-                    .padding(.horizontal, 14)
-                    .appearing(.opacity.combined(with: .offset(y: -6)))
-            }
-        }
-        .animation(.easeOut(duration: 0.15), value: store.toast)
+        .overlay(alignment: .topTrailing) { ThreadCorner() }
     }
 
     @ToolbarContentBuilder private var bar: some ToolbarContent {

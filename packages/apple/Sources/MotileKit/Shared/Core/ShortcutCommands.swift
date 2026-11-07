@@ -16,6 +16,7 @@ extension AppStore {
         if settings != nil { context.insert("settingsOpen") }
         if showsUsage { context.insert("usagePageOpen") }
         if modelPickerOpen { context.insert("modelPickerOpen") }
+        if find.shown { context.insert("findOpen") }
         return context
     }
 
@@ -96,6 +97,12 @@ extension AppStore {
         case "thread.editQueuedMessage":
             guard openThreadRemovedServer == nil, let queued = activity.queued.last else { return false }
             takeBack(queued: queued.id)
+        case "find.open":
+            guard selectedThread != nil, panel == nil, settings == nil, !showsUsage else { return false }
+            openFind(query: selectedTranscriptText)
+        case "find.next", "find.previous":
+            guard selectedThread != nil, panel == nil, settings == nil, !showsUsage else { return false }
+            stepFind(back: command == "find.previous")
         case "pullRequest.copyLink":
             guard let url = shownPullRequest?.url else { return false }
             Platform.copy(url.absoluteString)

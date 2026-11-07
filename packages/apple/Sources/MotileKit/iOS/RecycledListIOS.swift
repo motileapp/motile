@@ -11,6 +11,9 @@ struct RecycledList<Item: Identifiable, Row: View>: UIViewRepresentable {
     var scrollTarget: Item.ID?
     /// Whether the target's row is scrolled to the top, clear of the fade, or only into sight.
     var scrollsTargetToTop = false
+    /// The row above the target that goes to the top in its place when both fit, such as its
+    /// section's line.
+    var scrollAnchor: Item.ID?
     /// A finger has started to scroll the list, or to drag a row.
     var scrolled: () -> Void = {}
     /// The shape a row lifts in when it is held: its light, inset from the row's edges.
@@ -177,7 +180,11 @@ struct RecycledList<Item: Identifiable, Row: View>: UIViewRepresentable {
             }
             let top = -view.adjustedContentInset.top
             let bottom = max(top, view.contentSize.height + view.adjustedContentInset.bottom - view.bounds.height)
-            view.setContentOffset(CGPoint(x: view.contentOffset.x, y: min(bottom, max(top, frame.minY - EdgeFade.length))), animated: true)
+            let room = view.bounds.height - view.adjustedContentInset.top - view.adjustedContentInset.bottom - 2 * EdgeFade.length
+            let anchor = list?.scrollAnchor.flatMap { id in list?.items.firstIndex { $0.id == id } }
+                .flatMap { view.layoutAttributesForItem(at: IndexPath(item: $0, section: 0))?.frame }
+            let lead = anchor.flatMap { frame.maxY - $0.minY <= room ? $0.minY : nil } ?? frame.minY
+            view.setContentOffset(CGPoint(x: view.contentOffset.x, y: min(bottom, max(top, lead - EdgeFade.length))), animated: true)
         }
 
         private func configure(_ cell: RecycledCell, at index: Int) {

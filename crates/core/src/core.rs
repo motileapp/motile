@@ -32,6 +32,7 @@ use crate::api::{
 use crate::browse;
 use crate::cache::{Cache, Page};
 use crate::connection::{NOT_CONNECTED, ServerAddr, bind, leave_relays, offline};
+use crate::find::{self, Find};
 use crate::follow::{self, Followed};
 use crate::gateway::{self, GatewayEvent, GatewayLink};
 use crate::git;
@@ -130,6 +131,11 @@ enum Input {
     Command {
         id: u64,
         command: Command,
+    },
+    /// The rows of an open thread that finding searches, read.
+    FindIndexed {
+        thread_id: String,
+        entries: Vec<find::Entry>,
     },
     Link(String, LinkEvent),
     Endpoint {
@@ -310,6 +316,8 @@ struct OpenThread {
     /// When the client left it. It stays open and current until it is one too many, but the client
     /// isn't told about it.
     left: Option<Instant>,
+    /// What the client finds in it, while it does.
+    find: Option<Find>,
 }
 
 /// A place the client left a transcript at, with the item of its row, which the transcript loads
@@ -652,6 +660,7 @@ impl Core {
     fn handle(&mut self, input: Input) {
         match input {
             Input::Command { id, command } => self.command(id, command),
+            Input::FindIndexed { thread_id, entries } => self.find_indexed(&thread_id, entries),
             Input::Link(server_id, event) => self.link_event(&server_id, event),
             Input::Endpoint { key, result } => self.endpoint_bound(&key, result),
             Input::AccountChecked { key, result } => self.account_checked(&key, result),
@@ -2260,6 +2269,14 @@ impl Core {
             return;
         }
         self.dress(thread_id, &mut splice.rows);
+        let finds = self.open.get_mut(thread_id).is_some_and(|open| {
+            let Some(find) = open.find.as_mut() else { return false };
+            for row in &splice.rows {
+                let Some(seq) = open.transcript.item(&row.item).map(|item| item.seq) else { continue };
+                find.update(seq, row);
+            }
+            true
+        });
         let place = self.places.get(&(thread_id.to_string(), None)).filter(|_| reset);
         self.emit(Event::Rows {
             thread_id: thread_id.to_string(),
@@ -2270,6 +2287,111 @@ impl Core {
             rows: splice.rows,
             earlier: self.open.get(thread_id).is_some_and(|open| open.earlier),
         });
+        if finds {
+            self.emit_found(thread_id);
+        }
+    }
+
+    /// Finds `query` in the thread, reading its rows from the cache the first time.
+    fn find(&mut self, thread_id: &str, query: &str, from: Option<ScrollAt>, item_id: Option<String>) {
+        let Some(open) = self.open.get_mut(thread_id) else { return };
+        let place = from.and_then(|at| {
+            let row = open.transcript.rows().iter().find(|row| row.id == at.row_id)?;
+            Some((open.transcript.item(&row.item)?.seq, find::block(&row.id)))
+        });
+        let find = match open.find.as_mut() {
+            Some(find) => find,
+            None => {
+                let mut items = self.cache.thread_items(thread_id);
+                for item in open.transcript.items() {
+                    match items.iter().position(|cached| cached.id == item.id) {
+                        Some(index) => items[index] = item.clone(),
+                        None => items.push(item.clone()),
+                    }
+                }
+                items.sort_by_key(|item| item.seq);
+                let (inputs, thread_id, cwd) =
+                    (self.inputs.clone(), thread_id.to_string(), open.transcript.cwd().to_string());
+                tokio::task::spawn_blocking(move || {
+                    let entries = find::index(&items, &cwd);
+                    let _ = inputs.send(Input::FindIndexed { thread_id, entries });
+                });
+                open.find.insert(Find::default())
+            }
+        };
+        find.from = place;
+        find.item = item_id.clone();
+        let moved = find.search(query, place, item_id.as_deref());
+        self.emit_found(thread_id);
+        if moved {
+            self.reveal_found(thread_id);
+        }
+    }
+
+    fn find_indexed(&mut self, thread_id: &str, entries: Vec<find::Entry>) {
+        let Some(open) = self.open.get_mut(thread_id) else { return };
+        let Some(find) = open.find.as_mut() else { return };
+        find.set_entries(entries);
+        for row in open.transcript.rows() {
+            let Some(seq) = open.transcript.item(&row.item).map(|item| item.seq) else { continue };
+            find.update(seq, row);
+        }
+        let (query, from, item) = (find.query().to_string(), find.from, find.item.clone());
+        let moved = find.search(&query, from, item.as_deref());
+        self.emit_found(thread_id);
+        if moved {
+            self.reveal_found(thread_id);
+        }
+    }
+
+    fn emit_found(&mut self, thread_id: &str) {
+        let Some(open) = self.open.get(thread_id) else { return };
+        let Some(find) = open.find.as_ref() else { return };
+        let event = Event::Found {
+            thread_id: thread_id.to_string(),
+            query: find.query().to_string(),
+            count: find.count(),
+            current: find.current_index(),
+            rows: find.found_rows(open.transcript.rows()),
+            ready: find.ready,
+        };
+        self.emit(event);
+    }
+
+    /// Brings the current match into sight: its turn loaded, its fold open.
+    fn reveal_found(&mut self, thread_id: &str) {
+        let hit = self.open.get(thread_id).and_then(|open| open.find.as_ref()?.current());
+        let Some(hit) = hit else { return };
+        self.show_row(thread_id, hit.seq, &hit.row_id);
+        self.emit(Event::Reveal {
+            thread_id: thread_id.to_string(),
+            row_id: hit.row_id,
+            range: Some([hit.start, hit.len]),
+        });
+    }
+
+    fn reveal_item(&mut self, thread_id: &str, item_id: &str) {
+        let Some(item) = self.cache.item(thread_id, item_id) else { return };
+        let Some(open) = self.open.get(thread_id) else { return };
+        let row_id = crate::render::rows::rendered(&item, open.transcript.cwd()).first().map(|row| row.id.clone());
+        let Some(row_id) = row_id else { return };
+        self.show_row(thread_id, item.seq, &row_id);
+        self.emit(Event::Reveal { thread_id: thread_id.to_string(), row_id, range: None });
+    }
+
+    /// Loads the turns back to the item at `seq` and opens the fold the row is in.
+    fn show_row(&mut self, thread_id: &str, seq: u64, row_id: &str) {
+        while self
+            .open
+            .get(thread_id)
+            .is_some_and(|open| open.earlier && open.transcript.first_seq().is_some_and(|first| first > seq))
+        {
+            self.load_earlier(thread_id);
+        }
+        let splice = self.open.get_mut(thread_id).and_then(|open| open.transcript.show_row(row_id));
+        if let Some(splice) = splice {
+            self.emit_rows(thread_id, false, splice);
+        }
     }
 
     fn emit_agent_rows(&mut self, thread_id: &str, reset: bool, mut splice: Splice) {
@@ -3589,6 +3711,32 @@ impl Core {
                 self.load_earlier(&thread_id);
                 self.reply(id, Ok(json!({})));
             }
+            Command::Find { thread_id, query, from, item_id } => {
+                self.find(&thread_id, &query, from, item_id);
+                self.reply(id, Ok(json!({})));
+            }
+            Command::FindStep { thread_id, back } => {
+                let stepped = self
+                    .open
+                    .get_mut(&thread_id)
+                    .and_then(|open| open.find.as_mut())
+                    .is_some_and(|find| find.step(back));
+                if stepped {
+                    self.emit_found(&thread_id);
+                    self.reveal_found(&thread_id);
+                }
+                self.reply(id, Ok(json!({})));
+            }
+            Command::FindEnd { thread_id } => {
+                if let Some(open) = self.open.get_mut(&thread_id) {
+                    open.find = None;
+                }
+                self.reply(id, Ok(json!({})));
+            }
+            Command::RevealItem { thread_id, item_id } => {
+                self.reveal_item(&thread_id, &item_id);
+                self.reply(id, Ok(json!({})));
+            }
             Command::TrimEarlier { thread_id, keep_rows } => {
                 self.trim_earlier(&thread_id, keep_rows);
                 self.reply(id, Ok(json!({})));
@@ -3795,6 +3943,7 @@ impl Core {
             programs: Programs::with_photos(self.photos.get(server_id).unwrap_or(&HashMap::new())),
             ui_timers: UiTimers::default(),
             left: None,
+            find: None,
         };
         self.open.insert(thread_id.to_string(), open);
         if let Some(activity) = activity {
@@ -3881,6 +4030,8 @@ impl Core {
 fn transcript_of(event: &Event) -> Option<&str> {
     match event {
         Event::Rows { thread_id, .. }
+        | Event::Found { thread_id, .. }
+        | Event::Reveal { thread_id, .. }
         | Event::Live { thread_id, .. }
         | Event::Agents { thread_id, .. }
         | Event::AgentRows { thread_id, .. }

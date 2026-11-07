@@ -36,6 +36,9 @@ extension Theme {
     static let mergedForeground = tone(0xffffff, 0xffffff)
     static let pink = tone(0xb7377c, 0xf28cc0)
     static let skill = tone(0x47730d, 0xa3e635)
+    static let findMatch = tone(0xfbe5a0, 0x584816)
+    static let findCurrent = tone(0xf0ad3a, 0xe8a23c)
+    static let findCurrentForeground = tone(0x22242b, 0x17140c)
     static let border = tone(0xe2e3e5, 0x191a1e)
     static let borderCard = tone(0xe9ebf0, 0x1e1f25)
     static let borderInput = tone(0xeaecf0, 0x1a1b21)
@@ -126,6 +129,9 @@ extension Theme {
         case "merged-foreground": mergedForeground
         case "pink": pink
         case "skill": skill
+        case "find-match": findMatch
+        case "find-current": findCurrent
+        case "find-current-foreground": findCurrentForeground
         case "border": border
         case "border-card": borderCard
         case "border-input": borderInput
@@ -216,6 +222,9 @@ extension Color {
     static let themeMergedForeground = Color(platform: Theme.mergedForeground)
     static let themePink = Color(platform: Theme.pink)
     static let themeSkill = Color(platform: Theme.skill)
+    static let themeFindMatch = Color(platform: Theme.findMatch)
+    static let themeFindCurrent = Color(platform: Theme.findCurrent)
+    static let themeFindCurrentForeground = Color(platform: Theme.findCurrentForeground)
     static let themeBorder = Color(platform: Theme.border)
     static let themeBorderCard = Color(platform: Theme.borderCard)
     static let themeBorderInput = Color(platform: Theme.borderInput)

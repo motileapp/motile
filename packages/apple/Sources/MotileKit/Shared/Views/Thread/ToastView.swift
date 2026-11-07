@@ -1,6 +1,7 @@
 import SwiftUI
 
-/// What the last git action or project add did, or what was refused, at the top of the thread.
+/// What the last git action or project add did, or what was refused, at the top of the thread,
+/// whose shadow `ThreadCorner` casts.
 /// What follows is one click away: the push after a commit, the pull request after a push, the
 /// thread in a project that was cloned.
 struct ToastView: View {
@@ -64,9 +65,7 @@ struct ToastView: View {
         .padding(.trailing, Self.trailing)
         .frame(maxWidth: Platform.scale > 1 ? 440 : 320)
         .background {
-            RoundedRectangle(cornerRadius: Self.radius, style: .continuous)
-                .fill(Color.themePopover)
-                .shadow(.lg, .shadowStronger)
+            RoundedRectangle(cornerRadius: Self.radius, style: .continuous).fill(Color.themePopover)
         }
         .overlay {
             RoundedRectangle(cornerRadius: Self.radius, style: .continuous).strokeBorder(Color.themeBorderPopover, lineWidth: 1)

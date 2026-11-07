@@ -7,6 +7,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.foundation.gestures.animateScrollBy
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -99,6 +103,17 @@ val LocalTranscriptMoves = staticCompositionLocalOf<() -> Boolean> { { false } }
 /** What the rows of one transcript do: open and close, copy, and open what they stand for. */
 class TranscriptActions(val store: AppStore, val model: TranscriptModel, val ofAgent: Boolean) {
     private val expanded = mutableStateMapOf<String, Unit>()
+
+    /** The row the transcript scrolls to for finding, whose long message opens when it hides the current match. */
+    var revealing by mutableStateOf<String?>(null)
+
+    /** Where the current match of finding was last drawn, in the window, and its row. */
+    var matchAt: Pair<String, Rect>? = null
+        private set
+
+    fun currentMatch(rowID: String, window: Rect) {
+        matchAt = rowID to window
+    }
 
     /** Called as a row opens or closes, which mustn't drag the view to the end; `byCore` when its rows come from the core. */
     var holding: (byCore: Boolean) -> Unit = {}
@@ -197,7 +212,14 @@ object TranscriptView {
  * padding is only room.
  */
 @Composable
-fun TranscriptView(model: TranscriptModel, modifier: Modifier = Modifier, contentPadding: PaddingValues = PaddingValues(), underComposer: Boolean = true) {
+fun TranscriptView(
+    model: TranscriptModel,
+    modifier: Modifier = Modifier,
+    contentPadding: PaddingValues = PaddingValues(),
+    underComposer: Boolean = true,
+    /** What the find bar covers of the top, kept free above the first row, so that a match there can come out from under it. */
+    findRoom: Dp = 0.dp,
+) {
     val store = LocalStore.current
     val palette = LocalPalette.current
     val density = LocalDensity.current
@@ -231,12 +253,16 @@ fun TranscriptView(model: TranscriptModel, modifier: Modifier = Modifier, conten
         val pinned = if (follower.hold != null) follower.wasPinned else follower.pinned
         if (pinned) null else entries.placeAt(state, density)
     }
+    val viewport by rememberUpdatedState { entries.placeAt(state, density) }
     DisposableEffect(model) {
         val view = { place() }
+        val shows = { viewport() }
         model.placeOfView = view
+        model.viewportOfView = shows
         onDispose {
             if (!model.keepsRows) model.place = view()
             if (model.placeOfView === view) model.placeOfView = null
+            if (model.viewportOfView === shows) model.viewportOfView = null
         }
     }
     // The way back at the end only shows while the one at the top is out of sight; its room stays, so that nothing moves when it does.
@@ -321,6 +347,20 @@ fun TranscriptView(model: TranscriptModel, modifier: Modifier = Modifier, conten
     LaunchedEffect(state) {
         snapshotFlow { Triple(state.remaining(), state.layoutInfo.totalItemsCount, model.version) }.collectLatest { follow() }
     }
+    val listTop = remember(state) { floatArrayOf(0f) }
+    val shownEntries by rememberUpdatedState(entries)
+    val revealing = model.revealing
+    val revealIndex = revealing?.let { request -> entries.indexOfFirst { (it as? RowModel)?.id == request.rowID } } ?: -1
+    LaunchedEffect(revealing?.serial, revealIndex >= 0) {
+        val request = revealing ?: return@LaunchedEffect
+        if (revealIndex < 0) return@LaunchedEffect
+        follower.pinned = false
+        follower.hold = null
+        actions.revealing = request.rowID
+        reveal(state, shownEntries, request, actions, listTop[0], density)
+        actions.revealing = null
+        model.revealed(request.serial)
+    }
     LaunchedEffect(state) {
         snapshotFlow { Triple(state.firstVisibleItemIndex, model.earlier, model.version) }.collect { loadEarlierIfNear() }
     }
@@ -335,6 +375,15 @@ fun TranscriptView(model: TranscriptModel, modifier: Modifier = Modifier, conten
             follower.highlighted += wanted
             store.core.send("highlight", mapOf("thread_id" to threadID, "row_ids" to wanted))
         }
+    }
+    // The find bar's room moves the rows only where the list is at its top; elsewhere what shows stays where it is.
+    val findRoomPx = with(density) { findRoom.toPx() }
+    val lastFindRoom = remember(state) { floatArrayOf(findRoomPx) }
+    LaunchedEffect(findRoomPx) {
+        val grown = findRoomPx - lastFindRoom[0]
+        lastFindRoom[0] = findRoomPx
+        if (grown == 0f || (state.firstVisibleItemIndex == 0 && state.firstVisibleItemScrollOffset == 0)) return@LaunchedEffect
+        state.scrollBy(grown)
     }
     // More room under the rows, as for the keyboard, is followed from near the end too.
     val bottomPx = with(density) { bottom.toPx() }
@@ -411,12 +460,13 @@ fun TranscriptView(model: TranscriptModel, modifier: Modifier = Modifier, conten
                     .fillMaxSize()
                     .alpha(if (follower.settled || entries.isEmpty()) 1f else 0f)
                     .fades(top, bottomFade)
+                    .onGloballyPositioned { listTop[0] = it.positionInWindow().y }
                     .nestedScroll(userScroll),
                 state = state,
                 contentPadding = PaddingValues(
                     start = side + contentPadding.calculateStartPadding(direction),
                     end = side + contentPadding.calculateEndPadding(direction),
-                    top = top + TranscriptView.topFade,
+                    top = top + TranscriptView.topFade + findRoom,
                     bottom = bottom,
                 ),
             ) {
@@ -592,4 +642,31 @@ private fun StartedByLine(open: () -> Unit) {
         }
         Box(Modifier.weight(1f).height(1.dp).background(palette.border))
     }
+}
+
+/**
+ * Scrolls to the row, and to the current match in it in the middle of what shows, unless it is in
+ * sight already. Without a range, the row's top comes into sight.
+ */
+private suspend fun reveal(state: LazyListState, entries: List<Any>, request: TranscriptModel.Revealing, actions: TranscriptActions, listTop: Float, density: Density) {
+    val index = entries.indexOfFirst { (it as? RowModel)?.id == request.rowID }.takeIf { it >= 0 } ?: return
+    val margin = with(density) { 40.dp.toPx() }
+    if (state.layoutInfo.visibleItemsInfo.none { it.index == index }) {
+        state.scrollToItem(index)
+        state.scrollBy(-state.layoutInfo.viewportSize.height * 0.35f)
+    }
+    repeat(3) { withFrameNanos {} }
+    val info = state.layoutInfo
+    val shownBottom = (info.viewportEndOffset - info.afterContentPadding).toFloat()
+    val match = actions.matchAt?.takeIf { request.range != null && it.first == request.rowID }?.second
+    if (match != null) {
+        val top = match.top - listTop + info.viewportStartOffset
+        val bottom = match.bottom - listTop + info.viewportStartOffset
+        if (top >= margin && bottom <= shownBottom - margin) return
+        state.animateScrollBy((top + bottom) / 2 - shownBottom / 2)
+        return
+    }
+    val row = info.visibleItemsInfo.firstOrNull { it.index == index } ?: return
+    if (row.offset >= 0 && row.offset <= shownBottom - margin) return
+    state.animateScrollBy(row.offset - margin)
 }

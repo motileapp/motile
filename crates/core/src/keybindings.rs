@@ -17,7 +17,7 @@ const MAX_DEPTH: usize = 64;
 const GROUPS: [&str; 5] = ["Navigation", "Threads", "Composer", "Right Panel", "Usage"];
 
 /// What the conditions can ask about the client. Any other name is false.
-pub const CONDITIONS: [&str; 8] = [
+pub const CONDITIONS: [&str; 9] = [
     "composerFocus",
     "editableFocus",
     "turnRunning",
@@ -26,6 +26,7 @@ pub const CONDITIONS: [&str; 8] = [
     "settingsOpen",
     "usagePageOpen",
     "modelPickerOpen",
+    "findOpen",
 ];
 
 /// Every command, by group, in the order the settings list them.
@@ -57,6 +58,9 @@ const COMMANDS: &[(&str, &str, usize)] = &[
     ("thread.stop", "Stop the Agent", 1),
     ("thread.steerQueuedMessage", "Steer With the First Queued Message", 1),
     ("thread.editQueuedMessage", "Edit the Last Queued Message", 1),
+    ("find.open", "Find in Thread", 1),
+    ("find.next", "Find Next", 1),
+    ("find.previous", "Find Previous", 1),
     ("pullRequest.copyLink", "Copy the Pull Request's Link", 1),
     ("pullRequest.copyNumber", "Copy the Pull Request's Number", 1),
     ("composer.sendAlternate", "Send the Other Way: Queue or Steer", 2),
@@ -149,6 +153,11 @@ const DEFAULTS: &[(&str, &str, Option<&str>)] = &[
     ("mod+shift+h", "composer.server", None),
     ("mod+shift+x", "composer.workspace", None),
     ("mod+shift+g", "composer.branch", None),
+    ("mod+f", "find.open", None),
+    ("mod+g", "find.next", None),
+    ("f3", "find.next", None),
+    ("mod+shift+g", "find.previous", Some("findOpen")),
+    ("shift+f3", "find.previous", None),
     ("mod+alt+b", "rightPanel.toggle", None),
     ("mod+alt+shift+b", "rightPanel.toggleMaximized", None),
     ("mod+t", "rightPanel.new", None),

@@ -48,6 +48,9 @@
   --color-merged-foreground: var(--merged-foreground);
   --color-pink: var(--pink);
   --color-skill: var(--skill);
+  --color-find-match: var(--find-match);
+  --color-find-current: var(--find-current);
+  --color-find-current-foreground: var(--find-current-foreground);
   --color-border: var(--border);
   --color-border-card: var(--border-card);
   --color-border-input: var(--border-input);

@@ -89,6 +89,7 @@ impl Store {
         if new == self.selection && !reopens {
             return;
         }
+        self.close_find(cx);
         if let Some(open) = self.open_thread_id.take() {
             self.keep_place(open.clone(), None, cx);
             self.send(Command::CloseThread { thread_id: open });

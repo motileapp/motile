@@ -13,6 +13,7 @@ use motile_core::render::agents::AgentState;
 use motile_core::render::rows::{AgentRow, CardPlace, ChangeEntry, HandoffLabel, RowKind, StateCount, Tool};
 use motile_protocol::wire::{Ask, ToolStatus};
 
+use super::find::Marks;
 use super::kit::{GrowthFade, RowButton, Shimmer, Sideways, TailLine, dashed_outline};
 use super::model::RowModel;
 use super::prose::{self, CodeBox, ParaStyle, ProseBlock, TableCell, TextPara};
@@ -65,6 +66,8 @@ pub struct RowContext {
     pub removed: bool,
     /// The thread whose rows these are, which a program's events go to.
     pub thread_id: Option<String>,
+    /// What finding in the thread found, by row.
+    pub found: Rc<HashMap<String, Marks>>,
 }
 
 /// What the text of a row is known by, so that a selection keeps to the row.
@@ -204,7 +207,7 @@ struct ParaLook {
 }
 
 /// A paragraph of prose, selectable, its links opening in the browser.
-fn paragraph(id: ElementId, para: &TextPara, look: ParaLook, cx: &App) -> AnyElement {
+fn paragraph(id: ElementId, para: &TextPara, look: ParaLook, marks: Option<&Marks>, cx: &App) -> AnyElement {
     let c = colors(cx);
     let ParaLook { size, weight, color, heading, key } = look;
     if para.text.is_empty() {
@@ -215,11 +218,13 @@ fn paragraph(id: ElementId, para: &TextPara, look: ParaLook, cx: &App) -> AnyEle
     let runs = text_runs(&para.text, &para.runs, &para.links, plain, cx);
     let code: Vec<Range<usize>> =
         para.runs.iter().filter(|(_, bits)| prose::is_code(*bits)).map(|(range, _)| range.clone()).collect();
+    let found = marks.map(|marks| marks.in_text(&para.text, para.source)).unwrap_or_default();
     crate::ui::rich_text::RichText::with_runs(id, para.text.clone(), runs)
         .row(key)
         .links(para.links.clone(), open_link)
         .tinted(code, c.background_accent)
         .tint_size(px(crate::fonts::inline_code_size(size)))
+        .found(found, cx)
         .into_any_element()
 }
 
@@ -229,11 +234,13 @@ const PLAIN_PARAGRAPH_GAP: f32 = 6.;
 /// Plain text, selectable, with its web addresses clickable, the names of its skills on chips,
 /// and room after each of its lines as the Mac keeps after a paragraph. Each line is text of its
 /// own, and the blank lines after it go with it, so that a copied selection has them.
+#[allow(clippy::too_many_arguments)]
 fn plain(
     id: &str,
     text: &str,
     links: &[(Range<usize>, String)],
     skills: &[Range<usize>],
+    found: &[(Range<usize>, bool)],
     color: Hsla,
     key: u64,
     cx: &App,
@@ -254,6 +261,8 @@ fn plain(
         let links: Vec<(Range<usize>, String)> =
             links.iter().filter(|(range, _)| inside(range)).map(|(range, url)| (shift(range), url.clone())).collect();
         let skills: Vec<Range<usize>> = skills.iter().filter(|range| inside(range)).map(shift).collect();
+        let found: Vec<(Range<usize>, bool)> =
+            found.iter().filter(|(range, _)| inside(range)).map(|(range, current)| (shift(range), *current)).collect();
         let words: SharedString = text[part.clone()].to_string().into();
         let breaks = 1 + words.len() - words.trim_end_matches('\n').len();
         let plain = Plain { family: theme::UI_FONT, size: 0., color, weight: FontWeight::NORMAL, heading: false };
@@ -262,7 +271,8 @@ fn plain(
             crate::ui::rich_text::RichText::with_runs(SharedString::from(format!("{id}-{index}")), words, runs)
                 .row(key)
                 .links(links, open_link)
-                .skills(skills),
+                .skills(skills)
+                .found(found, cx),
         )
     }))
 }
@@ -299,6 +309,23 @@ struct Shown {
     text: String,
     links: Vec<(Range<usize>, String)>,
     labels: Vec<Range<usize>>,
+    /// Where each skill's `$name` ended in the message, and where its chip ends in `text`.
+    shifts: Vec<(usize, usize)>,
+    /// The skills' `$name`s, by bytes of the message.
+    names: Vec<Range<usize>>,
+}
+
+impl Shown {
+    /// Bytes of the message as bytes of `text`. What falls on a skill's chip isn't in it.
+    fn moved(&self, range: &Range<usize>) -> Option<Range<usize>> {
+        if self.names.iter().any(|name| name.start < range.end && range.start < name.end) {
+            return None;
+        }
+        let moved = |offset: usize| {
+            self.shifts.iter().rev().find(|(end, _)| *end <= offset).map_or(offset, |(end, shown)| shown + offset - end)
+        };
+        Some(moved(range.start)..moved(range.end))
+    }
 }
 
 /// Each skill's `$name` is its label, which no line breaks, between the room its chip takes. The
@@ -306,7 +333,7 @@ struct Shown {
 fn with_skill_chips(message: Message, window: &mut Window) -> Shown {
     let Message { text, links, skills } = message;
     if skills.is_empty() {
-        return Shown { text: text.to_string(), links, labels: Vec::new() };
+        return Shown { text: text.to_string(), links, labels: Vec::new(), shifts: Vec::new(), names: Vec::new() };
     }
     let (before, after) = crate::ui::skill_chip::room();
     let (lead, trail) = (spacer(before, window), spacer(after, window));
@@ -336,7 +363,8 @@ fn with_skill_chips(message: Message, window: &mut Window) -> Shown {
         .filter(|(link, _)| !skills.iter().any(|(skill, _)| skill.start < link.end && link.start < skill.end))
         .map(|(link, url)| (moved(link.start)..moved(link.end), url))
         .collect();
-    Shown { text: shown, links, labels }
+    let names = skills.iter().map(|(range, _)| range.clone()).collect();
+    Shown { text: shown, links, labels, shifts, names }
 }
 
 thread_local! {
@@ -392,9 +420,11 @@ pub fn code_text(
     id: ElementId,
     code: &SharedString,
     spans: Option<&Vec<(Range<usize>, u32)>>,
+    found: Vec<(Range<usize>, bool)>,
     key: u64,
-    c: &Colors,
+    cx: &App,
 ) -> AnyElement {
+    let c = colors(cx);
     if code.is_empty() {
         return div().h(px(theme::CODE_LINE_HEIGHT)).into_any_element();
     }
@@ -415,7 +445,7 @@ pub fn code_text(
     if at < code.len() {
         runs.push(run(code.len() - at, base, c.foreground));
     }
-    crate::ui::rich_text::RichText::with_runs(id, code.clone(), runs).row(key).into_any_element()
+    crate::ui::rich_text::RichText::with_runs(id, code.clone(), runs).row(key).found(found, cx).into_any_element()
 }
 
 /// The button that copies something, which shows a check mark for a moment once it has.
@@ -471,9 +501,21 @@ fn copy_code(id: &str, code: &SharedString, ctx: &RowContext) -> AnyElement {
 /// A box of code with its language and a copy button above it, on `surface`. Code in a reply's
 /// prose wraps its long lines as the Mac's text does; a code row of its own keeps them and moves
 /// sideways.
-pub fn code_box(id: &str, code: &CodeBox, wraps: bool, key: u64, copy: AnyElement, surface: Surface, cx: &App) -> Div {
+#[allow(clippy::too_many_arguments)]
+pub fn code_box(
+    id: &str,
+    code: &CodeBox,
+    wraps: bool,
+    key: u64,
+    copy: AnyElement,
+    surface: Surface,
+    marks: Option<&Marks>,
+    cx: &App,
+) -> Div {
     let c = colors(cx);
-    let text = code_text(SharedString::from(format!("{id}-code")).into(), &code.code, code.spans.as_ref(), key, c);
+    let found = marks.map(|marks| marks.in_text(&code.code, code.source)).unwrap_or_default();
+    let text =
+        code_text(SharedString::from(format!("{id}-code")).into(), &code.code, code.spans.as_ref(), found, key, cx);
     let body =
         div().px(px(14.)).pb(px(CODE_BOTTOM)).text_size(px(theme::CODE_SIZE)).line_height(px(theme::CODE_LINE_HEIGHT));
     div()
@@ -499,7 +541,7 @@ fn prose_row(model: &RowModel, ctx: &RowContext, cx: &App) -> AnyElement {
     let row_id = model.row.id.clone();
     let key = row_key(&row_id);
     let copy = |id: &str, code: &SharedString| copy_code(id, code, ctx);
-    let column = prose_blocks(&row_id, prepared, key, &copy, Surface::Background, cx);
+    let column = prose_blocks(&row_id, prepared, key, &copy, Surface::Background, ctx.found.get(&row_id), cx);
     let grown = ctx.grown.get(&row_id).copied();
     div()
         .pt(px(3. + above))
@@ -515,6 +557,7 @@ pub fn prose_blocks(
     key: u64,
     copy: &dyn Fn(&str, &SharedString) -> AnyElement,
     surface: Surface,
+    marks: Option<&Marks>,
     cx: &App,
 ) -> Div {
     let c = colors(cx);
@@ -563,7 +606,7 @@ pub fn prose_blocks(
                     ),
                 };
                 let heading = matches!(para.style, ParaStyle::Heading(_));
-                let text = paragraph(id, para, ParaLook { size, weight, color, heading, key }, cx);
+                let text = paragraph(id, para, ParaLook { size, weight, color, heading, key }, marks, cx);
                 let body = text_box(size, line).text_color(color).child(text);
                 let element = match &para.style {
                     ParaStyle::ListItem { depth, marker, quote } => {
@@ -605,7 +648,7 @@ pub fn prose_blocks(
             ProseBlock::Code(code) => {
                 let code_id = format!("{row_id}-code-{code_index}");
                 code_index += 1;
-                code_box(&code_id, code, true, key, copy(&code_id, &code.code), surface, cx).into_any_element()
+                code_box(&code_id, code, true, key, copy(&code_id, &code.code), surface, marks, cx).into_any_element()
             }
             ProseBlock::Rule => div()
                 .pt(px(4.))
@@ -616,7 +659,7 @@ pub fn prose_blocks(
                 .child(div().w_full().h(px(1.)).bg(c.border))
                 .into_any_element(),
             ProseBlock::Table { columns, rows, extra_above } => {
-                table(row_id, index, *columns, rows, *extra_above, last, key, cx).into_any_element()
+                table(row_id, index, *columns, rows, *extra_above, last, key, marks, cx).into_any_element()
             }
         };
         column = column.child(element);
@@ -646,6 +689,7 @@ fn table(
     extra_above: f32,
     last: bool,
     key: u64,
+    marks: Option<&Marks>,
     cx: &App,
 ) -> impl IntoElement {
     let c = colors(cx);
@@ -664,7 +708,7 @@ fn table(
                             .text_color(color)
                             .when(cell.align == 1, |text| text.text_center())
                             .when(cell.align == 2, |text| text.text_right())
-                            .child(paragraph(id.into(), &cell.para, look, cx)),
+                            .child(paragraph(id.into(), &cell.para, look, marks, cx)),
                     )
                 },
             )
@@ -756,7 +800,10 @@ fn bubble_content(
     cx: &App,
 ) -> (Div, bool) {
     let text = message.text;
+    let found = ctx.found.get(&model.row.id).map(|marks| marks.in_text(text, 0)).unwrap_or_default();
     let shown = with_skill_chips(message, window);
+    let found: Vec<(Range<usize>, bool)> =
+        found.iter().filter_map(|(range, current)| Some((shown.moved(range)?, *current))).collect();
     let has_files = !attachments.is_empty();
     let widest = (ctx.width * 0.8).max(120.) - BUBBLE_PADDING * 2.;
     let cut = if collapsible { cut_height(&shown.text, widest, window) } else { None };
@@ -775,6 +822,7 @@ fn bubble_content(
                 &shown.text,
                 &shown.links,
                 &shown.labels,
+                &found,
                 color,
                 row_key(&model.row.id),
                 cx,
@@ -1004,6 +1052,7 @@ fn code_row(model: &RowModel, language: &str, code: &str, ctx: &RowContext, cx: 
         code: code.to_string().into(),
         spans: model.code_spans.clone(),
         indent: 0.,
+        source: 0,
     };
     let key = row_key(&model.row.id);
     div()
@@ -1017,6 +1066,7 @@ fn code_row(model: &RowModel, language: &str, code: &str, ctx: &RowContext, cx: 
                 key,
                 copy_code(&model.row.id, &code.code, ctx),
                 Surface::Background,
+                ctx.found.get(&model.row.id),
                 cx,
             )
             .mb(px(0.)),
@@ -1128,7 +1178,7 @@ fn tool_row(model: &RowModel, ctx: &RowContext, cx: &App) -> AnyElement {
         RowKind::Thinking { text } => {
             if expanded_here {
                 let id = format!("{row_id}-detail");
-                let thought = plain(&id, text, &[], &[], c.muted_foreground, row_key(&row_id), cx);
+                let thought = plain(&id, text, &[], &[], &[], c.muted_foreground, row_key(&row_id), cx);
                 detail = Some(detail_box(inset, text_box(13., 20.5).text_color(c.muted_foreground).child(thought), cx));
             }
             ToolLine {
@@ -1515,13 +1565,14 @@ pub fn turn_label(stopped: bool, duration_ms: Option<u64>) -> String {
     }
 }
 
-fn error_row(model: &RowModel, message: &str, cx: &App) -> AnyElement {
+fn error_row(model: &RowModel, message: &str, ctx: &RowContext, cx: &App) -> AnyElement {
     let id = format!("{}-error", model.row.id);
-    div().pt(px(4.)).pb(px(10.)).child(error_box(&id, message, row_key(&model.row.id), cx)).into_any_element()
+    let found = ctx.found.get(&model.row.id).map(|marks| marks.in_text(message, 0)).unwrap_or_default();
+    div().pt(px(4.)).pb(px(10.)).child(error_box(&id, message, &found, row_key(&model.row.id), cx)).into_any_element()
 }
 
-/// An error on its tint, with its sign before it.
-pub fn error_box(id: &str, message: &str, key: u64, cx: &App) -> Div {
+/// An error on its tint, with its sign before it, and what finding found in it set off.
+pub fn error_box(id: &str, message: &str, found: &[(Range<usize>, bool)], key: u64, cx: &App) -> Div {
     let c = colors(cx);
     div()
         .bg(c.destructive_tint)
@@ -1545,6 +1596,7 @@ pub fn error_box(id: &str, message: &str, key: u64, cx: &App) -> Div {
             message,
             &[],
             &[],
+            found,
             c.destructive,
             key,
             cx,
@@ -1962,6 +2014,7 @@ fn removed_row(model: &RowModel, title: &str, message: &str, ctx: &RowContext, c
                     message,
                     &[],
                     &[],
+                    &[],
                     c.muted_foreground,
                     row_key(&model.row.id),
                     cx,
@@ -2039,7 +2092,7 @@ pub fn render_row(model: &RowModel, ctx: &RowContext, window: &mut Window, cx: &
         RowKind::Agents { .. } => agents_row(model, ctx, cx),
         RowKind::Media { .. } => crate::media::media_row(model, ctx, window, cx),
         RowKind::File { .. } => crate::media::file::file_row(model, ctx, window, cx),
-        RowKind::Error { message } => error_row(model, message, cx),
+        RowKind::Error { message } => error_row(model, message, ctx, cx),
         RowKind::Changes { files, added, removed, entries, .. } => {
             changes_row(model, *files, *added, *removed, entries, ctx, cx)
         }

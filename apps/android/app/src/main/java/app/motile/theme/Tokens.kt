@@ -40,6 +40,9 @@ class Palette(
     val mergedForeground: Color,
     val pink: Color,
     val skill: Color,
+    val findMatch: Color,
+    val findCurrent: Color,
+    val findCurrentForeground: Color,
     val border: Color,
     val borderCard: Color,
     val borderInput: Color,
@@ -127,6 +130,9 @@ class Palette(
             mergedForeground = Color(0xFFFFFFFF),
             pink = Color(0xFFB7377C),
             skill = Color(0xFF47730D),
+            findMatch = Color(0xFFFBE5A0),
+            findCurrent = Color(0xFFF0AD3A),
+            findCurrentForeground = Color(0xFF22242B),
             border = Color(0xFFE2E3E5),
             borderCard = Color(0xFFE9EBF0),
             borderInput = Color(0xFFEAECF0),
@@ -214,6 +220,9 @@ class Palette(
             mergedForeground = Color(0xFFFFFFFF),
             pink = Color(0xFFF28CC0),
             skill = Color(0xFFA3E635),
+            findMatch = Color(0xFF584816),
+            findCurrent = Color(0xFFE8A23C),
+            findCurrentForeground = Color(0xFF17140C),
             border = Color(0xFF191A1E),
             borderCard = Color(0xFF1E1F25),
             borderInput = Color(0xFF1A1B21),
@@ -303,6 +312,9 @@ class Palette(
         "merged-foreground" -> mergedForeground
         "pink" -> pink
         "skill" -> skill
+        "find-match" -> findMatch
+        "find-current" -> findCurrent
+        "find-current-foreground" -> findCurrentForeground
         "border" -> border
         "border-card" -> borderCard
         "border-input" -> borderInput

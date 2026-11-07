@@ -469,6 +469,7 @@ final class AppStore {
     private(set) var integrations = Integration.kept(in: .standard)
     @ObservationIgnored let core = CoreBridge()
     @ObservationIgnored let transcript = TranscriptModel()
+    let find = FindState()
     /// What the agent did that the right panel shows.
     @ObservationIgnored let agentTranscript = TranscriptModel()
     @ObservationIgnored private var signInSession: SignInSession?
@@ -658,6 +659,10 @@ final class AppStore {
                 let turns = self.transcript.turns
                 if self.rightPanel.turns != turns { self.rightPanel.turns = turns }
             }
+        case "found":
+            return takeFound(event)
+        case "reveal":
+            return takeReveal(event)
         case "agents":
             let threadID = event.string("thread_id")
             let agents = event.objects("agents").map { AgentInfo(json: $0) }
@@ -2257,6 +2262,7 @@ final class AppStore {
     var escapes: (() -> Void)? {
         guard panel == nil, viewing == nil, !showsBranches else { return nil }
         if settings != nil || showsUsage { return { [self] in closeRoute() } }
+        if find.active { return { [self] in closeFind() } }
         if rightPanel.isMaximized { return { [self] in rightPanel.toggleMaximized() } }
         if rightPanel.isOpen, rightPanel.tabs.isBlank { return { [self] in rightPanel.isOpen = false } }
         return nil
@@ -2299,6 +2305,7 @@ final class AppStore {
         showsUsage = false
         let reopens = selectedThread != nil && openThreadID == nil
         guard new != selection || reopens else { return }
+        closeFind()
         if let open = openThreadID {
             transcript.leave { keepPlace($0, threadID: open) }
             core.send("close_thread", ["thread_id": open])
@@ -2395,6 +2402,12 @@ final class AppStore {
     func show(_ selection: Selection) {
         select(selection)
         threadsShown += 1
+    }
+
+    /// Opens the thread and brings its row into sight in the sidebar.
+    func reveal(_ threadID: String) {
+        show(.thread(threadID))
+        revealedThreadID = threadID
     }
 
     /// Where the client goes when what was open is gone.

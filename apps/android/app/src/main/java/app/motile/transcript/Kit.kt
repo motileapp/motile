@@ -30,6 +30,15 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.unit.isSpecified
+import app.motile.core.FoundSpan
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.BlendMode
@@ -245,21 +254,98 @@ fun ShimmerText(text: AnnotatedString, style: TextStyle, color: Color, bright: C
 
 /**
  * Text with what its text system can't draw drawn behind it: the rounded boxes of inline code and
- * the chips of skills, from the marks `Typesetter` left in it.
+ * the chips of skills, from the marks `Typesetter` left in it, and finding's matches in the thread,
+ * `found`. `onCurrent` is told where the current match is, in the text and in the window.
  */
 @Composable
-fun MarkedText(text: AnnotatedString, style: TextStyle, modifier: Modifier = Modifier) {
+fun MarkedText(
+    text: AnnotatedString,
+    style: TextStyle,
+    modifier: Modifier = Modifier,
+    found: List<FoundSpan> = emptyList(),
+    onCurrent: ((Rect, Rect) -> Unit)? = null,
+) {
     val palette = LocalPalette.current
     val dark = LocalDark.current
     val marks = remember(text) {
         text.getStringAnnotations(TextMarks.code, 0, text.length) + text.getStringAnnotations(TextMarks.skill, 0, text.length)
     }
+    val shown = remember(text, found, palette) { text.withCurrent(found, palette) }
     var layout by remember(text) { mutableStateOf<TextLayoutResult?>(null) }
-    val drawn = if (marks.isEmpty()) modifier else modifier.drawBehind {
-        val shown = layout ?: return@drawBehind
-        for (mark in marks) drawMark(shown, mark.start, mark.end, mark.tag == TextMarks.skill, palette, dark)
+    val density = LocalDensity.current
+    val drawn = if (marks.isEmpty() && found.isEmpty()) modifier else modifier.drawBehind {
+        val laid = layout ?: return@drawBehind
+        drawFound(laid, found, style, palette)
+        for (mark in marks) drawMark(laid, mark.start, mark.end, mark.tag == TextMarks.skill, palette, dark)
     }
-    Text(text, drawn, style = style, onTextLayout = { layout = it })
+    Text(shown, drawn.reportsCurrent(found, style, density, { layout }, onCurrent), style = style, onTextLayout = { layout = it })
+}
+
+/** Tells `onCurrent` where the current match is once the text is laid out and placed. */
+fun Modifier.reportsCurrent(
+    found: List<FoundSpan>,
+    style: TextStyle,
+    density: Density,
+    layout: () -> TextLayoutResult?,
+    onCurrent: ((Rect, Rect) -> Unit)?,
+): Modifier {
+    val current = found.firstOrNull { it.current } ?: return this
+    onCurrent ?: return this
+    return onGloballyPositioned { coordinates ->
+        val laid = layout() ?: return@onGloballyPositioned
+        val local = with(density) { foundBox(laid, current.start, current.end, style) } ?: return@onGloballyPositioned
+        onCurrent(local, local.translate(coordinates.positionInWindow()))
+    }
+}
+
+/** The text with the current match in its own colour, which changes nothing of its layout. */
+fun AnnotatedString.withCurrent(found: List<FoundSpan>, palette: Palette): AnnotatedString {
+    val current = found.firstOrNull { it.current && it.end <= length } ?: return this
+    val builder = AnnotatedString.Builder(this)
+    builder.addStyle(SpanStyle(color = palette.findCurrentForeground), current.start, current.end)
+    return builder.toAnnotatedString()
+}
+
+/** A box behind each match, as tall as its font around the baseline, the current one in its own colour. */
+fun DrawScope.drawFound(layout: TextLayoutResult, found: List<FoundSpan>, style: TextStyle, palette: Palette) {
+    for (span in found) {
+        val text = layout.layoutInput.text
+        if (span.end <= span.start || span.end > text.length) continue
+        val em = emOf(text, style, span.start).toPx()
+        val pad = 1.dp.toPx()
+        for (line in layout.getLineForOffset(span.start)..layout.getLineForOffset(span.end - 1)) {
+            val from = max(span.start, layout.getLineStart(line))
+            val to = min(span.end, layout.getLineEnd(line, visibleEnd = true))
+            if (to <= from) continue
+            val left = layout.getHorizontalPosition(from, usePrimaryDirection = true)
+            val right = layout.getBoundingBox(to - 1).right
+            val baseline = layout.getLineBaseline(line)
+            drawRoundRect(
+                if (span.current) palette.findCurrent else palette.findMatch,
+                topLeft = Offset(left - pad, baseline - em * 0.95f - pad),
+                size = Size(right - left + pad * 2, em * 1.25f + pad * 2),
+                cornerRadius = CornerRadius(Radius.xs.toPx()),
+            )
+        }
+    }
+}
+
+/** Where the match is in the text: the box of its first line. */
+private fun Density.foundBox(layout: TextLayoutResult, start: Int, end: Int, style: TextStyle): Rect? {
+    val text = layout.layoutInput.text
+    if (end <= start || end > text.length) return null
+    val em = emOf(text, style, start).toPx()
+    val line = layout.getLineForOffset(start)
+    val baseline = layout.getLineBaseline(line)
+    val left = layout.getHorizontalPosition(start, usePrimaryDirection = true)
+    val right = layout.getBoundingBox(min(end, layout.getLineEnd(line, visibleEnd = true).coerceAtLeast(start + 1)) - 1).right
+    return Rect(left, baseline - em * 0.95f, max(right, left + 1f), baseline + em * 0.3f)
+}
+
+/** The size of the font at `offset`: its span's, or else the style's, or else the prose's. */
+private fun emOf(text: AnnotatedString, style: TextStyle, offset: Int): TextUnit {
+    val span = text.spanStyles.lastOrNull { it.start <= offset && offset < it.end && it.item.fontSize.isSpecified }
+    return span?.item?.fontSize ?: style.fontSize.takeIf { it.isSpecified } ?: Theme.proseSize
 }
 
 private fun DrawScope.drawMark(layout: TextLayoutResult, start: Int, end: Int, skill: Boolean, palette: Palette, dark: Boolean) {

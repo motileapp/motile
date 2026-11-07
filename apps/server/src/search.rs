@@ -20,7 +20,7 @@ const RECENCY_HALF_LIFE: f64 = 14.0 * 24.0 * 3600.0;
 
 const OWN_HITS: &str = "
     SELECT '', items.thread_id, json_extract(items.payload, '$.type'), json_extract(items.payload, '$.text'),
-           json_extract(items.payload, '$.created_at'), threads.updated_at
+           json_extract(items.payload, '$.created_at'), threads.updated_at, items.id
     FROM item_search
     JOIN items ON items.rowid = item_search.rowid
     JOIN threads ON threads.id = items.thread_id
@@ -36,7 +36,7 @@ const OWN_HITS: &str = "
 const COPIED_HITS: &str = "
     SELECT copied_items.origin, copied_items.thread_id, json_extract(copied_items.payload, '$.type'),
            json_extract(copied_items.payload, '$.text'), json_extract(copied_items.payload, '$.created_at'),
-           json_extract(copied_threads.payload, '$.updated_at')
+           json_extract(copied_threads.payload, '$.updated_at'), copied_items.id
     FROM copied_item_search
     JOIN copied_items ON copied_items.rowid = copied_item_search.rowid
     JOIN copied_threads ON copied_threads.origin = copied_items.origin AND copied_threads.id = copied_items.thread_id
@@ -54,6 +54,7 @@ const COPIED_HITS: &str = "
 struct Hit {
     origin: String,
     thread_id: String,
+    item_id: String,
     user: bool,
     text: String,
     created_at: f64,
@@ -112,6 +113,7 @@ fn hits(connection: &Connection, sql: &str, params: impl Params) -> rusqlite::Re
             text: row.get(3)?,
             created_at: row.get::<_, Option<f64>>(4)?.unwrap_or(0.0),
             updated_at: row.get::<_, Option<f64>>(5)?.unwrap_or(0.0),
+            item_id: row.get(6)?,
         })
     })?;
     rows.collect()
@@ -166,6 +168,7 @@ fn rank(hits: Vec<Hit>, matcher: &Matcher, limit: usize, now: f64) -> Vec<Thread
             excerpt: search::excerpt(&hit.text, graded.offset),
             origin: Some(hit.origin).filter(|origin| !origin.is_empty()),
             thread_id: hit.thread_id,
+            item_id: hit.item_id,
         })
         .collect()
 }
@@ -236,12 +239,14 @@ mod tests {
                     thread_id: "new".into(),
                     speaker: Speaker::User,
                     excerpt: "Deploy again".into(),
+                    item_id: "new-3".into(),
                     origin: None
                 },
                 ThreadMatch {
                     thread_id: "old".into(),
                     speaker: Speaker::Agent,
                     excerpt: "The DEPLOY failed".into(),
+                    item_id: "old-1".into(),
                     origin: None
                 },
             ]

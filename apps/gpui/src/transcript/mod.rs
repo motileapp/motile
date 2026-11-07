@@ -1,6 +1,7 @@
 //! The transcript of the open thread: the rows the core sends, and the list that draws them.
 
 pub mod canvas;
+pub mod find;
 pub mod kit;
 pub mod map;
 pub mod model;

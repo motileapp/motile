@@ -3,6 +3,7 @@ package app.motile.core
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import app.motile.panel.TurnChange
@@ -48,6 +49,15 @@ class TranscriptModel {
     var place: TranscriptPlace? = null
     /** Where the view that shows the rows has them, null at the end. */
     var placeOfView: (() -> TranscriptPlace?)? = null
+    /** Where the view that shows the rows has them, at the end too. */
+    var viewportOfView: (() -> TranscriptPlace?)? = null
+    /** What finding in the thread found, by row. */
+    val found = mutableStateMapOf<String, FoundMarks>()
+    /** The row the view scrolls to, and the part of its text, with a number each time it is asked for again. */
+    var revealing by mutableStateOf<Revealing?>(null)
+        private set
+
+    class Revealing(val rowID: String, val range: IntRange?, val serial: Int)
     /** Counts up whenever the rows change. */
     var version by mutableIntStateOf(0)
         private set
@@ -92,6 +102,8 @@ class TranscriptModel {
         place = null
         pending = null
         pendingText = null
+        found.clear()
+        revealing = null
         keptActivity = Activity()
         keptLive = live
         keepsRows = keepingRows
@@ -198,6 +210,23 @@ class TranscriptModel {
 
     fun changeLive(live: Boolean) {
         if (keepsRows) keptLive = live else this.live = live
+    }
+
+    /** Where the view shows the rows, whether or not it follows the end. */
+    val viewport: TranscriptPlace? get() = viewportOfView?.invoke()
+
+    fun setFound(marks: Map<String, FoundMarks>) {
+        found.keys.retainAll(marks.keys)
+        for ((id, mark) in marks) if (found[id] != mark) found[id] = mark
+    }
+
+    fun reveal(rowID: String, range: IntRange?) {
+        revealing = Revealing(rowID, range, (revealing?.serial ?: 0) + 1)
+    }
+
+    /** The view has scrolled to the row. */
+    fun revealed(serial: Int) {
+        if (revealing?.serial == serial) revealing = null
     }
 
     fun apply(spans: IntArray, rowID: String) {

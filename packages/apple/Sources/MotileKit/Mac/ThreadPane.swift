@@ -53,15 +53,7 @@ struct ThreadPane: View {
         .modal(item: $store.committingProject) { project in
             CommitSheet(project: project)
         }
-        .overlay(alignment: .topTrailing) {
-            if let toast = store.openToast {
-                ToastView(toast: toast)
-                    .padding(.top, 6)
-                    .padding(.trailing, 14)
-                    .appearing(.opacity.combined(with: .offset(y: -6)))
-            }
-        }
-        .animation(.easeOut(duration: 0.15), value: store.toast)
+        .overlay(alignment: .topTrailing) { ThreadCorner() }
     }
 
     /// The thread's project and name and its git button, drawn in the window's top bar over

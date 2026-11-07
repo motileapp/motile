@@ -17,6 +17,7 @@ fun AppStore.shortcutContext(composerFocus: Boolean, editableFocus: Boolean): Se
     if (settings != null) add("settingsOpen")
     if (showsUsage) add("usagePageOpen")
     if (showsThreadSettings) add("modelPickerOpen")
+    if (find.shown) add("findOpen")
 }
 
 /** The threads the jump keys and the next and previous thread go through: the sidebar's, as it lists them, or what its search found. */
@@ -100,6 +101,14 @@ fun AppStore.perform(command: String): Boolean {
         "thread.editQueuedMessage" -> {
             if (openThreadRemovedServer != null) return false
             takeBack(activity.queued.lastOrNull()?.id ?: return false)
+        }
+        "find.open" -> {
+            if (selectedThread == null || panel != null || settings != null || showsUsage) return false
+            openFind()
+        }
+        "find.next", "find.previous" -> {
+            if (selectedThread == null || panel != null || settings != null || showsUsage) return false
+            stepFind(back = command == "find.previous")
         }
         "pullRequest.copyLink" -> Platform.copy(shownPullRequest?.first ?: return false)
         "pullRequest.copyNumber" -> Platform.copy("#${shownPullRequest?.second ?: return false}")

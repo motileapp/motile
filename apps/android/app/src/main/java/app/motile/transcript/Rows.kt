@@ -9,6 +9,9 @@ import androidx.compose.ui.text.buildAnnotatedString
 import app.motile.core.Agent
 import app.motile.core.AgentState
 import app.motile.core.AttachedFile
+import app.motile.core.FoundMarks
+import app.motile.core.FoundSpan
+import app.motile.composer.SkillChip
 import app.motile.core.JSON
 import app.motile.core.SkillSpan
 import app.motile.core.Time
@@ -179,6 +182,21 @@ class TextLink(val start: Int, val length: Int, val url: String) {
 /** A message's text, its links and the skills it starts, which show as chips. */
 class MessageText(val text: String, val links: List<TextLink>, val skills: List<SkillSpan>, muted: Boolean) {
     constructor(json: JSON, muted: Boolean) : this(json.string("text"), json.objects("links").map(::TextLink), json.objects("skills").map(::SkillSpan), muted)
+
+    /** Finding's matches in the message, where they are in its text as it shows: past every chip before them, which is longer than its `$name`. */
+    fun found(marks: FoundMarks?): List<FoundSpan> {
+        marks ?: return emptyList()
+        val chips = skills.filter { it.start >= 0 && it.length > 0 && it.end <= text.length }.sortedBy { it.start }
+        val moves = mutableListOf<Pair<Int, Int>>()
+        var at = 0
+        for (chip in chips) {
+            if (chip.start < at) continue
+            moves += chip.end to (SkillChip.shown(chip.label).length - chip.length)
+            at = chip.end
+        }
+        fun moved(index: Int) = index + moves.filter { it.first <= index }.sumOf { it.second }
+        return marks.ranges.mapIndexed { index, range -> FoundSpan(moved(range.first), moved(range.last + 1), index == marks.current) }
+    }
 
     val styled = Typeset { palette ->
         Typesetter.message(this, if (muted) palette.mutedForeground else palette.foreground, palette)

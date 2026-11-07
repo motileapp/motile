@@ -1,6 +1,7 @@
 //! The right side of the window: the open thread with the composer over its end, or the start
 //! of a new one.
 
+pub mod find_bar;
 mod toast;
 
 use std::cell::Cell;
@@ -52,6 +53,7 @@ pub struct ThreadPane {
     project_menu: Anchor,
     git_menu: Anchor,
     commit_sheet: Option<Entity<crate::git::CommitSheet>>,
+    find_bar: Entity<find_bar::FindBar>,
     /// The title the window was last given.
     window_title: String,
     _ticks: Task<()>,
@@ -65,6 +67,7 @@ impl ThreadPane {
         })
         .detach();
         let composer = cx.new(|cx| Composer::new(store.clone(), window, cx));
+        let find_bar = cx.new(|cx| find_bar::FindBar::new(store.clone(), window, cx));
         let model = store.read(cx).transcript.clone();
         let transcript = cx.new(|cx| crate::transcript::view::TranscriptView::new(store.clone(), model, false, cx));
         let model = store.read(cx).agent_transcript.clone();
@@ -98,6 +101,7 @@ impl ThreadPane {
             project_menu: Anchor::default(),
             git_menu: Anchor::default(),
             commit_sheet: None,
+            find_bar,
             window_title: String::new(),
             _ticks: ticks,
         }
@@ -444,6 +448,7 @@ impl Render for ThreadPane {
             store.selected_draft().is_some_and(|draft| store.transcript_is_empty && !store.is_sending(&draft.id));
         let pending_git = store.pending_git.clone();
         let toast = store.open_toast();
+        let finding = store.find.shown && store.selected_thread().is_some() && !is_start;
         let removing = store.removing_project.clone();
         let title = store.selected_thread().map(|thread| thread.title.clone()).unwrap_or("New thread".into());
         let removed = store.open_thread_removed();
@@ -530,15 +535,9 @@ impl Render for ThreadPane {
                     .into_any_element()
             })
             .child(self.top_bar(cx))
-            .when_some(toast, |pane, (toast, _)| {
-                pane.child(
-                    div()
-                        .absolute()
-                        .top(px(theme::TOP_BAR + 6. - 6. * (1. - toast_shown)))
-                        .right(px(14.))
-                        .opacity(toast_shown)
-                        .child(toast::toast_view(&self.store, &toast, cx)),
-                )
+            .when(finding || toast.is_some(), |pane| {
+                let toast = toast.map(|(toast, _)| toast);
+                pane.child(self.corner(finding, toast.as_ref(), toast_shown, cx))
             })
             .when(cover > 0., |pane| pane.child(self.drop_cover(cover, cx)))
             .on_drag_move(cx.listener(|this, event: &DragMoveEvent<ExternalPaths>, _, cx| {
@@ -565,6 +564,60 @@ impl Render for ThreadPane {
                 pane.child(crate::git::confirm_alert(&self.store, &pending, cx).leaving(leaving))
             })
             .when_some(removing, |pane, (project, leaving)| pane.child(self.removal(&project, cx).leaving(leaving)))
+    }
+}
+
+impl ThreadPane {
+    /// The thread's top corner: the find bar, and the toast under it, on one plane. Both cards'
+    /// shadows are drawn before either card, so that neither shades the other.
+    fn corner(&self, finding: bool, toast: Option<&crate::store::Toast>, toast_shown: f32, cx: &App) -> Div {
+        let c = colors(cx);
+        let (bar_bounds, toast_bounds) = (Rc::new(Cell::new(None)), Rc::new(Cell::new(None)));
+        let (bar_cell, toast_cell) = (bar_bounds.clone(), toast_bounds.clone());
+        let shadows = c.shadow(theme::ShadowSize::Lg, theme::Opacity::ShadowStronger);
+        let shadow = canvas(
+            |_, _, _| {},
+            move |_, _, window, _| {
+                let radii = Corners::all(px(Radius::LG));
+                if let Some(bounds) = bar_cell.get() {
+                    window.paint_drop_shadows(bounds, radii, &shadows);
+                }
+                if let Some(bounds) = toast_cell.get() {
+                    let faded: Vec<BoxShadow> = shadows
+                        .iter()
+                        .map(|shadow| BoxShadow { color: shadow.color.opacity(toast_shown), ..shadow.clone() })
+                        .collect();
+                    window.paint_drop_shadows(bounds, radii, &faded);
+                }
+            },
+        )
+        .absolute()
+        .inset_0();
+        let recorded = |cell: Rc<Cell<Option<Bounds<Pixels>>>>| {
+            canvas(move |bounds, _, _| cell.set(Some(bounds)), |_, _, _, _| {}).absolute().inset_0()
+        };
+        div()
+            .absolute()
+            .top(px(theme::TOP_BAR + find_bar::GAP))
+            .right(px(14.))
+            .flex()
+            .flex_col()
+            .items_end()
+            .gap(px(find_bar::GAP))
+            .child(shadow)
+            .when(finding, |corner| {
+                corner.child(div().relative().child(self.find_bar.clone()).child(recorded(bar_bounds)))
+            })
+            .when_some(toast, |corner, toast| {
+                corner.child(
+                    div()
+                        .relative()
+                        .top(px(-6. * (1. - toast_shown)))
+                        .opacity(toast_shown)
+                        .child(toast::toast_view(&self.store, toast, cx))
+                        .child(recorded(toast_bounds)),
+                )
+            })
     }
 }
 

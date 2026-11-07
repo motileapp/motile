@@ -558,6 +558,11 @@ final class RowTextView: UITextView, UITextViewDelegate {
         system.lineTops(count, forWidth: width)
     }
 
+    /// Where that part of the text is, in the view.
+    func rect(of range: NSRange) -> CGRect? {
+        system.rect(of: range)?.offsetBy(dx: textContainerInset.left, dy: textContainerInset.top)
+    }
+
     /// Fades in the text under `oldHeight`, which was just added, and leaves the rest as it is.
     func fadeIn(below oldHeight: CGFloat) {
         GrowthFade.run(on: layer, size: bounds.size, below: oldHeight)

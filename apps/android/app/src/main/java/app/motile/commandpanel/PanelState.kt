@@ -10,6 +10,7 @@ import app.motile.core.FolderListing
 import app.motile.core.GitHubState
 import app.motile.core.PanelPage
 import app.motile.core.Project
+import app.motile.core.openFind
 import app.motile.core.ProjectImage
 import app.motile.core.Repo
 import app.motile.core.RestartWhen
@@ -475,7 +476,7 @@ internal class PanelState(start: PanelPage, private val store: AppStore, private
             else -> thread.interruption?.word ?: Time.ago(thread.updatedAt)
         }
         return PanelItem("thread-${thread.id}", thread.title, "$name$from · $state", PanelIcon.Project(project)) {
-            store.show(app.motile.core.Selection.Thread(thread.id))
+            store.reveal(thread.id)
         }
     }
 
@@ -516,7 +517,11 @@ internal class PanelState(start: PanelPage, private val store: AppStore, private
             val usage = PanelItem("usage", "Usage", "Limits, cost and tokens", PanelIcon.Glyph(Symbol.ChartColumn)) {
                 store.openUsage()
             }.keyed("usage.open")
-            return serverUpdates + always + settings + usage
+            val thread = store.selectedThread
+            val find = if (thread == null) emptyList() else listOf(
+                PanelItem("find", "Find in thread", thread.title, PanelIcon.Glyph(Symbol.Search)) { store.openFind() }.keyed("find.open"),
+            )
+            return find + serverUpdates + always + settings + usage
         }
 
     private companion object {

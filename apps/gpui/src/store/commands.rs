@@ -47,6 +47,9 @@ impl Store {
         if self.composer_picker.is_some() {
             context.push("modelPickerOpen");
         }
+        if self.find.shown {
+            context.push("findOpen");
+        }
         context
     }
 
@@ -175,6 +178,12 @@ impl Store {
             }
             "navigation.back" => return self.go(true, cx),
             "navigation.forward" => return self.go(false, cx),
+            "find.next" | "find.previous" => {
+                if !self.finds() {
+                    return false;
+                }
+                self.step_find(command == "find.previous", cx);
+            }
             "thread.previous" => return self.show_thread_offset(-1, cx),
             "thread.next" => return self.show_thread_offset(1, cx),
             "thread.done" => {
@@ -357,12 +366,19 @@ impl Store {
     /// What Esc does when the focused view claims nothing: leaves a route, restores the
     /// maximized right panel, or hides a right panel that only has its blank tab. Nothing while
     /// the command panel, the viewer or the branches have it. Whether it did anything.
-    pub fn escape(&mut self) -> bool {
+    /// Whether finding in the thread can open: a thread shows, with nothing over it.
+    pub fn finds(&self) -> bool {
+        self.selected_thread().is_some() && self.panel.is_none() && self.settings.section.is_none() && !self.shows_usage
+    }
+
+    pub fn escape(&mut self, cx: &mut Context<Self>) -> bool {
         if self.panel.is_some() || self.viewing.is_some() || self.shows_branches || self.composer_picker.is_some() {
             return false;
         }
         if self.settings.section.is_some() || self.shows_usage {
             self.close_route();
+        } else if self.find.active {
+            self.close_find(cx);
         } else if self.panel_maximized() {
             self.toggle_panel_maximized();
         } else if self.right_panel.is_open && self.panel_tabs().is_blank() {

@@ -37,6 +37,12 @@ final class TranscriptModel {
         let earlier: (Bool) -> Void
         /// Whether the thread has caught up with its server.
         let live: (Bool) -> Void
+        /// Where the view shows the rows, at the end too.
+        let viewport: () -> TranscriptPlace?
+        /// What finding in the thread found in the rows, by row.
+        let found: ([String: FoundMarks]) -> Void
+        /// The view scrolls to the row, and to that part of its text.
+        let reveal: (String, NSRange?) -> Void
     }
 
     private(set) var threadID: String?
@@ -55,6 +61,9 @@ final class TranscriptModel {
     private var pendingCollapsible = false
     private var hooks: Hooks?
     private var owner: ObjectIdentifier?
+    private(set) var found: [String: FoundMarks] = [:]
+    /// The row to scroll to once a view shows the rows.
+    private var revealing: (String, NSRange?)?
 
     var isEmpty: Bool { rows.isEmpty && pending == nil }
     var hasPending: Bool { pending != nil }
@@ -75,6 +84,11 @@ final class TranscriptModel {
         hooks.pending(pending)
         hooks.activity(activity)
         hooks.earlier(hasEarlier)
+        hooks.found(found)
+        if let (rowID, range) = revealing {
+            revealing = nil
+            hooks.reveal(rowID, range)
+        }
     }
 
     /// Lets go of the view, unless another one has attached since.
@@ -92,6 +106,8 @@ final class TranscriptModel {
         rows = []
         place = nil
         pending = nil
+        found = [:]
+        revealing = nil
         activity = Activity()
         hasEarlier = false
         setLive(live)
@@ -188,6 +204,22 @@ final class TranscriptModel {
         guard let index = rows.lastIndex(where: { $0.id == rowID }), let row = make(rows[index]) else { return }
         rows[index] = row
         hooks?.splice(index, 1, [row])
+    }
+
+    /// Where the view shows the rows, whether or not it follows the end.
+    var viewport: TranscriptPlace? { hooks?.viewport() }
+
+    func setFound(_ found: [String: FoundMarks]) {
+        self.found = found
+        hooks?.found(found)
+    }
+
+    func reveal(rowID: String, range: NSRange?) {
+        guard let hooks else {
+            revealing = (rowID, range)
+            return
+        }
+        hooks.reveal(rowID, range)
     }
 
     func apply(spans: [NSNumber], rowID: String) {
