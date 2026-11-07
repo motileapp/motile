@@ -5,6 +5,10 @@ import SwiftUI
 struct AccountMenu: View {
     /// The picture on the Mac, which fills its button but for a margin.
     static let picture = IconSize.xl
+    #if os(iOS)
+    /// The picture on iOS, 6 points inside its glass button.
+    static let glassPicture = GlassButtonStyle.side - 12
+    #endif
 
     var margin = EdgeInsets()
     @Environment(AppStore.self) private var store
@@ -18,7 +22,7 @@ struct AccountMenu: View {
         #else
         Menu { items } label: {
             AccountPicture(account: store.account)
-                .frame(width: 34, height: 34)
+                .frame(width: Self.glassPicture, height: Self.glassPicture)
                 .frame(width: GlassButtonStyle.side, height: GlassButtonStyle.side)
                 .contentShape(Circle())
         }
