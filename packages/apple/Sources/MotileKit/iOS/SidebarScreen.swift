@@ -264,15 +264,12 @@ struct SidebarScreen: View {
 
     private func sectionHeader(_ section: ThreadSection, count: Int) -> some View {
         let expanded = expanded(section)
-        return Button {
-            expanded.wrappedValue.toggle()
-        } label: {
-            SectionLine(section: section, count: count, expanded: expanded.wrappedValue)
-                .padding(.horizontal, sidebarEdge)
-                .frame(height: 44)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
+        return SectionLine(section: section, count: count, expanded: expanded.wrappedValue)
+            .padding(.horizontal, sidebarEdge - rowMargin.leading)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding(rowMargin)
+            .button(.highlight(radius: Radius.md, inset: rowMargin, opaque: true)) { expanded.wrappedValue.toggle() }
+            .frame(height: 44)
     }
 
     /// The servers and how the client reaches them, and under them the account, which leads to the

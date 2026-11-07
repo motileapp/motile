@@ -82,6 +82,7 @@ import app.motile.theme.Theme
 import app.motile.theme.symbolSide
 import app.motile.ui.Icon
 import app.motile.ui.Text
+import app.motile.ui.pressesAtOnce
 import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
@@ -550,6 +551,7 @@ private fun JumpButton(modifier: Modifier, onClick: () -> Unit) {
             .composerSurface(CircleShape, ShadowSize.Md)
             .background(if (pressed) palette.borderComposer else Color.Transparent, CircleShape)
             .semantics { contentDescription = "Scroll to end" }
+            .pressesAtOnce(interaction)
             .clickable(interaction, null, role = Role.Button, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
@@ -578,6 +580,7 @@ private fun StartedByLine(open: () -> Unit) {
                 .height(size.height)
                 .background(if (pressed) palette.borderAccent else palette.backgroundAccent, CircleShape)
                 .border(1.dp, palette.borderAccent, CircleShape)
+                .pressesAtOnce(interaction)
                 .clickable(interaction, indication = null, role = Role.Button, onClick = open)
                 // Lucide leaves an eighth of the arrow's square empty on each side; its ink starts at the padding.
                 .padding(start = size.padding - symbolSide(size.symbol) / 8, end = size.padding),

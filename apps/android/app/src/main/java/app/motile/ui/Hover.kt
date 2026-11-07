@@ -2,8 +2,12 @@ package app.motile.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.PressInteraction
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
@@ -21,6 +25,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.pointerHoverIcon
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -93,7 +98,7 @@ fun HighlightButton(
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val tracked by interaction.collectIsHoveredAsState()
-    val pressing = modifier.arrowPointer().combinedClickable(
+    val pressing = modifier.arrowPointer().pressesAtOnce(interaction, usable).combinedClickable(
         interactionSource = interaction,
         indication = null,
         enabled = usable,
@@ -162,11 +167,31 @@ fun DimButton(
     Box(
         modifier
             .arrowPointer()
+            .pressesAtOnce(interaction, enabled && LocalEnabled.current)
             .combinedClickable(interactionSource = interaction, indication = null, enabled = enabled && LocalEnabled.current, onLongClick = onLongClick, onClick = onClick)
             .alpha(if (pressed) lit else 1f),
         contentAlignment = contentAlignment,
         content = content,
     )
+}
+
+/**
+ * Says a press began as soon as the finger lands, and ended as it lifts or a scroll takes it. Inside
+ * a list, a clickable says so only a tap's timeout later, so a quick tap never lit.
+ */
+fun Modifier.pressesAtOnce(interaction: MutableInteractionSource, enabled: Boolean = true): Modifier {
+    if (!enabled) return this
+    return pointerInput(interaction) {
+        awaitEachGesture {
+            val press = PressInteraction.Press(awaitFirstDown(requireUnconsumed = false).position)
+            interaction.tryEmit(press)
+            try {
+                waitForUpOrCancellation()
+            } finally {
+                interaction.tryEmit(PressInteraction.Release(press))
+            }
+        }
+    }
 }
 
 /**

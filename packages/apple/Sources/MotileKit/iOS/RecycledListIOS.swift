@@ -40,6 +40,8 @@ struct RecycledList<Item: Identifiable, Row: View>: UIViewRepresentable {
         view.backgroundColor = .clear
         view.allowsSelection = false
         view.keyboardDismissMode = .onDrag
+        // A press lights what it lands on at once, so that a quick tap shows as the pointer does.
+        view.delaysContentTouches = false
         view.delegate = context.coordinator
         view.dragDelegate = context.coordinator
         view.dropDelegate = context.coordinator
