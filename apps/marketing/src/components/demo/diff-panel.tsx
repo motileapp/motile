@@ -63,7 +63,7 @@ export function DiffPanel({
           <PlusIcon className="size-4" />
         </span>
       </div>
-      <div className="flex h-9 shrink-0 items-center gap-1 border-t border-b pr-1 pl-3">
+      <div className="flex h-9 shrink-0 items-center gap-0.5 border-t border-b pr-1 pl-3">
         <span className="-ml-2 flex h-8 items-center gap-1.5 rounded-md px-[11px] text-[12px] font-medium text-muted-foreground hover:bg-background-accent hover:text-foreground">
           Uncommitted
           <MenuChevron />

@@ -125,7 +125,7 @@ fun PanelLoading() {
 }
 
 /** The room between what a panel bar holds. Buttons side by side are put in a row of their own that gives it to them, so that it only looks empty. */
-val panelBarGap = 4.dp
+val panelBarGap = 2.dp
 
 /**
  * The strip under the tabs with what the open tab is about and its buttons. A bar of controls over a

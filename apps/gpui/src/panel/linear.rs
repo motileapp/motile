@@ -14,6 +14,7 @@ use motile_protocol::wire::{LinearChange, LinearState, LinearStateKind, LinearTe
 
 use super::pull_request::text_blocks;
 use super::state::{Loaded, PanelTarget};
+use super::view::BAR_GAP;
 use crate::models::ago;
 use crate::sidebar::{DONE_ROW_HEIGHT, ROW_INSET, ROW_PADDING};
 use crate::store::Store;
@@ -1541,8 +1542,6 @@ fn initials_disc(initials: String, name: String, cx: &App) -> impl IntoElement {
         .tooltip(tooltip(name))
 }
 
-/// The room between what a bar holds. Buttons side by side share it, so that it only looks empty.
-const BAR_GAP: f32 = 4.;
 /// The room between an issue's property menus, which they share.
 const PROPERTY_GAP: f32 = 6.;
 
