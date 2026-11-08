@@ -16,6 +16,8 @@ use crate::theme::{ControlSize, colors};
 use crate::ui::Spinner;
 
 const MAX_ZOOM: f32 = 8.;
+/// How much smaller than fitting, or than its real size if that is smaller, an image zooms out.
+const ZOOM_OUT: f32 = 4.;
 /// The largest an image is decoded, on its longer side.
 const MAX_PIXELS: u32 = 8192;
 /// What a notch of a mouse wheel with ⌘ zooms by.
@@ -153,9 +155,10 @@ impl ZoomableImage {
         across.min(down).clamp(0.01, self.largest_fit)
     }
 
-    /// An image enlarged to fit can still be shown at its real size.
+    /// An image enlarged to fit can still be shown at its real size, and either can be zoomed out
+    /// to a quarter of that.
     fn smallest(&self, points: Size<f32>) -> f32 {
-        self.fit(points).min(1.)
+        self.fit(points).min(1.) / ZOOM_OUT
     }
 
     fn scale_now(&self, cx: &mut App) -> f32 {

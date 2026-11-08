@@ -12,7 +12,7 @@ use super::zoom::ZoomableImage;
 use super::{MediaFiles, SAVE_TITLE};
 use crate::models::{MediaSource, ViewedMedia};
 use crate::store::Store;
-use crate::theme::{ControlSize, Radius, TOP_BAR, colors};
+use crate::theme::{ControlSize, Radius, colors};
 use crate::ui::menu::Menu;
 use crate::ui::parts::CopyButton;
 use crate::ui::{ActionButton, Spinner, Variant, beside};
@@ -330,9 +330,11 @@ impl Render for MediaViewer {
         let shortcuts = &self.store.read(cx).shortcuts;
         let (copy_keys, save_keys) = (shortcuts.keys_label("mod+c"), shortcuts.keys_label("mod+s"));
         let trailing = CORNER_INSET + crate::window_frame::trailing_room(window, cx);
+        let buttons = 3. * ControlSize::Large.height() + 2. * CORNER_GAP;
+        let name_inset = (trailing + buttons).max(crate::window_frame::leading_room(window, cx)) + CORNER_INSET;
         let corner = div()
             .absolute()
-            .top(px(CORNER_INSET))
+            .top_0()
             .right(px(trailing))
             .flex()
             .items_center()
@@ -427,19 +429,24 @@ impl Render for MediaViewer {
                                 )),
                         )
                     })
+                    // One row in the top bar places the name and the buttons, so they share a
+                    // middle. The name is centered on the window, as far from both ends as all
+                    // three buttons need, so it keeps clear of them however many show.
                     .when(!full_screen, |viewer| {
-                        viewer
-                            .child(
-                                div()
-                                    .absolute()
-                                    .top(px(TOP_BAR + 14.))
-                                    .left(px(80.))
-                                    .right(px(80.))
-                                    .flex()
-                                    .justify_center()
-                                    .child(title),
-                            )
-                            .child(corner)
+                        viewer.child(
+                            div()
+                                .absolute()
+                                .top(px(CORNER_INSET))
+                                .left_0()
+                                .right_0()
+                                .h(px(ControlSize::Large.height()))
+                                .px(px(name_inset))
+                                .flex()
+                                .items_center()
+                                .justify_center()
+                                .child(title)
+                                .child(corner),
+                        )
                     }),
             ),
         )
