@@ -339,6 +339,10 @@ for tests.
   nothing gets through, so the link pings its server (`Ping`) every half minute, when a request has
   waited ten seconds, and when the client comes back or the network changes, and gives up one that
   doesn't answer, saying why in the server's error.
+- `away.rs`: whether the client was away, paused by the system or in the background. Coming back
+  after a while the core opens a new endpoint, and a connection or a dial from before that ends
+  then only dials again, without an error: the clients show an outage only once a dial made after
+  coming back fails.
 - `outbox.rs`: the messages on their way, kept in the cache before they are sent and until their
   server has them, each with the id the server knows it by, so that a lost connection or a restart
   sends it again and never twice. The clients show what waits, and put back in its composer a

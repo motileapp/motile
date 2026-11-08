@@ -5,7 +5,7 @@
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
 use futures_lite::StreamExt;
 use iroh::endpoint::PathEvent;
@@ -15,6 +15,7 @@ use serde::Serialize;
 use tokio::sync::{Notify, mpsc};
 use tokio::task::AbortHandle;
 
+use crate::away::Away;
 use crate::connection::{Closed, Connection, NOT_CONNECTED, PathKind, ServerAddr, lost, offline};
 
 const RETRY_DELAYS: [Duration; 4] =
@@ -75,6 +76,8 @@ pub struct Status {
 pub struct Link {
     server_id: String,
     endpoint: Mutex<Endpoint>,
+    /// Whether a connection that ended went because the client was away, which isn't an outage.
+    away: Away,
     events: mpsc::UnboundedSender<(String, LinkEvent)>,
     inner: Mutex<Inner>,
     /// Ends the wait before the next dial.
@@ -114,11 +117,13 @@ impl Link {
     pub fn connect(
         endpoint: Endpoint,
         server: ServerAddr,
+        away: Away,
         events: mpsc::UnboundedSender<(String, LinkEvent)>,
     ) -> Arc<Self> {
         let link = Arc::new(Self {
             server_id: server.key.clone(),
             endpoint: Mutex::new(endpoint),
+            away,
             events,
             inner: Mutex::default(),
             wake: Notify::new(),
@@ -196,6 +201,7 @@ impl Link {
                 *status = Status { state: State::Connecting, error: status.error.take(), ..Status::default() }
             });
             let endpoint = self.endpoint.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).clone();
+            let started = SystemTime::now();
             let closed = tokio::select! {
                 biased;
                 _ = self.restart.notified() => None,
@@ -221,11 +227,20 @@ impl Link {
                     RETRY_DELAYS[(failures - 1).min(RETRY_DELAYS.len() - 1)]
                 }
             };
+            // What lived through the client being away ends as it comes back, and says nothing of
+            // the server: it shows as dialing again, and only a dial from after says why it fails.
+            let quiet = !closed.refused && self.away.excuses(started);
+            if quiet {
+                tracing::info!(server = self.server_id, reason = closed.reason, "a connection from while away ended");
+            }
             self.update_status(|status| {
-                *status = Status {
-                    state: if closed.refused { State::Refused } else { State::Disconnected },
-                    error: Some(closed.reason),
-                    ..Status::default()
+                *status = match quiet {
+                    true => Status { state: State::Connecting, ..Status::default() },
+                    false => Status {
+                        state: if closed.refused { State::Refused } else { State::Disconnected },
+                        error: Some(closed.reason),
+                        ..Status::default()
+                    },
                 }
             });
             tokio::select! {
@@ -620,7 +635,7 @@ mod tests {
         let (_server, address) = server_that_stops_answering().await;
         let endpoint = bind(&DeviceKey::generate(), true).await.unwrap();
         let (events, mut heard) = mpsc::unbounded_channel();
-        let link = Link::connect(endpoint, address, events);
+        let link = Link::connect(endpoint, address, Away::new(), events);
         while link.status().state != State::Connected {
             tokio::time::sleep(Duration::from_millis(20)).await;
         }
@@ -649,11 +664,44 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn a_connection_that_ends_while_the_client_is_away_dials_again_without_saying_why() {
+        let (_server, address) = server_that_stops_answering().await;
+        let endpoint = bind(&DeviceKey::generate(), true).await.unwrap();
+        let (events, mut heard) = mpsc::unbounded_channel();
+        let away = Away::new();
+        let link = Link::connect(endpoint, address, away.clone(), events);
+        while link.status().state != State::Connected {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        while heard.try_recv().is_ok() {}
+
+        away.backgrounded();
+        let within = SUSPECT_AFTER + PING_WITHIN + Duration::from_secs(5);
+        let request = Request::Skills { project_id: "p".to_string() };
+        let _ = tokio::time::timeout(within, link.request(&request)).await.expect("the request waited forever");
+        let dialing = tokio::time::timeout(Duration::from_secs(5), async {
+            while let Some((_, event)) = heard.recv().await {
+                if let LinkEvent::Status(status) = event
+                    && status.state != State::Connected
+                {
+                    return status;
+                }
+            }
+            panic!("the link stopped");
+        })
+        .await
+        .expect("the link still says it is connected");
+
+        assert_eq!(dialing, Status { state: State::Connecting, ..Status::default() });
+        link.shutdown();
+    }
+
+    #[tokio::test]
     async fn a_server_that_never_sends_its_threads_is_dialed_again() {
         let (_server, address) = silent_server().await;
         let endpoint = bind(&DeviceKey::generate(), true).await.unwrap();
         let (events, mut heard) = mpsc::unbounded_channel();
-        let link = Link::connect(endpoint, address, events);
+        let link = Link::connect(endpoint, address, Away::new(), events);
 
         let given_up = tokio::time::timeout(WELCOME_TIMEOUT + Duration::from_secs(10), async {
             while let Some((_, event)) = heard.recv().await {

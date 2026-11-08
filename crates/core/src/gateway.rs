@@ -3,7 +3,7 @@
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
 use anyhow::{Context, anyhow, bail};
 use chrono::{DateTime, FixedOffset};
@@ -19,6 +19,7 @@ use serde::Serialize;
 use tokio::sync::Notify;
 use tokio::task::AbortHandle;
 
+use crate::away::Away;
 use crate::connection::{Closed, Connection, ServerAddr, offline};
 use crate::limits::{self, Row};
 use crate::link::State;
@@ -62,6 +63,8 @@ pub struct Status {
 pub struct GatewayLink {
     pub key: String,
     endpoint: Mutex<Endpoint>,
+    /// Whether a connection that ended went because the client was away, which isn't an outage.
+    away: Away,
     emit: Emit,
     inner: Mutex<Inner>,
     wake: Notify,
@@ -78,10 +81,11 @@ struct Inner {
 }
 
 impl GatewayLink {
-    pub fn connect(endpoint: Endpoint, gateway: ServerAddr, emit: Emit) -> Arc<Self> {
+    pub fn connect(endpoint: Endpoint, gateway: ServerAddr, away: Away, emit: Emit) -> Arc<Self> {
         let link = Arc::new(Self {
             key: gateway.key.clone(),
             endpoint: Mutex::new(endpoint),
+            away,
             emit,
             inner: Mutex::default(),
             wake: Notify::new(),
@@ -138,6 +142,7 @@ impl GatewayLink {
         loop {
             self.update_status(|status| *status = Status { state: State::Connecting, error: status.error.take() });
             let endpoint = self.endpoint.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).clone();
+            let started = SystemTime::now();
             let closed = tokio::select! {
                 biased;
                 _ = self.restart.notified() => None,
@@ -160,10 +165,15 @@ impl GatewayLink {
                     RETRY_DELAYS[(failures - 1).min(RETRY_DELAYS.len() - 1)]
                 }
             };
+            // As a server's link does: what lived through the client being away dials again quietly.
+            let quiet = !closed.refused && self.away.excuses(started);
             self.update_status(|status| {
-                *status = Status {
-                    state: if closed.refused { State::Refused } else { State::Disconnected },
-                    error: Some(closed.reason).filter(|reason| !reason.is_empty()),
+                *status = match quiet {
+                    true => Status { state: State::Connecting, error: None },
+                    false => Status {
+                        state: if closed.refused { State::Refused } else { State::Disconnected },
+                        error: Some(closed.reason).filter(|reason| !reason.is_empty()),
+                    },
                 }
             });
             tokio::select! {
@@ -1048,7 +1058,7 @@ mod tests {
         let emit: Emit = Arc::new(move |event| {
             let _ = events.send(event);
         });
-        let link = GatewayLink::connect(client, address, emit);
+        let link = GatewayLink::connect(client, address, Away::new(), emit);
         let mut seen = (None, None);
         while seen.0.is_none() || seen.1.is_none() {
             match tokio::time::timeout(Duration::from_secs(10), received.recv()).await.unwrap().unwrap() {

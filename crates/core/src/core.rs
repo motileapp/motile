@@ -5,7 +5,7 @@
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::{Duration, Instant, SystemTime};
+use std::time::{Duration, Instant};
 
 use anyhow::{Context, bail};
 use base64::Engine;
@@ -29,6 +29,7 @@ use crate::api::{
     AccountView, Children, Command, Config, Event, ProjectView, ScrollAt, Section, ServerView, SyncState, SyncView,
     ThreadView, WaitingChild,
 };
+use crate::away::{Away, STALE_AFTER};
 use crate::backup::{self, BACKUP_PROTOCOL};
 use crate::browse;
 use crate::cache::{Cache, Page};
@@ -95,8 +96,6 @@ const SEARCH_TIMEOUT: Duration = Duration::from_secs(5);
 const GATEWAY_LIMITS_WAIT: Duration = Duration::from_secs(5);
 /// What a server said of its agents' accounts is read again once it is this old.
 const LIMITS_STALE: Duration = Duration::from_secs(5 * 60);
-/// An endpoint that didn't run for this long isn't trusted to reach anything anymore.
-const STALE_AFTER: Duration = Duration::from_secs(10);
 /// How long the core may take over one input before the log says so.
 const BUSY_AFTER: Duration = Duration::from_secs(1);
 /// How long a message that didn't reach its server waits before it is sent again.
@@ -391,10 +390,9 @@ struct Core {
     outbox: Outbox,
     key: Arc<DeviceKey>,
     endpoint: Option<Endpoint>,
-    /// When the core last ran. A gap says the system had the client paused: asleep or suspended.
-    ran_at: SystemTime,
-    /// When the client went to the background, where Android may cut its network without pausing it.
-    backgrounded_at: Option<SystemTime>,
+    /// Whether the client was paused, asleep or suspended, or in the background, where Android
+    /// may cut its network without pausing it. The links ask it too.
+    away: Away,
     /// When the endpoint last had a server answer it, or was opened.
     reached_at: Instant,
     /// The key of the endpoint being opened, while it is.
@@ -550,8 +548,7 @@ pub fn start(config: Config, sink: EventSink) -> anyhow::Result<Handle> {
         cache,
         key: Arc::new(key),
         endpoint: None,
-        ran_at: SystemTime::now(),
-        backgrounded_at: None,
+        away: Away::new(),
         reached_at: Instant::now(),
         binding: None,
         account_error: None,
@@ -822,7 +819,7 @@ impl Core {
             Input::Stop => {}
             Input::Tick => {
                 self.ticks += 1;
-                self.replace_stale_endpoint(Duration::ZERO);
+                self.replace_stale_endpoint();
                 self.replace_wedged_endpoint();
                 self.forget_unconfirmed_updates();
                 for (thread_id, followed) in &mut self.followed {
@@ -1058,13 +1055,11 @@ impl Core {
         }
     }
 
-    /// Opens a new endpoint for the links once the client ran again after a pause, or was `away`
-    /// in the background as long, and says whether it does. The system cuts what a paused
-    /// endpoint had open without a word, and the endpoint can go on dialing through it for long.
-    fn replace_stale_endpoint(&mut self, away: Duration) -> bool {
-        let now = SystemTime::now();
-        let paused = now.duration_since(self.ran_at).unwrap_or_default().max(away);
-        self.ran_at = now;
+    /// Opens a new endpoint for the links once the client was away, paused or in the background,
+    /// for a while, and says whether it does. The system cuts what a paused endpoint had open
+    /// without a word, and the endpoint can go on dialing through it for long.
+    fn replace_stale_endpoint(&mut self) -> bool {
+        let paused = self.away.take();
         if paused < STALE_AFTER || self.endpoint.is_none() {
             return false;
         }
@@ -1262,7 +1257,7 @@ impl Core {
                 let emit: gateway::Emit = Arc::new(move |event| {
                     let _ = inputs.send(Input::Gateway { key: key.clone(), event });
                 });
-                self.gateway.link = Some(GatewayLink::connect(endpoint, address, emit));
+                self.gateway.link = Some(GatewayLink::connect(endpoint, address, self.away.clone(), emit));
             }
         }
         self.emit_gateway();
@@ -1471,7 +1466,7 @@ impl Core {
             let direct = self.config.direct_addrs.get(&server_id).or(self.config.direct_addr.as_ref());
             let address =
                 ServerAddr { key: server_id.clone(), direct: direct.and_then(|address| address.parse().ok()) };
-            let link = Link::connect(endpoint.clone(), address, self.link_events.clone());
+            let link = Link::connect(endpoint.clone(), address, self.away.clone(), self.link_events.clone());
             // Threads the client opened before there was a connection to follow them on.
             for (thread_id, open) in self.open.iter().filter(|(_, open)| open.server_id == server_id) {
                 link.open(thread_id.clone(), open.rev);
@@ -2946,14 +2941,13 @@ impl Core {
                 self.reply(id, Ok(json!({})));
             }
             Command::Background => {
-                self.backgrounded_at = Some(SystemTime::now());
+                self.away.backgrounded();
                 self.reply(id, Ok(json!({})));
             }
             Command::Foreground => {
                 tracing::info!("came back");
-                let backgrounded_at = self.backgrounded_at.take();
-                let away = backgrounded_at.and_then(|at| SystemTime::now().duration_since(at).ok());
-                if !self.replace_stale_endpoint(away.unwrap_or_default()) {
+                self.away.foregrounded();
+                if !self.replace_stale_endpoint() {
                     self.network_changed();
                 }
                 self.check_account();

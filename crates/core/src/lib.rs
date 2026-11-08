@@ -2,6 +2,7 @@
 //! servers, the local copy of their threads, and turning transcripts into rows ready to draw.
 
 pub mod api;
+pub mod away;
 pub mod backup;
 pub mod browse;
 pub mod cache;
