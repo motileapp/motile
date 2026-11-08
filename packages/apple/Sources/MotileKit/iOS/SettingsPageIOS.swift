@@ -262,7 +262,7 @@ struct SettingsPage: View {
             Button {
                 store.editedBackup = EditedBackup(bucket: store.backup.bucket)
             } label: {
-                SettingsItem("S3 bucket", description: on ? store.backup.description : "Not set up", truncates: .middle) {
+                SettingsItem("S3 Bucket", description: on ? store.backup.description : "Not set up", truncates: .middle) {
                     SettingsTile(symbol: .cloudUpload)
                 }
             }
