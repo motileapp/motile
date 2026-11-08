@@ -24,6 +24,9 @@ pub struct Entry {
 /// Where a row stands in the thread: its item's place, then its own among the item's rows.
 pub type Place = (u64, usize);
 
+/// A point in the thread's text: a row's place, and an offset in its text in UTF-16 units.
+pub type At = (u64, usize, u32);
+
 /// A match: its row and where it is in the row's text, in UTF-16 units.
 #[derive(Serialize, Clone, PartialEq, Debug)]
 pub struct Hit {
@@ -56,7 +59,7 @@ pub struct Find {
     /// Whether the thread's rows have been read.
     pub ready: bool,
     /// Where the search started, for once the thread's rows have been read.
-    pub from: Option<Place>,
+    pub from: Option<At>,
     pub item: Option<String>,
 }
 
@@ -111,10 +114,11 @@ impl Find {
 
     /// Searches for `query`. With `item`, the message the sidebar's search found, the current match
     /// is its first, once the whole thread is searched, and none when it has none. Without, it is
-    /// the first at or after `from`, round from the start. Whether it moved.
-    pub fn search(&mut self, query: &str, from: Option<Place>, item: Option<&str>) -> bool {
+    /// the first at or after the current match, or without one `from`, round from the start.
+    /// Whether it moved.
+    pub fn search(&mut self, query: &str, from: Option<At>, item: Option<&str>) -> bool {
         let before = self.current.clone();
-        let from = self.current_place().or(from);
+        let from = self.current_at().or(from);
         self.query = query.to_string();
         self.phrase = Some(Folded::new(query.trim())).filter(|phrase| !phrase.is_empty());
         self.match_all();
@@ -125,8 +129,8 @@ impl Find {
             return self.current != before;
         }
         let next = {
-            let from = from.unwrap_or((0, 0));
-            let at = |hit: &&Hit| self.place_of(&hit.row_id).is_some_and(|place| place >= from);
+            let from = from.unwrap_or((0, 0, 0));
+            let at = |hit: &&Hit| self.at_of(hit).is_some_and(|at| at >= from);
             hits.iter().find(at).or(hits.first())
         };
         self.current = next.map(|hit| (hit.row_id.clone(), hit.start));
@@ -244,16 +248,18 @@ impl Find {
         }
         let from = self.place_of(&row_id).map(|(seq, block)| (seq, block, start));
         let hits = self.hits();
-        let after = |hit: &&Hit| {
-            let place = self.place_of(&hit.row_id).map(|(seq, block)| (seq, block, hit.start));
-            from.is_none_or(|from| place >= Some(from))
-        };
+        let after = |hit: &&Hit| from.is_none_or(|from| self.at_of(hit) >= Some(from));
         let next = hits.iter().find(after).or(hits.first());
         self.current = next.map(|hit| (hit.row_id.clone(), hit.start));
     }
 
-    fn current_place(&self) -> Option<Place> {
-        self.place_of(&self.current.as_ref()?.0)
+    fn current_at(&self) -> Option<At> {
+        let (row_id, start) = self.current.as_ref()?;
+        self.place_of(row_id).map(|(seq, block)| (seq, block, *start))
+    }
+
+    fn at_of(&self, hit: &Hit) -> Option<At> {
+        self.place_of(&hit.row_id).map(|(seq, block)| (seq, block, hit.start))
     }
 
     fn place_of(&self, row_id: &str) -> Option<Place> {
@@ -332,12 +338,29 @@ mod tests {
         let items = [user("a", 1, "deploy"), user("b", 2, "deploy"), user("c", 3, "deploy")];
         let mut find = Find::default();
         find.set_entries(index(&items, "/tmp"));
-        find.search("depl", Some((2, 0)), None);
+        find.search("depl", Some((2, 0, 0)), None);
         assert_eq!(find.current_index(), Some(1));
-        find.search("deploy", Some((1, 0)), None);
+        find.search("deploy", Some((1, 0, 0)), None);
         assert_eq!(find.current_index(), Some(1), "a longer search keeps the current match");
         find.search("deploy", None, Some("c"));
         assert_eq!(find.current_index(), Some(2), "the message it was found by comes first");
+    }
+
+    #[test]
+    fn starts_where_the_client_is_in_a_long_row() {
+        let items = [reply("a", 1, "not one, not two, not three"), user("b", 2, "not four")];
+        let mut find = Find::default();
+        find.set_entries(index(&items, "/tmp"));
+        find.search("n", Some((1, 0, 9)), None);
+        assert_eq!(find.current().map(|hit| hit.start), Some(9), "not the row's first match");
+        find.search("no", Some((1, 0, 0)), None);
+        assert_eq!(find.current().map(|hit| hit.start), Some(9), "a longer search stays on the current match");
+        find.search("not th", Some((1, 0, 0)), None);
+        assert_eq!(find.current().map(|hit| hit.start), Some(18), "and moves on from it when it is gone");
+        let mut find = Find::default();
+        find.set_entries(index(&items, "/tmp"));
+        find.search("not", Some((1, 0, 25)), None);
+        assert_eq!(find.current().map(|hit| hit.row_id), Some("b/0".into()), "past the row's last match");
     }
 
     #[test]

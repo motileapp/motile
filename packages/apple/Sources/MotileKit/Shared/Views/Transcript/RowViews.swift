@@ -70,6 +70,9 @@ class RowView: FlippedView {
     /// Where that part of the text the core sent is, in the row.
     func rect(of range: NSRange) -> CGRect? { nil }
 
+    /// Where the first whole line at or below `y` in the row starts in the text the core sent.
+    func textOffset(below y: CGFloat) -> Int { 0 }
+
     /// The row left the screen: its view goes to the pool or away.
     func recycled() {}
 
@@ -368,6 +371,10 @@ final class UserRowView: RowView {
         found.rect(of: range, in: text).map { convert($0, from: text) }
     }
 
+    override func textOffset(below y: CGFloat) -> Int {
+        found.offset(below: convert(CGPoint(x: 0, y: y), to: text).y, in: text)
+    }
+
     /// Whether that part of the text is past where a long message is cut.
     func hides(_ range: NSRange) -> Bool {
         guard collapsible, !(owner?.isExpanded(id: rowID) ?? false), let rect = found.rect(of: range, in: text) else { return false }
@@ -526,6 +533,10 @@ final class ProseRowView: RowView {
         found.rect(of: range, in: text).map { convert($0, from: text) }
     }
 
+    override func textOffset(below y: CGFloat) -> Int {
+        found.offset(below: convert(CGPoint(x: 0, y: y), to: text).y, in: text)
+    }
+
     override func layout(width: CGFloat) -> CGFloat {
         let before = text.frame.size
         let height = text.height(forWidth: width)
@@ -659,6 +670,10 @@ final class CodeRowView: RowView {
 
     override func rect(of range: NSRange) -> CGRect? {
         found.rect(of: range, in: text).map { convert($0, from: text) }
+    }
+
+    override func textOffset(below y: CGFloat) -> Int {
+        found.offset(below: convert(CGPoint(x: 0, y: y), to: text).y, in: text)
     }
 
     /// The length of the longest line in columns, counting what is wider than a letter as two.
@@ -993,6 +1008,10 @@ final class ErrorRowView: RowView {
 
     override func rect(of range: NSRange) -> CGRect? {
         found.rect(of: range, in: box.text).map { convert($0, from: box.text) }
+    }
+
+    override func textOffset(below y: CGFloat) -> Int {
+        found.offset(below: convert(CGPoint(x: 0, y: y), to: box.text).y, in: box.text)
     }
 
     override func layout(width: CGFloat) -> CGFloat {

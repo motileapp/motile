@@ -73,6 +73,7 @@ import app.motile.DemoHooks
 import app.motile.LocalStore
 import app.motile.composer.composerSurface
 import app.motile.core.AppStore
+import app.motile.core.FindFrom
 import app.motile.core.TranscriptModel
 import app.motile.core.TranscriptPlace
 import app.motile.panel.DiffScope
@@ -114,6 +115,9 @@ class TranscriptActions(val store: AppStore, val model: TranscriptModel, val ofA
     fun currentMatch(rowID: String, window: Rect) {
         matchAt = rowID to window
     }
+
+    /** The pieces of the text of each row on screen, for where finding starts. */
+    val texts = HashMap<String, RowTexts>()
 
     /** Called as a row opens or closes, which mustn't drag the view to the end; `byCore` when its rows come from the core. */
     var holding: (byCore: Boolean) -> Unit = {}
@@ -253,18 +257,6 @@ fun TranscriptView(
         val pinned = if (follower.hold != null) follower.wasPinned else follower.pinned
         if (pinned) null else entries.placeAt(state, density)
     }
-    val viewport by rememberUpdatedState { entries.placeAt(state, density) }
-    DisposableEffect(model) {
-        val view = { place() }
-        val shows = { viewport() }
-        model.placeOfView = view
-        model.viewportOfView = shows
-        onDispose {
-            if (!model.keepsRows) model.place = view()
-            if (model.placeOfView === view) model.placeOfView = null
-            if (model.viewportOfView === shows) model.viewportOfView = null
-        }
-    }
     // The way back at the end only shows while the one at the top is out of sight; its room stays, so that nothing moves when it does.
     val topInSight by remember(state, entries) { derivedStateOf { entries.firstOrNull() is StartedBy && state.firstVisibleItemIndex == 0 } }
     val actions = remember(model, resets) { TranscriptActions(store, model, ofAgent) }
@@ -272,6 +264,21 @@ fun TranscriptView(
     val animates = model.activity.running && model.live && !Platform.reducesMotion
     val top = contentPadding.calculateTopPadding()
     val bottom = kept.bottom
+    val listTop = remember(state) { floatArrayOf(0f) }
+    val findFrom by rememberUpdatedState { cover: Dp ->
+        entries.findFrom(state, actions, listTop[0], with(density) { (top + cover).toPx() })
+    }
+    DisposableEffect(model) {
+        val view = { place() }
+        val finds = { cover: Dp -> findFrom(cover) }
+        model.placeOfView = view
+        model.findFromOfView = finds
+        onDispose {
+            if (!model.keepsRows) model.place = view()
+            if (model.placeOfView === view) model.placeOfView = null
+            if (model.findFromOfView === finds) model.findFromOfView = null
+        }
+    }
 
     actions.holding = { byCore ->
         follower.wasPinned = follower.pinned
@@ -347,7 +354,6 @@ fun TranscriptView(
     LaunchedEffect(state) {
         snapshotFlow { Triple(state.remaining(), state.layoutInfo.totalItemsCount, model.version) }.collectLatest { follow() }
     }
-    val listTop = remember(state) { floatArrayOf(0f) }
     val shownEntries by rememberUpdatedState(entries)
     val revealing = model.revealing
     val revealIndex = revealing?.let { request -> entries.indexOfFirst { (it as? RowModel)?.id == request.rowID } } ?: -1
@@ -357,7 +363,7 @@ fun TranscriptView(
         follower.pinned = false
         follower.hold = null
         actions.revealing = request.rowID
-        reveal(state, shownEntries, request, actions, listTop[0], with(density) { findCover.toPx() }, density)
+        reveal(state, shownEntries, request, actions, listTop[0], with(density) { (top + findCover).toPx() })
         actions.revealing = null
         model.revealed(request.serial)
     }
@@ -478,7 +484,14 @@ fun TranscriptView(
                     val placed = Modifier.fillMaxWidth().animateItem(fadeInSpec = if (fades) tween(350) else null, placementSpec = null, fadeOutSpec = null)
                     Box(placed) {
                         when {
-                            row != null -> TranscriptRow(row)
+                            row != null -> {
+                                val texts = remember(row.id) { RowTexts() }
+                                DisposableEffect(texts) {
+                                    actions.texts[row.id] = texts
+                                    onDispose { actions.texts.remove(row.id, texts) }
+                                }
+                                CompositionLocalProvider(LocalRowTexts provides texts) { TranscriptRow(row) }
+                            }
                             entry is StartedBy && entry.end && topInSight -> Box(Modifier.height(ControlSize.Large.height))
                             entry is StartedBy && parent != null -> StartedByLine { store.openStartedThread(parent) }
                             else -> WorkingLine(model.activity, Modifier.padding(top = 2.dp))
@@ -513,6 +526,15 @@ private fun workingIndex(rows: List<RowModel>, pending: RowModel?): Int {
     var index = end
     while (index > 0 && rows[index - 1].isQueued) index -= 1
     return if (index == end) rows.size else index
+}
+
+/** Where finding starts: the first row that shows below `covered`, from the list's top, and where its first whole line there is in its text. */
+private fun List<Any>.findFrom(state: LazyListState, actions: TranscriptActions, listTop: Float, covered: Float): FindFrom? {
+    val info = state.layoutInfo
+    val below = covered + info.viewportStartOffset
+    val item = info.visibleItemsInfo.firstOrNull { it.offset + it.size > below && getOrNull(it.index) is RowModel } ?: return null
+    val row = this[item.index] as RowModel
+    return FindFrom(row.id, actions.texts[row.id]?.offset(below = listTop + covered) ?: 0)
 }
 
 /** The first row at or under the viewport's top, and how far the top is below the row's: less than none when the row is under it. */
@@ -637,7 +659,8 @@ private fun StartedByLine(open: () -> Unit) {
 
 /**
  * Scrolls to the row, and to the current match in it in the middle of what shows, unless it is in
- * sight already. Without a range, the row's top comes into sight.
+ * sight already between the bars, the find bar too, which cover `covered` from the list's top.
+ * Without a range, the row's top comes into sight.
  */
 private suspend fun reveal(
     state: LazyListState,
@@ -646,26 +669,23 @@ private suspend fun reveal(
     actions: TranscriptActions,
     listTop: Float,
     covered: Float,
-    density: Density,
 ) {
     val index = entries.indexOfFirst { (it as? RowModel)?.id == request.rowID }.takeIf { it >= 0 } ?: return
-    val margin = with(density) { 40.dp.toPx() }
     if (state.layoutInfo.visibleItemsInfo.none { it.index == index }) {
         state.scrollToItem(index)
         state.scrollBy(-state.layoutInfo.viewportSize.height * 0.35f)
     }
     repeat(3) { withFrameNanos {} }
     val info = state.layoutInfo
+    val shownTop = covered + info.viewportStartOffset
     val shownBottom = (info.viewportEndOffset - info.afterContentPadding).toFloat()
     val match = actions.matchAt?.takeIf { request.range != null && it.first == request.rowID }?.second
-    if (match != null) {
-        val top = match.top - listTop + info.viewportStartOffset
-        val bottom = match.bottom - listTop + info.viewportStartOffset
-        if (top >= covered + margin && bottom <= shownBottom - margin) return
-        state.animateScrollBy((top + bottom) / 2 - (covered + shownBottom) / 2)
-        return
+    val row = info.visibleItemsInfo.firstOrNull { it.index == index }
+    val (top, bottom) = when {
+        match != null -> match.top - listTop + info.viewportStartOffset to match.bottom - listTop + info.viewportStartOffset
+        row != null -> row.offset.toFloat() to row.offset + min(row.size.toFloat(), shownBottom - shownTop)
+        else -> return
     }
-    val row = info.visibleItemsInfo.firstOrNull { it.index == index } ?: return
-    if (row.offset >= covered && row.offset <= shownBottom - margin) return
-    state.animateScrollBy(row.offset - covered - margin)
+    if (top >= shownTop && bottom <= shownBottom) return
+    state.animateScrollBy((top + bottom) / 2 - (shownTop + shownBottom) / 2)
 }

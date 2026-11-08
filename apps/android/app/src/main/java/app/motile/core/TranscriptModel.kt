@@ -6,6 +6,7 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.unit.Dp
 import app.motile.panel.TurnChange
 import app.motile.transcript.RowModel
 
@@ -49,8 +50,8 @@ class TranscriptModel {
     var place: TranscriptPlace? = null
     /** Where the view that shows the rows has them, null at the end. */
     var placeOfView: (() -> TranscriptPlace?)? = null
-    /** Where the view that shows the rows has them, at the end too. */
-    var viewportOfView: (() -> TranscriptPlace?)? = null
+    /** Where finding starts in what the view that shows the rows shows below its bars, a find bar that covers `cover` too. */
+    var findFromOfView: ((cover: Dp) -> FindFrom?)? = null
     /** What finding in the thread found, by row. */
     val found = mutableStateMapOf<String, FoundMarks>()
     /** The row the view scrolls to, and the part of its text, with a number each time it is asked for again. */
@@ -212,8 +213,8 @@ class TranscriptModel {
         if (keepsRows) keptLive = live else this.live = live
     }
 
-    /** Where the view shows the rows, whether or not it follows the end. */
-    val viewport: TranscriptPlace? get() = viewportOfView?.invoke()
+    /** Where finding starts in what the view shows, under a find bar that covers `cover`. */
+    fun findFrom(cover: Dp): FindFrom? = findFromOfView?.invoke(cover)
 
     fun setFound(marks: Map<String, FoundMarks>) {
         found.keys.retainAll(marks.keys)

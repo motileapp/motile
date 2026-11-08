@@ -186,16 +186,29 @@ class MessageText(val text: String, val links: List<TextLink>, val skills: List<
     /** Finding's matches in the message, where they are in its text as it shows: past every chip before them, which is longer than its `$name`. */
     fun found(marks: FoundMarks?): List<FoundSpan> {
         marks ?: return emptyList()
-        val chips = skills.filter { it.start >= 0 && it.length > 0 && it.end <= text.length }.sortedBy { it.start }
-        val moves = mutableListOf<Pair<Int, Int>>()
-        var at = 0
-        for (chip in chips) {
-            if (chip.start < at) continue
-            moves += chip.end to (SkillChip.shown(chip.label).length - chip.length)
-            at = chip.end
-        }
+        val moves = chips().map { chip -> chip.end to (SkillChip.shown(chip.label).length - chip.length) }
         fun moved(index: Int) = index + moves.filter { it.first <= index }.sumOf { it.second }
         return marks.ranges.mapIndexed { index, range -> FoundSpan(moved(range.first), moved(range.last + 1), index == marks.current) }
+    }
+
+    /** Where a place in the text as it shows is in its text, as `found` turned round. A place in a chip is the chip's start. */
+    fun sentOffset(shown: Int): Int {
+        var shift = 0
+        for (chip in chips()) {
+            val start = chip.start + shift
+            if (shown < start) break
+            if (shown < start + SkillChip.shown(chip.label).length) return chip.start
+            shift += SkillChip.shown(chip.label).length - chip.length
+        }
+        return shown - shift
+    }
+
+    /** The skills that show as chips, in order, none inside another. */
+    private fun chips(): List<SkillSpan> {
+        var at = 0
+        return skills.filter { it.start >= 0 && it.length > 0 && it.end <= text.length }.sortedBy { it.start }.filter { chip ->
+            (chip.start >= at).also { if (it) at = chip.end }
+        }
     }
 
     val styled = Typeset { palette ->

@@ -20,6 +20,16 @@ struct FoundMarks: Equatable {
     }
 }
 
+/// Where finding in the thread starts: the first row that shows below the bars, and the first
+/// character of its first whole line there, in UTF-16 units of the text the core sent. A long
+/// reply is a single row, so its first match can be far above what shows.
+struct FindFrom: Equatable {
+    let rowID: String
+    let offset: Int
+
+    var json: [String: Any] { ["row_id": rowID, "offset": offset] }
+}
+
 /// Finding in the open thread, as a browser finds in a page: the bar's query, and what the core
 /// found for it.
 @Observable
@@ -126,7 +136,7 @@ extension AppStore {
 
     private func sendFind(threadID: String, itemID: String?, fromViewport: Bool = true) {
         var fields: [String: Any] = ["thread_id": threadID, "query": find.query]
-        if fromViewport, let place = transcript.viewport { fields["from"] = place.json }
+        if fromViewport, let from = transcript.findFrom(cover: FindBar.cover) { fields["from"] = from.json }
         if let itemID { fields["item_id"] = itemID }
         core.send("find", fields)
     }

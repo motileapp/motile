@@ -217,7 +217,7 @@ private fun UserBubble(row: RowModel, user: RowModel.Kind.User, text: AnnotatedS
                             MarkedText(text, messageStyle, found = found, onCurrent = { local, window ->
                                 actions.currentMatch(row.id, window)
                                 if (cut && actions.revealing == row.id && local.bottom > cutPx) actions.toggleExpansion(row.id)
-                            })
+                            }, sent = user.text::sentOffset)
                         }
                         if (more) {
                             ActionButton(
@@ -319,14 +319,17 @@ fun ProseBlockView(block: ProseBlock, marks: FoundMarks? = null, onCurrent: ((Re
             Row(placed.fillMaxWidth().padding(start = (if (block.marker != null) block.markerIndent else block.indent).dp)) {
                 block.marker?.let { marker ->
                     Box(Modifier.width((block.indent - block.markerIndent).dp)) {
-                        MarkedText(marker, style, found = marks.within(block.markerOffset, marker.length), onCurrent = onCurrent)
+                        MarkedText(marker, style, found = marks.within(block.markerOffset, marker.length), onCurrent = onCurrent, sent = { block.markerOffset + it })
                     }
                 }
-                MarkedText(block.text, style, found = marks.within(block.offset, block.text.length), onCurrent = onCurrent)
+                MarkedText(block.text, style, found = marks.within(block.offset, block.text.length), onCurrent = onCurrent, sent = { block.offset + it })
             }
         }
         is CodeBlock -> Box(placed.fillMaxWidth().padding(start = block.indent.dp)) {
-            CodeBox(block.language, block.code, block.text, found = marks.within(block.offset, block.text.length), onCurrent = onCurrent)
+            CodeBox(
+                block.language, block.code, block.text, found = marks.within(block.offset, block.text.length), onCurrent = onCurrent,
+                sent = { block.offset + it },
+            )
         }
         is RuleBlock -> Box(
             placed.fillMaxWidth().height(Theme.proseLineHeight.value.dp).drawBehind {
@@ -337,7 +340,7 @@ fun ProseBlockView(block: ProseBlock, marks: FoundMarks? = null, onCurrent: ((Re
     }
 }
 
-/** Code in a box with its language and a button that copies it, which scrolls sideways when it is wider than the column, or `wraps`. */
+/** Code in a box with its language and a button that copies it, which scrolls sideways when it is wider than the column, or `wraps`. `sent` maps a place in it to the row's text. */
 @Composable
 fun CodeBox(
     language: String,
@@ -348,9 +351,11 @@ fun CodeBox(
     radius: Dp = Radius.lg,
     found: List<FoundSpan> = emptyList(),
     onCurrent: ((Rect, Rect) -> Unit)? = null,
+    sent: ((Int) -> Int)? = null,
 ) {
     val palette = LocalPalette.current
     val density = LocalDensity.current
+    val piece = rememberTextPiece(sent)
     val style = TextStyle(fontFamily = Theme.mono, fontSize = Theme.codeSize, lineHeight = Theme.codeLineHeight)
     val shown = remember(text, found, palette) { text.withCurrent(found, palette) }
     var layout by remember(text) { mutableStateOf<TextLayoutResult?>(null) }
@@ -363,10 +368,14 @@ fun CodeBox(
                 (if (wraps) Modifier else Modifier.horizontalScroll(rememberScrollState()))
                     .padding(start = 14.dp, end = 14.dp, bottom = 12.dp)
                     .then(marked)
-                    .reportsCurrent(found, style, density, { layout }, onCurrent),
+                    .reportsCurrent(found, style, density, { layout }, onCurrent)
+                    .placesPiece(piece),
                 style = style,
                 softWrap = wraps,
-                onTextLayout = { layout = it },
+                onTextLayout = {
+                    layout = it
+                    piece?.layout = it
+                },
             )
         }
     }
@@ -382,7 +391,7 @@ private fun CodeRow(row: RowModel, content: CodeContent) {
     SelectionContainer {
         CodeBox(
             content.language, content.code, text, Modifier.padding(top = 4.dp, bottom = 10.dp), found = found,
-            onCurrent = { _, window -> actions.currentMatch(row.id, window) },
+            onCurrent = { _, window -> actions.currentMatch(row.id, window) }, sent = { it },
         )
     }
 }
@@ -640,7 +649,7 @@ private fun Modifier.bleed(by: Dp): Modifier = layout { measurable, constraints 
 private fun ErrorRow(row: RowModel, message: String) {
     val actions = LocalTranscript.current
     val found = actions.model.found[row.id].within(0, message.length)
-    ErrorRow(message, found = found, onCurrent = { _, window -> actions.currentMatch(row.id, window) })
+    ErrorRow(message, found = found, onCurrent = { _, window -> actions.currentMatch(row.id, window) }, sent = { it })
 }
 
 @Composable
@@ -649,6 +658,7 @@ fun ErrorRow(
     modifier: Modifier = Modifier.padding(top = 4.dp, bottom = 10.dp),
     found: List<FoundSpan> = emptyList(),
     onCurrent: ((Rect, Rect) -> Unit)? = null,
+    sent: ((Int) -> Int)? = null,
 ) {
     val palette = LocalPalette.current
     val shape = RoundedCornerShape(Radius.lg)
@@ -664,12 +674,8 @@ fun ErrorRow(
         }
         SelectionContainer {
             val style = Theme.ui(13f).copy(lineHeight = (13f * Platform.scale * 1.2f + 5).sp, color = palette.destructive)
-            if (found.isEmpty()) {
-                Text(message, style = style, color = palette.destructive)
-            } else {
-                val text = remember(message, palette) { AnnotatedString(message, SpanStyle(color = palette.destructive)) }
-                MarkedText(text, style, found = found, onCurrent = onCurrent)
-            }
+            val text = remember(message, palette) { AnnotatedString(message, SpanStyle(color = palette.destructive)) }
+            MarkedText(text, style, found = found, onCurrent = onCurrent, sent = sent)
         }
     }
 }

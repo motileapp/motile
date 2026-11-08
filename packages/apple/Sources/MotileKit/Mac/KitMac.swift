@@ -595,6 +595,11 @@ final class RowTextView: PointerTextView {
         system.rect(of: range)?.offsetBy(dx: textContainerOrigin.x, dy: textContainerOrigin.y)
     }
 
+    /// The first character of the first line that starts at or below `y` in the view.
+    func firstCharacter(below y: CGFloat) -> Int {
+        system.firstCharacter(below: y - textContainerOrigin.y)
+    }
+
     override func writeSelection(to pboard: NSPasteboard, types: [NSPasteboard.PasteboardType]) -> Bool {
         guard super.writeSelection(to: pboard, types: types) else { return false }
         guard let text = pboard.string(forType: .string), text.contains("\u{2028}") else { return true }

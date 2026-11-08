@@ -563,6 +563,11 @@ final class RowTextView: UITextView, UITextViewDelegate {
         system.rect(of: range)?.offsetBy(dx: textContainerInset.left, dy: textContainerInset.top)
     }
 
+    /// The first character of the first line that starts at or below `y` in the view.
+    func firstCharacter(below y: CGFloat) -> Int {
+        system.firstCharacter(below: y - textContainerInset.top)
+    }
+
     /// Fades in the text under `oldHeight`, which was just added, and leaves the rest as it is.
     func fadeIn(below oldHeight: CGFloat) {
         GrowthFade.run(on: layer, size: bounds.size, below: oldHeight)

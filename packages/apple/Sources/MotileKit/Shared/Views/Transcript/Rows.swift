@@ -904,6 +904,29 @@ enum Typesetter {
         #endif
     }
 
+    /// Where a place in the text as it shows is in the text the core sent, as `shownRange` turned
+    /// round. A place in a table's line is the table's start.
+    static func sentLocation(_ location: Int, in text: NSAttributedString) -> Int {
+        #if os(iOS)
+        var shift = 0
+        var sent: Int?
+        text.enumerateAttribute(.motileTable, in: NSRange(location: 0, length: text.length)) { value, place, stop in
+            guard let table = value as? TableContent else { return }
+            if location < place.location {
+                stop.pointee = true
+            } else if location < NSMaxRange(place) {
+                sent = table.source.location
+                stop.pointee = true
+            } else {
+                shift += table.source.length - place.length
+            }
+        }
+        return sent ?? location + shift
+        #else
+        return location
+        #endif
+    }
+
     /// The text as it is copied: what a table stands for instead of what holds its place.
     static func words(of text: NSAttributedString) -> String {
         #if os(macOS)

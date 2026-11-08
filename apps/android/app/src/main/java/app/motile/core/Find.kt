@@ -6,6 +6,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import app.motile.thread.FindBar
 
 /** The matches finding in the thread found in one row, `[start, end)` in UTF-16 units of the row's text, and which of them is the current one. */
 data class FoundMarks(val ranges: List<IntRange>, val current: Int?) {
@@ -28,6 +29,11 @@ fun FoundMarks?.within(offset: Int, length: Int): List<FoundSpan> {
         val end = minOf(range.last + 1, offset + length)
         if (end <= start) null else FoundSpan(start - offset, end - offset, index == current)
     }
+}
+
+/** Where finding in the thread starts: the first row that shows below the bars, and the first character of its first whole line there, in UTF-16 units of the text the core sent. */
+data class FindFrom(val rowID: String, val offset: Int) {
+    val json: Map<String, Any?> get() = mapOf("row_id" to rowID, "offset" to offset)
 }
 
 /** Finding in the open thread, as a browser finds in a page: the bar's query, and what the core found for it. */
@@ -142,7 +148,7 @@ fun AppStore.stepFind(back: Boolean) {
 
 private fun AppStore.sendFind(threadID: String, itemID: String?, fromViewport: Boolean = true) {
     val fields = mutableMapOf<String, Any?>("thread_id" to threadID, "query" to find.query)
-    if (fromViewport) transcript.viewport?.let { fields["from"] = it.json }
+    if (fromViewport) transcript.findFrom(FindBar.cover)?.let { fields["from"] = it.json }
     if (itemID != null) fields["item_id"] = itemID
     core.send("find", fields)
 }

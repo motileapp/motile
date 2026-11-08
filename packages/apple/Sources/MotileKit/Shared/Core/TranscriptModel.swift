@@ -37,8 +37,8 @@ final class TranscriptModel {
         let earlier: (Bool) -> Void
         /// Whether the thread has caught up with its server.
         let live: (Bool) -> Void
-        /// Where the view shows the rows, at the end too.
-        let viewport: () -> TranscriptPlace?
+        /// Where finding starts in what the view shows below the bars, the find bar's `cover` too.
+        let findFrom: (_ cover: CGFloat) -> FindFrom?
         /// What finding in the thread found in the rows, by row.
         let found: ([String: FoundMarks]) -> Void
         /// The view scrolls to the row, and to that part of its text.
@@ -206,8 +206,8 @@ final class TranscriptModel {
         hooks?.splice(index, 1, [row])
     }
 
-    /// Where the view shows the rows, whether or not it follows the end.
-    var viewport: TranscriptPlace? { hooks?.viewport() }
+    /// Where finding starts in what the view shows, under a find bar that covers `cover`.
+    func findFrom(cover: CGFloat) -> FindFrom? { hooks?.findFrom(cover) }
 
     func setFound(_ found: [String: FoundMarks]) {
         self.found = found

@@ -126,10 +126,11 @@ impl Store {
         self.send(Command::FindStep { thread_id, back });
     }
 
-    /// Asks the core to find the query, from where the transcript shows the rows when
+    /// Asks the core to find the query, from the first line the transcript shows under the bar when
     /// `from_viewport`, else from the thread's start.
     fn send_find(&mut self, thread_id: String, item_id: Option<String>, from_viewport: bool, cx: &App) {
-        let from = if from_viewport { self.transcript.read(cx).viewport() } else { None };
+        let cover = crate::thread::find_bar::COVER;
+        let from = if from_viewport { self.transcript.read(cx).find_from(cover) } else { None };
         self.send(Command::Find { thread_id, query: self.find.query.clone(), from, item_id });
     }
 
