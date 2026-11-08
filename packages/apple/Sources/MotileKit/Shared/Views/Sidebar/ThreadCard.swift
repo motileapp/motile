@@ -30,8 +30,10 @@ struct ThreadCard: View {
                     let home = store.server(thread.serverID)?.home ?? ""
                     CardLine(text: ThreadFolderLabel.shortened(thread.cwd, home: home), middle: true) { Image(.folder, size: Self.iconSize) }
                 }
-                let proxied = store.server(thread.serverID)?.runsThroughGateway(thread.agentAccount, of: thread.agent) ?? false
-                CardLine(text: store.modelLabel(of: thread), proxied: proxied) { AgentIcon(agent: thread.agent, size: Self.iconSize) }
+                let server = store.server(thread.serverID)
+                let proxied = server?.runsThroughGateway(thread.agentAccount, of: thread.agent) ?? false
+                let pinned = server?.runsPinned(thread.agentAccount, of: thread.agent) ?? false
+                CardLine(text: store.modelLabel(of: thread), proxied: proxied, pinned: pinned) { AgentIcon(agent: thread.agent, size: Self.iconSize) }
                 if let server = store.server(thread.serverID) {
                     CardLine(text: server.name) { Image(.server, size: Self.iconSize) }
                 }
@@ -64,12 +66,13 @@ private struct CardLine<Icon: View>: View {
     /// Cut in the middle, as a path or a branch is.
     var middle = false
     var proxied = false
+    var pinned = false
     @ViewBuilder let icon: () -> Icon
 
     var body: some View {
         HStack(spacing: 8) {
             icon()
-            ProxiedLine(text, proxied: proxied, fontSize: 12, size: ThreadCard.iconSize)
+            ProxiedLine(text, proxied: proxied, pinned: pinned, fontSize: 12, size: ThreadCard.iconSize)
                 .font(.ui(size: 12))
                 .lineLimit(1)
                 .truncationMode(middle ? .middle : .tail)

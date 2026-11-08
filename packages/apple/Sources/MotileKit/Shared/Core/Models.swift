@@ -398,6 +398,11 @@ struct Server: Equatable, Identifiable {
     func runsThroughGateway(_ id: String?, of agent: Agent) -> Bool {
         account(id, of: agent)?.gateway ?? false
     }
+
+    /// Whether the account is pinned to one of the gateway's, which a pin after the gateway's symbol says.
+    func runsPinned(_ id: String?, of agent: Agent) -> Bool {
+        account(id, of: agent).map { $0.gateway && $0.pin != nil } ?? false
+    }
 }
 
 /// A branch of a project's repository.
@@ -1186,6 +1191,8 @@ struct AgentInfo: Equatable, Identifiable {
     let account: String?
     /// It runs through the account's gateway.
     let gateway: Bool
+    /// It is pinned to the gateway's account it names.
+    let pinned: Bool
 
     init(json: JSON) {
         let number = { (key: String) in (json[key] as? NSNumber)?.intValue }
@@ -1207,6 +1214,7 @@ struct AgentInfo: Equatable, Identifiable {
         model = json.optionalString("model")
         account = json.optionalString("account")
         gateway = json.bool("gateway")
+        pinned = json.bool("pinned")
     }
 
     var working: Bool { status == .running }

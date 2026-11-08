@@ -28,7 +28,9 @@ use crate::theme::{self, Colors, ControlSize, IconSize, Layer, Radius, Surface, 
 use crate::transcript::kit::dashed_outline;
 use crate::ui::agent_avatar::{AgentAvatar, state_color};
 use crate::ui::menu::Menu;
-use crate::ui::{ActionButton, ActionMenu, Highlight, KeyCaps, Spinner, TOOLBAR_WIDTH, Variant, beside, edges, icons};
+use crate::ui::{
+    ActionButton, ActionMenu, GatewayMark, Highlight, KeyCaps, Spinner, TOOLBAR_WIDTH, Variant, beside, edges, icons,
+};
 
 /// How far the tabs keep from the strip's ends, as far as from the top bar's top and bottom.
 const TAB_EDGE: f32 = (theme::TOP_BAR - ControlSize::Regular.height()) / 2.;
@@ -1677,7 +1679,7 @@ impl AgentEntry {
             Self::Parent(id) => format!("parent:{id}"),
             Self::Ended { count, failed, shown } => format!("ended:{count}:{failed}:{shown}"),
             Self::Agent(agent) => format!(
-                "agent:{}:{}:{:?}:{:?}:{:?}:{}:{:?}:{}:{}:{}:{}",
+                "agent:{}:{}:{:?}:{:?}:{:?}:{}:{:?}:{}:{}:{}:{}:{}",
                 agent.id,
                 agent.title,
                 agent.status,
@@ -1688,6 +1690,7 @@ impl AgentEntry {
                 agent.detail,
                 agent.facts().unwrap_or_default(),
                 agent.gateway,
+                agent.pinned,
                 agent.parent.is_some()
             ),
         }
@@ -1895,9 +1898,9 @@ fn agent_row(
                         .when(agent.facts().is_some(), |text| {
                             let runs_on = agent.runs_on();
                             let usage = agent.usage().unwrap_or_default();
-                            let proxied = agent.gateway && runs_on.is_some();
+                            let mark = GatewayMark::of(agent.gateway && runs_on.is_some(), agent.pinned);
                             text.child(
-                                crate::ui::proxied_line(&runs_on.unwrap_or_default(), proxied, &usage, 11.)
+                                crate::ui::proxied_line(&runs_on.unwrap_or_default(), mark, &usage, 11.)
                                     .text_color(c.muted_stronger_foreground),
                             )
                         }),

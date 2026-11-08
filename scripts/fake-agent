@@ -49,6 +49,8 @@ made up on the spot instead:
   it would change.
 - "ask a supervised agent": a turn that starts a supervised agent to run greet.py, which asks
   before each step, and ends.
+- "ask a pinned agent": a turn that starts two agents to look over greet.py slowly, one pinned to
+  one of the gateway's Claude Code accounts and one on the Gateway account, and ends.
 - "ask an agent which color": a turn that starts an agent that asks which color; told it asks, it
   answers blue.
 - "show the ui <name>": a reply with the program `fixtures/openui/<name>.oui` in an `openui-lang`
@@ -846,6 +848,25 @@ def ask_three_agents():
     turn.done()
 
 
+def ask_a_pinned_agent():
+    """Starts Claude Code on one of the gateway's accounts it pins, and on the Gateway account, which places it."""
+    turn = Turn("00000000-0000-4000-8000-00000091e0a1")
+    listed = call_motile(turn, "list_accounts", {}).get("accounts", [])
+    gateway = [account for account in listed if account.get("agent") == "claude" and account.get("gateway")]
+    pinned = next((account for account in gateway if account.get("pinned")), None)
+    placed = next((account for account in gateway if not account.get("pinned")), None)
+    if not pinned or not placed:
+        turn.text("Your gateway has no Claude Code account to pin an agent to.")
+        return turn.done()
+    turn.text(f"I'll pin one agent to {pinned['name']} and let the gateway place the other.")
+    call_motile(turn, "start_agent", {"prompt": "Look over greet.py slowly and say what you would change.",
+                                      "title": "Review greet.py", "account": pinned["id"]})
+    call_motile(turn, "start_agent", {"prompt": "Look over greet.py slowly and say what you would change.",
+                                      "title": "Check the tests", "account": placed["id"]})
+    turn.text("Both are working. I'll tell you what they find.")
+    turn.done()
+
+
 def ask_a_supervised_agent():
     turn = Turn("00000000-0000-4000-8000-0000000a5c01")
     call_motile(turn, "start_agent", {"prompt": "Run greet.py.", "title": "Run greet.py", "access": "supervised"})
@@ -1522,6 +1543,7 @@ SCRIPTED = {
     "ask sixty agents": ask_sixty_agents,
     "say hello": say_hello,
     "ask a supervised agent": ask_a_supervised_agent,
+    "ask a pinned agent": ask_a_pinned_agent,
     "ask an agent which color": ask_an_agent_which_color,
     "finished. its reply:": hear_from_an_agent,
     ") failed: ": hear_from_an_agent,

@@ -86,7 +86,7 @@ fun ThreadCard(threadID: String, modifier: Modifier = Modifier) {
                     val home = store.server(thread.serverID)?.home ?: ""
                     CardLine(shortenedFolder(thread.cwd, home), middle = true) { Icon(Symbol.Folder, ThreadCard.iconSize) }
                 }
-                CardLine(store.modelLabel(thread), proxied = store.modelProxied(thread)) { AgentIcon(thread.agent, size = ThreadCard.iconSize) }
+                CardLine(store.modelLabel(thread), proxied = store.modelProxied(thread), pinned = store.modelPinned(thread)) { AgentIcon(thread.agent, size = ThreadCard.iconSize) }
                 store.server(thread.serverID)?.let { server -> CardLine(server.name) { Icon(Symbol.Server, ThreadCard.iconSize) } }
             }
             val pullRequest = project?.pullRequest(thread) ?: return@Column
@@ -101,13 +101,13 @@ fun ThreadCard(threadID: String, modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun CardLine(text: String, middle: Boolean = false, proxied: Boolean = false, icon: @Composable () -> Unit) {
+private fun CardLine(text: String, middle: Boolean = false, proxied: Boolean = false, pinned: Boolean = false, icon: @Composable () -> Unit) {
     val palette = Theme.colors
     CompositionLocalProvider(LocalForeground provides palette.mutedForeground) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             icon()
             Text(
-                dotted(text, palette.mutedStrongerForeground).proxied(proxied), size = 12f, maxLines = 1,
+                dotted(text, palette.mutedStrongerForeground).proxied(proxied, pinned), size = 12f, maxLines = 1,
                 overflow = if (middle) TextOverflow.MiddleEllipsis else TextOverflow.Ellipsis,
                 inlineContent = if (proxied) GatewayMark.content(palette.mutedForeground, 12f, ThreadCard.iconSize) else emptyMap(),
             )

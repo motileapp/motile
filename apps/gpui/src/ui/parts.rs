@@ -18,6 +18,42 @@ use crate::ui::{edges, icons, motion};
 
 type Run = Rc<dyn Fn(&mut Window, &mut App)>;
 
+/// What the gateway's symbol after a name says: nothing, that it runs through the gateway, or
+/// that it is pinned to one of the gateway's accounts too, which a pin after the symbol says.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub enum GatewayMark {
+    #[default]
+    Hidden,
+    Gateway,
+    Pinned,
+}
+
+impl GatewayMark {
+    pub fn of(gateway: bool, pinned: bool) -> Self {
+        match (gateway, pinned) {
+            (false, _) => Self::Hidden,
+            (true, false) => Self::Gateway,
+            (true, true) => Self::Pinned,
+        }
+    }
+
+    pub fn shown(self) -> bool {
+        self != Self::Hidden
+    }
+
+    /// How wide its symbols of `size` are, without the gap before them.
+    fn width(self, size: IconSize) -> f32 {
+        match self {
+            Self::Hidden => 0.,
+            Self::Gateway => size.side(),
+            Self::Pinned => size.side() * 2. + PIN_GAP,
+        }
+    }
+}
+
+/// The room between the gateway's symbol and the pin after it.
+const PIN_GAP: f32 = 2.;
+
 /// The gateway's symbol beside words of `font_size`, as the Mac app sizes it.
 pub fn gateway_mark_size(font_size: f32) -> IconSize {
     match font_size {
@@ -41,14 +77,21 @@ fn gateway_mark_beside(icon: IconSize) -> IconSize {
     }
 }
 
-/// How much wider the gateway's symbol makes words of `font_size`: its gap, and itself.
-pub fn gateway_mark_width(font_size: f32) -> f32 {
-    gateway_mark_width_as(font_size, gateway_mark_size(font_size))
+/// How much wider the gateway's mark makes words of `font_size`: its gap, and itself.
+pub fn gateway_mark_width(font_size: f32, mark: GatewayMark) -> f32 {
+    marked_width(font_size, gateway_mark_size(font_size), mark)
 }
 
-/// How much wider the gateway's symbol beside an icon of `size` makes words of `font_size`.
-pub fn gateway_mark_width_as(font_size: f32, size: IconSize) -> f32 {
-    gateway_gap(font_size) + gateway_mark_beside(size).side()
+/// How much wider the gateway's mark beside an icon of `size` makes words of `font_size`.
+pub fn gateway_mark_width_as(font_size: f32, size: IconSize, mark: GatewayMark) -> f32 {
+    marked_width(font_size, gateway_mark_beside(size), mark)
+}
+
+fn marked_width(font_size: f32, size: IconSize, mark: GatewayMark) -> f32 {
+    if !mark.shown() {
+        return 0.;
+    }
+    gateway_gap(font_size) + mark.width(size)
 }
 
 /// A space of DM Sans, and a point more.
@@ -56,50 +99,52 @@ fn gateway_gap(font_size: f32) -> f32 {
     font_size * 0.266 + 1.
 }
 
-/// The gateway's symbol after words of `font_size`, which says what they name runs through the
-/// gateway, centred on their capitals, which DM Sans centres in the line.
-fn gateway_mark(font_size: f32, size: IconSize, spaced: bool) -> Div {
+/// The gateway's symbol after words of `font_size`, and the pin after it where `mark` is pinned,
+/// centred on their capitals, which DM Sans centres in the line.
+fn gateway_mark(font_size: f32, size: IconSize, mark: GatewayMark, spaced: bool) -> Div {
     div()
         .flex_none()
-        .when(spaced, |mark| mark.ml(px(gateway_gap(font_size))))
+        .when(spaced, |shown| shown.ml(px(gateway_gap(font_size))))
         .flex()
         .items_center()
+        .gap(px(PIN_GAP))
         .child(icons::symbol("waypoints", size))
+        .when(mark == GatewayMark::Pinned, |shown| shown.child(icons::symbol("pin", size)))
 }
 
-/// The words with the gateway's symbol after them where what they name runs through the gateway,
-/// cut at their end before the symbol is.
-pub fn proxied(words: impl IntoElement, proxied: bool, font_size: f32) -> Div {
-    marked(words, proxied, font_size, gateway_mark_size(font_size))
+/// The words with the gateway's mark after them where what they name runs through the gateway,
+/// cut at their end before the mark is.
+pub fn proxied(words: impl IntoElement, mark: GatewayMark, font_size: f32) -> Div {
+    marked(words, mark, font_size, gateway_mark_size(font_size))
 }
 
-/// `proxied`, with the symbol a step smaller than `size`, an icon beside it.
-pub fn proxied_as(words: impl IntoElement, proxied: bool, font_size: f32, size: IconSize) -> Div {
-    marked(words, proxied, font_size, gateway_mark_beside(size))
+/// `proxied`, with the mark a step smaller than `size`, an icon beside it.
+pub fn proxied_as(words: impl IntoElement, mark: GatewayMark, font_size: f32, size: IconSize) -> Div {
+    marked(words, mark, font_size, gateway_mark_beside(size))
 }
 
-fn marked(words: impl IntoElement, proxied: bool, font_size: f32, size: IconSize) -> Div {
+fn marked(words: impl IntoElement, mark: GatewayMark, font_size: f32, size: IconSize) -> Div {
     div()
         .min_w_0()
         .flex()
         .items_center()
         .child(div().min_w_0().whitespace_nowrap().overflow_hidden().text_ellipsis().child(words))
-        .when(proxied, |line| line.child(gateway_mark(font_size, size, true)))
+        .when(mark.shown(), |line| line.child(gateway_mark(font_size, size, mark, true)))
 }
 
-/// "Opus 5.5 · Work" with its dots muted, and the gateway's symbol after the name, ahead of the
+/// "Opus 5.5 · Work" with its dots muted, and the gateway's mark after the name, ahead of the
 /// account, where it runs through the gateway, a step smaller than `size`, an icon beside it: what
 /// follows the name is cut at its end first.
-pub fn proxied_dotted(text: String, proxied: bool, font_size: f32, size: IconSize, c: &Colors) -> Div {
-    let Some((name, rest)) = text.split_once(" · ").filter(|_| proxied) else {
-        return proxied_as(dotted(text, c), proxied, font_size, size);
+pub fn proxied_dotted(text: String, mark: GatewayMark, font_size: f32, size: IconSize, c: &Colors) -> Div {
+    let Some((name, rest)) = text.split_once(" · ").filter(|_| mark.shown()) else {
+        return proxied_as(dotted(text, c), mark, font_size, size);
     };
     div()
         .min_w_0()
         .flex()
         .items_center()
         .child(div().flex_none().whitespace_nowrap().child(name.to_string()))
-        .child(gateway_mark(font_size, gateway_mark_beside(size), true))
+        .child(gateway_mark(font_size, gateway_mark_beside(size), mark, true))
         .child(
             div()
                 .min_w_0()
@@ -110,10 +155,10 @@ pub fn proxied_dotted(text: String, proxied: bool, font_size: f32, size: IconSiz
         )
 }
 
-/// What something runs on, "Opus 5.5 · Work", with the gateway's symbol after the model where it
+/// What something runs on, "Opus 5.5 · Work", with the gateway's mark after the model where it
 /// runs through the gateway, then `rest` after a dot: one line of `font_size`, cut at its end.
-pub fn proxied_line(runs_on: &str, proxied: bool, rest: &str, font_size: f32) -> Div {
-    if !proxied {
+pub fn proxied_line(runs_on: &str, mark: GatewayMark, rest: &str, font_size: f32) -> Div {
+    if !mark.shown() {
         let words = [runs_on, rest].into_iter().filter(|part| !part.is_empty()).collect::<Vec<_>>().join(" · ");
         return div().min_w_0().text_size(px(font_size)).truncate().child(words);
     }
@@ -126,7 +171,7 @@ pub fn proxied_line(runs_on: &str, proxied: bool, rest: &str, font_size: f32) ->
         .overflow_hidden()
         .text_size(px(font_size))
         .when(!name.is_empty(), |line| line.child(div().flex_none().whitespace_nowrap().child(name.to_string())))
-        .child(gateway_mark(font_size, gateway_mark_size(font_size), !name.is_empty()))
+        .child(gateway_mark(font_size, gateway_mark_size(font_size), mark, !name.is_empty()))
         .when(!rest.is_empty(), |line| line.child(div().min_w_0().truncate().child(format!(" · {rest}"))))
 }
 

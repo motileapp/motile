@@ -219,6 +219,8 @@ struct ControlLabel: View {
     var tinted: (words: String, color: Color)?
     /// What the words name runs through the gateway, which its symbol after them says.
     var proxied = false
+    /// What the words name is pinned to one of the gateway's accounts, which a pin after its symbol says.
+    var pinned = false
 
     private var wordless: Bool { title == nil && !chevron }
     private var markSize: IconSize {
@@ -300,7 +302,7 @@ struct ControlLabel: View {
     }
 
     private func text(_ title: String, tinted: (words: String, color: Color)?) -> Text {
-        let named = Text(dotted: title, proxied: proxied, fontSize: size.textSize, size: markSize)
+        let named = Text(dotted: title, proxied: proxied, pinned: pinned, fontSize: size.textSize, size: markSize)
         guard let tinted else { return named }
         return Text("\(named.foregroundStyle(Color.themeForeground)) \(Text(verbatim: tinted.words).foregroundStyle(tinted.color))")
     }
@@ -492,6 +494,7 @@ struct ActionButton: View {
     private var place: String?
     private var tinted: String?
     private var proxied = false
+    private var pinned = false
     private let margin: EdgeInsets
     /// Rings move out from it, while what it does waits for something else.
     private var signals = false
@@ -502,7 +505,7 @@ struct ActionButton: View {
 
     init(
         _ title: String, tinted: String? = nil, icon: Symbol? = nil, picture: AnyView? = nil, pictures: AnyView? = nil, detail: Symbol? = nil,
-        place: String? = nil, proxied: Bool = false, help: String? = nil,
+        place: String? = nil, proxied: Bool = false, pinned: Bool = false, help: String? = nil,
         variant: ButtonVariant = .secondary, size: ControlSize = .regular, symbolSize: IconSize? = nil, gap: CGFloat? = nil,
         padding: CGFloat? = nil, pending: Bool = false, pendingTitle: String? = nil,
         selected: Bool = false, round: Bool = false,
@@ -519,6 +522,7 @@ struct ActionButton: View {
         self.place = place
         self.tinted = tinted
         self.proxied = proxied
+        self.pinned = pinned
         self.help = help
         look = ControlLook(variant: variant, size: size, selected: selected, round: round, joined: joined, tint: tint)
         self.pending = pending
@@ -579,7 +583,8 @@ struct ActionButton: View {
                 chevronColor: look.foreground == .themeForeground ? .themeMutedForeground : .themeMutedStrongerForeground, pending: pending,
                 pendingTitle: pendingTitle, fills: fills,
                 alignment: alignment, symbolSize: symbolSize, gap: gap, padding: padding, detail: detail, place: place,
-                tinted: look.tint.flatMap { tint in tinted.map { (words: $0, color: tint) } }, proxied: proxied
+                tinted: look.tint.flatMap { tint in tinted.map { (words: $0, color: tint) } }, proxied: proxied,
+                pinned: pinned
             )
             .padding(reach.around)
         }
@@ -782,23 +787,29 @@ extension Text {
 
     /// "Opus 5.5 · Work" with the gateway's symbol after the name, ahead of the account, where it runs
     /// through the gateway, inside a line of fixed height.
-    init(dotted text: String, proxied: Bool, fontSize: CGFloat, size: IconSize? = nil) {
+    init(dotted text: String, proxied: Bool, pinned: Bool = false, fontSize: CGFloat, size: IconSize? = nil) {
         let parts = text.components(separatedBy: " · ").map { Text(verbatim: $0) }
         guard proxied, let name = parts.first else {
             self.init(dotted: parts)
             return
         }
-        self.init(dotted: [name.proxied(true, fontSize: fontSize, size: size)] + parts.dropFirst())
+        self.init(dotted: [name.proxied(true, pinned: pinned, fontSize: fontSize, size: size)] + parts.dropFirst())
     }
 
     /// The gateway's symbol beside words of `fontSize` that stand alone, centred on their line, a
     /// step smaller than `size` where it goes with an icon beside it. It stands outside the line,
     /// which a symbol moved off the baseline would make taller.
-    func gatewayMarked(_ proxied: Bool, fontSize: CGFloat, size: IconSize? = nil) -> some View {
+    func gatewayMarked(_ proxied: Bool, pinned: Bool = false, fontSize: CGFloat, size: IconSize? = nil) -> some View {
         HStack(spacing: (fontSize / 4).rounded() + GatewayMark.gap) {
             self
             if proxied {
-                Image(.waypoints, size: GatewayMark.size(for: fontSize, beside: size))
+                let size = GatewayMark.size(for: fontSize, beside: size)
+                HStack(spacing: GatewayMark.pinGap) {
+                    Image(.waypoints, size: size)
+                    if pinned {
+                        Image(.pin, size: size)
+                    }
+                }
             }
         }
     }
@@ -806,11 +817,14 @@ extension Text {
     /// The gateway's symbol after words of `fontSize` inside a line of fixed height, which says what
     /// they name runs through the gateway: centred on their capitals rather than standing on their
     /// baseline, and a step smaller than `size` where it goes with an icon beside it.
-    func proxied(_ proxied: Bool, fontSize: CGFloat, size: IconSize? = nil) -> Text {
+    func proxied(_ proxied: Bool, pinned: Bool = false, fontSize: CGFloat, size: IconSize? = nil) -> Text {
         guard proxied else { return self }
         let size = GatewayMark.size(for: fontSize, beside: size)
         let rise = ((PlatformFont.ui(fontSize).capHeight - PlatformImage.symbolSide(size)) / 2).rounded()
-        return Text("\(self)\(Text(verbatim: " ").kerning(GatewayMark.gap))\(Text(Image(.waypoints, size: size)).baselineOffset(rise))")
+        let symbol = { (name: Symbol) in Text(Image(name, size: size)).baselineOffset(rise) }
+        let marked = Text("\(self)\(Text(verbatim: " ").kerning(GatewayMark.gap))\(symbol(.waypoints))")
+        guard pinned else { return marked }
+        return Text("\(marked)\(Text(verbatim: "\u{2060}").kerning(GatewayMark.pinGap))\(symbol(.pin))")
     }
 
     init(dotted parts: [Text]) {
@@ -825,16 +839,19 @@ extension Text {
 struct ProxiedLine: View {
     let parts: [String]
     let proxied: Bool
+    /// It is pinned to one of the gateway's accounts, which a pin after the gateway's symbol says.
+    var pinned = false
     let fontSize: CGFloat
     var size: IconSize? = nil
 
-    init(_ text: String, proxied: Bool, fontSize: CGFloat, size: IconSize? = nil) {
-        self.init(parts: text.components(separatedBy: " · "), proxied: proxied, fontSize: fontSize, size: size)
+    init(_ text: String, proxied: Bool, pinned: Bool = false, fontSize: CGFloat, size: IconSize? = nil) {
+        self.init(parts: text.components(separatedBy: " · "), proxied: proxied, pinned: pinned, fontSize: fontSize, size: size)
     }
 
-    init(parts: [String], proxied: Bool, fontSize: CGFloat, size: IconSize? = nil) {
+    init(parts: [String], proxied: Bool, pinned: Bool = false, fontSize: CGFloat, size: IconSize? = nil) {
         self.parts = parts
         self.proxied = proxied
+        self.pinned = pinned
         self.fontSize = fontSize
         self.size = size
     }
@@ -843,7 +860,7 @@ struct ProxiedLine: View {
         let words = parts.map { Text(verbatim: $0) }
         if proxied, let name = words.first {
             HStack(spacing: 0) {
-                name.gatewayMarked(true, fontSize: fontSize, size: size)
+                name.gatewayMarked(true, pinned: pinned, fontSize: fontSize, size: size)
                     .layoutPriority(1)
                 if words.count > 1 {
                     Text(dotted: [Text(verbatim: "")] + words.dropFirst())

@@ -53,7 +53,7 @@ struct ComposerSettings: View {
         let effortTitle = labeled ? [effort.map(ComposerView.effortLabel), context].compactMap { $0 }.joined(separator: " · ") : context
         return HStack(spacing: 0) {
             part(modelTitle, icon: model.map { .picture(AnyView(AgentIcon(agent: $0.agent, size: ControlSize.regular.symbol))) },
-                 proxied: store.composerProxied)
+                 proxied: store.composerProxied, pinned: store.composerPinned)
             if effort != nil || context != nil {
                 divider
                 part(effortTitle, icon: effort.map { .symbol(ComposerView.effortSymbol($0)) })
@@ -65,9 +65,9 @@ struct ComposerSettings: View {
     }
 
     /// A part: its symbol and its words, or its symbol alone, which stands as close to the edge.
-    @ViewBuilder private func part(_ title: String?, icon: ControlIcon?, proxied: Bool = false) -> some View {
+    @ViewBuilder private func part(_ title: String?, icon: ControlIcon?, proxied: Bool = false, pinned: Bool = false) -> some View {
         if let title {
-            ControlLabel(title: title, icon: icon, size: .regular, gap: 5, padding: 0, proxied: proxied)
+            ControlLabel(title: title, icon: icon, size: .regular, gap: 5, padding: 0, proxied: proxied, pinned: pinned)
         } else {
             Group {
                 switch icon {

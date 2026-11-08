@@ -145,6 +145,9 @@ pub struct AgentView {
     /// It runs through the account's gateway, which the gateway's symbol after the model says.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub gateway: bool,
+    /// It is pinned to the gateway's account it names, which a pin after the gateway's symbol says.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub pinned: bool,
 }
 
 /// How many of `count` agents stand side by side as avatars: all of four or fewer, else three
@@ -238,6 +241,7 @@ pub fn starting(item: &Item, call: &ToolCall, threads: &HashMap<String, ThreadSt
             .map(|model| short_model_name(model).unwrap_or(model).to_string()),
         account: runs_on.and_then(|on| on.account.clone()),
         gateway: runs_on.is_some_and(|on| on.gateway),
+        pinned: runs_on.is_some_and(|on| on.pinned),
     })
 }
 
@@ -307,6 +311,7 @@ pub fn noticed(item: &Item, notice: &AgentNotice) -> AgentView {
         model: None,
         account: None,
         gateway: false,
+        pinned: false,
     }
 }
 
@@ -506,6 +511,7 @@ mod tests {
             model: None,
             account: None,
             gateway: false,
+            pinned: false,
             thread_id: Some("c1".into()),
         }));
         assert_eq!(alone(&item).unwrap().detail, "Working");
@@ -616,6 +622,7 @@ mod tests {
             model: None,
             account: None,
             gateway: false,
+            pinned: false,
             thread_id: Some("c1".into()),
         }));
         item

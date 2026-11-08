@@ -449,6 +449,8 @@ data class AgentContent(
     val runsOn: String,
     /** It runs through the account's gateway, which the gateway's symbol after the model says. */
     val gateway: Boolean,
+    /** It is pinned to the gateway's account it names, which a pin after the gateway's symbol says. */
+    val pinned: Boolean,
     val startedAt: Double,
     val durationMs: Int?,
     /** When the thread's agent was told, for what it was told. */
@@ -470,6 +472,7 @@ data class AgentContent(
         agent = Agent.of(json.optionalString("agent")),
         runsOn = json.string("runs_on"),
         gateway = json.bool("gateway"),
+        pinned = json.bool("pinned"),
         startedAt = json.double("started_at"),
         durationMs = json.optionalInt("duration_ms"),
         at = json.optionalDouble("at"),
@@ -483,7 +486,7 @@ data class AgentContent(
     /** The second line: what it runs on, with the gateway's symbol after the model where it runs through the gateway, then what it does or said. */
     val line: AnnotatedString
         get() = buildAnnotatedString {
-            append(AnnotatedString(runsOn).proxied(gateway))
+            append(AnnotatedString(runsOn).proxied(gateway, pinned))
             if (said.isNotEmpty()) append(if (runsOn.isEmpty() && !gateway) said else " · $said")
         }
 }
@@ -517,6 +520,8 @@ class HandoffContent(json: JSON) {
         val account = json?.optionalString("account")
         /** The account runs through the gateway, which its symbol after the label says. */
         val gateway = json?.bool("gateway") ?: false
+        /** The account is pinned to one of the gateway's, which a pin after the gateway's symbol says. */
+        val pinned = json?.bool("pinned") ?: false
     }
 
     val from = End(json.obj("from"))

@@ -22,7 +22,7 @@ use crate::models::{AttachedFile, duration, elapsed};
 use crate::store::Store;
 use crate::store::settings::SettingsSection;
 use crate::theme::{self, Colors, ControlSize, IconSize, Radius, Surface, colors};
-use crate::ui::{ActionButton, Highlight, beside, edges, icons};
+use crate::ui::{ActionButton, GatewayMark, Highlight, beside, edges, icons};
 
 /// The room a prose row has around its text, which is what keeps two rows apart.
 pub const PROSE_GAP: f32 = 9.;
@@ -1370,7 +1370,7 @@ const CARD_BELOW: f32 = 10. + CARD_LIGHT - LIGHT_GAP;
 /// where it runs through the gateway, then what it does or said.
 fn agent_line(agent: &AgentRow) -> Div {
     let said = if agent.detail.is_empty() && agent.runs_on.is_empty() { &agent.label } else { &agent.detail };
-    crate::ui::proxied_line(&agent.runs_on, agent.gateway, said, 12.)
+    crate::ui::proxied_line(&agent.runs_on, GatewayMark::of(agent.gateway, agent.pinned), said, 12.)
 }
 
 /// When the thread's agent was told, for what it was told; else how long the agent has worked
@@ -1916,7 +1916,7 @@ fn handoff_row(from: &HandoffLabel, to: &HandoffLabel, ctx: &RowContext, window:
         (text.into(), runs)
     };
     let width = |end: &HandoffLabel, (text, runs): &(SharedString, Vec<TextRun>), window: &mut Window| {
-        let mark = if end.gateway { crate::ui::gateway_mark_width_as(12., logo) } else { 0. };
+        let mark = crate::ui::gateway_mark_width_as(12., logo, GatewayMark::of(end.gateway, end.pinned));
         f32::from(window.text_system().shape_line(text.clone(), px(12.), runs, None).width).ceil() + mark
     };
     let (from_text, to_text) = (text(from), text(to));
@@ -1933,7 +1933,8 @@ fn handoff_row(from: &HandoffLabel, to: &HandoffLabel, ctx: &RowContext, window:
             ];
             div().min_w_0().truncate().child(StyledText::new(format!(" · {account}")).with_runs(runs))
         });
-        let label = crate::ui::proxied_as(end.label.clone(), end.gateway, 12., logo).children(account);
+        let label = crate::ui::proxied_as(end.label.clone(), GatewayMark::of(end.gateway, end.pinned), 12., logo)
+            .children(account);
         div()
             .flex()
             .flex_none()

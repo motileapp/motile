@@ -1251,8 +1251,19 @@ class AppStore(private val context: Context) {
             return composerServer?.runsThroughGateway(accountID, model.agent) ?: false
         }
 
+    /** The composer's model is pinned to one of the gateway's accounts. */
+    val composerPinned: Boolean
+        get() {
+            val model = composerModel ?: return false
+            val accountID = selectedThread?.agentAccount ?: selectedDraft?.agentAccount
+            return composerServer?.runsPinned(accountID, model.agent) ?: false
+        }
+
     /** Whether the thread's model runs through the gateway. */
     fun modelProxied(thread: ThreadInfo): Boolean = server(thread.serverID)?.runsThroughGateway(thread.agentAccount, thread.agent) ?: false
+
+    /** Whether the thread's model is pinned to one of the gateway's accounts. */
+    fun modelPinned(thread: ThreadInfo): Boolean = server(thread.serverID)?.runsPinned(thread.agentAccount, thread.agent) ?: false
 
     /** The thread's model as the composer shows it, with the account when its agent has more than one. */
     fun modelLabel(thread: ThreadInfo): String {

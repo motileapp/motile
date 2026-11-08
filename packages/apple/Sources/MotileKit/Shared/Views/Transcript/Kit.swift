@@ -414,10 +414,13 @@ final class ProgressRingView: LayerView {
 }
 
 /// Symbols drawn in a colour that follows the appearance.
-/// The gateway's symbol in a line of text, centred on the line's capitals.
+/// The gateway's symbol in a line of text, centred on the line's capitals, and a pin after it for
+/// what is pinned to one of the gateway's accounts.
 enum GatewayMark {
     /// What the symbol stands from the words before it beyond a space.
     static let gap: CGFloat = 1
+    /// What the pin stands from the gateway's symbol.
+    static let pinGap: CGFloat = 2
 
     /// The symbol's size beside words of `fontSize`, or a step smaller than `icon`, an icon beside it.
     static func size(for fontSize: CGFloat, beside icon: IconSize? = nil) -> IconSize {
@@ -427,15 +430,24 @@ enum GatewayMark {
 
     /// The symbol after `line`'s words, a space and `gap` from them, a step smaller than `size`
     /// where it goes with an icon beside it.
-    static func append(to line: NSMutableAttributedString, font: PlatformFont, color: PlatformColor, size: IconSize? = nil) {
+    static func append(to line: NSMutableAttributedString, font: PlatformFont, color: PlatformColor, size: IconSize? = nil, pinned: Bool = false) {
         if line.length > 0 {
             line.append(NSAttributedString(string: " ", attributes: [.font: font, .kern: gap]))
         }
-        line.append(attachment(font: font, color: color, size: size))
+        line.append(attachment(font: font, color: color, size: size, pinned: pinned))
     }
 
-    static func attachment(font: PlatformFont, color: PlatformColor, size: IconSize? = nil) -> NSAttributedString {
-        let image = TintedSymbol.image(.waypoints, size: self.size(for: font.pointSize, beside: size), color: color)
+    static func attachment(font: PlatformFont, color: PlatformColor, size: IconSize? = nil, pinned: Bool = false) -> NSAttributedString {
+        let side = self.size(for: font.pointSize, beside: size)
+        let mark = NSMutableAttributedString(attributedString: symbol(.waypoints, font: font, color: color, size: side))
+        guard pinned else { return mark }
+        mark.addAttribute(.kern, value: pinGap, range: NSRange(location: 0, length: mark.length))
+        mark.append(symbol(.pin, font: font, color: color, size: side))
+        return mark
+    }
+
+    private static func symbol(_ name: Symbol, font: PlatformFont, color: PlatformColor, size: IconSize) -> NSAttributedString {
+        let image = TintedSymbol.image(name, size: size, color: color)
         let attachment = NSTextAttachment()
         attachment.image = image
         attachment.bounds = CGRect(x: 0, y: ((font.capHeight - image.size.height) / 2).rounded(), width: image.size.width, height: image.size.height)

@@ -482,6 +482,8 @@ struct AgentContent {
     let runsOn: String
     /// It runs through the account's gateway, which the gateway's symbol after the model says.
     let gateway: Bool
+    /// It is pinned to the gateway's account it names, which a pin after the gateway's symbol says.
+    let pinned: Bool
     let startedAt: Double
     let durationMs: Int?
     /// When the thread's agent was told, for what it was told.
@@ -500,6 +502,7 @@ struct AgentContent {
         agent = json.optionalString("agent").flatMap(Agent.init(rawValue:))
         runsOn = json.string("runs_on")
         gateway = json.bool("gateway")
+        pinned = json.bool("pinned")
         startedAt = json.double("started_at")
         durationMs = (json["duration_ms"] as? NSNumber)?.intValue
         at = json.optionalDouble("at")
@@ -521,7 +524,7 @@ struct AgentContent {
         let rest = (gateway ? Array(parts.dropFirst()) : []) + (said.isEmpty ? [] : [said])
         let line = NSMutableAttributedString(attributedString: words(named.joined(separator: " · ")))
         if gateway {
-            GatewayMark.append(to: line, font: font, color: color)
+            GatewayMark.append(to: line, font: font, color: color, pinned: pinned)
         }
         if !rest.isEmpty {
             line.append(words((named.isEmpty && !gateway ? "" : " · ") + rest.joined(separator: " · ")))
@@ -560,12 +563,14 @@ struct HandoffContent {
         let label: String
         let account: String?
         let gateway: Bool
+        let pinned: Bool
 
         init(json: JSON?) {
             agent = Agent(rawValue: json?.string("agent") ?? "") ?? .claude
             label = json?.string("label") ?? ""
             account = json?.optionalString("account")
             gateway = json?.bool("gateway") ?? false
+            pinned = json?.bool("pinned") ?? false
         }
     }
 

@@ -111,6 +111,7 @@ enum class Symbol(val character: String?) {
     Paperclip("\uE12D"),
     Pencil("\uE1F9"),
     PencilLine("\uE4F0"),
+    Pin("\uE259"),
     Play("\uE13C"),
     Plug("\uE37F"),
     Plus("\uE13D"),

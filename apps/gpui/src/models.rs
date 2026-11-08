@@ -400,6 +400,11 @@ impl Server {
     pub fn runs_through_gateway(&self, account: Option<&str>, agent: Agent) -> bool {
         self.account(account, agent).is_some_and(|account| account.gateway)
     }
+
+    /// Whether the account is pinned to one of the gateway's, which a pin after the gateway's symbol says.
+    pub fn runs_pinned(&self, account: Option<&str>, agent: Agent) -> bool {
+        self.account(account, agent).is_some_and(|account| account.gateway && account.pin.is_some())
+    }
 }
 
 /// A server that is installing a new version of itself.
@@ -1271,6 +1276,9 @@ mod tests {
         assert!(!server.runs_through_gateway(Some("work"), Agent::Claude));
         assert!(server.runs_through_gateway(Some("Gateway"), Agent::Claude));
         assert!(server.runs_through_gateway(Some("Seat"), Agent::Claude));
+        assert!(!server.runs_pinned(Some("work"), Agent::Claude));
+        assert!(!server.runs_pinned(Some("Gateway"), Agent::Claude));
+        assert!(server.runs_pinned(Some("Seat"), Agent::Claude));
     }
 
     #[test]

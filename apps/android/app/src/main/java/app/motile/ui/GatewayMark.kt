@@ -1,6 +1,7 @@
 package app.motile.ui
 
-import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.text.InlineTextContent
 import androidx.compose.foundation.text.appendInlineContent
@@ -19,15 +20,21 @@ import app.motile.platform.Symbol
 import app.motile.theme.IconSize
 import app.motile.theme.symbolSide
 
-/** The gateway's symbol in a line of text, after what runs through the gateway, centred on the line, where DM Sans centres its capitals. */
+/** The gateway's symbol in a line of text, after what runs through the gateway, centred on the line, where DM Sans centres its capitals, and a pin after it where that is pinned to one of the gateway's accounts. */
 object GatewayMark {
     private const val ID = "gateway"
+    private const val PINNED_ID = "gateway-pinned"
 
     /** What the symbol stands from the words before it beyond a space. */
     val gap: Dp = 1.dp
 
-    /** The symbol where the text has it, which a `Text` draws given `content`, and reads as "Gateway". */
-    fun AnnotatedString.Builder.appendMark() = appendInlineContent(ID, "Gateway")
+    /** What the pin stands from the gateway's symbol. */
+    private val pinGap: Dp = 2.dp
+
+    /** The symbol where the text has it, with the pin after it when `pinned`, which a `Text` draws given `content`, and reads as "Gateway", or "Gateway, pinned". */
+    fun AnnotatedString.Builder.appendMark(pinned: Boolean = false) {
+        if (pinned) appendInlineContent(PINNED_ID, "Gateway, pinned") else appendInlineContent(ID, "Gateway")
+    }
 
     /** The symbol's size beside words of `fontSize`, or a step smaller than `icon`, an icon beside it, as the Mac app sizes it. */
     fun size(fontSize: Float, icon: IconSize? = null): IconSize {
@@ -39,28 +46,35 @@ object GatewayMark {
         }
     }
 
-    /** What draws the symbol of `appendMark` beside words of `fontSize`, in `color`, a step smaller than `symbol` where it goes with an icon beside it. */
+    /** What draws the symbols of `appendMark` beside words of `fontSize`, in `color`, a step smaller than `symbol` where they go with an icon beside them. */
     @Composable
     fun content(color: Color, fontSize: Float, symbol: IconSize? = null): Map<String, InlineTextContent> {
         val size = size(fontSize, symbol)
-        val (width, height) = with(LocalDensity.current) { (symbolSide(size) + gap).toSp() to symbolSide(size).toSp() }
-        return mapOf(
-            ID to InlineTextContent(Placeholder(width, height, PlaceholderVerticalAlign.TextCenter)) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.CenterEnd) { Icon(Symbol.Waypoints, size, color = color) }
-            },
-        )
+        val side = symbolSide(size)
+        val density = LocalDensity.current
+        val height = with(density) { side.toSp() }
+        val mark = { pinned: Boolean ->
+            val width = with(density) { (if (pinned) gap + side + pinGap + side else gap + side).toSp() }
+            InlineTextContent(Placeholder(width, height, PlaceholderVerticalAlign.TextCenter)) {
+                Row(Modifier.fillMaxSize(), Arrangement.spacedBy(pinGap, Alignment.End), Alignment.CenterVertically) {
+                    Icon(Symbol.Waypoints, size, color = color)
+                    if (pinned) Icon(Symbol.Pin, size, color = color)
+                }
+            }
+        }
+        return mapOf(ID to mark(false), PINNED_ID to mark(true))
     }
 }
 
-/** The words with the gateway's symbol after the name they start with, ahead of the account after its dot, where what they name runs through the gateway: "Opus 5.5 ⟿ · Work". */
-fun AnnotatedString.proxied(proxied: Boolean): AnnotatedString {
+/** The words with the gateway's symbol after the name they start with, ahead of the account after its dot, where what they name runs through the gateway: "Opus 5.5 ⟿ · Work", and a pin after it where it is pinned to that account. */
+fun AnnotatedString.proxied(proxied: Boolean, pinned: Boolean = false): AnnotatedString {
     if (!proxied) return this
     val words = this
     val name = text.indexOf(" · ").takeIf { it >= 0 } ?: length
     return buildAnnotatedString {
         append(words.subSequence(0, name))
         if (name > 0) append(" ")
-        with(GatewayMark) { appendMark() }
+        with(GatewayMark) { appendMark(pinned) }
         append(words.subSequence(name, words.length))
     }
 }

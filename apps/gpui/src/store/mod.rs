@@ -49,6 +49,7 @@ use crate::models::*;
 use crate::panel::state::{PanelTabs, PanelTarget, RightPanel};
 use crate::prefs::Prefs;
 use crate::transcript::model::{Prepared, Transcript};
+use crate::ui::GatewayMark;
 use crate::updater::Updater;
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
@@ -1299,11 +1300,12 @@ impl Store {
         Some(label.unwrap_or_else(|| model.name.clone()))
     }
 
-    /// The composer's model runs through the gateway.
-    pub fn composer_proxied(&self) -> bool {
-        let Some(model) = self.composer_model() else { return false };
-        self.composer_server()
-            .is_some_and(|server| server.runs_through_gateway(self.composer_account_id(), model.agent))
+    /// The gateway's mark after the composer's model: it runs through the gateway, pinned or not.
+    pub fn composer_gateway_mark(&self) -> GatewayMark {
+        let Some(model) = self.composer_model() else { return GatewayMark::Hidden };
+        let Some(server) = self.composer_server() else { return GatewayMark::Hidden };
+        let account = self.composer_account_id();
+        GatewayMark::of(server.runs_through_gateway(account, model.agent), server.runs_pinned(account, model.agent))
     }
 
     /// What the model picker lists: each account with its agent's models, titled with the
