@@ -49,39 +49,42 @@ struct MediaViewer: View {
                 .padding(.horizontal, 14)
             }
         }
+        // One row in the top bar places the name and the buttons, so they share a middle. The name
+        // is centered on the window and keeps clear of the buttons however many of them show.
         .overlay(alignment: .top) {
-            HStack(spacing: 8) {
-                Text(item.name)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                if viewing.items.count > 1 {
-                    Text("\(viewing.index + 1) of \(viewing.items.count)")
-                        .foregroundStyle(Color.themeMutedForegroundOverPicture)
-                }
-            }
-            .font(.ui(size: 13, weight: .medium))
-            .foregroundStyle(Color.themeForegroundOverPicture)
-            .padding(.horizontal, 10)
-            .frame(height: 24)
-            .background(Color.themeScrim, in: Capsule())
-            .padding(.top, 14)
-            .padding(.horizontal, 80)
-        }
-        .overlay(alignment: .topTrailing) {
-            HStack(spacing: 0) {
-                if let file {
-                    CopyButton(
-                        help: "\(Self.copyTitle(item)) (⌘C)", variant: .overlay, size: .large,
-                        symbolSize: ControlSize.large.smallSymbol, round: true, copies: copies, margin: .sharing(Self.buttonGap, at: 0, of: count)
-                    ) { MediaFiles.copy(file, video: item.video, named: item.name) }
-                    roundButton(.download, help: "Save As (⌘S)", margin: .sharing(Self.buttonGap, at: 1, of: count)) {
-                        MediaFiles.save(file, named: item.name)
+            ZStack {
+                HStack(spacing: 8) {
+                    Text(item.name)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    if viewing.items.count > 1 {
+                        Text("\(viewing.index + 1) of \(viewing.items.count)")
+                            .foregroundStyle(Color.themeMutedForegroundOverPicture)
                     }
                 }
-                roundButton(.x, help: "Close (Esc)", margin: .sharing(Self.buttonGap, at: count - 1, of: count)) { store.closeViewer() }
+                .font(.ui(size: 13, weight: .medium))
+                .foregroundStyle(Color.themeForegroundOverPicture)
+                .padding(.horizontal, 10)
+                .frame(height: 24)
+                .background(Color.themeScrim, in: Capsule())
+                .padding(.horizontal, Self.nameInset)
+                HStack(spacing: 0) {
+                    if let file {
+                        CopyButton(
+                            help: "\(Self.copyTitle(item)) (⌘C)", variant: .overlay, size: .large,
+                            symbolSize: ControlSize.large.smallSymbol, round: true, copies: copies, margin: .sharing(Self.buttonGap, at: 0, of: count)
+                        ) { MediaFiles.copy(file, video: item.video, named: item.name) }
+                        roundButton(.download, help: "Save As (⌘S)", margin: .sharing(Self.buttonGap, at: 1, of: count)) {
+                            MediaFiles.save(file, named: item.name)
+                        }
+                    }
+                    roundButton(.x, help: "Close (Esc)", margin: .sharing(Self.buttonGap, at: count - 1, of: count)) { store.closeViewer() }
+                }
+                .padding(.trailing, Self.cornerInset)
+                .frame(maxWidth: .infinity, alignment: .trailing)
             }
+            .frame(height: ControlSize.large.height)
             .padding(.top, Self.cornerInset)
-            .padding(.trailing, Self.cornerInset)
             .offset(y: -bar)
         }
         .task(id: item) { load(item) }
@@ -144,6 +147,11 @@ struct MediaViewer: View {
     private static let buttonGap: CGFloat = 8
     /// The room between the corner's buttons and the window's top and trailing edges.
     private static let cornerInset: CGFloat = 16
+    /// The room on each side of the name: what all three corner buttons take and a gap, the same
+    /// on both sides so the name stays centered and doesn't move when the buttons come in.
+    private static var nameInset: CGFloat {
+        cornerInset + 3 * ControlSize.large.height + 2 * buttonGap + cornerInset
+    }
 
     private static func copyTitle(_ item: ViewedMedia) -> String {
         item.video ? "Copy Video" : "Copy Image"
@@ -320,6 +328,8 @@ final class ZoomingScrollView: NSScrollView {
     static let viewerMargin = CGSize(width: 64, height: 52)
     /// A small image is enlarged to fit the viewer, up to twice its size.
     static let viewerLargestFit: CGFloat = 2
+    /// How much smaller than fitting, or than its real size if that is smaller, an image zooms out.
+    private static let zoomOut: CGFloat = 4
 
     var keys = true
     var menuActions: () -> [MenuAction] = { [] }
@@ -338,8 +348,9 @@ final class ZoomingScrollView: NSScrollView {
         return max(0.01, min(largestFit, width, height))
     }
 
-    /// An image enlarged to fit can still be shown at its real size.
-    private var smallest: CGFloat { min(fit, 1) }
+    /// An image enlarged to fit can still be shown at its real size, and either can be zoomed out
+    /// to a quarter of that.
+    private var smallest: CGFloat { min(fit, 1) / Self.zoomOut }
 
     private var fitted: Bool { abs(magnification - fit) < 0.001 }
 
