@@ -7,6 +7,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use futures_util::{SinkExt, StreamExt};
+use motile_core::away::Away;
 use motile_core::cache::Cache;
 use motile_core::connection::{Connection, Follow, ServerAddr, bind};
 use motile_core::link::{Link, LinkEvent, State};
@@ -720,7 +721,7 @@ async fn a_link_given_a_new_endpoint_leaves_the_old_one_and_connects_again() {
     let harness = Harness::start("fixtures/read-and-bash.jsonl", "0").await;
     let (events, mut received) = mpsc::unbounded_channel();
     let stale = bind(&harness.app_key, true).await.unwrap();
-    let link = Link::connect(stale.clone(), harness.address.clone(), events);
+    let link = Link::connect(stale.clone(), harness.address.clone(), Away::new(), events);
     assert_eq!(states_until_connected(&mut received).await, [State::Connected]);
 
     link.redial_on(bind(&harness.app_key, true).await.unwrap());
@@ -736,7 +737,7 @@ async fn a_link_given_a_new_endpoint_leaves_the_old_one_and_connects_again() {
 async fn a_request_made_while_the_link_dials_waits_for_the_connection() {
     let harness = Harness::start("fixtures/read-and-bash.jsonl", "0").await;
     let (events, _received) = mpsc::unbounded_channel();
-    let link = Link::connect(bind(&harness.app_key, true).await.unwrap(), harness.address.clone(), events);
+    let link = Link::connect(bind(&harness.app_key, true).await.unwrap(), harness.address.clone(), Away::new(), events);
 
     let add = Request::AddProject { path: harness.folder("project") };
     assert_eq!(link.request(&add).await.unwrap(), Message::Ok);
@@ -747,7 +748,7 @@ async fn a_request_made_while_the_link_dials_waits_for_the_connection() {
 async fn an_upload_the_connection_dropped_on_the_way_is_sent_again() {
     let harness = Harness::start("fixtures/read-and-bash.jsonl", "0").await;
     let (events, mut received) = mpsc::unbounded_channel();
-    let link = Link::connect(bind(&harness.app_key, true).await.unwrap(), harness.address.clone(), events);
+    let link = Link::connect(bind(&harness.app_key, true).await.unwrap(), harness.address.clone(), Away::new(), events);
     assert_eq!(states_until_connected(&mut received).await, [State::Connected]);
     let file = harness.dir.path().join("archive.zip");
     let bytes: Vec<u8> = (0..4_000_000u32).map(|index| (index % 251) as u8).collect();
