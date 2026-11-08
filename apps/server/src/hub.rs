@@ -4005,7 +4005,8 @@ impl Hub {
         let used = accounts.iter().find(|kept| Some(kept.id.as_str()) == account);
         let gateway = used.is_some_and(|used| used.gateway);
         let named = used.filter(|used| accounts.len() > 1 && (!used.gateway || used.pin.is_some()));
-        HandoffEnd { agent, model, name, account: named.map(|kept| kept.name.clone()), gateway }
+        let pinned = used.is_some_and(|used| used.pin.is_some());
+        HandoffEnd { agent, model, name, account: named.map(|kept| kept.name.clone()), gateway, pinned }
     }
 
     /// The model's name as the picker lists it. An agent names a model it runs with its whole id,
@@ -4038,8 +4039,7 @@ impl Hub {
             None => thread.model.clone().or_else(|| live.session_model.clone()),
         };
         let model = model.map(|model| self.model_name(thread.agent, &model).unwrap_or(model));
-        let (shown, gateway) = self.shown_account(&thread.id, &account);
-        RunsOn { agent: thread.agent, model, account: shown, gateway, thread_id: None }
+        RunsOn { model, ..self.shown_account(&thread.id, &account) }
     }
 
     /// Gives the handoff that waited for it the model the new session runs.
@@ -4048,7 +4048,7 @@ impl Hub {
         let Some(mut item) = self.store.item(&live.stored.thread.id, &item_id)? else { return Ok(()) };
         let ItemKind::Handoff { to, .. } = &mut item.kind else { return Ok(()) };
         let named = self.handoff_end(to.agent, Some(model.to_string()), None);
-        *to = HandoffEnd { account: to.account.take(), gateway: to.gateway, ..named };
+        *to = HandoffEnd { account: to.account.take(), gateway: to.gateway, pinned: to.pinned, ..named };
         item.rev = live.next_rev();
         live.save(&self.store, item)
     }

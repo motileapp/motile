@@ -233,6 +233,9 @@ pub struct AgentRow {
     /// It runs through the account's gateway, which the gateway's symbol after the model says.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub gateway: bool,
+    /// It is pinned to the gateway's account it names, which a pin after the gateway's symbol says.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub pinned: bool,
     pub started_at: f64,
     /// How long it worked, once it has ended.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -261,6 +264,7 @@ impl AgentRow {
             agent: view.agent,
             runs_on,
             gateway: view.gateway,
+            pinned: view.pinned,
             started_at: view.started_at,
             duration_ms: view.duration_ms,
             at,
@@ -304,6 +308,9 @@ pub struct HandoffLabel {
     pub account: Option<String>,
     /// The account runs through the gateway, which its symbol after the label says.
     pub gateway: bool,
+    /// The account is pinned to one of the gateway's, which a pin after the gateway's symbol says.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub pinned: bool,
 }
 
 /// The name servers give their Gateway account, which a handoff written before `HandoffEnd.gateway`
@@ -323,7 +330,13 @@ impl HandoffLabel {
         };
         let before_gateway_mark = !end.gateway && end.account.as_deref() == Some(GATEWAY_ACCOUNT);
         let account = end.account.clone().filter(|_| !before_gateway_mark);
-        Self { agent: end.agent, label: label.to_string(), account, gateway: end.gateway || before_gateway_mark }
+        Self {
+            agent: end.agent,
+            label: label.to_string(),
+            account,
+            gateway: end.gateway || before_gateway_mark,
+            pinned: end.pinned,
+        }
     }
 }
 
@@ -2111,7 +2124,8 @@ mod tests {
             agent: Agent::Codex,
             model: Some("GPT-6.1-Sol".into()),
             account: Some("work".into()),
-            gateway: false,
+            gateway: true,
+            pinned: true,
             thread_id: Some("c".into()),
         }));
         let mut transcript = Transcript::new("");
@@ -2122,6 +2136,7 @@ mod tests {
             (row.agent, row.runs_on.as_str(), row.thread.as_deref()),
             (Some(Agent::Codex), "6.1-Sol · work", Some("c"))
         );
+        assert_eq!((row.gateway, row.pinned), (true, true));
     }
 
     #[test]
@@ -2135,6 +2150,7 @@ mod tests {
             model: None,
             account: None,
             gateway: false,
+            pinned: false,
             thread_id: Some("c".into()),
         }));
         let started = [item.clone()];
@@ -2160,6 +2176,7 @@ mod tests {
                 model: None,
                 account: None,
                 gateway: false,
+                pinned: false,
                 thread_id: Some("c".into()),
             }));
             item
@@ -2397,6 +2414,7 @@ mod tests {
             name: name.map(str::to_string),
             account: None,
             gateway: false,
+            pinned: false,
         };
         let user = |id: &str, seq| item(id, seq, said("Go"));
         let read = call("t1", 2, "Read", serde_json::json!({"file_path": "/srv/api/a.rs"}), ToolStatus::Succeeded);

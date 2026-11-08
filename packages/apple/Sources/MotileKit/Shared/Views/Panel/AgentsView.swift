@@ -245,7 +245,7 @@ private struct AgentRow: View {
         let runsOn = [agent.model, agent.account].compactMap { $0 }
         let usage = agent.usage?.components(separatedBy: " · ") ?? []
         if !(runsOn + usage).isEmpty {
-            ProxiedLine(parts: runsOn + usage, proxied: agent.gateway && !runsOn.isEmpty, fontSize: 11)
+            ProxiedLine(parts: runsOn + usage, proxied: agent.gateway && !runsOn.isEmpty, pinned: agent.pinned, fontSize: 11)
         }
     }
 

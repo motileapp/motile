@@ -348,6 +348,8 @@ fun ControlLabel(
     tinted: Pair<String, Color>? = null,
     /** What the words name runs through the gateway, which its symbol after them says. */
     proxied: Boolean = false,
+    /** What the words name is pinned to one of the gateway's accounts, which a pin after the gateway's symbol says. */
+    pinned: Boolean = false,
     /** Its chevron points up, at what it hides again. */
     chevronUp: Boolean = false,
     /** Its words are the prose's, as the text it stands under. */
@@ -372,8 +374,8 @@ fun ControlLabel(
         ) {
             if (icon != null || title != null) {
                 Box(Modifier.weight(1f, fill = false).offset(y = wordsShift), contentAlignment = Alignment.Center) {
-                    ControlWords(title, tinted, proxied, icon, size, font, markSize, pictureSide, gap, detail, place, pending, spins = pending && icon != null, Modifier.alpha(if (waitingTitle == null) 1f else 0f))
-                    if (waitingTitle != null) ControlWords(waitingTitle, null, false, icon, size, font, markSize, pictureSide, gap, null, null, pending, spins = true)
+                    ControlWords(title, tinted, proxied, pinned, icon, size, font, markSize, pictureSide, gap, detail, place, pending, spins = pending && icon != null, Modifier.alpha(if (waitingTitle == null) 1f else 0f))
+                    if (waitingTitle != null) ControlWords(waitingTitle, null, false, false, icon, size, font, markSize, pictureSide, gap, null, null, pending, spins = true)
                 }
             }
             if (chevron) Icon(
@@ -414,6 +416,7 @@ private fun ControlWords(
     title: String?,
     tinted: Pair<String, Color>?,
     proxied: Boolean,
+    pinned: Boolean,
     icon: ControlIcon?,
     size: ControlSize,
     font: TextStyle,
@@ -444,7 +447,7 @@ private fun ControlWords(
             ) {
                 val markColor = if (tinted == null) LocalForeground.current else LocalPalette.current.foreground
                 Text(
-                    words(title, tinted, proxied, muted), style = font, maxLines = 1, modifier = Modifier.weight(1f, fill = false),
+                    words(title, tinted, proxied, pinned, muted), style = font, maxLines = 1, modifier = Modifier.weight(1f, fill = false),
                     inlineContent = if (proxied) GatewayMark.content(markColor, size.textSize, markSize) else emptyMap(),
                 )
                 if (detail != null) {
@@ -461,8 +464,8 @@ private fun ControlWords(
 }
 
 @Composable
-private fun words(title: String, tinted: Pair<String, Color>?, proxied: Boolean, muted: Color): AnnotatedString {
-    val named = dotted(title, muted).proxied(proxied)
+private fun words(title: String, tinted: Pair<String, Color>?, proxied: Boolean, pinned: Boolean, muted: Color): AnnotatedString {
+    val named = dotted(title, muted).proxied(proxied, pinned)
     if (tinted == null) return named
     val foreground = LocalPalette.current.foreground
     return buildAnnotatedString {
@@ -625,6 +628,8 @@ fun ActionButton(
     tinted: String? = null,
     /** What its title names runs through the gateway, which its symbol after the title says. */
     proxied: Boolean = false,
+    /** What its title names is pinned to one of the gateway's accounts, which a pin after the gateway's symbol says. */
+    pinned: Boolean = false,
     help: String? = null,
     variant: ButtonVariant = if (title.isNullOrEmpty()) ButtonVariant.Ghost else ButtonVariant.Secondary,
     size: ControlSize = ControlSize.Regular,
@@ -661,7 +666,7 @@ fun ActionButton(
         ControlLabel(
             words, ControlIcon.of(icon, picture, pictures), size, chevron = opens || expanded != null, pending = pending, pendingTitle = pendingTitle, fills = fills,
             alignment = alignment, symbolSize = symbolSize, gap = gap, padding = padding, detail = detail, place = place,
-            tinted = tinted?.let { tail -> tint?.let { tail to it } }, proxied = proxied, chevronUp = expanded == true, prose = prose,
+            tinted = tinted?.let { tail -> tint?.let { tail to it } }, proxied = proxied, pinned = pinned, chevronUp = expanded == true, prose = prose,
         )
     }
     if (!inline) {

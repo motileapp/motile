@@ -288,6 +288,9 @@ pub struct HandoffEnd {
     /// The account runs through the account's gateway.
     #[serde(default, alias = "proxy")]
     pub gateway: bool,
+    /// The account is pinned to one of the gateway's accounts, `account`.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub pinned: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
@@ -357,6 +360,9 @@ pub struct RunsOn {
     /// It runs through the account's gateway.
     #[serde(default, alias = "proxy", skip_serializing_if = "std::ops::Not::not")]
     pub gateway: bool,
+    /// It stays on `account`, one of the gateway's accounts, which the gateway doesn't move it off.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub pinned: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub thread_id: Option<String>,
 }

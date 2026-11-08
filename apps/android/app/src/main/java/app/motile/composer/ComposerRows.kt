@@ -81,7 +81,7 @@ private fun SettingsButton() {
     Box(Modifier.semantics { contentDescription = "Thread settings" }) {
         ActionButton(
             store.composerModelLabel, picture = logo, detail = effort, place = store.composerServer?.shortName, proxied = store.composerProxied,
-            variant = ButtonVariant.Ghost, gap = 5.dp,
+            pinned = store.composerPinned, variant = ButtonVariant.Ghost, gap = 5.dp,
         ) { store.showsThreadSettings = true }
     }
 }

@@ -1561,7 +1561,7 @@ final class HandoffRowView: RowView {
         }
         let label = NSMutableAttributedString(attributedString: text(end.label, Theme.foreground))
         if end.gateway {
-            GatewayMark.append(to: label, font: Theme.smallFont, color: Theme.foreground, size: logoSize)
+            GatewayMark.append(to: label, font: Theme.smallFont, color: Theme.foreground, size: logoSize, pinned: end.pinned)
         }
         guard let account = end.account else { return label }
         label.append(text(" · ", Theme.mutedStrongerForeground))

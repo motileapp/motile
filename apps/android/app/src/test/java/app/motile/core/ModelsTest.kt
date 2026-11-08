@@ -154,6 +154,7 @@ class ModelsTest {
         assertEquals("Opus 5.5", server.label(opus, "gateway"))
         assertEquals("Opus 5.5 · Seat", server.label(opus, "seat"))
         assertEquals(listOf(false, true, true), listOf("work", "gateway", "seat").map { server.runsThroughGateway(it, Agent.Claude) })
+        assertEquals(listOf(false, false, true), listOf("work", "gateway", "seat").map { server.runsPinned(it, Agent.Claude) })
     }
 
     @Test
@@ -213,6 +214,8 @@ class ModelsTest {
         val proxied = agent("runs_on" to "Opus 5.5", "gateway" to true, "detail" to "Reading a.rs")?.content
         assertEquals("Opus 5.5 Gateway · Reading a.rs", proxied?.line?.text)
         assertEquals("Gateway · Needs approval", agent("gateway" to true)?.content?.line?.text)
+        val pinned = agent("runs_on" to "Opus 5.5 · org-1@x.com", "gateway" to true, "pinned" to true, "detail" to "Reading a.rs")?.content
+        assertEquals("Opus 5.5 Gateway, pinned · org-1@x.com · Reading a.rs", pinned?.line?.text)
     }
 
     @Test

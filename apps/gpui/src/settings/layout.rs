@@ -244,8 +244,11 @@ pub fn label(
 /// A label whose title names what runs through the gateway where `proxied`, which its symbol after
 /// the title says. Such a title is cut on its line rather than wrapped.
 pub fn proxied_label(title: String, description: Option<String>, proxied: bool, cx: &App) -> AnyElement {
-    let title =
-        if proxied { crate::ui::proxied(title, true, 13.).into_any_element() } else { title.into_any_element() };
+    let title = if proxied {
+        crate::ui::proxied(title, crate::ui::GatewayMark::Gateway, 13.).into_any_element()
+    } else {
+        title.into_any_element()
+    };
     titled_label(title, description, None, Cut::Wraps, None, cx)
 }
 

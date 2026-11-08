@@ -282,6 +282,9 @@ data class Server(
     /** Whether the account runs through the gateway, which the gateway's symbol after its name says. */
     fun runsThroughGateway(account: String?, of: Agent): Boolean = account(account, of)?.gateway ?: false
 
+    /** Whether the account is pinned to one of the gateway's accounts, which a pin after the gateway's symbol says. */
+    fun runsPinned(account: String?, of: Agent): Boolean = account(account, of)?.let { it.gateway && it.pin != null } ?: false
+
     companion object {
         operator fun invoke(json: JSON): Server {
             val info = json.obj("info")
@@ -1129,6 +1132,8 @@ data class AgentInfo(
     val account: String? = null,
     /** It runs through the account's gateway. */
     val gateway: Boolean = false,
+    /** It is pinned to the gateway's account it names. */
+    val pinned: Boolean = false,
 ) {
     constructor(json: JSON) : this(
         id = json.string("id"),
@@ -1149,6 +1154,7 @@ data class AgentInfo(
         model = json.optionalString("model"),
         account = json.optionalString("account"),
         gateway = json.bool("gateway"),
+        pinned = json.bool("pinned"),
     )
 
     val working: Boolean get() = status == ToolStatus.Running

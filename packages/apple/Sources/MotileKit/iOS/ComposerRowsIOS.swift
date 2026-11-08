@@ -64,6 +64,7 @@ struct ComposerTouchControls: View {
         let effort = store.composerEffort.flatMap { $0.isEmpty ? nil : ComposerView.effortSymbol($0) }
         return ActionButton(
             store.composerModelLabel, picture: logo, detail: effort, place: store.composerServer?.shortName, proxied: store.composerProxied,
+            pinned: store.composerPinned,
             variant: .ghost,
             gap: 5
         ) {

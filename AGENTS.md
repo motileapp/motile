@@ -764,6 +764,7 @@ clients. It replays the recorded output in `fixtures/` or makes up a turn, depen
 | "ask three agents" | Starts three agents through `start_agent`, the last of which fails (Claude Code) |
 | "ask sixty agents" | Starts fifty-four agents that say hello and six that look over greet.py slowly, through `start_agent` (Claude Code) |
 | "ask a supervised agent" | Starts a supervised agent that runs greet.py, which waits for the user's approval (Claude Code) |
+| "ask a pinned agent" | Starts two agents that look over greet.py slowly, one pinned to one of the gateway's Claude Code accounts and one the gateway places, through `start_agent` (Claude Code) |
 | "ask an agent which color" | Starts an agent that asks which color; told it asks, answers blue through `answer_agent` (Claude Code) |
 | "look over" | Reads greet.py and runs the tests, a step every `FAKE_AGENT_CHILD_STEP` seconds, and says what it would change |
 | "run the workflow" | Runs a workflow of two phases, whose last agent fails (Claude Code) |

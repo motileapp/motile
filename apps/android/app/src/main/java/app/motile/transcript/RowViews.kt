@@ -781,7 +781,7 @@ private fun HandoffRow(handoff: HandoffContent) {
                 withStyle(SpanStyle(color = palette.mutedStrongerForeground)) { append(" · ") }
                 append(account)
             }
-        }.proxied(end.gateway)
+        }.proxied(end.gateway, end.pinned)
         Text(label, style = Theme.smallFont, color = palette.foreground, maxLines = 1, inlineContent = GatewayMark.content(palette.foreground, 12f, ControlSize.Regular.symbol))
     }
     Row(Modifier.fillMaxWidth().height(ControlSize.Large.height), verticalAlignment = Alignment.CenterVertically) {

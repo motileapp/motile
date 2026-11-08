@@ -773,7 +773,7 @@ fn header(group: &Group, cx: &App) -> Div {
                 .child(
                     crate::ui::proxied_as(
                         group.title.clone(),
-                        group.account.gateway,
+                        crate::ui::GatewayMark::of(group.account.gateway, false),
                         ControlSize::Regular.text_size(),
                         ControlSize::Regular.symbol(),
                     )

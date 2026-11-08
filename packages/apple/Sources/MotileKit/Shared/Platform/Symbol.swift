@@ -109,6 +109,7 @@ enum Symbol: String {
     case paperclip = "\u{e12d}"
     case pencil = "\u{e1f9}"
     case pencilLine = "\u{e4f0}"
+    case pin = "\u{e259}"
     case play = "\u{e13c}"
     case plug = "\u{e37f}"
     case plus = "\u{e13d}"

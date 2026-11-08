@@ -182,7 +182,7 @@ private fun AgentRow(agent: AgentInfo) {
     // "6.1-Sol · work · 3 tools · 21k tokens", as far as each is known, with the gateway's symbol after the model of one that runs through the gateway.
     val runsOn = listOfNotNull(agent.model, agent.account).joinToString(" · ")
     val facts = buildAnnotatedString {
-        append(AnnotatedString(runsOn).proxied(agent.gateway && runsOn.isNotEmpty()))
+        append(AnnotatedString(runsOn).proxied(agent.gateway && runsOn.isNotEmpty(), agent.pinned))
         agent.usage?.let { append(if (runsOn.isEmpty()) it else " · $it") }
     }.takeIf { it.isNotEmpty() }
     Box(Modifier.fillMaxWidth().pressPosition(menu)) {

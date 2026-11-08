@@ -1285,6 +1285,13 @@ final class AppStore {
         return composerServer?.runsThroughGateway(accountID, of: model.agent) ?? false
     }
 
+    /// The composer's model runs on one of the gateway's accounts it is pinned to.
+    var composerPinned: Bool {
+        guard let model = composerModel else { return false }
+        let accountID = selectedThread.map { $0.agentAccount } ?? selectedDraft?.agentAccount
+        return composerServer?.runsPinned(accountID, of: model.agent) ?? false
+    }
+
     /// The thread's model as the composer shows it, with the account when its agent has more than one.
     func modelLabel(of thread: ThreadInfo) -> String {
         let server = self.server(thread.serverID)

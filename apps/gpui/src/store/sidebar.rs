@@ -12,6 +12,7 @@ use motile_protocol::wire::{Agent, ThreadChange};
 
 use super::{ListedDraft, Selection, Store};
 use crate::models::{ModelInfoExt, Server, ThreadInfo, now};
+use crate::ui::GatewayMark;
 
 /// How long the offer to undo stays once the pointer isn't on it.
 const UNDO_FOR: Duration = Duration::from_secs(5);
@@ -219,10 +220,11 @@ impl Store {
         server.label(model, account)
     }
 
-    /// Whether the thread's model runs through the gateway.
-    pub fn model_proxied(&self, thread: &ThreadInfo) -> bool {
+    /// The gateway's mark after the thread's model: it runs through the gateway, pinned or not.
+    pub fn model_gateway_mark(&self, thread: &ThreadInfo) -> GatewayMark {
         let account = Some(thread.agent_account.as_str()).filter(|account| !account.is_empty());
-        self.server(Some(&thread.server_id)).is_some_and(|server| server.runs_through_gateway(account, thread.agent))
+        let Some(server) = self.server(Some(&thread.server_id)) else { return GatewayMark::Hidden };
+        GatewayMark::of(server.runs_through_gateway(account, thread.agent), server.runs_pinned(account, thread.agent))
     }
 
     fn bare_model(&self, thread: &ThreadInfo) -> String {
