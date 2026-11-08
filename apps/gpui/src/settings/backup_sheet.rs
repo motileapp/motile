@@ -133,7 +133,7 @@ impl Render for BackupSheet {
             .text_color(c.foreground)
             .child(div().text_size(px(15.)).font_weight(FontWeight::SEMIBOLD).child("S3 Backup"))
             .child(field("Endpoint", caption("Empty for AWS."), InputField::new(&self.endpoint), cx))
-            .child(field("Region", caption("auto for Cloudflare R2."), InputField::new(&self.region), cx))
+            .child(field("Region", None, InputField::new(&self.region), cx))
             .child(field("Bucket", None, InputField::new(&self.bucket), cx))
             .child(field("Access key", None, InputField::new(&self.access_key).monospaced(true), cx))
             .child(field("Secret key", None, InputField::new(&self.secret_key).monospaced(true).secure(true), cx))

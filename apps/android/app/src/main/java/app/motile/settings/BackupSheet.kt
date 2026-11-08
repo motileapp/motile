@@ -57,7 +57,7 @@ fun BackupSheet() {
             group(header = "Endpoint", footer = "Empty for AWS.") {
                 row { SettingsField("https://<account>.r2.cloudflarestorage.com", endpoint, { endpoint = it }, monospaced = true) }
             }
-            group(header = "Region", footer = "auto for Cloudflare R2.") {
+            group(header = "Region") {
                 row { SettingsField("us-east-1", region, { region = it }, monospaced = true) }
             }
             group(header = "Bucket") {

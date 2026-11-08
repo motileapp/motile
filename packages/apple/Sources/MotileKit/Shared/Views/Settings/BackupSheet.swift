@@ -81,7 +81,7 @@ struct BackupSheet: View {
                 InputField("https://<account>.r2.cloudflarestorage.com", text: $bucket.endpoint, monospaced: true)
             }
             HStack(alignment: .top, spacing: 12) {
-                field("Region", caption: "auto for Cloudflare R2.") {
+                field("Region") {
                     InputField("us-east-1", text: $bucket.region, monospaced: true)
                 }
                 field("Bucket") {
@@ -124,13 +124,8 @@ struct BackupSheet: View {
             Text("Empty for AWS.")
                 .foregroundStyle(Color.themeMutedForeground)
         }
-        Section {
+        Section("Region") {
             plainField("us-east-1", text: $bucket.region)
-        } header: {
-            Text("Region")
-        } footer: {
-            Text("auto for Cloudflare R2.")
-                .foregroundStyle(Color.themeMutedForeground)
         }
         Section("Bucket") {
             plainField("motile-backup", text: $bucket.bucket)
