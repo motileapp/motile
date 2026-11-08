@@ -125,10 +125,11 @@ impl Drop for Waiting {
 /// How the gateway's accounts work, said to an agent that lists the accounts while there is a gateway.
 const GATEWAY_ACCOUNTS: &str = "Accounts with \"gateway\": true run on your gateway. The one named Gateway, \
      not pinned, puts each agent on whichever of the gateway's accounts has room for it and moves it when \
-     that account runs out, so agents started on it spread over the gateway's accounts by themselves. A \
-     pinned one is one of the gateway's accounts: an agent started on it stays there, and stops when that \
-     account reaches its limit. Pick Gateway to let it manage the limits, or pin agents to spread work \
-     yourself.";
+     that account runs out. Each pinned one is one of the gateway's accounts: an agent started on it stays \
+     there, and stops when that account reaches its limit. Gateway suits most work. Pin an agent when \
+     choosing its account yourself is better: one the user named, one with more of its limits left, or a \
+     different account for each of several agents. Claude Code's and Codex's are both named Gateway, so \
+     give `agent` with the name, or the id.";
 
 impl Hub {
     /// The threads the thread's agent started, theirs before them, deepest first.
@@ -370,7 +371,10 @@ impl Hub {
         let account = match named.map(str::trim).filter(|named| !named.is_empty()) {
             Some(named) => {
                 let by_id = accounts.iter().find(|account| account.id == named);
-                let by_name = || accounts.iter().find(|account| account.name.eq_ignore_ascii_case(named));
+                let by_name = || {
+                    let of_agent = |account: &&AgentAccount| agent.is_none_or(|agent| agent == account.agent);
+                    accounts.iter().filter(of_agent).find(|account| account.name.eq_ignore_ascii_case(named))
+                };
                 let found = by_id.or_else(by_name).cloned();
                 found
                     .with_context(|| format!("Your server has no account called {named}. list_accounts lists them."))?

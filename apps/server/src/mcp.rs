@@ -187,7 +187,8 @@ impl Tools {
 
     /// Lists the accounts of your server you can start agents on: other Claude Code logins and
     /// Codex, with the models each offers and how much of its plan's limits it has used. Yours is
-    /// marked.
+    /// marked. With a gateway, it lists Gateway, which places agents on the gateway's accounts, and
+    /// each of those accounts too, to pin an agent to.
     #[tool(name = "list_accounts", annotations(title = "List accounts", read_only_hint = true))]
     async fn list_accounts(&self, Extension(parts): Extension<Parts>) -> CallToolResult {
         let accounts = async { self.hub()?.accounts_for(&caller(&parts)?).await };
@@ -277,8 +278,9 @@ pub struct StartAgent {
     pub title: Option<String>,
     /// The part it plays, such as "reviewer". Its prompt starts by telling it.
     pub role: Option<String>,
-    /// The account it runs on, by its name or id from list_accounts, which says how your gateway's
-    /// accounts work if you have one. Yours when neither this nor `agent` is given.
+    /// The account it runs on, by its name or id from list_accounts. Yours when neither this nor
+    /// `agent` is given. With a gateway, Gateway places the agent on whichever of the gateway's
+    /// accounts has room, and you can pin it to one of them instead when you'd rather choose.
     pub account: Option<String>,
     /// "claude" or "codex": that agent's default account, or yours when you are that agent.
     pub agent: Option<String>,

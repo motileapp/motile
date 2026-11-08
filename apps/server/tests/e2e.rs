@@ -18,10 +18,10 @@ use motile_protocol::identity::DeviceKey;
 use motile_protocol::wire::{
     Access as AgentAccess, Agent, AgentAccount, AgentLimits, Approval, Ask, CONTINUE_PROMPT, Change, CheckStatus,
     CopiedThread, DiffScope, EventKind, FileKind, GitAction, GitHubState, GitStage, GitStatus, Interruption, Item,
-    ItemKind, LineComment, MergeMethod, Mergeable, Message, NewThread, NewWorktree, Project, PullRequestAction,
-    PullRequestDetail, PullRequestEdit, PullRequestState, Queued, ReactionKind, Request, RestartWhen, ReviewVerdict,
-    ServerInfo, ServerUpdate, Side, Skill, SkillMention, SkillSource, Thread, ThreadChange, Tokens, ToolCall,
-    ToolStatus, TurnChanges, TurnSummary, UsageBucket, Variable,
+    ItemKind, LimitWindow, LineComment, MergeMethod, Mergeable, Message, NewThread, NewWorktree, Project,
+    PullRequestAction, PullRequestDetail, PullRequestEdit, PullRequestState, Queued, ReactionKind, Request,
+    RestartWhen, ReviewVerdict, ServerInfo, ServerUpdate, Side, Skill, SkillMention, SkillSource, Thread, ThreadChange,
+    Tokens, ToolCall, ToolStatus, TurnChanges, TurnSummary, UsageBucket, Variable,
 };
 use motile_server::access::Access;
 use motile_server::agents::environment::Environment;
@@ -4274,6 +4274,26 @@ async fn an_agent_only_follows_the_agents_it_started_on_accounts_that_exist() {
     assert_eq!(named, [("claude", false), ("codex", true)]);
 }
 
+#[tokio::test]
+async fn an_agent_names_the_gateway_account_of_the_agent_it_asks_for() {
+    let (harness, connection, mut list) = with_children().await;
+    harness.serve_gateway().await;
+    harness.access.set_gateway(Some(DeviceKey::generate().public()));
+    accounts_until(&mut list, &["claude", "codex", "gateway-claude", "gateway-codex"]).await;
+    let new_thread = full_access(&harness, &connection, Agent::Codex).await;
+    let thread_id = send(&connection, None, new_thread, "Run greet.py").await;
+    finished_transcript(&connection, &thread_id).await;
+    let started = harness.recorded_requests("thread/start");
+    let server = &started.last().unwrap()["config"]["mcp_servers"]["motile"];
+    let url = server["url"].as_str().unwrap();
+    let token = server["http_headers"]["Authorization"].as_str().unwrap().strip_prefix("Bearer ").unwrap();
+
+    // Past the account, the access it can't have is what stops it.
+    let start = json!({"prompt": "Look over greet.py", "account": "Gateway", "agent": "codex", "access": "everything"});
+    let (said, failed) = call_tool(url, token, "start_agent", start).await;
+    assert!(failed && said.contains("access is supervised"), "{said}");
+}
+
 // ---- copies of the account's threads on its other servers ----
 
 /// The servers as a client connected to all of them sees them, by their keys.
@@ -4689,6 +4709,77 @@ async fn the_gateway_accounts_are_there_while_the_account_has_a_gateway() {
     }
 }
 
+/// Lets `endpoint` reach `gateway` on this machine.
+fn reach(endpoint: &iroh::Endpoint, gateway: &iroh::Endpoint) {
+    let port = gateway.bound_sockets().iter().find(|address| address.is_ipv4()).unwrap().port();
+    let lookup = iroh::address_lookup::MemoryLookup::new();
+    lookup.add_endpoint_info(iroh::EndpointAddr::new(gateway.id()).with_ip_addr(([127, 0, 0, 1], port).into()));
+    endpoint.address_lookup().unwrap().add(lookup);
+}
+
+/// What the agents' accounts have used, once `done` says it is all there.
+async fn limits_until(connection: &Connection, done: impl Fn(&[AgentLimits]) -> bool) -> Vec<AgentLimits> {
+    let read = async {
+        loop {
+            let Message::Limits { agents } = connection.request(&Request::Limits).await.unwrap() else {
+                panic!("no limits came")
+            };
+            if done(&agents) {
+                return agents;
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+    };
+    tokio::time::timeout(TIMEOUT, read).await.expect("the limits came")
+}
+
+#[tokio::test]
+async fn a_restarted_server_reads_what_the_gateways_accounts_used_once_the_gateway_answers() {
+    let (gateway, _asked) = fake_gateway(Arc::new(tokio::sync::Notify::new())).await;
+    let mut harness = Harness::start("fixtures/read-and-bash.jsonl", "0").await;
+    reach(harness.endpoint.as_ref().unwrap(), &gateway);
+    harness.access.set_gateway(Some(gateway.id().to_string()));
+    harness.serve_gateway().await;
+    let connection = harness.connect().await;
+    let pinned = |agents: &[AgentLimits]| {
+        agents.iter().any(|limits| limits.account_name == "work@example.com" && limits.error.is_none())
+    };
+    limits_until(&connection, pinned).await;
+    drop(connection);
+
+    // As the server starts: it reads the limits before it reaches the gateway, with the Gateway
+    // accounts it kept already offered. The old server's way to the gateway can hold its port a
+    // while, so it comes back on another.
+    harness.address.direct = None;
+    harness.restart().await;
+    let connection = harness.connect().await;
+    let Message::Limits { agents } = connection.request(&Request::Limits).await.unwrap() else {
+        panic!("no limits came")
+    };
+    assert!(!pinned(&agents), "the gateway's accounts aren't listed yet: {agents:?}");
+    reach(harness.endpoint.as_ref().unwrap(), &gateway);
+    harness.access.set_gateway(Some(gateway.id().to_string()));
+    harness.serve_gateway().await;
+    let agents = limits_until(&connection, pinned).await;
+    assert!(agents.iter().any(|limits| limits.account_name == "Gateway"), "{agents:?}");
+
+    // Each time the server lists the gateway's accounts, the pinned one says what it has used then.
+    let used = |agents: &[AgentLimits]| {
+        let pinned = agents.iter().find(|limits| limits.account_name == "work@example.com");
+        pinned.and_then(|limits| limits.windows.first()).map(|window| window.used_percent)
+    };
+    let before = used(&agents).expect("the pinned account says what it has used");
+    harness.hub.follow_gateway().await;
+    let Message::Limits { agents } = connection.request(&Request::Limits).await.unwrap() else {
+        panic!("no limits came")
+    };
+    assert!(used(&agents).is_some_and(|now| now > before), "{before} then {agents:?}");
+}
+
+/// How many times a fake gateway listed its accounts, which its account says it has used of its
+/// session, so that each listing says more.
+static LISTED: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+
 /// What the fake gateway was asked, with the body of each HTTP request.
 type Asked = mpsc::UnboundedReceiver<(GatewayRequest, Vec<u8>)>;
 
@@ -4769,7 +4860,13 @@ async fn answer_as_gateway(
                 priority: 0,
                 enabled: true,
                 status: AccountStatus::Ready,
-                windows: vec![],
+                windows: vec![LimitWindow {
+                    label: "Session".into(),
+                    used_percent: LISTED.fetch_add(1, std::sync::atomic::Ordering::Relaxed) as f64,
+                    resets_at: None,
+                    window_secs: None,
+                    warning: false,
+                }],
                 reset_credits: 0,
                 threads: 0,
                 next: true,
