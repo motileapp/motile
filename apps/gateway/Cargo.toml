@@ -31,5 +31,5 @@ tracing-subscriber.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]
-axum = { version = "0.8", default-features = false, features = ["tokio", "http1", "ws", "json", "form"] }
+axum = { version = "0.8", default-features = false, features = ["tokio", "http1", "ws", "json", "form", "original-uri"] }
 tempfile.workspace = true
