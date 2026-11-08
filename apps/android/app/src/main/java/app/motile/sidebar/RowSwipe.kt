@@ -85,7 +85,6 @@ fun RowSwipe(
     symbol: Symbol,
     label: String,
     tint: Color,
-    size: ControlSize,
     isOpen: Boolean,
     onOpenChange: (Boolean) -> Unit,
     action: () -> Unit,
@@ -93,14 +92,13 @@ fun RowSwipe(
     leaves: Boolean = true,
     content: @Composable () -> Unit,
 ) {
-    RowSwipe(listOf(SwipeAction(symbol, label, tint, leaves, action)), size, isOpen, onOpenChange, modifier, content)
+    RowSwipe(listOf(SwipeAction(symbol, label, tint, leaves, action)), isOpen, onOpenChange, modifier, content)
 }
 
 /** The same with a button for each action, the first against the edge. A long swipe does what the first does, when it is a button. */
 @Composable
 fun RowSwipe(
     actions: List<SwipeAction>,
-    size: ControlSize,
     isOpen: Boolean,
     onOpenChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
@@ -116,7 +114,7 @@ fun RowSwipe(
     val currentOpenChange by rememberUpdatedState(onOpenChange)
 
     /** How far the row rests aside while its buttons show. */
-    val openWidth = with(density) { ((size.height + swipeGap) * actions.size + 10.dp).toPx() }
+    val openWidth = with(density) { ((swipeSize.height + swipeGap) * actions.size + 10.dp).toPx() }
     /** The first action, which a long swipe does. */
     val swiped = actions.firstOrNull()?.takeIf { it.perform != null }
     /** From here on, letting go does what the first button does. */
@@ -200,7 +198,7 @@ fun RowSwipe(
                 }
             },
     ) {
-        if (offset.value > 0f) SwipeButtons(actions, size, offset.value, openWidth, armed, Modifier.matchParentSize(), ::commit)
+        if (offset.value > 0f) SwipeButtons(actions, offset.value, openWidth, armed, Modifier.matchParentSize(), ::commit)
         Box(Modifier.offset { IntOffset(offset.value.roundToInt(), 0) }) {
             content()
             if (offset.value > 0f) {
@@ -212,11 +210,13 @@ fun RowSwipe(
 
 private val swipeGap = 10.dp
 
+/** Every row's buttons are one size, however tall the row, so that they read as the same buttons. */
+private val swipeSize = ControlSize.Regular
+
 /** The buttons come in as the row leaves, and past their place the first stretches after the row. */
 @Composable
 private fun SwipeButtons(
     actions: List<SwipeAction>,
-    size: ControlSize,
     offset: Float,
     openWidth: Float,
     armed: Boolean,
@@ -245,25 +245,25 @@ private fun SwipeButtons(
         ) {
             actions.forEachIndexed { index, action ->
                 val grown = if (index == 0) stretch else 0.dp
-                SwipeButton(action, size, grown, if (index == 0) shift else 0.dp) { commit(action) }
+                SwipeButton(action, grown, if (index == 0) shift else 0.dp) { commit(action) }
             }
         }
     }
 }
 
 @Composable
-private fun SwipeButton(action: SwipeAction, size: ControlSize, stretch: Dp, shift: Dp, onClick: () -> Unit) {
+private fun SwipeButton(action: SwipeAction, stretch: Dp, shift: Dp, onClick: () -> Unit) {
     val menu = rememberMenuState()
     Box {
         Box(
             Modifier
-                .size(width = size.height + stretch, height = size.height)
+                .size(width = swipeSize.height + stretch, height = swipeSize.height)
                 .background(action.tint, CircleShape)
                 .clickable(interactionSource = null, indication = null) { if (action.menu != null) menu.open() else onClick() }
                 .semantics { contentDescription = action.label },
             contentAlignment = Alignment.Center,
         ) {
-            Icon(action.symbol, size.filledSymbol, Modifier.offset { IntOffset(shift.roundToPx(), 0) }, color = Theme.colors.background)
+            Icon(action.symbol, swipeSize.filledSymbol, Modifier.offset { IntOffset(shift.roundToPx(), 0) }, color = Theme.colors.background)
         }
         action.menu?.let { MenuPopup(menu, it) }
     }

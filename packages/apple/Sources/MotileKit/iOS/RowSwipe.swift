@@ -26,28 +26,29 @@ extension View {
     /// short swipe leaves the button there to tap, a long one does what the button does. The row
     /// leaves with a long swipe unless the button won't take it away.
     func rowSwipe(
-        _ symbol: Symbol, _ label: String, tint: Color, size: ControlSize, leaves: Bool = true, isOpen: Binding<Bool>,
+        _ symbol: Symbol, _ label: String, tint: Color, leaves: Bool = true, isOpen: Binding<Bool>,
         action: @escaping () -> Void
     ) -> some View {
-        rowSwipe([.button(symbol, label, tint: tint, leaves: leaves, perform: action)], size: size, isOpen: isOpen)
+        rowSwipe([.button(symbol, label, tint: tint, leaves: leaves, perform: action)], isOpen: isOpen)
     }
 
     /// The same with a button for each action, the first against the edge. A long swipe does what
     /// the first does, when it is a button.
-    func rowSwipe(_ actions: [SwipeAction], size: ControlSize, isOpen: Binding<Bool>) -> some View {
-        modifier(RowSwipe(actions: actions, size: size, isOpen: isOpen))
+    func rowSwipe(_ actions: [SwipeAction], isOpen: Binding<Bool>) -> some View {
+        modifier(RowSwipe(actions: actions, isOpen: isOpen))
     }
 }
 
 private struct RowSwipe: ViewModifier {
     let actions: [SwipeAction]
-    let size: ControlSize
     @Binding var isOpen: Bool
 
     @State private var offset = 0.0
     @State private var offsetAtStart: Double?
     @State private var width = 0.0
 
+    /// Every row's buttons are one size, however tall the row, so that they read as the same buttons.
+    private let size = ControlSize.regular
     private static let leading = sidebarEdge
     private static let gap = 10.0
     private static let settle = Animation.spring(response: 0.29, dampingFraction: 0.86)
