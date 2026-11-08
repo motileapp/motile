@@ -11,8 +11,9 @@
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU8, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use anyhow::Context;
 use futures_lite::StreamExt;
@@ -23,7 +24,7 @@ use object_store::buffered::BufWriter;
 use object_store::path::Path as Key;
 use object_store::{ObjectStore, ObjectStoreExt, PutPayload};
 use serde::{Deserialize, Serialize};
-use tokio::io::AsyncWriteExt;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::Notify;
 
 use crate::access::{Access, Named};
@@ -32,6 +33,9 @@ use crate::store::Store;
 use crate::sync::LogPart;
 
 const EVERY: Duration = Duration::from_secs(60);
+/// A part of a pass that ends sooner than this never says how far it is: the minute's few new
+/// changes would only make the line flicker.
+const QUIET: Duration = Duration::from_secs(3);
 const BUCKET_SETTING: &str = "backup_bucket";
 const UPLOADED_SETTING: &str = "backup_uploaded";
 const SERVER_FILE: &str = "server.json";
@@ -186,6 +190,7 @@ impl Backup {
     async fn pass(&self) {
         let Some(opened) = self.kept().opened.clone() else { return };
         let uploaded = self.upload(&opened).await;
+        self.report(|state| state.progress = None);
         if let Err(error) = &uploaded {
             tracing::warn!("couldn't back up to the bucket: {error:#}");
         }
@@ -200,9 +205,10 @@ impl Backup {
         });
     }
 
+    /// Puts the log's new changes in the bucket, then the media it lacks, saying how far both are
+    /// together, in bytes.
     async fn upload(&self, opened: &Opened) -> anyhow::Result<()> {
         let kept = self.hub.store().setting(UPLOADED_SETTING).and_then(|json| serde_json::from_str(&json).ok());
-        let report = |percent| self.report(|state| state.progress = Some(BackupProgress { uploading: true, percent }));
         let named = self.access.servers().await.remove(&self.me);
         let file = ServerFile {
             name: named
@@ -211,17 +217,33 @@ impl Backup {
             platform: named.map_or_else(|| std::env::consts::OS.to_string(), |named| named.platform),
             log_id: String::new(),
         };
-        let hub = self.hub.clone();
-        let uploaded =
-            upload_log(&hub, opened.store.as_ref(), &self.me, &bucket_id(&opened.settings), kept, &file, report)
-                .await?;
-        self.hub.store().set_setting(UPLOADED_SETTING, Some(&serde_json::to_string(&uploaded)?))?;
         let listed = self.kept().media.take();
         let mut known = match listed {
             Some(known) => known,
             None => listed_media(opened.store.as_ref(), &self.me).await?,
         };
-        let media = upload_media(opened.store.clone(), &self.me, &self.media, &mut known).await;
+        let missing = missing_media(&self.media, &known);
+        let media_bytes: u64 = missing.iter().map(|(_, size)| size).sum();
+        let meter = Meter::new(self, true);
+        let log_bytes = AtomicU64::new(0);
+        let log = async {
+            let report = |sent: LogSent| {
+                log_bytes.store(sent.bytes, Ordering::Relaxed);
+                meter.show(sent.bytes, sent.whole() + media_bytes);
+            };
+            let hub = self.hub.clone();
+            let bucket_id = bucket_id(&opened.settings);
+            let uploaded = upload_log(&hub, opened.store.as_ref(), &self.me, &bucket_id, kept, &file, report).await?;
+            self.hub.store().set_setting(UPLOADED_SETTING, Some(&serde_json::to_string(&uploaded)?))?;
+            anyhow::Ok(())
+        };
+        if let Err(error) = log.await {
+            self.kept().media = Some(known);
+            return Err(error);
+        }
+        let log_bytes = log_bytes.load(Ordering::Relaxed);
+        let report = |sent| meter.show(log_bytes + sent, log_bytes + media_bytes);
+        let media = upload_media(opened.store.clone(), &self.me, &self.media, missing, &mut known, report).await;
         self.kept().media = Some(known);
         media?;
         self.report(|state| state.backed_up_at = Some(motile_protocol::now()));
@@ -234,7 +256,8 @@ impl Backup {
             return Ok(());
         }
         let deleted: HashSet<String> = self.access.deleted().await.into_iter().collect();
-        let report = |percent| self.report(|state| state.progress = Some(BackupProgress { uploading: false, percent }));
+        let meter = Meter::new(self, false);
+        let report = |done, total| meter.show(done, total);
         let hub = self.hub.clone();
         let origins = copy_others(&hub, opened.store.as_ref(), &self.me, &servers, &deleted, report).await?;
         self.kept().origins = origins;
@@ -259,6 +282,31 @@ impl Backup {
             return Ok(true);
         }
         Ok(false)
+    }
+}
+
+/// Says how far a part of a pass is, as one number that only goes up, once the part has run
+/// longer than [`QUIET`].
+struct Meter<'a> {
+    backup: &'a Backup,
+    uploading: bool,
+    started: Instant,
+    shown: AtomicU8,
+}
+
+impl<'a> Meter<'a> {
+    fn new(backup: &'a Backup, uploading: bool) -> Self {
+        Self { backup, uploading, started: Instant::now(), shown: AtomicU8::new(0) }
+    }
+
+    fn show(&self, done: u64, total: u64) {
+        if total == 0 || self.started.elapsed() < QUIET {
+            return;
+        }
+        let percent = (u128::from(done.min(total)) * 100 / u128::from(total)) as u8;
+        let percent = self.shown.fetch_max(percent, Ordering::Relaxed).max(percent);
+        let uploading = self.uploading;
+        self.backup.report(|state| state.progress = Some(BackupProgress { uploading, percent }));
     }
 }
 
@@ -333,6 +381,25 @@ fn parse_batch(name: &str) -> Option<(u64, u64)> {
     Some((up_to.parse().ok()?, after.parse().ok()?))
 }
 
+/// How much of its log a pass has put in the bucket so far.
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub struct LogSent {
+    pub changes: u64,
+    /// The changes the pass puts there.
+    pub of: u64,
+    pub bytes: u64,
+}
+
+impl LogSent {
+    /// The bytes the whole pass will take, judged by what went so far.
+    pub fn whole(&self) -> u64 {
+        match self.changes {
+            0 => self.bytes,
+            changes => (u128::from(self.bytes) * u128::from(self.of.max(changes)) / u128::from(changes)) as u64,
+        }
+    }
+}
+
 /// Puts the server's log in the bucket after where `kept` says it is there, then its
 /// `server.json`, and says how far the log is there now.
 pub async fn upload_log<D: Database>(
@@ -342,7 +409,7 @@ pub async fn upload_log<D: Database>(
     bucket_id: &str,
     kept: Option<Uploaded>,
     file: &ServerFile,
-    report: impl Fn(u8),
+    report: impl Fn(LogSent),
 ) -> anyhow::Result<Uploaded> {
     let own = blocking(database, |store| Ok(store.watermark()?)).await?;
     let mut uploaded = match kept {
@@ -350,6 +417,7 @@ pub async fn upload_log<D: Database>(
         _ => Uploaded { bucket: bucket_id.to_string(), log_id: own.log_id.clone(), change: 0 },
     };
     let start = uploaded.change;
+    let mut bytes = 0;
     while uploaded.change < own.change {
         let after = uploaded.change;
         let (part, compressed) = blocking(database, move |store| {
@@ -361,11 +429,10 @@ pub async fn upload_log<D: Database>(
         if part.up_to <= after || part.log_id != uploaded.log_id {
             break;
         }
+        bytes += compressed.len() as u64;
         bucket.put(&batch_key(me, &part.log_id, part.up_to, part.after), compressed.into()).await?;
         uploaded.change = part.up_to;
-        if own.change > start + 1 {
-            report(((uploaded.change - start) * 100 / (own.change - start)).min(100) as u8);
-        }
+        report(LogSent { changes: uploaded.change - start, of: own.change - start, bytes });
         if !part.more {
             break;
         }
@@ -380,20 +447,35 @@ async fn listed_media(bucket: &dyn ObjectStore, me: &str) -> anyhow::Result<Hash
     Ok(listed.into_iter().filter_map(|meta| meta.location.filename().map(String::from)).collect())
 }
 
-/// Puts the media the bucket doesn't have yet there.
+/// The media the bucket doesn't have yet, with their sizes.
+fn missing_media(folder: &Path, known: &HashSet<String>) -> Vec<(String, u64)> {
+    let Ok(entries) = std::fs::read_dir(folder) else { return Vec::new() };
+    let sized = |entry: std::fs::DirEntry| Some((entry.file_name().into_string().ok()?, entry.metadata().ok()?.len()));
+    entries.flatten().filter_map(sized).filter(|(name, _)| is_id(name) && !known.contains(name)).collect()
+}
+
+/// Puts the missing media there, saying how many bytes went.
 pub async fn upload_media(
     bucket: Arc<dyn ObjectStore>,
     me: &str,
     folder: &Path,
+    missing: Vec<(String, u64)>,
     known: &mut HashSet<String>,
+    report: impl Fn(u64),
 ) -> anyhow::Result<()> {
-    let Ok(entries) = std::fs::read_dir(folder) else { return Ok(()) };
-    let names = entries.flatten().filter_map(|entry| entry.file_name().into_string().ok());
-    let missing: Vec<String> = names.filter(|name| is_id(name) && !known.contains(name)).collect();
-    for name in missing {
+    let (mut sent, mut chunk) = (0, vec![0; 1 << 20]);
+    for (name, _) in missing {
         let mut file = tokio::fs::File::open(folder.join(&name)).await?;
         let mut upload = BufWriter::new(bucket.clone(), Key::from(format!("{me}/media/{name}")));
-        tokio::io::copy(&mut file, &mut upload).await?;
+        loop {
+            let read = file.read(&mut chunk).await?;
+            if read == 0 {
+                break;
+            }
+            upload.write_all(&chunk[..read]).await?;
+            sent += read as u64;
+            report(sent);
+        }
         upload.shutdown().await?;
         known.insert(name);
     }
@@ -413,19 +495,37 @@ fn keep_media(folder: &Path, id: &str, bytes: &[u8]) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// The batches of an origin's log that a server's copy lacks.
+struct Copy {
+    origin: String,
+    named: Named,
+    log_id: String,
+    /// How far the copy went, and the batches after, in order.
+    have: u64,
+    batches: Vec<(u64, u64, Key)>,
+}
+
+impl Copy {
+    fn changes(&self) -> u64 {
+        self.batches.last().map_or(0, |(up_to, _, _)| up_to - self.have)
+    }
+}
+
 /// Copies what the bucket has of every other server of the account, and deletes what it has of
-/// the servers the account deleted completely. Says whose logs it copied.
+/// the servers the account deleted completely. Says whose logs it copied, and how many of the
+/// changes it found it has copied as it goes.
 pub async fn copy_others<D: Database>(
     database: &Arc<D>,
     bucket: &dyn ObjectStore,
     me: &str,
     servers: &HashMap<String, Named>,
     deleted: &HashSet<String>,
-    report: impl Fn(u8),
+    report: impl Fn(u64, u64),
 ) -> anyhow::Result<Vec<String>> {
     let listed = bucket.list_with_delimiter(None).await?;
     let keys: Vec<String> = listed.common_prefixes.iter().map(|prefix| prefix.as_ref().to_string()).collect();
     let mut origins = Vec::new();
+    let mut copies = Vec::new();
     let mut failed = None;
     for key in keys.iter().filter(|key| *key != me) {
         if deleted.contains(key) {
@@ -441,9 +541,20 @@ pub async fn copy_others<D: Database>(
             Err(error) => return Err(error.into()),
         };
         origins.push(key.clone());
-        if let Err(error) = copy_log(database, bucket, key, named, &file.log_id, &report).await {
-            failed = Some(error.context(format!("Couldn't copy {}'s threads.", named.name)));
+        match lacking(database, bucket, key, named, &file.log_id).await {
+            Ok(copy) => copies.push(copy),
+            Err(error) => failed = Some(error.context(format!("Couldn't copy {}'s threads.", named.name))),
         }
+    }
+    let total = copies.iter().map(Copy::changes).sum();
+    let mut done = 0;
+    for copy in copies {
+        let name = copy.named.name.clone();
+        let changes = copy.changes();
+        if let Err(error) = apply_copy(database, bucket, copy, |copied| report(done + copied, total)).await {
+            failed = Some(error.context(format!("Couldn't copy {name}'s threads.")));
+        }
+        done += changes;
     }
     match failed {
         Some(error) => Err(error),
@@ -451,18 +562,17 @@ pub async fn copy_others<D: Database>(
     }
 }
 
-/// Copies what the bucket has of `origin`'s log after what this server's copy has.
-async fn copy_log<D: Database>(
+/// Lists what the bucket has of `origin`'s log after what this server's copy has.
+async fn lacking<D: Database>(
     database: &Arc<D>,
     bucket: &dyn ObjectStore,
     origin: &str,
     named: &Named,
     log_id: &str,
-    report: &impl Fn(u8),
-) -> anyhow::Result<()> {
+) -> anyhow::Result<Copy> {
     let key = origin.to_string();
     let copy = blocking(database, move |store| Ok(store.origin_watermark(&key)?)).await?;
-    let mut have = copy.filter(|copy| copy.log_id == log_id).map_or(0, |copy| copy.change);
+    let have = copy.filter(|copy| copy.log_id == log_id).map_or(0, |copy| copy.change);
     let prefix = Key::from(format!("{origin}/log/{log_id}"));
     // A batch is named by its last change first, so every one that ends after `have` sorts after this.
     let offset = Key::from(format!("{origin}/log/{log_id}/{have:020}-~"));
@@ -476,16 +586,22 @@ async fn copy_log<D: Database>(
         .filter(|(up_to, _, _)| *up_to > have)
         .collect();
     batches.sort_by_key(|(up_to, _, _)| *up_to);
-    let (start, end) = (have, batches.last().map_or(have, |(up_to, _, _)| *up_to));
-    for (up_to, after, location) in batches {
+    Ok(Copy { origin: origin.to_string(), named: named.clone(), log_id: log_id.to_string(), have, batches })
+}
+
+/// Applies the batches, saying how many changes of them it has copied.
+async fn apply_copy<D: Database>(
+    database: &Arc<D>,
+    bucket: &dyn ObjectStore,
+    copy: Copy,
+    report: impl Fn(u64),
+) -> anyhow::Result<()> {
+    for (up_to, after, location) in copy.batches {
         let compressed = bucket.get(&location).await?.bytes().await?;
-        let part = LogPart::decompress(log_id, after, up_to, &compressed)?;
-        let (origin, named) = (origin.to_string(), named.clone());
+        let part = LogPart::decompress(&copy.log_id, after, up_to, &compressed)?;
+        let (origin, named) = (copy.origin.clone(), copy.named.clone());
         blocking(database, move |store| store.apply_part(&origin, &named.name, &named.platform, &part, false)).await?;
-        have = up_to;
-        if end > start + 1 {
-            report(((have - start) * 100 / (end - start)).min(100) as u8);
-        }
+        report(up_to - copy.have);
     }
     Ok(())
 }
@@ -554,11 +670,20 @@ mod tests {
         add_thread(&a, "kept", 3);
         add_thread(&a, "gone", 1);
 
-        let first = upload_log(&a, &bucket, "a", "bucket", None, &file(), |_| {}).await.unwrap();
+        let sent = Mutex::new(None);
+        let first = upload_log(&a, &bucket, "a", "bucket", None, &file(), |log| *sent.lock().unwrap() = Some(log))
+            .await
+            .unwrap();
         assert_eq!(first.change, a.watermark().unwrap().change);
+        let sent = sent.into_inner().unwrap().unwrap();
+        assert_eq!((sent.changes, sent.whole()), (sent.of, sent.bytes), "the pass ends with all of it there");
         let none = HashSet::new();
-        let origins = copy_others(&b, &bucket, "b", &account(&["a", "b"]), &none, |_| {}).await.unwrap();
+        let copied = Mutex::new(Vec::new());
+        let report = |done, total| copied.lock().unwrap().push((done, total));
+        let origins = copy_others(&b, &bucket, "b", &account(&["a", "b"]), &none, report).await.unwrap();
         assert_eq!(origins, vec!["a".to_string()]);
+        let copied = copied.into_inner().unwrap();
+        assert_eq!(copied.last(), Some(&(first.change, first.change)), "{copied:?}");
         assert_eq!(thread_ids(&b, "a"), vec!["gone", "kept"]);
 
         a.delete_thread("gone").unwrap();
@@ -566,7 +691,7 @@ mod tests {
         let before = objects(&bucket).await;
         let second = upload_log(&a, &bucket, "a", "bucket", Some(first), &file(), |_| {}).await.unwrap();
         assert_eq!(objects(&bucket).await, before + 1, "only the new batch goes up");
-        copy_others(&b, &bucket, "b", &account(&["a", "b"]), &none, |_| {}).await.unwrap();
+        copy_others(&b, &bucket, "b", &account(&["a", "b"]), &none, |_, _| {}).await.unwrap();
 
         assert_eq!(thread_ids(&b, "a"), vec!["kept", "new"]);
         assert_eq!(b.copied_items("a", "kept").unwrap().len(), 3);
@@ -586,13 +711,20 @@ mod tests {
         upload_log(&a, &bucket, "stranger", "bucket", None, &file(), |_| {}).await.unwrap();
 
         let deleted = HashSet::from(["a".to_string()]);
-        let origins = copy_others(&b, &bucket, "b", &account(&["b"]), &deleted, |_| {}).await.unwrap();
+        let origins = copy_others(&b, &bucket, "b", &account(&["b"]), &deleted, |_, _| {}).await.unwrap();
 
         assert!(origins.is_empty());
         assert!(thread_ids(&b, "a").is_empty() && thread_ids(&b, "stranger").is_empty());
         let left: Vec<_> = bucket.list(None).try_collect().await.unwrap();
         assert!(left.iter().all(|meta| meta.location.as_ref().starts_with("stranger/")), "{left:?}");
         assert!(!left.is_empty());
+    }
+
+    #[test]
+    fn a_log_is_judged_whole_by_what_its_first_batches_took() {
+        assert_eq!(LogSent { changes: 0, of: 100, bytes: 0 }.whole(), 0);
+        assert_eq!(LogSent { changes: 25, of: 100, bytes: 1000 }.whole(), 4000);
+        assert_eq!(LogSent { changes: 120, of: 100, bytes: 1000 }.whole(), 1000, "changes made while it went");
     }
 
     #[test]
@@ -617,7 +749,13 @@ mod tests {
         std::fs::write(folder.path().join("unfinished.part"), b"half").unwrap();
 
         let mut known = HashSet::new();
-        upload_media(bucket.clone(), "a", folder.path(), &mut known).await.unwrap();
+        let missing = missing_media(folder.path(), &known);
+        assert_eq!(missing, vec![(id.clone(), 7)], "only what is named by its contents");
+        let sent = AtomicU64::new(0);
+        let report = |bytes| sent.store(bytes, Ordering::Relaxed);
+        upload_media(bucket.clone(), "a", folder.path(), missing, &mut known, report).await.unwrap();
+        assert_eq!(sent.load(Ordering::Relaxed), 7);
+        assert!(missing_media(folder.path(), &known).is_empty());
         assert_eq!(known, HashSet::from([id.clone()]));
         assert_eq!(listed_media(bucket.as_ref(), "a").await.unwrap(), known);
 

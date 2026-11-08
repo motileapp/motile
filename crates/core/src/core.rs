@@ -108,6 +108,9 @@ const RELAY_SOON: Duration = Duration::from_secs(2);
 const RELAY_AFTER_CHANGE: Duration = Duration::from_secs(10);
 /// How many ticks pass between rounds of copying when nothing asks for one, about five minutes.
 const RELAY_TICKS: u64 = 150;
+/// A round of copying that ends sooner than this never shows under its servers: a turn's few
+/// changes would only make the line flicker.
+const RELAY_QUIET: Duration = Duration::from_secs(3);
 
 pub type EventSink = Arc<dyn Fn(Event) + Send + Sync>;
 
@@ -477,6 +480,8 @@ struct Relay {
     read: HashSet<String>,
     /// What the running round carries, with how far each log has reached.
     copying: Vec<(relay::Transfer, u64)>,
+    /// When the running round planned what it carries, until the lines under its servers show it.
+    quiet_since: Option<Instant>,
     /// Why the last round couldn't copy to a server, by server id.
     failed: HashMap<String, relay::Failure>,
     /// The servers the last round left behind until a network that isn't metered.
@@ -830,6 +835,10 @@ impl Core {
                 }
                 if self.ticks.is_multiple_of(RELAY_TICKS) {
                     self.schedule_relay(RELAY_SOON);
+                }
+                if self.relay.quiet_since.is_some_and(|since| since.elapsed() >= RELAY_QUIET) {
+                    self.relay.quiet_since = None;
+                    self.emit_servers();
                 }
                 if self.ticks.is_multiple_of(LIMITS_CHECK_TICKS) {
                     let servers: Vec<String> =
@@ -1793,9 +1802,9 @@ impl Core {
         if server.status.state != State::Connected {
             return view(SyncState::Off, "Not syncing");
         }
-        let copying: Vec<&(relay::Transfer, u64)> =
-            self.relay.copying.iter().filter(|(transfer, _)| transfer.target == *id).collect();
-        if copying.iter().any(|(transfer, reached)| *reached < transfer.until) {
+        if self.carries_visibly(id) {
+            let copying: Vec<&(relay::Transfer, u64)> =
+                self.relay.copying.iter().filter(|(transfer, _)| transfer.target == *id).collect();
             let total: u64 = copying.iter().map(|(transfer, _)| transfer.until.saturating_sub(transfer.after)).sum();
             let done: u64 = copying
                 .iter()
@@ -1844,12 +1853,23 @@ impl Core {
             return Some(view);
         }
         let id = &server.device.public_key;
-        let carried =
-            self.relay.copying.iter().any(|(transfer, reached)| transfer.target == *id && *reached < transfer.until);
-        if carried || self.relay.failed.contains_key(id) {
+        if self.relay.failed.contains_key(id) {
             return None;
         }
-        Some(backup::line(info.backup.as_ref(), self.backup.failed.get(id), self.backup.saved.bucket.is_some()))
+        let line = backup::line(info.backup.as_ref(), self.backup.failed.get(id), self.backup.saved.bucket.is_some());
+        // The server's own work comes first; what the client carries to it shows only while the
+        // backup has nothing to say, so the line never swaps between the two.
+        let busy = matches!(line.state, SyncState::Copying | SyncState::Failed);
+        if !busy && self.carries_visibly(id) {
+            return None;
+        }
+        Some(line)
+    }
+
+    /// Whether the running round still carries to the server and has run long enough to say so.
+    fn carries_visibly(&self, id: &str) -> bool {
+        self.relay.quiet_since.is_none()
+            && self.relay.copying.iter().any(|(transfer, reached)| transfer.target == id && *reached < transfer.until)
     }
 
     /// Gives the bucket this device keeps to a connected server that has none.
@@ -1961,6 +1981,7 @@ impl Core {
         match progress {
             relay::Progress::Planned(transfers) => {
                 self.relay.copying = transfers.into_iter().map(|transfer| (transfer.clone(), transfer.after)).collect();
+                self.relay.quiet_since = Some(Instant::now());
             }
             relay::Progress::Carried { origin, target, mark } => {
                 let mut copying = self.relay.copying.iter_mut();
@@ -1978,6 +1999,7 @@ impl Core {
     fn relayed(&mut self, round: relay::Round) {
         self.relay.running = false;
         self.relay.copying.clear();
+        self.relay.quiet_since = None;
         let origins: Vec<String> = self.servers.iter().map(|server| server.device.public_key.clone()).collect();
         let behind: HashSet<String> =
             relay::plan(&round.marks, &origins, false).into_iter().map(|transfer| transfer.target).collect();
