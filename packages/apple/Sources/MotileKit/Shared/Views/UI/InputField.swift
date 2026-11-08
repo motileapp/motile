@@ -88,7 +88,9 @@ extension InputField {
                 .aspectRatio(1, contentMode: .fit)
                 .overlay { ActionButton(icon: .x, help: "Clear", symbolSize: ControlSize.regular.symbol, round: true) { text = "" } }
         } else {
+            // It lies on the field's fill, so it lights a step above it.
             ActionButton(icon: .x, help: "Clear", size: clearSize) { text = "" }
+                .environment(\.row, bare ? nil : .control)
                 .padding(.trailing, clearInset - size.padding + 2)
         }
     }

@@ -8,19 +8,31 @@ import SwiftUI
 /// of a line that scrolls, and the hook of a last f.
 final class LineFieldCell: NSTextFieldCell {
     static let inset: CGFloat = 3
+    /// How far past the right of the frame it is given AppKit shows a field's editor. The editor
+    /// is given that much less, so that at the end of a line the cursor stays inside the line's
+    /// frame, clear of what lies beside it.
+    static let editorReach: CGFloat = 2
+
+    /// Where the text and the field's editor lie in the field's bounds. AppKit places the editor
+    /// by `edit` and `select` when typing starts and by `drawingRect` when the field is resized.
+    static func textFrame(_ rect: NSRect) -> NSRect {
+        var frame = rect.insetBy(dx: inset, dy: 0)
+        frame.size.width = max(0, frame.width - editorReach)
+        return frame
+    }
 
     override func drawingRect(forBounds rect: NSRect) -> NSRect {
-        super.drawingRect(forBounds: rect).insetBy(dx: Self.inset, dy: 0)
+        Self.textFrame(super.drawingRect(forBounds: rect))
     }
 
     override func edit(withFrame rect: NSRect, in controlView: NSView, editor: NSText, delegate: Any?, event: NSEvent?) {
-        super.edit(withFrame: rect.insetBy(dx: Self.inset, dy: 0), in: controlView, editor: editor, delegate: delegate, event: event)
+        super.edit(withFrame: Self.textFrame(rect), in: controlView, editor: editor, delegate: delegate, event: event)
     }
 
     override func select(
         withFrame rect: NSRect, in controlView: NSView, editor: NSText, delegate: Any?, start: Int, length: Int
     ) {
-        super.select(withFrame: rect.insetBy(dx: Self.inset, dy: 0), in: controlView, editor: editor, delegate: delegate, start: start, length: length)
+        super.select(withFrame: Self.textFrame(rect), in: controlView, editor: editor, delegate: delegate, start: start, length: length)
     }
 }
 
@@ -52,19 +64,18 @@ final class LineTextField: NSTextField {
 /// `LineFieldCell` for a secure field, whose editor shows dots.
 final class LineSecureFieldCell: NSSecureTextFieldCell {
     override func drawingRect(forBounds rect: NSRect) -> NSRect {
-        super.drawingRect(forBounds: rect).insetBy(dx: LineFieldCell.inset, dy: 0)
+        LineFieldCell.textFrame(super.drawingRect(forBounds: rect))
     }
 
     override func edit(withFrame rect: NSRect, in controlView: NSView, editor: NSText, delegate: Any?, event: NSEvent?) {
-        super.edit(withFrame: rect.insetBy(dx: LineFieldCell.inset, dy: 0), in: controlView, editor: editor, delegate: delegate, event: event)
+        super.edit(withFrame: LineFieldCell.textFrame(rect), in: controlView, editor: editor, delegate: delegate, event: event)
     }
 
     override func select(
         withFrame rect: NSRect, in controlView: NSView, editor: NSText, delegate: Any?, start: Int, length: Int
     ) {
         super.select(
-            withFrame: rect.insetBy(dx: LineFieldCell.inset, dy: 0), in: controlView, editor: editor, delegate: delegate, start: start,
-            length: length)
+            withFrame: LineFieldCell.textFrame(rect), in: controlView, editor: editor, delegate: delegate, start: start, length: length)
     }
 }
 
