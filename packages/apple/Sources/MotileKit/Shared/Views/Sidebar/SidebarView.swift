@@ -703,7 +703,7 @@ struct DraftRows: View {
                     DraftRow(listed: listed, open: open)
                 } else {
                     DraftRow(listed: listed, open: open)
-                        .rowSwipe(.trash2, "Discard Draft", tint: .themeDestructive, size: .regular, isOpen: swiped(listed.id)) {
+                        .rowSwipe(.trash2, "Discard Draft", tint: .themeDestructive, isOpen: swiped(listed.id)) {
                             store.discard(listed.draft)
                         }
                 }
