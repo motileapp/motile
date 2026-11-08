@@ -48,7 +48,8 @@ fun TableView(table: TableBlock, modifier: Modifier = Modifier, marks: FoundMark
                             }
                             val start = table.starts.getOrNull(rowIndex)?.getOrNull(column)
                             val found = if (start == null) emptyList() else marks.within(start, cell.length)
-                            MarkedText(cell, style.copy(textAlign = align), found = found, onCurrent = onCurrent)
+                            val sent = start?.let { from -> { at: Int -> from + at } }
+                            MarkedText(cell, style.copy(textAlign = align), found = found, onCurrent = onCurrent, sent = sent)
                         }
                     }
                 },

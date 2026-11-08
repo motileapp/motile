@@ -3,8 +3,12 @@
 //! their own, each told by where it starts in the row's.
 
 use std::ops::Range;
+use std::rc::Rc;
 
+use gpui_kit::SharedString;
 use motile_core::find::FoundRow;
+
+use crate::ui::rich_text::Sent;
 
 /// The matches in one row, and which of them is the current one.
 #[derive(Clone, Debug, PartialEq, Default)]
@@ -41,6 +45,16 @@ impl Marks {
     }
 }
 
+/// The UTF-16 units of `text` before its byte `byte`.
+pub fn units_before(text: &str, byte: usize) -> u32 {
+    text.char_indices().take_while(|(at, _)| *at < byte).map(|(_, character)| character.len_utf16() as u32).sum()
+}
+
+/// Where the bytes of `text`, which starts `source` units into its row's text, are in the row's.
+pub fn stretch(text: SharedString, source: u32) -> Sent {
+    Rc::new(move |byte| source + units_before(&text, byte))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -51,5 +65,13 @@ mod tests {
         assert_eq!(marks.in_text("café au lait", 0), vec![(2..7, false), (10..13, true)]);
         assert_eq!(marks.in_text("lait", 8), vec![(1..4, true)], "a stretch further on");
         assert!(marks.in_text("ca", 0).iter().all(|(range, _)| range.end <= 2), "cut at the stretch's end");
+    }
+
+    #[test]
+    fn a_byte_of_a_stretch_is_units_of_the_row() {
+        let sent = stretch("café 😀 au lait".into(), 8);
+        assert_eq!(sent(0), 8);
+        assert_eq!(sent(6), 13, "é is one unit of two bytes");
+        assert_eq!(sent(11), 16, "😀 is two units of four bytes");
     }
 }

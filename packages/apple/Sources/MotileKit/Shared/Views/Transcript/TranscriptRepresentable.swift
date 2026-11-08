@@ -71,7 +71,7 @@ struct TranscriptRepresentable {
             recolor: { [weak view] rowID, content in view?.recolor(rowID: rowID, content: content) },
             earlier: { [weak view] earlier in view?.setEarlier(earlier) },
             live: { [weak view] live in view?.live = live },
-            viewport: { [weak view] in view?.viewport },
+            findFrom: { [weak view] cover in view?.findFrom(cover: cover) },
             found: { [weak view] found in view?.setFound(found) },
             reveal: { [weak view] rowID, range in view?.reveal(rowID: rowID, range: range) }
         )

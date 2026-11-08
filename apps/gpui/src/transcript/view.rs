@@ -436,8 +436,8 @@ impl TranscriptView {
     }
 
     /// Scrolls to the row, and to the current match in it, a frame at a time: the row into the
-    /// viewport first, then the match to its middle unless it is in sight already. A long message
-    /// that hides the match opens.
+    /// viewport first, then the match to its middle unless it is in sight already, between the
+    /// find bar and what floats over the end. A long message that hides the match opens.
     fn advance_reveal(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(mut reveal) = self.revealing.take() else { return };
         reveal.frames += 1;
@@ -500,8 +500,7 @@ impl TranscriptView {
         }
         let target = painted.unwrap_or(row);
         let visible = shown_bottom - shown_top;
-        let margin = px(80.).min(visible / 4.);
-        if target.top() >= shown_top + margin && target.bottom() <= shown_bottom - margin {
+        if target.top() >= shown_top && target.bottom() <= shown_bottom {
             return;
         }
         let middle = shown_top + visible / 2.;
@@ -552,6 +551,8 @@ impl Render for TranscriptView {
                 this.trim_earlier_if_far(cx);
             });
         }
+        // The rows paint their text again, which finding starts from.
+        crate::ui::rich_text::forget_painted_text();
         let viewport = self.viewport_height(cx);
         let show_jump = !self.pinned(cx)
             && !self.model.read(cx).rows.is_empty()

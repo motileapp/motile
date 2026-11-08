@@ -8,10 +8,10 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use gpui_kit::*;
-use motile_core::api::{Event, ScrollAt};
+use motile_core::api::{Event, FindFrom, ScrollAt};
 use motile_core::render::agents::AgentState;
-use motile_core::render::markdown::ParaKind;
-use motile_core::render::rows::{After, Row, RowKind};
+use motile_core::render::markdown::{ParaKind, utf16_len};
+use motile_core::render::rows::{After, Row, RowKind, searched_text};
 
 use super::find::Marks;
 use super::prose::{self, PreparedProse};
@@ -491,15 +491,22 @@ impl Transcript {
         Some(ScrollAt { row_id: self.rows[row].row.id.clone(), delta: f64::from(delta) })
     }
 
-    /// Where the viewport shows the rows, whether or not it follows the end.
-    pub fn viewport(&self) -> Option<ScrollAt> {
-        let top = self.list.logical_scroll_top();
-        let (shown, row) = self.items.iter().enumerate().skip(top.item_ix).find_map(|(shown, item)| match item {
-            Item::Row(row) => Some((shown, *row)),
-            _ => None,
-        })?;
-        let delta = if shown == top.item_ix { f32::from(top.offset_in_item) } else { 0. };
-        Some(ScrollAt { row_id: self.rows[row].row.id.clone(), delta: f64::from(delta) })
+    /// Where finding starts: the first row that shows below a find bar that covers `cover` of
+    /// the viewport's top, and where its first whole line there is in its searched text.
+    pub fn find_from(&self, cover: f32) -> Option<FindFrom> {
+        let top = self.list.viewport_bounds().top() + px(cover);
+        let first = self.list.logical_scroll_top().item_ix;
+        let row = (first..self.items.len())
+            .map_while(|shown| Some((&self.items[shown], self.list.bounds_for_item(shown)?)))
+            .find_map(|(item, bounds)| match item {
+                Item::Row(row) if bounds.bottom() > top => Some(*row),
+                _ => None,
+            })?;
+        let row = &self.rows[row].row;
+        let offset = crate::ui::rich_text::first_line_below(super::rows::row_key(&row.id), top)
+            .or_else(|| searched_text(row).map(utf16_len))
+            .unwrap_or(0);
+        Some(FindFrom { row_id: row.id.clone(), offset })
     }
 
     pub fn set_found(&mut self, found: HashMap<String, Marks>) {

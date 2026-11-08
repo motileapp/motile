@@ -250,6 +250,18 @@ final class TextSystem {
         return tops
     }
 
+    /// The first character of the first line that starts at or below `y`, from the container's
+    /// top, or the text's length when no line does.
+    func firstCharacter(below y: CGFloat) -> Int {
+        guard storage.length > 0, y > 0 else { return 0 }
+        let glyph = layout.glyphIndex(for: CGPoint(x: 0, y: y), in: container)
+        var line = NSRange()
+        let rect = layout.lineFragmentRect(forGlyphAt: glyph, effectiveRange: &line)
+        let first = rect.minY >= y ? line.location : NSMaxRange(line)
+        guard first < layout.numberOfGlyphs else { return storage.length }
+        return layout.characterIndexForGlyph(at: first)
+    }
+
     /// Where that part of the text is laid out, from the container's corner.
     func rect(of range: NSRange) -> CGRect? {
         guard range.length > 0, NSMaxRange(range) <= storage.length else { return nil }
@@ -410,5 +422,10 @@ struct FoundText {
     /// Where that part of the text the core sent is in the view.
     func rect(of range: NSRange, in view: RowTextView) -> CGRect? {
         Typesetter.shownRange(range, in: base).flatMap { view.rect(of: $0) }
+    }
+
+    /// Where the first whole line at or below `y` in the view starts in the text the core sent.
+    func offset(below y: CGFloat, in view: RowTextView) -> Int {
+        Typesetter.sentLocation(view.firstCharacter(below: y), in: base)
     }
 }

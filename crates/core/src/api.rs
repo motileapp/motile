@@ -50,6 +50,16 @@ pub struct Config {
     pub media_limit: Option<u64>,
 }
 
+/// Where finding in a thread starts: the first row that shows below the client's bars, and how
+/// far into its text it shows, in UTF-16 units: the first character of its first whole line there.
+/// A long reply is a single row, so its first match can be far above what the client shows.
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct FindFrom {
+    pub row_id: String,
+    #[serde(default)]
+    pub offset: u32,
+}
+
 /// A place in a transcript: the row at the top of the viewport, and how far the viewport's top is
 /// below the row's.
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
@@ -492,13 +502,14 @@ pub enum Command {
         at: Option<ScrollAt>,
     },
     /// Finds `query` in the thread, as a browser finds in a page, and answers with `found`. The
-    /// current match is the one in `item_id` when it has one, or else the first from `from`, the
-    /// client's place. Each time the current match moves, `reveal` brings it into sight.
+    /// current match is the one in `item_id` when it has one, or else the first from the current
+    /// match, or without one from `from`, where the client shows the thread. Each time the current
+    /// match moves, `reveal` brings it into sight.
     Find {
         thread_id: String,
         query: String,
         #[serde(default)]
-        from: Option<ScrollAt>,
+        from: Option<FindFrom>,
         #[serde(default)]
         item_id: Option<String>,
     },

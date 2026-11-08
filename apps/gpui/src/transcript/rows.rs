@@ -13,7 +13,7 @@ use motile_core::render::agents::AgentState;
 use motile_core::render::rows::{AgentRow, CardPlace, ChangeEntry, HandoffLabel, RowKind, StateCount, Tool};
 use motile_protocol::wire::{Ask, ToolStatus};
 
-use super::find::Marks;
+use super::find::{self, Marks};
 use super::kit::{GrowthFade, RowButton, Shimmer, Sideways, TailLine, dashed_outline};
 use super::model::RowModel;
 use super::prose::{self, CodeBox, ParaStyle, ProseBlock, TableCell, TextPara};
@@ -22,6 +22,7 @@ use crate::models::{AttachedFile, duration, elapsed};
 use crate::store::Store;
 use crate::store::settings::SettingsSection;
 use crate::theme::{self, Colors, ControlSize, IconSize, Radius, Surface, colors};
+use crate::ui::rich_text::Sent;
 use crate::ui::{ActionButton, GatewayMark, Highlight, beside, edges, icons};
 
 /// The room a prose row has around its text, which is what keeps two rows apart.
@@ -225,6 +226,7 @@ fn paragraph(id: ElementId, para: &TextPara, look: ParaLook, marks: Option<&Mark
         .tinted(code, c.background_accent)
         .tint_size(px(crate::fonts::inline_code_size(size)))
         .found(found, cx)
+        .sent(find::stretch(para.text.clone(), para.source))
         .into_any_element()
 }
 
@@ -233,7 +235,8 @@ const PLAIN_PARAGRAPH_GAP: f32 = 6.;
 
 /// Plain text, selectable, with its web addresses clickable, the names of its skills on chips,
 /// and room after each of its lines as the Mac keeps after a paragraph. Each line is text of its
-/// own, and the blank lines after it go with it, so that a copied selection has them.
+/// own, and the blank lines after it go with it, so that a copied selection has them. `sent` says
+/// where its bytes are in the text its row was searched in.
 #[allow(clippy::too_many_arguments)]
 fn plain(
     id: &str,
@@ -241,6 +244,7 @@ fn plain(
     links: &[(Range<usize>, String)],
     skills: &[Range<usize>],
     found: &[(Range<usize>, bool)],
+    sent: Option<&Sent>,
     color: Hsla,
     key: u64,
     cx: &App,
@@ -267,13 +271,19 @@ fn plain(
         let breaks = 1 + words.len() - words.trim_end_matches('\n').len();
         let plain = Plain { family: theme::UI_FONT, size: 0., color, weight: FontWeight::NORMAL, heading: false };
         let runs = with_skill_names(text_runs(&words, &[], &links, plain, cx), &skills, cx);
-        div().when(index + 1 < count, |line| line.mb(px(PLAIN_PARAGRAPH_GAP * breaks as f32))).child(
-            crate::ui::rich_text::RichText::with_runs(SharedString::from(format!("{id}-{index}")), words, runs)
-                .row(key)
-                .links(links, open_link)
-                .skills(skills)
-                .found(found, cx),
-        )
+        let text = crate::ui::rich_text::RichText::with_runs(SharedString::from(format!("{id}-{index}")), words, runs)
+            .row(key)
+            .links(links, open_link)
+            .skills(skills)
+            .found(found, cx);
+        let text = match sent.cloned() {
+            Some(sent) => {
+                let start = part.start;
+                text.sent(Rc::new(move |byte| sent(start + byte)))
+            }
+            None => text,
+        };
+        div().when(index + 1 < count, |line| line.mb(px(PLAIN_PARAGRAPH_GAP * breaks as f32))).child(text)
     }))
 }
 
@@ -325,6 +335,18 @@ impl Shown {
             self.shifts.iter().rev().find(|(end, _)| *end <= offset).map_or(offset, |(end, shown)| shown + offset - end)
         };
         Some(moved(range.start)..moved(range.end))
+    }
+
+    /// Where bytes of `text` are in `message`, in UTF-16 units. What falls on a skill's chip is
+    /// where its `$name` starts.
+    fn sent(&self, message: &str) -> Sent {
+        let (message, shifts) = (message.to_string(), self.shifts.clone());
+        let starts: Vec<usize> = self.names.iter().map(|name| name.start).collect();
+        Rc::new(move |offset| {
+            let (end, shown) = shifts.iter().rev().find(|(_, shown)| *shown <= offset).copied().unwrap_or_default();
+            let next = starts.iter().copied().find(|start| *start >= end).unwrap_or(message.len());
+            find::units_before(&message, (end + offset - shown).min(next))
+        })
     }
 }
 
@@ -421,6 +443,7 @@ pub fn code_text(
     code: &SharedString,
     spans: Option<&Vec<(Range<usize>, u32)>>,
     found: Vec<(Range<usize>, bool)>,
+    source: u32,
     key: u64,
     cx: &App,
 ) -> AnyElement {
@@ -445,7 +468,11 @@ pub fn code_text(
     if at < code.len() {
         runs.push(run(code.len() - at, base, c.foreground));
     }
-    crate::ui::rich_text::RichText::with_runs(id, code.clone(), runs).row(key).found(found, cx).into_any_element()
+    crate::ui::rich_text::RichText::with_runs(id, code.clone(), runs)
+        .row(key)
+        .found(found, cx)
+        .sent(find::stretch(code.clone(), source))
+        .into_any_element()
 }
 
 /// The button that copies something, which shows a check mark for a moment once it has.
@@ -514,8 +541,8 @@ pub fn code_box(
 ) -> Div {
     let c = colors(cx);
     let found = marks.map(|marks| marks.in_text(&code.code, code.source)).unwrap_or_default();
-    let text =
-        code_text(SharedString::from(format!("{id}-code")).into(), &code.code, code.spans.as_ref(), found, key, cx);
+    let code_id = SharedString::from(format!("{id}-code")).into();
+    let text = code_text(code_id, &code.code, code.spans.as_ref(), found, code.source, key, cx);
     let body =
         div().px(px(14.)).pb(px(CODE_BOTTOM)).text_size(px(theme::CODE_SIZE)).line_height(px(theme::CODE_LINE_HEIGHT));
     div()
@@ -802,6 +829,7 @@ fn bubble_content(
     let text = message.text;
     let found = ctx.found.get(&model.row.id).map(|marks| marks.in_text(text, 0)).unwrap_or_default();
     let shown = with_skill_chips(message, window);
+    let sent = shown.sent(text);
     let found: Vec<(Range<usize>, bool)> =
         found.iter().filter_map(|(range, current)| Some((shown.moved(range)?, *current))).collect();
     let has_files = !attachments.is_empty();
@@ -823,6 +851,7 @@ fn bubble_content(
                 &shown.links,
                 &shown.labels,
                 &found,
+                Some(&sent),
                 color,
                 row_key(&model.row.id),
                 cx,
@@ -1178,7 +1207,7 @@ fn tool_row(model: &RowModel, ctx: &RowContext, cx: &App) -> AnyElement {
         RowKind::Thinking { text } => {
             if expanded_here {
                 let id = format!("{row_id}-detail");
-                let thought = plain(&id, text, &[], &[], &[], c.muted_foreground, row_key(&row_id), cx);
+                let thought = plain(&id, text, &[], &[], &[], None, c.muted_foreground, row_key(&row_id), cx);
                 detail = Some(detail_box(inset, text_box(13., 20.5).text_color(c.muted_foreground).child(thought), cx));
             }
             ToolLine {
@@ -1568,11 +1597,20 @@ pub fn turn_label(stopped: bool, duration_ms: Option<u64>) -> String {
 fn error_row(model: &RowModel, message: &str, ctx: &RowContext, cx: &App) -> AnyElement {
     let id = format!("{}-error", model.row.id);
     let found = ctx.found.get(&model.row.id).map(|marks| marks.in_text(message, 0)).unwrap_or_default();
-    div().pt(px(4.)).pb(px(10.)).child(error_box(&id, message, &found, row_key(&model.row.id), cx)).into_any_element()
+    let sent = find::stretch(message.to_string().into(), 0);
+    let error = error_box(&id, message, &found, Some(&sent), row_key(&model.row.id), cx);
+    div().pt(px(4.)).pb(px(10.)).child(error).into_any_element()
 }
 
 /// An error on its tint, with its sign before it, and what finding found in it set off.
-pub fn error_box(id: &str, message: &str, found: &[(Range<usize>, bool)], key: u64, cx: &App) -> Div {
+pub fn error_box(
+    id: &str,
+    message: &str,
+    found: &[(Range<usize>, bool)],
+    sent: Option<&Sent>,
+    key: u64,
+    cx: &App,
+) -> Div {
     let c = colors(cx);
     div()
         .bg(c.destructive_tint)
@@ -1597,6 +1635,7 @@ pub fn error_box(id: &str, message: &str, found: &[(Range<usize>, bool)], key: u
             &[],
             &[],
             found,
+            sent,
             c.destructive,
             key,
             cx,
@@ -2016,6 +2055,7 @@ fn removed_row(model: &RowModel, title: &str, message: &str, ctx: &RowContext, c
                     &[],
                     &[],
                     &[],
+                    None,
                     c.muted_foreground,
                     row_key(&model.row.id),
                     cx,

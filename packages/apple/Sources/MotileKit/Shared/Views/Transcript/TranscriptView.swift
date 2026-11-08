@@ -411,9 +411,14 @@ final class TranscriptView: FlippedView, RowOwner {
         currentAnchor().map { TranscriptPlace(rowID: $0.id, delta: $0.delta) }
     }
 
-    /// Where the viewport shows the rows, whether or not it follows the end.
-    var viewport: TranscriptPlace? {
-        viewportAnchor().map { TranscriptPlace(rowID: $0.id, delta: $0.delta) }
+    /// Where finding starts: the first row that shows below the top bar and a find bar that covers
+    /// `cover`, which may not be up yet, and where its first whole line there is in its text.
+    func findFrom(cover: CGFloat) -> FindFrom? {
+        guard !rows.isEmpty else { return nil }
+        let top = scroller.offsetY + topInset + cover - topPadding
+        let index = self.index(at: top)
+        let row = rows[index]
+        return FindFrom(rowID: row.id, offset: views[row.id]?.textOffset(below: top - offsets[index]) ?? 0)
     }
 
     private func viewportAnchor() -> Anchor? {
@@ -960,7 +965,7 @@ final class TranscriptView: FlippedView, RowOwner {
     }
 
     /// Scrolls to the row, and to that part of its text in the middle of the viewport unless it is
-    /// in sight already. A long message that hides it opens.
+    /// in sight already, between the bars. A long message that hides it opens.
     func reveal(rowID: String, range: NSRange?) {
         guard bounds.width > 0, viewportHeight > 0, rows.contains(where: { $0.id == rowID }) else {
             revealing = (rowID, range)
@@ -981,9 +986,8 @@ final class TranscriptView: FlippedView, RowOwner {
         let rect = range.flatMap { view.rect(of: $0) } ?? CGRect(x: 0, y: 0, width: view.bounds.width, height: min(view.bounds.height, visible))
         let top = view.frame.minY + rect.minY
         let bottom = view.frame.minY + rect.maxY
-        let margin = min(80, visible / 4)
-        let shownTop = scroller.offsetY + covered + margin
-        let shownBottom = scroller.offsetY + viewportHeight - bottomInset - margin
+        let shownTop = scroller.offsetY + covered
+        let shownBottom = scroller.offsetY + viewportHeight - bottomInset
         guard top < shownTop || bottom > shownBottom else { return updateJumpButton() }
         let y = max(0, min(endY, (top + bottom) / 2 - covered - visible / 2))
         scroll(to: y)

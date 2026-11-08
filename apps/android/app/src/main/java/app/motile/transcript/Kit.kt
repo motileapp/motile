@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
@@ -23,6 +24,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.withFrameMillis
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -31,7 +33,9 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.SpanStyle
@@ -252,10 +256,63 @@ fun ShimmerText(text: AnnotatedString, style: TextStyle, color: Color, bright: C
     }
 }
 
+/** A laid out piece of a row's text, and `sent`, where a place in it is in the text the core sent. */
+class TextPiece {
+    var sent: (Int) -> Int = { it }
+    var layout: TextLayoutResult? = null
+    var coordinates: LayoutCoordinates? = null
+}
+
+/** The pieces of a row's text as they are laid out, for where finding starts in the row. */
+class RowTexts {
+    private val pieces = mutableSetOf<TextPiece>()
+
+    fun add(piece: TextPiece) = pieces.add(piece)
+
+    fun remove(piece: TextPiece) = pieces.remove(piece)
+
+    /** Where the first whole line at or below `below` in the window starts in the text the core sent, or the text's end when none does. */
+    fun offset(below: Float): Int {
+        var end = 0
+        var first: Pair<Float, Int>? = null
+        for (piece in pieces) {
+            val layout = piece.layout ?: continue
+            val coordinates = piece.coordinates?.takeIf { it.isAttached } ?: continue
+            val top = coordinates.positionInWindow().y
+            end = max(end, piece.sent(layout.layoutInput.text.length))
+            val line = (0 until layout.lineCount).firstOrNull { top + layout.getLineTop(it) >= below } ?: continue
+            val at = top + layout.getLineTop(line) to piece.sent(layout.getLineStart(line))
+            if (first == null || at.first < first.first || (at.first == first.first && at.second < first.second)) first = at
+        }
+        return first?.second ?: end
+    }
+}
+
+/** The pieces of the row being composed, which its texts join. */
+val LocalRowTexts = staticCompositionLocalOf<RowTexts?> { null }
+
+/** A piece of the row's text that joins its row's while composed, or null outside a row or without `sent`. */
+@Composable
+fun rememberTextPiece(sent: ((Int) -> Int)?): TextPiece? {
+    val texts = LocalRowTexts.current ?: return null
+    sent ?: return null
+    val piece = remember(texts) { TextPiece() }
+    piece.sent = sent
+    DisposableEffect(texts, piece) {
+        texts.add(piece)
+        onDispose { texts.remove(piece) }
+    }
+    return piece
+}
+
+/** Keeps where the text is placed in its piece. */
+fun Modifier.placesPiece(piece: TextPiece?): Modifier = if (piece == null) this else onPlaced { piece.coordinates = it }
+
 /**
  * Text with what its text system can't draw drawn behind it: the rounded boxes of inline code and
  * the chips of skills, from the marks `Typesetter` left in it, and finding's matches in the thread,
- * `found`. `onCurrent` is told where the current match is, in the text and in the window.
+ * `found`. `onCurrent` is told where the current match is, in the text and in the window. `sent`
+ * maps a place in it to the row's text, where finding starts.
  */
 @Composable
 fun MarkedText(
@@ -264,7 +321,9 @@ fun MarkedText(
     modifier: Modifier = Modifier,
     found: List<FoundSpan> = emptyList(),
     onCurrent: ((Rect, Rect) -> Unit)? = null,
+    sent: ((Int) -> Int)? = null,
 ) {
+    val piece = rememberTextPiece(sent)
     val palette = LocalPalette.current
     val dark = LocalDark.current
     val marks = remember(text) {
@@ -278,7 +337,13 @@ fun MarkedText(
         drawFound(laid, found, style, palette)
         for (mark in marks) drawMark(laid, mark.start, mark.end, mark.tag == TextMarks.skill, palette, dark)
     }
-    Text(shown, drawn.reportsCurrent(found, style, density, { layout }, onCurrent), style = style, onTextLayout = { layout = it })
+    Text(
+        shown, drawn.reportsCurrent(found, style, density, { layout }, onCurrent).placesPiece(piece), style = style,
+        onTextLayout = {
+            layout = it
+            piece?.layout = it
+        },
+    )
 }
 
 /** Tells `onCurrent` where the current match is once the text is laid out and placed. */

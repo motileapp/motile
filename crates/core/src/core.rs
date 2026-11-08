@@ -26,8 +26,8 @@ use tokio::sync::mpsc;
 use tokio::task::AbortHandle;
 
 use crate::api::{
-    AccountView, Children, Command, Config, Event, ProjectView, ScrollAt, Section, ServerView, SyncState, SyncView,
-    ThreadView, WaitingChild,
+    AccountView, Children, Command, Config, Event, FindFrom, ProjectView, ScrollAt, Section, ServerView, SyncState,
+    SyncView, ThreadView, WaitingChild,
 };
 use crate::away::{Away, STALE_AFTER};
 use crate::backup::{self, BACKUP_PROTOCOL};
@@ -2473,11 +2473,11 @@ impl Core {
     }
 
     /// Finds `query` in the thread, reading its rows from the cache the first time.
-    fn find(&mut self, thread_id: &str, query: &str, from: Option<ScrollAt>, item_id: Option<String>) {
+    fn find(&mut self, thread_id: &str, query: &str, from: Option<FindFrom>, item_id: Option<String>) {
         let Some(open) = self.open.get_mut(thread_id) else { return };
-        let place = from.and_then(|at| {
-            let row = open.transcript.rows().iter().find(|row| row.id == at.row_id)?;
-            Some((open.transcript.item(&row.item)?.seq, find::block(&row.id)))
+        let place = from.and_then(|from| {
+            let row = open.transcript.rows().iter().find(|row| row.id == from.row_id)?;
+            Some((open.transcript.item(&row.item)?.seq, find::block(&row.id), from.offset))
         });
         let find = match open.find.as_mut() {
             Some(find) => find,

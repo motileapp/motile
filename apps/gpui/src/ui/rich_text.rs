@@ -17,6 +17,9 @@ use gpui_kit::*;
 type OnLink = Rc<dyn Fn(&str, &mut Window, &mut App)>;
 type LinkPress = Rc<std::cell::Cell<Option<Point<Pixels>>>>;
 
+/// Where each byte of a text is in the text its transcript row was searched in, in UTF-16 units.
+pub type Sent = Rc<dyn Fn(usize) -> u32>;
+
 pub struct RichText {
     id: ElementId,
     text: SharedString,
@@ -36,6 +39,8 @@ pub struct RichText {
     found: Vec<(Range<usize>, bool)>,
     /// The transcript row it is in.
     row: Option<u64>,
+    /// Where its bytes are in the text its row was searched in, which finding starts from.
+    sent: Option<Sent>,
     /// It lies in a control, whose cursor it keeps in place of the I-beam.
     in_control: bool,
     /// Where it comes in the window's text, which a copied selection keeps to.
@@ -182,6 +187,7 @@ impl RichText {
             runs: None,
             found: Vec::new(),
             row: None,
+            sent: None,
             in_control: false,
             order: 0,
         }
@@ -190,6 +196,13 @@ impl RichText {
     /// The transcript row it is in, which a selection keeps to.
     pub fn row(mut self, row: u64) -> Self {
         self.row = Some(row);
+        self
+    }
+
+    /// Says where its bytes are in the text its row was searched in, so that finding can start
+    /// at one of its lines.
+    pub fn sent(mut self, sent: Sent) -> Self {
+        self.sent = Some(sent);
         self
     }
 
@@ -444,6 +457,9 @@ impl Element for RichText {
         cx: &mut App,
     ) {
         let layout = self.styled.layout().clone();
+        if let (Some(row), Some(sent)) = (self.row, self.sent.clone()) {
+            PAINTED_TEXT.with_borrow_mut(|painted| painted.push(PaintedText { row, layout: layout.clone(), sent }));
+        }
         let projection =
             kept.handle.update_runs(&[TextSelectionRun::new(self.text.clone(), layout.clone(), bounds)], cx);
         if !self.in_control {
@@ -936,6 +952,45 @@ mod tests {
         send(&mut cx, window, vec![released]);
         assert_eq!(*opened.borrow(), ["https://motile.app"]);
     }
+
+    /// A row's text that starts 10 units into the row's, 10 points down, in lines 20 points tall.
+    struct Lined(&'static str, f32);
+
+    impl Render for Lined {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            let text = RichText::new("lined", self.0).row(7).sent(crate::transcript::find::stretch(self.0.into(), 10));
+            div()
+                .font_family(crate::theme::UI_FONT)
+                .text_size(px(14.))
+                .line_height(px(20.))
+                .pt(px(10.))
+                .w(px(self.1))
+                .child(text)
+        }
+    }
+
+    #[test]
+    fn finding_starts_at_the_first_whole_line_below() {
+        let Some((mut cx, window)) = headless_window(|_| Lined("first\nsecond\nthird", 400.)) else { return };
+        forget_painted_text();
+        draw(&mut cx, window);
+        assert_eq!(first_line_below(7, px(0.)), Some(10), "above the text");
+        assert_eq!(first_line_below(7, px(10.)), Some(10), "at its first line's top");
+        assert_eq!(first_line_below(7, px(15.)), Some(16), "into its first line");
+        assert_eq!(first_line_below(7, px(45.)), Some(23));
+        assert_eq!(first_line_below(7, px(55.)), None, "past its last line");
+        assert_eq!(first_line_below(8, px(0.)), None, "another row");
+    }
+
+    #[test]
+    fn a_wrapped_line_starts_at_a_word() {
+        let text = "aaaa bbbb cccc dddd";
+        let Some((mut cx, window)) = headless_window(|_| Lined(text, 50.)) else { return };
+        forget_painted_text();
+        draw(&mut cx, window);
+        let starts = [15, 20, 25];
+        assert!(first_line_below(7, px(11.)).is_some_and(|offset| starts.contains(&offset)));
+    }
 }
 
 /// The runs with the text in `range` in `color`, split where it starts and ends.
@@ -982,4 +1037,54 @@ pub fn painted_current_match() -> Option<Bounds<Pixels>> {
 /// Forgets where the current match was painted, to learn where it is painted next.
 pub fn forget_current_match() {
     CURRENT_MATCH.set(None);
+}
+
+/// Text of a transcript's row painted since the transcript last drew.
+struct PaintedText {
+    row: u64,
+    layout: TextLayout,
+    sent: Sent,
+}
+
+thread_local! {
+    static PAINTED_TEXT: std::cell::RefCell<Vec<PaintedText>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// Forgets the text of the rows painted before, as the transcript draws them again.
+pub fn forget_painted_text() {
+    PAINTED_TEXT.with_borrow_mut(Vec::clear);
+}
+
+/// Where the first whole line of the row's text at or below `y` in the window starts, in the
+/// text the row was searched in. None when no line of it does.
+pub fn first_line_below(row: u64, y: Pixels) -> Option<u32> {
+    PAINTED_TEXT.with_borrow(|painted| {
+        painted
+            .iter()
+            .filter(|text| text.row == row)
+            .filter_map(|text| line_below(&text.layout, y).map(|byte| (text.sent)(byte)))
+            .min()
+    })
+}
+
+/// The first byte of the first line of the text whose top is at or below `y`.
+fn line_below(layout: &TextLayout, y: Pixels) -> Option<usize> {
+    let line_height = layout.line_height();
+    let mut top = layout.bounds().top();
+    let mut start = 0;
+    for line in layout.line_layouts() {
+        let wraps = line
+            .wrap_boundaries
+            .iter()
+            .filter_map(|wrap| line.unwrapped_layout.runs.get(wrap.run_ix)?.glyphs.get(wrap.glyph_ix))
+            .map(|glyph| glyph.index);
+        for at in std::iter::once(0).chain(wraps) {
+            if top >= y {
+                return Some(start + at);
+            }
+            top += line_height;
+        }
+        start += line.unwrapped_layout.len + 1;
+    }
+    None
 }
