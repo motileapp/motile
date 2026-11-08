@@ -501,6 +501,8 @@ pub fn limit_reply(gateway: &Gateway, agent: Agent, pin: Option<&str>) -> Option
         Agent::Claude => {
             headers.push(("anthropic-ratelimit-unified-status".into(), "rejected".into()));
             headers.push(("anthropic-ratelimit-unified-reset".into(), (until as u64).to_string()));
+            headers.push(("anthropic-ratelimit-unified-representative-claim".into(), claude_claim(until - now).into()));
+            headers.push(("anthropic-ratelimit-unified-overage-status".into(), "rejected".into()));
             json!({"type": "error", "error": {"type": "rate_limit_error", "message": message}})
         }
         Agent::Codex => {
@@ -508,6 +510,14 @@ pub fn limit_reply(gateway: &Gateway, agent: Agent, pin: Option<&str>) -> Option
         }
     };
     Some(Made { headers, body: body.to_string().into_bytes() })
+}
+
+/// The window Claude Code is told ran out, which it needs to read the reset at all.
+fn claude_claim(resets_in: f64) -> &'static str {
+    match resets_in > 5.0 * 3600.0 {
+        true => "seven_day",
+        false => "five_hour",
+    }
 }
 
 #[cfg(test)]

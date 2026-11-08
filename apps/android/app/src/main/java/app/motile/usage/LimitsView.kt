@@ -153,6 +153,7 @@ private fun Numbers(window: LimitsReport.Window) {
 
 private val LimitsReport.Window.Pace.symbol: Symbol
     get() = when (this) {
+        LimitsReport.Window.Pace.Limited -> Symbol.Clock
         LimitsReport.Window.Pace.Ahead -> Symbol.TrendingUp
         LimitsReport.Window.Pace.On -> Symbol.Gauge
         LimitsReport.Window.Pace.Under -> Symbol.TrendingDown
@@ -160,6 +161,7 @@ private val LimitsReport.Window.Pace.symbol: Symbol
 
 private val LimitsReport.Window.Pace.label: String
     get() = when (this) {
+        LimitsReport.Window.Pace.Limited -> "Limit reached"
         LimitsReport.Window.Pace.Ahead -> "Ahead of pace"
         LimitsReport.Window.Pace.On -> "On pace"
         LimitsReport.Window.Pace.Under -> "Under pace"
@@ -167,6 +169,7 @@ private val LimitsReport.Window.Pace.label: String
 
 private val LimitsReport.Window.Pace.help: String
     get() = when (this) {
+        LimitsReport.Window.Pace.Limited -> "Waits until the window starts over"
         LimitsReport.Window.Pace.Ahead -> "Used faster than the window passes"
         LimitsReport.Window.Pace.On -> "Used as fast as the window passes"
         LimitsReport.Window.Pace.Under -> "Room left for the rest of the window"

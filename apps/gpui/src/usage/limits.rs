@@ -129,6 +129,7 @@ pub fn limit_row(id: (usize, usize), window: &LimitWindow, beside: bool, cx: &Ap
         )
         .when_some(window.pace, |numbers, pace| {
             let (symbol, label, help) = match pace {
+                Pace::Limited => ("clock", "Limit reached", "Waits until the window starts over"),
                 Pace::Ahead => ("trending-up", "Ahead of pace", "Used faster than the window passes"),
                 Pace::On => ("gauge", "On pace", "Used as fast as the window passes"),
                 Pace::Under => ("trending-down", "Under pace", "Room left for the rest of the window"),

@@ -1667,7 +1667,7 @@ struct LimitsReport {
 
     struct Window: Identifiable, Equatable {
         enum Pace: String {
-            case ahead, on, under
+            case limited, ahead, on, under
         }
 
         enum Tone: String {

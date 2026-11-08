@@ -140,6 +140,7 @@ struct LimitRow: View {
 
     private static func symbol(of pace: LimitsReport.Window.Pace) -> Symbol {
         switch pace {
+        case .limited: .clock
         case .ahead: .trendingUp
         case .on: .gauge
         case .under: .trendingDown
@@ -148,6 +149,7 @@ struct LimitRow: View {
 
     private static func label(of pace: LimitsReport.Window.Pace) -> String {
         switch pace {
+        case .limited: "Limit reached"
         case .ahead: "Ahead of pace"
         case .on: "On pace"
         case .under: "Under pace"
@@ -156,6 +158,7 @@ struct LimitRow: View {
 
     private static func help(of pace: LimitsReport.Window.Pace) -> String {
         switch pace {
+        case .limited: "Waits until the window starts over"
         case .ahead: "Used faster than the window passes"
         case .on: "Used as fast as the window passes"
         case .under: "Room left for the rest of the window"

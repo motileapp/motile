@@ -798,8 +798,14 @@ async fn a_pinned_thread_goes_only_to_its_account_and_hears_its_limit() {
     assert!(matches!(head, GatewayReply::HttpHead { status: 429, .. }), "{head:?}");
     assert_eq!(harness.last_org(), other, "it never moves to another account");
     let (head, body) = pinned("p1").await;
-    assert!(matches!(head, GatewayReply::HttpHead { status: 429, .. }), "{head:?}");
+    let GatewayReply::HttpHead { status: 429, headers, .. } = head else { panic!("a limit error, got {head:?}") };
     assert!(body.contains("is at its limit"), "{body}");
+    let header = |name: &str| headers.iter().find(|(key, _)| key == name).map(|(_, value)| value.as_str());
+    assert!(header("anthropic-ratelimit-unified-reset").is_some());
+    assert!(
+        header("anthropic-ratelimit-unified-representative-claim").is_some(),
+        "Claude Code only reads the reset beside the window that ran out"
+    );
 
     let (status, _) = harness.claude(&server, "free").await;
     assert_eq!((status, harness.last_org()), (200, first), "a thread that isn't pinned goes on");

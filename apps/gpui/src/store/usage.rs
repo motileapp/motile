@@ -142,6 +142,7 @@ impl From<&limits::Row> for LimitWindow {
             used: row.used.clone(),
             resets_in: row.resets_in.clone(),
             pace: row.pace.map(|pace| match pace {
+                limits::Pace::Limited => Pace::Limited,
                 limits::Pace::Ahead => Pace::Ahead,
                 limits::Pace::On => Pace::On,
                 limits::Pace::Under => Pace::Under,
@@ -159,6 +160,7 @@ impl From<&limits::Row> for LimitWindow {
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Pace {
+    Limited,
     Ahead,
     On,
     Under,

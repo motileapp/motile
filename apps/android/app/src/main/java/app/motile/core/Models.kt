@@ -1660,7 +1660,7 @@ data class LimitsReport(
         val tone: Tone,
         val resetCredits: Int,
     ) {
-        enum class Pace(val raw: String) { Ahead("ahead"), On("on"), Under("under") }
+        enum class Pace(val raw: String) { Limited("limited"), Ahead("ahead"), On("on"), Under("under") }
         enum class Tone(val raw: String) { Success("success"), Pending("pending"), Warning("warning") }
 
         val id: String get() = label
