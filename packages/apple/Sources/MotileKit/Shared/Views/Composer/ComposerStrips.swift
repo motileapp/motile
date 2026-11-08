@@ -328,21 +328,20 @@ struct BranchPicker: View {
             HStack(spacing: DropdownList.gap) {
                 Image(.search, size: DropdownList.symbol)
                     .foregroundStyle(Color.themeMutedStrongerForeground)
-                TextField("", text: $query)
+                LineField(text: $query, font: DropdownList.lineFont)
                     .placeholder(prompt, shown: query.isEmpty)
-                    .textFieldStyle(.plain)
                     .font(DropdownList.font)
                     .focused($searching)
-                    .onSubmit { choose(choices, at: highlighted.index) }
-                    .onKeyPress(.downArrow) {
+                    .onReturn { choose(choices, at: highlighted.index) }
+                    .onLineKey(.downArrow) {
                         highlighted.key(min(highlighted.index + 1, max(0, choices.count - 1)))
                         return .handled
                     }
-                    .onKeyPress(.upArrow) {
+                    .onLineKey(.upArrow) {
                         highlighted.key(max(highlighted.index - 1, 0))
                         return .handled
                     }
-                    .onKeyPress(.escape) {
+                    .onLineKey(.escape) {
                         store.showsBranches = false
                         return .handled
                     }

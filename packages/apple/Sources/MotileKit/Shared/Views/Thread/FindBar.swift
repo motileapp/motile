@@ -20,7 +20,7 @@ struct FindBar: View {
         let find = store.find
         HStack(spacing: 0) {
             InputField("Find in thread", text: Binding(get: { find.query }, set: { store.setFindQuery($0) }), icon: .search, variant: .bare, focus: $focused)
-                .onSubmit { store.stepFind(back: Self.shiftHeld) }
+                .onReturn { store.stepFind(back: Self.shiftHeld) }
             if !find.label.isEmpty {
                 Text(find.label)
                     .font(.ui(size: ControlSize.regular.textSize))

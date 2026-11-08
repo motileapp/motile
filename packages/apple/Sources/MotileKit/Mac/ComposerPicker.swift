@@ -302,20 +302,19 @@ private struct ComposerPicker: View {
             Image(.search, size: DropdownList.symbol)
                 .foregroundStyle(Color.themeMutedStrongerForeground)
                 .allowsHitTesting(false)
-            TextField("", text: $query)
+            LineField(text: $query, font: DropdownList.lineFont)
                 .placeholder("Search models", shown: query.isEmpty)
-                .textFieldStyle(.plain)
                 .font(DropdownList.font)
                 .focused($searching)
                 .onChange(of: query) {
                     column = .model
                     lit = rows.isEmpty ? nil : 0
                 }
-                .onSubmit { pickLit(rows: rows, settings: settings) }
-                .onKeyPress(.downArrow) { step(1, rows: rows, settings: settings) }
-                .onKeyPress(.upArrow) { step(-1, rows: rows, settings: settings) }
-                .onKeyPress(.rightArrow) { move(1, rows: rows, settings: settings) }
-                .onKeyPress(.leftArrow) { move(-1, rows: rows, settings: settings) }
+                .onReturn { pickLit(rows: rows, settings: settings) }
+                .onLineKey(.downArrow) { step(1, rows: rows, settings: settings) }
+                .onLineKey(.upArrow) { step(-1, rows: rows, settings: settings) }
+                .onLineKey(.rightArrow) { move(1, rows: rows, settings: settings) }
+                .onLineKey(.leftArrow) { move(-1, rows: rows, settings: settings) }
         }
         .padding(.leading, DropdownList.searchPadding - Self.searchNudge)
         .padding(.trailing, DropdownList.searchPadding)

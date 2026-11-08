@@ -11,6 +11,10 @@ enum DropdownList {
     /// The room between a row's symbol and its words.
     static let gap: CGFloat = 8
     static let font = Font.ui(size: 13)
+    #if os(macOS)
+    /// `font` for the search's `LineField`.
+    static let lineFont = NSFont.ui(13)
+    #endif
     static let symbol = IconSize.md
     static let check = IconSize.sm
     /// The room between two rows' lights: only drawn, so that the rows' presses meet.

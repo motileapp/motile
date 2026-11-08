@@ -324,13 +324,13 @@ struct McpServerAddSheet: View {
             .textInputAutocapitalization(.never)
             .keyboardType(.URL)
             #endif
-            .onSubmit(continueWithAddress)
+            .onReturn(continueWithAddress)
             .onAppear { searchFocused = true }
         if let address {
             VStack(alignment: .leading, spacing: 6) {
                 SheetLabel("Name")
                 InputField(McpServerAdder.hostName(address), text: $name)
-                    .onSubmit(continueWithAddress)
+                    .onReturn(continueWithAddress)
                 if let slug = McpServerRow.slug(of: name) {
                     AgentName(text: "mcp__\(slug)__…")
                 }
@@ -402,7 +402,7 @@ struct McpServerAddSheet: View {
             .foregroundStyle(Color.themeMutedForeground)
             .fixedSize(horizontal: false, vertical: true)
         InputField("Key", text: $key, monospaced: true, secure: true, focus: $keyFocused)
-            .onSubmit { addWithKey(url: url, given: given) }
+            .onReturn { addWithKey(url: url, given: given) }
             .onAppear { keyFocused = true }
         VStack(alignment: .leading, spacing: 6) {
             SheetLabel("Header")
@@ -543,7 +543,7 @@ struct McpServerRenameSheet: View {
             VStack(alignment: .leading, spacing: 6) {
                 SheetLabel("Name")
                 InputField(mcpServer.name, text: $name, focus: $focused)
-                    .onSubmit(save)
+                    .onReturn(save)
                 AgentName(text: mcpServer.example(named: name))
             }
         }
@@ -617,7 +617,7 @@ struct McpServerKeySheet: View {
                 .foregroundStyle(Color.themeMutedForeground)
                 .fixedSize(horizontal: false, vertical: true)
             InputField("Key", text: $key, monospaced: true, secure: true, focus: $focused)
-                .onSubmit(save)
+                .onReturn(save)
             VStack(alignment: .leading, spacing: 6) {
                 SheetLabel("Header")
                 InputField("Authorization", text: $header, monospaced: true)

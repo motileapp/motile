@@ -146,7 +146,7 @@ struct LinkPullRequestField: View {
     var body: some View {
         HStack(spacing: 6) {
             InputField("Link a PR by number or address", text: $text)
-                .onSubmit(submit)
+                .onReturn(submit)
             ActionButton("Link", action: submit)
                 .disabled(number == nil)
         }
@@ -320,7 +320,7 @@ private struct PullRequestPageView: View {
         let working = panel.pullRequestWorking?.key == "title"
         return VStack(alignment: .leading, spacing: 8) {
             InputField("Title", text: binding, size: .large, focus: $titleFocused)
-                .onSubmit(saveTitle)
+                .onReturn(saveTitle)
                 .onAppear { titleFocused = true }
                 .onEscape { title = nil }
             HStack(spacing: 0) {

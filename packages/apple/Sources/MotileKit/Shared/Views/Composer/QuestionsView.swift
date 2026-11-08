@@ -94,7 +94,7 @@ struct QuestionsView: View {
             InputField("Something else", text: typedAnswer, variant: .bare, size: .large, focus: $typing)
                 .padding(.leading, -(ControlSize.large.padding - 2))
                 .fixedSize(horizontal: false, vertical: true)
-                .onSubmit(goOn)
+                .onReturn(goOn)
         }
         .padding(.vertical, 8)
         .padding(.horizontal, Self.optionReach)

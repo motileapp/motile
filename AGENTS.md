@@ -455,6 +455,10 @@ to be AppKit on the Mac and UIKit on iOS has a twin in each, named alike (`KitMa
 - `Shared/Views/UI`: the components every view is made of. `ActionButton` and `ActionMenu` (a
   variant, one of three sizes, an optional symbol, a pending state), `Spinner`, `Chip`,
   `InputField`. Their sizes are `ControlSize` and their corners `Radius`, in `Theme.swift`.
+  Every line to type in on the Mac is a `LineField` (`Mac/LineFieldMac.swift`), an AppKit field
+  whose cell keeps its text in from its sides, so that the cursor after the last letter isn't cut
+  off as in SwiftUI's plain field. Return in one is `onReturn`, a key a view steers with
+  `onLineKey`, in place of SwiftUI's `onSubmit` and `onKeyPress`, which don't reach it.
 - `Shared/Theme/Theme.swift`: the design tokens, generated into `Tokens.swift` beside it from
   `packages/theme/tokens.json`. Every colour is a `Theme` token, every opacity one of `Opacity`,
   every shadow a `ShadowSize` at one of the shadow opacities and every radius one of `Radius`. A view lies on a `Surface` (the page, a box, a card or a popover) and what it

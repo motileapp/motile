@@ -123,7 +123,7 @@ private struct BottomSearch: ViewModifier {
         content
             .safeAreaInset(edge: .bottom) {
                 SearchField(text: $text, prompt: prompt, capsule: true, focus: $focused)
-                    .onSubmit(submit)
+                    .onReturn(submit)
                     .submitLabel(.search)
                     .padding(.leading, 6)
                     .frame(height: GlassButtonStyle.side)

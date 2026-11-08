@@ -14,7 +14,8 @@ enum InputVariant {
 
 /// A line to type in, as tall as a button of its size, with a symbol before it when it has one
 /// and a button that empties it when it is `clearable`, as Esc does while it has text. A `secure`
-/// one shows dots for what is typed, a `numeric` one asks for the keypad of numbers.
+/// one shows dots for what is typed, a `numeric` one asks for the keypad of numbers. On the Mac
+/// its line is a `LineField`, so Return does what `onReturn` says.
 struct InputField: View {
     private let placeholder: String
     @Binding private var text: String
@@ -93,11 +94,16 @@ extension InputField {
     }
 
     @ViewBuilder fileprivate var field: some View {
+        #if os(macOS)
+        let font: NSFont = monospaced ? .uiMono(size.textSize + 0.5) : .ui(size.textSize + 0.5)
+        LineField(text: $text, font: font, secure: secure).placeholder(placeholder, shown: text.isEmpty)
+        #else
         if secure {
             SecureField("", text: $text).placeholder(placeholder, shown: text.isEmpty)
         } else {
             TextField("", text: $text).placeholder(placeholder, shown: text.isEmpty)
         }
+        #endif
     }
 }
 

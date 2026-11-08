@@ -75,9 +75,9 @@ private struct SearchKeys: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .onKeyPress(.downArrow) { steer(1) }
-            .onKeyPress(.upArrow) { steer(-1) }
-            .onSubmit {
+            .onLineKey(.downArrow) { steer(1) }
+            .onLineKey(.upArrow) { steer(-1) }
+            .onReturn {
                 let results = store.searchResults
                 guard results.indices.contains(highlighted.index) else { return }
                 open(results[highlighted.index])

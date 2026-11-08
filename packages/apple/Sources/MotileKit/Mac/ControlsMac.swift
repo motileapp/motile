@@ -26,7 +26,7 @@ final class FieldView: FlippedView, NSTextFieldDelegate {
     var editing: Bool { field.currentEditor() != nil }
 
     private let frameView = SurfaceView()
-    private let field = NSTextField()
+    private let field = LineTextField(secure: false)
 
     /// A `numeric` field asks for the keypad of numbers where there is one.
     init(placeholder: String, size: ControlSize = .regular, numeric: Bool = false, onChange: @escaping (String) -> Void) {
@@ -37,14 +37,7 @@ final class FieldView: FlippedView, NSTextFieldDelegate {
         super.init(frame: .zero)
         frameView.radius = size.radius
         frameView.fill = fieldFill(surface)
-        field.isBordered = false
-        field.isBezeled = false
-        field.drawsBackground = false
-        field.focusRingType = .none
         field.font = .ui(size.textSize + 0.5)
-        field.textColor = Theme.foreground
-        field.cell?.usesSingleLineMode = true
-        field.cell?.isScrollable = true
         field.delegate = self
         addSubview(frameView)
         addSubview(field)
@@ -65,7 +58,8 @@ final class FieldView: FlippedView, NSTextFieldDelegate {
         let height = size.height
         let top = ((bounds.height - height) / 2).rounded()
         frameView.frame = CGRect(x: 0, y: top, width: bounds.width, height: height)
-        let inset = size.padding - 2
+        // The field stands out past where its text lies by its cell's inset.
+        let inset = size.padding - 2 - LineTextField.outset
         let fieldHeight = field.intrinsicContentSize.height
         field.frame = CGRect(x: inset, y: top + ((height - fieldHeight) / 2).rounded(), width: max(0, bounds.width - 2 * inset), height: fieldHeight)
     }

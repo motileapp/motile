@@ -465,7 +465,7 @@ struct GatewaySignInSheet: View {
         if signIn.needsCode {
             HStack(spacing: 6) {
                 InputField("Paste the code", text: $code, monospaced: true, focus: $codeFocused)
-                    .onSubmit(finish)
+                    .onReturn(finish)
                     .onAppear { codeFocused = true }
                 ActionButton("Sign In", variant: .primary, pending: signIn.waiting, action: finish)
                     .disabled(!canFinish && !signIn.waiting)

@@ -229,7 +229,7 @@ struct AgentAccountSheet: View {
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                         .submitLabel(.done)
-                        .onSubmit(finishSignIn)
+                        .onReturn(finishSignIn)
                     if signIn.finishing {
                         Spinner(size: .xl)
                     } else {
@@ -378,7 +378,7 @@ struct AgentAccountSheet: View {
                 CommandBox(command: url.absoluteString, link: url)
                 HStack(spacing: 6) {
                     InputField("Paste the code", text: $signIn.code, monospaced: true, focus: $codeFocused)
-                        .onSubmit(finishSignIn)
+                        .onReturn(finishSignIn)
                         .onAppear { codeFocused = true }
                     ActionButton("Sign In", variant: .primary, pending: signIn.finishing, action: finishSignIn)
                         .disabled(!signIn.canFinish || !canSave)

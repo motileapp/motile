@@ -175,7 +175,7 @@ private struct GatewayRenameSheet: View {
             Text("Rename Account")
                 .font(.ui(size: 15, weight: .semibold))
             InputField("Work", text: $name, focus: $focused)
-                .onSubmit(save)
+                .onReturn(save)
             HStack(spacing: 0) {
                 Spacer()
                 ActionButton("Cancel", margin: .beside(trailing: 4)) { close() }
