@@ -153,7 +153,7 @@ const DEFAULTS: &[(&str, &str, Option<&str>)] = &[
     ("mod+shift+a", "composer.access", None),
     ("mod+shift+h", "composer.server", None),
     ("mod+shift+x", "composer.workspace", None),
-    ("mod+shift+g", "composer.branch", None),
+    ("mod+shift+g", "composer.branch", Some("!findOpen")),
     ("mod+f", "find.open", None),
     ("mod+shift+f", "search.focus", None),
     ("mod+g", "find.next", None),
@@ -1016,6 +1016,18 @@ mod tests {
         assert_eq!(keys_of(&bindings.view(), "thread.jump.1"), vec!["mod+1"]);
         bindings.reset("modelPicker.jump.1").unwrap();
         assert_eq!(keys_of(&bindings.view(), "modelPicker.jump.1"), vec!["mod+1"]);
+    }
+
+    #[test]
+    fn find_keys_are_separate_from_composer_keys() {
+        let (_dir, bindings) = loaded(None);
+        let view = bindings.view();
+        for (command, when) in [("composer.branch", "!findOpen"), ("find.previous", "findOpen")] {
+            let row = view.groups.iter().flat_map(|group| &group.rows).find(|row| row.command == command).unwrap();
+            assert_eq!(row.key, "mod+shift+g");
+            assert_eq!(row.when, when);
+            assert!(row.conflicts.is_empty());
+        }
     }
 
     #[test]
