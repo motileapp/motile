@@ -414,7 +414,7 @@ impl SettingsPage {
             let _ = page.update(cx, |page, cx| page.open_backup_sheet(window, cx));
         });
         let cut = if on { Cut::Middle } else { Cut::Wraps };
-        let leading = label("S3 bucket", Some(backup.description), Some("cloud-upload"), cut, cx);
+        let leading = label("S3 Bucket", Some(backup.description), Some("cloud-upload"), cut, cx);
         let trailing = if on {
             let turn_off = Self::ask_removal(&cx.weak_entity(), Removal::Backup);
             let menu = more("backup-menu", "What to do with the backup", move |_, _| {

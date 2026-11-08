@@ -192,7 +192,7 @@ private fun SettingsGroups.backup(store: AppStore, edit: () -> Unit, remove: (Re
     group("backup", header = "Backup", footer = footer) {
         row {
             SettingsLink(edit) {
-                SettingsItem("S3 bucket", if (on) store.backup.description else "Not set up", TextOverflow.MiddleEllipsis) { SettingsTile(Symbol.CloudUpload) }
+                SettingsItem("S3 Bucket", if (on) store.backup.description else "Not set up", TextOverflow.MiddleEllipsis) { SettingsTile(Symbol.CloudUpload) }
             }
         }
         if (on) row { SettingsButton("Turn Off", destructive = true) { remove(Removal.OfBackup) } }

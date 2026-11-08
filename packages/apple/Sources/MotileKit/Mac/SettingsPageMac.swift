@@ -186,7 +186,7 @@ struct SettingsPage: View {
         let on = store.backup.bucket != nil
         SettingsGroup("backup", "Backup", caption: on ? "Your servers keep their threads, images and files in it, and sync through it." : nil) {
             SettingsRow {
-                SettingsLabel("S3 bucket", description: store.backup.description, icon: .cloudUpload, truncates: on ? .middle : nil)
+                SettingsLabel("S3 Bucket", description: store.backup.description, icon: .cloudUpload, truncates: on ? .middle : nil)
             } trailing: {
                 if on {
                     HStack(spacing: 0) {
