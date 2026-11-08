@@ -1995,9 +1995,11 @@ impl RenderOnce for InputField {
             )
             .when(clears, |field| {
                 field.child(
+                    // It lies on the field's fill, so it lights a step above it.
                     ActionButton::icon("clear", "x", "Clear")
                         .size(clear_size)
                         .surface(self.surface)
+                        .row((!bare).then_some(Layer::Control))
                         .margin(Edges {
                             top: 0.,
                             left: 0.,
