@@ -553,12 +553,21 @@ impl Hub {
     /// Offers the Gateway accounts while the account has a gateway, one pinned to each of its accounts
     /// too, and takes them away when it no longer has one, or no longer has the account, as a removed
     /// account is: their threads go on with their agents' defaults. The gateway's accounts stay as
-    /// they were while it can't be asked.
+    /// they were while it can't be asked. What the accounts have used is read again when either
+    /// changed, as it is when the server starts: the accounts it keeps are offered already, but the
+    /// gateway's weren't listed when it first read them. Otherwise the pinned accounts take what the
+    /// gateway's accounts have used from its list, which costs no read.
     async fn offer_gateway(self: &Arc<Self>, has_gateway: bool) -> anyhow::Result<()> {
         let Some(way) = self.gateway.get() else { return Ok(()) };
+        let mut listed_others = false;
         if has_gateway {
             match way.tunnel.accounts().await {
-                Ok(pool) => *way.pool.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = pool,
+                Ok(pool) => {
+                    let mut kept = way.pool.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+                    let ids = |pool: &[GatewayAccount]| pool.iter().map(|pooled| pooled.id.clone()).collect::<Vec<_>>();
+                    listed_others = ids(&kept) != ids(&pool);
+                    *kept = pool;
+                }
                 Err(error) => tracing::debug!("couldn't ask the gateway for its accounts: {error:#}"),
             }
         }
@@ -576,6 +585,11 @@ impl Hub {
         let offered =
             agent_accounts::with_gateway(accounts.clone(), has_gateway.then_some((way.folder.as_path(), &pool)));
         if offered == accounts {
+            drop(threads);
+            match listed_others {
+                true => self.refresh_limits(),
+                false => self.keep_pinned_limits(&accounts, &pool).await,
+            }
             return Ok(());
         }
         let gone: Vec<&AgentAccount> =
@@ -2535,6 +2549,22 @@ impl Hub {
             read.extend(task.await.ok());
         }
         read
+    }
+
+    /// Puts what the gateway's accounts have used, as `pool` lists them, in the limits read last,
+    /// for the accounts pinned to them.
+    async fn keep_pinned_limits(&self, accounts: &[AgentAccount], pool: &[GatewayAccount]) {
+        let mut kept = self.limits.lock().await;
+        let Some(agents) = kept.as_mut() else { return };
+        for account in accounts.iter().filter(|account| account.pin.is_some()) {
+            let pooled = pool.iter().find(|pooled| account.pin.as_deref() == Some(pooled.id.as_str()));
+            let listed = limits::pinned(account, pooled);
+            let same = |read: &&mut AgentLimits| read.agent == account.agent && read.account_name == account.name;
+            match agents.iter_mut().find(same) {
+                Some(read) => *read = listed,
+                None => agents.push(listed),
+            }
+        }
     }
 
     /// Looks at the watched pull requests every so often and tells their threads' agents what
