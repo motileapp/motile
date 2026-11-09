@@ -1635,8 +1635,6 @@ data class UsageReport(
 data class LimitsReport(
     val sections: List<Section>,
     val notes: List<String>,
-    /** Some of it is old or missing, from what was last read. */
-    val stale: Boolean,
 ) {
     data class Section(
         val agent: Agent,
@@ -1696,7 +1694,6 @@ data class LimitsReport(
                 )
             },
             notes = json.strings("notes"),
-            stale = json.bool("stale"),
         )
     }
 }

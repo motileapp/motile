@@ -3706,7 +3706,7 @@ impl Core {
                     reply(&sink, id, answer);
                 });
             }
-            Command::Limits { refresh, kept, servers } => {
+            Command::Limits { kept, servers } => {
                 let chosen = self
                     .servers
                     .iter()
@@ -3715,7 +3715,6 @@ impl Core {
                 let mut asked = tokio::task::JoinSet::new();
                 let mut notes = Vec::new();
                 let mut reads = Vec::new();
-                let mut stale = false;
                 let mut proxied: Vec<(String, Agent, String)> = Vec::new();
                 for server in chosen {
                     let Some(info) = server.info.as_ref() else { continue };
@@ -3727,12 +3726,8 @@ impl Core {
                         continue;
                     }
                     let server_id = server.device.public_key.clone();
-                    let last = self.kept_limits(&server_id);
-                    let fresh = last.as_ref().is_some_and(|(fresh, _)| *fresh);
-                    let link = server.link.clone().filter(|_| !kept && (refresh || !fresh));
-                    let Some(link) = link else {
-                        stale |= !fresh;
-                        let agents = last.map(|(_, agents)| agents).unwrap_or_default();
+                    let Some(link) = server.link.clone().filter(|_| !kept) else {
+                        let agents = self.limits_read(&server_id).map(|(_, agents)| agents).unwrap_or_default();
                         reads.extend(agents.into_iter().map(|limits| (name.clone(), limits)));
                         continue;
                     };
@@ -3778,7 +3773,7 @@ impl Core {
                         .collect();
                     reads.sort_by(|a, b| a.server.cmp(&b.server));
                     let sections = limits::sections(reads, &accounts, now());
-                    reply(&sink, id, Ok(json!({ "sections": sections, "notes": notes, "stale": stale })));
+                    reply(&sink, id, Ok(json!({ "sections": sections, "notes": notes })));
                 });
             }
             Command::Markdown { text } => {

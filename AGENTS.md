@@ -253,8 +253,9 @@ shadcn's own colours, opacities and radii are gone from the theme.
   to say what the tokens Codex spent would have cost. Claude Code says what its own cost.
 - `limits.rs`: how much of their plans the agents' accounts have used, as their CLIs say without
   spending tokens: `codex app-server` answers `account/rateLimits/read` and Claude Code the
-  `get_usage` control request. `hub.rs` keeps the answer for five minutes, but takes a pinned
-  Gateway account's from the gateway's list of its accounts each time it asks for it, every minute.
+  `get_usage` control request. `hub.rs` reads them every five minutes and again whenever a client
+  or an agent asks, unless the last read is under 30 seconds old, and takes a pinned Gateway
+  account's from the gateway's list of its accounts each time it asks for it, every minute.
 - `git.rs`: branches, worktrees, status, commit, pull, push, pull requests (through `gh`),
   snapshots and patches.
 - `pull_requests.rs`: what GitHub says of a pull request (one `gh api graphql` read), the

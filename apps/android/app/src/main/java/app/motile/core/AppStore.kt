@@ -2125,10 +2125,9 @@ class AppStore(private val context: Context) {
         core.send("usage", command, read = { UsageReport(it) }, reply = reply)
     }
 
-    /** How much of their plans the agents' accounts on the connected `servers`, or all of them, have used. `refresh` has the servers read it anew, `kept` answers at once with what was last read. */
-    fun loadLimits(refresh: Boolean, kept: Boolean, servers: Set<String>?, reply: (Result<LimitsReport>) -> Unit) {
+    /** How much of their plans the agents' accounts on the connected `servers`, or all of them, have used, as the servers read it now. `kept` answers at once with what was last read. */
+    fun loadLimits(kept: Boolean, servers: Set<String>?, reply: (Result<LimitsReport>) -> Unit) {
         val command = buildMap<String, Any?> {
-            put("refresh", refresh)
             put("kept", kept)
             servers?.let { put("servers", it.toList()) }
         }

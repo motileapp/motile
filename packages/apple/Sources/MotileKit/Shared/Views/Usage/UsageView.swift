@@ -86,7 +86,7 @@ final class UsageModel {
 
     /// Asks the servers again for what the tab shows.
     func refresh() {
-        load(refresh: true)
+        load()
     }
 
     /// The servers counted among these, or nil for all of them.
@@ -117,22 +117,18 @@ final class UsageModel {
         }
     }
 
-    private func load(refresh: Bool = false) {
+    /// Shows what the core kept for the tab at once, then asks the servers.
+    private func load() {
         guard let store else { return }
         asked += 1
         let number = asked
         refreshing = true
         let counted = picked(among: store.usageServers)
         if tab == .limits {
-            store.loadLimits(refresh: refresh, kept: !refresh, servers: counted) { [weak self] result in
+            store.loadLimits(kept: true, servers: counted) { [weak self] kept in
                 guard let self, number == asked else { return }
-                guard case .success(let report) = result, report.stale else {
-                    refreshing = false
-                    limits = Self.loaded(result, over: limits)
-                    return
-                }
-                if !report.sections.isEmpty { limits = .ready(report) }
-                store.loadLimits(refresh: false, kept: false, servers: counted) { [weak self] result in
+                if case .success(let report) = kept, !report.sections.isEmpty { limits = .ready(report) }
+                store.loadLimits(kept: false, servers: counted) { [weak self] result in
                     guard let self, number == asked else { return }
                     refreshing = false
                     limits = Self.loaded(result, over: limits)
