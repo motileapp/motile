@@ -19,7 +19,10 @@ struct AttachmentTile: View {
                     .scaledToFit()
                     .frame(width: Self.side, height: Self.side)
             }
-            if attachment.video {
+            if attachment.state == .preparing {
+                Spinner(size: .lg)
+                    .foregroundStyle(Color.themeMutedForeground)
+            } else if attachment.video {
                 Image(.play, size: .lg)
                     .foregroundStyle(Color.themeForegroundOverPicture)
                     .shadow(.sm, .shadowStrongest)
@@ -38,7 +41,7 @@ struct AttachmentTile: View {
         }
         .help(attachment.name)
         .accessibilityLabel(attachment.name)
-        .task(id: attachment.id) { loadPicture() }
+        .task(id: attachment.file) { loadPicture() }
     }
 
     private func loadPicture() {
@@ -129,6 +132,8 @@ private struct AttachmentProgress: View {
         switch attachment.state {
         case .ready:
             EmptyView()
+        case .preparing:
+            if !onPicture { Spinner(size: .sm) }
         case .uploading(let fraction):
             let percent = Text("\(Int(fraction * 100))%").monospacedDigit()
             if onPicture {

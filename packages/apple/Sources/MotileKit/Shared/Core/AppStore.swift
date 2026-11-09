@@ -2991,6 +2991,37 @@ final class AppStore {
         composerFocus += 1
     }
 
+    /// Shows a picked photo or video at once, before the photo library has written its file.
+    func prepareAttachment(video: Bool) -> String? {
+        guard let server = composerServer, !server.removed else { return nil }
+        let attachment = Attachment(preparing: video, serverID: server.id)
+        attachmentsByKey[draftKey, default: []].append(attachment)
+        composerFocus += 1
+        return attachment.id
+    }
+
+    /// Starts sending a prepared file, or drops its tile when the photo library couldn't write it.
+    func prepared(_ id: String, file: URL?) {
+        guard let file else { return removePreparing(id) }
+        var found = false
+        changeAttachment(id) {
+            $0.prepared(file)
+            found = true
+        }
+        guard found else {
+            try? FileManager.default.removeItem(at: file.deletingLastPathComponent())
+            return
+        }
+        upload(id)
+    }
+
+    private func removePreparing(_ id: String) {
+        for key in attachmentsByKey.keys {
+            attachmentsByKey[key]?.removeAll { $0.id == id }
+            if attachmentsByKey[key]?.isEmpty == true { attachmentsByKey[key] = nil }
+        }
+    }
+
     func removeAttachment(_ id: String) {
         if case .uploading = attachments.first(where: { $0.id == id })?.state {
             core.send("cancel_upload", ["key": id])
@@ -3067,7 +3098,12 @@ final class AppStore {
     /// Sends the open draft's files again when its project is on another server than they are.
     private func uploadToComposerServer() {
         guard let server = composerServer else { return }
-        for attachment in attachments where attachment.serverID != server.id && attachment.file != nil {
+        for attachment in attachments where attachment.serverID != server.id {
+            guard attachment.state != .preparing else {
+                changeAttachment(attachment.id) { $0.serverID = server.id }
+                continue
+            }
+            guard attachment.file != nil else { continue }
             core.send("cancel_upload", ["key": attachment.id])
             changeAttachment(attachment.id) {
                 $0.serverID = server.id

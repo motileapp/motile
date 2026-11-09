@@ -47,7 +47,13 @@ fun AttachMenu() {
             }
         }
     }
-    val photos = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(maxItems = 10)) { attach(it) }
+    val photos = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(maxItems = 10)) { uris ->
+        for (uri in uris) {
+            val video = Platform.context.contentResolver.getType(uri)?.startsWith("video/") == true
+            val id = store.prepareAttachment(video) ?: return@rememberLauncherForActivityResult
+            scope.launch { store.prepared(id, withContext(Dispatchers.IO) { PickedFile.copy(uri) }) }
+        }
+    }
     val files = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { attach(it) }
     var photoPath by rememberSaveable { mutableStateOf<String?>(null) }
     val camera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { taken ->

@@ -1290,6 +1290,8 @@ extension AttachedFile {
 /// A file in the composer: on its way to the server, or there and ready to be sent.
 struct Attachment: Equatable, Identifiable {
     enum State: Equatable {
+        /// Picked, and on its way to a file the client can read, as the photo library writes it.
+        case preparing
         case uploading(Double)
         case ready
         case failed(String)
@@ -1297,9 +1299,9 @@ struct Attachment: Equatable, Identifiable {
 
     let id: String
     /// Where it is on this Mac. A file that came back from a queued message is only on its server.
-    let file: URL?
-    let name: String
-    let bytes: Int64?
+    var file: URL?
+    var name: String
+    var bytes: Int64?
     let video: Bool
     /// Shown as a tile with its picture, not by its name.
     let pictured: Bool
@@ -1319,6 +1321,24 @@ struct Attachment: Equatable, Identifiable {
         video = type?.conforms(to: .movie) == true
         pictured = video || type?.conforms(to: .image) == true
         self.serverID = serverID
+        state = .uploading(0)
+    }
+
+    init(preparing video: Bool, serverID: String) {
+        id = UUID().uuidString
+        file = nil
+        name = video ? "Video" : "Photo"
+        bytes = nil
+        self.video = video
+        pictured = true
+        self.serverID = serverID
+        state = .preparing
+    }
+
+    mutating func prepared(_ file: URL) {
+        self.file = file
+        name = file.lastPathComponent
+        bytes = (try? file.resourceValues(forKeys: [.fileSizeKey]).fileSize).map(Int64.init)
         state = .uploading(0)
     }
 
