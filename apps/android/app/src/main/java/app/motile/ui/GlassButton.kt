@@ -37,10 +37,13 @@ import app.motile.theme.Surface
 import app.motile.theme.floatingHeight
 import app.motile.theme.shadow
 
-/** The surface of a button that floats over the client, with a shadow under it. */
+/** The surface of a button that floats over the client, with a shadow under it; `primary` fills it in the primary colour. */
 @Composable
-fun Modifier.glassButton(shape: Shape, size: GlassSize = GlassSize.Regular): Modifier =
-    shadow(size.shadow, shape, size.shadowStrength).floatingSurface(shape)
+fun Modifier.glassButton(shape: Shape, size: GlassSize = GlassSize.Regular, primary: Boolean = false): Modifier {
+    val shadowed = shadow(size.shadow, shape, size.shadowStrength)
+    if (!primary) return shadowed.floatingSurface(shape)
+    return shadowed.clip(shape).background(LocalPalette.current.primary, shape).arrowPointer()
+}
 
 /**
  * The surface of what floats over the client, the composer and the buttons alike, where iOS has
@@ -85,9 +88,11 @@ fun GlassButton(
     enabled: Boolean = true,
     size: GlassSize = GlassSize.Regular,
     state: String? = null,
+    primary: Boolean = false,
     content: @Composable () -> Unit,
 ) {
-    val glass = if (bare) Modifier else Modifier.glassButton(CircleShape, size)
+    val palette = LocalPalette.current
+    val glass = if (bare) Modifier else Modifier.glassButton(CircleShape, size, primary)
     // One node for accessibility: the label and the press together.
     Box(
         modifier.size(size.side).then(glass).semantics(mergeDescendants = true) {
@@ -101,7 +106,7 @@ fun GlassButton(
             CompositionLocalProvider(
                 LocalSurface provides Surface.Background,
                 LocalRow provides null,
-                LocalForeground provides LocalPalette.current.foreground,
+                LocalForeground provides if (primary) palette.primaryForeground else palette.foreground,
                 content = content,
             )
         }

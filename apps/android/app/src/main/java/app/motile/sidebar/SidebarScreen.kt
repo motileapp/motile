@@ -643,7 +643,7 @@ private fun Footer(
             )
             Appearing(searching, enter = appear, exit = leave) { GlassButton(Symbol.X, "Close search", onClick = closeSearch) }
             Appearing(!searching, enter = appear, exit = leave) {
-                GlassButton("New thread", onClick = { store.newThread() }, modifier = Modifier.opacity(Opacity.Disabled, on = !canStart), enabled = canStart) {
+                GlassButton("New thread", onClick = { store.newThread() }, modifier = Modifier.opacity(Opacity.Disabled, on = !canStart), enabled = canStart, primary = true) {
                     Icon(Symbol.SquarePen, IconSize.Lg)
                 }
             }

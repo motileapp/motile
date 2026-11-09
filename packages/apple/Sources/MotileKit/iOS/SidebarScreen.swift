@@ -303,7 +303,7 @@ struct SidebarScreen: View {
                     }
                     .appearing(.scale.combined(with: .opacity))
                 } else {
-                    circleButton(.squarePen, label: "New thread") { store.newThread() }
+                    circleButton(.squarePen, label: "New thread", primary: true) { store.newThread() }
                         .disabled(store.projects.isEmpty && store.noProjects.isEmpty)
                         .appearing(.scale.combined(with: .opacity))
                 }
@@ -350,15 +350,15 @@ struct SidebarScreen: View {
         ServerErrors(servers: servers)
     }
 
-    private func circleButton(_ symbol: Symbol, label: String, action: @escaping () -> Void) -> some View {
+    private func circleButton(_ symbol: Symbol, label: String, primary: Bool = false, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(symbol, size: .lg)
-                .foregroundStyle(Color.themeForeground)
+                .foregroundStyle(primary ? Color.themePrimaryForeground : Color.themeForeground)
                 .frame(width: GlassButtonStyle.side, height: GlassButtonStyle.side)
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
-        .glassButton(in: Circle())
+        .glassButton(in: Circle(), primary: primary)
         .accessibilityLabel(label)
     }
 

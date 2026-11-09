@@ -3,18 +3,20 @@ import SwiftUI
 
 extension View {
     /// The surface of a button that floats over the client.
-    func glassButton<S: Shape>(in shape: S) -> some View {
-        glassSurface(in: shape, interactive: true)
+    func glassButton<S: Shape>(in shape: S, primary: Bool = false) -> some View {
+        glassSurface(in: shape, interactive: true, primary: primary)
     }
 
     /// The surface of what floats over the client, like the composer and the buttons: the system's
     /// Liquid Glass in its tint where it has it, and the system's material with a hairline around
-    /// it before that.
+    /// it before that. `primary` tints the glass in the primary colour, or fills it before glass.
     @ViewBuilder
-    func glassSurface<S: Shape>(in shape: S, interactive: Bool = false) -> some View {
+    func glassSurface<S: Shape>(in shape: S, interactive: Bool = false, primary: Bool = false) -> some View {
         if #available(iOS 26.0, *) {
-            let glass = Glass.regular.tint(.themeGlassTint)
+            let glass = Glass.regular.tint(primary ? .themePrimary : .themeGlassTint)
             glassEffect(interactive ? glass.interactive() : glass, in: shape)
+        } else if primary {
+            background(Color.themePrimary, in: shape)
         } else {
             background(.regularMaterial, in: shape)
                 .overlay { shape.stroke(Color.themeBorder, lineWidth: 1) }
