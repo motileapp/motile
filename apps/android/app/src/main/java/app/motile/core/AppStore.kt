@@ -2855,6 +2855,30 @@ class AppStore(private val context: Context) {
         composerFocus += 1
     }
 
+    /** Shows a picked photo or video at once, before its file is copied. */
+    fun prepareAttachment(video: Boolean): String? {
+        val server = composerServer ?: return null
+        if (server.removed) return null
+        val attachment = Attachment.preparing(video, server.id)
+        attachmentsByKey = attachmentsByKey + (draftKey to (attachmentsByKey[draftKey] ?: emptyList()) + attachment)
+        composerFocus += 1
+        return attachment.id
+    }
+
+    /** Starts sending a prepared file, or drops its tile when it couldn't be copied. */
+    fun prepared(id: String, file: File?) {
+        if (file == null) {
+            attachmentsByKey = attachmentsByKey.mapValues { (_, attached) -> attached.filter { it.id != id } }.filterValues { it.isNotEmpty() }
+            return
+        }
+        if (attachmentsByKey.values.none { attached -> attached.any { it.id == id } }) {
+            file.parentFile?.deleteRecursively()
+            return
+        }
+        changeAttachment(id) { it.prepared(file) }
+        upload(id)
+    }
+
     fun removeAttachment(id: String) {
         if (attachments.firstOrNull { it.id == id }?.state is Attachment.State.Uploading) core.send("cancel_upload", json("key" to id))
         val left = attachments.filter { it.id != id }
@@ -2916,7 +2940,12 @@ class AppStore(private val context: Context) {
     private fun uploadToComposerServer() {
         val server = composerServer ?: return
         for (attachment in attachments) {
-            if (attachment.serverID == server.id || attachment.file == null) continue
+            if (attachment.serverID == server.id) continue
+            if (attachment.state == Attachment.State.Preparing) {
+                changeAttachment(attachment.id) { it.copy(serverID = server.id) }
+                continue
+            }
+            if (attachment.file == null) continue
             core.send("cancel_upload", json("key" to attachment.id))
             changeAttachment(attachment.id) { it.copy(serverID = server.id, path = null, media = null, poster = null) }
             upload(attachment.id)

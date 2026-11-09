@@ -54,6 +54,7 @@ import app.motile.ui.ActionButton
 import app.motile.ui.ButtonVariant
 import app.motile.ui.DimButton
 import app.motile.ui.Icon
+import app.motile.ui.Spinner
 import app.motile.ui.Text
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -74,7 +75,7 @@ fun AttachmentTile(attachment: Attachment, open: () -> Unit) {
     val palette = Theme.colors
     val shape = RoundedCornerShape(Radius.lg)
     val maxPixels = with(LocalDensity.current) { (AttachmentTile.side.toPx() * 2).roundToInt() }
-    val picture by produceState(AttachmentTile.pictures.get("tile:${attachment.id}"), attachment.id) {
+    val picture by produceState(AttachmentTile.pictures.get("tile:${attachment.id}"), attachment.id, attachment.file) {
         if (value != null) return@produceState
         val file = attachment.file ?: attachment.attached.picture?.let { id ->
             suspendCancellableCoroutine<File?> { going -> store.media(id) { going.resume(it) } }
@@ -90,7 +91,9 @@ fun AttachmentTile(attachment: Attachment, open: () -> Unit) {
         DimButton(open, Modifier.size(AttachmentTile.side).clip(shape).border(1.dp, palette.border, shape)) {
             Box(Modifier.fillMaxSize().background(palette.backgroundSecondary), contentAlignment = Alignment.Center) {
                 picture?.let { Image(it, null, Modifier.fillMaxSize(), contentScale = ContentScale.Fit) }
-                if (attachment.video) {
+                if (attachment.state == Attachment.State.Preparing) {
+                    Spinner(IconSize.Lg, color = palette.mutedForeground)
+                } else if (attachment.video) {
                     Icon(Symbol.Play, IconSize.Lg, Modifier.shadow(ShadowSize.Sm, CircleShape, Opacity.ShadowStrongest), color = OverPicture.foreground)
                 }
                 Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth()) { AttachmentProgress(attachment, onPicture = true) }
@@ -153,6 +156,7 @@ private fun AttachmentProgress(attachment: Attachment, onPicture: Boolean) {
     val palette = Theme.colors
     when (val state = attachment.state) {
         Attachment.State.Ready -> Unit
+        Attachment.State.Preparing -> if (!onPicture) Spinner(IconSize.Sm)
         is Attachment.State.Uploading -> {
             val percent = "${(state.fraction * 100).toInt()}%"
             if (onPicture) {

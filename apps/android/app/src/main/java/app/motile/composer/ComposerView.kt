@@ -275,7 +275,9 @@ private fun Attachments() {
     ) {
         for (attachment in pictured) {
             AttachmentTile(attachment) {
-                store.view(pictured.mapNotNull { it.viewed }, pictured.indexOf(attachment).coerceAtLeast(0))
+                val viewable = pictured.filter { it.viewed != null }
+                val index = viewable.indexOf(attachment)
+                if (index >= 0) store.view(viewable.mapNotNull { it.viewed }, index)
             }
         }
         for (attachment in store.attachments.filter { !it.pictured }) AttachmentChip(attachment)

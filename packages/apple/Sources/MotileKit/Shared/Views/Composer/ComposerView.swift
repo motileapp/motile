@@ -259,7 +259,9 @@ struct ComposerView: View {
                 let pictured = store.attachments.filter(\.pictured)
                 ForEach(pictured) { attachment in
                     AttachmentTile(attachment: attachment) {
-                        store.view(pictured.compactMap(\.viewed), at: pictured.firstIndex(of: attachment) ?? 0)
+                        let viewable = pictured.filter { $0.viewed != nil }
+                        guard let index = viewable.firstIndex(of: attachment) else { return }
+                        store.view(viewable.compactMap(\.viewed), at: index)
                     }
                 }
                 ForEach(store.attachments.filter { !$0.pictured }) { attachment in

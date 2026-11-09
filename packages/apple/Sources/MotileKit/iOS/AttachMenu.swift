@@ -60,9 +60,11 @@ struct AttachMenu: View {
         guard !picked.isEmpty else { return }
         photos = []
         for item in picked {
+            let video = item.supportedContentTypes.contains { $0.conforms(to: .movie) }
+            guard let id = store.prepareAttachment(video: video) else { return }
             item.loadTransferable(type: PickedFile.self) { result in
-                guard case .success(let file?) = result else { return }
-                DispatchQueue.main.async { store.attach([file.url]) }
+                let file = try? result.get()?.url
+                DispatchQueue.main.async { store.prepared(id, file: file) }
             }
         }
     }

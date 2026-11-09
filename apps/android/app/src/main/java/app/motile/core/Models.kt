@@ -1268,6 +1268,8 @@ data class Attachment(
     val poster: String? = null,
 ) {
     sealed interface State {
+        /** Picked, and on its way to a file the client can read, as the photo picker gives it. */
+        data object Preparing : State
         data class Uploading(val fraction: Double) : State
         data object Ready : State
         data class Failed(val message: String) : State
@@ -1281,7 +1283,20 @@ data class Attachment(
             return media?.let { ViewedMedia(name, video, ViewedMedia.Source.Media(it)) }
         }
 
+    fun prepared(file: File): Attachment = copy(file = file, name = file.name, bytes = file.length(), state = State.Uploading(0.0))
+
     companion object {
+        fun preparing(video: Boolean, serverID: String) = Attachment(
+            id = UUID.randomUUID().toString(),
+            file = null,
+            name = if (video) "Video" else "Photo",
+            bytes = null,
+            video = video,
+            pictured = true,
+            serverID = serverID,
+            state = State.Preparing,
+        )
+
         fun of(file: File, serverID: String): Attachment {
             val type = MimeTypeMap.getSingleton().getMimeTypeFromExtension(file.extension.lowercase()) ?: ""
             val video = type.startsWith("video/")
