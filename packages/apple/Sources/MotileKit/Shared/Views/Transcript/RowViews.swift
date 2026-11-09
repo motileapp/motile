@@ -36,10 +36,6 @@ protocol RowOwner: AnyObject {
     func openThread(id: String)
     /// Whether a file that couldn't be fetched can be asked for again: not from a removed server.
     var fetchesAgain: Bool { get }
-    /// Opens a new thread on another server that goes on from this one, whose server was unlinked.
-    func continueElsewhere()
-    /// Opens the settings' servers, where an unlinked server's threads are deleted with it.
-    func openServerSettings()
     /// The user did something to a node of the program in the row.
     func programEvent(rowID: String, node: String, event: JSON)
     /// The row's height changed without the core: it is measured again.
@@ -97,8 +93,6 @@ class RowView: FlippedView {
             return TextMeasure.height(of: text, width: width) + ProseRowView.gap + row.above
         case .error(let text):
             return TextMeasure.height(of: text, width: width - ErrorRowView.textInset) + ErrorRowView.padding
-        case .removed(let content):
-            return RemovedRowView.height(textHeight: TextMeasure.height(of: content.message, width: RemovedRowView.inner(width)))
         case .ui(let content):
             return ProgramRowView.height(content, width: width)
         case .code, .tool, .thinking, .group, .fold, .agent, .agents, .media, .file, .changes, .turnEnd, .handoff, .queued, .unknown:
@@ -137,8 +131,6 @@ class RowView: FlippedView {
             return TurnEndRowView.height
         case .handoff:
             return HandoffRowView.height
-        case .removed(let content):
-            return RemovedRowView.height(textHeight: estimatedTextHeight(content.message.length, width: RemovedRowView.inner(width)))
         case .queued(let content):
             let attachments = AttachedFilesView.height(content.attachments, width: width)
             return estimatedTextHeight(content.text.length, width: width * 0.75) + 48 + QueuedRowView.footHeight + attachments
@@ -168,7 +160,6 @@ class RowView: FlippedView {
         case .turnEnd: return TurnEndRowView()
         case .handoff: return HandoffRowView()
         case .queued: return QueuedRowView()
-        case .removed: return RemovedRowView()
         case .unknown: return RowView()
         }
     }
@@ -189,7 +180,6 @@ class RowView: FlippedView {
         case .turnEnd: return "turnEnd"
         case .handoff: return "handoff"
         case .queued: return "queued"
-        case .removed: return "removed"
         case .unknown: return "unknown"
         }
     }
@@ -1634,105 +1624,6 @@ final class HandoffRowView: RowView {
         x += arrowSide + Self.arrowGap
         drawEnd(content.to, to, toWidth)
     }
-}
-
-/// The end of a thread whose server was unlinked from the account, in place of the composer: why
-/// the thread can only be read, and the ways on from it.
-final class RemovedRowView: RowView {
-    private static let margin = scaled(12)
-    private static let padding = scaled(16)
-    private static let titleHeight = scaled(18)
-    private static let iconGap = scaled(8)
-    private static let textGap = scaled(6)
-    private static let buttonsGap = scaled(14)
-    /// Under this width the two buttons share the row in halves.
-    private static let halvesBelow = scaled(420)
-
-    private let surface = SurfaceView()
-    private let icon = SymbolView(.unlink, size: .md, tint: Theme.mutedForeground)
-    private let title = TextLabel(font: .ui(scaled(13), weight: .semibold), color: Theme.foreground)
-    private let text = RowTextView.make()
-    private var continueButton: RowButton!
-    private var settingsButton: RowButton!
-
-    static func inner(_ width: CGFloat) -> CGFloat { max(0, width - padding * 2) }
-
-    static func height(textHeight: CGFloat) -> CGFloat {
-        margin + padding + titleHeight + textGap + textHeight + buttonsGap + RowButton.metrics.height + padding + margin
-    }
-
-    override init(frame: CGRect) {
-        super.init(frame: frame)
-        surface.fill = Theme.backgroundSecondary
-        surface.stroke = Theme.border
-        surface.radius = Radius.lg
-        addSubview(surface)
-        [icon, title, text].forEach { surface.addSubview($0) }
-        text.onSelect = { [weak self] in
-            guard let self else { return }
-            self.owner?.rowWillSelect(self)
-        }
-        // The gap between the two is theirs, half each, so that a click in it lands on one.
-        let half = ControlSize.regular.gap / 2
-        let button = { (title: String, tooltip: String, primary: Bool, insets: PlatformEdgeInsets, action: @escaping () -> Void) in
-            RowButton(
-                title: title, tooltip: tooltip, radius: RowButton.metrics.radius, bordered: true, primary: primary,
-                hover: Theme.border, rest: Theme.background, insets: insets, action: action
-            )
-        }
-        continueButton = button(
-            "Continue Thread", "Start a thread on another server with everything that happened here", true,
-            PlatformEdgeInsets(top: 0, left: half, bottom: 0, right: 0)
-        ) {
-            [weak self] in self?.owner?.continueElsewhere()
-        }
-        settingsButton = button(
-            "Open Settings", "Unlinked servers are deleted with their threads in settings", false,
-            PlatformEdgeInsets(top: 0, left: 0, bottom: 0, right: half)
-        ) {
-            [weak self] in self?.owner?.openServerSettings()
-        }
-        surface.addSubview(continueButton)
-        surface.addSubview(settingsButton)
-    }
-
-    required init?(coder: NSCoder) { fatalError("not used") }
-
-    override func configure(_ row: RowModel) {
-        super.configure(row)
-        guard case .removed(let content) = row.kind else { return }
-        title.string = content.title
-        text.content = content.message
-        continueButton.dim()
-        settingsButton.dim()
-    }
-
-    override func layout(width: CGFloat) -> CGFloat {
-        let inner = Self.inner(width)
-        let textHeight = text.height(forWidth: inner)
-        let height = Self.height(textHeight: textHeight)
-        surface.frame = CGRect(x: 0, y: Self.margin, width: width, height: height - Self.margin * 2)
-        let side = icon.intrinsicContentSize.width
-        icon.frame = CGRect(x: Self.padding, y: Self.padding, width: side, height: Self.titleHeight)
-        let titleX = icon.frame.maxX + Self.iconGap
-        title.frame = CGRect(x: titleX, y: Self.padding, width: max(0, width - titleX - Self.padding), height: Self.titleHeight)
-        text.frame = CGRect(x: Self.padding, y: title.frame.maxY + Self.textGap, width: inner, height: textHeight)
-        let buttonsY = text.frame.maxY + Self.buttonsGap
-        let gap = ControlSize.regular.gap
-        let buttonHeight = RowButton.metrics.height
-        // Narrow, each takes half the row; wide, they keep their size at its end. Each width holds
-        // its half of the gap.
-        let halfRow = ((inner - gap) / 2).rounded(.down) + gap / 2
-        let (settingsWidth, continueWidth) = inner < Self.halvesBelow
-            ? (halfRow, halfRow)
-            : (settingsButton.width, continueButton.width)
-        let end = Self.padding + inner
-        continueButton.frame = CGRect(x: end - continueWidth, y: buttonsY, width: continueWidth, height: buttonHeight)
-        settingsButton.frame = CGRect(x: continueButton.frame.minX - settingsWidth, y: buttonsY, width: settingsWidth, height: buttonHeight)
-        return height
-    }
-
-    override func clearSelection() { text.clearSelection() }
 }
 
 /// Under a message or a reply: when it was sent and a button that copies it, at the side the

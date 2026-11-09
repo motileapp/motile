@@ -8,6 +8,7 @@ import UIKit
 ///     sidebar open | sidebar close      shows or hides the sidebar
 ///     thread <title>                    opens the thread with that title
 ///     new                               starts a new thread
+///     continue                          goes on from the open thread of an unlinked server
 ///     type <text>                       writes in the composer
 ///     send                              sends what is written
 ///     panel diff|files|agents|close     opens a tab of the panel, or closes the panel
@@ -84,6 +85,7 @@ enum DemoDriver {
             guard let thread = all.first(where: { $0.title.localizedCaseInsensitiveContains(rest) }) else { return }
             store.select(.thread(thread.id))
         case "new": store.startNewThread(in: store.composerProject ?? store.projects.first)
+        case "continue": store.continueOnAnotherServer()
         case "type": store.draft = rest
         case "send": store.send()
         case "stop": store.stop()

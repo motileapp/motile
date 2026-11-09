@@ -20,7 +20,6 @@ struct TranscriptRepresentable {
         view.startedBy = ofAgent ? nil : store.parentThread?.id
         view.topInset = topInset
         view.findCover = findCover
-        view.underComposer = ofAgent || store.openThreadRemovedServer == nil
         view.bottomInset = bottomInset
         view.bottomFade = bottomFade
         view.measuresAhead = !ofAgent
@@ -41,8 +40,6 @@ struct TranscriptRepresentable {
         view.onOpenAgent = { itemID in store.rightPanel.showAgent(itemID) }
         view.onOpenThread = { threadID in store.openStartedThread(threadID) }
         view.canFetchAgain = { store.openThreadRemovedServer == nil }
-        view.onContinueElsewhere = { store.continueOnAnotherServer() }
-        view.onOpenServerSettings = { store.openSettings(.servers) }
         view.onProgramEvent = { rowID, node, event in
             guard let threadID = model.threadID else { return }
             store.programEvent(threadID: threadID, rowID: rowID, node: node, event: event)
@@ -84,7 +81,6 @@ struct TranscriptRepresentable {
         view.startedBy = ofAgent ? nil : store.parentThread?.id
         view.topInset = topInset
         view.findCover = findCover
-        view.underComposer = ofAgent || store.openThreadRemovedServer == nil
         view.bottomInset = bottomInset
         view.bottomFade = bottomFade
     }

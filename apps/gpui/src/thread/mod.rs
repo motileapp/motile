@@ -451,9 +451,8 @@ impl Render for ThreadPane {
         let finding = store.find.shown && store.selected_thread().is_some() && !is_start;
         let removing = store.removing_project.clone();
         let title = store.selected_thread().map(|thread| thread.title.clone()).unwrap_or("New thread".into());
-        let removed = store.open_thread_removed();
         let shown_agent = store.shown_agent().cloned().filter(|_| !is_start);
-        let takes_drops = store.composer_server().is_some() && !removed;
+        let takes_drops = store.composer_server().is_some() && !store.open_thread_removed();
         if self.window_title != title {
             window.set_window_title(&title);
             self.window_title = title;
@@ -489,9 +488,7 @@ impl Render for ThreadPane {
             cx,
         );
         let measured = self.composer_height.clone();
-        // A thread whose server was unlinked ends with the row that says so, in the composer's place.
-        let room_below = shown_agent.is_some() || !removed;
-        let inset = if room_below { self.composer_height.get() } else { COMPOSER_BOTTOM_GAP };
+        let inset = self.composer_height.get();
         let transcript = if shown_agent.is_some() { self.agent_transcript.clone() } else { self.transcript.clone() };
         transcript.update(cx, |transcript, cx| transcript.set_bottom_inset(inset, cx));
         let below: AnyElement = match &shown_agent {
@@ -509,29 +506,27 @@ impl Render for ThreadPane {
                     .size_full()
                     .relative()
                     .child(div().absolute().top(px(theme::TOP_BAR)).left_0().right_0().bottom_0().child(transcript))
-                    .when(room_below, |thread| {
-                        thread.child(
-                            div()
-                                .absolute()
-                                .left_0()
-                                .right_0()
-                                .bottom_0()
-                                .px(px(theme::COMPOSER_PADDING))
-                                .pt(px(COMPOSER_GAP))
-                                .pb(px(COMPOSER_BOTTOM_GAP))
-                                .flex()
-                                .justify_center()
-                                .child(
-                                    canvas(
-                                        move |bounds, _, _| measured.set(f32::from(bounds.size.height)),
-                                        |_, _, _, _| {},
-                                    )
-                                    .absolute()
-                                    .inset_0(),
+                    .child(
+                        div()
+                            .absolute()
+                            .left_0()
+                            .right_0()
+                            .bottom_0()
+                            .px(px(theme::COMPOSER_PADDING))
+                            .pt(px(COMPOSER_GAP))
+                            .pb(px(COMPOSER_BOTTOM_GAP))
+                            .flex()
+                            .justify_center()
+                            .child(
+                                canvas(
+                                    move |bounds, _, _| measured.set(f32::from(bounds.size.height)),
+                                    |_, _, _, _| {},
                                 )
-                                .child(below),
-                        )
-                    })
+                                .absolute()
+                                .inset_0(),
+                            )
+                            .child(below),
+                    )
                     .into_any_element()
             })
             .child(self.top_bar(cx))

@@ -93,7 +93,6 @@ final class RowButton: FlippedView {
     private let title: TextLabel
     private let font: PlatformFont
     private let bordered: Bool
-    private let primary: Bool
     private let sidePadding: CGFloat
     private let insets: PlatformEdgeInsets
     private let hover: PlatformColor
@@ -103,14 +102,12 @@ final class RowButton: FlippedView {
     /// The room between the words and the highlight's sides, without a border.
     static let padding: CGFloat = 8
 
-    /// `hover` lights the button, a step above the surface it sits on, and `rest` fills it unlit. A
-    /// `primary` one is filled.
+    /// `hover` lights the button, a step above the surface it sits on, and `rest` fills it unlit.
     init(
         title: String,
         tooltip: String,
         radius: CGFloat,
         bordered: Bool = false,
-        primary: Bool = false,
         hover: PlatformColor = Theme.backgroundSecondary,
         rest: PlatformColor = .clear,
         insets: PlatformEdgeInsets,
@@ -119,14 +116,13 @@ final class RowButton: FlippedView {
         self.insets = insets
         self.hover = hover
         self.rest = rest
-        self.bordered = bordered || primary
-        self.primary = primary
+        self.bordered = bordered
         font = self.bordered ? .ui(Self.metrics.textSize, weight: .medium) : Theme.smallFont
         sidePadding = self.bordered ? Self.metrics.padding : Self.padding
         self.title = TextLabel(font: font, color: self.bordered ? Theme.foreground : Theme.mutedForeground)
         super.init(frame: .zero)
         highlight.radius = radius
-        if bordered && !primary { highlight.stroke = Theme.border }
+        if bordered { highlight.stroke = Theme.border }
         addSubview(highlight)
         self.title.string = title
         self.title.centered = true
@@ -158,11 +154,6 @@ final class RowButton: FlippedView {
     }
 
     private func light(_ lit: Bool) {
-        guard !primary else {
-            highlight.fill = lit ? Theme.thinned(Theme.primary, .lit) : Theme.primary
-            title.color = Theme.primaryForeground
-            return
-        }
         highlight.fill = lit ? hover : rest
         title.color = lit || bordered ? Theme.foreground : Theme.mutedForeground
     }

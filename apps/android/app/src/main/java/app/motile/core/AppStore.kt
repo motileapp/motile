@@ -2315,12 +2315,13 @@ class AppStore(private val context: Context) {
         return !isRemoved(project.serverID)
     }
 
-    /** Opens a draft of a new thread that goes on from the open one, whose server was removed, on the server of the project the user picks. */
+    /** Opens a draft of a new thread that goes on from the open one, whose server was removed, in its project on a server that has it, or else in "No project". */
     fun continueOnAnotherServer() {
         val thread = selectedThread ?: return
         if (!isRemoved(thread.serverID)) return
         val from = ContinuedThread(thread.serverID, thread.id, thread.title)
-        startNewThread()
+        val key = project(thread.projectID)?.key ?: Project.NO_PROJECT_KEY
+        startNewThread(preferredCopy(key) ?: preferredCopy(Project.NO_PROJECT_KEY))
         updateDraft { it.copy(from = from) }
         composerFocus += 1
     }

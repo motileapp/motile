@@ -200,11 +200,8 @@ object TranscriptView {
     /** How close to the end the viewport has to be to go to the end when the keyboard opens. */
     val nearEnd = 80.dp
 
-    /** Where the jump button stands above the bottom: over the composer's gap, or above the bottom padding where there is no composer. */
-    fun jumpButtonBottom(bottom: Dp, underComposer: Boolean): Dp {
-        if (!underComposer) return bottom + jumpButtonGap
-        return max(jumpButtonGap.value, (bottom - composerGap + jumpButtonGap).value).dp
-    }
+    /** Where the jump button stands above the bottom, over the composer's gap. */
+    fun jumpButtonBottom(bottom: Dp): Dp = max(jumpButtonGap.value, (bottom - composerGap + jumpButtonGap).value).dp
 }
 
 /**
@@ -212,15 +209,13 @@ object TranscriptView {
  * stays at the end while rows come in and the user hasn't scrolled up, asks for earlier turns near
  * its top and lets go of them far above the end, and never moves what is on screen while rows
  * splice in. `contentPadding` leaves room for what floats over its ends: the top bar and the
- * composer, under which the rows fade out. Without a composer (`underComposer` false) the bottom
- * padding is only room.
+ * composer, under which the rows fade out.
  */
 @Composable
 fun TranscriptView(
     model: TranscriptModel,
     modifier: Modifier = Modifier,
     contentPadding: PaddingValues = PaddingValues(),
-    underComposer: Boolean = true,
     /** What the find bar covers of the top, which revealing a match scrolls it clear of. */
     findCover: Dp = 0.dp,
 ) {
@@ -508,7 +503,7 @@ fun TranscriptView(
             }
         }
         if (jumps) {
-            JumpButton(Modifier.align(Alignment.BottomCenter).padding(bottom = TranscriptView.jumpButtonBottom(bottom, underComposer))) {
+            JumpButton(Modifier.align(Alignment.BottomCenter).padding(bottom = TranscriptView.jumpButtonBottom(bottom))) {
                 follower.pinned = true
                 follower.userScrolling = false
                 scope.launch {
