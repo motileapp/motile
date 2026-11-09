@@ -84,6 +84,11 @@ struct RecycledList<Item: Identifiable, Row: View>: UIViewRepresentable {
         private var landing: ClosedRange<Int>?
         /// The row a pointer is on.
         private var pointedRow: Item.ID?
+        /// The target the list keeps at the top while the rows take their heights and the keyboard
+        /// leaves, until a finger scrolls, the rows change or another target comes; and whether
+        /// the list still slides there.
+        private var held: Item.ID?
+        private var sliding = false
 
         func attach(_ view: UICollectionView) {
             let registration = UICollectionView.CellRegistration<RecycledCell, Item.ID> { [weak self] cell, indexPath, _ in
@@ -97,7 +102,9 @@ struct RecycledList<Item: Identifiable, Row: View>: UIViewRepresentable {
             self.source = source
             (view as? FadingCollectionView)?.laidOut = { [weak self, weak view] in
                 guard let self, let view else { return false }
-                return self.stretch(in: view)
+                guard !self.stretch(in: view) else { return true }
+                self.keepHeld(in: view)
+                return false
             }
         }
 
@@ -124,6 +131,7 @@ struct RecycledList<Item: Identifiable, Row: View>: UIViewRepresentable {
             let ids = list?.items.map(\.id) ?? []
             if ids != self.ids {
                 self.ids = ids
+                held = nil
                 var snapshot = NSDiffableDataSourceSnapshot<Int, Item.ID>()
                 snapshot.appendSections([0])
                 snapshot.appendItems(ids)
@@ -141,6 +149,8 @@ struct RecycledList<Item: Identifiable, Row: View>: UIViewRepresentable {
         }
 
         func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
+            held = nil
+            sliding = false
             list?.scrolled()
             point(at: nil, in: scrollView)
         }
@@ -163,9 +173,13 @@ struct RecycledList<Item: Identifiable, Row: View>: UIViewRepresentable {
             list.pointed(item, frame, view)
         }
 
-        /// Brings the target's row into sight once it is in the list.
+        /// Brings the target's row into sight once it is in the list. A row is only as tall as it
+        /// is once it has been laid out, so the list is put where the target seems to be until it
+        /// stays there, then slides there from where it was.
         func scroll(_ view: UICollectionView, to target: Item.ID?) {
             guard target != scrollTarget else { return }
+            held = nil
+            sliding = false
             guard let target else {
                 scrollTarget = nil
                 return
@@ -173,18 +187,50 @@ struct RecycledList<Item: Identifiable, Row: View>: UIViewRepresentable {
             guard let index = list?.items.firstIndex(where: { $0.id == target }) else { return }
             scrollTarget = target
             view.layoutIfNeeded()
-            guard let frame = view.layoutAttributesForItem(at: IndexPath(item: index, section: 0))?.frame else { return }
             guard list?.scrollsTargetToTop == true else {
+                guard let frame = view.layoutAttributesForItem(at: IndexPath(item: index, section: 0))?.frame else { return }
                 view.scrollRectToVisible(frame, animated: true)
                 return
             }
+            let start = view.contentOffset
+            var offset = start
+            for _ in 0..<5 {
+                guard let next = topOffset(for: index, in: view), abs(next.y - offset.y) >= 1 else { break }
+                offset = next
+                view.contentOffset = next
+                view.layoutIfNeeded()
+            }
+            view.contentOffset = start
+            held = target
+            guard offset != start else { return }
+            sliding = true
+            view.setContentOffset(offset, animated: true)
+        }
+
+        func scrollViewDidEndScrollingAnimation(_ scrollView: UIScrollView) {
+            guard let view = scrollView as? UICollectionView, sliding else { return }
+            sliding = false
+            keepHeld(in: view)
+        }
+
+        private func keepHeld(in view: UICollectionView) {
+            guard !sliding, let held, let index = ids.firstIndex(of: held),
+                  let offset = topOffset(for: index, in: view), abs(offset.y - view.contentOffset.y) >= 1
+            else { return }
+            view.contentOffset = offset
+        }
+
+        /// Where the list puts the row at the top, clear of the fade, with the anchor above it
+        /// when both fit.
+        private func topOffset(for index: Int, in view: UICollectionView) -> CGPoint? {
+            guard let frame = view.layoutAttributesForItem(at: IndexPath(item: index, section: 0))?.frame else { return nil }
             let top = -view.adjustedContentInset.top
             let bottom = max(top, view.contentSize.height + view.adjustedContentInset.bottom - view.bounds.height)
             let room = view.bounds.height - view.adjustedContentInset.top - view.adjustedContentInset.bottom - 2 * EdgeFade.length
             let anchor = list?.scrollAnchor.flatMap { id in list?.items.firstIndex { $0.id == id } }
                 .flatMap { view.layoutAttributesForItem(at: IndexPath(item: $0, section: 0))?.frame }
             let lead = anchor.flatMap { frame.maxY - $0.minY <= room ? $0.minY : nil } ?? frame.minY
-            view.setContentOffset(CGPoint(x: view.contentOffset.x, y: min(bottom, max(top, lead - EdgeFade.length))), animated: true)
+            return CGPoint(x: view.contentOffset.x, y: min(bottom, max(top, lead - EdgeFade.length)))
         }
 
         private func configure(_ cell: RecycledCell, at index: Int) {
