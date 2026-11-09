@@ -62,7 +62,9 @@ pub struct Status {
 /// when the connection drops.
 pub struct GatewayLink {
     pub key: String,
-    endpoint: Mutex<Endpoint>,
+    /// What the link dials on; none while the core replaces it, when what is on the old one ends
+    /// because the core closed it, which says nothing of the server.
+    endpoint: Mutex<Option<Endpoint>>,
     /// Whether a connection that ended went because the client was away, which isn't an outage.
     away: Away,
     emit: Emit,
@@ -84,7 +86,7 @@ impl GatewayLink {
     pub fn connect(endpoint: Endpoint, gateway: ServerAddr, away: Away, emit: Emit) -> Arc<Self> {
         let link = Arc::new(Self {
             key: gateway.key.clone(),
-            endpoint: Mutex::new(endpoint),
+            endpoint: Mutex::new(Some(endpoint)),
             away,
             emit,
             inner: Mutex::default(),
@@ -119,7 +121,21 @@ impl GatewayLink {
     }
 
     pub fn redial_on(&self, endpoint: Endpoint) {
-        *self.endpoint.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = endpoint;
+        *self.endpoint.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(endpoint);
+        self.restart.notify_one();
+    }
+
+    /// Says why there is no endpoint to dial on, while the link waits for one.
+    pub fn no_endpoint(&self, error: String) {
+        if self.endpoint.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).is_none() {
+            self.update_status(|status| *status = Status { state: State::Disconnected, error: Some(error) });
+        }
+    }
+
+    /// Lets go of the dial or the connection there is, as the core is about to close the endpoint
+    /// they are on, and waits for `redial_on` without saying anything: the link shows as dialing.
+    pub fn retire(&self) {
+        *self.endpoint.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = None;
         self.restart.notify_one();
     }
 
@@ -142,6 +158,11 @@ impl GatewayLink {
         loop {
             self.update_status(|status| *status = Status { state: State::Connecting, error: status.error.take() });
             let endpoint = self.endpoint.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).clone();
+            let Some(endpoint) = endpoint else {
+                self.restart.notified().await;
+                failures = 0;
+                continue;
+            };
             let started = SystemTime::now();
             let closed = tokio::select! {
                 biased;
