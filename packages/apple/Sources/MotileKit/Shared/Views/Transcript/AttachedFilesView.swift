@@ -7,18 +7,16 @@ import UIKit
 #endif
 
 /// The files attached to a message, in its bubble: the images and videos as tiles that open in
-/// the viewer, and the others under them, a line each, which download as an agent's file does. The
-/// tiles are all one size, so the row knows its height before any picture is on this device.
+/// the viewer, and the others under them as the cards an agent's files are. The tiles and the cards
+/// are all one size, so the row knows its height before any picture is on this device.
 final class AttachedFilesView: FlippedView {
     private static let tile = CGSize(width: 96, height: 96)
     private static let gap: CGFloat = 6
-    private static let lineHeight: CGFloat = scaled(16)
-    private static let lineGap: CGFloat = 4
 
     private weak var owner: RowOwner?
     private var files: [AttachedFile] = []
     private var tiles: [TileView] = []
-    private var lines: [FileLine] = []
+    private var cards: [FileCard] = []
 
     /// What the files add to the height of a row that is `width` wide, to place rows nobody has
     /// scrolled to yet.
@@ -35,8 +33,8 @@ final class AttachedFilesView: FlippedView {
         let columns = min(pictured, perRow)
         let tilesWidth = CGFloat(columns) * (tile.width + gap) - (columns > 0 ? gap : 0)
         let tilesHeight = CGFloat(rows) * (tile.height + gap) - (rows > 0 ? gap : 0)
-        let namesWidth = min(width, named.map(FileLine.width).max() ?? 0)
-        let namesHeight = named.isEmpty ? 0 : CGFloat(named.count) * (lineHeight + lineGap) - lineGap
+        let namesWidth = named.isEmpty ? 0 : min(width, FileCard.widest)
+        let namesHeight = named.isEmpty ? 0 : CGFloat(named.count) * (FileCard.height + gap) - gap
         let between: CGFloat = rows > 0 && !named.isEmpty ? gap : 0
         return CGSize(width: max(tilesWidth, namesWidth), height: tilesHeight + between + namesHeight)
     }
@@ -56,14 +54,15 @@ final class AttachedFilesView: FlippedView {
             tiles[index].show(file, owner: owner) { [weak self] in self?.open(index) }
         }
         let named = files.filter { !$0.pictured }
-        while lines.count > named.count { lines.removeLast().removeFromSuperview() }
-        while lines.count < named.count {
-            let line = FileLine()
-            lines.append(line)
-            addSubview(line)
+        while cards.count > named.count { cards.removeLast().removeFromSuperview() }
+        while cards.count < named.count {
+            let card = FileCard()
+            cards.append(card)
+            addSubview(card)
         }
-        for (line, file) in zip(lines, named) {
-            line.show(file, owner: owner)
+        for (card, file) in zip(cards, named) {
+            let download = file.download
+            card.show(download ?? SentFile(id: "", bytes: file.size, alt: "", name: file.name), owner: owner, kept: download != nil)
         }
     }
 
@@ -84,111 +83,9 @@ final class AttachedFilesView: FlippedView {
             tile.frame = CGRect(origin: origin, size: Self.tile)
         }
         var y = tiles.last.map { $0.frame.maxY + Self.gap } ?? 0
-        for line in lines {
-            line.frame = CGRect(x: 0, y: y, width: width, height: Self.lineHeight)
-            y += Self.lineHeight + Self.lineGap
-        }
-    }
-
-    /// A file that isn't an image or a video: a paperclip and its name. One its server kept
-    /// downloads, shows how far, and opens once it is here.
-    private final class FileLine: FlippedView {
-        private static let iconGap: CGFloat = 4
-        private static var iconSide: CGFloat { PlatformImage.symbolSide(.xs) }
-
-        private let icon = SymbolView(.paperclip, size: .xs, tint: Theme.mutedForeground)
-        private let name = TextLabel(font: Theme.smallFont, color: Theme.mutedForeground)
-        private let status = TextLabel(font: PlatformFont.uiDigits(12), color: Theme.mutedForeground)
-        private weak var owner: RowOwner?
-        private var download: SentFile?
-        private var hovered = false
-        private var downloadWatch: NSObjectProtocol?
-
-        static func width(_ file: AttachedFile) -> CGFloat {
-            iconSide + iconGap + ceil(file.name.size(withAttributes: [.font: Theme.smallFont]).width) + 4
-        }
-
-        override init(frame: CGRect) {
-            super.init(frame: frame)
-            name.breaks = .byTruncatingMiddle
-            addSubview(icon)
-            addSubview(name)
-            addSubview(status)
-            onHover = { [weak self] point in
-                guard let self else { return }
-                self.hovered = point != nil
-                self.light()
-            }
-            downloadWatch = NotificationCenter.default.addObserver(forName: FileDownloads.changed, object: nil, queue: .main) { [weak self] note in
-                guard let self, let id = self.download?.id, note.userInfo?["id"] as? String == id else { return }
-                self.light()
-            }
-        }
-
-        required init?(coder: NSCoder) { fatalError("not used") }
-
-        deinit {
-            if let downloadWatch { NotificationCenter.default.removeObserver(downloadWatch) }
-        }
-
-        func show(_ file: AttachedFile, owner: RowOwner?) {
-            self.owner = owner
-            download = file.download
-            name.string = file.name
-            describe(file.name, button: download != nil)
-            pointer = download == nil ? .arrow : .hand
-            onPress = download == nil ? nil : { [weak self] _ in self?.press() }
-            menuActions = download == nil ? nil : { [weak self] in self?.actions() ?? [] }
-            light()
-        }
-
-        private func press() {
-            guard let download, let owner else { return }
-            FileDownloads.press(download, owner: owner, from: self)
-        }
-
-        private func actions() -> [MenuAction] {
-            guard let download, let owner else { return [] }
-            return FileDownloads.actions(download, owner: owner, from: self)
-        }
-
-        /// The name lights under the pointer when a press does something, and the line says how
-        /// far a download is or why it failed.
-        private func light() {
-            let lit = hovered && download != nil
-            name.color = lit ? Theme.foreground : Theme.mutedForeground
-            icon.tint = name.color
-            status.color = Theme.mutedForeground
-            tip = nil
-            status.string = ""
-            if let download {
-                switch FileDownloads.state(of: download.id) {
-                case .fetching(let fraction):
-                    status.string = " · \(Int((fraction * 100).rounded()))%"
-                case .failed(let reason):
-                    status.string = " · \(FileRowView.firstSentence(of: reason))"
-                    status.color = Theme.destructive
-                    tip = reason
-                case .remote, .downloaded:
-                    break
-                }
-            }
-            layoutNow()
-        }
-
-        override func layoutNow() {
-            let side = Self.iconSide
-            icon.frame = CGRect(x: 0, y: ((bounds.height - side) / 2).rounded(), width: side, height: side)
-            let x = icon.frame.maxX + Self.iconGap
-            let statusNatural = status.string.isEmpty ? 0 : ceil(status.string.size(withAttributes: [.font: PlatformFont.uiDigits(12)]).width) + 2
-            let statusWidth = min(statusNatural, max(0, bounds.width - x))
-            let nameWidth = min(ceil(name.string.size(withAttributes: [.font: Theme.smallFont]).width) + 4, max(0, bounds.width - x - statusWidth))
-            name.frame = CGRect(x: x, y: 0, width: nameWidth, height: bounds.height)
-            status.frame = CGRect(x: name.frame.maxX, y: 0, width: statusWidth, height: bounds.height)
-        }
-
-        override func takesPress(at point: CGPoint) -> Bool {
-            bounds.contains(point) && point.x <= status.frame.maxX
+        for card in cards {
+            card.frame = CGRect(x: 0, y: y, width: min(width, FileCard.widest), height: FileCard.height)
+            y += FileCard.height + Self.gap
         }
     }
 
