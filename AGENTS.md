@@ -213,14 +213,20 @@ shadcn's own colours, opacities and radii are gone from the theme.
   its own thread: `read_thread` reads any thread of the server, for what a handoff left out,
   `openui_guide` gives the prompt that teaches programs in pages that fit in a tool's answer,
   `check_ui` checks a program before the agent shows it, and `list_accounts`, `start_agent`,
-  `agent_status`, `message_agent`, `answer_agent` and `stop_agent` start and follow agents on any of
-  the server's accounts, Claude Code's or Codex's.
+  `agent_status`, `message_agent`, `answer_agent`, `approve_agent` and `stop_agent` start and follow
+  agents on any of the server's accounts, Claude Code's or Codex's. The same tools follow any thread
+  of the server and drive one with no more access than the caller's. `create_thread`, `list_threads`,
+  `update_thread`, `thread_queue`, `list_projects`, `add_project`, `read_pull_request`,
+  `link_pull_request` and `git_status` (`hub/threads.rs`) start threads the sidebar lists, find and
+  change threads, projects and pull requests, under the same rule.
 - `hub/children.rs`: those agents. Each works in a thread of its own, which knows the thread and
   the tool call that started it (`parent`); the sidebar doesn't list it. It gets only its prompt,
   works in its parent's folder unless given a worktree, and never has more access than its parent.
   Its parent's tool call follows how it does, and the parent's agent is told (`Notice`) when the
-  turn it gave the thread ends or the thread asks a question, unless a call of its own waited for
-  that. Stopping or deleting a thread stops or deletes the ones it started.
+  turn it gave the thread ends, the thread asks a question, or a thread with full access waits for a
+  tool call to be allowed (Claude Code asks for some under any access), unless a call of its own
+  waited for that. Only an agent with full access allows one, with `approve_agent`; a thread with
+  less waits for the user. Stopping or deleting a thread stops or deletes the ones it started.
 - `pacing.rs`: passes a streamed reply on in finished blocks.
 - `agents/`: builds the command for a turn and parses its output into `AgentEvent`s
   (`claude.rs`, `codex.rs`). `skills.rs` asks each account's CLI for the skills it offers in a
@@ -775,6 +781,7 @@ clients. It replays the recorded output in `fixtures/` or makes up a turn, depen
 | "ask a supervised agent" | Starts a supervised agent that runs greet.py, which waits for the user's approval (Claude Code) |
 | "ask a pinned agent" | Starts two agents that look over greet.py slowly, one pinned to one of the gateway's Claude Code accounts and one the gateway places, through `start_agent` (Claude Code) |
 | "ask an agent which color" | Starts an agent that asks which color; told it asks, answers blue through `answer_agent` (Claude Code) |
+| "ask an agent to change the settings" | Starts an agent that asks before it edits `.claude/settings.json` under any access; told it waits, allows it through `approve_agent` (Claude Code) |
 | "look over" | Reads greet.py and runs the tests, a step every `FAKE_AGENT_CHILD_STEP` seconds, and says what it would change |
 | "run the workflow" | Runs a workflow of two phases, whose last agent fails (Claude Code) |
 | "which color" | Asks the user a question |

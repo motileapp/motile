@@ -266,6 +266,9 @@ pub enum NoticeEvent {
     Stopped,
     /// It asks a question, which the agent that started it can answer.
     Asked,
+    /// It has full access and waits for a tool call or a plan to be allowed, which the agent that
+    /// started it can allow.
+    NeedsApproval,
     /// It reached its account's usage limit, and waits for the limit to reset.
     Limited,
     /// An event of a newer server.

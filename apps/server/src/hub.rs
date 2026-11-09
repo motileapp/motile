@@ -49,6 +49,7 @@ use crate::ui_lookups::Lookups;
 use crate::{agent_accounts, drafts, files, gateway, git, github, icons, limits, pacing, pull_requests, title, ui};
 
 mod children;
+mod threads;
 
 pub use children::{LONGEST_WAIT, WAIT};
 use motile_protocol::wire::{
@@ -292,7 +293,7 @@ struct Live {
     /// The skills the thread's messages started, which Claude Code is given as its commands.
     skills: Vec<SkillMention>,
     /// The question the agent that started the thread was told it asks.
-    told_question: Option<String>,
+    told_ask: Option<String>,
     /// The agent that started the thread was told it waits for its usage limit to reset.
     told_limit: bool,
     /// How many tool calls of its own the transcript has, once they were counted.
@@ -4147,7 +4148,7 @@ impl Live {
             turn: None,
             retry: None,
             mcp_token: None,
-            told_question: None,
+            told_ask: None,
             told_limit: false,
             tools: None,
             deleted: false,
