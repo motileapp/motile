@@ -97,6 +97,9 @@ const PRICES: &str = "prices";
 const GATEWAY_ACCOUNTS_EVERY: Duration = Duration::from_secs(60);
 /// How often what the agents' accounts have used is read.
 const LIMITS_READ_EVERY: Duration = Duration::from_secs(5 * 60);
+/// How recent a read of what the agents' accounts have used answers whoever asks for it, so that
+/// clients and agents asking at once read the accounts once.
+const LIMITS_ANSWER_WITHIN: Duration = Duration::from_secs(30);
 const PRICES_STALE: Duration = Duration::from_secs(24 * 3600);
 const PRICES_RETRY: Duration = Duration::from_secs(3600);
 const MAX_INSTRUCTIONS_CHARS: usize = 4000;
@@ -167,7 +170,7 @@ pub struct Hub {
     /// What the models cost at the API's prices, as last fetched.
     prices: std::sync::Mutex<Prices>,
     /// What the agents' accounts had used of their plans, and when that was read.
-    limits: Mutex<Option<Vec<AgentLimits>>>,
+    limits: Mutex<Option<(Instant, Vec<AgentLimits>)>>,
     /// What was last seen of each watched thread's pull request, by thread.
     watched: std::sync::Mutex<HashMap<String, Seen>>,
     /// Held while a folder is kept as it is, so a thread's snapshots follow one another.
@@ -986,7 +989,7 @@ impl Hub {
     /// Reads what the accounts have used in the background, which also says who they are.
     pub fn refresh_limits(self: &Arc<Self>) {
         let hub = self.clone();
-        tokio::spawn(async move { hub.read_limits().await });
+        tokio::spawn(async move { hub.read_limits(Duration::ZERO).await });
     }
 
     /// Reads what the accounts have used now and every few minutes, so that a client never waits
@@ -995,7 +998,7 @@ impl Hub {
         let hub = self.clone();
         tokio::spawn(async move {
             loop {
-                hub.read_limits().await;
+                hub.read_limits(Duration::ZERO).await;
                 tokio::time::sleep(LIMITS_READ_EVERY).await;
             }
         });
@@ -2523,21 +2526,18 @@ impl Hub {
         Ok(Message::Watermarks { own: self.store.watermark()?, copies: self.store.origin_watermarks()?, bucket })
     }
 
-    /// What the agents' accounts had used of their plans when they were last read, read now if
-    /// they never were.
+    /// What the agents' accounts have used of their plans now: read again unless they just were.
     pub async fn limits(&self) -> Message {
-        let kept = self.limits.lock().await.clone();
-        let agents = match kept {
-            Some(agents) => agents,
-            None => self.read_limits().await,
-        };
-        Message::Limits { agents }
+        Message::Limits { agents: self.read_limits(LIMITS_ANSWER_WITHIN).await }
     }
 
-    /// Reads what the agents' accounts have used of their plans. An account that can't be read
-    /// keeps what it said last time, beside why.
-    async fn read_limits(&self) -> Vec<AgentLimits> {
+    /// Reads what the agents' accounts have used of their plans, unless they were read within
+    /// `kept_for`. An account that can't be read keeps what it said last time, beside why.
+    async fn read_limits(&self, kept_for: Duration) -> Vec<AgentLimits> {
         let mut kept = self.limits.lock().await;
+        if let Some((_, agents)) = kept.as_ref().filter(|(at, _)| at.elapsed() < kept_for) {
+            return agents.clone();
+        }
         let (pooled, own): (Vec<_>, Vec<_>) = self.agent_accounts().into_iter().partition(|account| account.gateway);
         let own = own.into_iter().map(|account| {
             let environment = self.account_environment(&account);
@@ -2545,9 +2545,10 @@ impl Hub {
         });
         let (mut read, pools) = tokio::join!(limits::read(own.collect()), self.read_pools(pooled));
         read.extend(pools);
-        let agents = limits::kept(read, kept.as_deref().unwrap_or_default());
+        let before = kept.as_ref().map(|(_, agents)| agents.as_slice()).unwrap_or_default();
+        let agents = limits::kept(read, before);
         self.note_signed_in(&agents);
-        *kept = Some(agents.clone());
+        *kept = Some((Instant::now(), agents.clone()));
         agents
     }
 
@@ -2579,7 +2580,7 @@ impl Hub {
     /// for the accounts pinned to them.
     async fn keep_pinned_limits(&self, accounts: &[AgentAccount], pool: &[GatewayAccount]) {
         let mut kept = self.limits.lock().await;
-        let Some(agents) = kept.as_mut() else { return };
+        let Some((_, agents)) = kept.as_mut() else { return };
         for account in accounts.iter().filter(|account| account.pin.is_some()) {
             let pooled = pool.iter().find(|pooled| account.pin.as_deref() == Some(pooled.id.as_str()));
             let listed = limits::pinned(account, pooled);

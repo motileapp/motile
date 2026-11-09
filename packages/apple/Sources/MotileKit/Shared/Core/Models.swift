@@ -1698,8 +1698,6 @@ struct LimitsReport {
 
     let sections: [Section]
     let notes: [String]
-    /// Some of it is old or missing, from what was last read.
-    let stale: Bool
 
     init(json: JSON) {
         sections = json.objects("sections").map { section in
@@ -1711,7 +1709,6 @@ struct LimitsReport {
                 note: section.optionalString("note"), gateway: section.bool("gateway"))
         }
         notes = json.strings("notes")
-        stale = json.bool("stale")
     }
 }
 

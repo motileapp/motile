@@ -2203,12 +2203,11 @@ final class AppStore {
     }
 
     /// How much of their plans the agents' accounts on the connected `servers`, or all of them,
-    /// have used. `refresh` has the servers read it anew, `kept` answers at once with what was
-    /// last read.
+    /// have used, as the servers read it now. `kept` answers at once with what was last read.
     func loadLimits(
-        refresh: Bool, kept: Bool, servers: Set<String>?, reply: @escaping (Result<LimitsReport, CoreBridge.CoreError>) -> Void
+        kept: Bool, servers: Set<String>?, reply: @escaping (Result<LimitsReport, CoreBridge.CoreError>) -> Void
     ) {
-        var command: JSON = ["refresh": refresh, "kept": kept]
+        var command: JSON = ["kept": kept]
         if let servers { command["servers"] = Array(servers) }
         core.send("limits", command, read: LimitsReport.init, reply: reply)
     }

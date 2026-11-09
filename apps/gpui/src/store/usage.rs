@@ -97,9 +97,6 @@ pub struct LimitsReport {
     pub sections: Vec<LimitsSection>,
     #[serde(default)]
     pub notes: Vec<String>,
-    /// Some of it is old or missing, from what was last read.
-    #[serde(default)]
-    pub stale: bool,
 }
 
 #[derive(Clone, PartialEq, Debug, Deserialize)]
@@ -293,20 +290,20 @@ impl Store {
             return;
         }
         self.shows_usage = true;
-        self.load_usage(false);
+        self.load_usage();
     }
 
     pub fn set_usage_tab(&mut self, tab: UsageTab) {
         let before = self.usage_tab();
         self.prefs.set(TAB_KEY, tab);
         if (before == UsageTab::Limits) != (tab == UsageTab::Limits) {
-            self.load_usage(false);
+            self.load_usage();
         }
     }
 
     pub fn set_usage_period(&mut self, period: UsagePeriod) {
         self.prefs.set(PERIOD_KEY, period);
-        self.load_usage(false);
+        self.load_usage();
     }
 
     /// Counts the server, or stops counting it.
@@ -320,7 +317,7 @@ impl Store {
             None => picked.push(server.to_string()),
         }
         self.prefs.set(SERVERS_KEY, picked);
-        self.load_usage(false);
+        self.load_usage();
     }
 
     pub fn usage_server_picked(&self, server: &str) -> bool {
@@ -350,33 +347,27 @@ impl Store {
 
     /// Asks the servers again for what the tab shows.
     pub fn refresh_usage(&mut self) {
-        self.load_usage(true);
+        self.load_usage();
     }
 
-    fn load_usage(&mut self, refresh: bool) {
+    /// Shows what the core kept for the tab at once, then asks the servers.
+    fn load_usage(&mut self) {
         self.follow_gateway_views();
         self.usage.asked += 1;
         let number = self.usage.asked;
         self.usage.refreshing = true;
         let servers = self.counted_servers();
         if self.usage_tab() == UsageTab::Limits {
-            self.load_limits(refresh, !refresh, servers.clone(), move |store, result| {
+            self.load_limits(true, servers.clone(), move |store, kept| {
                 if store.usage.asked != number {
                     return;
                 }
-                let report = match result {
-                    Ok(report) if report.stale => report,
-                    result => {
-                        store.usage.refreshing = false;
-                        let shown = std::mem::replace(&mut store.usage.limits, Loaded::Loading);
-                        store.usage.limits = loaded(result, shown);
-                        return;
-                    }
-                };
-                if !report.sections.is_empty() {
+                if let Ok(report) = kept
+                    && !report.sections.is_empty()
+                {
                     store.usage.limits = Loaded::Ready(report);
                 }
-                store.load_limits(false, false, servers, move |store, result| {
+                store.load_limits(false, servers, move |store, result| {
                     if store.usage.asked != number {
                         return;
                     }
@@ -425,16 +416,15 @@ impl Store {
         self.ask_read(command, read::<UsageReport>, move |store, result, _| then(store, flatten(result)));
     }
 
-    /// How much of their plans the agents' accounts have used. `refresh` has the servers read it
-    /// anew, `kept` answers at once with what was last read.
+    /// How much of their plans the agents' accounts have used, as the servers read it now. `kept`
+    /// answers at once with what was last read.
     fn load_limits(
         &mut self,
-        refresh: bool,
         kept: bool,
         servers: Option<Vec<String>>,
         then: impl FnOnce(&mut Store, Result<LimitsReport, String>) + 'static,
     ) {
-        let command = Command::Limits { refresh, kept, servers };
+        let command = Command::Limits { kept, servers };
         self.ask_read(command, read::<LimitsReport>, move |store, result, _| then(store, flatten(result)));
     }
 }
@@ -461,10 +451,9 @@ mod tests {
                     "pace": "ahead", "tone": "pending", "reset_credits": 2}],
                 "note": null
             }],
-            "notes": [], "stale": true
+            "notes": []
         });
         let report: LimitsReport = read(value).unwrap();
-        assert!(report.stale);
         let window = &report.sections[0].windows[0];
         assert_eq!((window.pace, window.tone, window.reset_credits), (Some(Pace::Ahead), Tone::Pending, 2));
     }
