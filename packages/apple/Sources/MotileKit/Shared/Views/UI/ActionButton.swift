@@ -50,6 +50,8 @@ struct ControlLook {
     var joined: HorizontalEdge.Set = []
     /// A colour that says something, like a pull request's state, in place of the quiet ones.
     var tint: Color?
+    /// On iOS's Liquid Glass, tinted in its colour, where the system has it.
+    var glass = false
 
     var foreground: Color {
         if let tint, takesTint { return tint }
@@ -99,7 +101,7 @@ struct ControlLook {
 
     var radius: CGFloat { round ? size.height / 2 : size.radius }
 
-    private var shape: UnevenRoundedRectangle {
+    fileprivate var shape: UnevenRoundedRectangle {
         let leading = joined.contains(.leading) ? 0 : radius
         let trailing = joined.contains(.trailing) ? 0 : radius
         return UnevenRoundedRectangle(
@@ -109,6 +111,18 @@ struct ControlLook {
 
     /// The colour it is filled with, which its signal rings take.
     var fillColor: AnyShapeStyle { fill }
+
+    /// The colour its glass is tinted in: the one it is filled with otherwise.
+    var glassTint: Color {
+        switch variant {
+        case .primary, .link, .accent: .themePrimary
+        case .danger: .themeDestructive
+        case .success: .themeSuccess
+        case .warning: .themeWarning
+        case .waiting: .themePending
+        default: .themeGlassTint
+        }
+    }
 
     var background: some View {
         shape.fill(fill)
@@ -379,18 +393,71 @@ private struct ControlBody<Label: View>: View {
     @State private var settled: ButtonVariant?
     @State private var grownOver: ButtonVariant?
     @State private var revealedAt: Date?
+    /// How far the new colour's glass has grown, which glass animates itself, back to 0 once it has.
+    @State private var glassRevealed: CGFloat = 0
     /// The rings' look, and when they stopped starting, so that the last ones still go out.
     @State private var rings: (look: ControlLook, stopped: Date?)?
     @Environment(\.isEnabled) private var enabled
     @Environment(\.surface) private var surface
     @Environment(\.row) private var row
 
-    var body: some View {
+    private var currentLook: ControlLook {
         var look = self.look
         look.surface = surface
         look.row = row
         look.lit = enabled && !pending && (hovering || pressed)
+        return look
+    }
+
+    var body: some View {
+        let look = currentLook
+        surfaced(look)
+            .contentShape(Rectangle())
+            .opacity(.disabled, when: !enabled && !pending)
+            .animation(.easeOut(duration: ControlLook.recolor), value: look.variant)
+            .onHover { hovering = $0 }
+            .onChange(of: look.variant, initial: true) { old, new in reveal(new, over: old) }
+            .onChange(of: signals, initial: true) { _, signals in signal(signals, look: look) }
+    }
+
+    @ViewBuilder
+    private func surfaced(_ look: ControlLook) -> some View {
+        #if os(iOS)
+        if look.glass, #available(iOS 26.0, *) {
+            glassed(look)
+                .background {
+                    if let rings { SignalRings(look: rings.look, stopped: rings.stopped).padding(margin) }
+                }
+        } else {
+            filled(look)
+        }
+        #else
+        filled(look)
+        #endif
+    }
+
+    #if os(iOS)
+    /// On glass its new colour grows from the middle as it does filled: the new tint's glass is
+    /// what the circle has reached, over the old tint's, since glass can't take a shape with a hole.
+    @available(iOS 26.0, *)
+    private func glassed(_ look: ControlLook) -> some View {
+        let changing = settled != nil && settled != look.variant
+        let old = changing ? settled : grownOver
+        let revealed = old == nil ? 1 : changing ? 0 : glassRevealed
         return label
+            .foregroundStyle(look.foreground)
+            .glassEffect(.regular.tint(look.glassTint).interactive(), in: GlassPart(shape: look.shape, insets: margin, revealed: revealed))
+            .background {
+                if let old {
+                    Color.clear.glassEffect(.regular.tint(look.as(old).glassTint), in: GlassPart(shape: look.shape, insets: margin))
+                }
+            }
+            .animation(nil, value: look.variant)
+    }
+    #endif
+
+    private func filled(_ look: ControlLook) -> some View {
+        label
             .foregroundStyle(look.foreground)
             .background {
                 ZStack {
@@ -416,12 +483,6 @@ private struct ControlBody<Label: View>: View {
                 .compositingGroup()
                 .padding(margin)
             }
-            .contentShape(Rectangle())
-            .opacity(.disabled, when: !enabled && !pending)
-            .animation(.easeOut(duration: ControlLook.recolor), value: look.variant)
-            .onHover { hovering = $0 }
-            .onChange(of: look.variant, initial: true) { old, new in reveal(new, over: old) }
-            .onChange(of: signals, initial: true) { _, signals in signal(signals, look: look) }
     }
 
     private func reveal(_ variant: ButtonVariant, over old: ButtonVariant) {
@@ -429,10 +490,14 @@ private struct ControlBody<Label: View>: View {
         guard old != variant else { return }
         grownOver = old
         revealedAt = .now
+        if look.glass {
+            withAnimation(.timingCurve(0.25, 1, 0.5, 1, duration: ControlLook.recolor)) { glassRevealed = 1 }
+        }
         DispatchQueue.main.asyncAfter(deadline: .now() + ControlLook.recolor) {
             guard settled == variant else { return }
             grownOver = nil
             revealedAt = nil
+            glassRevealed = 0
         }
     }
 
@@ -444,6 +509,30 @@ private struct ControlBody<Label: View>: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + SignalRings.travel) {
             if rings?.stopped == stopped { rings = nil }
         }
+    }
+}
+
+/// A button's shape inside its margin, or of it the part a circle growing from its middle has
+/// `revealed`.
+private struct GlassPart<S: Shape>: Shape {
+    let shape: S
+    let insets: EdgeInsets
+    var revealed: CGFloat = 1
+
+    var animatableData: CGFloat {
+        get { revealed }
+        set { revealed = newValue }
+    }
+
+    func path(in rect: CGRect) -> Path {
+        let inner = CGRect(
+            x: rect.minX + insets.leading, y: rect.minY + insets.top,
+            width: rect.width - insets.leading - insets.trailing, height: rect.height - insets.top - insets.bottom)
+        let whole = shape.path(in: inner)
+        guard revealed < 1 else { return whole }
+        let side = hypot(inner.width, inner.height) * revealed
+        let circle = Path(ellipseIn: CGRect(x: inner.midX - side / 2, y: inner.midY - side / 2, width: side, height: side))
+        return whole.intersection(circle)
     }
 }
 
@@ -510,7 +599,8 @@ struct ActionButton: View {
         padding: CGFloat? = nil, pending: Bool = false, pendingTitle: String? = nil,
         selected: Bool = false, round: Bool = false,
         fills: Bool = false, alignment: HorizontalAlignment = .center, opens: Bool = false, open: Bool = false, joined: HorizontalEdge.Set = [],
-        signals: Bool = false, tint: Color? = nil, margin: EdgeInsets = EdgeInsets(), inline: Bool = false, action: @escaping () -> Void
+        signals: Bool = false, tint: Color? = nil, glass: Bool = false, margin: EdgeInsets = EdgeInsets(), inline: Bool = false,
+        action: @escaping () -> Void
     ) {
         chevron = opens
         self.signals = signals
@@ -524,7 +614,7 @@ struct ActionButton: View {
         self.proxied = proxied
         self.pinned = pinned
         self.help = help
-        look = ControlLook(variant: variant, size: size, selected: selected, round: round, joined: joined, tint: tint)
+        look = ControlLook(variant: variant, size: size, selected: selected, round: round, joined: joined, tint: tint, glass: glass)
         self.pending = pending
         self.pendingTitle = pendingTitle
         self.fills = fills
@@ -541,7 +631,7 @@ struct ActionButton: View {
     init(
         icon: Symbol, help: String, variant: ButtonVariant = .ghost, size: ControlSize = .regular, symbolSize: IconSize? = nil,
         pending: Bool = false, selected: Bool = false, round: Bool = false, joined: HorizontalEdge.Set = [], signals: Bool = false,
-        tint: Color? = nil, margin: EdgeInsets = EdgeInsets(), inline: Bool = false, action: @escaping () -> Void
+        tint: Color? = nil, glass: Bool = false, margin: EdgeInsets = EdgeInsets(), inline: Bool = false, action: @escaping () -> Void
     ) {
         title = nil
         self.signals = signals
@@ -549,7 +639,7 @@ struct ActionButton: View {
         self.icon = .symbol(icon)
         detail = nil
         self.help = help
-        look = ControlLook(variant: variant, size: size, selected: selected, round: round, joined: joined, tint: tint)
+        look = ControlLook(variant: variant, size: size, selected: selected, round: round, joined: joined, tint: tint, glass: glass)
         self.pending = pending
         pendingTitle = nil
         fills = false
