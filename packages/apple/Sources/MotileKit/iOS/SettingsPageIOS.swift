@@ -203,7 +203,7 @@ struct SettingsPage: View {
                 NavigationLink {
                     ServerSettingsPage(serverID: server.id, removed: false).glassBackButton()
                 } label: {
-                    SettingsItem(server.name, description: server.state == .connected ? "Connected · version \(server.version)" : server.stateLabel) {
+                    SettingsItem(server.name, description: server.settingsDescription, truncates: nil) {
                         SettingsTile(symbol: .server)
                     } footer: {
                         if let sync = server.sync { ServerSyncLine(sync: sync).padding(.top, 2) }
@@ -747,7 +747,8 @@ struct SettingsActionLabel: View {
 private struct SettingsItem<Picture: View, Footer: View>: View {
     let title: String
     let description: String
-    var truncates: Text.TruncationMode = .tail
+    /// Cuts the description on one line, or wraps it when `nil`.
+    var truncates: Text.TruncationMode? = .tail
     /// What the title names runs through the gateway, which its symbol after it says.
     var proxied = false
     @ViewBuilder let picture: Picture
@@ -755,7 +756,7 @@ private struct SettingsItem<Picture: View, Footer: View>: View {
     @ViewBuilder let footer: Footer
 
     init(
-        _ title: String, description: String, truncates: Text.TruncationMode = .tail, proxied: Bool = false,
+        _ title: String, description: String, truncates: Text.TruncationMode? = .tail, proxied: Bool = false,
         @ViewBuilder picture: () -> Picture, @ViewBuilder footer: () -> Footer
     ) {
         self.title = title
@@ -776,8 +777,9 @@ private struct SettingsItem<Picture: View, Footer: View>: View {
                 Text(description)
                     .font(.footnote)
                     .foregroundStyle(Color.themeMutedForeground)
-                    .lineLimit(1)
-                    .truncationMode(truncates)
+                    .lineLimit(truncates == nil ? nil : 1)
+                    .truncationMode(truncates ?? .tail)
+                    .fixedSize(horizontal: false, vertical: truncates == nil)
                 footer
             }
         }
@@ -786,7 +788,7 @@ private struct SettingsItem<Picture: View, Footer: View>: View {
 }
 
 extension SettingsItem where Footer == EmptyView {
-    init(_ title: String, description: String, truncates: Text.TruncationMode = .tail, proxied: Bool = false, @ViewBuilder picture: () -> Picture) {
+    init(_ title: String, description: String, truncates: Text.TruncationMode? = .tail, proxied: Bool = false, @ViewBuilder picture: () -> Picture) {
         self.init(title, description: description, truncates: truncates, proxied: proxied, picture: picture) { EmptyView() }
     }
 }

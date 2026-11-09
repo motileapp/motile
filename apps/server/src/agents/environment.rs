@@ -105,7 +105,14 @@ async fn version(executable: &Path, variables: &HashMap<String, String>) -> Opti
     let mut command = Command::new(executable);
     command.arg("--version").env_clear().envs(variables);
     let output = run(command, Duration::from_secs(10)).await?;
-    output.lines().next().map(|line| line.trim().to_string())
+    output.lines().next().map(version_number)
+}
+
+/// The number in what a CLI says its version is: `2.1.317` of `2.1.317 (Claude Code)` and of
+/// `codex-cli 2.1.317`.
+fn version_number(line: &str) -> String {
+    let number = line.split_whitespace().find(|word| word.starts_with(|first: char| first.is_ascii_digit()));
+    number.unwrap_or(line.trim()).to_string()
 }
 
 async fn shell_environment() -> HashMap<String, String> {
@@ -168,4 +175,16 @@ async fn run(mut command: Command, timeout: Duration) -> Option<String> {
     let child = command.spawn().ok()?;
     let output = tokio::time::timeout(timeout, child.wait_with_output()).await.ok()?.ok()?;
     output.status.success().then(|| String::from_utf8_lossy(&output.stdout).into_owned())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::version_number;
+
+    #[test]
+    fn keeps_only_the_version_number() {
+        assert_eq!(version_number("2.1.317 (Claude Code)"), "2.1.317");
+        assert_eq!(version_number("codex-cli 0.46.0\n"), "0.46.0");
+        assert_eq!(version_number(" nightly "), "nightly");
+    }
 }

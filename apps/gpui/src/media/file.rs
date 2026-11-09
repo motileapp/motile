@@ -70,6 +70,9 @@ impl SentFile {
     /// What kind of file it is and how large, as "PDF · 2.4 MB".
     fn detail(&self) -> String {
         let kind = self.kind();
+        if self.bytes == 0 {
+            return kind;
+        }
         if kind.is_empty() { file_size(self.bytes) } else { format!("{kind} · {}", file_size(self.bytes)) }
     }
 
@@ -340,89 +343,52 @@ fn open_or_download(store: &Entity<Store>, file: &SentFile, state: &Download, cx
     }
 }
 
-/// A file attached to a message, as a line of its bubble with a paperclip and its name. One its
-/// server kept is pressed as the card is, and a press stops its download, whose progress or
-/// failure follows the name.
-pub fn attached_line(
+/// A file a reply sends, as its card.
+pub fn file_row(model: &RowModel, ctx: &RowContext, window: &mut Window, cx: &mut App) -> AnyElement {
+    let RowKind::File { media, size, alt, name } = &model.row.kind else { return div().into_any_element() };
+    let file = SentFile { id: media.clone(), bytes: *size, alt: alt.clone(), name: name.clone() };
+    let card_id = SharedString::from(format!("file-{}", model.row.id));
+    div()
+        .py(px(GAP))
+        .child(file_card(card_id, &ctx.store, &file, true, ctx.removed, window, cx).w_full().max_w(px(WIDEST)))
+        .into_any_element()
+}
+
+/// A file attached to a message, as the card a file a reply sends is, in its bubble.
+pub fn attached_card(
     key: String,
     store: &Entity<Store>,
     attached: &AttachedFile,
     removed: bool,
+    window: &mut Window,
     cx: &mut App,
 ) -> AnyElement {
-    let c = colors(cx);
-    let line = div()
-        .max_w_full()
-        .h(px(LINE_HEIGHT))
-        .flex()
-        .items_center()
-        .gap(px(4.))
-        .text_size(px(12.))
-        .text_color(c.muted_foreground)
-        .child(icons::symbol("paperclip", ControlSize::Small.small_symbol()));
-    let name = crate::ui::middle_truncated(attached.name.clone());
-    let Some(media) = attached.media.clone().filter(|_| attached.file) else {
-        return line.child(name).into_any_element();
+    let kept = attached.file && attached.media.is_some();
+    let file = SentFile {
+        id: attached.media.clone().unwrap_or_default(),
+        bytes: attached.size,
+        alt: String::new(),
+        name: attached.name.clone(),
     };
-    let file = SentFile { id: media.clone(), bytes: attached.size, alt: String::new(), name: attached.name.clone() };
-    let state = FileDownloads::state(store, &media, cx);
-    // Only a removed server had a file it couldn't hand over, so asking again is no use.
-    let gone = removed && matches!(state, Download::Failed(_));
-    let progress = match &state {
-        Download::Fetching(fraction) => Some(format!(" · {}%", (fraction * 100.).round() as u32)),
-        Download::Failed(reason) => Some(format!(" · {}", first_sentence(reason))),
-        _ => None,
-    };
-    let tip = match &state {
-        Download::Failed(reason) => Some(reason.clone()),
-        _ => None,
-    };
-    let suffix_color = if tip.is_some() { c.destructive } else { c.muted_foreground };
-    let lit = c.foreground;
-    let (press_store, press_file, pressed_state) = (store.clone(), file.clone(), state.clone());
-    let (menu_store, menu_file) = (store.clone(), file);
-    line.id(SharedString::from(key))
-        .child(name)
-        .children(progress.map(|progress| {
-            div().flex_none().font_features(crate::ui::tabular_numbers()).text_color(suffix_color).child(progress)
-        }))
-        .when_some(tip, |line, tip| line.tooltip(crate::ui::tooltip(tip)))
-        .when(!gone, |line| line.cursor_pointer().hover(move |line| line.text_color(lit)))
-        .on_hover(move |hovered, _, cx| {
-            if *hovered {
-                FileDownloads::recheck(&media, cx);
-            }
-        })
-        .on_click(move |_, _, cx| {
-            cx.stop_propagation();
-            if gone {
-                return;
-            }
-            if matches!(pressed_state, Download::Fetching(_)) {
-                return FileDownloads::cancel(&press_store, &press_file.id, cx);
-            }
-            open_or_download(&press_store, &press_file, &pressed_state, cx)
-        })
-        .on_mouse_down(MouseButton::Right, move |event, window, cx| {
-            cx.stop_propagation();
-            if gone {
-                return;
-            }
-            let state = FileDownloads::state(&menu_store, &menu_file.id, cx);
-            menu(&menu_store, &menu_file, &state).show(event.position, window, cx);
-        })
-        .into_any_element()
+    file_card(key.into(), store, &file, kept, removed, window, cx).w(px(WIDEST)).max_w_full().into_any_element()
 }
 
-/// A file a reply sends, as a card with its name, its kind and size. Its icon says where the
-/// download is, as a messaging app's does: an arrow to download it, the progress with a cross
-/// that stops it, then the kind of file, which the card opens.
-pub fn file_row(model: &RowModel, ctx: &RowContext, window: &mut Window, cx: &mut App) -> AnyElement {
-    let RowKind::File { media, size, alt, name } = &model.row.kind else { return div().into_any_element() };
-    let file = SentFile { id: media.clone(), bytes: *size, alt: alt.clone(), name: name.clone() };
-    let store = ctx.store.clone();
-    let state = FileDownloads::state(&store, media, cx);
-    let card_id: ElementId = SharedString::from(format!("file-{}", model.row.id)).into();
+/// A file as a card with its name, its kind and size. Its icon says where the download is, as a
+/// messaging app's does: an arrow to download it, the progress with a cross that stops it, then
+/// the kind of file, which the card opens. A file its server didn't keep only shows its kind.
+fn file_card(
+    key: SharedString,
+    store: &Entity<Store>,
+    file: &SentFile,
+    kept: bool,
+    removed: bool,
+    window: &mut Window,
+    cx: &mut App,
+) -> Stateful<Div> {
+    let media = &file.id;
+    let store = store.clone();
+    let state = if kept { FileDownloads::state(&store, media, cx) } else { Download::Remote };
+    let card_id: ElementId = key.clone().into();
     let tile_id: ElementId = (card_id.clone(), "tile").into();
     let reveal_id: ElementId = (card_id.clone(), "reveal").into();
     let card_hover = crate::ui::hover_state(&card_id, window, cx);
@@ -444,10 +410,10 @@ pub fn file_row(model: &RowModel, ctx: &RowContext, window: &mut Window, cx: &mu
     let downloaded = matches!(state, Download::Downloaded(_));
     let lit_tile = over_tile && fetching;
     // Only a removed server had a file it couldn't hand over, so asking again is no use.
-    let gone = ctx.removed && matches!(state, Download::Failed(_));
-
+    let gone = !kept || removed && matches!(state, Download::Failed(_));
+    let lit_card = over_card && !over_reveal && !fetching && !gone;
     let (icon, icon_size) = match &state {
-        Download::Failed(_) if gone => (file.symbol(), ControlSize::Large.symbol()),
+        _ if gone => (file.symbol(), ControlSize::Large.symbol()),
         Download::Remote | Download::Failed(_) => ("download", ControlSize::Large.symbol()),
         Download::Fetching(_) => ("x", ControlSize::Small.symbol()),
         Download::Downloaded(_) => (file.symbol(), ControlSize::Large.symbol()),
@@ -466,33 +432,34 @@ pub fn file_row(model: &RowModel, ctx: &RowContext, window: &mut Window, cx: &mu
     let border = 1.;
     let text_left = INSET + TILE_SIDE + INSET - 4. - border;
 
-    let tile =
-        div()
-            .id(tile_id)
-            .absolute()
-            .left(px(INSET - border))
-            .top(px(INSET - border))
-            .size(px(TILE_SIDE))
-            .rounded(px(Radius::MD))
-            .bg(if lit_tile { c.background_secondary_accent_stronger } else { c.background_secondary_accent })
-            .when_some(ring, |tile, fraction| {
-                tile.child(div().absolute().inset(px(RING_INSET)).child(progress_ring(
-                    fraction as f32,
-                    c.muted_strongest_foreground,
-                    c.foreground,
-                )))
-            })
-            .child(div().absolute().inset_0().flex().items_center().justify_center().child(
+    let tile = div()
+        .id(tile_id)
+        .absolute()
+        .left(px(INSET - border))
+        .top(px(INSET - border))
+        .size(px(TILE_SIDE))
+        .rounded(px(Radius::MD))
+        .bg(if lit_card || lit_tile { c.background_secondary_accent_stronger } else { c.background_secondary_accent })
+        .when_some(ring, |tile, fraction| {
+            tile.child(div().absolute().inset(px(RING_INSET)).child(progress_ring(
+                fraction as f32,
+                c.muted_strongest_foreground,
+                c.foreground,
+            )))
+        })
+        .child(
+            div().absolute().inset_0().flex().items_center().justify_center().child(
                 icons::symbol(icon, icon_size).text_color(if lit_tile { c.foreground } else { c.muted_foreground }),
-            ))
-            .on_hover(crate::ui::track_hover(&tile_hover))
-            .when(fetching, |tile| {
-                let (store, id) = (store.clone(), file.id.clone());
-                tile.on_click(move |_, _, cx| {
-                    cx.stop_propagation();
-                    FileDownloads::cancel(&store, &id, cx);
-                })
-            });
+            ),
+        )
+        .on_hover(crate::ui::track_hover(&tile_hover))
+        .when(fetching, |tile| {
+            let (store, id) = (store.clone(), file.id.clone());
+            tile.on_click(move |_, _, cx| {
+                cx.stop_propagation();
+                FileDownloads::cancel(&store, &id, cx);
+            })
+        });
 
     let text = div()
         .flex_1()
@@ -527,15 +494,11 @@ pub fn file_row(model: &RowModel, ctx: &RowContext, window: &mut Window, cx: &mu
                     .mr(px(BUTTON_MARGIN - border))
                     .on_hover(crate::ui::track_hover(&reveal_hover))
                     .child(
-                        RowButton::new(
-                            SharedString::from(format!("reveal-{}", model.row.id)),
-                            REVEAL_TITLE,
-                            REVEAL_TITLE,
-                        )
-                        .bordered()
-                        .hover(c.background_secondary_accent)
-                        .rest(c.background)
-                        .on_click(move |_, _, cx| cx.reveal_path(&revealed)),
+                        RowButton::new(SharedString::from(format!("reveal-{key}")), REVEAL_TITLE, REVEAL_TITLE)
+                            .bordered()
+                            .hover(c.background_secondary_accent)
+                            .rest(c.background)
+                            .on_click(move |_, _, cx| cx.reveal_path(&revealed)),
                     ),
             )
         }
@@ -566,40 +529,30 @@ pub fn file_row(model: &RowModel, ctx: &RowContext, window: &mut Window, cx: &mu
     let recheck_id = file.id.clone();
     let card_hovered = card_hover.clone();
     div()
-        .py(px(GAP))
-        .child(
-            div()
-                .id(card_id)
-                .relative()
-                .w_full()
-                .max_w(px(WIDEST))
-                .h(px(CARD_HEIGHT))
-                .rounded(px(Radius::LG))
-                .border_1()
-                .border_color(c.border)
-                .bg(if over_card && !over_reveal && !fetching {
-                    c.background_secondary_accent
-                } else {
-                    c.background_secondary
-                })
-                .when(!gone, |card| card.cursor_pointer())
-                .child(content)
-                .child(tile)
-                .when_some(tip, |card, tip| card.tooltip(crate::ui::tooltip(tip)))
-                .on_hover(move |hovered, window, cx| {
-                    if *hovered && !*card_hovered.read(cx) {
-                        FileDownloads::recheck(&recheck_id, cx);
-                    }
-                    crate::ui::track_hover(&card_hovered)(hovered, window, cx);
-                })
-                .on_click(pressed)
-                .on_mouse_down(MouseButton::Right, move |event, window, cx| {
-                    if gone {
-                        return;
-                    }
-                    let state = FileDownloads::state(&menu_store, &menu_file.id, cx);
-                    menu(&menu_store, &menu_file, &state).show(event.position, window, cx);
-                }),
-        )
-        .into_any_element()
+        .id(card_id)
+        .relative()
+        .flex_none()
+        .h(px(CARD_HEIGHT))
+        .rounded(px(Radius::LG))
+        .border_1()
+        .border_color(c.border)
+        .bg(if lit_card { c.background_secondary_accent } else { c.background_secondary })
+        .when(!gone, |card| card.cursor_pointer())
+        .child(content)
+        .child(tile)
+        .when_some(tip, |card, tip| card.tooltip(crate::ui::tooltip(tip)))
+        .on_hover(move |hovered, window, cx| {
+            if *hovered && !*card_hovered.read(cx) {
+                FileDownloads::recheck(&recheck_id, cx);
+            }
+            crate::ui::track_hover(&card_hovered)(hovered, window, cx);
+        })
+        .on_click(pressed)
+        .on_mouse_down(MouseButton::Right, move |event, window, cx| {
+            if gone {
+                return;
+            }
+            let state = FileDownloads::state(&menu_store, &menu_file.id, cx);
+            menu(&menu_store, &menu_file, &state).show(event.position, window, cx);
+        })
 }

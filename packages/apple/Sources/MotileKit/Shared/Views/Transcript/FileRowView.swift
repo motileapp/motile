@@ -29,6 +29,7 @@ struct SentFile {
     /// What kind of file it is and how large, as "PDF · 2.4 MB".
     var detail: String {
         let kind = (name as NSString).pathExtension.uppercased()
+        guard bytes > 0 else { return kind }
         return kind.isEmpty ? size : "\(kind) · \(size)"
     }
 
@@ -209,19 +210,51 @@ enum FileDownloads {
     }
 }
 
-/// A file a reply sends, as a card with its name, its kind and size. Its icon says where the
-/// download is, as a messaging app's does: an arrow to download it, the progress with a cross
-/// that stops it, then the kind of file, which the card opens.
+/// A file a reply sends, as its card.
 final class FileRowView: RowView {
     private static let gap: CGFloat = 6
-    private static let cardHeight = scaled(56)
-    private static let widest = scaled(420)
+    private let card = FileCard()
+
+    static var height: CGFloat { FileCard.height + gap * 2 }
+
+    /// The words that say what went wrong, without the system's reasons after them.
+    static func firstSentence(of reason: String) -> String {
+        guard let end = reason.range(of: ". ") else { return reason }
+        return String(reason[..<end.lowerBound]) + "."
+    }
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        addSubview(card)
+    }
+
+    required init?(coder: NSCoder) { fatalError("not used") }
+
+    override func configure(_ row: RowModel) {
+        super.configure(row)
+        guard case .file(let content) = row.kind else { return }
+        card.show(content, owner: owner)
+    }
+
+    override func layout(width: CGFloat) -> CGFloat {
+        card.frame = CGRect(x: 0, y: Self.gap, width: min(width, FileCard.widest), height: FileCard.height)
+        return Self.height
+    }
+}
+
+/// A file as a card with its name, its kind and size, where an agent sends one and in a message's
+/// bubble. Its icon says where the download is, as a messaging app's does: an arrow to download it,
+/// the progress with a cross that stops it, then the kind of file, which the card opens. A file its
+/// server didn't keep only shows its kind.
+final class FileCard: FlippedView {
+    static let height = scaled(56)
+    static let widest = scaled(420)
     private static let tileSide = scaled(36)
     private static let ringInset = scaled(5)
-    private static let inset = (cardHeight - tileSide) / 2
+    private static let inset = (height - tileSide) / 2
     private static let lineHeight = scaled(16)
     /// The button is as far from the card's side as from its top and bottom.
-    private static let buttonMargin = (cardHeight - RowButton.metrics.height) / 2
+    private static let buttonMargin = (height - RowButton.metrics.height) / 2
 
     private let card = SurfaceView()
     private let tile = SurfaceView()
@@ -230,12 +263,12 @@ final class FileRowView: RowView {
     private let name = TextLabel(font: .ui(13, weight: .medium), color: Theme.foreground)
     private let detail = TextLabel(font: .uiDigits(12), color: Theme.mutedForeground)
     private var revealButton: RowButton!
+    private weak var owner: RowOwner?
     private var content: SentFile?
+    private var kept = true
     private var state = FileDownloads.State.remote
     private var hovered: CGPoint?
     private var downloadWatch: NSObjectProtocol?
-
-    static var height: CGFloat { cardHeight + gap * 2 }
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -260,8 +293,6 @@ final class FileRowView: RowView {
             insets: PlatformEdgeInsets(top: 0, left: 0, bottom: 0, right: 0)
         ) { [weak self] in self?.reveal() }
         card.addSubview(revealButton)
-        pointer = .hand
-        onPress = { [weak self] point in self?.press(at: point) }
         onHover = { [weak self] point in
             guard let self else { return }
             let entered = self.hovered == nil && point != nil
@@ -270,9 +301,8 @@ final class FileRowView: RowView {
             guard entered else { return self.light() }
             self.show()
         }
-        menuActions = { [weak self] in self?.actions() ?? [] }
         downloadWatch = NotificationCenter.default.addObserver(forName: FileDownloads.changed, object: nil, queue: .main) { [weak self] note in
-            guard let self, let id = self.content?.id, note.userInfo?["id"] as? String == id else { return }
+            guard let self, self.kept, let id = self.content?.id, note.userInfo?["id"] as? String == id else { return }
             self.show()
         }
     }
@@ -283,26 +313,31 @@ final class FileRowView: RowView {
         if let downloadWatch { NotificationCenter.default.removeObserver(downloadWatch) }
     }
 
-    override func configure(_ row: RowModel) {
-        super.configure(row)
-        guard case .file(let content) = row.kind, content.id != self.content?.id else { return }
-        self.content = content
-        describe("\(content.name), \(content.detail)")
-        name.string = content.name
+    /// Shows the file, which can be downloaded when its server `kept` it.
+    func show(_ file: SentFile, owner: RowOwner?, kept: Bool = true) {
+        self.owner = owner
+        guard file.id != content?.id || file.name != content?.name || kept != self.kept else { return }
+        content = file
+        self.kept = kept
+        describe("\(file.name), \(file.detail)", button: kept)
+        name.string = file.name
+        pointer = kept ? .hand : .arrow
+        onPress = kept ? { [weak self] point in self?.press(at: point) } : nil
+        menuActions = kept ? { [weak self] in self?.actions() ?? [] } : nil
         revealButton.dim()
         show()
     }
 
     private func show() {
         guard let content else { return }
-        state = FileDownloads.state(of: content.id)
+        state = kept ? FileDownloads.state(of: content.id) : .remote
         ring.isHidden = true
         tip = content.alt.isEmpty ? nil : content.alt
         detail.color = Theme.mutedForeground
         detail.string = content.detail
         switch state {
         case .remote:
-            icon.show(.download, size: ControlSize.large.symbol)
+            icon.show(kept ? .download : content.symbol, size: ControlSize.large.symbol)
         case .fetching(let fraction):
             ring.isHidden = false
             ring.fraction = fraction
@@ -313,19 +348,13 @@ final class FileRowView: RowView {
             icon.show(.download, size: ControlSize.large.symbol)
             tip = reason
             detail.color = Theme.destructive
-            detail.string = Self.firstSentence(of: reason)
+            detail.string = FileRowView.firstSentence(of: reason)
         case .downloaded:
             icon.show(content.symbol, size: ControlSize.large.symbol)
         }
         revealButton.isHidden = !isDownloaded
         light()
         placeEnd()
-    }
-
-    /// The words that say what went wrong, without the system's reasons after them.
-    static func firstSentence(of reason: String) -> String {
-        guard let end = reason.range(of: ". ") else { return reason }
-        return String(reason[..<end.lowerBound]) + "."
     }
 
     private var isDownloaded: Bool {
@@ -338,22 +367,21 @@ final class FileRowView: RowView {
         return true
     }
 
-    /// The card lights under the pointer where a press does something; while the file downloads
-    /// that is only its icon, which stops it.
+    /// The card lights under the pointer where a press does something, and its icon's tile a step
+    /// above it; while the file downloads only the tile lights, which stops it.
     private func light() {
-        let overTile = hovered.map { tileFrame.contains($0) } ?? false
-        let overCard = hovered.map { takesPress(at: $0) } ?? false
-        card.fill = overCard && !isFetching ? Theme.backgroundSecondaryAccent : Theme.backgroundSecondary
-        tile.fill = overTile && isFetching ? Theme.backgroundSecondaryAccentStronger : Theme.backgroundSecondaryAccent
-        icon.tint = overTile && isFetching ? Theme.foreground : Theme.mutedForeground
+        let overTile = hovered.map { tile.frame.contains($0) } ?? false
+        let litCard = kept && !isFetching && (hovered.map { takesPress(at: $0) } ?? false)
+        let litTile = overTile && isFetching
+        card.fill = litCard ? Theme.backgroundSecondaryAccent : Theme.backgroundSecondary
+        tile.fill = litCard || litTile ? Theme.backgroundSecondaryAccentStronger : Theme.backgroundSecondaryAccent
+        icon.tint = litTile ? Theme.foreground : Theme.mutedForeground
     }
-
-    private var tileFrame: CGRect { tile.frame.offsetBy(dx: card.frame.minX, dy: card.frame.minY) }
 
     private func press(at point: CGPoint) {
         guard let content, let owner else { return }
         show()
-        guard !isFetching || tileFrame.contains(point) else { return }
+        guard !isFetching || tile.frame.contains(point) else { return }
         FileDownloads.press(content, owner: owner, from: self)
     }
 
@@ -369,14 +397,12 @@ final class FileRowView: RowView {
         return FileDownloads.actions(content, owner: owner, from: self)
     }
 
-    override func layout(width: CGFloat) -> CGFloat {
-        let cardWidth = min(width, Self.widest)
-        card.frame = CGRect(x: 0, y: Self.gap, width: cardWidth, height: Self.cardHeight)
+    override func layoutNow() {
+        card.frame = bounds
         tile.frame = CGRect(x: Self.inset, y: Self.inset, width: Self.tileSide, height: Self.tileSide)
         ring.frame = tile.bounds.insetBy(dx: Self.ringInset, dy: Self.ringInset)
         icon.frame = tile.bounds
         placeEnd()
-        return Self.height
     }
 
     /// Places the button at the card's end, when there is one, and the words in the room left.
@@ -397,9 +423,8 @@ final class FileRowView: RowView {
     }
 
     override func takesPress(at point: CGPoint) -> Bool {
-        guard card.frame.contains(point) else { return false }
-        if isFetching { return tileFrame.contains(point) }
-        let inCard = CGPoint(x: point.x - card.frame.minX, y: point.y - card.frame.minY)
-        return revealButton.isHidden || !revealButton.frame.contains(inCard)
+        guard bounds.contains(point) else { return false }
+        if isFetching { return tile.frame.contains(point) }
+        return revealButton.isHidden || !revealButton.frame.contains(point)
     }
 }

@@ -220,7 +220,13 @@ pub fn named_copy(file: &Path, name: &str) -> PathBuf {
 
 /// The images, videos and files attached to a message: tiles of one size with the whole picture
 /// fitted in each, which open in the viewer, and a line for each of the others under them.
-pub fn attached_files(row_id: &str, ctx: &RowContext, files: &[AttachedFile], cx: &mut App) -> AnyElement {
+pub fn attached_files(
+    row_id: &str,
+    ctx: &RowContext,
+    files: &[AttachedFile],
+    window: &mut Window,
+    cx: &mut App,
+) -> AnyElement {
     let store = &ctx.store;
     let c = colors(cx);
     let pictured: Vec<&AttachedFile> = files.iter().filter(|file| file.pictured()).collect();
@@ -239,7 +245,7 @@ pub fn attached_files(row_id: &str, ctx: &RowContext, files: &[AttachedFile], cx
         .enumerate()
         .filter(|(_, file)| !file.pictured())
         .map(|(index, file)| {
-            file::attached_line(format!("attached-file-{row_id}-{index}"), store, file, ctx.removed, cx)
+            file::attached_card(format!("attached-file-{row_id}-{index}"), store, file, ctx.removed, window, cx)
         })
         .collect();
     div()
