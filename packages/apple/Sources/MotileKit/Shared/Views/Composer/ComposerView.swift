@@ -343,7 +343,7 @@ struct ComposerSendButtons: View {
                 ActionButton(
                     "", picture: AnyView(RoundedRectangle(cornerRadius: 2.5).frame(width: 11, height: 11)),
                     help: store.shortcuts.help("Stop", "thread.stop"), variant: waits ? .waiting : .danger, round: true,
-                    signals: waits, margin: ComposerView.margin(leading: 4, trailing: sends ? 4 : ComposerView.edge)
+                    signals: waits, glass: true, margin: ComposerView.margin(leading: 4, trailing: sends ? 4 : ComposerView.edge)
                 ) {
                     store.stop()
                 }
@@ -353,7 +353,7 @@ struct ComposerSendButtons: View {
             if sends {
                 ActionButton(
                     icon: .arrowUp, help: store.attachmentsHold ?? (running ? whileRunning : "Send"), variant: connecting ? .waiting : .primary,
-                    symbolSize: .md, round: true, signals: connecting, margin: ComposerView.margin(leading: 4, trailing: ComposerView.edge)
+                    symbolSize: .md, round: true, signals: connecting, glass: true, margin: ComposerView.margin(leading: 4, trailing: ComposerView.edge)
                 ) {
                     store.send()
                 }
