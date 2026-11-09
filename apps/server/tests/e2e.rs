@@ -4238,7 +4238,7 @@ async fn an_agent_drives_other_threads_only_within_its_own_access() {
     assert!(failed && said.contains("more access than you have"), "{said}");
     let approve = json!({"id": child.id, "approval_id": "nope", "allow": false});
     let (said, failed) = call_tool(url, token, "approve_agent", approve).await;
-    assert!(failed && said.contains("more access than you have"), "{said}");
+    assert!(failed && said.contains("only allow or refuse what a thread you started"), "{said}");
     let create = json!({"prompt": "Say hello", "access": "full"});
     let (said, failed) = call_tool(url, token, "create_thread", create).await;
     assert!(failed && said.contains("can't have more access"), "{said}");
@@ -4339,6 +4339,17 @@ async fn an_agent_follows_any_thread_and_starts_agents_only_on_accounts_that_exi
     assert!(!failed && said.contains(&child.id), "{said}");
     let (said, failed) = call_tool(url, token, "agent_status", json!({"ids": ["nope"]})).await;
     assert!(failed && said.starts_with("Your server has no thread with that id"), "{said}");
+    // It follows another's agent, but only the user allows what that one asks, full access or not.
+    let approve = json!({"id": child.id, "approval_id": "nope", "allow": true});
+    let (said, failed) = call_tool(url, token, "approve_agent", approve).await;
+    assert!(failed && said.contains("only allow or refuse what a thread you started"), "{said}");
+    // A thread it made the sidebar lists is still its own to allow, unlike the user's.
+    let (said, failed) = call_tool(url, token, "create_thread", json!({"prompt": "Say hello"})).await;
+    assert!(!failed, "{said}");
+    let created: serde_json::Value = serde_json::from_str(&said).unwrap();
+    let approve = json!({"id": created["id"], "approval_id": "nope", "allow": true});
+    let (said, failed) = call_tool(url, token, "approve_agent", approve).await;
+    assert!(failed && said.contains("no longer waits for that approval"), "{said}");
     let start = json!({"prompt": "Look over greet.py", "account": "nope"});
     let (said, failed) = call_tool(url, token, "start_agent", start).await;
     assert!(failed && said.contains("no account called nope"), "{said}");

@@ -215,18 +215,22 @@ shadcn's own colours, opacities and radii are gone from the theme.
   `check_ui` checks a program before the agent shows it, and `list_accounts`, `start_agent`,
   `agent_status`, `message_agent`, `answer_agent`, `approve_agent` and `stop_agent` start and follow
   agents on any of the server's accounts, Claude Code's or Codex's. The same tools follow any thread
-  of the server and drive one with no more access than the caller's. `create_thread`, `list_threads`,
+  of the server and drive one with no more access than the caller's, except `approve_agent`, which
+  only answers the threads the caller's agent started (`started_by`) and the ones those started,
+  never the user's. `create_thread`, `list_threads`,
   `update_thread`, `thread_queue`, `list_projects`, `add_project`, `read_pull_request`,
   `link_pull_request` and `git_status` (`hub/threads.rs`) start threads the sidebar lists, find and
-  change threads, projects and pull requests, under the same rule.
+  change threads, projects and pull requests, under the same rule. A thread an agent starts,
+  with `start_agent` or `create_thread`, keeps the thread whose agent started it (`started_by`),
+  which sets it apart from the user's; `parent` only says where a thread sits.
 - `hub/children.rs`: those agents. Each works in a thread of its own, which knows the thread and
   the tool call that started it (`parent`); the sidebar doesn't list it. It gets only its prompt,
   works in its parent's folder unless given a worktree, and never has more access than its parent.
   Its parent's tool call follows how it does, and the parent's agent is told (`Notice`) when the
   turn it gave the thread ends, the thread asks a question, or a thread with full access waits for a
   tool call to be allowed (Claude Code asks for some under any access), unless a call of its own
-  waited for that. Only an agent with full access allows one, with `approve_agent`; a thread with
-  less waits for the user. Stopping or deleting a thread stops or deletes the ones it started.
+  waited for that. Only an agent with full access allows one, with `approve_agent`, and only for a
+  thread it started or one under it; a thread with less, or the user's, waits for the user. Stopping or deleting a thread stops or deletes the ones it started.
 - `pacing.rs`: passes a streamed reply on in finished blocks.
 - `agents/`: builds the command for a turn and parses its output into `AgentEvent`s
   (`claude.rs`, `codex.rs`). `skills.rs` asks each account's CLI for the skills it offers in a

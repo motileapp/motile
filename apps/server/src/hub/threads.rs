@@ -68,7 +68,8 @@ impl Hub {
             worktree,
             from: None,
         };
-        let thread_id = self.send(None, Some(new_thread), NewMessage::text(text)).await?;
+        let message = NewMessage::text(text);
+        let thread_id = self.send_started_by(None, Some(new_thread), message, Some(caller.to_string())).await?;
         if let Some(request) = request {
             self.lock_started().insert(request, thread_id.clone());
         }

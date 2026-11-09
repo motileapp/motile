@@ -218,12 +218,15 @@ struct Slot {
     /// The thread that started it, which never changes, so that a thread's family is known without
     /// its lock.
     parent: Option<ThreadParent>,
+    /// The thread whose agent started it, which never changes either.
+    started_by: Option<String>,
 }
 
 impl Slot {
     fn new(live: Live) -> Self {
         let parent = live.stored.thread.parent.clone();
-        Self { live: Arc::new(Mutex::new(live)), parent }
+        let started_by = live.stored.started_by.clone();
+        Self { live: Arc::new(Mutex::new(live)), parent, started_by }
     }
 }
 
@@ -1216,6 +1219,17 @@ impl Hub {
         new_thread: Option<NewThread>,
         message: NewMessage,
     ) -> anyhow::Result<String> {
+        self.send_started_by(thread_id, new_thread, message, None).await
+    }
+
+    /// Starts a turn as `send` does; a new thread is one the agent of `started_by` made, when given.
+    async fn send_started_by(
+        self: &Arc<Self>,
+        thread_id: Option<String>,
+        new_thread: Option<NewThread>,
+        message: NewMessage,
+        started_by: Option<String>,
+    ) -> anyhow::Result<String> {
         let NewMessage { text, attachments, now, context, message_id } = message;
         let text = text.trim().to_string();
         if text.is_empty() && attachments.is_empty() && context.is_none() {
@@ -1255,6 +1269,7 @@ impl Hub {
                     None => None,
                 };
                 let mut stored = self.new_thread(new_thread, &text, &attachments, None).await?;
+                stored.started_by = started_by;
                 if let Some((copied, _)) = &from {
                     stored.thread.title = copied.title.clone();
                     stored.title_source = TitleSource::Generated;
@@ -1480,7 +1495,15 @@ impl Hub {
             rev: 0,
         };
         let title_source = TitleSource::Placeholder;
-        Ok(StoredThread { thread, session_id: None, title_source, next_seq: 0, worktree, reports: false })
+        Ok(StoredThread {
+            thread,
+            session_id: None,
+            title_source,
+            next_seq: 0,
+            worktree,
+            reports: false,
+            started_by: None,
+        })
     }
 
     async fn title_from_first_message(self: Arc<Self>, thread_id: String, text: String) {

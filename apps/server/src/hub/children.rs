@@ -176,6 +176,26 @@ impl Hub {
         false
     }
 
+    /// Whether the agent of `ancestor` started the thread, with start_agent or create_thread, or
+    /// started one that did, at any depth. Where a thread sits (`parent`) doesn't say: the user's
+    /// threads, subthreads or not, no agent started.
+    fn started_under(&self, thread_id: &str, ancestor: &str) -> bool {
+        let threads = self.lock_threads();
+        let starter = |id: &str| threads.get(id)?.started_by.clone();
+        let mut seen = HashSet::new();
+        let mut found = starter(thread_id);
+        while let Some(id) = found {
+            if id == ancestor {
+                return true;
+            }
+            if !seen.insert(id.clone()) {
+                return false;
+            }
+            found = starter(&id);
+        }
+        false
+    }
+
     fn lock_waiting(&self) -> std::sync::MutexGuard<'_, HashMap<String, usize>> {
         self.waiting_on.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
     }
@@ -319,6 +339,7 @@ impl Hub {
         let runs_on = RunsOn { model, thread_id: Some(child_id.clone()), ..self.shown_account(&child_id, &account) };
         let tool_id = self.show_started(caller, &text, role, runs_on).await?;
         stored.thread.parent = Some(ThreadParent { thread_id: caller.to_string(), tool_id });
+        stored.started_by = Some(caller.to_string());
         stored.reports = true;
         let title = start.title.map(|title| title.trim().to_string()).filter(|title| !title.is_empty());
         if let Some(title) = &title {
@@ -565,7 +586,13 @@ impl Hub {
         approval_id: &str,
         allow: bool,
     ) -> anyhow::Result<ChildState> {
-        self.reach(caller, id).await?;
+        // Unlike the other tools, only on the threads it started and theirs, not any thread it reaches.
+        if !self.started_under(id, caller) {
+            bail!(
+                "You can only allow or refuse what a thread you started asks, or one it started. \
+                 Tell the user it waits for them in its thread."
+            );
+        }
         {
             let live = self.live_or(id, "That agent's thread is gone.").await?;
             let waiting = live.activity.approvals.iter().find(|approval| approval.id == approval_id);
