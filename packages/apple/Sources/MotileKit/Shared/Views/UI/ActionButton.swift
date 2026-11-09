@@ -395,6 +395,10 @@ private struct ControlBody<Label: View>: View {
     @State private var revealedAt: Date?
     /// How far the new colour's glass has grown, which glass animates itself, back to 0 once it has.
     @State private var glassRevealed: CGFloat = 0
+    /// Whether it was dimmed when it settled, and when its new colour started to grow, which the
+    /// old colour keeps on glass.
+    @State private var settledDimmed = false
+    @State private var grownOverDimmed = false
     /// The rings' look, and when they stopped starting, so that the last ones still go out.
     @State private var rings: (look: ControlLook, stopped: Date?)?
     @Environment(\.isEnabled) private var enabled
@@ -409,47 +413,61 @@ private struct ControlBody<Label: View>: View {
         return look
     }
 
+    private struct Shown: Equatable {
+        let variant: ButtonVariant
+        let dimmed: Bool
+    }
+
     var body: some View {
         let look = currentLook
-        surfaced(look)
+        let dimmed = !enabled && !pending
+        surfaced(look, dimmed: dimmed)
             .contentShape(Rectangle())
-            .opacity(.disabled, when: !enabled && !pending)
             .animation(.easeOut(duration: ControlLook.recolor), value: look.variant)
             .onHover { hovering = $0 }
-            .onChange(of: look.variant, initial: true) { old, new in reveal(new, over: old) }
+            .onChange(of: Shown(variant: look.variant, dimmed: dimmed), initial: true) { old, new in
+                if new.variant != old.variant { grownOverDimmed = old.dimmed }
+                settledDimmed = new.dimmed
+                reveal(new.variant, over: old.variant)
+            }
             .onChange(of: signals, initial: true) { _, signals in signal(signals, look: look) }
     }
 
     @ViewBuilder
-    private func surfaced(_ look: ControlLook) -> some View {
+    private func surfaced(_ look: ControlLook, dimmed: Bool) -> some View {
         #if os(iOS)
         if look.glass, #available(iOS 26.0, *) {
-            glassed(look)
+            glassed(look, dimmed: dimmed)
                 .background {
                     if let rings { SignalRings(look: rings.look, stopped: rings.stopped).padding(margin) }
                 }
         } else {
-            filled(look)
+            filled(look).opacity(.disabled, when: dimmed)
         }
         #else
-        filled(look)
+        filled(look).opacity(.disabled, when: dimmed)
         #endif
     }
 
     #if os(iOS)
-    /// On glass its new colour grows from the middle as it does filled: the new tint's glass is
-    /// what the circle has reached, over the old tint's, since glass can't take a shape with a hole.
+    /// On glass its new colour grows from the middle as it does filled: the new tint's glass is what
+    /// the circle has reached, and the rest is the old tint, a fill since glass can't take a shape
+    /// with a hole and glass over glass mixes the two. Each colour is dimmed as it was for what it
+    /// stood for, so that the new one never grows in faded and the old one doesn't light up.
     @available(iOS 26.0, *)
-    private func glassed(_ look: ControlLook) -> some View {
+    private func glassed(_ look: ControlLook, dimmed: Bool) -> some View {
         let changing = settled != nil && settled != look.variant
         let old = changing ? settled : grownOver
         let revealed = old == nil ? 1 : changing ? 0 : glassRevealed
         return label
             .foregroundStyle(look.foreground)
             .glassEffect(.regular.tint(look.glassTint).interactive(), in: GlassPart(shape: look.shape, insets: margin, revealed: revealed))
+            .opacity(.disabled, when: dimmed)
             .background {
                 if let old {
-                    Color.clear.glassEffect(.regular.tint(look.as(old).glassTint), in: GlassPart(shape: look.shape, insets: margin))
+                    GlassPart(shape: look.shape, insets: margin, revealed: revealed, rest: true)
+                        .fill(look.as(old).glassTint, style: FillStyle(eoFill: true))
+                        .opacity(.disabled, when: changing ? settledDimmed : grownOverDimmed)
                 }
             }
             .animation(nil, value: look.variant)
@@ -513,11 +531,12 @@ private struct ControlBody<Label: View>: View {
 }
 
 /// A button's shape inside its margin, or of it the part a circle growing from its middle has
-/// `revealed`.
+/// `revealed`, or with `rest` the part it hasn't.
 private struct GlassPart<S: Shape>: Shape {
     let shape: S
     let insets: EdgeInsets
     var revealed: CGFloat = 1
+    var rest = false
 
     var animatableData: CGFloat {
         get { revealed }
@@ -529,10 +548,10 @@ private struct GlassPart<S: Shape>: Shape {
             x: rect.minX + insets.leading, y: rect.minY + insets.top,
             width: rect.width - insets.leading - insets.trailing, height: rect.height - insets.top - insets.bottom)
         let whole = shape.path(in: inner)
-        guard revealed < 1 else { return whole }
+        guard revealed < 1 else { return rest ? Path() : whole }
         let side = hypot(inner.width, inner.height) * revealed
         let circle = Path(ellipseIn: CGRect(x: inner.midX - side / 2, y: inner.midY - side / 2, width: side, height: side))
-        return whole.intersection(circle)
+        return rest ? whole.subtracting(circle) : whole.intersection(circle)
     }
 }
 
