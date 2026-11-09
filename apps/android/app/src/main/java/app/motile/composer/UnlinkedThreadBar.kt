@@ -51,12 +51,13 @@ fun UnlinkedThreadBar(server: Server, modifier: Modifier = Modifier) {
             Column(Modifier.padding(start = textInset, end = textInset, top = 14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(Symbol.Unlink, IconSize.Sm, color = palette.warning)
+                    Text("Read-only:", weight = FontWeight.Medium, color = palette.warning, maxLines = 1)
                     NameChip(server.name)
                     Text("is unlinked", Modifier.weight(1f, fill = false), weight = FontWeight.Medium, color = palette.warning, maxLines = 1)
                 }
                 Text("This thread is read-only. You can continue it on another server, or delete the server in settings.", color = palette.mutedForeground)
             }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            Row(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalArrangement = Arrangement.End) {
                 ActionButton(
                     "Settings", help = "Delete “${server.name}” and its threads in Settings", round = true, margin = ComposerView.margin(trailing = 4.dp),
                 ) { store.openSettings(SettingsSection.Servers) }

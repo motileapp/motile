@@ -43,11 +43,12 @@ struct UnlinkedThreadBar: View {
     private var title: some View {
         HStack(spacing: 6) {
             Image(.unlink, size: .sm)
+            Text("Read-only:")
             nameChip
             Text("is unlinked")
-                .font(.ui(size: 13, weight: .medium))
-                .lineLimit(1)
         }
+        .font(.ui(size: 13, weight: .medium))
+        .lineLimit(1)
         .foregroundStyle(Color.themeWarning)
     }
 

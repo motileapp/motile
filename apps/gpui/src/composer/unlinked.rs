@@ -25,6 +25,7 @@ pub fn unlinked_box(store: &Entity<Store>, server: &Server, cx: &App) -> impl In
         .gap(px(6.))
         .text_color(c.warning)
         .child(icons::symbol("unlink", IconSize::Sm))
+        .child(div().flex_none().text_size(px(TEXT_SIZE)).font_weight(FontWeight::MEDIUM).child("Read-only:"))
         .child(name_chip(server.name.clone(), cx))
         .child(
             div().min_w_0().text_size(px(TEXT_SIZE)).font_weight(FontWeight::MEDIUM).truncate().child("is unlinked"),
