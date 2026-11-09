@@ -264,8 +264,9 @@ shadcn's own colours, opacities and radii are gone from the theme.
   so, it fast-forwards a project's folder on its default branch after each fetch and each merge.
 - `files.rs`: browses the server's folders, takes uploads, and reads the files of a thread's
   folder, never outside it.
-- `media.rs`: keeps the images and videos threads show and the files agents send, named by their
-  contents. An agent sends any file as a Markdown image of its path, and gives a video its
+- `media.rs`: keeps the images and videos threads show and the files agents send and users attach,
+  named by their contents. At start the server keeps the files attached to earlier messages that it
+  still has the uploads of. An agent sends any file as a Markdown image of its path, and gives a video its
   preview image as the image's title.
 - `title.rs`, `drafts.rs`: have an agent write titles, commit messages, pull request texts and
   branch names, through `generate.rs`, which also says what each answer took so that it is kept

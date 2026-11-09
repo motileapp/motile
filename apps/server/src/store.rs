@@ -684,8 +684,8 @@ impl Store {
         let mut statement = connection.prepare(
             "SELECT payload FROM items WHERE thread_id = ?1 AND json_extract(payload, '$.type') = 'assistant'
                  AND json_extract(payload, '$.ui') IS NOT NULL AND json_extract(payload, '$.parent') IS NULL
-                 AND rev > (SELECT COALESCE(MAX(rev), 0) FROM items WHERE thread_id = ?1
-                            AND json_extract(payload, '$.type') IN ('user', 'notice'))
+                 AND rev > COALESCE((SELECT rev FROM items WHERE thread_id = ?1
+                            AND json_extract(payload, '$.type') IN ('user', 'notice') ORDER BY seq DESC LIMIT 1), 0)
              ORDER BY seq",
         )?;
         let payloads = statement.query_map([thread_id], |row| row.get::<_, String>(0))?;
@@ -717,6 +717,26 @@ impl Store {
             |row| row.get(0),
         )?;
         Ok(tools as u64)
+    }
+
+    /// The thread and id of each message whose attached files aren't all kept as media.
+    pub fn messages_missing_attached(&self) -> rusqlite::Result<Vec<(String, String)>> {
+        let connection = self.connection();
+        let mut statement = connection.prepare(
+            "SELECT thread_id, payload FROM items WHERE json_extract(payload, '$.type') = 'user'
+                 AND json_array_length(json_extract(payload, '$.attachments')) > 0",
+        )?;
+        let rows = statement.query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)))?;
+        let mut missing = Vec::new();
+        for row in rows {
+            let (thread_id, payload) = row?;
+            let Ok(item) = serde_json::from_str::<Item>(&payload) else { continue };
+            let ItemKind::User { attachments, .. } = &item.kind else { continue };
+            if attachments.iter().any(|path| !item.media.iter().any(|media| &media.src == path)) {
+                missing.push((thread_id, item.id));
+            }
+        }
+        Ok(missing)
     }
 
     pub fn item(&self, thread_id: &str, item_id: &str) -> rusqlite::Result<Option<Item>> {

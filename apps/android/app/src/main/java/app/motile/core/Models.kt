@@ -1194,7 +1194,7 @@ data class QueuedMessage(
         id = json.string("id"),
         text = json.string("text"),
         attachments = json.strings("attachments"),
-        media = json.objects("media").reversed().associate { media ->
+        media = json.objects("media").filter { !it.bool("file") }.reversed().associate { media ->
             media.string("src") to AttachedFile("", media.string("id"), media.bool("video"), media.optionalString("poster"))
         },
     )
@@ -1235,11 +1235,16 @@ data class OutgoingMessage(
     }
 }
 
-/** A file attached to a message, as the transcript shows it. An image or a video names the file the core has it under, and a video the image that stands for it until it plays. */
-data class AttachedFile(val name: String, val media: String?, val video: Boolean, val poster: String?) {
-    constructor(json: JSON) : this(json.string("name"), json.optionalString("media"), json.bool("video"), json.optionalString("poster"))
+/** A file attached to a message, as the transcript shows it. An image or a video names the file the core has it under, and a video the image that stands for it until it plays. Any other `file` the core has is one to download. */
+data class AttachedFile(val name: String, val media: String?, val video: Boolean, val poster: String?, val file: Boolean = false, val size: Long = 0) {
+    constructor(json: JSON) : this(
+        json.string("name"), json.optionalString("media"), json.bool("video"), json.optionalString("poster"), json.bool("file"), json.long("size"),
+    )
 
-    val json: Map<String, Any?> get() = mapOf("name" to name, "media" to media, "video" to video, "poster" to poster)
+    val json: Map<String, Any?> get() = mapOf("name" to name, "media" to media, "video" to video, "poster" to poster, "file" to file, "size" to size)
+
+    /** Shown as a tile with its picture, not by its name. */
+    val pictured: Boolean get() = media != null && !file
 
     /** The image a tile of it shows. */
     val picture: String? get() = if (video) poster else media
@@ -1298,7 +1303,7 @@ data class Attachment(
             name = path.substringAfterLast('/'),
             bytes = null,
             video = shown?.video == true,
-            pictured = shown != null,
+            pictured = shown?.pictured == true,
             serverID = serverID,
             state = State.Ready,
             path = path,

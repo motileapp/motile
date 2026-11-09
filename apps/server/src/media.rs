@@ -1,5 +1,5 @@
-//! The images and videos agents show in their replies and users attach to their messages, and the
-//! other files agents send. The server copies each one when it is shown, named by its contents, so
+//! The images and videos agents show in their replies, the other files agents send, and the files
+//! users attach to their messages. The server copies each one when it is shown, named by its contents, so
 //! a thread keeps showing it after the file has changed or gone.
 
 use std::io::{Read, Write};
@@ -44,15 +44,14 @@ impl MediaStore {
         captured
     }
 
-    /// Copies the images and videos among the files attached to a message, each video with the
-    /// poster that was uploaded for it.
+    /// Copies the files attached to a message, each video with the poster that was uploaded for it.
     pub fn capture_attached(&self, attachments: &[String]) -> Vec<Media> {
         let mut captured: Vec<Media> = Vec::new();
         for path in attachments {
             if captured.iter().any(|media| &media.src == path) {
                 continue;
             }
-            let Some(mut media) = self.capture(path, "/", false) else { continue };
+            let Some(mut media) = self.capture(path, "/", true) else { continue };
             if let Some(poster) = Path::new(path).with_file_name(POSTER).to_str().filter(|_| media.video) {
                 self.give_poster(&mut media, poster, "/");
             }
@@ -337,7 +336,7 @@ mod tests {
     }
 
     #[test]
-    fn only_images_and_videos_are_kept_of_what_a_message_attaches() {
+    fn every_file_a_message_attaches_is_kept() {
         let dir = tempfile::tempdir().unwrap();
         let (store, _) = store(&dir);
         let shot = dir.path().join("project/shot.png");
@@ -348,6 +347,8 @@ mod tests {
 
         let captured = store.capture_attached(&attached);
 
-        assert_eq!(captured.iter().map(|media| media.src.as_str()).collect::<Vec<_>>(), [attached[0].as_str()]);
+        let kept = captured.iter().map(|media| (media.src.as_str(), media.file)).collect::<Vec<_>>();
+        assert_eq!(kept, [(attached[0].as_str(), false), (attached[1].as_str(), true)]);
+        assert_eq!(std::fs::read(dir.path().join("media").join(&captured[1].id)).unwrap(), b"notes");
     }
 }

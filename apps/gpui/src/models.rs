@@ -834,16 +834,26 @@ pub fn tokens(count: u64) -> String {
 }
 
 /// A file attached to a message, as the transcript shows it. An image or a video names the file
-/// the core has it under, and a video the image that stands for it until it plays.
+/// the core has it under, and a video the image that stands for it until it plays. Any other
+/// `file` the core has is one to download.
 #[derive(Clone, PartialEq, Debug, Default, Serialize, Deserialize)]
 pub struct AttachedFile {
     pub name: String,
     pub media: Option<String>,
     pub video: bool,
     pub poster: Option<String>,
+    #[serde(default)]
+    pub file: bool,
+    #[serde(default)]
+    pub size: u64,
 }
 
 impl AttachedFile {
+    /// Shown as a tile with its picture, not by its name.
+    pub fn pictured(&self) -> bool {
+        self.media.is_some() && !self.file
+    }
+
     /// The image a tile of it shows.
     pub fn picture(&self) -> Option<&String> {
         if self.video { self.poster.as_ref() } else { self.media.as_ref() }
@@ -857,6 +867,8 @@ impl From<&motile_core::render::rows::Attached> for AttachedFile {
             media: attached.media.clone(),
             video: attached.video,
             poster: attached.poster.clone(),
+            file: attached.file,
+            size: attached.size,
         }
     }
 }
@@ -924,9 +936,9 @@ impl Attachment {
             id: uuid::Uuid::new_v4().to_string(),
             file: None,
             name: Path::new(path).file_name().map(|name| name.to_string_lossy().to_string()).unwrap_or_default(),
-            bytes: None,
+            bytes: shown.map(|shown| shown.size).filter(|size| *size > 0),
             video: shown.is_some_and(|shown| shown.video),
-            pictured: shown.is_some(),
+            pictured: shown.is_some_and(AttachedFile::pictured),
             server_id: server_id.to_string(),
             state: UploadState::Ready,
             path: Some(path.to_string()),
@@ -941,6 +953,8 @@ impl Attachment {
             media: self.media.clone(),
             video: self.media.is_some() && self.video,
             poster: self.poster.clone(),
+            file: !self.pictured,
+            size: self.bytes.unwrap_or(0),
         }
     }
 

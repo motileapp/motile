@@ -14,10 +14,14 @@ struct SentFile {
     let name: String
 
     init(json: JSON) {
-        id = json.string("media")
-        bytes = (json["size"] as? NSNumber)?.int64Value ?? 0
-        alt = json.string("alt")
-        name = json.string("name")
+        self.init(id: json.string("media"), bytes: (json["size"] as? NSNumber)?.int64Value ?? 0, alt: json.string("alt"), name: json.string("name"))
+    }
+
+    init(id: String, bytes: Int64, alt: String, name: String) {
+        self.id = id
+        self.bytes = bytes
+        self.alt = alt
+        self.name = name
     }
 
     var size: String { ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file) }
@@ -104,6 +108,70 @@ enum FileDownloads {
         generations[id, default: 0] += 1
         owner.cancelFetch(id: id)
         tell(id)
+    }
+
+    /// Downloads the file, stops its download, or opens it once it is downloaded.
+    static func press(_ file: SentFile, owner: RowOwner, from view: PlatformView) {
+        switch state(of: file.id) {
+        case .remote, .failed:
+            download(file, owner: owner)
+        case .fetching:
+            cancel(file.id, owner: owner)
+        case .downloaded(let downloaded):
+            MediaFiles.open(downloaded, named: file.name, from: view)
+        }
+    }
+
+    static func reveal(_ file: SentFile, from view: PlatformView) {
+        guard case .downloaded(let downloaded) = state(of: file.id) else { return }
+        MediaFiles.reveal(downloaded, named: file.name, from: view)
+    }
+
+    /// The menu of the file as far as its download is.
+    static func actions(_ file: SentFile, owner: RowOwner, from view: PlatformView) -> [MenuAction] {
+        let copy = MenuAction(title: "Copy File", symbol: .copy) { [weak owner] in
+            guard let owner else { return }
+            withFile(file, owner: owner) { fetched in
+                DispatchQueue.global(qos: .userInitiated).async {
+                    let named = MediaFiles.namedCopy(of: fetched, name: file.name)
+                    DispatchQueue.main.async { MediaFiles.copyFile(named) }
+                }
+            }
+        }
+        switch state(of: file.id) {
+        case .fetching:
+            return [MenuAction(title: "Cancel Download", symbol: .x) { cancel(file.id, owner: owner) }]
+        case .downloaded(let downloaded):
+            return [
+                MenuAction(title: "Open", symbol: .squareArrowOutUpRight) { [weak view] in
+                    guard let view else { return }
+                    MediaFiles.open(downloaded, named: file.name, from: view)
+                },
+                MenuAction(title: MediaFiles.revealTitle, symbol: .folder) { [weak view] in
+                    guard let view else { return }
+                    reveal(file, from: view)
+                },
+                copy,
+            ]
+        case .remote, .failed:
+            return [
+                MenuAction(title: "Download", symbol: .download) { download(file, owner: owner) },
+                MenuAction(title: MediaFiles.saveTitle, symbol: .download) { [weak view, weak owner] in
+                    guard let owner else { return }
+                    withFile(file, owner: owner) { fetched in
+                        guard let view else { return }
+                        MediaFiles.save(fetched, named: file.name, from: view)
+                    }
+                },
+                copy,
+            ]
+        }
+    }
+
+    /// Hands over the downloaded file, or the client's copy, which the core fetches if need be.
+    private static func withFile(_ file: SentFile, owner: RowOwner, _ done: @escaping (URL) -> Void) {
+        if case .downloaded(let downloaded) = state(of: file.id) { return done(downloaded) }
+        fetch(file, owner: owner, done: done)
     }
 
     private static func fail(_ id: String, _ reason: String) {
@@ -255,7 +323,7 @@ final class FileRowView: RowView {
     }
 
     /// The words that say what went wrong, without the system's reasons after them.
-    private static func firstSentence(of reason: String) -> String {
+    static func firstSentence(of reason: String) -> String {
         guard let end = reason.range(of: ". ") else { return reason }
         return String(reason[..<end.lowerBound]) + "."
     }
@@ -285,64 +353,20 @@ final class FileRowView: RowView {
     private func press(at point: CGPoint) {
         guard let content, let owner else { return }
         show()
-        switch state {
-        case .remote, .failed:
-            FileDownloads.download(content, owner: owner)
-        case .fetching:
-            guard tileFrame.contains(point) else { return }
-            FileDownloads.cancel(content.id, owner: owner)
-        case .downloaded(let file):
-            MediaFiles.open(file, named: content.name, from: self)
-        }
+        guard !isFetching || tileFrame.contains(point) else { return }
+        FileDownloads.press(content, owner: owner, from: self)
     }
 
     private func reveal() {
-        guard let content, case .downloaded(let file) = FileDownloads.state(of: content.id) else { return show() }
-        MediaFiles.reveal(file, named: content.name, from: self)
+        guard let content else { return }
+        guard case .downloaded = FileDownloads.state(of: content.id) else { return show() }
+        FileDownloads.reveal(content, from: self)
     }
 
     private func actions() -> [MenuAction] {
         guard let content, let owner else { return [] }
         show()
-        let copy = MenuAction(title: "Copy File", symbol: .copy) { [weak self] in
-            self?.withFile { file in
-                DispatchQueue.global(qos: .userInitiated).async {
-                    let named = MediaFiles.namedCopy(of: file, name: content.name)
-                    DispatchQueue.main.async { MediaFiles.copyFile(named) }
-                }
-            }
-        }
-        switch state {
-        case .fetching:
-            return [MenuAction(title: "Cancel Download", symbol: .x) { FileDownloads.cancel(content.id, owner: owner) }]
-        case .downloaded(let file):
-            return [
-                MenuAction(title: "Open", symbol: .squareArrowOutUpRight) { [weak self] in
-                    guard let self else { return }
-                    MediaFiles.open(file, named: content.name, from: self)
-                },
-                MenuAction(title: MediaFiles.revealTitle, symbol: .folder) { [weak self] in self?.reveal() },
-                copy,
-            ]
-        case .remote, .failed:
-            return [
-                MenuAction(title: "Download", symbol: .download) { FileDownloads.download(content, owner: owner) },
-                MenuAction(title: MediaFiles.saveTitle, symbol: .download) { [weak self] in
-                    self?.withFile { file in
-                        guard let self else { return }
-                        MediaFiles.save(file, named: content.name, from: self)
-                    }
-                },
-                copy,
-            ]
-        }
-    }
-
-    /// Hands over the downloaded file, or the client's copy, which the core fetches if need be.
-    private func withFile(_ done: @escaping (URL) -> Void) {
-        guard let content, let owner else { return }
-        if case .downloaded(let file) = FileDownloads.state(of: content.id) { return done(file) }
-        FileDownloads.fetch(content, owner: owner, done: done)
+        return FileDownloads.actions(content, owner: owner, from: self)
     }
 
     override func layout(width: CGFloat) -> CGFloat {

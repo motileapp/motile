@@ -86,7 +86,7 @@ fun FileRow(file: SentFile) {
                 .combinedClickable(
                     interactionSource = card, indication = null, role = Role.Button,
                     onLongClick = { if (!gone) menu.openAtPress() },
-                    onClick = { if (!gone) press(file, state, store) },
+                    onClick = { if (!gone) pressFile(file, state, store) },
                 ),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -147,7 +147,7 @@ object FileRow {
     val ringInset = scaled(5f).dp
 }
 
-private fun press(file: SentFile, state: FileDownloads.State, store: AppStore) {
+fun pressFile(file: SentFile, state: FileDownloads.State, store: AppStore) {
     when (state) {
         is FileDownloads.State.Remote, is FileDownloads.State.Failed -> FileDownloads.download(file, store)
         is FileDownloads.State.Fetching -> Unit
@@ -156,12 +156,12 @@ private fun press(file: SentFile, state: FileDownloads.State, store: AppStore) {
 }
 
 /** The words that say what went wrong, without the system's reasons after them. */
-private fun firstSentence(reason: String): String {
+fun firstSentence(reason: String): String {
     val end = reason.indexOf(". ")
     return if (end < 0) reason else reason.substring(0, end) + "."
 }
 
-private fun MenuBuilder.fileActions(file: SentFile, state: FileDownloads.State, store: AppStore) {
+fun MenuBuilder.fileActions(file: SentFile, state: FileDownloads.State, store: AppStore) {
     /** Hands over the downloaded file, or the client's copy, which the core fetches if need be. */
     fun withFile(done: (File) -> Unit) {
         val downloaded = FileDownloads.state(file.id, store) as? FileDownloads.State.Downloaded
