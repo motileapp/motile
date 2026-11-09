@@ -97,6 +97,9 @@ const PRICES: &str = "prices";
 const GATEWAY_ACCOUNTS_EVERY: Duration = Duration::from_secs(60);
 /// How often what the agents' accounts have used is read.
 const LIMITS_READ_EVERY: Duration = Duration::from_secs(5 * 60);
+/// How recent a read of what the agents' accounts have used answers whoever asks for it, so that
+/// clients and agents asking at once read the accounts once.
+const LIMITS_ANSWER_WITHIN: Duration = Duration::from_secs(30);
 const PRICES_STALE: Duration = Duration::from_secs(24 * 3600);
 const PRICES_RETRY: Duration = Duration::from_secs(3600);
 const MAX_INSTRUCTIONS_CHARS: usize = 4000;
@@ -167,7 +170,7 @@ pub struct Hub {
     /// What the models cost at the API's prices, as last fetched.
     prices: std::sync::Mutex<Prices>,
     /// What the agents' accounts had used of their plans, and when that was read.
-    limits: Mutex<Option<Vec<AgentLimits>>>,
+    limits: Mutex<Option<(Instant, Vec<AgentLimits>)>>,
     /// What was last seen of each watched thread's pull request, by thread.
     watched: std::sync::Mutex<HashMap<String, Seen>>,
     /// Held while a folder is kept as it is, so a thread's snapshots follow one another.
@@ -218,12 +221,15 @@ struct Slot {
     /// The thread that started it, which never changes, so that a thread's family is known without
     /// its lock.
     parent: Option<ThreadParent>,
+    /// The thread whose agent started it, which never changes either.
+    started_by: Option<String>,
 }
 
 impl Slot {
     fn new(live: Live) -> Self {
         let parent = live.stored.thread.parent.clone();
-        Self { live: Arc::new(Mutex::new(live)), parent }
+        let started_by = live.stored.started_by.clone();
+        Self { live: Arc::new(Mutex::new(live)), parent, started_by }
     }
 }
 
@@ -983,7 +989,7 @@ impl Hub {
     /// Reads what the accounts have used in the background, which also says who they are.
     pub fn refresh_limits(self: &Arc<Self>) {
         let hub = self.clone();
-        tokio::spawn(async move { hub.read_limits().await });
+        tokio::spawn(async move { hub.read_limits(Duration::ZERO).await });
     }
 
     /// Reads what the accounts have used now and every few minutes, so that a client never waits
@@ -992,7 +998,7 @@ impl Hub {
         let hub = self.clone();
         tokio::spawn(async move {
             loop {
-                hub.read_limits().await;
+                hub.read_limits(Duration::ZERO).await;
                 tokio::time::sleep(LIMITS_READ_EVERY).await;
             }
         });
@@ -1216,6 +1222,17 @@ impl Hub {
         new_thread: Option<NewThread>,
         message: NewMessage,
     ) -> anyhow::Result<String> {
+        self.send_started_by(thread_id, new_thread, message, None).await
+    }
+
+    /// Starts a turn as `send` does; a new thread is one the agent of `started_by` made, when given.
+    async fn send_started_by(
+        self: &Arc<Self>,
+        thread_id: Option<String>,
+        new_thread: Option<NewThread>,
+        message: NewMessage,
+        started_by: Option<String>,
+    ) -> anyhow::Result<String> {
         let NewMessage { text, attachments, now, context, message_id } = message;
         let text = text.trim().to_string();
         if text.is_empty() && attachments.is_empty() && context.is_none() {
@@ -1255,6 +1272,7 @@ impl Hub {
                     None => None,
                 };
                 let mut stored = self.new_thread(new_thread, &text, &attachments, None).await?;
+                stored.started_by = started_by;
                 if let Some((copied, _)) = &from {
                     stored.thread.title = copied.title.clone();
                     stored.title_source = TitleSource::Generated;
@@ -1365,6 +1383,49 @@ impl Hub {
             self.store.save_media(thread_id, id)?;
         }
         Ok(media)
+    }
+
+    /// Keeps the files attached to messages from before the server kept every attached file, so
+    /// that they can be downloaded again while their uploads are still here.
+    pub fn keep_earlier_attachments(self: &Arc<Self>) {
+        let hub = self.clone();
+        tokio::spawn(async move {
+            let missing = match hub.store.messages_missing_attached() {
+                Ok(missing) => missing,
+                Err(error) => return tracing::error!("couldn't read the attached files: {error:#}"),
+            };
+            for (thread_id, item_id) in missing {
+                if let Err(error) = hub.keep_attached_to(&thread_id, &item_id).await {
+                    tracing::warn!("couldn't keep the files attached to {item_id}: {error:#}");
+                }
+            }
+        });
+    }
+
+    async fn keep_attached_to(&self, thread_id: &str, item_id: &str) -> anyhow::Result<()> {
+        let Some(item) = self.store.item(thread_id, item_id)? else { return Ok(()) };
+        let ItemKind::User { attachments, .. } = &item.kind else { return Ok(()) };
+        let unkept: Vec<String> =
+            attachments.iter().filter(|path| !item.media.iter().any(|media| &media.src == *path)).cloned().collect();
+        let media = self.media.clone();
+        let kept = tokio::task::spawn_blocking(move || media.capture_attached(&unkept)).await?;
+        if kept.is_empty() {
+            return Ok(());
+        }
+        let Some(mut live) = self.live(thread_id).await else {
+            self.forget_media(&kept);
+            return Ok(());
+        };
+        live.keep_attached_media(&self.store, item_id, kept)
+    }
+
+    /// Removes copies no thread came to show.
+    fn forget_media(&self, kept: &[Media]) {
+        for id in kept.iter().flat_map(|media| std::iter::once(&media.id).chain(&media.poster)) {
+            if !self.store.shows_media(id).unwrap_or(true) {
+                self.media.remove(id);
+            }
+        }
     }
 
     /// Removes the uploads that were never sent.
@@ -1480,7 +1541,15 @@ impl Hub {
             rev: 0,
         };
         let title_source = TitleSource::Placeholder;
-        Ok(StoredThread { thread, session_id: None, title_source, next_seq: 0, worktree, reports: false })
+        Ok(StoredThread {
+            thread,
+            session_id: None,
+            title_source,
+            next_seq: 0,
+            worktree,
+            reports: false,
+            started_by: None,
+        })
     }
 
     async fn title_from_first_message(self: Arc<Self>, thread_id: String, text: String) {
@@ -2500,21 +2569,18 @@ impl Hub {
         Ok(Message::Watermarks { own: self.store.watermark()?, copies: self.store.origin_watermarks()?, bucket })
     }
 
-    /// What the agents' accounts had used of their plans when they were last read, read now if
-    /// they never were.
+    /// What the agents' accounts have used of their plans now: read again unless they just were.
     pub async fn limits(&self) -> Message {
-        let kept = self.limits.lock().await.clone();
-        let agents = match kept {
-            Some(agents) => agents,
-            None => self.read_limits().await,
-        };
-        Message::Limits { agents }
+        Message::Limits { agents: self.read_limits(LIMITS_ANSWER_WITHIN).await }
     }
 
-    /// Reads what the agents' accounts have used of their plans. An account that can't be read
-    /// keeps what it said last time, beside why.
-    async fn read_limits(&self) -> Vec<AgentLimits> {
+    /// Reads what the agents' accounts have used of their plans, unless they were read within
+    /// `kept_for`. An account that can't be read keeps what it said last time, beside why.
+    async fn read_limits(&self, kept_for: Duration) -> Vec<AgentLimits> {
         let mut kept = self.limits.lock().await;
+        if let Some((_, agents)) = kept.as_ref().filter(|(at, _)| at.elapsed() < kept_for) {
+            return agents.clone();
+        }
         let (pooled, own): (Vec<_>, Vec<_>) = self.agent_accounts().into_iter().partition(|account| account.gateway);
         let own = own.into_iter().map(|account| {
             let environment = self.account_environment(&account);
@@ -2522,9 +2588,10 @@ impl Hub {
         });
         let (mut read, pools) = tokio::join!(limits::read(own.collect()), self.read_pools(pooled));
         read.extend(pools);
-        let agents = limits::kept(read, kept.as_deref().unwrap_or_default());
+        let before = kept.as_ref().map(|(_, agents)| agents.as_slice()).unwrap_or_default();
+        let agents = limits::kept(read, before);
         self.note_signed_in(&agents);
-        *kept = Some(agents.clone());
+        *kept = Some((Instant::now(), agents.clone()));
         agents
     }
 
@@ -2556,7 +2623,7 @@ impl Hub {
     /// for the accounts pinned to them.
     async fn keep_pinned_limits(&self, accounts: &[AgentAccount], pool: &[GatewayAccount]) {
         let mut kept = self.limits.lock().await;
-        let Some(agents) = kept.as_mut() else { return };
+        let Some((_, agents)) = kept.as_mut() else { return };
         for account in accounts.iter().filter(|account| account.pin.is_some()) {
             let pooled = pool.iter().find(|pooled| account.pin.as_deref() == Some(pooled.id.as_str()));
             let listed = limits::pinned(account, pooled);
@@ -3834,6 +3901,8 @@ impl Hub {
                 live.write(lines);
             }
             AgentEvent::Limited { resets_at } => {
+                let noted = self.gateway.get().and_then(|way| way.tunnel.take_limit_reset(&live.stored.thread.id));
+                let resets_at = resets_at.or(noted);
                 let continues = self.continue_settings().after_limits && resets_at.is_some_and(|at| at > now());
                 live.stored.thread.interruption = Some(Interruption::Limit { resets_at, continues });
                 wake(&mut live.stored.thread, true);
@@ -4408,6 +4477,22 @@ impl Live {
         store.save_item(&self.stored.thread.id, &item)?;
         let _ = self.updates.send(Message::Items { items: vec![item] });
         Ok(())
+    }
+
+    /// Adds to the message the copies of its attached files that it doesn't hold yet.
+    fn keep_attached_media(&mut self, store: &Store, item_id: &str, kept: Vec<Media>) -> anyhow::Result<()> {
+        let Some(mut item) = store.item(&self.stored.thread.id, item_id)? else { return Ok(()) };
+        let new: Vec<Media> =
+            kept.into_iter().filter(|media| !item.media.iter().any(|held| held.src == media.src)).collect();
+        if new.is_empty() {
+            return Ok(());
+        }
+        for id in new.iter().flat_map(|media| std::iter::once(&media.id).chain(&media.poster)) {
+            store.save_media(&self.stored.thread.id, id)?;
+        }
+        item.media.extend(new);
+        item.rev = self.next_rev();
+        self.save(store, item)
     }
 
     fn set_ui(&mut self, store: &Store, item_id: &str, block: u32, state: Value) -> anyhow::Result<()> {

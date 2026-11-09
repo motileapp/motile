@@ -75,7 +75,9 @@ pub struct Status {
 
 pub struct Link {
     server_id: String,
-    endpoint: Mutex<Endpoint>,
+    /// What the link dials on; none while the core replaces it, when what is on the old one ends
+    /// because the core closed it, which says nothing of the server.
+    endpoint: Mutex<Option<Endpoint>>,
     /// Whether a connection that ended went because the client was away, which isn't an outage.
     away: Away,
     events: mpsc::UnboundedSender<(String, LinkEvent)>,
@@ -122,7 +124,7 @@ impl Link {
     ) -> Arc<Self> {
         let link = Arc::new(Self {
             server_id: server.key.clone(),
-            endpoint: Mutex::new(endpoint),
+            endpoint: Mutex::new(Some(endpoint)),
             away,
             events,
             inner: Mutex::default(),
@@ -172,7 +174,23 @@ impl Link {
     /// Lets go of the dial or the connection there is and dials again at once, on `endpoint`.
     /// For when the old endpoint can't be trusted to reach anything anymore.
     pub fn redial_on(&self, endpoint: Endpoint) {
-        *self.endpoint.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = endpoint;
+        *self.endpoint.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(endpoint);
+        self.restart.notify_one();
+    }
+
+    /// Says why there is no endpoint to dial on, while the link waits for one.
+    pub fn no_endpoint(&self, error: String) {
+        if self.endpoint.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).is_none() {
+            self.update_status(|status| {
+                *status = Status { state: State::Disconnected, error: Some(error), ..Status::default() }
+            });
+        }
+    }
+
+    /// Lets go of the dial or the connection there is, as the core is about to close the endpoint
+    /// they are on, and waits for `redial_on` without saying anything: the link shows as dialing.
+    pub fn retire(&self) {
+        *self.endpoint.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = None;
         self.restart.notify_one();
     }
 
@@ -201,6 +219,11 @@ impl Link {
                 *status = Status { state: State::Connecting, error: status.error.take(), ..Status::default() }
             });
             let endpoint = self.endpoint.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).clone();
+            let Some(endpoint) = endpoint else {
+                self.restart.notified().await;
+                failures = 0;
+                continue;
+            };
             let started = SystemTime::now();
             let closed = tokio::select! {
                 biased;
@@ -693,6 +716,39 @@ mod tests {
         .expect("the link still says it is connected");
 
         assert_eq!(dialing, Status { state: State::Connecting, ..Status::default() });
+        link.shutdown();
+    }
+
+    #[tokio::test]
+    async fn replacing_the_endpoint_dials_again_without_saying_why() {
+        let (_server, address) = server_that_stops_answering().await;
+        let key = DeviceKey::generate();
+        let stale = bind(&key, true).await.unwrap();
+        let (events, mut heard) = mpsc::unbounded_channel();
+        let link = Link::connect(stale.clone(), address, Away::new(), events);
+        while link.status().state != State::Connected {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        while heard.try_recv().is_ok() {}
+
+        // As the core replaces an endpoint: the old one is closed while the new one is bound, which
+        // takes a while, and only then do the links hear of it.
+        link.retire();
+        crate::connection::leave_relays(&stale).await;
+        stale.close().await;
+        tokio::time::sleep(Duration::from_secs(1)).await;
+        link.redial_on(bind(&key, true).await.unwrap());
+        while link.status().state != State::Connected {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+
+        let mut said = Vec::new();
+        while let Ok((_, event)) = heard.try_recv() {
+            if let LinkEvent::Status(status) = event {
+                said.push(status);
+            }
+        }
+        assert!(said.iter().all(|status| status.error.is_none() && status.state != State::Disconnected), "{said:?}");
         link.shutdown();
     }
 

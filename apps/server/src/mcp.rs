@@ -264,9 +264,10 @@ impl Tools {
         answered(state.await)
     }
 
-    /// Allows or refuses the tool call or the plan an agent waits with, which agent_status and the
-    /// notice you are given show with its approval_id. Allowing needs full access, yours and the
-    /// agent's; with less, ask the user to allow it in the agent's thread.
+    /// Allows or refuses the tool call or the plan a thread waits with, which agent_status and the
+    /// notice you are given show with its approval_id: a thread you started, with start_agent or
+    /// create_thread, or one those started. The user allows what the user's threads ask. Allowing
+    /// needs full access, yours and the thread's; with less, ask the user to allow it in its thread.
     #[tool(name = "approve_agent", annotations(title = "Approve an agent's tool call"))]
     async fn approve_agent(
         &self,
@@ -776,6 +777,7 @@ mod tests {
             next_seq: 0,
             worktree: None,
             reports: false,
+            started_by: None,
         };
         store.save_thread(&stored).unwrap();
         let call = |name: &str, input: &str| ToolCall {

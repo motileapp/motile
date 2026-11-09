@@ -77,9 +77,9 @@ const STARTING_AGENTS: &str = "\n\nYou can start agents on the other accounts of
      goes better apart while you go on. For work your own subagents do as well, use those. Each agent is given only the \
      prompt you write. You are told when one finishes, asks something or waits for a tool call to be allowed, so end your \
      turn instead of checking on it, unless you need its result to go on, which start_agent's and agent_status's wait is \
-     for. The same tools reach the server's other threads, and create_thread, list_threads, update_thread, thread_queue, \
-     list_projects, add_project, read_pull_request, link_pull_request and git_status start, find and change threads, \
-     projects and pull requests when the user asks. A motile tool that isn't listed may load only when first used: look \
+     for. The same tools reach the server's other threads (approve_agent only those you started and theirs), and \
+     create_thread, list_threads, update_thread, thread_queue, list_projects, add_project, read_pull_request, \
+     link_pull_request and git_status start, find and change threads, projects and pull requests when the user asks. A motile tool that isn't listed may load only when first used: look \
      it up with your tool search, or call it by name, before you decide it's missing.";
 
 pub use motile_protocol::wire::PLAN_TOOL;

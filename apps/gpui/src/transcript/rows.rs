@@ -824,7 +824,7 @@ fn bubble_content(
     color: Hsla,
     ctx: &RowContext,
     window: &mut Window,
-    cx: &App,
+    cx: &mut App,
 ) -> (Div, bool) {
     let text = message.text;
     let found = ctx.found.get(&model.row.id).map(|marks| marks.in_text(text, 0)).unwrap_or_default();
@@ -842,7 +842,7 @@ fn bubble_content(
         .flex()
         .flex_col()
         .gap(px(if has_files && !text.is_empty() { 8. } else { 0. }))
-        .when(has_files, |bubble| bubble.child(crate::media::attached_files(&ctx.store, attachments, cx)))
+        .when(has_files, |bubble| bubble.child(crate::media::attached_files(&model.row.id, ctx, attachments, cx)))
         .when(!text.is_empty(), |bubble| {
             let id = format!("{}-text", model.row.id);
             let body = text_box(theme::PROSE_SIZE, MESSAGE_LINE).text_color(color).child(plain(
@@ -982,7 +982,7 @@ fn queued_row(
     status: &str,
     ctx: &RowContext,
     window: &mut Window,
-    cx: &App,
+    cx: &mut App,
 ) -> AnyElement {
     let c = colors(cx);
     // The buttons are this far from the bubble's right and bottom, this far from the message,

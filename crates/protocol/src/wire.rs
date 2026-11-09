@@ -961,8 +961,8 @@ pub enum Request {
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         removed: Vec<String>,
     },
-    /// How much of their plans the agents' accounts had used when the server last read them,
-    /// which it does every few minutes. `Limits` answers.
+    /// How much of their plans the agents' accounts have used, which the server reads again
+    /// unless it just did. `Limits` answers.
     Limits,
     /// Has the agents asked what models they run, unless they were in the last minute. `Ok`
     /// answers at once, and `Server` follows on the list when what they run changed.

@@ -33,6 +33,7 @@ pub(crate) const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/0021_gateway.sql"),
     include_str!("../migrations/0022_message_search.sql"),
     include_str!("../migrations/0023_snooze.sql"),
+    include_str!("../migrations/0024_thread_started_by.sql"),
 ];
 
 pub struct Store {
@@ -101,6 +102,9 @@ pub struct StoredThread {
     pub worktree: Option<StoredWorktree>,
     /// The agent that started the thread is told when the turn it gave the thread ends.
     pub reports: bool,
+    /// The thread whose agent started this one, with start_agent or create_thread, which never
+    /// changes. The user's threads have none, wherever they sit.
+    pub started_by: Option<String>,
 }
 
 /// An agent and the folder it keeps its sessions in. Accounts that share one take over each
@@ -197,9 +201,9 @@ impl Store {
                                   created_at, updated_at, done_at, needs_approval, turn_ended_at, position,
                                   worktree_branch, worktree_base, pull_request, watching, running, monitoring,
                                   interruption, agent_account, parent_thread, parent_tool, reports, snoozed_until,
-                                  woke_at)
+                                  woke_at, started_by)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22,
-                     ?23, ?24, ?25, ?26, ?27, ?28)
+                     ?23, ?24, ?25, ?26, ?27, ?28, ?29)
              ON CONFLICT(id) DO UPDATE SET
                  title = excluded.title,
                  title_source = excluded.title_source,
@@ -252,6 +256,7 @@ impl Store {
                 stored.reports,
                 thread.snoozed_until,
                 thread.woke_at,
+                stored.started_by,
             ],
         )?;
         Ok(())
@@ -679,8 +684,8 @@ impl Store {
         let mut statement = connection.prepare(
             "SELECT payload FROM items WHERE thread_id = ?1 AND json_extract(payload, '$.type') = 'assistant'
                  AND json_extract(payload, '$.ui') IS NOT NULL AND json_extract(payload, '$.parent') IS NULL
-                 AND rev > (SELECT COALESCE(MAX(rev), 0) FROM items WHERE thread_id = ?1
-                            AND json_extract(payload, '$.type') IN ('user', 'notice'))
+                 AND rev > COALESCE((SELECT rev FROM items WHERE thread_id = ?1
+                            AND json_extract(payload, '$.type') IN ('user', 'notice') ORDER BY seq DESC LIMIT 1), 0)
              ORDER BY seq",
         )?;
         let payloads = statement.query_map([thread_id], |row| row.get::<_, String>(0))?;
@@ -712,6 +717,26 @@ impl Store {
             |row| row.get(0),
         )?;
         Ok(tools as u64)
+    }
+
+    /// The thread and id of each message whose attached files aren't all kept as media.
+    pub fn messages_missing_attached(&self) -> rusqlite::Result<Vec<(String, String)>> {
+        let connection = self.connection();
+        let mut statement = connection.prepare(
+            "SELECT thread_id, payload FROM items WHERE json_extract(payload, '$.type') = 'user'
+                 AND json_array_length(json_extract(payload, '$.attachments')) > 0",
+        )?;
+        let rows = statement.query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)))?;
+        let mut missing = Vec::new();
+        for row in rows {
+            let (thread_id, payload) = row?;
+            let Ok(item) = serde_json::from_str::<Item>(&payload) else { continue };
+            let ItemKind::User { attachments, .. } = &item.kind else { continue };
+            if attachments.iter().any(|path| !item.media.iter().any(|media| &media.src == path)) {
+                missing.push((thread_id, item.id));
+            }
+        }
+        Ok(missing)
     }
 
     pub fn item(&self, thread_id: &str, item_id: &str) -> rusqlite::Result<Option<Item>> {
@@ -782,7 +807,8 @@ pub(crate) fn threads_where<P: rusqlite::Params>(
                 t.session_id, t.created_at, t.updated_at, t.done_at, t.needs_approval, t.turn_ended_at, t.position,
                 COALESCE(MAX(i.rev), 0), COALESCE(MAX(i.seq) + 1, 0), t.worktree_branch, t.worktree_base,
                 t.pull_request, t.watching, t.running, t.monitoring, t.interruption, t.agent_account, t.change,
-                t.parent_thread, t.parent_tool, t.reports, t.snoozed_until, t.woke_at
+                t.parent_thread, t.parent_tool, t.reports, t.snoozed_until, t.woke_at,
+                t.started_by
          FROM threads t LEFT JOIN items i ON i.thread_id = t.id
          {filter}
          GROUP BY t.id {tail}"
@@ -833,6 +859,7 @@ pub(crate) fn threads_where<P: rusqlite::Params>(
                 _ => None,
             },
             reports: row.get(29)?,
+            started_by: row.get(32)?,
         };
         Ok((stored, change as u64))
     })?;
@@ -998,6 +1025,65 @@ mod tests {
         let again: Vec<serde_json::Value> =
             serde_json::from_str(&Store::open(&path).unwrap().setting("agent_accounts").unwrap()).unwrap();
         assert_eq!(again[1]["id"], work, "an account keeps its id from then on");
+    }
+
+    #[test]
+    fn the_threads_agents_started_before_keep_who_started_them_and_the_users_none() {
+        let folder = tempfile::tempdir().unwrap();
+        let path = folder.path().join("motile.db");
+        {
+            let connection = Connection::open(&path).unwrap();
+            for (index, migration) in MIGRATIONS.iter().take(23).enumerate() {
+                connection.execute_batch(&format!("{migration} PRAGMA user_version = {};", index + 1)).unwrap();
+            }
+            let thread = |id: &str, parent: Option<&str>| {
+                connection
+                    .execute(
+                        "INSERT INTO threads (id, title, title_source, project_id, cwd, agent, access, created_at,
+                                              updated_at, agent_account, parent_thread)
+                         VALUES (?1, 'Title', 'user', 'p', '/tmp', 'claude', 'full', 0, 0, 'claude', ?2)",
+                        params![id, parent],
+                    )
+                    .unwrap();
+            };
+            thread("agent", None);
+            thread("child", Some("agent"));
+            thread("grandchild", Some("child"));
+            thread("made", None);
+            thread("users", None);
+            let call = |name: &str, status: &str, output: &str| {
+                serde_json::json!({"id": name, "seq": 0, "rev": 0, "created_at": 0.0, "type": "tool",
+                    "call": {"id": name, "name": name, "input": "{}", "output": output, "status": status}})
+                .to_string()
+            };
+            let made = call("mcp__motile__create_thread", "succeeded", r#"{"id":"made","title":"Made"}"#);
+            // A call that failed, or another tool that answered with a thread's id, made nothing.
+            let failed = call("mcp__motile__create_thread", "failed", r#"{"id":"users"}"#);
+            let read = call("mcp__motile__agent_status", "succeeded", r#"{"id":"users"}"#);
+            for (id, payload) in [("1", made), ("2", failed), ("3", read)] {
+                connection
+                    .execute(
+                        "INSERT INTO items (thread_id, id, seq, rev, payload) VALUES ('agent', ?1, ?1, 0, ?2)",
+                        params![id, payload],
+                    )
+                    .unwrap();
+            }
+        }
+        let store = Store::open(&path).unwrap();
+        let mut started: Vec<(String, Option<String>)> =
+            store.load_threads().unwrap().into_iter().map(|stored| (stored.thread.id, stored.started_by)).collect();
+        started.sort();
+        let by = |id: &str| Some(id.to_string());
+        assert_eq!(
+            started,
+            [
+                ("agent".into(), None),
+                ("child".into(), by("agent")),
+                ("grandchild".into(), by("child")),
+                ("made".into(), by("agent")),
+                ("users".into(), None),
+            ]
+        );
     }
 
     #[test]

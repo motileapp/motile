@@ -3460,7 +3460,7 @@ async fn a_file_the_agent_sends_is_kept_to_download() {
 }
 
 #[tokio::test]
-async fn attached_images_and_videos_are_shown_in_the_message_and_go_with_its_thread() {
+async fn attached_files_are_kept_in_the_message_and_go_with_its_thread() {
     let harness = Harness::start("fixtures/read-and-bash.jsonl", "0").await;
     let connection = harness.connect().await;
     let local = harness.dir.path().join("local");
@@ -3499,12 +3499,19 @@ async fn attached_images_and_videos_are_shown_in_the_message_and_go_with_its_thr
     // The client that sent the files named their contents the way the server did.
     let message = &transcript.items[0];
     let shown: Vec<_> =
-        message.media.iter().map(|media| (media.src.as_str(), Some(&media.id), media.poster.as_ref())).collect();
+        message.media[..2].iter().map(|media| (media.src.as_str(), Some(&media.id), media.poster.as_ref())).collect();
     assert_eq!(
         shown,
         vec![(shot.as_str(), shot_id.as_ref(), None), (video.as_str(), video_id.as_ref(), poster_id.as_ref())]
     );
     assert_eq!((message.media[1].width, message.media[1].height), (Some(640), Some(400)));
+
+    // Any other file is kept for the user to download again.
+    let [.., kept_notes] = &message.media[..] else { panic!("no media") };
+    assert_eq!((kept_notes.src.as_str(), kept_notes.file, kept_notes.size), (notes.as_str(), true, 5));
+    let fetched = harness.dir.path().join("fetched.txt");
+    connection.media(&kept_notes.id, &fetched, |_, _| {}).await.unwrap();
+    assert_eq!(std::fs::read(&fetched).unwrap(), b"notes");
 
     let gone = Request::Send {
         thread_id: None,
@@ -3526,6 +3533,49 @@ async fn attached_images_and_videos_are_shown_in_the_message_and_go_with_its_thr
         assert!(!Path::new(path).exists(), "{path} went with its thread");
     }
     assert!(Path::new(&unsent).exists(), "a file that was never sent waits for its message");
+}
+
+#[tokio::test]
+async fn a_file_attached_before_files_were_kept_is_kept_once_the_server_starts() {
+    let mut harness = Harness::start("fixtures/read-and-bash.jsonl", "0").await;
+    let connection = harness.connect().await;
+    let notes = harness.dir.path().join("notes.txt");
+    std::fs::write(&notes, b"notes").unwrap();
+    let (uploaded, _) = connection.upload(&notes, None, |_, _| {}).await.unwrap();
+    let new_thread = harness.new_thread(&connection, Agent::Claude).await;
+    let request = Request::Send {
+        thread_id: None,
+        new_thread,
+        text: "Look".to_string(),
+        attachments: vec![uploaded.clone()],
+        now: false,
+        context: None,
+        message_id: None,
+    };
+    let Message::Sent { thread_id } = connection.request(&request).await.unwrap() else { panic!("not sent") };
+    let sent = finished_transcript(&connection, &thread_id).await.items.remove(0);
+
+    // The message as a server that kept only images and videos left it.
+    let store = Store::open(&harness.dir.path().join("motile.sqlite")).unwrap();
+    let mut earlier = store.item(&thread_id, &sent.id).unwrap().unwrap();
+    earlier.media.clear();
+    store.save_item(&thread_id, &earlier).unwrap();
+    harness.restart().await;
+    harness.hub.keep_earlier_attachments();
+
+    let connection = harness.connect().await;
+    let mut follow = open(&connection, &thread_id, 0).await;
+    let mut transcript = Transcript::default();
+    while transcript.items.first().is_none_or(|message| message.media.is_empty()) {
+        transcript.apply(next(&mut follow).await);
+    }
+    let message = &transcript.items[0];
+    assert!(message.rev > earlier.rev, "clients that have the message are sent it again");
+    let [kept] = &message.media[..] else { panic!("one file is kept: {:?}", message.media) };
+    assert_eq!((kept.src.as_str(), kept.file), (uploaded.as_str(), true));
+    let fetched = harness.dir.path().join("fetched.txt");
+    connection.media(&kept.id, &fetched, |_, _| {}).await.unwrap();
+    assert_eq!(std::fs::read(&fetched).unwrap(), b"notes");
 }
 
 async fn usage(connection: &Connection, agent: Agent, writing: bool) -> Vec<UsageBucket> {
@@ -4238,7 +4288,7 @@ async fn an_agent_drives_other_threads_only_within_its_own_access() {
     assert!(failed && said.contains("more access than you have"), "{said}");
     let approve = json!({"id": child.id, "approval_id": "nope", "allow": false});
     let (said, failed) = call_tool(url, token, "approve_agent", approve).await;
-    assert!(failed && said.contains("more access than you have"), "{said}");
+    assert!(failed && said.contains("only allow or refuse what a thread you started"), "{said}");
     let create = json!({"prompt": "Say hello", "access": "full"});
     let (said, failed) = call_tool(url, token, "create_thread", create).await;
     assert!(failed && said.contains("can't have more access"), "{said}");
@@ -4339,6 +4389,17 @@ async fn an_agent_follows_any_thread_and_starts_agents_only_on_accounts_that_exi
     assert!(!failed && said.contains(&child.id), "{said}");
     let (said, failed) = call_tool(url, token, "agent_status", json!({"ids": ["nope"]})).await;
     assert!(failed && said.starts_with("Your server has no thread with that id"), "{said}");
+    // It follows another's agent, but only the user allows what that one asks, full access or not.
+    let approve = json!({"id": child.id, "approval_id": "nope", "allow": true});
+    let (said, failed) = call_tool(url, token, "approve_agent", approve).await;
+    assert!(failed && said.contains("only allow or refuse what a thread you started"), "{said}");
+    // A thread it made the sidebar lists is still its own to allow, unlike the user's.
+    let (said, failed) = call_tool(url, token, "create_thread", json!({"prompt": "Say hello"})).await;
+    assert!(!failed, "{said}");
+    let created: serde_json::Value = serde_json::from_str(&said).unwrap();
+    let approve = json!({"id": created["id"], "approval_id": "nope", "allow": true});
+    let (said, failed) = call_tool(url, token, "approve_agent", approve).await;
+    assert!(failed && said.contains("no longer waits for that approval"), "{said}");
     let start = json!({"prompt": "Look over greet.py", "account": "nope"});
     let (said, failed) = call_tool(url, token, "start_agent", start).await;
     assert!(failed && said.contains("no account called nope"), "{said}");
@@ -4860,6 +4921,44 @@ async fn a_restarted_server_reads_what_the_gateways_accounts_used_once_the_gatew
     assert!(used(&agents).is_some_and(|now| now > before), "{before} then {agents:?}");
 }
 
+#[tokio::test]
+async fn a_gateway_threads_limit_resets_when_the_gateway_said() {
+    let (gateway, _asked) = fake_gateway(Arc::new(tokio::sync::Notify::new())).await;
+    let harness = Harness::start(fixture(Agent::Claude), "0").await;
+    reach(harness.endpoint.as_ref().unwrap(), &gateway);
+    harness.access.set_gateway(Some(gateway.id().to_string()));
+    harness.serve_gateway().await;
+    let connection = harness.connect().await;
+    let new_thread = harness.new_thread(&connection, Agent::Claude).await.unwrap();
+    let mut list = connection.follow(&Request::Subscribe).await.unwrap();
+    loop {
+        if let Message::Server { server } | Message::Welcome { server, .. } = next(&mut list).await
+            && server.agent_accounts.iter().any(|account| account.id == "gateway-claude")
+        {
+            break;
+        }
+    }
+
+    let new_thread = NewThread { agent_account: Some("gateway-claude".into()), ..new_thread };
+    let thread_id = send(&connection, None, Some(new_thread), "Over the gateway's limit").await;
+    let limited = loop {
+        if let Message::ThreadUpsert { thread } = next(&mut list).await
+            && thread.id == thread_id
+            && thread.interruption.is_some()
+        {
+            break thread;
+        }
+    };
+    assert!(
+        matches!(limited.interruption, Some(Interruption::Limit { resets_at: Some(at), continues: true }) if at == GATEWAY_RESET),
+        "{:?}",
+        limited.interruption
+    );
+}
+
+/// When the fake gateway says the limit of a message over it resets.
+const GATEWAY_RESET: f64 = 4_000_000_000.0;
+
 /// How many times a fake gateway listed its accounts, which its account says it has used of its
 /// session, so that each listing says more.
 static LISTED: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
@@ -4901,6 +5000,20 @@ async fn answer_as_gateway(
     match &request {
         GatewayRequest::Http { .. } => {
             let body = recv.read_to_end(1 << 20).await.unwrap();
+            if String::from_utf8_lossy(&body).contains("gateway's limit") {
+                let reset = (GATEWAY_RESET as u64).to_string();
+                let head = vec![("anthropic-ratelimit-unified-reset".to_string(), reset)];
+                write_frame(&mut send, &GatewayReply::HttpHead { status: 429, headers: head, account: None })
+                    .await
+                    .unwrap();
+                send.write_all(
+                    br#"{"type":"error","error":{"type":"rate_limit_error","message":"work is at its limit."}}"#,
+                )
+                .await
+                .unwrap();
+                send.finish().unwrap();
+                return;
+            }
             asked.send((request, body)).unwrap();
             let head = vec![("content-type".to_string(), "text/event-stream".to_string())];
             write_frame(&mut send, &GatewayReply::HttpHead { status: 200, headers: head, account: None })

@@ -1246,7 +1246,7 @@ struct QueuedMessage: Equatable, Identifiable {
         id = json.string("id")
         text = json.string("text")
         attachments = json.strings("attachments")
-        let shown = json.objects("media").map { media in
+        let shown = json.objects("media").filter { !$0.bool("file") }.map { media in
             let file = AttachedFile(name: "", media: media.string("id"), video: media.bool("video"), poster: media.optionalString("poster"))
             return (media.string("src"), file)
         }
@@ -1255,20 +1255,35 @@ struct QueuedMessage: Equatable, Identifiable {
 }
 
 /// A file attached to a message, as the transcript shows it. An image or a video names the file
-/// the core has it under, and a video the image that stands for it until it plays.
+/// the core has it under, and a video the image that stands for it until it plays. Any other file
+/// the core has is one to download.
 struct AttachedFile: Equatable, Codable {
     let name: String
     let media: String?
     let video: Bool
     let poster: String?
+    var file = false
+    var size: Int64 = 0
+
+    /// Shown as a tile with its picture, not by its name.
+    var pictured: Bool { media != nil && !file }
 
     /// The image a tile of it shows.
     var picture: String? { video ? poster : media }
+
+    /// The file to download, when its server kept it.
+    var download: SentFile? {
+        guard file, let media else { return nil }
+        return SentFile(id: media, bytes: size, alt: "", name: name)
+    }
 }
 
 extension AttachedFile {
     init(json: JSON) {
-        self.init(name: json.string("name"), media: json.optionalString("media"), video: json.bool("video"), poster: json.optionalString("poster"))
+        self.init(
+            name: json.string("name"), media: json.optionalString("media"), video: json.bool("video"), poster: json.optionalString("poster"),
+            file: json.bool("file"), size: (json["size"] as? NSNumber)?.int64Value ?? 0
+        )
     }
 }
 
@@ -1308,6 +1323,7 @@ struct Attachment: Equatable, Identifiable {
     }
 
     init(path: String, shown: AttachedFile?, serverID: String) {
+        let shown = shown.flatMap { $0.pictured ? $0 : nil }
         id = UUID().uuidString
         file = nil
         name = (path as NSString).lastPathComponent
@@ -1698,8 +1714,6 @@ struct LimitsReport {
 
     let sections: [Section]
     let notes: [String]
-    /// Some of it is old or missing, from what was last read.
-    let stale: Bool
 
     init(json: JSON) {
         sections = json.objects("sections").map { section in
@@ -1711,7 +1725,6 @@ struct LimitsReport {
                 note: section.optionalString("note"), gateway: section.bool("gateway"))
         }
         notes = json.strings("notes")
-        stale = json.bool("stale")
     }
 }
 

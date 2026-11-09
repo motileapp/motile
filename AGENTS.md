@@ -215,18 +215,22 @@ shadcn's own colours, opacities and radii are gone from the theme.
   `check_ui` checks a program before the agent shows it, and `list_accounts`, `start_agent`,
   `agent_status`, `message_agent`, `answer_agent`, `approve_agent` and `stop_agent` start and follow
   agents on any of the server's accounts, Claude Code's or Codex's. The same tools follow any thread
-  of the server and drive one with no more access than the caller's. `create_thread`, `list_threads`,
+  of the server and drive one with no more access than the caller's, except `approve_agent`, which
+  only answers the threads the caller's agent started (`started_by`) and the ones those started,
+  never the user's. `create_thread`, `list_threads`,
   `update_thread`, `thread_queue`, `list_projects`, `add_project`, `read_pull_request`,
   `link_pull_request` and `git_status` (`hub/threads.rs`) start threads the sidebar lists, find and
-  change threads, projects and pull requests, under the same rule.
+  change threads, projects and pull requests, under the same rule. A thread an agent starts,
+  with `start_agent` or `create_thread`, keeps the thread whose agent started it (`started_by`),
+  which sets it apart from the user's; `parent` only says where a thread sits.
 - `hub/children.rs`: those agents. Each works in a thread of its own, which knows the thread and
   the tool call that started it (`parent`); the sidebar doesn't list it. It gets only its prompt,
   works in its parent's folder unless given a worktree, and never has more access than its parent.
   Its parent's tool call follows how it does, and the parent's agent is told (`Notice`) when the
   turn it gave the thread ends, the thread asks a question, or a thread with full access waits for a
   tool call to be allowed (Claude Code asks for some under any access), unless a call of its own
-  waited for that. Only an agent with full access allows one, with `approve_agent`; a thread with
-  less waits for the user. Stopping or deleting a thread stops or deletes the ones it started.
+  waited for that. Only an agent with full access allows one, with `approve_agent`, and only for a
+  thread it started or one under it; a thread with less, or the user's, waits for the user. Stopping or deleting a thread stops or deletes the ones it started.
 - `pacing.rs`: passes a streamed reply on in finished blocks.
 - `agents/`: builds the command for a turn and parses its output into `AgentEvent`s
   (`claude.rs`, `codex.rs`). `skills.rs` asks each account's CLI for the skills it offers in a
@@ -249,8 +253,9 @@ shadcn's own colours, opacities and radii are gone from the theme.
   to say what the tokens Codex spent would have cost. Claude Code says what its own cost.
 - `limits.rs`: how much of their plans the agents' accounts have used, as their CLIs say without
   spending tokens: `codex app-server` answers `account/rateLimits/read` and Claude Code the
-  `get_usage` control request. `hub.rs` keeps the answer for five minutes, but takes a pinned
-  Gateway account's from the gateway's list of its accounts each time it asks for it, every minute.
+  `get_usage` control request. `hub.rs` reads them every five minutes and again whenever a client
+  or an agent asks, unless the last read is under 30 seconds old, and takes a pinned Gateway
+  account's from the gateway's list of its accounts each time it asks for it, every minute.
 - `git.rs`: branches, worktrees, status, commit, pull, push, pull requests (through `gh`),
   snapshots and patches.
 - `pull_requests.rs`: what GitHub says of a pull request (one `gh api graphql` read), the
@@ -260,8 +265,9 @@ shadcn's own colours, opacities and radii are gone from the theme.
   so, it fast-forwards a project's folder on its default branch after each fetch and each merge.
 - `files.rs`: browses the server's folders, takes uploads, and reads the files of a thread's
   folder, never outside it.
-- `media.rs`: keeps the images and videos threads show and the files agents send, named by their
-  contents. An agent sends any file as a Markdown image of its path, and gives a video its
+- `media.rs`: keeps the images and videos threads show and the files agents send and users attach,
+  named by their contents. At start the server keeps the files attached to earlier messages that it
+  still has the uploads of. An agent sends any file as a Markdown image of its path, and gives a video its
   preview image as the image's title.
 - `title.rs`, `drafts.rs`: have an agent write titles, commit messages, pull request texts and
   branch names, through `generate.rs`, which also says what each answer took so that it is kept
@@ -344,7 +350,9 @@ for tests.
 - `link.rs`: keeps one server connected and follows its threads. A connection can look open while
   nothing gets through, so the link pings its server (`Ping`) every half minute, when a request has
   waited ten seconds, and when the client comes back or the network changes, and gives up one that
-  doesn't answer, saying why in the server's error.
+  doesn't answer, saying why in the server's error. When the core replaces the endpoint it retires
+  the links first: what ends on the old one ends because the core closed it, so they show as
+  dialing, not dial on it, until the new one is open.
 - `away.rs`: whether the client was away, paused by the system or in the background. Coming back
   after a while the core opens a new endpoint, and a connection or a dial from before that ends
   then only dials again, without an error: the clients show an outage only once a dial made after
@@ -797,7 +805,8 @@ clients. It replays the recorded output in `fixtures/` or makes up a turn, depen
 
 As `claude auth login` it signs in with any code but one with "wrong" in it, as the folder's
 name at motile.app. On a Gateway account it sends a request through the gateway with each message (Claude Code),
-so that the gateway places its thread. A message sent now while it works is read after its next tool call, or stops a reply that
+so that the gateway places its thread, and ends the turn on the gateway's limit error as Claude Code
+does for a gateway: without saying when the limit resets. A message sent now while it works is read after its next tool call, or stops a reply that
 streams (Claude Code). Asked for a title, a commit message, a pull request's text or a branch's
 name, it writes one.
 

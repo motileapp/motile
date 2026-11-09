@@ -84,7 +84,7 @@ class UsageModel {
     }
 
     /** Asks the servers again for what the tab shows. */
-    fun refresh() = load(refresh = true)
+    fun refresh() = load()
 
     /** The servers counted among these, or null for all of them. */
     private fun picked(all: List<Server>): Set<String>? {
@@ -106,23 +106,18 @@ class UsageModel {
         return if (named.size == 1) named[0].name else "${named.size} servers"
     }
 
-    private fun load(refresh: Boolean = false) {
+    /** Shows what the core kept for the tab at once, then asks the servers. */
+    private fun load() {
         val store = store ?: return
         asked += 1
         val number = asked
         refreshing = true
         val counted = picked(store.usageServers)
         if (tab == Tab.Limits) {
-            store.loadLimits(refresh = refresh, kept = !refresh, servers = counted) { result ->
+            store.loadLimits(kept = true, servers = counted) { kept ->
                 if (number != asked) return@loadLimits
-                val report = result.getOrNull()
-                if (report == null || !report.stale) {
-                    refreshing = false
-                    limits = Loaded.of(result, limits)
-                    return@loadLimits
-                }
-                if (report.sections.isNotEmpty()) limits = Loaded.Ready(report)
-                store.loadLimits(refresh = false, kept = false, servers = counted) { again ->
+                kept.getOrNull()?.takeIf { it.sections.isNotEmpty() }?.let { limits = Loaded.Ready(it) }
+                store.loadLimits(kept = false, servers = counted) { again ->
                     if (number != asked) return@loadLimits
                     refreshing = false
                     limits = Loaded.of(again, limits)
