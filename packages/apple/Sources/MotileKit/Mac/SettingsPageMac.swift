@@ -155,7 +155,7 @@ struct SettingsPage: View {
         SettingsGroup("servers", "Servers") {
             ForEach(store.servers) { server in
                 SettingsRow {
-                    SettingsLabel(server.name, description: server.settingsDescription, icon: .server, truncates: .tail) {
+                    SettingsLabel(server.name, description: server.settingsDescription, icon: .server) {
                         if let sync = server.sync { ServerSyncLine(sync: sync).padding(.top, 2) }
                     }
                 } trailing: {

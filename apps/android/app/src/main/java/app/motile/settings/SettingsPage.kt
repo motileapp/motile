@@ -156,9 +156,8 @@ private fun SettingsGroups.servers(store: AppStore, navigator: SettingsNavigator
     group("servers") {
         for (server in store.servers) row {
             SettingsLink({ navigator.push(SettingsRoute.ServerPage(server.id)) }) {
-                val description = if (server.state == Server.State.Connected) "Connected · version ${server.version}" else server.stateLabel
                 val sync = server.sync
-                SettingsItem(server.name, description, footer = sync?.let { { ServerSyncLine(it) } }) { SettingsTile(Symbol.Server) }
+                SettingsItem(server.name, server.settingsDescription, lines = Int.MAX_VALUE, footer = sync?.let { { ServerSyncLine(it) } }) { SettingsTile(Symbol.Server) }
             }
         }
         row { SettingsLink({ navigator.push(SettingsRoute.AddServer) }) { SettingsActionLabel("Add a Server", Symbol.Plus) } }

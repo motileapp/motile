@@ -383,7 +383,7 @@ impl SettingsPage {
             .margin(beside(TRAILING_GAP / 2., 0.));
             let sync = server.sync.as_ref().map(|sync| sync_line(sync, cx));
             let leading =
-                footed_label(server.name.clone(), Some(description(server)), Some("server"), Cut::End, sync, cx);
+                footed_label(server.name.clone(), Some(description(server)), Some("server"), Cut::Wraps, sync, cx);
             let trailing = div().flex().items_center().child(status).child(menu).into_any_element();
             rows.push(row(vec![leading], vec![trailing]).into_any_element());
             rows.push(divider_on(Surface::Card, cx).into_any_element());
