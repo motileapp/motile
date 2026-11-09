@@ -3857,6 +3857,8 @@ impl Hub {
                 live.write(lines);
             }
             AgentEvent::Limited { resets_at } => {
+                let noted = self.gateway.get().and_then(|way| way.tunnel.take_limit_reset(&live.stored.thread.id));
+                let resets_at = resets_at.or(noted);
                 let continues = self.continue_settings().after_limits && resets_at.is_some_and(|at| at > now());
                 live.stored.thread.interruption = Some(Interruption::Limit { resets_at, continues });
                 wake(&mut live.stored.thread, true);

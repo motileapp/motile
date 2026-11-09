@@ -803,7 +803,8 @@ clients. It replays the recorded output in `fixtures/` or makes up a turn, depen
 
 As `claude auth login` it signs in with any code but one with "wrong" in it, as the folder's
 name at motile.app. On a Gateway account it sends a request through the gateway with each message (Claude Code),
-so that the gateway places its thread. A message sent now while it works is read after its next tool call, or stops a reply that
+so that the gateway places its thread, and ends the turn on the gateway's limit error as Claude Code
+does for a gateway: without saying when the limit resets. A message sent now while it works is read after its next tool call, or stops a reply that
 streams (Claude Code). Asked for a title, a commit message, a pull request's text or a branch's
 name, it writes one.
 

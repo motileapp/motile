@@ -23,12 +23,12 @@ use base64::engine::general_purpose::STANDARD as BASE64;
 use futures_lite::StreamExt;
 use iroh::endpoint::{Connection, RecvStream, SendStream};
 use iroh::{Endpoint, EndpointAddr, EndpointId};
-use motile_protocol::GATEWAY_ALPN;
 use motile_protocol::frame::{read_frame, write_frame};
 use motile_protocol::gateway_wire::{
     GatewayAccount, GatewayReply, GatewayRequest, MCP_APPROVED, MCP_NEEDS_APPROVAL, WsMessage,
 };
 use motile_protocol::wire::{Agent, AgentLimits};
+use motile_protocol::{GATEWAY_ALPN, now};
 use tokio::sync::{Mutex, mpsc, watch};
 
 use crate::hub::Hub;
@@ -115,6 +115,9 @@ pub struct Tunnel {
     pins: std::sync::Mutex<HashMap<String, String>>,
     /// The gateway's account that last answered each thread.
     placed: std::sync::Mutex<HashMap<String, String>>,
+    /// When the limit that last refused each thread resets, which Claude Code doesn't say on a
+    /// Gateway account.
+    limit_resets: std::sync::Mutex<HashMap<String, f64>>,
 }
 
 impl Tunnel {
@@ -125,6 +128,7 @@ impl Tunnel {
             connection: Mutex::default(),
             pins: std::sync::Mutex::default(),
             placed: std::sync::Mutex::default(),
+            limit_resets: std::sync::Mutex::default(),
         })
     }
 
@@ -149,6 +153,23 @@ impl Tunnel {
     fn answered(&self, thread: &str, account: Option<String>) {
         let Some(account) = account else { return };
         self.placed.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).insert(thread.to_string(), account);
+    }
+
+    /// When the limit that last refused the thread resets, if it is yet to.
+    pub fn take_limit_reset(&self, thread: &str) -> Option<f64> {
+        let reset = self.limit_resets.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).remove(thread);
+        reset.filter(|at| *at > now())
+    }
+
+    fn note_limit(&self, thread: &str, status: u16, headers: &[(String, String)]) {
+        if status != 429 {
+            return;
+        }
+        let mut resets = self.limit_resets.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        match limit_reset(headers, now()) {
+            Some(at) => resets.insert(thread.to_string(), at),
+            None => resets.remove(thread),
+        };
     }
 
     /// The gateway's accounts, which the server's agents can be pinned to.
@@ -406,6 +427,7 @@ async fn tunnel(tunnel: &Tunnel, thread: &str, request: GatewayRequest, body: Bo
     let (status, headers) = match reply {
         GatewayReply::HttpHead { status, headers, account } => {
             tunnel.answered(thread, account);
+            tunnel.note_limit(thread, status, &headers);
             (status, headers)
         }
         GatewayReply::Error { message } => return Ok(refused(StatusCode::BAD_GATEWAY, &message)),
@@ -415,6 +437,15 @@ async fn tunnel(tunnel: &Tunnel, thread: &str, request: GatewayRequest, body: Bo
     *response.status_mut() = StatusCode::from_u16(status).context("Your gateway answered with no status.")?;
     add_headers(response.headers_mut(), headers);
     Ok(response)
+}
+
+/// When a limit error says its limit resets: Anthropic's reset, or after its `retry-after`.
+fn limit_reset(headers: &[(String, String)], now: f64) -> Option<f64> {
+    let number = |name: &str| {
+        let (_, value) = headers.iter().find(|(header, _)| header.eq_ignore_ascii_case(name))?;
+        value.trim().parse::<f64>().ok()
+    };
+    number("anthropic-ratelimit-unified-reset").or_else(|| number("retry-after").map(|seconds| now + seconds))
 }
 
 fn add_headers(to: &mut HeaderMap, headers: Vec<(String, String)>) {
