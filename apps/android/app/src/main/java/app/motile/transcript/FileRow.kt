@@ -51,34 +51,43 @@ import app.motile.ui.rememberMenuState
 import app.motile.ui.pressesAtOnce
 import java.io.File
 
-/**
- * A file a reply sends, as a card with its name, its kind and size. Its icon says where the
- * download is, as a messaging app's does: an arrow to download it, the progress with a cross that
- * stops it, then the kind of file, which the card opens.
- */
+/** A file a reply sends, as its card. */
 @Composable
 fun FileRow(file: SentFile) {
+    Box(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+        FileCard(file, Modifier.widthIn(max = FileRow.widest).fillMaxWidth())
+    }
+}
+
+/**
+ * A file as a card with its name, its kind and size, where an agent sends one and in a message's
+ * bubble. Its icon says where the download is, as a messaging app's does: an arrow to download it,
+ * the progress with a cross that stops it, then the kind of file, which the card opens. A file its
+ * server didn't `kept` only shows its kind.
+ */
+@Composable
+fun FileCard(file: SentFile, modifier: Modifier = Modifier, kept: Boolean = true) {
     val store = LocalStore.current
     val palette = LocalPalette.current
-    val state = FileDownloads.state(file.id, store)
+    val state = if (kept) FileDownloads.state(file.id, store) else FileDownloads.State.Remote
     val fetching = state is FileDownloads.State.Fetching
     // Only a removed server had a file it couldn't hand over, so asking again is no use.
-    val gone = state is FileDownloads.State.Failed && !store.fetchesAgain
+    val gone = !kept || state is FileDownloads.State.Failed && !store.fetchesAgain
     val menu = rememberMenuState()
     val card = remember { MutableInteractionSource() }
     val cardPressed by card.collectIsPressedAsState()
     val tile = remember { MutableInteractionSource() }
     val tilePressed by tile.collectIsPressedAsState()
+    val cardLit = cardPressed && !fetching && !gone
     val shape = RoundedCornerShape(Radius.lg)
     val inset = (FileRow.cardHeight - FileRow.tileSide) / 2
-    Box(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+    Box(modifier) {
         Row(
             Modifier
-                .widthIn(max = FileRow.widest)
                 .fillMaxWidth()
                 .height(FileRow.cardHeight)
                 .clip(shape)
-                .background(if (cardPressed && !fetching && !gone) palette.backgroundSecondaryAccent else palette.backgroundSecondary, shape)
+                .background(if (cardLit) palette.backgroundSecondaryAccent else palette.backgroundSecondary, shape)
                 .border(1.dp, palette.border, shape)
                 .pressPosition(menu)
                 .semantics { contentDescription = "${file.name}, ${file.detail}" }
@@ -87,6 +96,7 @@ fun FileRow(file: SentFile) {
                     interactionSource = card, indication = null, role = Role.Button,
                     onLongClick = { if (!gone) menu.openAtPress() },
                     onClick = { if (!gone) pressFile(file, state, store) },
+                    enabled = !gone,
                 ),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -97,7 +107,7 @@ fun FileRow(file: SentFile) {
                 Modifier
                     .size(FileRow.tileSide)
                     .clip(tileShape)
-                    .background(if (tileLit) palette.backgroundSecondaryAccentStronger else palette.backgroundSecondaryAccent, tileShape)
+                    .background(if (cardLit || tileLit) palette.backgroundSecondaryAccentStronger else palette.backgroundSecondaryAccent, tileShape)
                     .then(
                         if (fetching) {
                             Modifier.pressesAtOnce(tile).clickable(tile, null, role = Role.Button, onClickLabel = "Cancel Download") { FileDownloads.cancel(file.id, store) }

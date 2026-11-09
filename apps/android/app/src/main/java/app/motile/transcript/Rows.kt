@@ -587,6 +587,7 @@ class SentFile(val id: String, val bytes: Long, val alt: String, val name: Strin
     val detail: String
         get() {
             val kind = extension.uppercase()
+            if (bytes <= 0) return kind
             return if (kind.isEmpty()) size else "$kind · $size"
         }
 
