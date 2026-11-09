@@ -111,6 +111,7 @@ import struct
 import sys
 import threading
 import time
+import urllib.error
 import urllib.request
 import uuid
 import zlib
@@ -236,20 +237,44 @@ prompts = queue.Queue()
 answers = queue.Queue()
 
 
-def ask_through_gateway():
-    """On one of the gateway's accounts, sends a request through it as Claude Code does, so that the gateway
-    places the thread on one of its accounts."""
-    base, token = os.environ.get("ANTHROPIC_BASE_URL", ""), os.environ.get("ANTHROPIC_AUTH_TOKEN", "")
-    if not base.startswith("http://127.0.0.1") or not token:
+def on_gateway():
+    return os.environ.get("ANTHROPIC_BASE_URL", "").startswith("http://127.0.0.1") and bool(
+        os.environ.get("ANTHROPIC_AUTH_TOKEN"))
+
+
+# What the gateway refused the last message with, which ends its turn.
+gateway_refusal = [None]
+
+
+def ask_through_gateway(content):
+    """On one of the gateway's accounts, sends the message through it as Claude Code does, so that the
+    gateway places the thread on one of its accounts, and keeps the limit error it may answer with."""
+    if not on_gateway():
         return
-    body = {"model": "claude-opus-4-5", "max_tokens": 1, "messages": [{"role": "user", "content": "hi"}]}
+    base, token = os.environ["ANTHROPIC_BASE_URL"], os.environ["ANTHROPIC_AUTH_TOKEN"]
+    body = {"model": "claude-opus-4-5", "max_tokens": 1, "messages": [{"role": "user", "content": content}]}
     request = urllib.request.Request(f"{base}/v1/messages", data=json.dumps(body).encode(),
                                      headers={"Content-Type": "application/json", "x-api-key": token})
     try:
         with urllib.request.urlopen(request, timeout=30) as response:
             response.read()
+    except urllib.error.HTTPError as error:
+        if error.code == 429:
+            refused = json.loads(error.read() or b"{}")
+            gateway_refusal[0] = refused.get("error", {}).get("message", "")
     except Exception:
         pass
+
+
+def refused_by_gateway(message):
+    """Ends the turn as Claude Code does when a gateway refuses it for a limit: as an API user's error,
+    without the `rate_limit_event` a subscriber gets."""
+    text = f"API Error: Request rejected (429) · {message}"
+    content = [{"type": "text", "text": text}]
+    emit({"type": "assistant", "error": "rate_limit", "message": {"id": f"msg_{PROCESS}refused",
+                                                                  "model": "<synthetic>", "content": content}})
+    emit({"type": "result", "subtype": "success", "is_error": True, "result": text, "duration_ms": 1,
+          "api_error_status": 429, "terminal_reason": "api_error"})
 
 
 def read_stdin():
@@ -258,7 +283,7 @@ def read_stdin():
             continue
         message = json.loads(line)
         if message["type"] == "user":
-            ask_through_gateway()
+            ask_through_gateway(text_of(message["message"]["content"]))
             prompts.put(message)
         if message["type"] == "control_response":
             answers.put(message)
@@ -1063,10 +1088,12 @@ def agents_hit_the_limit():
 
 
 def refused_for_the_limit():
-    """Ends the turn as Claude Code does when the subscription's limit runs out, and says so."""
+    """Ends the turn as Claude Code does when the subscription's limit runs out, and says so. On a
+    gateway's account it is an API user, which never hears when the limit resets."""
     resets = limit_resets()
-    emit({"type": "rate_limit_event", "rate_limit_info": {"status": "rejected", "rateLimitType": "five_hour",
-                                                          "resetsAt": resets, "overageStatus": "rejected"}})
+    if not on_gateway():
+        emit({"type": "rate_limit_event", "rate_limit_info": {"status": "rejected", "rateLimitType": "five_hour",
+                                                              "resetsAt": resets, "overageStatus": "rejected"}})
     text = "You've hit your limit · resets " + time.strftime("%H:%M", time.localtime(resets))
     message = {"id": f"msg_{PROCESS}limit", "model": "<synthetic>", "content": [{"type": "text", "text": text}]}
     emit({"type": "assistant", "error": "rate_limit", "message": message})
@@ -1634,6 +1661,9 @@ prompt_now = [prompt]
 
 def answer(prompt):
     prompt_now[0] = prompt
+    refusal, gateway_refusal[0] = gateway_refusal[0], None
+    if refusal is not None:
+        return refused_by_gateway(refusal)
     said = message_of(prompt).lower()
     names = [command["name"] for command in claude_commands() if not command.get("builtin")]
     started = re.search(r"(?:\A|\n\n)/([\w:-]+)[ \t]*(.*)\Z", message_of(prompt), re.S)

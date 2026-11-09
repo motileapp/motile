@@ -4921,6 +4921,44 @@ async fn a_restarted_server_reads_what_the_gateways_accounts_used_once_the_gatew
     assert!(used(&agents).is_some_and(|now| now > before), "{before} then {agents:?}");
 }
 
+#[tokio::test]
+async fn a_gateway_threads_limit_resets_when_the_gateway_said() {
+    let (gateway, _asked) = fake_gateway(Arc::new(tokio::sync::Notify::new())).await;
+    let harness = Harness::start(fixture(Agent::Claude), "0").await;
+    reach(harness.endpoint.as_ref().unwrap(), &gateway);
+    harness.access.set_gateway(Some(gateway.id().to_string()));
+    harness.serve_gateway().await;
+    let connection = harness.connect().await;
+    let new_thread = harness.new_thread(&connection, Agent::Claude).await.unwrap();
+    let mut list = connection.follow(&Request::Subscribe).await.unwrap();
+    loop {
+        if let Message::Server { server } | Message::Welcome { server, .. } = next(&mut list).await
+            && server.agent_accounts.iter().any(|account| account.id == "gateway-claude")
+        {
+            break;
+        }
+    }
+
+    let new_thread = NewThread { agent_account: Some("gateway-claude".into()), ..new_thread };
+    let thread_id = send(&connection, None, Some(new_thread), "Over the gateway's limit").await;
+    let limited = loop {
+        if let Message::ThreadUpsert { thread } = next(&mut list).await
+            && thread.id == thread_id
+            && thread.interruption.is_some()
+        {
+            break thread;
+        }
+    };
+    assert!(
+        matches!(limited.interruption, Some(Interruption::Limit { resets_at: Some(at), continues: true }) if at == GATEWAY_RESET),
+        "{:?}",
+        limited.interruption
+    );
+}
+
+/// When the fake gateway says the limit of a message over it resets.
+const GATEWAY_RESET: f64 = 4_000_000_000.0;
+
 /// How many times a fake gateway listed its accounts, which its account says it has used of its
 /// session, so that each listing says more.
 static LISTED: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
@@ -4962,6 +5000,20 @@ async fn answer_as_gateway(
     match &request {
         GatewayRequest::Http { .. } => {
             let body = recv.read_to_end(1 << 20).await.unwrap();
+            if String::from_utf8_lossy(&body).contains("gateway's limit") {
+                let reset = (GATEWAY_RESET as u64).to_string();
+                let head = vec![("anthropic-ratelimit-unified-reset".to_string(), reset)];
+                write_frame(&mut send, &GatewayReply::HttpHead { status: 429, headers: head, account: None })
+                    .await
+                    .unwrap();
+                send.write_all(
+                    br#"{"type":"error","error":{"type":"rate_limit_error","message":"work is at its limit."}}"#,
+                )
+                .await
+                .unwrap();
+                send.finish().unwrap();
+                return;
+            }
             asked.send((request, body)).unwrap();
             let head = vec![("content-type".to_string(), "text/event-stream".to_string())];
             write_frame(&mut send, &GatewayReply::HttpHead { status: 200, headers: head, account: None })
