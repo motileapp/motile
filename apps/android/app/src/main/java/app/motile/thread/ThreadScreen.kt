@@ -66,6 +66,7 @@ import androidx.compose.ui.unit.dp
 import app.motile.LocalStore
 import app.motile.composer.AgentBar
 import app.motile.composer.ComposerView
+import app.motile.composer.UnlinkedThreadBar
 import app.motile.core.AppStore
 import app.motile.core.Toast
 import app.motile.core.PanelPage
@@ -111,19 +112,19 @@ fun ThreadScreen(overSidebar: Boolean = true) {
     val isStart = store.isStart
     // An agent the thread's agent started shows in the thread's place, with a bar in the composer's.
     val agent = store.shownAgent?.takeIf { !isStart }
-    // A thread whose server was removed ends with the row that says so, in the composer's place.
-    val removed = agent == null && store.openThreadRemovedServer != null
+    // A thread whose server was unlinked has a bar in the composer's place that says so.
+    val removedServer = store.openThreadRemovedServer.takeIf { agent == null }
     val below = WindowInsets.ime.union(WindowInsets.navigationBars).only(WindowInsetsSides.Bottom)
     val top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + barHeight
     FileDrop(Modifier.fillMaxSize()) {
         Box(Modifier.fillMaxSize().background(Theme.colors.background)) {
             if (!isStart) {
-                val bottom = below.asPaddingValues().calculateBottomPadding() + if (removed) composerBottomGap else composerHeight
+                val bottom = below.asPaddingValues().calculateBottomPadding() + composerHeight
                 val model = if (agent != null) store.agentTranscript else store.transcript
                 key(model) {
                     val findCover = if (agent == null && store.find.shown && store.selectedThread != null) FindBar.cover else 0.dp
                     TranscriptView(
-                        model, Modifier.fillMaxSize(), contentPadding = PaddingValues(top = top, bottom = bottom), underComposer = !removed, findCover = findCover,
+                        model, Modifier.fillMaxSize(), contentPadding = PaddingValues(top = top, bottom = bottom), findCover = findCover,
                     )
                 }
             }
@@ -138,7 +139,9 @@ fun ThreadScreen(overSidebar: Boolean = true) {
                         .padding(start = Theme.composerPadding, end = Theme.composerPadding, top = TranscriptView.composerGap, bottom = composerBottomGap)
                     if (agent != null) {
                         Box(composerPlace, contentAlignment = Alignment.BottomCenter) { AgentBar(agent) }
-                    } else if (!removed && (!isStart || store.projects.isNotEmpty() || store.noProjects.isNotEmpty())) {
+                    } else if (removedServer != null) {
+                        Box(composerPlace, contentAlignment = Alignment.BottomCenter) { UnlinkedThreadBar(removedServer) }
+                    } else if (!isStart || store.projects.isNotEmpty() || store.noProjects.isNotEmpty()) {
                         ComposerView(composerPlace)
                     }
                 }

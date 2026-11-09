@@ -680,10 +680,8 @@ impl Render for TranscriptView {
             linear_color_stop(c.background, 0.),
             linear_color_stop(c.background.opacity(0.), 1.),
         ));
-        // Above the composer, which starts `COMPOSER_GAP` into the inset, or above the inset.
-        let under_composer = self.agent || !removed;
-        let composer = if under_composer { crate::thread::COMPOSER_GAP } else { 0. };
-        let jump_bottom = bottom - composer + JUMP_BUTTON_GAP;
+        // Above the composer, which starts `COMPOSER_GAP` into the inset.
+        let jump_bottom = bottom - crate::thread::COMPOSER_GAP + JUMP_BUTTON_GAP;
 
         div()
             .size_full()

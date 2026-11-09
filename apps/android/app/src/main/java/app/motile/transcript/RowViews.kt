@@ -7,7 +7,6 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import app.motile.ui.edgeFade
 import app.motile.ui.ButtonVariant
 import app.motile.ui.ActionButton
-import app.motile.ui.beside
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.horizontalScroll
@@ -64,7 +63,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.motile.core.Activity
 import app.motile.core.AgentState
-import app.motile.core.SettingsSection
 import app.motile.core.Time
 import app.motile.platform.Platform
 import app.motile.platform.Symbol
@@ -114,7 +112,6 @@ fun TranscriptRow(row: RowModel) {
         is RowModel.Kind.Changes -> ChangesRow(row, kind.content)
         is RowModel.Kind.TurnEnd -> TurnEndRow(row, kind.content)
         is RowModel.Kind.Handoff -> HandoffRow(kind.content)
-        is RowModel.Kind.Removed -> RemovedRow(kind.content)
         RowModel.Kind.Unknown -> {}
     }
 }
@@ -801,58 +798,6 @@ private fun HandoffRow(handoff: HandoffContent) {
         Spacer(Modifier.width(lineGap))
         Box(Modifier.weight(1f).height(1.dp).background(palette.border))
     }
-}
-
-/** The end of a thread whose server was unlinked from the account, in place of the composer: why the thread can only be read, and the ways on from it. */
-@Composable
-private fun RemovedRow(removed: RemovedContent) {
-    val palette = LocalPalette.current
-    val actions = LocalTranscript.current
-    SurfaceBox(RoundedCornerShape(Radius.lg), Modifier.padding(vertical = RemovedRow.margin).fillMaxWidth(), bordered = true) {
-        BoxWithConstraints(Modifier.padding(RemovedRow.padding)) {
-            val halves = maxWidth < RemovedRow.halvesBelow
-            Column {
-                Row(Modifier.height(RemovedRow.titleHeight), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Symbol.Unlink, iconSize(text = 13f), color = palette.mutedForeground)
-                    Text(removed.title, Modifier.padding(start = RemovedRow.iconGap), style = Theme.ui(13f, FontWeight.SemiBold), color = palette.foreground, maxLines = 1)
-                }
-                SelectionContainer(Modifier.padding(top = RemovedRow.textGap)) {
-                    Text(removed.message, style = Theme.ui(13f).copy(lineHeight = (13f * Platform.scale * 1.2f + 5).sp), color = palette.mutedForeground)
-                }
-                Row(Modifier.fillMaxWidth().padding(top = RemovedRow.buttonsGap), horizontalArrangement = Arrangement.End) {
-                    val half = if (halves) Modifier.weight(1f) else Modifier
-                    // The gap is the buttons', split in whole pixels, so that each half of the row is as wide as before.
-                    val (before, after) = with(LocalDensity.current) {
-                        val gap = ControlSize.Regular.gap.roundToPx()
-                        (gap / 2).toDp() to (gap - gap / 2).toDp()
-                    }
-                    RowButton(
-                        "Open Settings", "Unlinked servers are deleted with their threads in settings", half, bordered = true, hover = palette.border,
-                        fills = halves, margin = beside(end = before),
-                    ) {
-                        actions.store.openSettings(SettingsSection.Servers)
-                    }
-                    RowButton(
-                        "Continue Thread", "Start a thread on another server with everything that happened here", half, primary = true, fills = halves,
-                        margin = beside(start = after),
-                    ) {
-                        actions.store.continueOnAnotherServer()
-                    }
-                }
-            }
-        }
-    }
-}
-
-private object RemovedRow {
-    val margin = scaled(12f).dp
-    val padding = scaled(16f).dp
-    val titleHeight = scaled(18f).dp
-    val iconGap = scaled(8f).dp
-    val textGap = scaled(6f).dp
-    val buttonsGap = scaled(14f).dp
-    /** Under this width the two buttons share the row in halves. */
-    val halvesBelow = scaled(420f).dp
 }
 
 /** Shown under the transcript while the agent is at work or waits for an approval. */

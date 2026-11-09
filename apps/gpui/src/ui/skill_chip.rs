@@ -9,7 +9,7 @@ use crate::ui::icons;
 
 pub const SYMBOL: &str = "box";
 const SYMBOL_SIZE: IconSize = IconSize::Sm;
-const PADDING: f32 = 5.;
+pub const PADDING: f32 = 5.;
 const GAP: f32 = 4.;
 /// The room between the chip and the text on either side.
 pub const MARGIN: f32 = 1.;

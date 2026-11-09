@@ -9,6 +9,7 @@ mod picker;
 mod questions;
 mod skills;
 mod strips;
+mod unlinked;
 
 use std::cell::Cell;
 use std::collections::HashMap;
@@ -914,7 +915,10 @@ impl Render for Composer {
         let project = store.composer_project();
         let server = project.as_ref().and_then(|project| store.server(Some(&project.server_id)).cloned());
         let skill_menu_open = store.skills.menu.is_some() || store.skills.loading;
-        let top_strip: Option<Div> = if let Some(approval) = &approval {
+        let unlinked = store.open_thread_removed_server().cloned();
+        let top_strip: Option<Div> = if unlinked.is_some() {
+            None
+        } else if let Some(approval) = &approval {
             let questions = self.questions.get(&approval.id).cloned();
             Some(waiting_strip(&self.store, approval, count, questions, cx))
         } else if let Some((text, first, count)) = waiting_children {
@@ -1011,7 +1015,10 @@ impl Render for Composer {
             .child(self.skill_menu(cx))
             .children(self.picker.clone().map(|picker| picker::placed(picker, &self.settings_anchor, window)))
             .children(top_strip.map(|strip| div().relative().child(measure(true, self.strips.clone())).child(strip)))
-            .child(self.box_(thread.as_ref(), labels, window, cx))
+            .child(match &unlinked {
+                Some(server) => unlinked::unlinked_box(&self.store, server, cx).into_any_element(),
+                None => self.box_(thread.as_ref(), labels, window, cx).into_any_element(),
+            })
             .children(
                 bottom_strip.map(|strip| div().relative().child(measure(false, self.strips.clone())).child(strip)),
             )
