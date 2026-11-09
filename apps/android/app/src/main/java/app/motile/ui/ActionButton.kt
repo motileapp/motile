@@ -155,8 +155,6 @@ data class ControlLook(
     val joined: Set<HorizontalEdge> = emptySet(),
     /** A colour that says something, like a pull request's state, in place of the quiet ones. */
     val tint: Color? = null,
-    /** What it fills with when lit, where that isn't its variant's colour. */
-    val hover: Color? = null,
     /** A ghost button that, until it is lit, is as muted as the time beside it. */
     val quiet: Boolean = false,
 ) {
@@ -182,7 +180,6 @@ data class ControlLook(
     /** A button filled with a colour of its own lights by that colour at opacity lit. */
     fun fill(palette: Palette, dark: Boolean): Color {
         fun filled(color: Color) = if (lit) color.at(Opacity.Lit, dark) else color
-        if (lit && hover != null) return hover
         return when (variant) {
             ButtonVariant.Primary -> filled(palette.primary)
             ButtonVariant.Secondary -> surface.color(if (selected || lit) Surface.Layer.ControlLit else Surface.Layer.Control, palette)
@@ -647,7 +644,6 @@ fun ActionButton(
     expanded: Boolean? = null,
     joined: Set<HorizontalEdge> = emptySet(),
     tint: Color? = null,
-    hover: Color? = null,
     quiet: Boolean = false,
     margin: PaddingValues = PaddingValues(0.dp),
     disabled: Boolean = false,
@@ -661,7 +657,7 @@ fun ActionButton(
     onClick: () -> Unit,
 ) {
     val words = title?.takeIf { it.isNotEmpty() }
-    val look = ControlLook(variant, size, selected = selected, round = round, joined = joined, tint = tint, hover = hover, quiet = quiet)
+    val look = ControlLook(variant, size, selected = selected, round = round, joined = joined, tint = tint, quiet = quiet)
     val label = @Composable {
         ControlLabel(
             words, ControlIcon.of(icon, picture, pictures), size, chevron = opens || expanded != null, pending = pending, pendingTitle = pendingTitle, fills = fills,

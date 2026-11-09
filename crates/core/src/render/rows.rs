@@ -200,13 +200,6 @@ pub enum RowKind {
         duration_ms: Option<u64>,
         open: bool,
     },
-    /// The thread's server was unlinked from the account: the thread is a read-only copy that can
-    /// only go on on another server. The last row, in place of the composer, which says why.
-    Removed {
-        server: String,
-        title: String,
-        message: String,
-    },
     /// A message that waits to be given to the agent. The row's item is the message.
     Queued {
         text: String,
@@ -479,8 +472,6 @@ pub struct Transcript {
     streaming: HashMap<String, Incremental>,
     /// The messages that wait for the agent; their rows come after everything else.
     queued: Vec<Queued>,
-    /// The name of the thread's server once it was removed, which the last row says.
-    removed: Option<String>,
     /// Nothing more is coming, as in the transcript of an agent that has ended.
     settled: bool,
     /// The agents the thread's agent started, as they are now.
@@ -546,9 +537,9 @@ impl Transcript {
         Self::new(&self.cwd)
     }
 
-    /// Lets go of every item; the thread's server stays removed.
+    /// Lets go of every item.
     pub fn clear(&mut self) {
-        *self = Self { removed: self.removed.take(), ..Self::new(&self.cwd) };
+        *self = Self::new(&self.cwd);
     }
 
     pub fn waiting(&self, approval: &Approval) -> Waiting {
@@ -664,13 +655,6 @@ impl Transcript {
         self.show()
     }
 
-    /// Ends the transcript with the row that says its server, named `server`, was removed, or
-    /// without it once the server is back.
-    pub fn set_removed(&mut self, server: Option<String>) -> Option<Splice> {
-        self.removed = server;
-        self.show()
-    }
-
     /// Takes the agents the thread's tool calls started and the states of the threads they work
     /// in, as they are now. The notice of one that has worked since shows it as it is now.
     pub fn set_agents(&mut self, started: &[Item], threads: &HashMap<String, ThreadState>) -> Option<Splice> {
@@ -706,17 +690,6 @@ impl Transcript {
         self.link_programs();
         let mut shown = present(&self.items, &self.rendered, &self.opened, self.settled);
         shown.extend(queued_rows(&self.queued).into_iter().map(Cow::Owned));
-        if let Some(server) = &self.removed {
-            let kind = RowKind::Removed {
-                server: server.clone(),
-                title: format!("“{server}” is unlinked"),
-                message: format!(
-                    "This thread is read-only. You can delete “{server}” in settings to remove its threads."
-                ),
-            };
-            let row = Row { id: "removed".to_string(), item: "removed".to_string(), nested: false, kind, after: None };
-            shown.push(Cow::Owned(row));
-        }
         let same_start = self.rows.iter().zip(&shown).take_while(|(before, after)| *before == after.as_ref()).count();
         if same_start == self.rows.len() && same_start == shown.len() {
             return None;
@@ -2540,27 +2513,6 @@ mod tests {
         let ids: Vec<&str> = rows.iter().map(|row| row.id.as_str()).collect();
         assert_eq!(ids, ["a/0", "m1/0"]);
         assert!(transcript.set_queued(Vec::new()).is_none());
-    }
-
-    #[test]
-    fn a_thread_of_a_removed_server_ends_with_a_row_that_says_so_even_after_it_starts_over() {
-        let mut transcript = Transcript::new("");
-        transcript.load(vec![assistant("a", 0, "Done.")]);
-        let mut rows = transcript.rows().to_vec();
-
-        apply(&mut rows, transcript.set_removed(Some("build-box".into())).unwrap());
-        let Some(RowKind::Removed { server, title, .. }) = rows.last().map(|row| &row.kind) else {
-            panic!("the last row says the server was unlinked")
-        };
-        assert_eq!((server.as_str(), title.as_str()), ("build-box", "“build-box” is unlinked"));
-        apply(&mut rows, transcript.upsert(assistant("b", 1, "More."), false).unwrap());
-        assert_eq!(rows.iter().map(|row| row.id.as_str()).collect::<Vec<_>>(), ["a/0", "b/0", "removed"]);
-
-        transcript.clear();
-        transcript.load(vec![assistant("a", 0, "Done.")]);
-        assert_eq!(transcript.rows().iter().map(|row| row.id.as_str()).collect::<Vec<_>>(), ["a/0", "removed"]);
-        transcript.set_removed(None);
-        assert_eq!(transcript.rows().iter().map(|row| row.id.as_str()).collect::<Vec<_>>(), ["a/0"]);
     }
 
     #[test]

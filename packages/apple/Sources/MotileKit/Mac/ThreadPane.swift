@@ -33,8 +33,13 @@ struct ThreadPane: View {
                     .padding(.bottom, Self.composerBottomGap)
                     .frame(maxWidth: .infinity)
                     .transformAnchorPreference(key: ComposerPlace.self, value: .bounds) { $0.room = $1 }
-            } else if store.openThreadRemovedServer != nil {
-                RoomWithoutComposer(bottomGap: Self.composerBottomGap)
+            } else if let server = store.openThreadRemovedServer {
+                UnlinkedThreadBar(server: server)
+                    .padding(.horizontal, Theme.composerPadding)
+                    .padding(.top, TranscriptView.composerGap)
+                    .padding(.bottom, Self.composerBottomGap)
+                    .frame(maxWidth: .infinity)
+                    .transformAnchorPreference(key: ComposerPlace.self, value: .bounds) { $0.room = $1 }
             } else {
                 ComposerView()
                     .padding(.horizontal, Theme.composerPadding)

@@ -2401,12 +2401,13 @@ final class AppStore {
         return !isRemoved(project.serverID)
     }
 
-    /// Opens a draft of a new thread that goes on from the open one, whose server was removed, on
-    /// the server of the project the user picks.
+    /// Opens a draft of a new thread that goes on from the open one, whose server was removed, in
+    /// its project on a server that has it, or else in "No project".
     func continueOnAnotherServer() {
         guard let thread = selectedThread, isRemoved(thread.serverID) else { return }
         let from = ContinuedThread(origin: thread.serverID, threadID: thread.id, title: thread.title)
-        startNewThread()
+        let key = project(thread.projectID)?.key ?? Project.noProjectKey
+        startNewThread(in: preferredCopy(of: key) ?? preferredCopy(of: Project.noProjectKey))
         updateDraft { $0.from = from }
         composerFocus += 1
     }

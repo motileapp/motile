@@ -660,7 +660,6 @@ extension RowModel {
         case .agent: "agent"
         case .agents: "agents"
         case .queued: "queued"
-        case .removed: "removed"
         case .unknown: "unknown"
         }
     }

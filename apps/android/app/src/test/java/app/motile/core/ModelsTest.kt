@@ -1,7 +1,6 @@
 package app.motile.core
 
 import app.motile.transcript.AgentContent
-import app.motile.transcript.RemovedContent
 import app.motile.transcript.RowModel
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -179,14 +178,6 @@ class ModelsTest {
         assertEquals("build-box", server.name)
         assertEquals(Server.State.Disconnected, server.state)
         assertFalse(server.known)
-    }
-
-    @Test
-    fun theLastRowOfARemovedServersThreadSaysWhatTheCoreWrote() {
-        val title = "“build-box” is unlinked"
-        val message = "This thread is read-only. You can delete “build-box” in settings to remove its threads."
-        val row = RowModel.parse(json("id" to "removed", "item" to "removed", "kind" to "removed", "server" to "build-box", "title" to title, "message" to message))
-        assertEquals(RemovedContent("build-box", title, message), (row?.kind as? RowModel.Kind.Removed)?.content)
     }
 
     @Test

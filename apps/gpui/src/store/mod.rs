@@ -1151,7 +1151,13 @@ impl Store {
 
     /// Whether the open thread's server was removed, so that it can only go on on another one.
     pub fn open_thread_removed(&self) -> bool {
-        self.selected_thread().is_some_and(|thread| self.is_removed(&thread.server_id))
+        self.open_thread_removed_server().is_some()
+    }
+
+    /// The open thread's server, once it was removed.
+    pub fn open_thread_removed_server(&self) -> Option<&Server> {
+        let thread = self.selected_thread()?;
+        self.server(Some(&thread.server_id)).filter(|server| server.removed)
     }
 
     fn composer_project_id(&self) -> Option<&str> {

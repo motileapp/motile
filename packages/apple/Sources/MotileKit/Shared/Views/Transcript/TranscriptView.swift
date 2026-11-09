@@ -38,9 +38,6 @@ final class TranscriptView: FlippedView, RowOwner {
     var onOpenThread: ((String) -> Void)?
     /// Whether a file that couldn't be fetched can be asked for again.
     var canFetchAgain: (() -> Bool)?
-    /// The thread, whose server was removed, is to go on on another server.
-    var onContinueElsewhere: (() -> Void)?
-    var onOpenServerSettings: (() -> Void)?
     /// What the user did to a node of a program: the row, the node and the event.
     var onProgramEvent: ((String, String, JSON) -> Void)?
     /// Whether rows are measured for this view's width as they are decoded. Only one transcript
@@ -74,22 +71,12 @@ final class TranscriptView: FlippedView, RowOwner {
 
     private static let jumpButtonGap: CGFloat = 10
 
-    /// The composer floats over the transcript's end, `composerGap` into the inset. Without it the
-    /// inset is only room.
-    var underComposer = true {
-        didSet {
-            guard underComposer != oldValue else { return }
-            jumpButton.frame.origin.y = jumpButtonY
-        }
-    }
-
     /// The room between the last row and the composer.
     static let composerGap: CGFloat = 80
 
-    /// Above the composer, which starts `composerGap` into the inset, or above the inset.
+    /// Above the composer, which starts `composerGap` into the inset.
     private var jumpButtonY: CGFloat {
-        let composer = underComposer ? Self.composerGap : 0
-        return bounds.height - shownBottomInset + composer - Self.jumpButtonGap - Self.jumpButtonSide
+        bounds.height - shownBottomInset + Self.composerGap - Self.jumpButtonGap - Self.jumpButtonSide
     }
 
     private static let jumpButtonSide: CGFloat = Platform.scale > 1 ? 38 : 32
@@ -724,7 +711,6 @@ final class TranscriptView: FlippedView, RowOwner {
         case is HandoffRowView: "handoff"
         case is AgentRowView: "agent"
         case is AgentsRowView: "agents"
-        case is RemovedRowView: "removed"
         default: "turnEnd"
         }
     }
@@ -1057,10 +1043,6 @@ final class TranscriptView: FlippedView, RowOwner {
     func openThread(id: String) { onOpenThread?(id) }
 
     var fetchesAgain: Bool { canFetchAgain?() ?? true }
-
-    func continueElsewhere() { onContinueElsewhere?() }
-
-    func openServerSettings() { onOpenServerSettings?() }
 
     func programEvent(rowID: String, node: String, event: JSON) { onProgramEvent?(rowID, node, event) }
 

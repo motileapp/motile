@@ -221,13 +221,12 @@ impl Element for TallRowInset {
 }
 
 /// How a description that doesn't fit its line is cut, where it isn't wrapped: a path at its
-/// start, an address in its middle, a sentence at its end. The title above it always wraps.
+/// start, an address in its middle. The title above it always wraps.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Cut {
     Wraps,
     Start,
     Middle,
-    End,
 }
 
 /// What a row is about: its name, and under it what it does.
@@ -300,7 +299,6 @@ fn titled_label(
                                 Cut::Wraps => text,
                                 Cut::Start => text.text_ellipsis_start(),
                                 Cut::Middle => text.text_ellipsis_middle(),
-                                Cut::End => text.text_ellipsis(),
                             })
                             .child(description),
                     )

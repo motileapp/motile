@@ -11,6 +11,7 @@
 //!   down x y | drag x y | up x y                        a press that moves, and its release
 //!   updater available 9.9.9                             shows the update row in that state
 //!   active on | active off                              as if the window came to the front or left it
+//!   open <title>                                        opens the thread with that title
 //!   slide <label> <share> | press <label>               drags the latest program's slider with that label
 //!                                                       to a share of its track, or presses its button
 
@@ -275,6 +276,18 @@ fn act(verb: &str, rest: &str, store: &Entity<Store>, window: &mut Window, cx: &
         }
         "fileexit" => {
             window.dispatch_event(PlatformInput::FileDrop(FileDropEvent::Exited), cx);
+        }
+        "open" => {
+            store.update(cx, |store, cx| {
+                let title = rest.trim();
+                let Some(id) =
+                    store.threads.values().find(|thread| thread.title == title).map(|thread| thread.id.clone())
+                else {
+                    return tracing::warn!("the dev driver found no thread {title}");
+                };
+                store.select(crate::store::Selection::Thread(id), cx);
+                cx.notify();
+            });
         }
         "signin" => {
             let email = rest.trim().to_string();

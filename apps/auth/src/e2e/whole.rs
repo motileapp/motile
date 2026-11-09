@@ -232,7 +232,6 @@ fn kinds(client: &Client) -> Vec<&'static str> {
         RowKind::Handoff { .. } => "handoff",
         RowKind::Agent { .. } => "agent",
         RowKind::Agents { .. } => "agents",
-        RowKind::Removed { .. } => "removed",
     });
     kinds.collect()
 }
@@ -632,7 +631,7 @@ async fn a_removed_servers_threads_stay_readable_from_the_copies_until_it_is_del
         tokio::time::sleep(Duration::from_millis(500)).await;
     }
 
-    // Removed, the server's thread is still there, and says so at its end.
+    // Removed, the server's thread is still there, read from the copy.
     client.ask(Command::RemoveServer { server_id: build.clone() }).await.unwrap();
     client
         .until("the server shows as removed", |client| {
@@ -641,11 +640,8 @@ async fn a_removed_servers_threads_stay_readable_from_the_copies_until_it_is_del
         .await;
     assert_eq!(client.threads[&thread_id].server_id, build);
     client.ask(Command::OpenThread { server_id: build.clone(), thread_id: thread_id.clone() }).await.unwrap();
-    client.until("the thread ends with the removal", |client| kinds(client).last() == Some(&"removed")).await;
-    let mut expected: Vec<&str> = finished.iter().map(String::as_str).collect();
-    expected.push("removed");
-    assert_eq!(kinds(&client), expected);
-    assert!(matches!(&client.rows.last().unwrap().kind, RowKind::Removed { server, .. } if server == "build-box"));
+    let expected: Vec<&str> = finished.iter().map(String::as_str).collect();
+    client.until("the thread opens from the copy", |client| kinds(client) == expected).await;
     let more = Command::Send {
         server_id: build.clone(),
         thread_id: Some(thread_id.clone()),

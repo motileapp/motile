@@ -1204,13 +1204,11 @@ impl Core {
         }
 
         let mut added = Vec::new();
-        let mut turned = Vec::new();
         for (device, removed) in wanted {
             if let Some(server) = self.servers.iter_mut().find(|server| server.device.public_key == device.public_key) {
                 server.device = device;
                 if server.removed != removed {
                     server.removed = removed;
-                    turned.push(server.device.public_key.clone());
                     if let Some(link) = server.link.take().filter(|_| removed) {
                         link.shutdown();
                         server.status = Status { state: State::Disconnected, ..Status::default() };
@@ -1249,9 +1247,6 @@ impl Core {
             let projects = self.cache.projects(&server_id);
             self.emit_projects(&server_id, projects);
             self.emit(Event::Threads { server_id, threads });
-        }
-        for server_id in turned {
-            self.mark_removed(&server_id);
         }
         self.schedule_relay(RELAY_SOON);
         self.sync_gateway();
@@ -1478,20 +1473,6 @@ impl Core {
             }
         }
         self.emit_gateway();
-    }
-
-    /// Ends the open threads of the server with the row that says it was removed, or takes the row
-    /// away once it is back.
-    fn mark_removed(&mut self, server_id: &str) {
-        let Some(server) = self.servers.iter().find(|server| server.device.public_key == server_id) else { return };
-        let removed = server.removed.then(|| server.device.name.clone());
-        let mut splices = Vec::new();
-        for (thread_id, open) in self.open.iter_mut().filter(|(_, open)| open.server_id == server_id) {
-            splices.extend(open.transcript.set_removed(removed.clone()).map(|splice| (thread_id.clone(), splice)));
-        }
-        for (thread_id, splice) in splices {
-            self.emit_rows(&thread_id, false, splice);
-        }
     }
 
     fn connect_servers(&mut self) {
@@ -4117,7 +4098,7 @@ impl Core {
         });
         let cwd = thread.as_ref().map(|thread| thread.cwd.clone()).unwrap_or_default();
         let link = server.link.clone();
-        let removed = server.removed.then(|| server.device.name.clone());
+        let removed = server.removed;
 
         let Page { mut items, mut earlier } = self.cache.page(thread_id, None);
         let since = self.cache.synced_rev(thread_id);
@@ -4128,7 +4109,6 @@ impl Core {
         let agents = self.cache.agents(thread_id);
         let threads = ThreadState::of_children(&server.threads, thread_id);
         let mut transcript = Transcript::new(&cwd);
-        transcript.set_removed(removed.clone());
         transcript.set_agents(&agents, &threads);
         transcript.load(newest);
         if let Some(seq) = place {
@@ -4172,7 +4152,7 @@ impl Core {
             link.open(thread_id.to_string(), since);
         }
         let behind = thread.as_ref().is_none_or(|thread| since < thread.rev);
-        if removed.is_some() && behind {
+        if removed && behind {
             self.open_copy(server_id, thread_id);
         }
         Ok(())

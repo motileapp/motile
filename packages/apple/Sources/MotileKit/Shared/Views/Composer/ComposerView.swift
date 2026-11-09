@@ -394,16 +394,3 @@ struct ComposerPlace: PreferenceKey {
         value.box = next.box ?? value.box
     }
 }
-
-/// The room under a thread whose server was removed, where the transcript's last row stands in
-/// for the composer.
-struct RoomWithoutComposer: View {
-    let bottomGap: CGFloat
-
-    var body: some View {
-        Color.clear
-            .frame(maxWidth: .infinity, maxHeight: 0)
-            .padding(.bottom, bottomGap)
-            .transformAnchorPreference(key: ComposerPlace.self, value: .bounds) { $0.room = $1 }
-    }
-}

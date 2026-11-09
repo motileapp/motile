@@ -200,7 +200,7 @@ impl Store {
     }
 
     /// Opens a draft of a new thread that goes on from the open thread, whose server was removed,
-    /// on the server of the project the user picks in it.
+    /// in its project on a server that has it, or else in "No project".
     pub fn continue_on_another_server(&mut self, cx: &mut Context<Self>) {
         let Some(thread) = self.selected_thread().filter(|thread| self.is_removed(&thread.server_id)) else { return };
         let from = Continuation {
@@ -208,7 +208,11 @@ impl Store {
             thread_id: thread.id.clone(),
             title: thread.title.clone(),
         };
-        self.start_new_thread(None, cx);
+        let key =
+            self.project(Some(&thread.project_id)).map_or(Project::NO_PROJECT_KEY, |project| project.key.as_str());
+        let project = self.preferred_copy(key).or_else(|| self.preferred_copy(Project::NO_PROJECT_KEY));
+        let project_id = project.map(|project| project.id.clone());
+        self.start_new_thread(project_id, cx);
         self.update_draft(|draft| draft.from = Some(from));
         self.composer_focus += 1;
     }

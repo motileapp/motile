@@ -29,6 +29,7 @@ import java.util.concurrent.Executors
  *     sidebar open | sidebar close      shows or hides the sidebar
  *     thread <title>                    opens the thread with that title
  *     new                               starts a new thread
+ *     continue                          goes on from the open thread of an unlinked server
  *     type <text>                       writes in the composer
  *     send                              sends what is written
  *     panel diff|files|agents|close     opens a tab of the panel, or closes the panel
@@ -118,6 +119,7 @@ object DemoDriver {
                 store.select(Selection.Thread(thread.id))
             }
             "new" -> store.startNewThread(store.composerProject ?: store.projects.firstOrNull())
+            "continue" -> store.continueOnAnotherServer()
             "type" -> store.draft = rest
             "send" -> store.send()
             "stop" -> store.stop()
