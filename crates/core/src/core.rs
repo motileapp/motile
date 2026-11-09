@@ -1101,6 +1101,9 @@ impl Core {
             return;
         }
         self.binding = Some(self.key.public());
+        // What ends on the old endpoint ends because it is closed here, which says nothing of the
+        // servers: the links show as dialing until the new one is open.
+        self.retire_links();
         let (key, inputs, local_only) = (self.key.clone(), self.inputs.clone(), self.config.local_only);
         let stale = self.endpoint.clone();
         tokio::spawn(async move {
@@ -1135,7 +1138,26 @@ impl Core {
                 self.connect_servers();
                 self.sync_gateway();
             }
-            Err(error) => tracing::error!("the network endpoint couldn't be opened: {error}"),
+            Err(error) => {
+                tracing::error!("the network endpoint couldn't be opened: {error}");
+                let error = format!("The network couldn't be opened: {error}");
+                for link in self.servers.iter().filter_map(|server| server.link.as_ref()) {
+                    link.no_endpoint(error.clone());
+                }
+                if let Some(link) = &self.gateway.link {
+                    link.no_endpoint(error.clone());
+                }
+            }
+        }
+    }
+
+    /// Has the links let go of the endpoint while a new one is bound, and wait for it.
+    fn retire_links(&self) {
+        for link in self.servers.iter().filter_map(|server| server.link.as_ref()) {
+            link.retire();
+        }
+        if let Some(link) = &self.gateway.link {
+            link.retire();
         }
     }
 
@@ -1266,7 +1288,11 @@ impl Core {
                 let emit: gateway::Emit = Arc::new(move |event| {
                     let _ = inputs.send(Input::Gateway { key: key.clone(), event });
                 });
-                self.gateway.link = Some(GatewayLink::connect(endpoint, address, self.away.clone(), emit));
+                let link = GatewayLink::connect(endpoint, address, self.away.clone(), emit);
+                if self.binding.is_some() {
+                    link.retire();
+                }
+                self.gateway.link = Some(link);
             }
         }
         self.emit_gateway();
@@ -1482,6 +1508,9 @@ impl Core {
             }
             for (thread_id, followed) in self.followed.iter().filter(|(_, followed)| followed.server_id == server_id) {
                 link.open(thread_id.clone(), followed.rev);
+            }
+            if self.binding.is_some() {
+                link.retire();
             }
             server.link = Some(link);
         }

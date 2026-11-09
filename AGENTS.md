@@ -348,7 +348,9 @@ for tests.
 - `link.rs`: keeps one server connected and follows its threads. A connection can look open while
   nothing gets through, so the link pings its server (`Ping`) every half minute, when a request has
   waited ten seconds, and when the client comes back or the network changes, and gives up one that
-  doesn't answer, saying why in the server's error.
+  doesn't answer, saying why in the server's error. When the core replaces the endpoint it retires
+  the links first: what ends on the old one ends because the core closed it, so they show as
+  dialing, not dial on it, until the new one is open.
 - `away.rs`: whether the client was away, paused by the system or in the background. Coming back
   after a while the core opens a new endpoint, and a connection or a dial from before that ends
   then only dials again, without an error: the clients show an outage only once a dial made after
