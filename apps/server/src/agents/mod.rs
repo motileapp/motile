@@ -70,14 +70,17 @@ const READING_THE_GUIDE: &str = "\n\nBefore you write a program, read the motile
      in a thread and again when they are no longer in your context. Check a program you aren't sure of with the motile \
      tool check_ui before you send it.";
 
-/// How the agents start agents on the server's other accounts.
+/// How the agents start agents on the server's other accounts, and reach its other threads.
 const STARTING_AGENTS: &str = "\n\nYou can start agents on the other accounts of the user's server, other Claude Code \
-     logins or Codex, with the motile tools: list_accounts, start_agent, agent_status, message_agent, answer_agent and \
-     stop_agent. Use them when the user asks for another account, agent or model, or for work that goes better apart \
-     while you go on. For work your own subagents do as well, use those. Each agent is given only the prompt you write. \
-     You are told when one finishes or asks something, so end your turn instead of checking on it, unless you need its \
-     result to go on, which start_agent's and agent_status's wait is for. A motile tool that isn't listed may load only \
-     when first used: look it up with your tool search, or call it by name, before you decide it's missing.";
+     logins or Codex, with the motile tools: list_accounts, start_agent, agent_status, message_agent, answer_agent, \
+     approve_agent and stop_agent. Use them when the user asks for another account, agent or model, or for work that \
+     goes better apart while you go on. For work your own subagents do as well, use those. Each agent is given only the \
+     prompt you write. You are told when one finishes, asks something or waits for a tool call to be allowed, so end your \
+     turn instead of checking on it, unless you need its result to go on, which start_agent's and agent_status's wait is \
+     for. The same tools reach the server's other threads, and create_thread, list_threads, update_thread, thread_queue, \
+     list_projects, add_project, read_pull_request, link_pull_request and git_status start, find and change threads, \
+     projects and pull requests when the user asks. A motile tool that isn't listed may load only when first used: look \
+     it up with your tool search, or call it by name, before you decide it's missing.";
 
 pub use motile_protocol::wire::PLAN_TOOL;
 

@@ -4189,6 +4189,87 @@ async fn an_agent_answers_the_question_an_agent_it_started_asks() {
 }
 
 #[tokio::test]
+async fn an_agent_allows_what_an_agent_with_full_access_it_started_asks() {
+    let (harness, connection, _list) = with_children().await;
+    let new_thread = full_access(&harness, &connection, Agent::Claude).await;
+    let parent = send(&connection, None, new_thread, "Ask an agent to change the settings").await;
+
+    use motile_protocol::wire::NoticeEvent::{Finished, NeedsApproval};
+    let finished = |transcript: &Transcript| notices(transcript).iter().any(|(_, event)| *event == Finished);
+    let told = transcript_once(&connection, &parent, finished).await;
+    let events: Vec<_> = notices(&told).into_iter().map(|(_, event)| event).collect();
+    assert_eq!(events, [NeedsApproval, Finished]);
+    let allowed = told.items.iter().any(|item| match &item.kind {
+        ItemKind::Tool { call } => call.name == "mcp__motile__approve_agent",
+        _ => false,
+    });
+    assert!(allowed, "{:?}", told.texts());
+    let finished_text = told.items.iter().find_map(|item| match &item.kind {
+        ItemKind::Notice { notice, text } if notice.event == Finished => Some(text.as_str()),
+        _ => None,
+    });
+    assert!(
+        finished_text.is_some_and(|text| text.ends_with("Its reply:\n\nThe settings allow pushes now.")),
+        "{finished_text:?}"
+    );
+}
+
+#[tokio::test]
+async fn an_agent_drives_other_threads_only_within_its_own_access() {
+    let (harness, connection, mut list) = with_children().await;
+    let new_thread = full_access(&harness, &connection, Agent::Claude).await;
+    // Its agent is Claude Code's, so the last Codex thread to start is the caller.
+    send(&connection, None, new_thread, "Ask an agent which color").await;
+    let child = thread_where(&mut list, |thread| thread.parent.is_some()).await;
+
+    let new_thread = harness.new_thread(&connection, Agent::Codex).await.unwrap();
+    let supervised = NewThread { access: AgentAccess::Supervised, ..new_thread };
+    let caller = send(&connection, None, Some(supervised), "Look over greet.py").await;
+    // Supervised, it waits for the user before its tool calls, but its token works from its start.
+    thread_where(&mut list, |thread| thread.id == caller && (thread.needs_approval || thread.turn_ended_at.is_some()))
+        .await;
+    let started = harness.recorded_requests("thread/start");
+    let server = &started.last().unwrap()["config"]["mcp_servers"]["motile"];
+    let url = server["url"].as_str().unwrap();
+    let token = server["http_headers"]["Authorization"].as_str().unwrap().strip_prefix("Bearer ").unwrap();
+
+    let message = json!({"id": child.id, "text": "Stop there."});
+    let (said, failed) = call_tool(url, token, "message_agent", message).await;
+    assert!(failed && said.contains("more access than you have"), "{said}");
+    let approve = json!({"id": child.id, "approval_id": "nope", "allow": false});
+    let (said, failed) = call_tool(url, token, "approve_agent", approve).await;
+    assert!(failed && said.contains("more access than you have"), "{said}");
+    let create = json!({"prompt": "Say hello", "access": "full"});
+    let (said, failed) = call_tool(url, token, "create_thread", create).await;
+    assert!(failed && said.contains("can't have more access"), "{said}");
+
+    let create = json!({"prompt": "Say hello", "title": "Greeter"});
+    let (said, failed) = call_tool(url, token, "create_thread", create).await;
+    assert!(!failed, "{said}");
+    let created: serde_json::Value = serde_json::from_str(&said).unwrap();
+    assert_eq!(
+        (&created["title"], &created["access"], &created["agent"]),
+        (&json!("Greeter"), &json!("supervised"), &json!("codex"))
+    );
+    let greeter = created["id"].as_str().unwrap().to_string();
+
+    let listed = |said: String| -> Vec<String> {
+        let listed: serde_json::Value = serde_json::from_str(&said).unwrap();
+        listed["threads"].as_array().unwrap().iter().map(|thread| thread["id"].as_str().unwrap().to_string()).collect()
+    };
+    let active = listed(call_tool(url, token, "list_threads", json!({})).await.0);
+    assert!(active.contains(&greeter) && active.contains(&caller) && !active.contains(&child.id), "{active:?}");
+    let with_agents = listed(call_tool(url, token, "list_threads", json!({"agents": true})).await.0);
+    assert!(with_agents.contains(&child.id), "{with_agents:?}");
+
+    let rename = json!({"thread_id": greeter, "title": "Say Hello"});
+    let (said, failed) = call_tool(url, token, "update_thread", rename).await;
+    assert!(!failed && said.contains("\"title\":\"Say Hello\""), "{said}");
+    let found = listed(call_tool(url, token, "list_threads", json!({"query": "hello"})).await.0);
+    assert_eq!(found, [greeter]);
+}
+
+#[tokio::test]
 async fn stopping_a_thread_stops_the_agents_it_started_and_deleting_it_deletes_them() {
     let (harness, connection, mut list) = with_children().await;
     let new_thread = full_access(&harness, &connection, Agent::Claude).await;
@@ -4239,7 +4320,7 @@ async fn call_tool(url: &str, token: &str, name: &str, arguments: serde_json::Va
 }
 
 #[tokio::test]
-async fn an_agent_only_follows_the_agents_it_started_on_accounts_that_exist() {
+async fn an_agent_follows_any_thread_and_starts_agents_only_on_accounts_that_exist() {
     let (harness, connection, mut list) = with_children().await;
     let new_thread = full_access(&harness, &connection, Agent::Claude).await;
     send(&connection, None, new_thread, "Ask agents in the background").await;
@@ -4255,7 +4336,9 @@ async fn an_agent_only_follows_the_agents_it_started_on_accounts_that_exist() {
     let token = server["http_headers"]["Authorization"].as_str().unwrap().strip_prefix("Bearer ").unwrap();
 
     let (said, failed) = call_tool(url, token, "agent_status", json!({"ids": [child.id]})).await;
-    assert!(failed && said.starts_with("No agent you started has the id"), "{said}");
+    assert!(!failed && said.contains(&child.id), "{said}");
+    let (said, failed) = call_tool(url, token, "agent_status", json!({"ids": ["nope"]})).await;
+    assert!(failed && said.starts_with("Your server has no thread with that id"), "{said}");
     let start = json!({"prompt": "Look over greet.py", "account": "nope"});
     let (said, failed) = call_tool(url, token, "start_agent", start).await;
     assert!(failed && said.contains("no account called nope"), "{said}");

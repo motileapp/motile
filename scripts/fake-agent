@@ -53,6 +53,10 @@ made up on the spot instead:
   one of the gateway's Claude Code accounts and one on the Gateway account, and ends.
 - "ask an agent which color": a turn that starts an agent that asks which color; told it asks, it
   answers blue.
+- "ask an agent to change the settings": a turn that starts an agent to change the settings, which
+  asks before it edits `.claude/settings.json` under any access, as Claude Code does; told it waits,
+  it allows the edit.
+- "change the settings": a turn that edits `.claude/settings.json`, asking first under any access.
 - "show the ui <name>": a reply with the program `fixtures/openui/<name>.oui` in an `openui-lang`
   fence, streamed in pieces. "show the dashboard" shows `dashboard.oui`, which reads `git_log` and
   `usage` with `Query`, and "ask with a form" `inputs.oui`, a form that sends its values with
@@ -881,6 +885,25 @@ def ask_an_agent_which_color():
     turn.done()
 
 
+def ask_an_agent_to_change_the_settings():
+    turn = Turn("00000000-0000-4000-8000-0000000a5e77")
+    call_motile(turn, "start_agent", {"prompt": "Change the settings to allow pushes.", "title": "Allow pushes"})
+    turn.text("An agent is changing the settings.")
+    turn.done()
+
+
+def change_the_settings():
+    """Claude Code asks before it edits its own settings, whatever the permission mode."""
+    turn = Turn("00000000-0000-4000-8000-0000000c5e77")
+    edit = {"file_path": os.path.join(os.getcwd(), ".claude/settings.json"), "old_string": "[]",
+            "new_string": '["Bash(git push:*)"]'}
+    if turn.tool("Edit", edit, "The file has been updated successfully.", ask=True):
+        turn.text("The settings allow pushes now.")
+    else:
+        turn.text("I left the settings as they were.")
+    turn.done()
+
+
 def hear_from_an_agent():
     """Told an agent it started finished, or asks something."""
     turn = Turn("00000000-0000-4000-8000-0000000be1d0")
@@ -889,6 +912,10 @@ def hear_from_an_agent():
     title, child = (named.group(1), named.group(2)) if named else ("", "")
     if ") failed: " in said or "was stopped before it finished" in said:
         turn.text(f"{title} didn't finish. I'll carry on without it.")
+    elif " waits for this to be allowed:\n" in said:
+        approval = re.search(r"approval_id (\S+), ", said)
+        call_motile(turn, "approve_agent", {"id": child, "approval_id": approval.group(1), "allow": True})
+        turn.text(f"I allowed what {title} asked.")
     elif " asks:\n" in said:
         question = re.search(r"- (.*?)(?: Options:|$)", said, re.M)
         call_motile(turn, "answer_agent", {"id": child, "answers": {question.group(1): "Blue"}})
@@ -1545,13 +1572,16 @@ SCRIPTED = {
     "ask a supervised agent": ask_a_supervised_agent,
     "ask a pinned agent": ask_a_pinned_agent,
     "ask an agent which color": ask_an_agent_which_color,
+    "ask an agent to change the settings": ask_an_agent_to_change_the_settings,
     "finished. its reply:": hear_from_an_agent,
     ") failed: ": hear_from_an_agent,
     "was stopped before it finished": hear_from_an_agent,
     " asks:\n": hear_from_an_agent,
+    " waits for this to be allowed:\n": hear_from_an_agent,
     "look over greet.py slowly": look_over_slowly,
     "look over": look_over,
     "ask which color": which_color,
+    "change the settings": change_the_settings,
     "show the screenshot": show_screenshot,
     "send the report": send_the_report,
     "show the recording": show_the_recording,

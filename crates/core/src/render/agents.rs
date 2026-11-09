@@ -81,7 +81,7 @@ impl AgentState {
             NoticeEvent::Finished | NoticeEvent::Unknown => Self::Done,
             NoticeEvent::Failed => Self::Failed,
             NoticeEvent::Stopped => Self::Stopped,
-            NoticeEvent::Asked => Self::Waiting,
+            NoticeEvent::Asked | NoticeEvent::NeedsApproval => Self::Waiting,
             NoticeEvent::Limited => Self::Limited,
         }
     }
@@ -284,6 +284,7 @@ pub fn noticed(item: &Item, notice: &AgentNotice) -> AgentView {
         NoticeEvent::Failed => "Failed",
         NoticeEvent::Stopped => "Stopped",
         NoticeEvent::Asked => "Asks a question",
+        NoticeEvent::NeedsApproval => "Needs approval",
         NoticeEvent::Limited => "Reached its usage limit",
         NoticeEvent::Unknown => "Told",
     };

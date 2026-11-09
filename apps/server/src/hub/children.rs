@@ -1,8 +1,9 @@
 //! The agents an agent starts through the `motile` MCP server, on any of your server's accounts.
 //! Each works in a thread of its own, which knows the thread and the tool call that started it.
 //! That tool call follows how the agent is doing, and the agent that started it is told when the
-//! turn it gave the thread ends, or when the thread asks a question, unless a call of its own was
-//! waiting for just that.
+//! turn it gave the thread ends, when the thread asks a question, or when a thread with full access
+//! waits for a tool call to be allowed, unless a call of its own was waiting for just that. The same
+//! tools follow and drive any other thread of your server that has no more access than the caller.
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -32,6 +33,8 @@ const LINK_EVERY: Duration = Duration::from_millis(50);
 /// How much of a reply a notice or an answer carries; `read_thread` reads the rest.
 const NOTICE_REPLY_CHARS: usize = 6000;
 const STATE_REPLY_CHARS: usize = 20_000;
+/// How much of a tool call's input an approval shows.
+const APPROVAL_INPUT_CHARS: usize = 4000;
 const PROGRESS_CHARS: usize = 120;
 
 #[derive(Serialize, Clone)]
@@ -51,6 +54,9 @@ pub struct ChildState {
     /// What it asks, while it does.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub questions: Option<Value>,
+    /// The tool call it waits to have allowed, while it does.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub approval: Option<Value>,
     /// When its usage limit resets, while it waits for that.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub limit_resets: Option<String>,
@@ -137,7 +143,24 @@ impl Hub {
         descendants_in(&self.lock_threads(), thread_id)
     }
 
-    fn descends_from(&self, thread_id: &str, ancestor: &str) -> bool {
+    /// Whether the caller's agent may drive the thread: one it started, or another of your server's
+    /// with no more access than it has.
+    pub(super) async fn reach(&self, caller: &str, thread_id: &str) -> anyhow::Result<()> {
+        if self.descends_from(thread_id, caller) {
+            return Ok(());
+        }
+        if thread_id == caller {
+            bail!("That is your own thread.");
+        }
+        let own = self.thread(caller).await.context("Your thread is no longer on your server.")?;
+        let thread = self.thread(thread_id).await.context("Your server has no thread with that id.")?;
+        if rank(thread.access) > rank(own.access) {
+            bail!("That thread has more access than you have, so only the user can drive it.");
+        }
+        Ok(())
+    }
+
+    pub(super) fn descends_from(&self, thread_id: &str, ancestor: &str) -> bool {
         let threads = self.lock_threads();
         let mut seen = HashSet::new();
         let mut parent = threads.get(thread_id).and_then(|slot| slot.parent.as_ref());
@@ -188,7 +211,7 @@ impl Hub {
         shown(name, true, false)
     }
 
-    fn lock_started(&self) -> std::sync::MutexGuard<'_, HashMap<(String, String), String>> {
+    pub(super) fn lock_started(&self) -> std::sync::MutexGuard<'_, HashMap<(String, String), String>> {
         self.started.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
@@ -365,7 +388,12 @@ impl Hub {
         Ok(Some(tool_id))
     }
 
-    fn pick_account(&self, own: &Thread, named: Option<&str>, agent: Option<Agent>) -> anyhow::Result<AgentAccount> {
+    pub(super) fn pick_account(
+        &self,
+        own: &Thread,
+        named: Option<&str>,
+        agent: Option<Agent>,
+    ) -> anyhow::Result<AgentAccount> {
         let accounts = self.agent_accounts();
         let own_account = self.account_of(own);
         let account = match named.map(str::trim).filter(|named| !named.is_empty()) {
@@ -395,7 +423,7 @@ impl Hub {
 
     /// The model and effort the agent runs: the ones asked for, which the account must list, or
     /// the caller's own when it runs the same agent, or the account's defaults.
-    fn pick_model(
+    pub(super) fn pick_model(
         &self,
         own: &Thread,
         account: &AgentAccount,
@@ -432,8 +460,9 @@ impl Hub {
         Ok((model, effort))
     }
 
-    /// How the agents the caller started are doing. With `wait`, once all of them have ended, one
-    /// asks a question, or `wait` is over. What it is answered here, it isn't told again.
+    /// How the threads are doing: the agents the caller started, or any of your server's. With
+    /// `wait`, once all of them have ended, one asks something, or `wait` is over. What it is
+    /// answered here of an agent it started, it isn't told again.
     pub async fn child_states(
         self: &Arc<Self>,
         caller: &str,
@@ -441,33 +470,35 @@ impl Hub {
         wait: Option<Duration>,
     ) -> anyhow::Result<Vec<ChildState>> {
         if ids.is_empty() {
-            bail!("Name the agents by the ids start_agent gave you.");
+            bail!("Name the threads by their ids.");
         }
+        let (own, others): (Vec<String>, Vec<String>) =
+            ids.iter().cloned().partition(|id| self.descends_from(id, caller));
         let deadline = wait.map(|wait| Instant::now() + wait);
-        let _waiting = Waiting::new(self, ids);
+        let _waiting = Waiting::new(self, &own);
         let mut told = self.children_told.subscribe();
+        let mut listed = self.list_updates.subscribe();
         loop {
             let timed_out = deadline.is_some_and(|deadline| Instant::now() >= deadline);
             let mut seen = Vec::new();
             for id in ids {
-                if !self.descends_from(id, caller) {
-                    bail!("No agent you started has the id {id}.");
-                }
-                let live = self.live_or(id, "That agent's thread is gone.").await?;
-                let question = live.activity.approvals.first().map(|approval| approval.id.clone());
-                seen.push((self.state_of(&live)?, question, live.told_limit));
+                let live = self.live_or(id, "Your server has no thread with that id.").await?;
+                let asked = live.activity.approvals.first().map(|approval| approval.id.clone());
+                seen.push((self.state_of(&live)?, asked, live.told_limit));
             }
             let settled = seen.iter().all(|(state, ..)| state.status.settled());
-            let asking = seen.iter().any(|(state, ..)| state.status == Status::Asking);
+            let asking = seen.iter().any(|(state, ..)| matches!(state.status, Status::Asking | Status::NeedsApproval));
             // An agent that reached its usage limit is worth hearing of once, not waited for.
             let limited =
                 seen.iter().any(|(state, _, told_limit)| state.status == Status::WaitingForUsageLimit && !told_limit);
             if deadline.is_none() || timed_out || settled || asking || limited {
                 let mut states = Vec::new();
-                for (mut state, question, _) in seen {
+                for (mut state, asked, _) in seen {
                     state.wait_timed_out = timed_out && !settled && !asking && !limited;
-                    if let Some(mut live) = self.live(&state.id).await {
-                        self.taken(&mut live, state.status, question)?;
+                    if own.contains(&state.id)
+                        && let Some(mut live) = self.live(&state.id).await
+                    {
+                        self.taken(&mut live, state.status, asked)?;
                     }
                     states.push(state);
                 }
@@ -475,50 +506,48 @@ impl Hub {
             }
             let Some(deadline) = deadline else { unreachable!("a call that doesn't wait has returned") };
             tokio::select! {
-                _ = told_of(&mut told, ids) => {}
+                _ = told_of(&mut told, &own) => {}
+                _ = listed_of(&mut listed, &others) => {}
                 _ = tokio::time::sleep_until(deadline.into()) => {}
             }
         }
     }
 
     /// The caller's agent was told what this state says: it needn't be told again.
-    fn taken(&self, live: &mut Live, status: Status, question: Option<String>) -> anyhow::Result<()> {
+    fn taken(&self, live: &mut Live, status: Status, asked: Option<String>) -> anyhow::Result<()> {
         if status.settled() && live.stored.reports {
             live.stored.reports = false;
             self.store.save_thread(&live.stored)?;
         }
-        if status == Status::Asking {
-            live.told_question = question;
+        if matches!(status, Status::Asking | Status::NeedsApproval) {
+            live.told_ask = asked;
         }
         live.told_limit = status == Status::WaitingForUsageLimit;
         Ok(())
     }
 
-    /// Gives an agent the caller started another message, which it is told the end of.
+    /// Gives a thread another message. An agent the caller started tells it when that turn ends.
     pub async fn message_child(self: &Arc<Self>, caller: &str, id: &str, text: String) -> anyhow::Result<ChildState> {
-        {
-            if !self.descends_from(id, caller) {
-                bail!("No agent you started has the id {id}.");
-            }
+        self.reach(caller, id).await?;
+        if self.descends_from(id, caller) {
             let mut live = self.live_or(id, "That agent's thread is gone.").await?;
             live.stored.reports = true;
             self.store.save_thread(&live.stored)?;
         }
+        self.wake(id).await;
         self.send(Some(id.to_string()), None, NewMessage { now: true, ..NewMessage::text(text) }).await?;
         Ok(self.child_states(caller, &[id.to_string()], None).await?.remove(0))
     }
 
-    /// Answers the question an agent the caller started asks, by question.
+    /// Answers the questions a thread's agent asks, by question.
     pub async fn answer_child(
         self: &Arc<Self>,
         caller: &str,
         id: &str,
         answers: HashMap<String, String>,
     ) -> anyhow::Result<ChildState> {
+        self.reach(caller, id).await?;
         let approval_id = {
-            if !self.descends_from(id, caller) {
-                bail!("No agent you started has the id {id}.");
-            }
             let live = self.live_or(id, "That agent's thread is gone.").await?;
             let asking = live.activity.approvals.iter().find(|approval| approval.ask() == Ask::Question);
             asking.context("That agent isn't asking anything now.")?.id.clone()
@@ -527,12 +556,40 @@ impl Hub {
         Ok(self.child_states(caller, &[id.to_string()], None).await?.remove(0))
     }
 
-    /// Stops an agent the caller started, and the agents it started.
-    pub async fn stop_child(self: &Arc<Self>, caller: &str, id: &str) -> anyhow::Result<ChildState> {
+    /// Allows or refuses the tool call or the plan a thread's agent waits with. Only an agent with
+    /// full access allows one, and only in a thread with full access, whose agent asks of itself.
+    pub async fn approve_child(
+        self: &Arc<Self>,
+        caller: &str,
+        id: &str,
+        approval_id: &str,
+        allow: bool,
+    ) -> anyhow::Result<ChildState> {
+        self.reach(caller, id).await?;
         {
-            if !self.descends_from(id, caller) {
-                bail!("No agent you started has the id {id}.");
+            let live = self.live_or(id, "That agent's thread is gone.").await?;
+            let waiting = live.activity.approvals.iter().find(|approval| approval.id == approval_id);
+            let waiting = waiting.context("That agent no longer waits for that approval.")?;
+            if waiting.ask() == Ask::Question {
+                bail!("That is a question. Answer it with answer_agent.");
             }
+        }
+        let own = self.thread(caller).await.context("Your thread is no longer on your server.")?;
+        let thread = self.thread(id).await.context("That agent's thread is gone.")?;
+        if allow && (own.access != Access::Full || thread.access != Access::Full) {
+            bail!(
+                "Only the user can allow this: an agent allows what another asks only when both have full access. \
+                 Tell the user it waits for them in its thread."
+            );
+        }
+        self.answer(id, approval_id, allow, HashMap::new()).await?;
+        Ok(self.child_states(caller, &[id.to_string()], None).await?.remove(0))
+    }
+
+    /// Stops a thread's agent, and the agents it started.
+    pub async fn stop_child(self: &Arc<Self>, caller: &str, id: &str) -> anyhow::Result<ChildState> {
+        self.reach(caller, id).await?;
+        if self.descends_from(id, caller) {
             let mut live = self.live_or(id, "That agent's thread is gone.").await?;
             live.stored.reports = false;
             self.store.save_thread(&live.stored)?;
@@ -541,7 +598,7 @@ impl Hub {
         Ok(self.child_states(caller, &[id.to_string()], None).await?.remove(0))
     }
 
-    fn state_of(&self, live: &Live) -> anyhow::Result<ChildState> {
+    pub(super) fn state_of(&self, live: &Live) -> anyhow::Result<ChildState> {
         let thread = &live.stored.thread;
         let account = self.account_of(thread);
         let approval = live.activity.approvals.first();
@@ -555,6 +612,7 @@ impl Hub {
             reply: None,
             error: None,
             questions: None,
+            approval: None,
             limit_resets: None,
             wait_timed_out: false,
         };
@@ -593,6 +651,9 @@ impl Hub {
             let input: Value =
                 approval.and_then(|approval| serde_json::from_str(&approval.input).ok()).unwrap_or_default();
             state.questions = Some(input["questions"].clone());
+        }
+        if state.status == Status::NeedsApproval {
+            state.approval = approval.map(approval_json);
         }
         state.reply = state.reply.map(|reply| cut(&reply, STATE_REPLY_CHARS, &thread.id));
         Ok(state)
@@ -716,16 +777,31 @@ impl Hub {
         let (event, text) = match state.status {
             Status::Asking => {
                 let Some(approval) = live.activity.approvals.first() else { return Ok(None) };
-                if live.told_question.as_ref() == Some(&approval.id) {
+                if live.told_ask.as_ref() == Some(&approval.id) {
                     return Ok(None);
                 }
-                live.told_question = Some(approval.id.clone());
+                live.told_ask = Some(approval.id.clone());
                 let questions = questions_text(state.questions.as_ref());
                 let text = format!(
                     "{named} asks:\n{questions}\nAnswer it with answer_agent when the answer follows from your task or what the \
                      user told you. Otherwise ask the user, then answer it."
                 );
                 (NoticeEvent::Asked, text)
+            }
+            // One with less access waits for the user, who chose to supervise it.
+            Status::NeedsApproval if thread.access == Access::Full => {
+                let Some(approval) = live.activity.approvals.first() else { return Ok(None) };
+                if live.told_ask.as_ref() == Some(&approval.id) {
+                    return Ok(None);
+                }
+                live.told_ask = Some(approval.id.clone());
+                let text = format!(
+                    "{named} waits for this to be allowed:\n{}\nAllow or refuse it with approve_agent, approval_id {}, when \
+                     that follows from your task or what the user told you. Otherwise ask the user, then answer it.",
+                    approval_text(approval),
+                    approval.id
+                );
+                (NoticeEvent::NeedsApproval, text)
             }
             Status::Finished => {
                 let reply = state.reply.as_deref().unwrap_or("It finished without a reply.");
@@ -770,6 +846,7 @@ impl Hub {
             Status::Asking => {
                 state.questions.as_ref().and_then(|questions| questions[0]["question"].as_str()).map(one_line)
             }
+            Status::NeedsApproval => live.activity.approvals.first().map(|approval| one_line(&approval_text(approval))),
             _ => None,
         };
         let notice = AgentNotice {
@@ -840,6 +917,42 @@ async fn told_of(told: &mut broadcast::Receiver<String>, ids: &[String]) {
         if ids.contains(&id) {
             return;
         }
+    }
+}
+
+/// Waits until your server's list shows one of the threads changed.
+async fn listed_of(listed: &mut broadcast::Receiver<Message>, ids: &[String]) {
+    if ids.is_empty() {
+        return std::future::pending().await;
+    }
+    loop {
+        match listed.recv().await {
+            Ok(Message::ThreadUpsert { thread }) if ids.contains(&thread.id) => return,
+            Ok(_) => {}
+            Err(broadcast::error::RecvError::Lagged(_)) => return,
+            Err(broadcast::error::RecvError::Closed) => return std::future::pending().await,
+        }
+    }
+}
+
+/// The tool call or the plan an agent waits to have allowed, as another agent reads it.
+fn approval_text(approval: &Approval) -> String {
+    let input: Value = serde_json::from_str(&approval.input).unwrap_or_default();
+    if approval.ask() == Ask::Plan {
+        let plan = input["plan"].as_str().unwrap_or(&approval.input);
+        return format!("Its plan:\n{}", cut_input(plan));
+    }
+    format!("{} {}", approval.tool_name, cut_input(&approval.input))
+}
+
+fn approval_json(approval: &Approval) -> Value {
+    json!({"approval_id": approval.id, "tool": approval.tool_name, "input": cut_input(&approval.input)})
+}
+
+fn cut_input(input: &str) -> String {
+    match input.char_indices().nth(APPROVAL_INPUT_CHARS) {
+        Some((end, _)) => format!("{}…", &input[..end]),
+        None => input.to_string(),
     }
 }
 
@@ -944,11 +1057,11 @@ fn limit_continues(thread: &Thread) -> bool {
     matches!(thread.interruption, Some(Interruption::Limit { continues: true, .. }))
 }
 
-fn wait_for(seconds: Option<u64>) -> Duration {
+pub(super) fn wait_for(seconds: Option<u64>) -> Duration {
     seconds.map(Duration::from_secs).unwrap_or(WAIT).min(LONGEST_WAIT)
 }
 
-fn parse_agent(name: &str) -> anyhow::Result<Agent> {
+pub(super) fn parse_agent(name: &str) -> anyhow::Result<Agent> {
     match name.trim().to_ascii_lowercase().as_str() {
         "claude" | "claude code" | "claude_code" => Ok(Agent::Claude),
         "codex" => Ok(Agent::Codex),
@@ -956,14 +1069,14 @@ fn parse_agent(name: &str) -> anyhow::Result<Agent> {
     }
 }
 
-fn agent_key(agent: Agent) -> &'static str {
+pub(super) fn agent_key(agent: Agent) -> &'static str {
     match agent {
         Agent::Claude => "claude",
         Agent::Codex => "codex",
     }
 }
 
-fn rank(access: Access) -> u8 {
+pub(super) fn rank(access: Access) -> u8 {
     match access {
         Access::Supervised => 0,
         Access::AcceptEdits => 1,
@@ -973,7 +1086,7 @@ fn rank(access: Access) -> u8 {
 }
 
 /// The access an agent starts with: what was asked, never more than the caller's own.
-fn pick_access(own: Access, wanted: Option<&str>) -> anyhow::Result<Access> {
+pub(super) fn pick_access(own: Access, wanted: Option<&str>) -> anyhow::Result<Access> {
     let Some(wanted) = wanted.map(str::trim).filter(|wanted| !wanted.is_empty()) else { return Ok(own) };
     let access: Access =
         serde_json::from_value(json!(wanted)).ok().context("access is supervised, accept_edits, auto or full.")?;

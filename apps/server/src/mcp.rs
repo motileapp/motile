@@ -1,7 +1,8 @@
 //! The `motile` MCP server, on the loopback interface, which only the agents your server started
 //! can call, each with the token of its thread: `read_thread` reads what a handoff left out,
-//! `openui_guide` teaches programs, `check_ui` checks one before the agent shows it, and the other
-//! tools start agents on any of your server's accounts and follow them.
+//! `openui_guide` teaches programs, `check_ui` checks one before the agent shows it, the agent
+//! tools start agents on any of your server's accounts and follow and drive them and the other
+//! threads, and the rest start, list and change threads, projects and pull requests.
 
 use std::collections::HashMap;
 use std::sync::{Arc, Weak};
@@ -33,14 +34,24 @@ use crate::ui;
 
 pub const SERVER_NAME: &str = "motile";
 /// The tools as the agents name them.
-pub const TOOLS: [&str; 9] = [
+pub const TOOLS: [&str; 19] = [
     "mcp__motile__read_thread",
     "mcp__motile__list_accounts",
     "mcp__motile__start_agent",
     "mcp__motile__agent_status",
     "mcp__motile__message_agent",
     "mcp__motile__answer_agent",
+    "mcp__motile__approve_agent",
     "mcp__motile__stop_agent",
+    "mcp__motile__create_thread",
+    "mcp__motile__list_threads",
+    "mcp__motile__update_thread",
+    "mcp__motile__thread_queue",
+    "mcp__motile__list_projects",
+    "mcp__motile__add_project",
+    "mcp__motile__read_pull_request",
+    "mcp__motile__link_pull_request",
+    "mcp__motile__git_status",
     "mcp__motile__openui_guide",
     "mcp__motile__check_ui",
 ];
@@ -211,9 +222,9 @@ impl Tools {
         answered(started.await)
     }
 
-    /// How the agents you started are doing, with the last reply of each that has finished. With
-    /// `wait`, returns once all of them have finished, one asks a question, or `timeout_seconds`
-    /// pass.
+    /// How the agents you started are doing, or any threads of your server, with the last reply of
+    /// each that has finished, and the questions or the tool call each waits with. With `wait`,
+    /// returns once all of them have finished, one asks something, or `timeout_seconds` pass.
     #[tool(name = "agent_status", annotations(title = "Check on agents", read_only_hint = true))]
     async fn agent_status(
         &self,
@@ -228,8 +239,9 @@ impl Tools {
         answered(states.await)
     }
 
-    /// Gives an agent you started another message. It starts the agent's next turn, or reaches it
-    /// at once while it works, and you are told when that turn ends.
+    /// Gives an agent you started, or any thread of your server with no more access than you, another
+    /// message. It starts the agent's next turn, or reaches it at once while it works. You are told
+    /// when that turn ends of an agent you started.
     #[tool(name = "message_agent", annotations(title = "Message an agent"))]
     async fn message_agent(
         &self,
@@ -240,7 +252,8 @@ impl Tools {
         answered(state.await)
     }
 
-    /// Answers the questions an agent you started asks, each question's text to the answer.
+    /// Answers the questions an agent you started asks, or the agent of any thread of your server
+    /// with no more access than you, each question's text to the answer.
     #[tool(name = "answer_agent", annotations(title = "Answer an agent"))]
     async fn answer_agent(
         &self,
@@ -251,7 +264,24 @@ impl Tools {
         answered(state.await)
     }
 
-    /// Stops an agent you started, and the agents it started.
+    /// Allows or refuses the tool call or the plan an agent waits with, which agent_status and the
+    /// notice you are given show with its approval_id. Allowing needs full access, yours and the
+    /// agent's; with less, ask the user to allow it in the agent's thread.
+    #[tool(name = "approve_agent", annotations(title = "Approve an agent's tool call"))]
+    async fn approve_agent(
+        &self,
+        Extension(parts): Extension<Parts>,
+        Parameters(request): Parameters<ApproveAgent>,
+    ) -> CallToolResult {
+        let state = async {
+            let hub = self.hub()?;
+            hub.approve_child(&caller(&parts)?, &request.id, &request.approval_id, request.allow).await
+        };
+        answered(state.await)
+    }
+
+    /// Stops an agent you started and the agents it started, or any thread of your server with no
+    /// more access than you.
     #[tool(name = "stop_agent", annotations(title = "Stop an agent"))]
     async fn stop_agent(
         &self,
@@ -260,6 +290,103 @@ impl Tools {
     ) -> CallToolResult {
         let state = async { self.hub()?.stop_child(&caller(&parts)?, &request.id).await };
         answered(state.await)
+    }
+
+    /// Starts a thread of its own, which the user's sidebar lists, as the user starts one: not an
+    /// agent of yours, so you aren't told how it does. Follow it with agent_status if you need to.
+    /// It works in its project's folder unless `worktree` is set.
+    #[tool(name = "create_thread", annotations(title = "Create a thread"))]
+    async fn create_thread(
+        &self,
+        Extension(parts): Extension<Parts>,
+        Parameters(request): Parameters<CreateThread>,
+    ) -> CallToolResult {
+        let created = async { self.hub()?.create_thread(&caller(&parts)?, request).await };
+        answered(created.await)
+    }
+
+    /// Lists your server's threads, the last active first, or with `query` those whose messages
+    /// have its words, the best first.
+    #[tool(name = "list_threads", annotations(title = "List threads", read_only_hint = true))]
+    async fn list_threads(&self, Parameters(request): Parameters<ListThreads>) -> CallToolResult {
+        let listed = async { self.hub()?.list_threads(request).await };
+        answered(listed.await)
+    }
+
+    /// Changes a thread's title, model, effort, account, access, archive or snooze: yours, or one of
+    /// your server's with no more access than you. A field not given stays as it is.
+    #[tool(name = "update_thread", annotations(title = "Update a thread"))]
+    async fn update_thread(
+        &self,
+        Extension(parts): Extension<Parts>,
+        Parameters(request): Parameters<UpdateThread>,
+    ) -> CallToolResult {
+        let updated = async { self.hub()?.update_thread(&caller(&parts)?, request).await };
+        answered(updated.await)
+    }
+
+    /// The messages that wait for a thread's agent to take them. `send_now` gives one to the agent
+    /// at once, `cancel` takes it back, in a thread with no more access than you.
+    #[tool(name = "thread_queue", annotations(title = "Manage a thread's queue"))]
+    async fn thread_queue(
+        &self,
+        Extension(parts): Extension<Parts>,
+        Parameters(request): Parameters<ThreadQueue>,
+    ) -> CallToolResult {
+        let queued = async { self.hub()?.thread_queue(&caller(&parts)?, request).await };
+        answered(queued.await)
+    }
+
+    /// Your server's projects, the folders its threads work in.
+    #[tool(name = "list_projects", annotations(title = "List projects", read_only_hint = true))]
+    async fn list_projects(&self) -> CallToolResult {
+        let listed = async { Ok(self.hub()?.projects_json().await) };
+        answered(listed.await)
+    }
+
+    /// Adds a project to your server: a folder that is there with `path`, a new empty repository with
+    /// `name`, or a clone of a GitHub repository with `repo`. Give one of them.
+    #[tool(name = "add_project", annotations(title = "Add a project"))]
+    async fn add_project(&self, Parameters(request): Parameters<AddProject>) -> CallToolResult {
+        let added = async { self.hub()?.add_project_for(request).await };
+        answered(added.await)
+    }
+
+    /// What GitHub says of a thread's pull request, or of another one of its repository by number:
+    /// its state, checks, review and latest activity.
+    #[tool(name = "read_pull_request", annotations(title = "Read a pull request", read_only_hint = true))]
+    async fn read_pull_request(
+        &self,
+        Extension(parts): Extension<Parts>,
+        Parameters(request): Parameters<ReadPullRequest>,
+    ) -> CallToolResult {
+        let read = async { self.hub()?.pull_request_for(&caller(&parts)?, request).await };
+        answered(read.await)
+    }
+
+    /// Links a pull request to a thread, yours unless `thread_id` is given, or unlinks its own. With
+    /// `watch` its agent is told when the pull request's checks finish, someone comments on it or it
+    /// starts to conflict; the thread is settled once it merges.
+    #[tool(name = "link_pull_request", annotations(title = "Link a pull request"))]
+    async fn link_pull_request(
+        &self,
+        Extension(parts): Extension<Parts>,
+        Parameters(request): Parameters<LinkPullRequest>,
+    ) -> CallToolResult {
+        let linked = async { self.hub()?.link_pull_request_for(&caller(&parts)?, request).await };
+        answered(linked.await)
+    }
+
+    /// What git says about the folder a thread works in, yours unless `thread_id` is given: its
+    /// branch, how far it is from the remote, and the files that changed.
+    #[tool(name = "git_status", annotations(title = "Read git status", read_only_hint = true))]
+    async fn git_status(
+        &self,
+        Extension(parts): Extension<Parts>,
+        Parameters(request): Parameters<GitStatusOf>,
+    ) -> CallToolResult {
+        let status = async { self.hub()?.git_status_for(&caller(&parts)?, request.thread_id, request.fetch).await };
+        answered(status.await)
     }
 }
 
@@ -320,7 +447,7 @@ struct CheckUi {
 
 #[derive(Deserialize, JsonSchema)]
 struct AgentStatus {
-    /// The ids start_agent gave you.
+    /// The ids start_agent gave you, or the ids of any threads of your server.
     ids: Vec<String>,
     /// Returns once all of them have finished, one asks a question, or `timeout_seconds` pass.
     #[serde(default)]
@@ -343,8 +470,143 @@ struct AnswerAgent {
 }
 
 #[derive(Deserialize, JsonSchema)]
+struct ApproveAgent {
+    id: String,
+    /// The approval_id agent_status or the notice gave you, so that you allow only what you read.
+    approval_id: String,
+    /// `true` allows it, `false` refuses it.
+    allow: bool,
+}
+
+#[derive(Deserialize, JsonSchema)]
 struct StopAgent {
     id: String,
+}
+
+#[derive(Deserialize, JsonSchema)]
+pub struct CreateThread {
+    /// The thread's first message: everything its agent needs to know. It sees nothing of your
+    /// conversation.
+    pub prompt: String,
+    /// A few words the thread is called by. Its first message names it when this isn't given.
+    pub title: Option<String>,
+    /// The project it works in, by its id, name or folder from list_projects. Yours when not given.
+    pub project: Option<String>,
+    /// The account it runs on, by its name or id from list_accounts. Yours when neither this nor
+    /// `agent` is given.
+    pub account: Option<String>,
+    /// "claude" or "codex": that agent's default account, or yours when you are that agent.
+    pub agent: Option<String>,
+    /// A model the account offers. Yours when it runs your agent, and the account's default
+    /// otherwise.
+    pub model: Option<String>,
+    /// A reasoning effort the model offers.
+    pub effort: Option<String>,
+    /// "supervised", "accept_edits", "auto" or "full", never more than yours, which it has when
+    /// this isn't given. Leave it unless the user asks.
+    pub access: Option<String>,
+    /// Works in a new git worktree on a branch of its own instead of the project's folder.
+    #[serde(default)]
+    pub worktree: bool,
+    /// The branch the worktree starts from: yours when the thread is in your project, the project's
+    /// otherwise.
+    pub base: Option<String>,
+    /// The same id for each retry of one request, so that a retry doesn't start a second thread.
+    pub request_id: Option<String>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+pub struct ListThreads {
+    /// Only the threads of this project, by its id, name or folder.
+    pub project: Option<String>,
+    /// Only the threads whose messages have every word of it, the best first.
+    pub query: Option<String>,
+    /// Archived threads too.
+    #[serde(default)]
+    pub archived: bool,
+    /// The threads agents started too, which the user's sidebar doesn't list.
+    #[serde(default)]
+    pub agents: bool,
+    /// How many, at most 100. 30 when not given.
+    pub limit: Option<usize>,
+    /// How many to skip, for the next page: `next_offset` of the last one.
+    pub offset: Option<usize>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+pub struct UpdateThread {
+    /// The thread's id. Yours when not given.
+    pub thread_id: Option<String>,
+    pub title: Option<String>,
+    /// A model its account offers; empty for the account's default.
+    pub model: Option<String>,
+    /// A reasoning effort the model offers; empty for the model's default.
+    pub effort: Option<String>,
+    /// Moves it to another account, by its name or id from list_accounts. Its agent goes on with
+    /// the conversation so far.
+    pub account: Option<String>,
+    /// "supervised", "accept_edits", "auto" or "full", never more than yours.
+    pub access: Option<String>,
+    /// `true` archives it, `false` brings it back.
+    pub archived: Option<bool>,
+    /// Snoozes it until then, an RFC 3339 time. A time that has passed wakes it.
+    pub snoozed_until: Option<String>,
+}
+
+#[derive(Deserialize, JsonSchema, PartialEq, Eq, Clone, Copy)]
+#[serde(rename_all = "snake_case")]
+pub enum QueueAction {
+    List,
+    SendNow,
+    Cancel,
+}
+
+#[derive(Deserialize, JsonSchema)]
+pub struct ThreadQueue {
+    pub thread_id: String,
+    pub action: QueueAction,
+    /// The message `send_now` and `cancel` act on, as `list` names it.
+    pub message_id: Option<String>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+pub struct AddProject {
+    /// A folder on your server.
+    pub path: Option<String>,
+    /// The name of a new project, made where your server keeps new projects, with a git repository.
+    pub name: Option<String>,
+    /// A GitHub repository to clone, as owner/name.
+    pub repo: Option<String>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+pub struct ReadPullRequest {
+    /// The thread whose repository it is in. Yours when not given.
+    pub thread_id: Option<String>,
+    /// The pull request's number. The thread's own when not given.
+    pub number: Option<u64>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+pub struct LinkPullRequest {
+    /// The thread's id. Yours when not given.
+    pub thread_id: Option<String>,
+    /// The pull request to link, by its number in the thread's repository.
+    pub number: Option<u64>,
+    /// Unlinks the thread's pull request.
+    #[serde(default)]
+    pub unlink: bool,
+    /// `true` has the thread's agent told what happens on its open pull request, `false` stops it.
+    pub watch: Option<bool>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+struct GitStatusOf {
+    /// The thread's id. Yours when not given.
+    thread_id: Option<String>,
+    /// Asks the remote first, to say how far behind the branch is.
+    #[serde(default)]
+    fetch: bool,
 }
 
 #[derive(Deserialize, JsonSchema, Default)]
