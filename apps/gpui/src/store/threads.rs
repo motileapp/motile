@@ -641,11 +641,14 @@ impl Store {
                 .attachments
                 .iter()
                 .map(|path| {
-                    let shown = message.media.iter().find(|media| &media.src == path).map(|media| AttachedFile {
-                        name: String::new(),
-                        media: Some(media.id.clone()),
-                        video: media.video,
-                        poster: media.poster.clone(),
+                    let shown = message.media.iter().find(|media| &media.src == path && !media.file).map(|media| {
+                        AttachedFile {
+                            name: String::new(),
+                            media: Some(media.id.clone()),
+                            video: media.video,
+                            poster: media.poster.clone(),
+                            ..AttachedFile::default()
+                        }
                     });
                     Attachment::from_server(path, shown.as_ref(), &thread.server_id)
                 })

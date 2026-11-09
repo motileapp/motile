@@ -51,6 +51,8 @@ impl RowModel {
                 media: file.media,
                 video: file.video,
                 poster: file.poster,
+                file: file.file,
+                size: file.size,
             })
             .collect();
         let kind = if queued {

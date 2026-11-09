@@ -77,6 +77,21 @@ class ModelsTest {
     }
 
     @Test
+    fun anAttachedFileItsServerKeptIsOfferedToDownloadNotPictured() {
+        val shot = AttachedFile(json("name" to "shot.png", "media" to "abc.png", "size" to 10))
+        val notes = AttachedFile(json("name" to "notes.txt", "media" to "bcd.txt", "file" to true, "size" to 5))
+        assertTrue(shot.pictured)
+        assertFalse(notes.pictured)
+        assertEquals(5L, notes.size)
+        assertFalse(Attachment.of("/up/2/notes.txt", notes, "s").pictured)
+        assertFalse(Attachment.of("/up/3/old.txt", AttachedFile("old.txt", null, false, null), "s").pictured)
+
+        val media = listOf(json("id" to "abc.png", "src" to "/up/1/shot.png"), json("id" to "bcd.txt", "src" to "/up/2/notes.txt", "file" to true))
+        val queued = QueuedMessage(json("id" to "q", "text" to "", "attachments" to listOf("/up/1/shot.png", "/up/2/notes.txt"), "media" to media))
+        assertEquals(setOf("/up/1/shot.png"), queued.media.keys)
+    }
+
+    @Test
     fun anAccountsFolderComesFromItsNameAndAvoidsTakenOnes() {
         val taken = AgentAccount.new(Agent.Claude).copy(folder = "~/.claude-work")
         val account = AgentAccount.new(Agent.Claude).copy(name = "Work")

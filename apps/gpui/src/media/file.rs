@@ -11,6 +11,7 @@ use gpui_kit::*;
 use motile_core::render::rows::RowKind;
 
 use super::{MediaFiles, SAVE_TITLE, file_size, named_copy, native};
+use crate::models::AttachedFile;
 use crate::store::Store;
 use crate::theme::{ControlSize, Radius, colors};
 use crate::transcript::kit::{RowButton, progress_ring};
@@ -330,6 +331,89 @@ fn menu(store: &Entity<Store>, file: &SentFile, state: &Download) -> Menu {
     }
 }
 
+/// Downloads the file, or opens it once it is downloaded.
+fn open_or_download(store: &Entity<Store>, file: &SentFile, state: &Download, cx: &mut App) {
+    match state {
+        Download::Remote | Download::Failed(_) => FileDownloads::download(store, file, cx),
+        Download::Fetching(_) => {}
+        Download::Downloaded(downloaded) => cx.open_with_system(downloaded),
+    }
+}
+
+/// A file attached to a message, as a line of its bubble with a paperclip and its name. One its
+/// server kept is pressed as the card is, and a press stops its download, whose progress or
+/// failure follows the name.
+pub fn attached_line(
+    key: String,
+    store: &Entity<Store>,
+    attached: &AttachedFile,
+    removed: bool,
+    cx: &mut App,
+) -> AnyElement {
+    let c = colors(cx);
+    let line = div()
+        .max_w_full()
+        .h(px(LINE_HEIGHT))
+        .flex()
+        .items_center()
+        .gap(px(4.))
+        .text_size(px(12.))
+        .text_color(c.muted_foreground)
+        .child(icons::symbol("paperclip", ControlSize::Small.small_symbol()));
+    let name = crate::ui::middle_truncated(attached.name.clone());
+    let Some(media) = attached.media.clone().filter(|_| attached.file) else {
+        return line.child(name).into_any_element();
+    };
+    let file = SentFile { id: media.clone(), bytes: attached.size, alt: String::new(), name: attached.name.clone() };
+    let state = FileDownloads::state(store, &media, cx);
+    // Only a removed server had a file it couldn't hand over, so asking again is no use.
+    let gone = removed && matches!(state, Download::Failed(_));
+    let progress = match &state {
+        Download::Fetching(fraction) => Some(format!(" · {}%", (fraction * 100.).round() as u32)),
+        Download::Failed(reason) => Some(format!(" · {}", first_sentence(reason))),
+        _ => None,
+    };
+    let tip = match &state {
+        Download::Failed(reason) => Some(reason.clone()),
+        _ => None,
+    };
+    let suffix_color = if tip.is_some() { c.destructive } else { c.muted_foreground };
+    let lit = c.foreground;
+    let (press_store, press_file, pressed_state) = (store.clone(), file.clone(), state.clone());
+    let (menu_store, menu_file) = (store.clone(), file);
+    line.id(SharedString::from(key))
+        .child(name)
+        .children(progress.map(|progress| {
+            div().flex_none().font_features(crate::ui::tabular_numbers()).text_color(suffix_color).child(progress)
+        }))
+        .when_some(tip, |line, tip| line.tooltip(crate::ui::tooltip(tip)))
+        .when(!gone, |line| line.cursor_pointer().hover(move |line| line.text_color(lit)))
+        .on_hover(move |hovered, _, cx| {
+            if *hovered {
+                FileDownloads::recheck(&media, cx);
+            }
+        })
+        .on_click(move |_, _, cx| {
+            cx.stop_propagation();
+            if gone {
+                return;
+            }
+            if matches!(pressed_state, Download::Fetching(_)) {
+                return FileDownloads::cancel(&press_store, &press_file.id, cx);
+            }
+            open_or_download(&press_store, &press_file, &pressed_state, cx)
+        })
+        .on_mouse_down(MouseButton::Right, move |event, window, cx| {
+            cx.stop_propagation();
+            if gone {
+                return;
+            }
+            let state = FileDownloads::state(&menu_store, &menu_file.id, cx);
+            menu(&menu_store, &menu_file, &state).show(event.position, window, cx);
+        })
+        .into_any_element()
+}
+
 /// A file a reply sends, as a card with its name, its kind and size. Its icon says where the
 /// download is, as a messaging app's does: an arrow to download it, the progress with a cross
 /// that stops it, then the kind of file, which the card opens.
@@ -471,11 +555,11 @@ pub fn file_row(model: &RowModel, ctx: &RowContext, window: &mut Window, cx: &mu
 
     let pressed = {
         let (store, file, state) = (store.clone(), file.clone(), state.clone());
-        move |_: &ClickEvent, _: &mut Window, cx: &mut App| match &state {
-            Download::Failed(_) if gone => {}
-            Download::Remote | Download::Failed(_) => FileDownloads::download(&store, &file, cx),
-            Download::Fetching(_) => {}
-            Download::Downloaded(downloaded) => cx.open_with_system(downloaded),
+        move |_: &ClickEvent, _: &mut Window, cx: &mut App| {
+            if gone {
+                return;
+            }
+            open_or_download(&store, &file, &state, cx)
         }
     };
     let (menu_store, menu_file) = (store.clone(), file.clone());

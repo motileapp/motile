@@ -576,11 +576,8 @@ class MediaContent(json: JSON) {
 }
 
 /** A file a reply sends, other than an image or a video, for the user to download. */
-class SentFile(json: JSON) {
-    val id = json.string("media")
-    val bytes = json.long("size")
-    val alt = json.string("alt")
-    val name = json.string("name")
+class SentFile(val id: String, val bytes: Long, val alt: String, val name: String) {
+    constructor(json: JSON) : this(json.string("media"), json.long("size"), json.string("alt"), json.string("name"))
 
     val size: String get() = byteCount(bytes)
 

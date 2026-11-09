@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
@@ -13,9 +14,11 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.motile.LocalStore
 import app.motile.core.AppStore
@@ -26,36 +29,88 @@ import app.motile.theme.ControlSize
 import app.motile.theme.LocalPalette
 import app.motile.theme.Theme
 import app.motile.ui.ContextMenuArea
+import app.motile.ui.DimButton
+import app.motile.ui.Icon
 import app.motile.ui.MenuBuilder
+import app.motile.ui.MenuPopup
 import app.motile.ui.Text
+import app.motile.ui.pressPosition
+import app.motile.ui.rememberMenuState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import java.io.File
 
 /**
  * The files attached to a message, in its bubble: the images and videos as tiles that open in the
- * viewer, and the others by name under them. The tiles are all one size, so the row knows its
- * height before any picture is on this device.
+ * viewer, and the others by name under them, one a line. The tiles are all one size, so the row
+ * knows its height before any picture is on this device.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun AttachedFiles(files: List<AttachedFile>, modifier: Modifier = Modifier) {
     val store = LocalStore.current
-    val palette = LocalPalette.current
-    val pictured = files.filter { it.media != null }
-    val names = files.filter { it.media == null }.joinToString("   ") { "📎 ${it.name}" }
+    val pictured = files.filter { it.pictured }
     Column(modifier, verticalArrangement = Arrangement.spacedBy(AttachedFiles.gap)) {
         if (pictured.isNotEmpty()) {
             FlowRow(horizontalArrangement = Arrangement.spacedBy(AttachedFiles.gap), verticalArrangement = Arrangement.spacedBy(AttachedFiles.gap)) {
                 pictured.forEachIndexed { index, file ->
                     Tile(file) {
-                        val viewed = files.mapNotNull { shown -> shown.media?.let { ViewedMedia(shown.name, shown.video, ViewedMedia.Source.Media(it)) } }
+                        val viewed = pictured.mapNotNull { shown -> shown.media?.let { ViewedMedia(shown.name, shown.video, ViewedMedia.Source.Media(it)) } }
                         store.view(viewed, index)
                     }
                 }
             }
         }
-        if (names.isNotEmpty()) Text(names, style = Theme.smallFont, color = palette.mutedForeground, maxLines = 1)
+        for (file in files.filter { !it.pictured }) {
+            val download = file.download
+            if (download == null) FileLine(file.name) else DownloadLine(download)
+        }
+    }
+}
+
+/** The file to download, when its server kept it. */
+private val AttachedFile.download: SentFile?
+    get() {
+        if (!file) return null
+        val id = media ?: return null
+        return SentFile(id, size, "", name)
+    }
+
+/** A file its server kept, which a press downloads, stops downloading or opens, as a file a reply sends does. */
+@Composable
+private fun DownloadLine(file: SentFile) {
+    val store = LocalStore.current
+    val palette = LocalPalette.current
+    val state = FileDownloads.state(file.id, store)
+    // Only a removed server had a file it couldn't hand over, so asking again is no use.
+    val gone = state is FileDownloads.State.Failed && !store.fetchesAgain
+    val menu = rememberMenuState()
+    val (suffix, suffixColor) = when (state) {
+        is FileDownloads.State.Fetching -> " · ${(state.fraction * 100).toInt()}%" to palette.mutedForeground
+        is FileDownloads.State.Failed -> " · ${firstSentence(state.reason)}" to palette.destructive
+        else -> "" to palette.mutedForeground
+    }
+    Box {
+        DimButton(
+            onClick = { if (state is FileDownloads.State.Fetching) FileDownloads.cancel(file.id, store) else pressFile(file, state, store) },
+            modifier = Modifier.pressPosition(menu),
+            enabled = !gone,
+            onLongClick = { menu.openAtPress() },
+        ) {
+            FileLine(file.name, suffix, suffixColor)
+        }
+        MenuPopup(menu) { fileActions(file, state, store) }
+    }
+}
+
+/** A file by its name, after a paperclip, with what its download is doing after it. */
+@Composable
+private fun FileLine(name: String, suffix: String = "", suffixColor: Color = LocalPalette.current.mutedForeground) {
+    val palette = LocalPalette.current
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        Icon(Symbol.Paperclip, ControlSize.Small.symbol, color = palette.mutedForeground)
+        Text(name, Modifier.weight(1f, fill = false), style = Theme.smallFont, color = palette.mutedForeground, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
+        if (suffix.isNotEmpty()) Text(suffix, style = Theme.smallFont, color = suffixColor, maxLines = 1)
     }
 }
 

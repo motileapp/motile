@@ -33,6 +33,8 @@ const GAP: f32 = 6.;
 /// The room between the spinner and its percentage, and the message and its button.
 const STACK_GAP: f32 = 10.;
 const LINE_HEIGHT: f32 = 16.;
+/// The room between the lines of a message's files.
+const LINE_GAP: f32 = 4.;
 const TILE: f32 = 96.;
 const TILE_GAP: f32 = 6.;
 const PLAYED_HERE: [&str; 3] = ["mp4", "mov", "m4v"];
@@ -217,10 +219,11 @@ pub fn named_copy(file: &Path, name: &str) -> PathBuf {
 }
 
 /// The images, videos and files attached to a message: tiles of one size with the whole picture
-/// fitted in each, which open in the viewer, and the names of the others under them.
-pub fn attached_files(store: &Entity<Store>, files: &[AttachedFile], cx: &App) -> AnyElement {
+/// fitted in each, which open in the viewer, and a line for each of the others under them.
+pub fn attached_files(row_id: &str, ctx: &RowContext, files: &[AttachedFile], cx: &mut App) -> AnyElement {
+    let store = &ctx.store;
     let c = colors(cx);
-    let pictured: Vec<&AttachedFile> = files.iter().filter(|file| file.media.is_some()).collect();
+    let pictured: Vec<&AttachedFile> = files.iter().filter(|file| file.pictured()).collect();
     let viewed: Vec<ViewedMedia> = pictured
         .iter()
         .filter_map(|file| {
@@ -231,8 +234,14 @@ pub fn attached_files(store: &Entity<Store>, files: &[AttachedFile], cx: &App) -
             })
         })
         .collect();
-    let names: Vec<String> =
-        files.iter().filter(|file| file.media.is_none()).map(|file| format!("📎 {}", file.name)).collect();
+    let named: Vec<AnyElement> = files
+        .iter()
+        .enumerate()
+        .filter(|(_, file)| !file.pictured())
+        .map(|(index, file)| {
+            file::attached_line(format!("attached-file-{row_id}-{index}"), store, file, ctx.removed, cx)
+        })
+        .collect();
     div()
         .flex()
         .flex_col()
@@ -292,15 +301,8 @@ pub fn attached_files(store: &Entity<Store>, files: &[AttachedFile], cx: &App) -
                 },
             )))
         })
-        .when(!names.is_empty(), |files| {
-            files.child(
-                div()
-                    .h(px(LINE_HEIGHT))
-                    .text_size(px(12.))
-                    .text_color(c.muted_foreground)
-                    .truncate()
-                    .child(names.join("   ")),
-            )
+        .when(!named.is_empty(), |files| {
+            files.child(div().flex().flex_col().items_start().gap(px(LINE_GAP)).children(named))
         })
         .into_any_element()
 }

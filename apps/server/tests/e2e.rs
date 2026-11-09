@@ -3460,7 +3460,7 @@ async fn a_file_the_agent_sends_is_kept_to_download() {
 }
 
 #[tokio::test]
-async fn attached_images_and_videos_are_shown_in_the_message_and_go_with_its_thread() {
+async fn attached_files_are_kept_in_the_message_and_go_with_its_thread() {
     let harness = Harness::start("fixtures/read-and-bash.jsonl", "0").await;
     let connection = harness.connect().await;
     let local = harness.dir.path().join("local");
@@ -3499,12 +3499,19 @@ async fn attached_images_and_videos_are_shown_in_the_message_and_go_with_its_thr
     // The client that sent the files named their contents the way the server did.
     let message = &transcript.items[0];
     let shown: Vec<_> =
-        message.media.iter().map(|media| (media.src.as_str(), Some(&media.id), media.poster.as_ref())).collect();
+        message.media[..2].iter().map(|media| (media.src.as_str(), Some(&media.id), media.poster.as_ref())).collect();
     assert_eq!(
         shown,
         vec![(shot.as_str(), shot_id.as_ref(), None), (video.as_str(), video_id.as_ref(), poster_id.as_ref())]
     );
     assert_eq!((message.media[1].width, message.media[1].height), (Some(640), Some(400)));
+
+    // Any other file is kept for the user to download again.
+    let [.., kept_notes] = &message.media[..] else { panic!("no media") };
+    assert_eq!((kept_notes.src.as_str(), kept_notes.file, kept_notes.size), (notes.as_str(), true, 5));
+    let fetched = harness.dir.path().join("fetched.txt");
+    connection.media(&kept_notes.id, &fetched, |_, _| {}).await.unwrap();
+    assert_eq!(std::fs::read(&fetched).unwrap(), b"notes");
 
     let gone = Request::Send {
         thread_id: None,
@@ -3526,6 +3533,49 @@ async fn attached_images_and_videos_are_shown_in_the_message_and_go_with_its_thr
         assert!(!Path::new(path).exists(), "{path} went with its thread");
     }
     assert!(Path::new(&unsent).exists(), "a file that was never sent waits for its message");
+}
+
+#[tokio::test]
+async fn a_file_attached_before_files_were_kept_is_kept_once_the_server_starts() {
+    let mut harness = Harness::start("fixtures/read-and-bash.jsonl", "0").await;
+    let connection = harness.connect().await;
+    let notes = harness.dir.path().join("notes.txt");
+    std::fs::write(&notes, b"notes").unwrap();
+    let (uploaded, _) = connection.upload(&notes, None, |_, _| {}).await.unwrap();
+    let new_thread = harness.new_thread(&connection, Agent::Claude).await;
+    let request = Request::Send {
+        thread_id: None,
+        new_thread,
+        text: "Look".to_string(),
+        attachments: vec![uploaded.clone()],
+        now: false,
+        context: None,
+        message_id: None,
+    };
+    let Message::Sent { thread_id } = connection.request(&request).await.unwrap() else { panic!("not sent") };
+    let sent = finished_transcript(&connection, &thread_id).await.items.remove(0);
+
+    // The message as a server that kept only images and videos left it.
+    let store = Store::open(&harness.dir.path().join("motile.sqlite")).unwrap();
+    let mut earlier = store.item(&thread_id, &sent.id).unwrap().unwrap();
+    earlier.media.clear();
+    store.save_item(&thread_id, &earlier).unwrap();
+    harness.restart().await;
+    harness.hub.keep_earlier_attachments();
+
+    let connection = harness.connect().await;
+    let mut follow = open(&connection, &thread_id, 0).await;
+    let mut transcript = Transcript::default();
+    while transcript.items.first().is_none_or(|message| message.media.is_empty()) {
+        transcript.apply(next(&mut follow).await);
+    }
+    let message = &transcript.items[0];
+    assert!(message.rev > earlier.rev, "clients that have the message are sent it again");
+    let [kept] = &message.media[..] else { panic!("one file is kept: {:?}", message.media) };
+    assert_eq!((kept.src.as_str(), kept.file), (uploaded.as_str(), true));
+    let fetched = harness.dir.path().join("fetched.txt");
+    connection.media(&kept.id, &fetched, |_, _| {}).await.unwrap();
+    assert_eq!(std::fs::read(&fetched).unwrap(), b"notes");
 }
 
 async fn usage(connection: &Connection, agent: Agent, writing: bool) -> Vec<UsageBucket> {

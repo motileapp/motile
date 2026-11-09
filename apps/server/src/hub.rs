@@ -1382,6 +1382,49 @@ impl Hub {
         Ok(media)
     }
 
+    /// Keeps the files attached to messages from before the server kept every attached file, so
+    /// that they can be downloaded again while their uploads are still here.
+    pub fn keep_earlier_attachments(self: &Arc<Self>) {
+        let hub = self.clone();
+        tokio::spawn(async move {
+            let missing = match hub.store.messages_missing_attached() {
+                Ok(missing) => missing,
+                Err(error) => return tracing::error!("couldn't read the attached files: {error:#}"),
+            };
+            for (thread_id, item_id) in missing {
+                if let Err(error) = hub.keep_attached_to(&thread_id, &item_id).await {
+                    tracing::warn!("couldn't keep the files attached to {item_id}: {error:#}");
+                }
+            }
+        });
+    }
+
+    async fn keep_attached_to(&self, thread_id: &str, item_id: &str) -> anyhow::Result<()> {
+        let Some(item) = self.store.item(thread_id, item_id)? else { return Ok(()) };
+        let ItemKind::User { attachments, .. } = &item.kind else { return Ok(()) };
+        let unkept: Vec<String> =
+            attachments.iter().filter(|path| !item.media.iter().any(|media| &media.src == *path)).cloned().collect();
+        let media = self.media.clone();
+        let kept = tokio::task::spawn_blocking(move || media.capture_attached(&unkept)).await?;
+        if kept.is_empty() {
+            return Ok(());
+        }
+        let Some(mut live) = self.live(thread_id).await else {
+            self.forget_media(&kept);
+            return Ok(());
+        };
+        live.keep_attached_media(&self.store, item_id, kept)
+    }
+
+    /// Removes copies no thread came to show.
+    fn forget_media(&self, kept: &[Media]) {
+        for id in kept.iter().flat_map(|media| std::iter::once(&media.id).chain(&media.poster)) {
+            if !self.store.shows_media(id).unwrap_or(true) {
+                self.media.remove(id);
+            }
+        }
+    }
+
     /// Removes the uploads that were never sent.
     pub fn keep_uploads_swept(self: &Arc<Self>) {
         let hub = self.clone();
@@ -4431,6 +4474,22 @@ impl Live {
         store.save_item(&self.stored.thread.id, &item)?;
         let _ = self.updates.send(Message::Items { items: vec![item] });
         Ok(())
+    }
+
+    /// Adds to the message the copies of its attached files that it doesn't hold yet.
+    fn keep_attached_media(&mut self, store: &Store, item_id: &str, kept: Vec<Media>) -> anyhow::Result<()> {
+        let Some(mut item) = store.item(&self.stored.thread.id, item_id)? else { return Ok(()) };
+        let new: Vec<Media> =
+            kept.into_iter().filter(|media| !item.media.iter().any(|held| held.src == media.src)).collect();
+        if new.is_empty() {
+            return Ok(());
+        }
+        for id in new.iter().flat_map(|media| std::iter::once(&media.id).chain(&media.poster)) {
+            store.save_media(&self.stored.thread.id, id)?;
+        }
+        item.media.extend(new);
+        item.rev = self.next_rev();
+        self.save(store, item)
     }
 
     fn set_ui(&mut self, store: &Store, item_id: &str, block: u32, state: Value) -> anyhow::Result<()> {

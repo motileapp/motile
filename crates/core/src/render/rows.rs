@@ -42,7 +42,8 @@ pub struct Row {
 }
 
 /// A file attached to a message. An image or a video is shown: the client asks the core for the
-/// file `media` names, and for a video's `poster` until it plays.
+/// file `media` names, and for a video's `poster` until it plays. Any other `file` that `media`
+/// names is offered to download.
 #[derive(Serialize, Clone, PartialEq, Debug)]
 pub struct Attached {
     pub name: String,
@@ -52,6 +53,14 @@ pub struct Attached {
     pub video: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub poster: Option<String>,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub file: bool,
+    #[serde(skip_serializing_if = "is_zero")]
+    pub size: u64,
+}
+
+fn is_zero(size: &u64) -> bool {
+    *size == 0
 }
 
 #[derive(Serialize, Clone, PartialEq, Debug)]
@@ -828,6 +837,8 @@ fn attached(paths: &[String], media: &[Media]) -> Vec<Attached> {
             media: shown.map(|media| media.id.clone()),
             video: shown.is_some_and(|media| media.video),
             poster: shown.and_then(|media| media.poster.clone()),
+            file: shown.is_some_and(|media| media.file),
+            size: shown.map_or(0, |media| media.size),
         }
     };
     paths.iter().map(file).collect()
@@ -1644,15 +1655,19 @@ mod tests {
     }
 
     #[test]
-    fn a_message_shows_the_images_and_videos_attached_to_it() {
+    fn a_message_shows_its_images_and_videos_and_offers_its_other_files() {
         use motile_protocol::wire::Media;
-        let attachments =
-            vec!["/up/1/shot.png".to_string(), "/up/2/notes.txt".to_string(), "/up/3/demo.mov".to_string()];
+        let attachments = vec![
+            "/up/1/shot.png".to_string(),
+            "/up/2/notes.txt".to_string(),
+            "/up/3/demo.mov".to_string(),
+            "/up/4/old.txt".to_string(),
+        ];
         let media = |id: &str, src: &str, video, poster: Option<&str>| Media {
             id: id.into(),
             src: src.into(),
             video,
-            file: false,
+            file: id.ends_with(".txt"),
             size: 10,
             width: None,
             height: None,
@@ -1671,6 +1686,7 @@ mod tests {
         );
         message.media = vec![
             media("abc.png", "/up/1/shot.png", false, None),
+            media("bcd.txt", "/up/2/notes.txt", false, None),
             media("def.mov", "/up/3/demo.mov", true, Some("fed.jpg")),
         ];
         let mut transcript = Transcript::new("/srv/api");
@@ -1680,9 +1696,10 @@ mod tests {
         assert_eq!(
             row["attachments"],
             serde_json::json!([
-                { "name": "shot.png", "media": "abc.png" },
-                { "name": "notes.txt" },
-                { "name": "demo.mov", "media": "def.mov", "video": true, "poster": "fed.jpg" },
+                { "name": "shot.png", "media": "abc.png", "size": 10 },
+                { "name": "notes.txt", "media": "bcd.txt", "file": true, "size": 10 },
+                { "name": "demo.mov", "media": "def.mov", "video": true, "poster": "fed.jpg", "size": 10 },
+                { "name": "old.txt" },
             ])
         );
     }
