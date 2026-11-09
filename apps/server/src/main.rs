@@ -145,6 +145,7 @@ async fn run(data_dir: &DataDir, allow_keys: Vec<String>, options: BindOptions) 
         data_dir.no_project(),
         environment,
     )?;
+    hub.refresh_icons().await;
     if hub.models().is_empty() {
         hub.refresh_models().await;
     }

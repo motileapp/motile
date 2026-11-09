@@ -1,5 +1,5 @@
-//! The image a project is shown with: a file the user picked, or the first one that looks like
-//! an icon in the project's folder.
+//! The image a project is shown with: a file the user picked, or the one in the project's folder
+//! that is named most like an icon.
 
 use std::path::{Path, PathBuf};
 use std::time::{Duration, UNIX_EPOCH};
@@ -34,7 +34,7 @@ const MAX_LISTED: usize = 5000;
 const MAX_WALKED: usize = 50_000;
 /// Folders a walk skips, which git would mostly ignore.
 const SKIPPED: [&str; 4] = ["node_modules", "target", "build", "dist"];
-const LISTING: Duration = Duration::from_secs(10);
+const LISTING: Duration = Duration::from_secs(1);
 
 fn named_like_image(path: &Path) -> bool {
     let extension = path.extension().and_then(|extension| extension.to_str()).unwrap_or_default().to_lowercase();
@@ -46,17 +46,11 @@ pub fn is_icon(path: &Path) -> bool {
     named_like_image(path) && metadata.is_file() && metadata.len() > 0 && metadata.len() <= MAX_ICON
 }
 
-/// Every image in the project's folder that can be its icon, by its path inside the folder: of
-/// what git tracks or doesn't ignore, or in a folder that isn't a repository, what isn't hidden.
+/// Every image in the project's folder that can be its icon, by its path inside the folder.
 pub async fn all(project: &str, environment: &Environment) -> Vec<String> {
-    let arguments = ["ls-files", "-z", "--cached", "--others", "--exclude-standard"];
-    let listed = git::run(git::command("git", project, environment, &arguments), None, LISTING).await;
+    let paths = files(project, environment).await;
     let project = PathBuf::from(project);
     let images = tokio::task::spawn_blocking(move || {
-        let paths = match listed {
-            Ok(listed) => listed.split('\0').filter(|path| !path.is_empty()).map(str::to_string).collect(),
-            Err(_) => walk(&project),
-        };
         let mut images: Vec<String> = paths
             .into_iter()
             .filter(|path| named_like_image(Path::new(path)) && is_icon(&project.join(path)))
@@ -67,6 +61,18 @@ pub async fn all(project: &str, environment: &Environment) -> Vec<String> {
         images
     });
     images.await.unwrap_or_default()
+}
+
+/// The files in the project's folder, by their paths inside it: what git tracks or doesn't
+/// ignore, or in a folder that isn't a repository, what isn't hidden.
+async fn files(project: &str, environment: &Environment) -> Vec<String> {
+    let arguments = ["ls-files", "-z", "--cached", "--others", "--exclude-standard"];
+    let listed = git::run(git::command("git", project, environment, &arguments), None, LISTING).await;
+    if let Ok(listed) = listed {
+        return listed.split('\0').filter(|path| !path.is_empty()).map(str::to_string).collect();
+    }
+    let project = PathBuf::from(project);
+    tokio::task::spawn_blocking(move || walk(&project)).await.unwrap_or_default()
 }
 
 /// The files under `root`, by their paths inside it, but for hidden ones and those in `SKIPPED`.
@@ -109,13 +115,34 @@ fn workspace_members(project: &Path) -> Vec<PathBuf> {
     WORKSPACES.iter().filter_map(members).flatten().collect()
 }
 
-/// The first file in the project's folder that is named like an icon.
-pub fn find(project: &Path) -> Option<String> {
+/// The project's icon: the file named most like one in the places projects usually keep it, or
+/// else anywhere in its folder, the least deep first.
+pub async fn find(project: &str, environment: &Environment) -> Option<String> {
+    if let Some(found) = in_usual_places(Path::new(project)) {
+        return Some(found);
+    }
+    let paths = files(project, environment).await;
+    let project = PathBuf::from(project);
+    tokio::task::spawn_blocking(move || anywhere(&project, paths)).await.ok().flatten()
+}
+
+fn in_usual_places(project: &Path) -> Option<String> {
     let roots: Vec<PathBuf> = std::iter::once(project.to_path_buf()).chain(workspace_members(project)).collect();
     let candidates = NAMES.iter().flat_map(|name| {
         roots.iter().flat_map(move |root| FOLDERS.iter().map(move |folder| root.join(folder).join(name)))
     });
     candidates.into_iter().find(|path| is_icon(path)).map(|path| path.to_string_lossy().into_owned())
+}
+
+fn anywhere(project: &Path, paths: Vec<String>) -> Option<String> {
+    let rank = |path: &String| {
+        let name = Path::new(path).file_name()?.to_str()?;
+        let wanted = NAMES.iter().position(|wanted| wanted.eq_ignore_ascii_case(name))?;
+        Some((wanted, Path::new(path).components().count()))
+    };
+    let ranked = paths.iter().filter_map(|path| Some((rank(path)?, path)));
+    let (_, best) = ranked.filter(|(_, path)| is_icon(&project.join(path))).min()?;
+    Some(project.join(best).to_string_lossy().into_owned())
 }
 
 /// Names the icon's current contents, ending in its extension. `None` when the file can't be
@@ -148,22 +175,46 @@ mod tests {
         std::fs::write(path, "<svg/>").unwrap();
     }
 
+    fn environment() -> Environment {
+        let variables = std::env::vars().filter(|(name, _)| name == "PATH").collect();
+        Environment::fixed(variables, Default::default())
+    }
+
     #[test]
     fn the_most_wanted_name_wins_wherever_it_is() {
         let project = tempfile::tempdir().unwrap();
-        assert_eq!(find(project.path()), None);
+        assert_eq!(in_usual_places(project.path()), None);
 
         write(project.path(), "favicon.ico");
-        assert_eq!(find(project.path()), Some(project.path().join("favicon.ico").to_string_lossy().into_owned()));
+        let found = in_usual_places(project.path());
+        assert_eq!(found, Some(project.path().join("favicon.ico").to_string_lossy().into_owned()));
 
         write(project.path(), "apps/web/public/icon.svg");
         write(project.path(), "public/logo.svg");
-        let found = find(project.path()).unwrap();
+        let found = in_usual_places(project.path()).unwrap();
         assert!(found.ends_with("apps/web/public/icon.svg"), "{found}");
 
         write(project.path(), "apps/marketing/public/favicon.svg");
-        let found = find(project.path()).unwrap();
+        let found = in_usual_places(project.path()).unwrap();
         assert!(found.ends_with("apps/marketing/public/favicon.svg"), "{found}");
+    }
+
+    #[tokio::test]
+    async fn an_icon_outside_the_usual_places_is_found_by_its_name_then_its_depth() {
+        let project = tempfile::tempdir().unwrap();
+        let root = project.path().to_string_lossy();
+        assert_eq!(find(&root, &environment()).await, None);
+
+        write(project.path(), "crates/app/assets/icons/logo.svg");
+        write(project.path(), "packaging/icons/deep/favicon.svg");
+        write(project.path(), "packaging/icons/favicon.svg");
+        write(project.path(), ".cache/favicon.svg");
+        let found = find(&root, &environment()).await.unwrap();
+        assert!(found.ends_with("/packaging/icons/favicon.svg"), "{found}");
+
+        write(project.path(), "docs/icon.png");
+        let found = find(&root, &environment()).await.unwrap();
+        assert!(found.ends_with("/docs/icon.png"), "{found}");
     }
 
     #[test]
@@ -173,7 +224,7 @@ mod tests {
         std::fs::create_dir(project.path().join("favicon.svg")).unwrap();
         std::fs::write(project.path().join("icon.png"), vec![0u8; MAX_ICON as usize + 1]).unwrap();
 
-        assert_eq!(find(project.path()), None);
+        assert_eq!(in_usual_places(project.path()), None);
         assert_eq!(version(&project.path().join("notes.txt").to_string_lossy()), None);
         assert!(read(&project.path().join("icon.png").to_string_lossy()).is_err());
     }
@@ -187,8 +238,7 @@ mod tests {
         write(project.path(), ".cache/icon.png");
         write(project.path(), "node_modules/thing/icon.png");
 
-        let variables = std::env::vars().filter(|(name, _)| name == "PATH").collect();
-        let environment = Environment::fixed(variables, Default::default());
+        let environment = environment();
         let root = project.path().to_string_lossy();
         assert_eq!(all(&root, &environment).await, vec!["docs/art/banner.png", "logo.svg"]);
 

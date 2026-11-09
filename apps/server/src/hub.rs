@@ -411,9 +411,6 @@ impl Hub {
             .map(|stored| live(stored).map(|(id, live)| (id, Slot::new(live))))
             .collect::<anyhow::Result<_>>()?;
         let mut projects = store.load_projects()?;
-        for project in &mut projects {
-            refresh_icon(&store, project);
-        }
         ensure_no_project(&store, &mut projects, &no_project_folder)?;
         let projects = Mutex::new(projects);
         let (list_updates, _) = broadcast::channel(UPDATES_BUFFER);
@@ -2006,6 +2003,7 @@ impl Hub {
         if !Path::new(path).is_absolute() || !Path::new(path).is_dir() {
             bail!("{path} isn't a folder on your server.");
         }
+        let icon = icons::find(path, &self.environment).await;
         let mut projects = self.projects.lock().await;
         if let Some(project) = projects.iter().find(|project| project.path == path) {
             return Ok(project.id.clone());
@@ -2014,7 +2012,7 @@ impl Hub {
             id: new_id(),
             path: path.to_string(),
             created_at: now(),
-            icon: icons::find(Path::new(path)),
+            icon,
             icon_chosen: false,
             setup: None,
         };
@@ -2101,6 +2099,10 @@ impl Hub {
 
     /// Makes the image at `path` the project's icon, or goes back to the one in its folder.
     pub async fn set_project_icon(&self, project_id: &str, path: Option<String>) -> anyhow::Result<()> {
+        let found = match path {
+            Some(_) => None,
+            None => icons::find(&self.project_path(project_id).await?, &self.environment).await,
+        };
         let mut projects = self.projects.lock().await;
         let project = projects
             .iter_mut()
@@ -2115,7 +2117,7 @@ impl Hub {
                 project.icon_chosen = true;
             }
             None => {
-                project.icon = icons::find(Path::new(&project.path));
+                project.icon = found;
                 project.icon_chosen = false;
             }
         }
@@ -3100,6 +3102,45 @@ impl Hub {
         let projects = self.projects.lock().await;
         let project = projects.iter().find(|project| project.id == project_id);
         Ok(project.context("That project is no longer on your server.")?.path.clone())
+    }
+
+    /// Looks for every project's icon in its folder again.
+    pub async fn refresh_icons(&self) {
+        let ids: Vec<String> = self.projects.lock().await.iter().map(|project| project.id.clone()).collect();
+        let mut changed = false;
+        for id in ids {
+            changed |= self.refresh_icon(&id).await;
+        }
+        if changed {
+            self.announce_projects(&self.projects.lock().await);
+        }
+    }
+
+    /// Looks for the project's icon in its folder again, unless the user picked one that is still
+    /// there. Says whether it changed.
+    async fn refresh_icon(&self, project_id: &str) -> bool {
+        let projects = self.projects.lock().await;
+        let Some(project) = projects.iter().find(|project| project.id == project_id) else { return false };
+        let (path, icon, chosen) = (project.path.clone(), project.icon.clone(), project.icon_chosen);
+        drop(projects);
+        if chosen && icon.as_deref().and_then(icons::version).is_some() {
+            return false;
+        }
+        let found = icons::find(&path, &self.environment).await;
+        if !chosen && found == icon {
+            return false;
+        }
+        let mut projects = self.projects.lock().await;
+        let Some(project) = projects.iter_mut().find(|project| project.id == project_id) else { return false };
+        if project.icon != icon || project.icon_chosen != chosen {
+            return false;
+        }
+        project.icon = found;
+        project.icon_chosen = false;
+        if let Err(error) = self.store.save_project_icon(project) {
+            tracing::error!(project_id, "couldn't save a project's icon: {error:#}");
+        }
+        true
     }
 
     fn announce_projects(&self, stored: &[StoredProject]) {
@@ -4161,14 +4202,19 @@ impl Hub {
             tokio::spawn(self.clone().title_from_transcript(live.stored.thread.id.clone()));
         }
         // The turn may have switched branches, or made the project an icon.
-        let mut projects = self.projects.lock().await;
-        let Some(project) = projects.iter_mut().find(|project| project.id == live.stored.thread.project_id) else {
+        let projects = self.projects.lock().await;
+        if !projects.iter().any(|project| project.id == live.stored.thread.project_id) {
             return;
-        };
-        refresh_icon(&self.store, project);
-        let (hub, path) = (self.clone(), live.stored.thread.cwd.clone());
+        }
         self.announce_projects(&projects);
+        let (hub, path) = (self.clone(), live.stored.thread.cwd.clone());
         tokio::spawn(async move { hub.read_git(&path, false).await });
+        let (hub, project_id) = (self.clone(), live.stored.thread.project_id.clone());
+        tokio::spawn(async move {
+            if hub.refresh_icon(&project_id).await {
+                hub.announce_projects(&hub.projects.lock().await);
+            }
+        });
     }
 
     /// Asks the agent to fix the programs of the turn that just ended that the clients can't draw
@@ -4861,24 +4907,6 @@ fn stop_git_above(environment: Environment, no_project_folder: &Path) -> Environ
         _ => data_folder.into_owned(),
     };
     environment.with([("GIT_CEILING_DIRECTORIES".to_string(), ceilings)])
-}
-
-/// Looks for the project's icon in its folder again, unless the user picked one that is still
-/// there.
-fn refresh_icon(store: &Store, project: &mut StoredProject) {
-    let chosen_exists = project.icon_chosen && project.icon.as_deref().and_then(icons::version).is_some();
-    if chosen_exists {
-        return;
-    }
-    let found = icons::find(Path::new(&project.path));
-    if !project.icon_chosen && found == project.icon {
-        return;
-    }
-    project.icon = found;
-    project.icon_chosen = false;
-    if let Err(error) = store.save_project_icon(project) {
-        tracing::error!(project_id = project.id, "couldn't save a project's icon: {error:#}");
-    }
 }
 
 /// Whether the two paths name one folder, however either is spelled.

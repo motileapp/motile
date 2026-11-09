@@ -230,6 +230,7 @@ async fn serve(
         environment,
     )
     .unwrap();
+    hub.refresh_icons().await;
     hub.serve_mcp().await.unwrap();
     hub.refresh_models().await;
     hub.keep_pull_requests_current(Duration::from_millis(200));
