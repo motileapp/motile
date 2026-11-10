@@ -280,7 +280,7 @@ private fun Attachments() {
                 if (index >= 0) store.view(viewable.mapNotNull { it.viewed }, index)
             }
         }
-        for (attachment in store.attachments.filter { !it.pictured }) AttachmentChip(attachment)
+        for (attachment in store.attachments.filter { !it.pictured }) AttachmentFileTile(attachment)
     }
 }
 

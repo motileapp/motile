@@ -1,5 +1,5 @@
-//! The attached files above the text: a tile for an image or a video and a chip for any other
-//! file, each saying how far its upload is. A click on a tile opens it in the viewer. A draft that
+//! The attached files above the text: a tile for each, with its picture for an image or a video
+//! and its kind and name for any other file, each saying how far its upload is. A click on a tile opens it in the viewer. A draft that
 //! goes on from a removed server's thread has a chip for that thread before them.
 
 use gpui_kit::prelude::*;
@@ -8,10 +8,14 @@ use gpui_kit::*;
 use crate::media::pictures::{Picture, Pictures};
 use crate::models::{Attachment, UploadState};
 use crate::store::Store;
-use crate::theme::{IconSize, Layer, Opacity, Radius, ShadowSize, Surface, colors};
-use crate::ui::{ActionButton, Variant, icons};
+use crate::theme::{ControlSize, IconSize, Layer, Opacity, Radius, ShadowSize, Surface, colors};
+use crate::ui::{ActionButton, Chip, icons};
 
-pub const TILE: f32 = 64.;
+pub const TILE: f32 = 96.;
+const NAME_INSET: f32 = 8.;
+const KIND_INSET: f32 = 6.;
+/// The remove button sits level with a file's kind.
+const REMOVE_INSET: f32 = KIND_INSET - (ControlSize::Small.height() - Chip::HEIGHT) / 2.;
 /// How wide the title of the thread a draft goes on from gets before it is cut.
 const CONTINUES_WIDTH: f32 = 320.;
 
@@ -37,7 +41,7 @@ pub fn attachments(store: &Entity<Store>, cx: &mut App) -> impl IntoElement {
         items.push(tile.into_any_element());
     }
     for attachment in attached.iter().filter(|attachment| !attachment.pictured) {
-        items.push(chip(attachment, store, cx).into_any_element());
+        items.push(file_tile(attachment, store.clone(), cx).into_any_element());
     }
     div()
         .id("attachments")
@@ -72,34 +76,69 @@ fn tile(attachment: &Attachment, store: Entity<Store>, cx: &mut App) -> Stateful
             .cloned()
             .map(|id| crate::media::MediaImage::new(store.clone(), id).size(TILE).into_any_element()),
     };
-    let remove = store.clone();
-    let id = attachment.id.clone();
-    let tile = div()
+    let tile = frame(attachment, cx);
+    let tile = crate::ui::dims(tile, cx).children(picture).when(attachment.video, |tile| {
+        tile.child(
+            div().absolute().inset_0().flex().items_center().justify_center().child(
+                div()
+                    .rounded_full()
+                    .shadow(c.shadow(ShadowSize::Sm, Opacity::ShadowStrongest))
+                    .child(icons::symbol("play", IconSize::Lg).text_color(c.foreground_over_picture)),
+            ),
+        )
+    });
+    finish(tile, attachment, store, cx)
+}
+
+/// A file that isn't shown as a picture: its kind, level with the remove button, and its name.
+fn file_tile(attachment: &Attachment, store: Entity<Store>, cx: &mut App) -> Stateful<Div> {
+    let c = colors(cx);
+    let tile =
+        frame(attachment, cx)
+            .child(
+                div().size_full().flex().flex_col().justify_end().p(px(NAME_INSET)).child(
+                    div()
+                        .text_size(px(12.))
+                        .font_weight(FontWeight::MEDIUM)
+                        .text_color(c.foreground)
+                        .line_clamp(3)
+                        .child(attachment.name.clone()),
+                ),
+            )
+            .children(kind(&attachment.name).map(|kind| {
+                div().absolute().top(px(KIND_INSET)).left(px(KIND_INSET)).child(Chip::new(kind).muted(true))
+            }));
+    finish(tile, attachment, store, cx)
+}
+
+/// The square every attachment lies in.
+fn frame(attachment: &Attachment, cx: &App) -> Stateful<Div> {
+    let c = colors(cx);
+    div()
         .id(SharedString::from(format!("tile-{}", attachment.id)))
         .relative()
         .size(px(TILE))
         .flex_shrink_0()
         .cursor_default()
-        .rounded(px(Radius::LG))
+        .rounded(px(Radius::XL))
         .overflow_hidden()
         .bg(c.background_secondary)
         .border_1()
-        .border_color(c.border);
-    crate::ui::dims(tile, cx)
-        .children(picture)
-        .when(attachment.video, |tile| {
-            tile.child(
-                div().absolute().inset_0().flex().items_center().justify_center().child(
-                    div()
-                        .rounded_full()
-                        .shadow(c.shadow(ShadowSize::Sm, Opacity::ShadowStrongest))
-                        .child(icons::symbol("play", IconSize::Lg).text_color(c.foreground_over_picture)),
-                ),
-            )
-        })
-        .child(div().absolute().bottom_0().left_0().right_0().child(progress(attachment, &store, true, cx)))
+        .border_color(c.border)
+}
+
+/// How far the upload is along the tile's bottom, the button that removes it, and its name and
+/// size under the pointer.
+fn finish(tile: Stateful<Div>, attachment: &Attachment, store: Entity<Store>, cx: &App) -> Stateful<Div> {
+    let remove = store.clone();
+    let id = attachment.id.clone();
+    let summary = match attachment.bytes {
+        Some(bytes) => format!("{}, {}", attachment.name, file_size(bytes)),
+        None => attachment.name.clone(),
+    };
+    tile.child(div().absolute().bottom_0().left_0().right_0().child(progress(attachment, &store, cx)))
         .child(
-            div().absolute().top(px(2.)).right(px(2.)).child(
+            div().absolute().top(px(REMOVE_INSET)).right(px(REMOVE_INSET)).child(
                 ActionButton::icon(SharedString::from(format!("remove-{}", attachment.id)), "x", "Remove")
                     .small()
                     .round(true)
@@ -112,48 +151,13 @@ fn tile(attachment: &Attachment, store: Entity<Store>, cx: &mut App) -> Stateful
                     }),
             ),
         )
-        .tooltip(crate::ui::tooltip(attachment.name.clone()))
+        .tooltip(crate::ui::tooltip(summary))
 }
 
-/// A file that isn't shown as a picture: its name, its size, and how far it is on its way to the
-/// server.
-fn chip(attachment: &Attachment, store: &Entity<Store>, cx: &App) -> impl IntoElement {
-    let c = colors(cx);
-    let remove = store.clone();
-    let id = attachment.id.clone();
-    div()
-        .flex_shrink_0()
-        .cursor_default()
-        .flex()
-        .items_center()
-        .gap(px(5.))
-        .pl(px(9.))
-        .pr(px(2.))
-        .py(px(2.))
-        .rounded_full()
-        .bg(Surface::Composer.layer(Layer::Chip, c))
-        .border_1()
-        .border_color(c.border_accent)
-        .text_size(px(12.))
-        .child(icons::symbol("file", IconSize::Sm))
-        .child(div().whitespace_nowrap().child(attachment.name.clone()))
-        .when_some(attachment.bytes, |chip, bytes| {
-            chip.child(div().text_color(c.muted_foreground).child(file_size(bytes)))
-        })
-        .child(progress(attachment, store, false, cx))
-        .child(
-            ActionButton::icon(SharedString::from(format!("remove-chip-{}", attachment.id)), "x", "Remove")
-                .small()
-                .round(true)
-                .surface(Surface::Composer)
-                .row(Some(Layer::Chip))
-                .on_click(move |_, _, cx| {
-                    remove.update(cx, |store, cx| {
-                        store.remove_attachment(&id);
-                        cx.notify();
-                    })
-                }),
-        )
+/// A file's extension, as "PDF", when it has one.
+fn kind(name: &str) -> Option<String> {
+    let extension = std::path::Path::new(name).extension()?.to_str()?;
+    Some(extension.to_uppercase())
 }
 
 /// The thread of a removed server the draft goes on from, with the button that lets go of it.
@@ -191,54 +195,27 @@ fn continues_chip(title: &str, store: &Entity<Store>, cx: &App) -> impl IntoElem
         )
 }
 
-/// How far an attachment is on its way to the server, or the button that tries again when it
-/// didn't get there. Nothing once it is there.
-fn progress(attachment: &Attachment, store: &Entity<Store>, on_picture: bool, cx: &App) -> AnyElement {
+/// How far an attachment is on its way to the server, along its tile's bottom edge, or the button
+/// that tries again when it didn't get there. Nothing once it is there.
+fn progress(attachment: &Attachment, store: &Entity<Store>, cx: &App) -> AnyElement {
     let c = colors(cx);
     match &attachment.state {
         UploadState::Ready => div().into_any_element(),
-        UploadState::Uploading(fraction) => {
-            let percent = format!("{}%", (fraction * 100.) as u32);
-            if on_picture {
-                div()
-                    .w_full()
-                    .py(px(2.))
-                    .bg(c.scrim)
-                    .flex()
-                    .justify_center()
-                    .text_size(px(10.))
-                    .font_weight(FontWeight::MEDIUM)
-                    .text_color(c.foreground_over_picture)
-                    .font_features(crate::ui::tabular_numbers())
-                    .child(percent)
-                    .into_any_element()
-            } else {
-                div()
-                    .text_color(c.muted_foreground)
-                    .font_features(crate::ui::tabular_numbers())
-                    .child(percent)
-                    .into_any_element()
-            }
-        }
+        UploadState::Uploading(fraction) => div()
+            .w_full()
+            .py(px(2.))
+            .bg(c.scrim)
+            .flex()
+            .justify_center()
+            .text_size(px(10.))
+            .font_weight(FontWeight::MEDIUM)
+            .text_color(c.foreground_over_picture)
+            .font_features(crate::ui::tabular_numbers())
+            .child(format!("{}%", (fraction * 100.) as u32))
+            .into_any_element(),
         UploadState::Failed(reason) => {
             let (store, id) = (store.clone(), attachment.id.clone());
             let help = format!("{reason} Click to try again.");
-            let retry = move |cx: &mut App| {
-                store.update(cx, |store, cx| {
-                    store.retry_attachment(&id);
-                    cx.notify();
-                })
-            };
-            if !on_picture {
-                return ActionButton::new(SharedString::from(format!("retry-{}", attachment.id)), "Retry")
-                    .symbol("rotate-cw")
-                    .help(help)
-                    .variant(Variant::Danger)
-                    .small()
-                    .round(true)
-                    .on_click(move |_, _, cx| retry(cx))
-                    .into_any_element();
-            }
             let strip = div()
                 .id(SharedString::from(format!("retry-{}", attachment.id)))
                 .w_full()
@@ -257,7 +234,10 @@ fn progress(attachment: &Attachment, store: &Entity<Store>, on_picture: bool, cx
                 .tooltip(crate::ui::tooltip(help))
                 .on_click(move |_, _, cx| {
                     cx.stop_propagation();
-                    retry(cx)
+                    store.update(cx, |store, cx| {
+                        store.retry_attachment(&id);
+                        cx.notify();
+                    })
                 })
                 .into_any_element()
         }

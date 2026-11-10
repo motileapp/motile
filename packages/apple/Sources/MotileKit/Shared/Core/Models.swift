@@ -1365,6 +1365,18 @@ struct Attachment: Equatable, Identifiable {
         if let file { return ViewedMedia(name: name, video: video, source: .file(file)) }
         return media.map { ViewedMedia(name: name, video: video, source: .media($0)) }
     }
+
+    /// Its extension, as "PDF", when it has one.
+    var kind: String? {
+        let kind = (name as NSString).pathExtension.uppercased()
+        return kind.isEmpty ? nil : kind
+    }
+
+    /// Its name, and its size when it is known.
+    var summary: String {
+        guard let bytes else { return name }
+        return "\(name), \(ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file))"
+    }
 }
 
 /// An image or a video the viewer shows: a file on this Mac, or one the core has or fetches.

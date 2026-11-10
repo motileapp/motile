@@ -265,7 +265,7 @@ struct ComposerView: View {
                     }
                 }
                 ForEach(store.attachments.filter { !$0.pictured }) { attachment in
-                    AttachmentChip(attachment: attachment)
+                    AttachmentFileTile(attachment: attachment)
                 }
             }
             .padding(.horizontal, 14)

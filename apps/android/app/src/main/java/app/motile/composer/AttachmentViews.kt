@@ -52,6 +52,7 @@ import app.motile.theme.scrim
 import app.motile.theme.shadow
 import app.motile.ui.ActionButton
 import app.motile.ui.ButtonVariant
+import app.motile.ui.Chip
 import app.motile.ui.DimButton
 import app.motile.ui.Icon
 import app.motile.ui.Spinner
@@ -65,7 +66,7 @@ import kotlin.math.roundToInt
 
 /** An image or a video in the composer: its picture, how far it is on its way to the server, and the button that removes it. A tap opens it in the viewer. */
 object AttachmentTile {
-    val side = 64.dp
+    val side = 96.dp
     internal val pictures = LruCache<String, ImageBitmap>(32)
 }
 
@@ -73,7 +74,6 @@ object AttachmentTile {
 fun AttachmentTile(attachment: Attachment, open: () -> Unit) {
     val store = LocalStore.current
     val palette = Theme.colors
-    val shape = RoundedCornerShape(Radius.lg)
     val maxPixels = with(LocalDensity.current) { (AttachmentTile.side.toPx() * 2).roundToInt() }
     val picture by produceState(AttachmentTile.pictures.get("tile:${attachment.id}"), attachment.id, attachment.file) {
         if (value != null) return@produceState
@@ -87,38 +87,56 @@ fun AttachmentTile(attachment: Attachment, open: () -> Unit) {
         AttachmentTile.pictures.put("tile:${attachment.id}", decoded)
         value = decoded
     }
-    Box(Modifier.semantics { contentDescription = attachment.name }) {
-        DimButton(open, Modifier.size(AttachmentTile.side).clip(shape).border(1.dp, palette.border, shape)) {
-            Box(Modifier.fillMaxSize().background(palette.backgroundSecondary), contentAlignment = Alignment.Center) {
-                picture?.let { Image(it, null, Modifier.fillMaxSize(), contentScale = ContentScale.Fit) }
-                if (attachment.state == Attachment.State.Preparing) {
-                    Spinner(IconSize.Lg, color = palette.mutedForeground)
-                } else if (attachment.video) {
-                    Icon(Symbol.Play, IconSize.Lg, Modifier.shadow(ShadowSize.Sm, CircleShape, Opacity.ShadowStrongest), color = OverPicture.foreground)
-                }
-                Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth()) { AttachmentProgress(attachment, onPicture = true) }
+    TileLook(attachment, open) {
+        Box(Modifier.fillMaxSize().background(palette.backgroundSecondary), contentAlignment = Alignment.Center) {
+            picture?.let { Image(it, null, Modifier.fillMaxSize(), contentScale = ContentScale.Fit) }
+            if (attachment.state == Attachment.State.Preparing) {
+                Spinner(IconSize.Lg, color = palette.mutedForeground)
+            } else if (attachment.video) {
+                Icon(Symbol.Play, IconSize.Lg, Modifier.shadow(ShadowSize.Sm, CircleShape, Opacity.ShadowStrongest), color = OverPicture.foreground)
             }
         }
-        ActionButton(
-            icon = Symbol.X, modifier = Modifier.align(Alignment.TopEnd).padding(2.dp), help = "Remove", variant = ButtonVariant.Overlay,
-            size = ControlSize.Small, round = true,
-        ) { store.removeAttachment(attachment.id) }
     }
 }
 
-/** A file in the composer that isn't shown as a picture: its name, its size, and how far it is on its way to the server. */
+private val nameInset = 8.dp
+private val kindInset = 6.dp
+
+/** The remove button sits level with a file's kind. */
+private val removeInset get() = kindInset - (ControlSize.Small.height - Chip.height) / 2
+
+/** A file in the composer that isn't shown as a picture, as a tile beside the pictures: its kind, its name, and how far it is on its way to the server. */
 @Composable
-fun AttachmentChip(attachment: Attachment) {
-    val store = LocalStore.current
+fun AttachmentFileTile(attachment: Attachment) {
     val palette = Theme.colors
-    ComposerChip {
-        Icon(Symbol.File, iconSize(text = 12f))
-        Text(attachment.name, size = 12f, maxLines = 1)
-        attachment.bytes?.let { Text(Formatter.formatShortFileSize(Platform.context, it), size = 12f, color = palette.mutedForeground, maxLines = 1) }
-        AttachmentProgress(attachment, onPicture = false)
-        CompositionLocalProvider(LocalRow provides Surface.Layer.Chip) {
-            ActionButton(icon = Symbol.X, help = "Remove", size = ControlSize.Small, round = true) { store.removeAttachment(attachment.id) }
+    TileLook(attachment, open = null) {
+        Box(Modifier.fillMaxSize().background(palette.backgroundSecondary)) {
+            Text(
+                attachment.name, Modifier.align(Alignment.BottomStart).padding(nameInset),
+                size = 12f, weight = FontWeight.Medium, color = palette.foreground, maxLines = 3,
+            )
+            attachment.kind?.let { Chip(it, Modifier.align(Alignment.TopStart).padding(kindInset), muted = true) }
         }
+    }
+}
+
+/** The square of an attachment: its edge, how far its upload is along its bottom, and the button that removes it. */
+@Composable
+private fun TileLook(attachment: Attachment, open: (() -> Unit)?, content: @Composable () -> Unit) {
+    val store = LocalStore.current
+    val shape = RoundedCornerShape(Radius.xl)
+    val summary = attachment.bytes?.let { "${attachment.name}, ${Formatter.formatShortFileSize(Platform.context, it)}" } ?: attachment.name
+    Box(Modifier.semantics { contentDescription = summary }) {
+        val framed = Modifier.size(AttachmentTile.side).clip(shape).border(1.dp, Theme.colors.border, shape)
+        val tile: @Composable () -> Unit = {
+            content()
+            Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth()) { AttachmentProgress(attachment) }
+        }
+        if (open != null) DimButton(open, framed) { tile() } else Box(framed) { tile() }
+        ActionButton(
+            icon = Symbol.X, modifier = Modifier.align(Alignment.TopEnd).padding(removeInset), help = "Remove", variant = ButtonVariant.Overlay,
+            size = ControlSize.Small, round = true,
+        ) { store.removeAttachment(attachment.id) }
     }
 }
 
@@ -135,7 +153,7 @@ fun ContinuedThreadChip(from: ContinuedThread, modifier: Modifier = Modifier) {
     }
 }
 
-/** The capsule of what a message goes with in the composer: a file, or the thread it continues. */
+/** The capsule of the thread a message continues in the composer. */
 @Composable
 private fun ComposerChip(modifier: Modifier = Modifier, content: @Composable RowScope.() -> Unit) {
     Row(
@@ -149,43 +167,29 @@ private fun ComposerChip(modifier: Modifier = Modifier, content: @Composable Row
     )
 }
 
-/** How far an attachment is on its way to the server, or the button that tries again when it didn't get there. Nothing once it is there. */
+/** How far an attachment is on its way to the server, along its tile's bottom edge, or the button that tries again when it didn't get there. Nothing once it is there. */
 @Composable
-private fun AttachmentProgress(attachment: Attachment, onPicture: Boolean) {
+private fun AttachmentProgress(attachment: Attachment) {
     val store = LocalStore.current
     val palette = Theme.colors
     when (val state = attachment.state) {
-        Attachment.State.Ready -> Unit
-        Attachment.State.Preparing -> if (!onPicture) Spinner(IconSize.Sm)
-        is Attachment.State.Uploading -> {
-            val percent = "${(state.fraction * 100).toInt()}%"
-            if (onPicture) {
-                Text(
-                    percent, Modifier.fillMaxWidth().background(palette.scrim).padding(vertical = 2.dp),
-                    style = Theme.uiDigits(10f, FontWeight.Medium), color = OverPicture.foreground, align = androidx.compose.ui.text.style.TextAlign.Center,
-                )
-            } else {
-                Text(percent, style = Theme.uiDigits(12f), color = palette.mutedForeground)
-            }
-        }
+        Attachment.State.Ready, Attachment.State.Preparing -> Unit
+        is Attachment.State.Uploading -> Text(
+            "${(state.fraction * 100).toInt()}%", Modifier.fillMaxWidth().background(palette.scrim).padding(vertical = 2.dp),
+            style = Theme.uiDigits(10f, FontWeight.Medium), color = OverPicture.foreground, align = androidx.compose.ui.text.style.TextAlign.Center,
+        )
         is Attachment.State.Failed -> {
             val help = "${state.message} Tap to try again."
-            if (onPicture) {
-                DimButton({ store.retryAttachment(attachment.id) }, Modifier.fillMaxWidth().background(palette.destructive).semantics { contentDescription = help }) {
-                    CompositionLocalProvider(LocalForeground provides palette.destructiveForeground) {
-                        Row(
-                            Modifier.align(Alignment.Center).padding(vertical = 2.dp),
-                            horizontalArrangement = Arrangement.spacedBy(3.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Icon(Symbol.RotateCw, iconSize(text = 10f))
-                            Text("Retry", size = 10f, weight = FontWeight.Medium)
-                        }
+            DimButton({ store.retryAttachment(attachment.id) }, Modifier.fillMaxWidth().background(palette.destructive).semantics { contentDescription = help }) {
+                CompositionLocalProvider(LocalForeground provides palette.destructiveForeground) {
+                    Row(
+                        Modifier.align(Alignment.Center).padding(vertical = 2.dp),
+                        horizontalArrangement = Arrangement.spacedBy(3.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(Symbol.RotateCw, iconSize(text = 10f))
+                        Text("Retry", size = 10f, weight = FontWeight.Medium)
                     }
-                }
-            } else {
-                ActionButton("Retry", Symbol.RotateCw, help = help, variant = ButtonVariant.Danger, size = ControlSize.Small, round = true) {
-                    store.retryAttachment(attachment.id)
                 }
             }
         }
