@@ -3,7 +3,7 @@ import SwiftUI
 /// An image or a video in the composer: its picture, how far it is on its way to the server, and
 /// the button that removes it. A click opens it in the viewer.
 struct AttachmentTile: View {
-    static let side: CGFloat = 64
+    static let side: CGFloat = 96
 
     @Environment(AppStore.self) private var store
     let attachment: Attachment
@@ -28,19 +28,7 @@ struct AttachmentTile: View {
                     .shadow(.sm, .shadowStrongest)
             }
         }
-        .frame(width: Self.side, height: Self.side)
-        .overlay(alignment: .bottom) { AttachmentProgress(attachment: attachment, onPicture: true) }
-        .clipShape(RoundedRectangle(cornerRadius: Radius.lg, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: Radius.lg, style: .continuous).stroke(Color.themeBorder, lineWidth: 1))
-        .button(DimButtonStyle(), action: open)
-        .overlay(alignment: .topTrailing) {
-            ActionButton(icon: .x, help: "Remove", variant: .overlay, size: .small, round: true) {
-                store.removeAttachment(attachment.id)
-            }
-            .padding(2)
-        }
-        .help(attachment.name)
-        .accessibilityLabel(attachment.name)
+        .modifier(TileLook(attachment: attachment, open: open))
         .task(id: attachment.file) { loadPicture() }
     }
 
@@ -64,26 +52,63 @@ struct AttachmentTile: View {
     }
 }
 
-/// A file in the composer that isn't shown as a picture: its name, its size, and how far it is on
-/// its way to the server.
-struct AttachmentChip: View {
-    @Environment(AppStore.self) private var store
+/// A file in the composer that isn't shown as a picture, as a tile beside the pictures: its kind,
+/// its name, and how far it is on its way to the server.
+struct AttachmentFileTile: View {
     let attachment: Attachment
 
     var body: some View {
-        HStack(spacing: 5) {
-            Image(.file, size: .sm)
-            Text(attachment.name)
-                .lineLimit(1)
-            if let bytes = attachment.bytes {
-                Text(ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file))
-                    .foregroundStyle(Color.themeMutedForeground)
+        Text(attachment.name)
+            .font(.ui(size: 12, weight: .medium))
+            .foregroundStyle(Color.themeForeground)
+            .lineLimit(3)
+            .padding(nameInset)
+            .frame(width: AttachmentTile.side, height: AttachmentTile.side, alignment: .bottomLeading)
+            .overlay(alignment: .topLeading) {
+                if let kind = attachment.kind {
+                    Chip(kind, muted: true)
+                        .padding(kindInset)
+                }
             }
-            AttachmentProgress(attachment: attachment, onPicture: false)
-            ActionButton(icon: .x, help: "Remove", size: .small, round: true) { store.removeAttachment(attachment.id) }
-                .environment(\.row, .chip)
+            .background(Color.themeBackgroundSecondary)
+            .modifier(TileLook(attachment: attachment, open: nil))
+    }
+}
+
+private let nameInset: CGFloat = 8
+private let kindInset: CGFloat = 6
+/// The remove button sits level with a file's kind.
+private let removeInset = kindInset - (ControlSize.small.height - Chip.height) / 2
+
+/// The square of an attachment: its edge, how far its upload is along its bottom, and the button
+/// that removes it.
+private struct TileLook: ViewModifier {
+    @Environment(AppStore.self) private var store
+    let attachment: Attachment
+    let open: (() -> Void)?
+
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: Radius.xl, style: .continuous)
+        let tile = content
+            .frame(width: AttachmentTile.side, height: AttachmentTile.side)
+            .overlay(alignment: .bottom) { AttachmentProgress(attachment: attachment) }
+            .clipShape(shape)
+            .overlay(shape.stroke(Color.themeBorder, lineWidth: 1))
+        Group {
+            if let open {
+                tile.button(DimButtonStyle(), action: open)
+            } else {
+                tile
+            }
         }
-        .modifier(ComposerChipLook())
+        .overlay(alignment: .topTrailing) {
+            ActionButton(icon: .x, help: "Remove", variant: .overlay, size: .small, round: true) {
+                store.removeAttachment(attachment.id)
+            }
+            .padding(removeInset)
+        }
+        .help(attachment.summary)
+        .accessibilityLabel(attachment.summary)
     }
 }
 
@@ -106,7 +131,7 @@ struct ContinuedThreadChip: View {
     }
 }
 
-/// The capsule of what a message goes with in the composer: a file, or the thread it continues.
+/// The capsule of the thread a message continues in the composer.
 private struct ComposerChipLook: ViewModifier {
     @Environment(\.surface) private var surface
 
@@ -120,47 +145,33 @@ private struct ComposerChipLook: ViewModifier {
     }
 }
 
-/// How far an attachment is on its way to the server, or the button that tries again when it
-/// didn't get there. Nothing once it is there.
+/// How far an attachment is on its way to the server, along its tile's bottom edge, or the button
+/// that tries again when it didn't get there. Nothing once it is there.
 private struct AttachmentProgress: View {
     @Environment(AppStore.self) private var store
     let attachment: Attachment
-    /// Over a tile's picture, along its bottom edge. Otherwise in a chip's line of text.
-    let onPicture: Bool
 
     var body: some View {
         switch attachment.state {
-        case .ready:
+        case .ready, .preparing:
             EmptyView()
-        case .preparing:
-            if !onPicture { Spinner(size: .sm) }
         case .uploading(let fraction):
-            let percent = Text("\(Int(fraction * 100))%").monospacedDigit()
-            if onPicture {
-                percent
-                    .font(.ui(size: 10, weight: .medium))
-                    .foregroundStyle(Color.themeForegroundOverPicture)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 2)
-                    .background(Color.themeScrim)
-            } else {
-                percent.foregroundStyle(Color.themeMutedForeground)
-            }
+            Text("\(Int(fraction * 100))%")
+                .monospacedDigit()
+                .font(.ui(size: 10, weight: .medium))
+                .foregroundStyle(Color.themeForegroundOverPicture)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 2)
+                .background(Color.themeScrim)
         case .failed(let reason):
-            if onPicture {
-                Label("Retry", symbol: .rotateCw, size: .xs)
-                    .font(.ui(size: 10, weight: .medium))
-                    .foregroundStyle(Color.themeDestructiveForeground)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 2)
-                    .background(Color.themeDestructive)
-                    .button(DimButtonStyle()) { store.retryAttachment(attachment.id) }
-                    .help("\(reason) Click to try again.")
-            } else {
-                ActionButton("Retry", icon: .rotateCw, help: "\(reason) Click to try again.", variant: .danger, size: .small, round: true) {
-                    store.retryAttachment(attachment.id)
-                }
-            }
+            Label("Retry", symbol: .rotateCw, size: .xs)
+                .font(.ui(size: 10, weight: .medium))
+                .foregroundStyle(Color.themeDestructiveForeground)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 2)
+                .background(Color.themeDestructive)
+                .button(DimButtonStyle()) { store.retryAttachment(attachment.id) }
+                .help("\(reason) Click to try again.")
         }
     }
 }
