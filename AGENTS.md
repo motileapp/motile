@@ -792,6 +792,8 @@ clients. It replays the recorded output in `fixtures/` or makes up a turn, depen
 | "ask an agent to change the settings" | Starts an agent that asks before it edits `.claude/settings.json` under any access; told it waits, allows it through `approve_agent` (Claude Code) |
 | "look over" | Reads greet.py and runs the tests, a step every `FAKE_AGENT_CHILD_STEP` seconds, and says what it would change |
 | "run the workflow" | Runs a workflow of two phases, whose last agent fails (Claude Code) |
+| "wait for more" | Sent now while it writes, waits for the next message sent now, which stops it before its answer, so it is never repeated (Claude Code) |
+| "too late" | Sent while it works, is refused once the turn ends, as a steer that comes as the turn ends is (Codex) |
 | "which color" | Asks the user a question |
 | "plan the hello" | Presents a plan to approve |
 | "hit the limit" | Is stopped by the usage limit, which resets `FAKE_AGENT_RESET` seconds later |

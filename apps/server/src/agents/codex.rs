@@ -19,6 +19,8 @@ const INJECT: u64 = 3;
 const FIRST_TURN: u64 = 4;
 /// What a Codex too old to take messages before a turn answers `thread/inject_items` with.
 const METHOD_NOT_FOUND: i64 = -32601;
+/// How the id of a message steered into a running turn starts.
+const STEER: &str = "steer:";
 
 pub fn arguments() -> Vec<String> {
     vec!["app-server".to_string()]
@@ -60,7 +62,7 @@ fn with_settings(params: &mut Value, settings: Settings) {
 pub fn steer(thread_id: &str, turn_id: &str, prompt: &str, id: &str) -> String {
     let mut params = turn_params(thread_id, prompt, id);
     params["expectedTurnId"] = json!(turn_id);
-    line(json!({"id": format!("message:{id}"), "method": "turn/steer", "params": params}))
+    line(json!({"id": format!("{STEER}{id}"), "method": "turn/steer", "params": params}))
 }
 
 pub fn stop(thread_id: &str, turn_id: &str) -> String {
@@ -248,6 +250,13 @@ impl Parser {
 
     /// The answers to what starts the thread: each leads to the next request.
     fn parse_answer(&mut self, id: &Value, message: &Value) -> Vec<AgentEvent> {
+        // Codex refuses a message steered into a turn that ended before it got there.
+        if let Some(steered) = id.as_str().and_then(|id| id.strip_prefix(STEER)) {
+            if message["error"].is_null() {
+                return vec![];
+            }
+            return vec![AgentEvent::TooLate { id: steered.to_string() }];
+        }
         let Some(id) = id.as_u64() else { return vec![] };
         if let Some(error) = message["error"]["message"].as_str() {
             return self.refused(id, &message["error"], error);
@@ -947,6 +956,13 @@ mod tests {
         assert_eq!(request["params"]["expectedTurnId"], "turn1");
         assert_eq!(request["params"]["clientUserMessageId"], "m2");
         assert_eq!(request["params"]["input"][0]["text"], "Also this");
+
+        let mut parser = parser(turn(Access::Full));
+        let steered = format!(r#"{{"id":{},"result":{{"turnId":"turn1"}}}}"#, request["id"]);
+        assert_eq!(parser.parse(&steered), vec![]);
+        let refused =
+            format!(r#"{{"id":{},"error":{{"code":-32600,"message":"no active turn to steer"}}}}"#, request["id"]);
+        assert_eq!(parser.parse(&refused), vec![AgentEvent::TooLate { id: "m2".to_string() }]);
     }
 
     #[test]
