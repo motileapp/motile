@@ -64,9 +64,11 @@ fn json<T: serde::de::DeserializeOwned>(row: &rusqlite::Row, index: usize) -> ru
     Ok(serde_json::from_str(&payload).ok().map(|value| (value, payload.len())))
 }
 
-/// A project as a copy shows it: no git and no icon, which only its own server can read.
+/// A project as a copy shows it: no git and no icon, which only its own server can read, but the
+/// repository it was cloned from, so that another server's clone of it is known as the same.
 fn copied_project(id: String, path: String, created_at: f64, setup: Option<String>) -> Project {
     Project {
+        origin: crate::git::origin_of(&path),
         id,
         name: file_name(&path).to_string(),
         path,
@@ -76,7 +78,6 @@ fn copied_project(id: String, path: String, created_at: f64, setup: Option<Strin
         worktrees: Vec::new(),
         setup,
         no_project: false,
-        origin: None,
         created_at,
     }
 }
@@ -731,6 +732,26 @@ mod tests {
         assert!(b.origin_watermarks().unwrap().is_empty());
         assert_eq!(b.copies("a").unwrap().1.len(), 0);
         assert!(b.copied_items("a", "t").unwrap().is_empty());
+    }
+
+    #[test]
+    fn a_copied_project_says_where_its_repository_was_cloned_from() {
+        let (folder, store) = store();
+        let repository = folder.path().join("motile");
+        std::fs::create_dir_all(repository.join(".git")).unwrap();
+        std::fs::write(
+            repository.join(".git/config"),
+            "[remote \"origin\"]\n\turl = git@github.com:owner/motile.git\n",
+        )
+        .unwrap();
+        store
+            .connection()
+            .execute("INSERT INTO projects (id, path, created_at) VALUES ('p', ?1, 0)", [repository.to_string_lossy()])
+            .unwrap();
+
+        let projects = set(&store.changes(0).unwrap()).projects;
+
+        assert_eq!(projects[0].value.origin.as_deref(), Some("github.com/owner/motile"));
     }
 
     #[test]
