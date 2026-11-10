@@ -175,6 +175,10 @@ pub enum AgentEvent {
     Taken {
         id: String,
     },
+    /// The message with this id came for a turn that had ended. It starts the next one.
+    TooLate {
+        id: String,
+    },
     /// The agent's own name for the turn that has started, which stopping it takes.
     Turn {
         id: String,

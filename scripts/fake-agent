@@ -8,8 +8,9 @@ With `--input-format stream-json` the prompt is the first JSON line on stdin, as
 it, and the process stays until stdin closes. A prompt written while a turn runs is read after the
 turn's next tool call and repeated on stdout; one written with priority `now` while a reply streams
 stops the reply, with a result that says so, and is answered in a turn of its own, as Claude Code
-does. A prompt that comes once the turn has ended gets a turn of its own. Some prompts get a reply
-made up on the spot instead:
+does; one with "wait for more" waits for the next, which stops it before its answer, so it is never
+repeated. A prompt that comes once the turn has ended gets a turn of its own. Some prompts get a
+reply made up on the spot instead:
 
 - "long reply with a lot of code": steps with code inside a list, then ten large code blocks,
   streamed in small pieces.
@@ -69,10 +70,11 @@ made up on the spot instead:
 
 Called as `app-server` it is Codex: it answers the requests that start a thread and its turns,
 takes a prompt steered into a running turn after the turn's next tool call, and stops a turn when
-asked. There "run greet.py" asks before each of the two under the `untrusted` approval policy,
-"which color" asks its question, "plan the hello" presents a plan and carries it out when told
-to implement it, "ask an agent" starts an agent, whose work comes as a thread of its own, and "hit
-the limit" is stopped by the usage limit.
+asked. A steer with "too late" is refused once the turn has ended, as Codex refuses one that comes
+as its turn ends. There "run greet.py" asks before each of the two under the `untrusted` approval
+policy, "which color" asks its question, "plan the hello" presents a plan and carries it out when
+told to implement it, "ask an agent" starts an agent, whose work comes as a thread of its own, and
+"hit the limit" is stopped by the usage limit.
 
 Asked for its login and the limits of its plan (`initialize` and `get_usage` for Claude Code,
 `account/read` and `account/rateLimits/read` for Codex) it answers with made-up ones. Asked for its
@@ -356,8 +358,27 @@ def take(message):
     """Repeats a prompt read from stdin, as `--replay-user-messages` does, and returns its text."""
     content = message["message"]["content"]
     record(content, prompts_file)
+    started(message)
     emit(dict(message, isReplay=True))
     return text_of(content)
+
+
+def started(message):
+    if message.get("uuid"):
+        emit({"type": "command_lifecycle", "command_uuid": message["uuid"], "state": "started"})
+
+
+def cut_off(message, turn):
+    """A prompt the next one stops before it was answered, which Claude Code never repeats."""
+    record(message["message"]["content"], prompts_file)
+    started(message)
+    turn.done(terminal_reason="aborted_streaming")
+
+
+def wait_for_another(seconds=5):
+    deadline = time.monotonic() + seconds
+    while prompts.empty() and time.monotonic() < deadline:
+        time.sleep(0.01)
 
 
 def take_waiting():
@@ -1294,6 +1315,8 @@ class Codex:
         self.items = 0
         self.requests = 0
         self.told = []
+        # Steers that came as the turn ended, which Codex refuses once it has.
+        self.late = []
 
     def read(self):
         for line in sys.stdin:
@@ -1341,6 +1364,9 @@ class Codex:
                 self.prompts.put(params)
             if method == "turn/steer":
                 record({method: params})
+                if "too late" in message_of(params["input"][0]["text"]).lower():
+                    self.late.append(message["id"])
+                    continue
                 emit({"id": message["id"], "result": {"turnId": params["expectedTurnId"]}})
                 self.prompts.put(params)
             if method == "turn/interrupt":
@@ -1570,6 +1596,8 @@ class Codex:
         self.notify("thread/tokenUsage/updated", threadId=self.thread_id, turnId=turn["id"],
                     tokenUsage={"total": total, "last": last, "modelContextWindow": 258400})
         self.notify("turn/completed", turn=dict(turn, status=status, error=error))
+        while self.late:
+            emit({"id": self.late.pop(0), "error": {"code": -32600, "message": "no active turn to steer"}})
 
     def serve(self):
         threading.Thread(target=self.read, daemon=True).start()
@@ -1676,6 +1704,13 @@ def answer(prompt):
         # A message that stops the answer to the one before it is answered in its turn, and so on.
         while True:
             turn = Turn(preempted.session_id)
+            if "wait for more" in message_of(text_of(preempted.message["message"]["content"])).lower():
+                wait_for_another()
+            following = steer_waiting()
+            if following:
+                cut_off(preempted.message, turn)
+                preempted = Preempted(following, turn.session_id)
+                continue
             said = take(preempted.message)
             try:
                 turn.text("I stopped there. You also said: " + said)
