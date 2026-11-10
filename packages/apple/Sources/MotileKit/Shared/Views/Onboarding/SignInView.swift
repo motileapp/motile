@@ -10,10 +10,10 @@ struct SignInView: View {
                 .fill(Color.themeEmphasizedForeground)
                 .frame(width: 48, height: 48)
             Text("Motile")
-                .font(.ui(size: 30, weight: .semibold))
+                .font(.ui(.xxl, weight: .semibold))
                 .padding(.top, 14)
             Text("The command center for coding agents.")
-                .font(.ui(size: 15))
+                .font(.ui(.lg))
                 .foregroundStyle(Color.themeMutedForeground)
                 .padding(.top, 6)
 
@@ -24,14 +24,14 @@ struct SignInView: View {
             .padding(.top, 34)
             if store.signingIn {
                 Text("Waiting for the browser")
-                    .font(.ui(size: 12))
+                    .font(.ui(.xs))
                     .foregroundStyle(Color.themeMutedStrongerForeground)
                     .padding(.top, 10)
             }
 
             if let error = store.signInError {
                 Text(error)
-                    .font(.ui(size: 13))
+                    .font(.ui(.sm))
                     .foregroundStyle(Color.themeDestructive)
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: 360)
@@ -40,7 +40,7 @@ struct SignInView: View {
             Spacer()
             Text("Signing in links this \(Platform.device) to your account. Your threads stay on your own machines.")
                 .multilineTextAlignment(.center)
-                .font(.ui(size: 12))
+                .font(.ui(.xs))
                 .foregroundStyle(Color.themeMutedStrongerForeground)
                 .padding(.horizontal, 20)
                 .padding(.bottom, 24)

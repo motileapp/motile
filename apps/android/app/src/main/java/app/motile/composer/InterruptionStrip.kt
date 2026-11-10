@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import app.motile.LocalStore
 import app.motile.core.Interruption
 import app.motile.core.Time
+import app.motile.theme.TextSize
 import app.motile.theme.iconSize
 import app.motile.theme.Theme
 import app.motile.ui.ActionButton
@@ -48,17 +49,17 @@ fun InterruptionStrip(interruption: Interruption) {
     }
     val detail = interruption.detail(now)
     Row(Modifier.fillMaxWidth().composerStrip(ComposerStrip.Edge.Top), verticalAlignment = Alignment.CenterVertically) {
-        Icon(interruption.symbol, iconSize(text = 12.5f), Modifier.padding(start = 14.dp, end = 7.dp), color = palette.warning)
+        Icon(interruption.symbol, iconSize(text = TextSize.Xs), Modifier.padding(start = 14.dp, end = 7.dp), color = palette.warning)
         // A narrow composer keeps what happens next and leaves out the title.
         FirstThatFits(
             Modifier.weight(1f).padding(end = 8.dp).semantics { contentDescription = "${interruption.title}. $detail." },
             {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(interruption.title, size = 12.5f, weight = FontWeight.Medium, color = palette.warning, maxLines = 1)
-                    Text(detail, size = 12.5f, color = palette.mutedForeground, maxLines = 1)
+                    Text(interruption.title, size = TextSize.Xs, weight = FontWeight.Medium, color = palette.warning, maxLines = 1)
+                    Text(detail, size = TextSize.Xs, color = palette.mutedForeground, maxLines = 1)
                 }
             },
-            { Text(detail, size = 12.5f, color = palette.warning, maxLines = 1, overflow = TextOverflow.MiddleEllipsis) },
+            { Text(detail, size = TextSize.Xs, color = palette.warning, maxLines = 1, overflow = TextOverflow.MiddleEllipsis) },
         )
         val button = @Composable { title: String, help: String, action: () -> Unit ->
             ActionButton(title, help = help, variant = ButtonVariant.Ghost, margin = ComposerStrip.margin, onClick = action)

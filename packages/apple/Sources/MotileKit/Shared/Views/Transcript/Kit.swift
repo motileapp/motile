@@ -496,7 +496,7 @@ extension PlatformImage {
 
 /// The lines added and removed, as they are written everywhere: `+12 −3`.
 enum LineCountText {
-    static let font = PlatformFont.uiDigits(11.5, weight: .medium)
+    static let font = PlatformFont.uiDigits(.xs, weight: .medium)
 
     static func text(added: Int, removed: Int) -> NSAttributedString {
         let text = NSMutableAttributedString()

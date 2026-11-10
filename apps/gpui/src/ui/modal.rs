@@ -10,7 +10,7 @@ use std::rc::Rc;
 use gpui_kit::prelude::*;
 use gpui_kit::*;
 
-use crate::theme::{Opacity, Radius, ShadowSize, colors};
+use crate::theme::{Opacity, Radius, ShadowSize, TextSize, colors};
 use crate::ui::control::{ActionButton, Variant};
 use crate::ui::motion::{self, Tween};
 
@@ -391,7 +391,7 @@ pub fn confirmation(
             div()
                 .w_0()
                 .min_w_full()
-                .text_size(px(15.))
+                .text_size(TextSize::Lg)
                 .line_height(px(20.))
                 .font_weight(FontWeight::SEMIBOLD)
                 .child(confirmation.title),
@@ -402,7 +402,7 @@ pub fn confirmation(
                     .w_0()
                     .min_w_full()
                     .pt(px(6.))
-                    .text_size(px(13.))
+                    .text_size(TextSize::Sm)
                     .line_height(px(18.))
                     .text_color(c.muted_foreground)
                     .child(confirmation.message),

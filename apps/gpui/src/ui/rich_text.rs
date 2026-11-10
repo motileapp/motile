@@ -571,7 +571,7 @@ fn search_url(words: &str) -> String {
 // Markdown a panel shows, a pull request's description or an issue's, drawn as the transcript
 // draws a reply but at the panel's size.
 
-use crate::theme::{self, colors};
+use crate::theme::{self, TextSize, colors};
 use crate::transcript::prose::{self, ParaStyle, PreparedProse, ProseBlock, TextPara};
 
 fn panel_font(family: &str, weight: FontWeight, italic: bool) -> Font {
@@ -670,7 +670,7 @@ pub fn code_block(
         .bg(surface.layer(theme::Layer::Box, c))
         .rounded(px(theme::Radius::LG))
         .font_family(theme::MONO_FONT)
-        .text_size(px(12.))
+        .text_size(TextSize::Xs)
         .line_height(px(17.))
         .text_color(c.foreground)
         .when(!code.is_empty(), |block| {
@@ -679,9 +679,9 @@ pub fn code_block(
 }
 
 /// Prose at `size`: its paragraphs, lists, quotes, code, rules and tables.
-pub fn prose_blocks(id: &str, prepared: &PreparedProse, size: f32, surface: theme::Surface, cx: &App) -> Div {
+pub fn prose_blocks(id: &str, prepared: &PreparedProse, size: TextSize, surface: theme::Surface, cx: &App) -> Div {
     let c = colors(cx);
-    let line = (size * 1.5).round();
+    let line = (size.points() * 1.5).round();
     let count = prepared.blocks.len();
     let mut column = div().w_full().flex().flex_col();
     for (index, block) in prepared.blocks.iter().enumerate() {
@@ -691,15 +691,16 @@ pub fn prose_blocks(id: &str, prepared: &PreparedProse, size: f32, surface: them
             ProseBlock::Para(para) => {
                 let (text_size, text_line, weight, color, after) = match &para.style {
                     ParaStyle::Heading(level) => {
-                        let heading = (theme::heading_size(*level) * size / theme::PROSE_SIZE).round();
-                        (heading, (heading * 1.25).round(), FontWeight::SEMIBOLD, c.foreground, 6.)
+                        let scale = size.points() / theme::PROSE_SIZE.points();
+                        let heading = TextSize::nearest(theme::heading_size(*level).points() * scale);
+                        (heading, (heading.points() * 1.25).round(), FontWeight::SEMIBOLD, c.foreground, 6.)
                     }
                     ParaStyle::Body => (size, line, FontWeight::NORMAL, c.foreground, 8.),
                     ParaStyle::ListItem { .. } => (size, line, FontWeight::NORMAL, c.foreground, 3.),
                     ParaStyle::Quote(_) => (size, line, FontWeight::NORMAL, c.muted_foreground, 6.),
                 };
                 let body = div()
-                    .text_size(px(text_size))
+                    .text_size(text_size)
                     .line_height(px(text_line))
                     .text_color(color)
                     .child(prose_paragraph(block_id.into(), para, color, weight, cx));
@@ -726,7 +727,7 @@ pub fn prose_blocks(id: &str, prepared: &PreparedProse, size: f32, surface: them
                                         .absolute()
                                         .top_0()
                                         .left(px(quote_indent + (*depth as f32 - 1.) * 20. + 4.))
-                                        .text_size(px(text_size))
+                                        .text_size(text_size)
                                         .line_height(px(text_line))
                                         .text_color(color)
                                         .child(marker),
@@ -761,7 +762,7 @@ pub fn prose_blocks(id: &str, prepared: &PreparedProse, size: f32, surface: them
                             div().flex_1().min_w(px(60.)).px(px(8.)).py(px(5.)).when_some(cell, |slot, cell| {
                                 let weight = if cell.header { FontWeight::SEMIBOLD } else { FontWeight::NORMAL };
                                 let color = c.foreground;
-                                slot.text_size(px(size)).line_height(px(line)).text_color(color).child(prose_paragraph(
+                                slot.text_size(size).line_height(px(line)).text_color(color).child(prose_paragraph(
                                     SharedString::from(format!("{block_id}-{row_index}-{column}")).into(),
                                     &cell.para,
                                     color,
@@ -961,7 +962,7 @@ mod tests {
             let text = RichText::new("lined", self.0).row(7).sent(crate::transcript::find::stretch(self.0.into(), 10));
             div()
                 .font_family(crate::theme::UI_FONT)
-                .text_size(px(14.))
+                .text_size(TextSize::Md)
                 .line_height(px(20.))
                 .pt(px(10.))
                 .w(px(self.1))

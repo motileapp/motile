@@ -28,7 +28,7 @@ struct BackupSheet: View {
         #if os(macOS)
         VStack(alignment: .leading, spacing: 14) {
             Text(title)
-                .font(.ui(size: 15, weight: .semibold))
+                .font(.ui(.lg, weight: .semibold))
             form
             HStack(spacing: 0) {
                 Spacer()
@@ -102,12 +102,12 @@ struct BackupSheet: View {
     ) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(title)
-                .font(.ui(size: 12, weight: .medium))
+                .font(.ui(.xs, weight: .medium))
                 .padding(.horizontal, 4)
             content()
             if let caption = failure ?? caption {
                 Text(caption)
-                    .font(.ui(size: 11.5))
+                    .font(.ui(.xs))
                     .foregroundStyle(failure == nil ? Color.themeMutedStrongerForeground : Color.themeDestructive)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, 4)

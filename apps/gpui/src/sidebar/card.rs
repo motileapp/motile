@@ -10,7 +10,7 @@ use gpui_kit::*;
 
 use super::{ROW_INSET, Sidebar, row_margin};
 use crate::models::{ThreadInfo, last_component, shortened};
-use crate::theme::{IconSize, Surface, colors};
+use crate::theme::{IconSize, Surface, TextSize, colors};
 use crate::ui::control::dotted;
 use crate::ui::logos::{self, pull_request_color, pull_request_symbol};
 use crate::ui::{GatewayMark, divider_on, dropdown_card, icons, proxied_dotted, tabular_numbers};
@@ -121,7 +121,7 @@ impl Sidebar {
         let project = store.project(Some(&thread.project_id)).map(|project| project.seen(thread));
         let server = store.server(Some(&thread.server_id));
         let card_line = |text: String, middle: bool, mark: GatewayMark, icon: AnyElement| {
-            let shown = div().min_w_0().text_size(px(12.)).whitespace_nowrap().overflow_hidden();
+            let shown = div().min_w_0().text_size(TextSize::Xs).whitespace_nowrap().overflow_hidden();
             let shown = if middle { shown.text_ellipsis_middle() } else { shown.text_ellipsis() };
             div()
                 .min_w_0()
@@ -132,7 +132,7 @@ impl Sidebar {
                 .child(icon)
                 .child(match mark {
                     GatewayMark::Hidden => shown.child(dotted(text, c)),
-                    mark => proxied_dotted(text, mark, 12., ICON, c).text_size(px(12.)),
+                    mark => proxied_dotted(text, mark, TextSize::Xs, ICON, c).text_size(TextSize::Xs),
                 })
                 .into_any_element()
         };
@@ -156,7 +156,7 @@ impl Sidebar {
             .flex_col()
             .child(
                 div()
-                    .text_size(px(13.))
+                    .text_size(TextSize::Sm)
                     .font_weight(FontWeight::MEDIUM)
                     .text_color(c.foreground)
                     .truncate()
@@ -194,7 +194,7 @@ impl Sidebar {
                         .child(
                             div()
                                 .flex_shrink_0()
-                                .text_size(px(12.))
+                                .text_size(TextSize::Xs)
                                 .font_weight(FontWeight::MEDIUM)
                                 .font_features(tabular_numbers())
                                 .text_color(c.muted_stronger_foreground)
@@ -203,7 +203,7 @@ impl Sidebar {
                         .child(
                             div()
                                 .min_w_0()
-                                .text_size(px(12.))
+                                .text_size(TextSize::Xs)
                                 .text_color(c.muted_foreground)
                                 .truncate()
                                 .child(pull_request.title.clone()),

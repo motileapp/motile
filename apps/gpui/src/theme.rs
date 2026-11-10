@@ -25,7 +25,32 @@ impl Appearance {
     }
 }
 
-pub use crate::tokens::{IconSize, Opacity, Radius, ShadowSize, Tokens};
+pub use crate::tokens::{IconSize, Opacity, Radius, ShadowSize, TextSize, Tokens};
+
+impl TextSize {
+    const ALL: [TextSize; 7] =
+        [TextSize::Xxs, TextSize::Xs, TextSize::Sm, TextSize::Md, TextSize::Lg, TextSize::Xl, TextSize::Xxl];
+
+    /// The size nearest to `points`, for text sized from something else, like the disc it is on.
+    pub fn nearest(points: f32) -> TextSize {
+        Self::ALL
+            .into_iter()
+            .min_by(|a, b| (a.points() - points).abs().total_cmp(&(b.points() - points).abs()))
+            .unwrap_or(TextSize::Md)
+    }
+}
+
+impl From<TextSize> for Pixels {
+    fn from(size: TextSize) -> Self {
+        px(size.points())
+    }
+}
+
+impl From<TextSize> for AbsoluteLength {
+    fn from(size: TextSize) -> Self {
+        px(size.points()).into()
+    }
+}
 
 /// The design tokens of one appearance, with the colours made from them. Every colour the app
 /// shows is one of these; a view never makes a colour of its own.
@@ -219,8 +244,8 @@ impl Surface {
 
 impl IconSize {
     /// The icon that goes with text of `size`: about a fifth larger, as on the web.
-    pub fn text(size: f32) -> IconSize {
-        match size {
+    pub fn text(size: TextSize) -> IconSize {
+        match size.points() {
             size if size < 11. => IconSize::Xs,
             size if size < 13. => IconSize::Sm,
             size if size < 15. => IconSize::Md,
@@ -288,11 +313,10 @@ impl ControlSize {
         }
     }
 
-    pub fn text_size(self) -> f32 {
+    pub fn text_size(self) -> TextSize {
         match self {
-            ControlSize::Small | ControlSize::Inset => 11.5,
-            ControlSize::Regular => 12.,
-            ControlSize::Large => 13.,
+            ControlSize::Small | ControlSize::Inset | ControlSize::Regular => TextSize::Xs,
+            ControlSize::Large => TextSize::Sm,
         }
     }
 
@@ -361,8 +385,8 @@ pub fn apply(dark: bool, window: &mut Window, cx: &mut App) {
     component::Theme::update(cx, |theme| {
         theme.font_family = UI_FONT.into();
         theme.mono_font_family = MONO_FONT.into();
-        theme.font_size = px(13.);
-        theme.mono_font_size = px(CODE_SIZE);
+        theme.font_size = TextSize::Sm.into();
+        theme.mono_font_size = CODE_SIZE.into();
         theme.background = c.background;
         theme.foreground = c.foreground;
         theme.border = c.border;
@@ -421,17 +445,16 @@ pub const SYSTEM_FONT: &str = ".AppleSystemUIFont";
 #[cfg(not(target_os = "macos"))]
 pub const SYSTEM_FONT: &str = UI_FONT;
 
-pub const PROSE_SIZE: f32 = 14.;
-pub const CODE_SIZE: f32 = 12.5;
+pub const PROSE_SIZE: TextSize = TextSize::Md;
+pub const CODE_SIZE: TextSize = TextSize::Xs;
 pub const PROSE_LINE_HEIGHT: f32 = 24.;
 pub const CODE_LINE_HEIGHT: f32 = 18.;
 
-pub fn heading_size(level: u8) -> f32 {
+pub const fn heading_size(level: u8) -> TextSize {
     match level {
-        1 => 20.,
-        2 => 17.,
-        3 => 15.,
-        _ => 14.,
+        1 | 2 => TextSize::Xl,
+        3 => TextSize::Lg,
+        _ => TextSize::Md,
     }
 }
 

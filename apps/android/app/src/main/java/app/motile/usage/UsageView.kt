@@ -22,6 +22,7 @@ import app.motile.core.Server
 import app.motile.core.UsageModel
 import app.motile.platform.Symbol
 import app.motile.theme.LocalPalette
+import app.motile.theme.TextSize
 import app.motile.ui.ActionMenu
 import app.motile.ui.ButtonVariant
 import app.motile.ui.Check
@@ -106,6 +107,6 @@ private fun UsageLoading() {
 @Composable
 fun UsageNote(text: String) {
     Box(Modifier.fillMaxWidth().heightIn(min = 240.dp), contentAlignment = Alignment.Center) {
-        Text(text, size = 12f, color = LocalPalette.current.mutedForeground, align = TextAlign.Center)
+        Text(text, size = TextSize.Xs, color = LocalPalette.current.mutedForeground, align = TextAlign.Center)
     }
 }

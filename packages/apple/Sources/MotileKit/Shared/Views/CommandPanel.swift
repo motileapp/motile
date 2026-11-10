@@ -188,9 +188,9 @@ struct CommandPanel: View {
                     .foregroundStyle(Color.themeMutedStrongerForeground)
                     .frame(width: ControlSize.regular.height, height: ControlSize.regular.height)
             }
-            LineField(text: $query, font: .ui(16))
+            LineField(text: $query, font: .ui(.lg))
                 .placeholder(prompt(page), shown: query.isEmpty)
-                .font(.ui(size: 16))
+                .font(.ui(.lg))
                 .focused($searching)
             if let id = page.githubID {
                 refreshRepos(id)
@@ -238,7 +238,7 @@ struct CommandPanel: View {
                 LazyVStack(alignment: .leading, spacing: 0) {
                     if rows == 0 {
                         Text(emptyText(page))
-                            .font(.ui(size: 13))
+                            .font(.ui(.sm))
                             .foregroundStyle(Color.themeMutedStrongerForeground)
                             .multilineTextAlignment(.center)
                             .frame(maxWidth: .infinity)
@@ -247,7 +247,7 @@ struct CommandPanel: View {
                     }
                     ForEach(sections) { section in
                         Text(section.title)
-                            .font(.ui(size: 12, weight: .medium))
+                            .font(.ui(.xs, weight: .medium))
                             .foregroundStyle(Color.themeMutedStrongerForeground)
                             .padding(.horizontal, PanelRow.sideMargin + 10)
                             .padding(.top, 10)
@@ -262,7 +262,7 @@ struct CommandPanel: View {
                     }
                     if let refused {
                         Text(refused)
-                            .font(.ui(size: 12))
+                            .font(.ui(.xs))
                             .foregroundStyle(Color.themeDestructive)
                             .lineLimit(2)
                             .padding(.horizontal, PanelRow.sideMargin + 10)
@@ -336,7 +336,7 @@ struct CommandPanel: View {
         HStack(spacing: 5) {
             KeyCaps(keys)
             Text(text)
-                .font(.ui(size: 12))
+                .font(.ui(.xs))
         }
         .foregroundStyle(Color.themeMutedForeground)
     }
@@ -959,11 +959,11 @@ private struct PanelRow: View {
                 } else if item.oneLine {
                     HStack(spacing: Self.dotGap) {
                         Text(item.title)
-                            .font(.ui(size: 14))
+                            .font(.ui(.md))
                             .lineLimit(1)
                         if !item.detailParts.isEmpty {
                             Text("·")
-                                .font(.ui(size: 12))
+                                .font(.ui(.xs))
                                 .foregroundStyle(Color.themeMutedStrongerForeground)
                             detailParts
                         }
@@ -971,14 +971,14 @@ private struct PanelRow: View {
                     .frame(height: Self.titleHeight)
                 } else {
                     Text(item.title)
-                        .font(.ui(size: 14))
+                        .font(.ui(.md))
                         .lineLimit(1)
                         .frame(height: Self.titleHeight)
                     if !item.detailParts.isEmpty {
                         detailParts
                     } else if !item.detail.isEmpty {
                         Text(item.detail)
-                            .font(.ui(size: 12))
+                            .font(.ui(.xs))
                             .foregroundStyle(Color.themeMutedForeground)
                             .lineLimit(1)
                             .truncationMode(.middle)
@@ -1020,7 +1020,7 @@ private struct PanelRow: View {
                 .layoutPriority(position == 0 ? 1 : 0)
             }
         }
-        .font(.ui(size: 12))
+        .font(.ui(.xs))
         .foregroundStyle(Color.themeMutedForeground)
         .frame(height: Self.detailHeight)
     }
@@ -1049,14 +1049,14 @@ private struct PanelRow: View {
                 .foregroundStyle(Color.themeMutedForeground)
         } else if let note = item.note {
             Text(note)
-                .font(.ui(size: 12, weight: .medium))
+                .font(.ui(.xs, weight: .medium))
                 .foregroundStyle(item.warns ? Color.themeWarning : Color.themeMutedStrongerForeground)
                 .padding(.horizontal, item.warns ? 8 : 0)
                 .padding(.vertical, item.warns ? 3 : 0)
                 .background(item.warns ? AnyShapeStyle(Color.themeWarning.wash()) : AnyShapeStyle(Color.clear), in: Capsule())
         } else if let keys = item.keys ?? item.shortcut.map({ "⌘\($0)" }) {
             Text(keys)
-                .font(.ui(size: 12, weight: .medium))
+                .font(.ui(.xs, weight: .medium))
                 .foregroundStyle(Color.themeMutedStrongerForeground)
                 .monospacedDigit()
         }

@@ -6,7 +6,7 @@ use gpui_kit::*;
 use motile_protocol::wire::{Agent, PullRequest};
 
 use crate::models::{Project, Server};
-use crate::theme::{Colors, IconSize, colors};
+use crate::theme::{Colors, IconSize, TextSize, colors};
 use crate::ui::{OnClick, dims, icons, tooltip};
 
 /// The colour an agent's logo and its series in a chart are drawn in.
@@ -205,7 +205,7 @@ fn is_svg(bytes: &[u8]) -> bool {
 
 /// The server a thread or project is on, for when there is more than one, by its short name.
 /// With `shows_state` its icon is tinted while it isn't connected.
-pub fn server_label(server: &Server, size: f32, shows_state: bool, cx: &App) -> impl IntoElement {
+pub fn server_label(server: &Server, size: TextSize, shows_state: bool, cx: &App) -> impl IntoElement {
     let c = colors(cx);
     let muted = c.muted_stronger_foreground;
     let tint = if shows_state { server.state_tint(c).unwrap_or(muted) } else { muted };
@@ -217,7 +217,7 @@ pub fn server_label(server: &Server, size: f32, shows_state: bool, cx: &App) -> 
         .gap(px(3.))
         .text_color(muted)
         .child(icons::symbol("server", IconSize::text(size)).text_color(tint))
-        .child(div().text_size(px(size)).truncate().child(server.short_name.clone()))
+        .child(div().text_size(size).truncate().child(server.short_name.clone()))
         .tooltip(tooltip(format!("On {}", server.name)))
 }
 
@@ -287,7 +287,7 @@ impl RenderOnce for PullRequestLabel {
             .child(icons::symbol(pull_request_symbol(&self.pull_request), IconSize::Sm))
             .child(
                 div()
-                    .text_size(px(11.))
+                    .text_size(TextSize::Xs)
                     .font_weight(FontWeight::MEDIUM)
                     .font_features(crate::ui::tabular_numbers())
                     .when(clickable, |number| number.group_hover(group, |number| number.text_decoration_1()))

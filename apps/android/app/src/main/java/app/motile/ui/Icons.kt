@@ -39,6 +39,7 @@ import app.motile.platform.Platform
 import app.motile.platform.Symbol
 import app.motile.theme.ControlSize
 import app.motile.theme.IconSize
+import app.motile.theme.TextSize
 import app.motile.theme.iconSize
 import app.motile.theme.LocalPalette
 import app.motile.theme.Palette
@@ -216,7 +217,7 @@ val Project?.menuSymbol: Symbol get() = if (this?.noProject == true) Symbol.Mess
 
 /** The server a thread or project is on, for when there is more than one. */
 @Composable
-fun ServerLabel(server: Server, modifier: Modifier = Modifier, size: Float = 11f, weight: FontWeight = FontWeight.Normal, showsState: Boolean = false) {
+fun ServerLabel(server: Server, modifier: Modifier = Modifier, size: TextSize = TextSize.Xs, weight: FontWeight = FontWeight.Normal, showsState: Boolean = false) {
     val muted = LocalPalette.current.mutedStrongerForeground
     Row(
         modifier.semantics { contentDescription = "On ${server.name}" },
@@ -257,7 +258,7 @@ fun PullRequestLabel(pullRequest: PullRequest, modifier: Modifier = Modifier, co
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(pullRequest.state.symbol, IconSize.Sm, color = color)
-            Text("${pullRequest.number}", style = Theme.uiDigits(11f, FontWeight.Medium), color = color)
+            Text("${pullRequest.number}", style = Theme.uiDigits(TextSize.Xs, FontWeight.Medium), color = color)
         }
     }
     if (onClick == null) {

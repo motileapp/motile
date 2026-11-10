@@ -41,6 +41,7 @@ import app.motile.theme.LocalPalette
 import app.motile.theme.LocalSurface
 import app.motile.theme.Radius
 import app.motile.theme.Surface
+import app.motile.theme.TextSize
 import app.motile.theme.Theme
 import app.motile.ui.Icon
 import app.motile.ui.MenuBuilder
@@ -128,14 +129,14 @@ fun FileCard(file: SentFile, modifier: Modifier = Modifier, kept: Boolean = true
                 }
             }
             Column(Modifier.weight(1f).padding(start = inset - 4.dp, end = inset)) {
-                Text(file.name, style = Theme.ui(13f, FontWeight.Medium), color = palette.foreground, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
+                Text(file.name, style = Theme.ui(TextSize.Sm, FontWeight.Medium), color = palette.foreground, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
                 Spacer(Modifier.height(2.dp))
                 val (detail, detailColor) = when (state) {
                     is FileDownloads.State.Fetching -> "${byteCount((state.fraction * file.bytes).toLong())} / ${file.size}" to palette.mutedForeground
                     is FileDownloads.State.Failed -> firstSentence(state.reason) to palette.destructive
                     else -> file.detail to palette.mutedForeground
                 }
-                Text(detail, style = Theme.uiDigits(12f), color = detailColor, maxLines = 1)
+                Text(detail, style = Theme.uiDigits(TextSize.Xs), color = detailColor, maxLines = 1)
             }
             if (state is FileDownloads.State.Downloaded) {
                 val margin = (FileRow.cardHeight - RowButton.size.height) / 2

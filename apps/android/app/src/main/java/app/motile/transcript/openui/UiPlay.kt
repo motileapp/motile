@@ -108,7 +108,7 @@ private fun FlashcardFace(slot: UiSlot, hint: String?, fill: Color, border: Colo
         if (hint != null) {
             Text(
                 hint, Modifier.align(Alignment.BottomCenter).padding(bottom = 10.dp),
-                style = UiStyle.text(UiTextStyle.Tick, false), color = palette.mutedStrongerForeground, maxLines = 1,
+                style = UiStyle.text(UiTextStyle.Tick), color = palette.mutedStrongerForeground, maxLines = 1,
             )
         }
     }

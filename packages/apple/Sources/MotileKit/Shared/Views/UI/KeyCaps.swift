@@ -17,7 +17,7 @@ struct KeyCaps: View {
         HStack(spacing: 5) {
             ForEach(shown.indices, id: \.self) { index in
                 Text(shown[index])
-                    .font(.ui(size: 11, weight: .medium, design: .monospaced))
+                    .font(.ui(.xs, weight: .medium, design: .monospaced))
                     .padding(.horizontal, 6)
                     .frame(minWidth: 22, minHeight: Self.height)
                     .background(Color(platform: Theme.accentTint), in: RoundedRectangle(cornerRadius: Radius.xs, style: .continuous))

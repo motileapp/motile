@@ -253,7 +253,7 @@ fun UiTable(node: UiNode, kind: UiKind.Table) {
                     kind.columns.forEach { column ->
                         Cell(column.numeric, palette.cardAccent, line = true, horizontal, 8.dp, oneLine = true) {
                             Text(
-                                column.title, style = UiStyle.text(UiTextStyle.Label, false), color = palette.foreground, maxLines = 1,
+                                column.title, style = UiStyle.text(UiTextStyle.Label), color = palette.foreground, maxLines = 1,
                                 align = if (column.numeric) TextAlign.End else null, overflow = TextOverflow.Clip,
                             )
                         }
@@ -265,7 +265,7 @@ fun UiTable(node: UiNode, kind: UiKind.Table) {
                             Cell(numeric, null, line = index < kind.rows.lastIndex, horizontal, vertical, oneLine = cell is UiTableCell.Node) {
                                 when (cell) {
                                     is UiTableCell.Text -> {
-                                        val style = UiStyle.text(UiTextStyle.Small, narrow).let { if (numeric) it.copy(fontFeatureSettings = "tnum", textAlign = TextAlign.End) else it }
+                                        val style = UiStyle.text(UiTextStyle.Small).let { if (numeric) it.copy(fontFeatureSettings = "tnum", textAlign = TextAlign.End) else it }
                                         UiRichText(cell.text, style, palette.foreground, maxLines = if (numeric) 1 else Int.MAX_VALUE)
                                     }
                                     is UiTableCell.Node -> UiColumnLayout(listOf(0f), UiAlign.Stretch, listOf(keepsWidth(cell.node)), Modifier.fillMaxWidth()) {

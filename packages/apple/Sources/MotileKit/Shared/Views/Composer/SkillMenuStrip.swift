@@ -75,7 +75,7 @@ private struct SkillMenuLoading: View {
         HStack(spacing: 8) {
             Spinner(size: .md)
             Text("Loading skills")
-                .font(.ui(size: 13))
+                .font(.ui(.sm))
             Spacer(minLength: 0)
         }
         .foregroundStyle(Color.themeMutedForeground)
@@ -95,12 +95,12 @@ private struct SkillMenuRow: View {
             #if os(iOS)
             VStack(alignment: .leading, spacing: 2) {
                 label
-                description(size: 12)
+                description(size: .xs)
             }
             #else
             label
                 .layoutPriority(1)
-            description(size: 13)
+            description(size: .sm)
             #endif
             Spacer(minLength: 8)
             Chip(row.source, icon: row.symbol)
@@ -114,14 +114,14 @@ private struct SkillMenuRow: View {
 
     private var label: some View {
         Text(row.label)
-            .font(.ui(size: 13, weight: .medium))
+            .font(.ui(.sm, weight: .medium))
             .foregroundStyle(Color.themeForeground)
             .lineLimit(1)
     }
 
-    private func description(size: CGFloat) -> some View {
+    private func description(size: TextSize) -> some View {
         Text(row.description)
-            .font(.ui(size: size))
+            .font(.ui(size))
             .foregroundStyle(Color.themeMutedForeground)
             .lineLimit(1)
     }

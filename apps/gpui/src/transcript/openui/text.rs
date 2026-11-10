@@ -8,7 +8,7 @@ use motile_core::render::openui::tree::{Glyph, ItemMarker, ListMarker, MarkdownB
 
 use super::style::{self, BODY, LABEL, Look, SMALL, Type};
 use super::{UiCx, framed, node};
-use crate::theme::{Colors, Layer, colors};
+use crate::theme::{Colors, Layer, TextSize, colors};
 use crate::transcript::prose::{self, CodeBox};
 use crate::transcript::rows::{self, code_box, open_link};
 use crate::ui::rich_text::RichText;
@@ -35,11 +35,11 @@ pub fn text(node: &UiNode, cx: &UiCx, window: &mut Window, app: &mut App) -> Sta
     let id = |part: &str| cx.id(&node.id, part);
     match &node.kind {
         UiKind::Title { text, style, color } => {
-            let look = Look::new(style::type_of(*style, narrow), style::color(color, cx, app));
+            let look = Look::new(style::type_of(*style), style::color(color, cx, app));
             element.child(rich(id("text"), text, look, cx, app))
         }
         UiKind::Text { text, inlines, style, color, weight, italic, strike, digits, max_lines } => {
-            let mut ty = style::type_of(*style, narrow).weight(*weight);
+            let mut ty = style::type_of(*style).weight(*weight);
             ty.digits |= *digits;
             let look = Look { ty, color: style::color(color, cx, app), italic: *italic, strike: *strike };
             let body = match inlines.is_empty() {
@@ -49,7 +49,7 @@ pub fn text(node: &UiNode, cx: &UiCx, window: &mut Window, app: &mut App) -> Sta
             element.child(body.when_some(*max_lines, |body, lines| body.line_clamp(lines as usize).text_ellipsis()))
         }
         UiKind::Caption { text, style, color } => {
-            let look = Look::new(style::type_of(*style, narrow), style::color(color, cx, app));
+            let look = Look::new(style::type_of(*style), style::color(color, cx, app));
             element.child(rich(id("text"), text, look, cx, app))
         }
         UiKind::Label { text, color } => {
@@ -120,7 +120,7 @@ fn rich_text(id: ElementId, text: &Rich, look: Look, cx: &UiCx, app: &App) -> Ri
         .in_control(cx.in_control)
         .links(set.links, open_link)
         .tinted(set.code, tint)
-        .tint_size(px(crate::fonts::inline_code_size(look.ty.size)))
+        .tint_size(crate::fonts::inline_code_size(look.ty.size).into())
 }
 
 fn copy(key: &str, code: &SharedString, cx: &UiCx) -> AnyElement {
@@ -143,7 +143,8 @@ fn badge(text: &str, tone: Option<&str>, icon: Option<&Glyph>, cx: &UiCx, app: &
 
 /// How wide a badge is: Chip's padding, symbol and words, and its edge when it has no tone.
 pub(super) fn badge_width(text: &str, tone: bool, icon: bool, window: &Window) -> f32 {
-    let words = Type { size: 11.5, line: Chip::HEIGHT, weight: FontWeight::MEDIUM, digits: false, mono: false };
+    let words =
+        Type { size: Chip::TEXT_SIZE, line: Chip::HEIGHT, weight: FontWeight::MEDIUM, digits: false, mono: false };
     let symbol = if icon { Chip::SYMBOL.side() + 5. } else { 0. };
     let edge = if tone { 0. } else { 2. };
     7. * 2. + edge + symbol + words.width(text, window)
@@ -155,7 +156,7 @@ fn link(element: Stateful<Div>, text: &str, url: Option<&str>, cx: &UiCx, app: &
         return element.child(rich(cx.id(text, "plain"), &plain(text), Look::new(BODY, c.foreground), cx, app));
     };
     let url = url.to_string();
-    let arrow = BODY.size * LINK_ARROW;
+    let arrow = BODY.size.points() * LINK_ARROW;
     element
         .flex()
         .flex_row()
@@ -179,10 +180,10 @@ fn inlined(
     window: &mut Window,
     app: &mut App,
 ) -> Div {
-    let size = look.ty.size;
-    let inline_cx = UiCx { text_size: size, ..cx.clone() };
+    let inline_cx = UiCx { text_size: look.ty.size, ..cx.clone() };
+    let size = look.ty.size.points();
     let boxes: Vec<(f32, f32, f32)> =
-        inlines.iter().map(|inline| inline_size(inline, size, &inline_cx, window, app)).collect();
+        inlines.iter().map(|inline| inline_size(inline, look.ty.size, &inline_cx, window, app)).collect();
     let tallest = boxes.iter().map(|(_, height, raise)| height + raise + size * INLINE_DROP).fold(0., f32::max);
     let line = look.ty.line.max((tallest + 4.).ceil());
     let look = Look { ty: Type { line, ..look.ty }, ..look };
@@ -205,10 +206,11 @@ fn inlined(
 }
 
 /// An inline component's width and height, and how much higher than the others it sits.
-fn inline_size(inline: &UiNode, size: f32, cx: &UiCx, window: &mut Window, app: &mut App) -> (f32, f32, f32) {
+fn inline_size(inline: &UiNode, text_size: TextSize, cx: &UiCx, window: &mut Window, app: &mut App) -> (f32, f32, f32) {
+    let size = text_size.points();
     match &inline.kind {
         UiKind::Math { canvas } => {
-            let Some(prepared) = super::drawing::scene(&inline.id, canvas, cx.width, size, cx, window, app) else {
+            let Some(prepared) = super::drawing::scene(&inline.id, canvas, cx.width, text_size, cx, window, app) else {
                 return (0., 0., 0.);
             };
             let scene = &prepared.scene;
@@ -444,11 +446,11 @@ fn list_item(
     };
     let c = colors(app);
     let narrow = cx.narrow();
-    let mut ty = style::type_of(*style, narrow);
+    let mut ty = style::type_of(*style);
     if *medium {
         ty.weight = FontWeight::MEDIUM;
     }
-    let size = ty.size;
+    let size = ty.size.points();
     let body_width = cx.width - lane.width - lane.gap;
     let body_cx = cx.within(body_width);
     let id = |part: &str| cx.id(&item.id, part);
@@ -504,7 +506,7 @@ fn list_item(
 
 /// A wide timeline's ring, a little after the lane of text markers.
 fn ring_after_lane(joined: bool, ty: Type, narrow: bool, cx: &UiCx, c: &Colors) -> Option<Div> {
-    joined.then(|| ring(cx, c).absolute().left(px(if narrow { 6. } else { 4. })).top(px(0.55 * ty.size)))
+    joined.then(|| ring(cx, c).absolute().left(px(if narrow { 6. } else { 4. })).top(px(0.55 * ty.size.points())))
 }
 
 fn ring(cx: &UiCx, c: &Colors) -> Div {
@@ -539,7 +541,7 @@ fn item_marker(
             .items_center()
             .justify_center()
             .child(
-                Type { size: 13., line: 24., weight: FontWeight::MEDIUM, digits: true, mono: false }
+                Type { size: TextSize::Sm, line: 24., weight: FontWeight::MEDIUM, digits: true, mono: false }
                     .text_box()
                     .child(number.to_string()),
             )
@@ -558,13 +560,13 @@ fn item_marker(
             .items_center()
             .justify_center()
             .child(
-                Type { size: 12., line: 20., weight: FontWeight::MEDIUM, digits: true, mono: false }
+                Type { size: TextSize::Xs, line: 20., weight: FontWeight::MEDIUM, digits: true, mono: false }
                     .text_box()
                     .child(text.clone()),
             )
             .into_any_element(),
         ItemMarker::Label { text } => {
-            Type { size: 13., line: first_line, weight: FontWeight::NORMAL, digits: true, mono: false }
+            Type { size: TextSize::Sm, line: first_line, weight: FontWeight::NORMAL, digits: true, mono: false }
                 .text_box()
                 .w(px(lane.width))
                 .whitespace_nowrap()

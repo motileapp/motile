@@ -136,24 +136,28 @@ func scaled(_ value: CGFloat) -> CGFloat {
     (value * Platform.scale).rounded()
 }
 
+extension TextSize {
+    /// Its size on this system: as on the Mac, larger on iOS.
+    var points: CGFloat { rawValue * Platform.scale }
+}
+
 extension Font {
-    /// The system font at a size given as it is on the Mac.
-    static func ui(size: CGFloat, weight: Font.Weight = .regular, design: Font.Design = .default) -> Font {
-        .system(size: size * Platform.scale, weight: weight, design: design)
+    static func ui(_ size: TextSize, weight: Font.Weight = .regular, design: Font.Design = .default) -> Font {
+        .system(size: size.points, weight: weight, design: design)
     }
 }
 
 extension PlatformFont {
-    static func ui(_ size: CGFloat, weight: PlatformFont.Weight = .regular) -> PlatformFont {
-        .systemFont(ofSize: size * Platform.scale, weight: weight)
+    static func ui(_ size: TextSize, weight: PlatformFont.Weight = .regular) -> PlatformFont {
+        .systemFont(ofSize: size.points, weight: weight)
     }
 
-    static func uiMono(_ size: CGFloat, weight: PlatformFont.Weight = .regular) -> PlatformFont {
-        .monospacedSystemFont(ofSize: size * Platform.scale, weight: weight)
+    static func uiMono(_ size: TextSize, weight: PlatformFont.Weight = .regular) -> PlatformFont {
+        .monospacedSystemFont(ofSize: size.points, weight: weight)
     }
 
-    static func uiDigits(_ size: CGFloat, weight: PlatformFont.Weight = .regular) -> PlatformFont {
-        .monospacedDigitSystemFont(ofSize: size * Platform.scale, weight: weight)
+    static func uiDigits(_ size: TextSize, weight: PlatformFont.Weight = .regular) -> PlatformFont {
+        .monospacedDigitSystemFont(ofSize: size.points, weight: weight)
     }
 
     var italicised: PlatformFont {

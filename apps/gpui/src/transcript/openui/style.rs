@@ -7,7 +7,7 @@ use gpui_kit::*;
 use motile_core::render::openui::tree::{Color, Radius, RadiusKind, Rich, TextStyle, UiKind, UiNode, Weight};
 
 use super::UiCx;
-use crate::theme::{self, Radius as Radii, colors};
+use crate::theme::{self, Radius as Radii, TextSize, colors};
 use crate::transcript::canvas::Palette;
 use crate::transcript::rows::{self, Plain};
 use crate::transcript::{kit, prose};
@@ -15,7 +15,7 @@ use crate::transcript::{kit, prose};
 /// A text style's size, line height and weight, and whether its digits are of one width.
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub struct Type {
-    pub size: f32,
+    pub size: TextSize,
     pub line: f32,
     pub weight: FontWeight,
     pub digits: bool,
@@ -23,7 +23,7 @@ pub struct Type {
 }
 
 impl Type {
-    const fn new(size: f32, line: f32, weight: FontWeight, digits: bool) -> Self {
+    const fn new(size: TextSize, line: f32, weight: FontWeight, digits: bool) -> Self {
         Self { size, line, weight, digits, mono: false }
     }
 
@@ -48,7 +48,7 @@ impl Type {
     /// A box of text in this style.
     pub fn text_box(self) -> Div {
         div()
-            .text_size(px(self.size))
+            .text_size(self.size)
             .line_height(px(self.line))
             .font_weight(self.weight)
             .when(self.mono, |text| text.font_family(theme::MONO_FONT))
@@ -69,7 +69,7 @@ impl Type {
             underline: None,
             strikethrough: None,
         };
-        f32::from(window.text_system().shape_line(text, px(self.size), &[run], None).width)
+        f32::from(window.text_system().shape_line(text, self.size.into(), &[run], None).width)
     }
 }
 
@@ -78,18 +78,18 @@ const MEDIUM: FontWeight = FontWeight::MEDIUM;
 const SEMIBOLD: FontWeight = FontWeight::SEMIBOLD;
 
 pub const BODY: Type = Type::new(theme::PROSE_SIZE, theme::PROSE_LINE_HEIGHT, REGULAR, false);
-pub const SMALL: Type = Type::new(13., 20., REGULAR, false);
-pub const CAPTION: Type = Type::new(12., 18., REGULAR, false);
-pub const LABEL: Type = Type::new(13., 18., MEDIUM, false);
-pub const READOUT: Type = Type::new(12., 18., MEDIUM, true);
-pub const TICK: Type = Type::new(11., 14., REGULAR, true);
+pub const SMALL: Type = Type::new(TextSize::Sm, 20., REGULAR, false);
+pub const CAPTION: Type = Type::new(TextSize::Xs, 18., REGULAR, false);
+pub const LABEL: Type = Type::new(TextSize::Sm, 18., MEDIUM, false);
+pub const READOUT: Type = Type::new(TextSize::Xs, 18., MEDIUM, true);
+pub const TICK: Type = Type::new(TextSize::Xs, 16., REGULAR, true);
 
-/// The style's type; the largest titles are smaller in a narrow column.
-pub fn type_of(style: TextStyle, narrow: bool) -> Type {
+/// The style's type.
+pub fn type_of(style: TextStyle) -> Type {
     match style {
         TextStyle::Body => BODY,
         TextStyle::BodyCard => Type::new(theme::PROSE_SIZE, 22., REGULAR, false),
-        TextStyle::Large => Type::new(16., 26., REGULAR, false),
+        TextStyle::Large => Type::new(TextSize::Lg, 26., REGULAR, false),
         TextStyle::Small => SMALL,
         TextStyle::Caption => CAPTION,
         TextStyle::Label => LABEL,
@@ -97,16 +97,13 @@ pub fn type_of(style: TextStyle, narrow: bool) -> Type {
         TextStyle::TitleMd => Type::new(theme::heading_size(3), 22., SEMIBOLD, true),
         TextStyle::TitleLg | TextStyle::Word => Type::new(theme::heading_size(2), 24., SEMIBOLD, true),
         TextStyle::TitleXl => Type::new(theme::heading_size(1), 26., SEMIBOLD, true),
-        TextStyle::Title2xl if narrow => Type::new(24., 28., SEMIBOLD, true),
-        TextStyle::Title2xl => Type::new(26., 30., SEMIBOLD, true),
-        TextStyle::Title3xl if narrow => Type::new(28., 32., SEMIBOLD, true),
-        TextStyle::Title3xl => Type::new(32., 36., SEMIBOLD, true),
-        TextStyle::CardTitle => Type::new(14., 20., MEDIUM, true),
-        TextStyle::CardSubtitle => Type::new(13., 18., REGULAR, false),
-        TextStyle::CardHeading => Type::new(16., 22., SEMIBOLD, true),
+        TextStyle::Title2xl | TextStyle::Title3xl => Type::new(TextSize::Xxl, 32., SEMIBOLD, true),
+        TextStyle::CardTitle => Type::new(TextSize::Md, 20., MEDIUM, true),
+        TextStyle::CardSubtitle => Type::new(TextSize::Sm, 18., REGULAR, false),
+        TextStyle::CardHeading => Type::new(TextSize::Lg, 22., SEMIBOLD, true),
         TextStyle::Readout => READOUT,
         TextStyle::Tick => TICK,
-        TextStyle::Timer => Type::new(28., 32., SEMIBOLD, true),
+        TextStyle::Timer => Type::new(TextSize::Xxl, 32., SEMIBOLD, true),
         TextStyle::Code => Type { mono: true, ..Type::new(theme::CODE_SIZE, theme::CODE_LINE_HEIGHT, REGULAR, false) },
         TextStyle::WordBack => Type::new(theme::PROSE_SIZE, theme::PROSE_LINE_HEIGHT, MEDIUM, false),
     }

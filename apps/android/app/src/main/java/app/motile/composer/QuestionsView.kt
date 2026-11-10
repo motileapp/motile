@@ -32,6 +32,7 @@ import app.motile.platform.Symbol
 import app.motile.theme.ControlSize
 import app.motile.theme.LocalForeground
 import app.motile.theme.Radius
+import app.motile.theme.TextSize
 import app.motile.theme.Theme
 import app.motile.ui.ActionButton
 import app.motile.ui.beside
@@ -124,8 +125,8 @@ fun QuestionsView(approval: Approval, modifier: Modifier = Modifier) {
                     if (questions.size > 1) "${index + 1} of ${questions.size}" else null,
                 )
             }
-            Text(question.text, size = 13.5f, weight = FontWeight.Medium, style = Theme.ui(13.5f, FontWeight.Medium).copy(lineHeight = Theme.ui(13.5f).fontSize * 1.35f))
-            if (question.multiple) Text("Choose any that apply", size = 12.5f, color = palette.mutedForeground)
+            Text(question.text, size = TextSize.Sm, weight = FontWeight.Medium, style = Theme.ui(TextSize.Sm, FontWeight.Medium).copy(lineHeight = Theme.ui(TextSize.Sm).fontSize * 1.35f))
+            if (question.multiple) Text("Choose any that apply", size = TextSize.Xs, color = palette.mutedForeground)
         }
         Column(Modifier.overhang(horizontal = optionReach)) {
             for (option in question.options) {
@@ -139,8 +140,8 @@ fun QuestionsView(approval: Approval, modifier: Modifier = Modifier) {
                     ) {
                         PickMark(picked, question.multiple, Modifier.padding(top = 2.dp))
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                            Text(option.label, size = 13f, weight = FontWeight.Medium, color = palette.foreground)
-                            if (option.detail.isNotEmpty()) Text(option.detail, size = 12f, color = palette.mutedForeground)
+                            Text(option.label, size = TextSize.Sm, weight = FontWeight.Medium, color = palette.foreground)
+                            if (option.detail.isNotEmpty()) Text(option.detail, size = TextSize.Xs, color = palette.mutedForeground)
                         }
                     }
                 }

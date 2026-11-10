@@ -1,4 +1,4 @@
-//! Inline code at the Mac's size. The Mac sets code in a paragraph at 12.5 points whatever the
+//! Inline code at the Mac's size. The Mac sets code in a paragraph at the code size whatever the
 //! paragraph's size, and GPUI sets a paragraph at one size. So the system's monospaced font is
 //! made again for each size of paragraph and each weight, under a name of its own, its glyphs
 //! drawn smaller by as much as the code is smaller than the paragraph: its em is made larger by
@@ -9,11 +9,11 @@ use std::sync::OnceLock;
 
 use gpui_kit::*;
 
-use crate::theme;
+use crate::theme::{self, TextSize};
 
-/// The sizes of the transcript's paragraphs that have inline code: prose, tool titles and table
-/// cells, and the headings.
-const PARAGRAPH_SIZES: [u32; 5] = [13, 14, 15, 17, 20];
+/// The sizes of the paragraphs that have inline code: prose, tool titles and table cells, and the
+/// headings.
+const PARAGRAPH_SIZES: [TextSize; 4] = [TextSize::Sm, TextSize::Md, TextSize::Lg, TextSize::Xl];
 
 /// The system's monospaced font, whose glyphs the copies are.
 const SYSTEM_MONO: &str = "/System/Library/Fonts/SFNSMono.ttf";
@@ -45,7 +45,7 @@ fn registered() -> bool {
     PARAGRAPH_SIZES.iter().all(|paragraph| {
         [(false, REGULAR), (true, SEMIBOLD)].into_iter().all(|(bold, weight)| {
             let family = family(*paragraph, bold);
-            let scale = *paragraph as f32 / theme::CODE_SIZE;
+            let scale = paragraph.points() / theme::CODE_SIZE.points();
             let Some(copy) = scaled(&font, scale, weight, &family) else { return false };
             let file = folder.join(format!("{}.ttf", postscript(&family)));
             std::fs::write(&file, copy).is_ok() && core_text::register(&file)
@@ -53,7 +53,8 @@ fn registered() -> bool {
     })
 }
 
-fn family(paragraph: u32, bold: bool) -> String {
+fn family(paragraph: TextSize, bold: bool) -> String {
+    let paragraph = paragraph.points();
     match bold {
         true => format!("Motile Inline Mono {paragraph} Semibold"),
         false => format!("Motile Inline Mono {paragraph}"),
@@ -64,22 +65,21 @@ fn postscript(family: &str) -> String {
     family.chars().filter(|character| !character.is_whitespace()).collect()
 }
 
-/// How big inline code is drawn in a paragraph of `paragraph` points.
-pub fn inline_code_size(paragraph: f32) -> f32 {
+/// How big inline code is drawn in a paragraph of `paragraph`.
+pub fn inline_code_size(paragraph: TextSize) -> TextSize {
     match scaled_family(paragraph, false) {
         Some(_) => theme::CODE_SIZE,
         None => paragraph,
     }
 }
 
-fn scaled_family(paragraph: f32, bold: bool) -> Option<String> {
-    let size = paragraph.round() as u32;
+fn scaled_family(paragraph: TextSize, bold: bool) -> Option<String> {
     let loaded = LOADED.get().copied().unwrap_or(false);
-    (loaded && paragraph.fract() == 0. && PARAGRAPH_SIZES.contains(&size)).then(|| family(size, bold))
+    (loaded && PARAGRAPH_SIZES.contains(&paragraph)).then(|| family(paragraph, bold))
 }
 
-/// The font of inline code in a paragraph of `paragraph` points, semibold when it is bold.
-pub fn inline_code(paragraph: f32, bold: bool) -> Font {
+/// The font of inline code in a paragraph of `paragraph`, semibold when it is bold.
+pub fn inline_code(paragraph: TextSize, bold: bool) -> Font {
     let weight = if bold { FontWeight::SEMIBOLD } else { FontWeight::NORMAL };
     let family = scaled_family(paragraph, bold).unwrap_or_else(|| theme::MONO_FONT.to_string());
     Font { family: family.into(), features: FontFeatures::default(), fallbacks: None, weight, style: FontStyle::Normal }

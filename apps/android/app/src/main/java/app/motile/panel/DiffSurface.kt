@@ -23,6 +23,7 @@ import app.motile.LocalStore
 import app.motile.core.Loaded
 import app.motile.platform.Symbol
 import app.motile.theme.LocalPalette
+import app.motile.theme.TextSize
 import app.motile.ui.ActionButton
 import app.motile.ui.ActionMenu
 import app.motile.ui.beside
@@ -51,7 +52,7 @@ fun DiffSurface(target: PanelTarget) {
                 Text(
                     "$viewed of ${page.viewed.size} viewed",
                     Modifier.padding(start = 6.dp).semantics { if (page.canReviewLines) contentDescription = "Tap a line's number to comment on it" },
-                    size = 12f, color = LocalPalette.current.mutedStrongerForeground, maxLines = 1,
+                    size = TextSize.Xs, color = LocalPalette.current.mutedStrongerForeground, maxLines = 1,
                 )
             }
             Spacer(Modifier.weight(1f))

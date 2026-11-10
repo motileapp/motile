@@ -48,7 +48,9 @@ import app.motile.theme.IconSize
 import app.motile.theme.LocalPalette
 import app.motile.theme.Opacity
 import app.motile.theme.Radius
+import app.motile.theme.TextSize
 import app.motile.theme.Theme
+import app.motile.theme.nearestTextSize
 import app.motile.theme.opacity
 import app.motile.theme.wash
 import app.motile.ui.ButtonVariant
@@ -256,7 +258,7 @@ fun McpServerTile(monogram: String, tint: String, side: Float = scaled(28f)) {
     val color = LocalPalette.current.mcpServerTint(tint)
     val shape = RoundedCornerShape(if (side <= scaled(18f)) Radius.xs else Radius.sm)
     Box(Modifier.size(side.dp).background(color.wash(), shape), contentAlignment = Alignment.Center) {
-        Text(monogram, size = side * 0.5f / Platform.scale, weight = FontWeight.SemiBold, color = color, maxLines = 1)
+        Text(monogram, size = nearestTextSize(side * 0.5f / Platform.scale), weight = FontWeight.SemiBold, color = color, maxLines = 1)
     }
 }
 
@@ -298,8 +300,8 @@ fun RowScope.McpToolGroupHeader(mcpServer: McpServerRow, group: McpToolGroup, mc
 fun RowScope.McpServerToolRow(mcpServer: McpServerRow, tool: McpServerTool, mcpServers: McpServers) {
     val palette = LocalPalette.current
     Column(Modifier.weight(1f).opacity(Opacity.Disabled, on = tool.permission == ToolPermission.Block), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Text(tool.title, size = 13f, color = palette.foreground, maxLines = 1)
-        tool.summary?.let { Text(it, size = 11.5f, color = palette.mutedForeground, maxLines = 1) }
+        Text(tool.title, size = TextSize.Sm, color = palette.foreground, maxLines = 1)
+        tool.summary?.let { Text(it, size = TextSize.Xs, color = palette.mutedForeground, maxLines = 1) }
     }
     ToolPermissionMenu(tool.permission, "What agents may do with ${tool.title}", compact = true) { mcpServers.setTool(mcpServer, tool, it) }
 }
@@ -369,13 +371,13 @@ fun McpServerCallRowView(row: McpServerCallRow) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                 if (!row.ok) Icon(Symbol.CircleAlert, IconSize.Sm, color = palette.warning)
-                Text(row.mcpServer, size = 13f, weight = FontWeight.Medium, maxLines = 1)
-                Text(row.tool, Modifier.weight(1f, fill = false), style = Theme.uiMono(12f), maxLines = 1)
+                Text(row.mcpServer, size = TextSize.Sm, weight = FontWeight.Medium, maxLines = 1)
+                Text(row.tool, Modifier.weight(1f, fill = false), style = Theme.uiMono(TextSize.Xs), maxLines = 1)
                 Spacer(Modifier.weight(1f))
-                Text(dotted("${row.latency} · ${row.time}", palette.mutedStrongerForeground), style = Theme.uiDigits(12f), color = palette.mutedForeground, maxLines = 1)
+                Text(dotted("${row.latency} · ${row.time}", palette.mutedStrongerForeground), style = Theme.uiDigits(TextSize.Xs), color = palette.mutedForeground, maxLines = 1)
             }
-            Text(row.source, size = 11.5f, color = palette.mutedForeground)
-            row.error?.let { Text(it, size = 11.5f, color = palette.warning) }
+            Text(row.source, size = TextSize.Xs, color = palette.mutedForeground)
+            row.error?.let { Text(it, size = TextSize.Xs, color = palette.warning) }
         }
     }
 }

@@ -30,6 +30,7 @@ import app.motile.core.ViewedMedia
 import app.motile.platform.Symbol
 import app.motile.theme.ControlSize
 import app.motile.theme.LocalPalette
+import app.motile.theme.TextSize
 import app.motile.theme.Theme
 import app.motile.ui.ContextMenuArea
 import app.motile.ui.Spinner
@@ -96,7 +97,7 @@ fun MediaRow(media: MediaContent) {
                     ) {
                         Spinner(ControlSize.Large.symbol, color = palette.mutedForeground)
                         store.mediaProgress[media.id]?.let { fraction ->
-                            Text("${(fraction * 100).toInt()}%", style = Theme.uiDigits(12f), color = palette.mutedForeground)
+                            Text("${(fraction * 100).toInt()}%", style = Theme.uiDigits(TextSize.Xs), color = palette.mutedForeground)
                         }
                     }
                     is MediaState.Failed -> Column(

@@ -10,7 +10,7 @@ use motile_protocol::wire::{Change, ChangedFile, GitAction};
 
 use crate::models::Project;
 use crate::store::{PendingGit, Store, stage_label};
-use crate::theme::{ControlSize, Layer, Radius, Surface, colors};
+use crate::theme::{ControlSize, Layer, Radius, Surface, TextSize, colors};
 use crate::ui::logos::{pull_request_color, pull_request_symbol};
 use crate::ui::menu::{Anchor, Menu, MenuIcon};
 use crate::ui::modal::{Answer, Confirmation, Modal, confirmation, modal};
@@ -280,8 +280,8 @@ impl CommitSheet {
                     .flex()
                     .items_center()
                     .gap(px(8.))
-                    .text_size(px(12.))
-                    .child(div().text_size(px(12.5)).font_weight(FontWeight::MEDIUM).child("Files"))
+                    .text_size(TextSize::Xs)
+                    .child(div().text_size(TextSize::Xs).font_weight(FontWeight::MEDIUM).child("Files"))
                     .when(!self.excluded.is_empty() && !self.editing, |header| {
                         header.child(div().text_color(c.muted_foreground).child(format!("{included} of {total}")))
                     })
@@ -340,7 +340,7 @@ impl CommitSheet {
             .flex()
             .items_center()
             .gap(px(8.))
-            .text_size(px(12.5))
+            .text_size(TextSize::Xs)
             .when(self.editing, |row| {
                 row.child(PickMark::new("pick", !excluded, true)).on_click(cx.listener(move |this, _, _, cx| {
                     if !this.excluded.remove(&path) {
@@ -383,7 +383,7 @@ fn line_counts(added: u32, removed: u32, cx: &App) -> Div {
     div()
         .flex()
         .gap(px(4.))
-        .text_size(px(11.))
+        .text_size(TextSize::Xs)
         .font_weight(FontWeight::MEDIUM)
         .font_features(crate::ui::tabular_numbers())
         .when(added > 0, |counts| counts.child(div().text_color(c.success).child(format!("+{added}"))))
@@ -408,10 +408,10 @@ impl Render for CommitSheet {
                     .flex()
                     .flex_col()
                     .gap(px(4.))
-                    .child(div().text_size(px(15.)).font_weight(FontWeight::SEMIBOLD).child("Commit Changes"))
+                    .child(div().text_size(TextSize::Lg).font_weight(FontWeight::SEMIBOLD).child("Commit Changes"))
                     .child(
                         div()
-                            .text_size(px(12.))
+                            .text_size(TextSize::Xs)
                             .text_color(c.muted_foreground)
                             .child("Review and confirm your commit. Leave the message empty to have one written."),
                     ),
@@ -420,7 +420,7 @@ impl Render for CommitSheet {
                 div()
                     .flex()
                     .gap(px(8.))
-                    .text_size(px(12.5))
+                    .text_size(TextSize::Xs)
                     .child(div().text_color(c.muted_foreground).child("Branch"))
                     .child(
                         div()
@@ -438,7 +438,12 @@ impl Render for CommitSheet {
                     .flex()
                     .flex_col()
                     .gap(px(6.))
-                    .child(div().text_size(px(12.5)).font_weight(FontWeight::MEDIUM).child("Commit message (optional)"))
+                    .child(
+                        div()
+                            .text_size(TextSize::Xs)
+                            .font_weight(FontWeight::MEDIUM)
+                            .child("Commit message (optional)"),
+                    )
                     .child(TextArea::new(&self.message)),
             )
             .child(

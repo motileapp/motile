@@ -212,7 +212,7 @@ impl Composer {
                     .gap(px(8.))
                     .rounded(px(Radius::MD))
                     .when(lit, |row| row.bg(Surface::Composer.layer(Layer::Row, c)))
-                    .text_size(px(skill_chip::TEXT_SIZE))
+                    .text_size(skill_chip::TEXT_SIZE)
                     .child(icons::symbol(skill_chip::SYMBOL, IconSize::text(skill_chip::TEXT_SIZE)).text_color(c.skill))
                     .child(
                         div()
@@ -251,7 +251,7 @@ fn loading_row(cx: &App) -> AnyElement {
         .flex()
         .items_center()
         .gap(px(8.))
-        .text_size(px(skill_chip::TEXT_SIZE))
+        .text_size(skill_chip::TEXT_SIZE)
         .text_color(c.muted_foreground)
         .child(Spinner::new(IconSize::text(skill_chip::TEXT_SIZE)).render(cx))
         .child("Loading skills")

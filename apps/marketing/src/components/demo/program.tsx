@@ -62,10 +62,10 @@ export function SavingsProgram() {
       <section className="flex flex-col gap-4 rounded-lg border border-border-card bg-card p-[19px] text-foreground">
         <div className="flex items-start gap-3">
           <div className="flex min-w-0 flex-col gap-1">
-            <h3 className="text-[17px] leading-6 font-semibold tabular-nums">
+            <h3 className="text-(length:--type-xl) leading-6 font-semibold tabular-nums">
               Retirement savings
             </h3>
-            <p className="text-[13px] leading-5 text-muted-foreground">
+            <p className="text-(length:--type-sm) leading-5 text-muted-foreground">
               Turn today's contributions into a picture of tomorrow.
             </p>
           </div>
@@ -90,7 +90,7 @@ export function SavingsProgram() {
           />
         </Grid>
         <AreaChart rows={rows} width={inner} />
-        <div className="flex items-center gap-2 text-[13px] leading-5">
+        <div className="flex items-center gap-2 text-(length:--type-sm) leading-5">
           {million ? (
             <PartyPopperIcon className="size-3.5 shrink-0 text-success" />
           ) : (
@@ -151,7 +151,7 @@ export function SavingsProgram() {
             onChange={set("rate")}
           />
         </Grid>
-        <p className="text-[12px] leading-[18px] text-muted-foreground">
+        <p className="text-(length:--type-xs) leading-[18px] text-muted-foreground">
           Assumes monthly compounding and contributions at the end of each
           month. Returns are not guaranteed; this is an illustration, not
           advice.
@@ -217,12 +217,12 @@ function Figure({
 }) {
   return (
     <div className="flex flex-col gap-1 rounded-xs bg-card-accent p-3">
-      <p className="text-[12px] leading-[18px] text-muted-foreground">
+      <p className="text-(length:--type-xs) leading-[18px] text-muted-foreground">
         {caption}
       </p>
       <p
         className={cn(
-          "text-[16px] leading-[22px] font-semibold tabular-nums",
+          "text-(length:--type-lg) leading-[22px] font-semibold tabular-nums",
           success && "text-success"
         )}
       >
@@ -245,7 +245,7 @@ function GhostButton({
     <button
       type="button"
       onClick={onClick}
-      className="flex h-6 shrink-0 items-center gap-[5px] rounded-sm px-2 text-[11.5px] font-medium text-muted-foreground hover:bg-card-accent hover:text-foreground"
+      className="flex h-6 shrink-0 items-center gap-[5px] rounded-sm px-2 text-(length:--type-xs) font-medium text-muted-foreground hover:bg-card-accent hover:text-foreground"
     >
       <Icon className="size-4" />
       {children}
@@ -298,8 +298,8 @@ function Slider({
   return (
     <div>
       <div className="flex items-baseline justify-between gap-3">
-        <span className="text-[13px] leading-5">{label}</span>
-        <span className="shrink-0 text-[12px] leading-[18px] font-medium whitespace-nowrap tabular-nums">
+        <span className="text-(length:--type-sm) leading-5">{label}</span>
+        <span className="shrink-0 text-(length:--type-xs) leading-[18px] font-medium whitespace-nowrap tabular-nums">
           {readout(value)}
         </span>
       </div>
@@ -439,7 +439,7 @@ function AreaChart({ rows, width }: { rows: Year[]; width: number }) {
                 x={left - 10}
                 y={y(tick) + 4}
                 textAnchor="end"
-                className="fill-muted-stronger-foreground text-[11px] tabular-nums"
+                className="fill-muted-stronger-foreground text-(length:--type-xs) tabular-nums"
               >
                 {money(tick, true)}
               </text>
@@ -460,7 +460,7 @@ function AreaChart({ rows, width }: { rows: Year[]; width: number }) {
                 x={x}
                 y={HEIGHT - 6}
                 textAnchor={anchor}
-                className="fill-muted-foreground text-[12px]"
+                className="fill-muted-foreground text-(length:--type-xs)"
               >
                 {row.year}
               </text>
@@ -528,7 +528,7 @@ function AreaChart({ rows, width }: { rows: Year[]; width: number }) {
               className="size-2 rounded-full"
               style={{ background: COLORS[si] }}
             />
-            <span className="text-[12px] leading-[18px] text-muted-foreground">
+            <span className="text-(length:--type-xs) leading-[18px] text-muted-foreground">
               {series}
             </span>
           </span>
@@ -541,7 +541,7 @@ function AreaChart({ rows, width }: { rows: Year[]; width: number }) {
 function ChartTip({ x, row }: { x: number; row: Year }) {
   return (
     <div
-      className="pointer-events-none absolute flex min-w-[110px] -translate-x-1/2 flex-col gap-[3px] rounded-lg border border-border-popover bg-popover px-3 py-2.5 text-[12px] leading-[18px] shadow-md shadow-shadow/(--opacity-shadow)"
+      className="pointer-events-none absolute flex min-w-[110px] -translate-x-1/2 flex-col gap-[3px] rounded-lg border border-border-popover bg-popover px-3 py-2.5 text-(length:--type-xs) leading-[18px] shadow-md shadow-shadow/(--opacity-shadow)"
       style={{ left: x, top: TOP }}
     >
       <span className="font-semibold">{row.year}</span>

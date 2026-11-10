@@ -41,11 +41,9 @@ that width; the tree doesn't change.
 | --- | --- | --- |
 | Card padding (outline and soft, not nested) | 20 | 16 |
 | Table cell padding (vertical, horizontal) | 10, 12; header 8, 12 | 8, 10; header 8, 10 |
-| `title-2xl` | 26 / 30 | 24 / 28 |
-| `title-3xl` | 32 / 36 | 28 / 32 |
 | List text lane (`wide`) | 76 lane, 16 gap; timeline 24 gap | 64 lane, 20 gap; timeline 20 gap |
 | Map expanded inset (window under 520 wide) | 24 | 12 |
-| Map pin label | 12, 160 max | 10, 120 max |
+| Map pin label | xs 12, 160 max | xxs 10, 120 max |
 
 ## Colours
 
@@ -92,30 +90,29 @@ Titles and anything marked "digits" use tabular figures (`uiDigits`, `tnum`).
 
 | Style | Size / line | Weight | Apple | GPUI | Android |
 | --- | --- | --- | --- | --- | --- |
-| `body` (Text md, the default) | 14 / 24 | regular | `Theme.proseFont`, `proseLineHeight` | `PROSE_SIZE`, `PROSE_LINE_HEIGHT` | `Theme.proseFont`, `proseLineHeight` |
-| `body-card` (Text md in a card or cell) | 14 / 22 | regular | `proseFont` | `PROSE_SIZE` | `proseFont` |
-| `large` (Text lg) | 16 / 26 | regular | `ui(16)` | `UI_FONT` 16 | `Theme.ui(16f)` |
-| `small` (Text sm, cells, descriptions) | 13 / 20 | regular | `ui(13)` | 13 | `ui(13f)` |
-| `caption` (Text xs, Caption) | 12 / 18 | regular | `Theme.smallFont` | 12 | `Theme.smallFont` |
-| `label` (Label, field labels, legends) | 13 / 18 | medium | `ui(13, .medium)` | 13 medium | `ui(13f, Medium)` |
-| `title-sm` | 14 / 20 | semibold, digits | `Theme.heading(4)` | `heading_size(4)` | `Theme.heading(4)` |
-| `title-md` (Title's default) | 15 / 22 | semibold, digits | `heading(3)` | `heading_size(3)` | `heading(3)` |
-| `title-lg` | 17 / 24 | semibold, digits | `heading(2)` | `heading_size(2)` | `heading(2)` |
-| `title-xl` | 20 / 26 | semibold, digits | `heading(1)` | `heading_size(1)` | `heading(1)` |
-| `title-2xl` | 26 / 30 (narrow 24 / 28) | semibold, digits | `uiDigits(26, .semibold)` | 26 | `uiDigits(26f, SemiBold)` |
-| `title-3xl` | 32 / 36 (narrow 28 / 32) | semibold, digits | `uiDigits(32, .semibold)` | 32 | `uiDigits(32f, SemiBold)` |
-| `card-title` | 14 / 20 | medium, digits | `uiDigits(14, .medium)` | 14 medium | `uiDigits(14f, Medium)` |
-| `card-subtitle` | 13 / 18, `muted-foreground` | regular | `ui(13)` | 13 | `ui(13f)` |
-| `card-heading` | 16 / 22 | semibold, digits | `uiDigits(16, .semibold)` | 16 | `uiDigits(16f, SemiBold)` |
-| `readout` (slider value, chart values) | 12 / 18 | medium, digits | `uiDigits(12, .medium)` | 12 | `uiDigits(12f, Medium)` |
-| `tick` (axis ticks, slider marks, hints) | 11 / 14 | regular, digits | `uiDigits(11)` | 11 | `uiDigits(11f)` |
-| `timer` | 28 / 32 | semibold, digits | `uiDigits(28, .semibold)` | 28 | `uiDigits(28f, SemiBold)` |
-| `code` | 12.5 / 18 | mono | `Theme.codeFont`, `codeLineHeight` | `CODE_SIZE`, `CODE_LINE_HEIGHT` | `Theme.codeFont` |
-| `control` | `ControlSize.font` | medium | `ControlSize` | `ControlSize` | `ControlSize` |
+| `body` (Text md, the default) | md 14 / 24 | regular | `Theme.proseFont`, `proseLineHeight` | `PROSE_SIZE`, `PROSE_LINE_HEIGHT` | `Theme.proseFont`, `proseLineHeight` |
+| `body-card` (Text md in a card or cell) | md 14 / 22 | regular | `proseFont` | `PROSE_SIZE` | `proseFont` |
+| `large` (Text lg) | lg 16 / 26 | regular | `ui(.lg)` | `TextSize::Lg` | `Theme.ui(TextSize.Lg)` |
+| `small` (Text sm, cells, descriptions) | sm 13 / 20 | regular | `ui(.sm)` | `TextSize::Sm` | `ui(TextSize.Sm)` |
+| `caption` (Text xs, Caption) | xs 12 / 18 | regular | `Theme.smallFont` | `TextSize::Xs` | `Theme.smallFont` |
+| `label` (Label, field labels, legends) | sm 13 / 18 | medium | `ui(.sm, .medium)` | `TextSize::Sm` medium | `ui(TextSize.Sm, Medium)` |
+| `title-sm` | md 14 / 20 | semibold, digits | `Theme.heading(4)` | `heading_size(4)` | `Theme.heading(4)` |
+| `title-md` (Title's default) | lg 16 / 22 | semibold, digits | `heading(3)` | `heading_size(3)` | `heading(3)` |
+| `title-lg` | xl 20 / 24 | semibold, digits | `heading(2)` | `heading_size(2)` | `heading(2)` |
+| `title-xl` | xl 20 / 26 | semibold, digits | `heading(1)` | `heading_size(1)` | `heading(1)` |
+| `title-2xl`, `title-3xl` | 2xl 28 / 32 | semibold, digits | `uiDigits(.xxl, .semibold)` | `TextSize::Xxl` | `uiDigits(TextSize.Xxl, SemiBold)` |
+| `card-title` | md 14 / 20 | medium, digits | `uiDigits(.md, .medium)` | `TextSize::Md` medium | `uiDigits(TextSize.Md, Medium)` |
+| `card-subtitle` | sm 13 / 18, `muted-foreground` | regular | `ui(.sm)` | `TextSize::Sm` | `ui(TextSize.Sm)` |
+| `card-heading` | lg 16 / 22 | semibold, digits | `uiDigits(.lg, .semibold)` | `TextSize::Lg` | `uiDigits(TextSize.Lg, SemiBold)` |
+| `readout` (slider value, chart values) | xs 12 / 18 | medium, digits | `uiDigits(.xs, .medium)` | `TextSize::Xs` | `uiDigits(TextSize.Xs, Medium)` |
+| `tick` (axis ticks, slider marks, hints) | xs 12 / 16 | regular, digits | `uiDigits(.xs)` | `TextSize::Xs` | `uiDigits(TextSize.Xs)` |
+| `timer` | 2xl 28 / 32 | semibold, digits | `uiDigits(.xxl, .semibold)` | `TextSize::Xxl` | `uiDigits(TextSize.Xxl, SemiBold)` |
+| `code` | xs 12 / 18 | mono | `Theme.codeFont`, `codeLineHeight` | `CODE_SIZE`, `CODE_LINE_HEIGHT` | `Theme.codeFont` |
+| `control` | `ControlSize`'s | medium | `ControlSize` | `ControlSize` | `ControlSize` |
 
-open-intelligent-ui sets its page at 16 and its cards at 14; Motile's prose is 14, so its sizes are
-taken a step down (Motile's): 16 → 14, 18 → 16, 15 → 14, 14 → 13, 12 → 12, title 15/17/21/25/32/40
-→ 14/15/17/20/26/32, the titles on Motile's own heading scale.
+Every size is one of Motile's text tokens (`text` in `packages/theme/tokens.json`). open-intelligent-ui
+sets its page at 16 and its cards at 14; Motile's prose is 14, so its sizes are taken onto Motile's
+scale: 16 → 14, 18 → 16, 15 → 14, 14 → 13, 12 → 12, title 15/17/21/25/32/40 → 14/16/20/20/28/28.
 
 Inline formatting inside any text (core's runs): `**bold**` is semibold in `foreground`, `*italic*`
 italic, `~~strike~~` struck through, `` `code` `` `Theme.inlineCodeFont` (12.5 mono) in
@@ -295,7 +292,7 @@ when it has a token background.
   `muted-foreground`. A press opens and closes.
 - Panel: Motile's popover: `popover` fill, 1 `border-popover`, `Radius.lg`, `ShadowSize.md`; padding
   12 vertical, 14 horizontal; a column with gap 8; as wide as its content, at most min(280, window −
-  24); text `body` at 14 / 21 in `foreground`. Its content lies on `Surface.popover`.
+  24); text `body` at md 14 / 21 in `foreground`. Its content lies on `Surface.popover`.
 - Placed 8 below the trigger, its leading edge at the trigger's, kept 12 inside the window; above
   the trigger instead when fewer than 220 are left below and more than 240 above.
 - Closes on a press outside it, Esc (Mac, GPUI, a hardware keyboard), and when the transcript
@@ -310,7 +307,7 @@ when it has a token background.
 | Text | `size` → `caption` / `small` / `body` (md) / `large`; `weight` regular / medium / semibold; `italic`; `lineThrough`; `tabularNums` (digits); colour default `foreground`; `maxLines` cuts it with "…" at the end of the last line. A list `text` lays its strings and inline components on one run of lines (below). | text |
 | Caption | `caption` in `muted-foreground` (or `color`). | text |
 | Label | `label` in `foreground`. | text |
-| Badge | Motile's `Chip` (Motile's: 20 tall, 11.5 medium, padding 7, its corners), not open-intelligent-ui's 26 pill. `neutral` and `info`: the chip without a tone. `success`, `warning`, `danger`, `purple`, `pink`: the chip with that tone (`success`, `warning`, `destructive`, `merged`, `pink`): text in the colour on its wash. `icon`: the chip's symbol before the text. Never wraps or shrinks; in a column it keeps its width at the start; in a Row it is centred vertically. | text |
+| Badge | Motile's `Chip` (Motile's: 20 tall, xs 12 medium, padding 7, its corners), not open-intelligent-ui's 26 pill. `neutral` and `info`: the chip without a tone. `success`, `warning`, `danger`, `purple`, `pink`: the chip with that tone (`success`, `warning`, `destructive`, `merged`, `pink`): text in the colour on its wash. `icon`: the chip's symbol before the text. Never wraps or shrinks; in a column it keeps its width at the start; in a Row it is centred vertically. | text |
 | Link | Text in `primary` (Motile's link colour, no underline), then Lucide `arrow-up-right` at 0.85 of the text size, 2 after it. Pointer: the pointing hand. Opens the URL in the browser. Without a valid URL: plain text. Without text: the URL's host (core). | link |
 | List, ListItem | See below. | list; items |
 | Markdown | Core parses it into the paragraphs prose rows have (`markdown.rs`); the client sets them with its prose typesetter (`Typesetter.prose` and its GPUI and Android counterparts): Motile's prose, not open-intelligent-ui's 16 / 1.65 rhythm. | as prose |
@@ -328,10 +325,10 @@ inline tokens; Android: `InlineTextContent`. The line grows to fit a taller box.
 | | Lane, gap to the text | Marker |
 | --- | --- | --- |
 | `bullet` (default) | 14, 8 (24, 12 in a timeline) | A 5 dot in `muted-stronger-foreground`, centred in the lane and on the first line |
-| `number` | 24, 12 | A 24 circle in `foreground` with the number in the surface's colour, 13 digits, at the top |
+| `number` | 24, 12 | A 24 circle in `foreground` with the number in the surface's colour, sm 13 digits, at the top |
 | `none` | no lane | none |
-| A ListItem's `marker` of 1–2 letters or digits | 24, 12 (in any list but a wide one) | A pill 20 tall, at least 20 wide, padding 5, `foreground`, text 12 medium digits in the surface's colour |
-| Any `marker` longer than 2 in the list (wide) | 76, 16 (narrow 64, 20) | That text, 13 digits in `muted-foreground`, leading, on one line |
+| A ListItem's `marker` of 1–2 letters or digits | 24, 12 (in any list but a wide one) | A pill 20 tall, at least 20 wide, padding 5, `foreground`, text xs 12 medium digits in the surface's colour |
+| Any `marker` longer than 2 in the list (wide) | 76, 16 (narrow 64, 20) | That text, sm 13 digits in `muted-foreground`, leading, on one line |
 
 - Items 10 apart. An item is its marker lane and its body side by side, both at the top; the first
   line's height centres a dot or a number on it.
@@ -360,7 +357,7 @@ actions.
 | IconButton | `ActionButton` with only a symbol, `.regular` (square), the symbol at the size's own. outline → `.outline`, ghost → `.ghost`, solid → `.primary`. `label` is its tooltip (pointer) and its name. | button, `label` or the icon's name |
 | Pressable | See below. | button, pressed state when `selected` is given |
 | Input | `InputField` (`.filled`, `.regular`), the column's width. `type: number`: the decimal keypad; what is typed stays while it doesn't parse yet (the client's draft), a number when it does, commas dropped, nothing when empty. `placeholder` in the field's placeholder colour. | text field, `label` or `placeholder` |
-| TextArea | Motile's `TextArea`, `rows` lines (2–20, default 3): `rows` × 18 + 19 tall (a line of its 13.5 text and 3 between lines, its insets and padding; 73 for 3), scrolling past that. Return is a line break. | text field |
+| TextArea | Motile's `TextArea`, `rows` lines (2–20, default 3): `rows` × 18 + 19 tall (a line of its xs 12 text and 3 between lines, its insets and padding; 73 for 3), scrolling past that. Return is a line break. | text field |
 | Select | `ActionMenu`, `.regular`, filling the width, the chosen label (or the placeholder, "Choose…" by default, in the placeholder colour) at the start and its chevron at the end. Opens the options with a check by the chosen one: a menu on the Mac and GPUI, a sheet on iOS (`Choice`), a dropdown on Android. | pop-up button |
 | SegmentedControl | `Segmented`, `.regular`, at its own width at the start, scrolling horizontally when wider than the column; `block` → `fills`. | radio group of radios |
 | Slider | See below. | adjustable, `label`, the readout as its value |
@@ -508,9 +505,9 @@ control, the pair a column.
 - Note (info open): 56 from the top, 12 from the left, at most 275 wide, padding 12, Motile's popover
   look, `caption` in `muted-foreground`: core's text. Error: the same box 28 from the bottom: "Map
   tiles are temporarily unavailable. The places are still shown." Route overview: 22 from the
-  bottom, 12 from the left, padding 2 and 7, `Radius.sm`, the surface's colour at `lit`, 10 / 16
+  bottom, 12 from the left, padding 2 and 7, `Radius.sm`, the surface's colour at `lit`, xxs 10 / 16
   `muted-foreground`: "Route overview".
-- Attribution: the style's, at the bottom left, 9 / 12 in `muted-foreground` on the surface's colour
+- Attribution: the style's, at the bottom left, xxs 10 / 12 in `muted-foreground` on the surface's colour
   at `lit`, links opening in the browser.
 - Gestures: a drag pans; the wheel and the trackpad scroll the transcript, never zoom; no rotation
   or pitch. On touch, a finger pans the map, as a drag does, and two pinch it; the transcript doesn't

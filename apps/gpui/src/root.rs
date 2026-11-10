@@ -7,7 +7,7 @@ use gpui_kit::*;
 use crate::main_view::MainView;
 use crate::onboarding::{ConnectServer, SignIn};
 use crate::store::Store;
-use crate::theme::{self, Appearance, colors};
+use crate::theme::{self, Appearance, TextSize, colors};
 use crate::ui::modal::{Answer, Confirmation, confirmation, error_alert, modal};
 
 pub struct Root {
@@ -219,7 +219,7 @@ impl Render for Root {
             .bg(c.background)
             .text_color(c.foreground)
             .font_family(theme::UI_FONT)
-            .text_size(px(13.))
+            .text_size(TextSize::Sm)
             .line_height(relative(theme::LINE_HEIGHT))
             .when(!own_top_bar, |root| {
                 root.child(crate::ui::window_drag_strip("page-top-bar", theme::TOP_BAR, &self.moving))

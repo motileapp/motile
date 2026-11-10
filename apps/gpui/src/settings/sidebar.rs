@@ -8,7 +8,7 @@ use gpui_kit::*;
 use crate::sidebar::{ROW_INSET, ROW_PADDING, SidebarFooter};
 use crate::store::Store;
 use crate::store::settings::{SettingsEntry, SettingsSection};
-use crate::theme::{self, ControlSize, IconSize, Radius, colors};
+use crate::theme::{self, ControlSize, IconSize, Radius, TextSize, colors};
 use crate::ui::{Highlight, InputField, InputVariant, edges, hover_state, icons, track_hover};
 
 const ROW_HEIGHT: f32 = ControlSize::Regular.height();
@@ -83,7 +83,7 @@ impl SettingsSidebar {
                     .items_center()
                     .gap(px(ROW_GAP))
                     .child(icons::symbol(section.symbol(), IconSize::Md))
-                    .child(div().text_size(px(13.)).child(section.title()));
+                    .child(div().text_size(TextSize::Sm).child(section.title()));
                 self.row(
                     ElementId::NamedInteger("settings-section".into(), index as u64),
                     selected == Some(section),
@@ -105,7 +105,7 @@ impl SettingsSidebar {
                 div()
                     .px(px(SIDEBAR_EDGE))
                     .py(px(10.))
-                    .text_size(px(13.))
+                    .text_size(TextSize::Sm)
                     .text_color(c.muted_stronger_foreground)
                     .child("No settings found")
                     .into_any_element(),
@@ -131,7 +131,7 @@ impl SettingsSidebar {
                             .gap(px(1.))
                             .child(
                                 div()
-                                    .text_size(px(13.))
+                                    .text_size(TextSize::Sm)
                                     .font_weight(FontWeight::MEDIUM)
                                     .whitespace_nowrap()
                                     .overflow_hidden()
@@ -140,7 +140,7 @@ impl SettingsSidebar {
                             )
                             .child(
                                 div()
-                                    .text_size(px(11.))
+                                    .text_size(TextSize::Xs)
                                     .text_color(c.muted_stronger_foreground)
                                     .whitespace_nowrap()
                                     .child(entry.section.title()),

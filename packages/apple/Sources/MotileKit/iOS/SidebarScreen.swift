@@ -210,10 +210,10 @@ struct SidebarScreen: View {
         case .empty:
             Group {
                 if store.isSearchingThreads {
-                    SearchEmptyLine(size: 13)
+                    SearchEmptyLine(size: .sm)
                 } else {
                     Text(store.allThreads.isEmpty ? "No threads yet" : "No active threads")
-                        .font(.ui(size: 13))
+                        .font(.ui(.sm))
                         .foregroundStyle(Color.themeMutedStrongerForeground)
                 }
             }

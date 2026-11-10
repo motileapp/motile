@@ -233,6 +233,13 @@
   --icon-xxl: 24px;
   --icon-display: 32px;
   --icon-hero: 48px;
+  --type-xxs: 10px;
+  --type-xs: 12px;
+  --type-sm: 13px;
+  --type-md: 14px;
+  --type-lg: 16px;
+  --type-xl: 20px;
+  --type-2xl: 28px;
 }
 
 :root,

@@ -24,7 +24,7 @@ use crate::panel::pull_request_list::PullRequestListView;
 use crate::panel::ricrac::RicracView;
 use crate::store::Store;
 use crate::store::integrations::Integration;
-use crate::theme::{self, Colors, ControlSize, IconSize, Layer, Radius, Surface, colors};
+use crate::theme::{self, Colors, ControlSize, IconSize, Layer, Radius, Surface, TextSize, colors};
 use crate::transcript::kit::dashed_outline;
 use crate::ui::agent_avatar::{AgentAvatar, state_color};
 use crate::ui::menu::Menu;
@@ -315,7 +315,7 @@ impl RightPanelView {
             .child(
                 crate::ui::middle_truncated(tab.title())
                     .relative()
-                    .text_size(px(12.))
+                    .text_size(TextSize::Xs)
                     .font_weight(FontWeight::MEDIUM)
                     .text_color(if lit { c.foreground } else { c.muted_foreground }),
             )
@@ -377,7 +377,7 @@ impl RightPanelView {
             .gap(px(12.))
             .child(
                 div()
-                    .text_size(px(12.5))
+                    .text_size(TextSize::Xs)
                     .text_color(c.muted_foreground)
                     .text_center()
                     .child("This folder isn't a git repository."),
@@ -422,7 +422,15 @@ impl RightPanelView {
             .flex_shrink_0()
             .flex()
             .flex_col()
-            .child(div().px(px(12.)).py(px(7.)).bg(c.warning_tint).text_size(px(12.)).text_color(c.warning).child(text))
+            .child(
+                div()
+                    .px(px(12.))
+                    .py(px(7.))
+                    .bg(c.warning_tint)
+                    .text_size(TextSize::Xs)
+                    .text_color(c.warning)
+                    .child(text),
+            )
             .child(crate::ui::divider(cx))
     }
 
@@ -501,7 +509,7 @@ impl RightPanelView {
                         .relative()
                         .flex_1()
                         .flex()
-                        .text_size(px(13.))
+                        .text_size(TextSize::Sm)
                         .text_color(c.foreground)
                         .when(count == 0, |text| text.child(title))
                         // How many of its things work, in the working colour.
@@ -524,7 +532,9 @@ impl RightPanelView {
             .items_center()
             .justify_center()
             .gap(px(12.))
-            .child(div().text_size(px(13.)).font_weight(FontWeight::SEMIBOLD).text_color(c.foreground).child("Open"))
+            .child(
+                div().text_size(TextSize::Sm).font_weight(FontWeight::SEMIBOLD).text_color(c.foreground).child("Open"),
+            )
             .child(
                 div()
                     .w(px(250.))
@@ -688,7 +698,7 @@ impl RightPanelView {
             document.as_ref().is_some_and(|document| store.right_panel.collapsed.len() >= document.files.len());
         let counts = document.as_ref().filter(|document| !document.files.is_empty()).map(|document| {
             let (text, runs) = counts_text(document.added(), document.removed(), colors(cx));
-            div().pl(px(4.)).text_size(px(11.5)).child(StyledText::new(text).with_runs(runs))
+            div().pl(px(4.)).text_size(TextSize::Xs).child(StyledText::new(text).with_runs(runs))
         });
         let viewed = match (&scope, store.pull_requests.shown_page(target)) {
             (DiffScope::PullRequest { number }, Some(page))
@@ -713,7 +723,7 @@ impl RightPanelView {
                         div()
                             .id("viewed-count")
                             .pl(px(6.))
-                            .text_size(px(12.))
+                            .text_size(TextSize::Xs)
                             .text_color(colors(cx).muted_stronger_foreground)
                             .whitespace_nowrap()
                             .child(viewed)
@@ -899,7 +909,7 @@ impl RightPanelView {
                 .child(
                     div()
                         .pl(px(3.))
-                        .text_size(px(12.5))
+                        .text_size(TextSize::Xs)
                         .font_weight(FontWeight::MEDIUM)
                         .text_color(c.foreground)
                         .truncate()
@@ -1035,7 +1045,7 @@ impl RightPanelView {
                     let title = StyledText::new(format!("{folder}{name}")).with_highlights([(0..folder.len(), muted)]);
                     div()
                         .min_w_0()
-                        .text_size(px(12.5))
+                        .text_size(TextSize::Xs)
                         .font_weight(FontWeight::MEDIUM)
                         .text_color(c.foreground)
                         .whitespace_nowrap()
@@ -1151,7 +1161,7 @@ impl RightPanelView {
                 .child(
                     div()
                         .min_w_0()
-                        .text_size(px(12.5))
+                        .text_size(TextSize::Xs)
                         .font_weight(FontWeight::MEDIUM)
                         .text_color(c.foreground)
                         .truncate()
@@ -1242,7 +1252,11 @@ impl RightPanelView {
         let said = if agents.is_empty() { StyledText::new("No agents") } else { summary(&agents, c) };
         let bar = Self::bar(
             div().flex().w_full().child(
-                div().text_size(px(12.)).font_weight(FontWeight::MEDIUM).text_color(c.muted_foreground).child(said),
+                div()
+                    .text_size(TextSize::Xs)
+                    .font_weight(FontWeight::MEDIUM)
+                    .text_color(c.muted_foreground)
+                    .child(said),
             ),
             cx,
         );
@@ -1460,12 +1474,12 @@ impl RightPanelView {
                             .gap(px(6.))
                             .child(
                                 div()
-                                    .text_size(px(15.))
+                                    .text_size(TextSize::Lg)
                                     .font_weight(FontWeight::SEMIBOLD)
                                     .text_color(c.foreground)
                                     .child("Connect Linear"),
                             )
-                            .child(div().text_size(px(12.5)).text_color(c.muted_foreground).text_center().child(
+                            .child(div().text_size(TextSize::Xs).text_color(c.muted_foreground).text_center().child(
                                 "See your issues and hand them to your agents. The connection is kept on your server.",
                             )),
                     )
@@ -1477,7 +1491,7 @@ impl RightPanelView {
                     )
                     .when_some(error, |prompt, error| {
                         prompt.child(
-                            div().w_full().text_size(px(12.5)).text_color(c.destructive).text_center().child(error),
+                            div().w_full().text_size(TextSize::Xs).text_color(c.destructive).text_center().child(error),
                         )
                     }),
             )
@@ -1522,12 +1536,12 @@ impl RightPanelView {
                             .gap(px(6.))
                             .child(
                                 div()
-                                    .text_size(px(15.))
+                                    .text_size(TextSize::Lg)
                                     .font_weight(FontWeight::SEMIBOLD)
                                     .text_color(c.foreground)
                                     .child("Connect Ricrac"),
                             )
-                            .child(div().text_size(px(12.5)).text_color(c.muted_foreground).text_center().child(
+                            .child(div().text_size(TextSize::Xs).text_color(c.muted_foreground).text_center().child(
                                 "See your issues and hand them to your agents. The connection is kept on your server.",
                             )),
                     )
@@ -1539,7 +1553,7 @@ impl RightPanelView {
                     )
                     .when_some(error, |prompt, error| {
                         prompt.child(
-                            div().w_full().text_size(px(12.5)).text_color(c.destructive).text_center().child(error),
+                            div().w_full().text_size(TextSize::Xs).text_color(c.destructive).text_center().child(error),
                         )
                     }),
             )
@@ -1577,11 +1591,10 @@ fn file_row(node: &FileNode, store: &Entity<Store>, cx: &App) -> Stateful<Div> {
             ),
         )
         .child(
-            crate::ui::middle_truncated(node.name.clone()).relative().text_size(px(12.5)).text_color(if node.ignored {
-                c.muted_strongest_foreground
-            } else {
-                c.foreground
-            }),
+            crate::ui::middle_truncated(node.name.clone())
+                .relative()
+                .text_size(TextSize::Xs)
+                .text_color(if node.ignored { c.muted_strongest_foreground } else { c.foreground }),
         )
         .on_click(act(store, move |store, _| {
             if folder {
@@ -1727,7 +1740,7 @@ fn parent_row(id: &str, store: &Entity<Store>, cx: &App) -> Div {
                         div()
                             .flex_1()
                             .min_w_0()
-                            .text_size(px(13.))
+                            .text_size(TextSize::Sm)
                             .font_weight(FontWeight::MEDIUM)
                             .text_color(c.foreground)
                             .truncate()
@@ -1757,7 +1770,7 @@ fn ended_header(count: usize, failed: usize, shown: bool, cx: &App) -> Stateful<
                 .flex()
                 .items_center()
                 .gap(px(8.))
-                .text_size(px(12.))
+                .text_size(TextSize::Xs)
                 .child(div().font_weight(FontWeight::SEMIBOLD).text_color(c.foreground).child("Previous agents"))
                 .child(div().text_color(c.muted_stronger_foreground).child(count.to_string()))
                 .when(failed > 0, |line| line.child(div().text_color(c.destructive).child(format!("{failed} failed"))))
@@ -1848,7 +1861,7 @@ fn agent_row(
                                 .child(
                                     div()
                                         .min_w_0()
-                                        .text_size(px(13.))
+                                        .text_size(TextSize::Sm)
                                         .font_weight(FontWeight::MEDIUM)
                                         .text_color(c.foreground)
                                         .truncate()
@@ -1858,7 +1871,7 @@ fn agent_row(
                                     line.child(
                                         div()
                                             .min_w_0()
-                                            .text_size(px(11.))
+                                            .text_size(TextSize::Xs)
                                             .text_color(c.muted_foreground)
                                             .truncate()
                                             .child(kind),
@@ -1868,7 +1881,7 @@ fn agent_row(
                                     line.child(
                                         div()
                                             .flex_shrink_0()
-                                            .text_size(px(11.))
+                                            .text_size(TextSize::Xs)
                                             .font_weight(FontWeight::MEDIUM)
                                             .text_color(state_color(agent.state, c))
                                             .child(agent.label.clone()),
@@ -1885,7 +1898,7 @@ fn agent_row(
                         .child(
                             div()
                                 .h(px(16.))
-                                .text_size(px(12.))
+                                .text_size(TextSize::Xs)
                                 .line_height(px(16.))
                                 .text_color(if agent.status == ToolStatus::Failed {
                                     c.destructive
@@ -1900,7 +1913,7 @@ fn agent_row(
                             let usage = agent.usage().unwrap_or_default();
                             let mark = GatewayMark::of(agent.gateway && runs_on.is_some(), agent.pinned);
                             text.child(
-                                crate::ui::proxied_line(&runs_on.unwrap_or_default(), mark, &usage, 11.)
+                                crate::ui::proxied_line(&runs_on.unwrap_or_default(), mark, &usage, TextSize::Xs)
                                     .text_color(c.muted_stronger_foreground),
                             )
                         }),
@@ -1946,7 +1959,7 @@ pub fn agent_time(agent: &AgentView, cx: &App) -> AnyElement {
     let time = |text: String, color: Hsla| {
         div()
             .flex_shrink_0()
-            .text_size(px(11.))
+            .text_size(TextSize::Xs)
             .font_weight(FontWeight::MEDIUM)
             .font_features(crate::ui::tabular_numbers())
             .text_color(color)

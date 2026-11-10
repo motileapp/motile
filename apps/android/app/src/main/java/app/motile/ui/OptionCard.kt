@@ -28,6 +28,7 @@ import app.motile.theme.LocalSurface
 import app.motile.theme.Opacity
 import app.motile.theme.Radius
 import app.motile.theme.Surface
+import app.motile.theme.TextSize
 import app.motile.theme.Theme
 import app.motile.theme.opacity
 import app.motile.theme.wash
@@ -75,7 +76,7 @@ fun OptionCard(
             .selectable(selected, interaction, indication = null, enabled = enabled, role = Role.RadioButton, onClick = onPress)
             .padding(horizontal = 16.dp, vertical = 14.dp),
     ) {
-        Text(title, style = Theme.ui(14f, FontWeight.Medium).lined(20f), color = palette.foreground)
-        if (detail != null) Text(detail, Modifier.padding(top = 2.dp), style = Theme.ui(13f).lined(20f), color = palette.mutedForeground)
+        Text(title, style = Theme.ui(TextSize.Md, FontWeight.Medium).lined(20f), color = palette.foreground)
+        if (detail != null) Text(detail, Modifier.padding(top = 2.dp), style = Theme.ui(TextSize.Sm).lined(20f), color = palette.mutedForeground)
     }
 }

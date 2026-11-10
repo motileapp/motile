@@ -342,6 +342,17 @@ enum Radius {
     static let xxl: CGFloat = 24
 }
 
+/// How large text is, as on the Mac. Every text in the clients is one of these.
+enum TextSize: CGFloat, CaseIterable {
+    case xxs = 10
+    case xs = 12
+    case sm = 13
+    case md = 14
+    case lg = 16
+    case xl = 20
+    case xxl = 28
+}
+
 /// How large an icon is, of any kind: the side of its square, as on the Mac. Every icon is one
 /// of these.
 enum IconSize: CGFloat, CaseIterable {

@@ -6,7 +6,7 @@ use gpui_kit::prelude::*;
 use gpui_kit::*;
 
 use crate::store::{CustomSnooze, Store};
-use crate::theme::colors;
+use crate::theme::{TextSize, colors};
 use crate::ui::{ActionButton, DateField, InputField, beside};
 
 pub struct CustomSnoozeSheet {
@@ -73,7 +73,7 @@ impl Render for CustomSnoozeSheet {
             .flex()
             .flex_col()
             .gap(px(14.))
-            .child(div().text_size(px(15.)).font_weight(FontWeight::SEMIBOLD).child("Snooze Until"))
+            .child(div().text_size(TextSize::Lg).font_weight(FontWeight::SEMIBOLD).child("Snooze Until"))
             .child(
                 div()
                     .flex()
@@ -92,7 +92,9 @@ impl Render for CustomSnoozeSheet {
                     ))
                     .child(div().w(px(110.)).child(InputField::new(&self.time))),
             )
-            .children(self.error.clone().map(|error| div().text_size(px(12.)).text_color(c.destructive).child(error)))
+            .children(
+                self.error.clone().map(|error| div().text_size(TextSize::Xs).text_color(c.destructive).child(error)),
+            )
             .child(
                 div()
                     .flex()

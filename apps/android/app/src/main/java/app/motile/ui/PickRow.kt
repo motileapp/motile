@@ -24,6 +24,7 @@ import app.motile.theme.ControlSize
 import app.motile.theme.LocalPalette
 import app.motile.theme.Opacity
 import app.motile.theme.Radius
+import app.motile.theme.TextSize
 import app.motile.theme.Theme
 import app.motile.theme.opacity
 
@@ -63,7 +64,7 @@ fun PickRow(
         Column(Modifier.weight(1f)) {
             val titleStyle = TextStyle(fontSize = Theme.proseSize, textDecoration = if (struck) TextDecoration.LineThrough else null).lined(24f)
             Text(title, style = titleStyle, color = if (struck) palette.mutedForeground else palette.foreground)
-            if (detail != null) Text(detail, Modifier.padding(top = 2.dp), style = Theme.ui(13f).lined(20f), color = palette.mutedForeground)
+            if (detail != null) Text(detail, Modifier.padding(top = 2.dp), style = Theme.ui(TextSize.Sm).lined(20f), color = palette.mutedForeground)
         }
     }
 }

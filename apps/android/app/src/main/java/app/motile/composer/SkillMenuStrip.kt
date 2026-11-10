@@ -23,6 +23,7 @@ import app.motile.core.SkillMenu
 import app.motile.core.SkillRow
 import app.motile.core.pickSkill
 import app.motile.platform.scaled
+import app.motile.theme.TextSize
 import app.motile.theme.iconSize
 import app.motile.theme.Radius
 import app.motile.theme.Theme
@@ -90,10 +91,10 @@ private fun SkillMenuRow(row: SkillRow) {
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(SkillChip.symbol, iconSize(text = 13f), color = palette.skill)
+        Icon(SkillChip.symbol, iconSize(text = TextSize.Sm), color = palette.skill)
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(row.label, size = 13f, weight = FontWeight.Medium, color = palette.foreground, maxLines = 1)
-            Text(row.description, size = 12f, color = palette.mutedForeground, maxLines = 1)
+            Text(row.label, size = TextSize.Sm, weight = FontWeight.Medium, color = palette.foreground, maxLines = 1)
+            Text(row.description, size = TextSize.Xs, color = palette.mutedForeground, maxLines = 1)
         }
         Chip(row.source, icon = row.symbol)
     }

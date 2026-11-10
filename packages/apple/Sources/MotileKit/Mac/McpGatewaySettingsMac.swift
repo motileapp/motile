@@ -83,10 +83,10 @@ struct McpGatewaySettings: View {
                     McpServerTile(monogram: mcpServer.monogram, tint: mcpServer.tint)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(mcpServer.name)
-                            .font(.ui(size: 13, weight: .medium))
+                            .font(.ui(.sm, weight: .medium))
                             .foregroundStyle(Color.themeForeground)
                         Text(mcpServer.statusText)
-                            .font(.ui(size: 11.5))
+                            .font(.ui(.xs))
                             .foregroundStyle(mcpServer.troubled ? Color.themeWarning : Color.themeMutedForeground)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -158,7 +158,7 @@ struct McpGatewaySettings: View {
                 if let empty = calls.emptyText {
                     ThemeDivider()
                     Text(empty)
-                        .font(.ui(size: 12))
+                        .font(.ui(.xs))
                         .foregroundStyle(Color.themeMutedForeground)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, settingsInset)

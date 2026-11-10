@@ -56,6 +56,7 @@ import app.motile.layout.KeyboardFocus
 import app.motile.platform.Symbol
 import app.motile.theme.ControlSize
 import app.motile.theme.LocalPalette
+import app.motile.theme.TextSize
 import app.motile.ui.GlassButton
 import app.motile.ui.InputField
 import app.motile.ui.InputVariant
@@ -225,7 +226,7 @@ private fun Results(state: PanelState, page: PanelPage, onDrag: () -> Unit) {
                 Text(
                     state.emptyText(page),
                     Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 28.dp),
-                    size = 13f,
+                    size = TextSize.Sm,
                     color = palette.mutedStrongerForeground,
                     align = TextAlign.Center,
                 )
@@ -236,7 +237,7 @@ private fun Results(state: PanelState, page: PanelPage, onDrag: () -> Unit) {
                 Text(
                     section.title,
                     Modifier.padding(start = PanelRow.sideMargin + 10.dp, end = PanelRow.sideMargin + 10.dp, top = 10.dp, bottom = 4.dp),
-                    size = 12f,
+                    size = TextSize.Xs,
                     weight = FontWeight.Medium,
                     color = palette.mutedStrongerForeground,
                 )
@@ -248,7 +249,7 @@ private fun Results(state: PanelState, page: PanelPage, onDrag: () -> Unit) {
         if (refused != null) {
             item("notice") {
                 Box(Modifier.fillMaxWidth().height(noticeHeight).padding(horizontal = PanelRow.sideMargin + 10.dp), contentAlignment = Alignment.CenterStart) {
-                    Text(refused, size = 12f, color = palette.destructive, maxLines = 2)
+                    Text(refused, size = TextSize.Xs, color = palette.destructive, maxLines = 2)
                 }
             }
         }

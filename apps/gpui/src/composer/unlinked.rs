@@ -8,12 +8,12 @@ use super::{RADIUS, margin};
 use crate::models::Server;
 use crate::store::Store;
 use crate::store::settings::SettingsSection;
-use crate::theme::{self, IconSize, Opacity, Radius, Surface, colors};
+use crate::theme::{self, IconSize, Opacity, Radius, Surface, TextSize, colors};
 use crate::ui::{ActionButton, icons, skill_chip};
 
 /// How far the words stand from the box's side, as the composer's text does, its border within.
 const TEXT_INSET: f32 = 14.;
-const TEXT_SIZE: f32 = 13.;
+const TEXT_SIZE: TextSize = TextSize::Sm;
 
 pub fn unlinked_box(store: &Entity<Store>, server: &Server, cx: &App) -> impl IntoElement {
     let c = colors(cx);
@@ -25,11 +25,9 @@ pub fn unlinked_box(store: &Entity<Store>, server: &Server, cx: &App) -> impl In
         .gap(px(6.))
         .text_color(c.warning)
         .child(icons::symbol("unlink", IconSize::Sm))
-        .child(div().flex_none().text_size(px(TEXT_SIZE)).font_weight(FontWeight::MEDIUM).child("Read-only:"))
+        .child(div().flex_none().text_size(TEXT_SIZE).font_weight(FontWeight::MEDIUM).child("Read-only:"))
         .child(name_chip(server.name.clone(), cx))
-        .child(
-            div().min_w_0().text_size(px(TEXT_SIZE)).font_weight(FontWeight::MEDIUM).truncate().child("is unlinked"),
-        );
+        .child(div().min_w_0().text_size(TEXT_SIZE).font_weight(FontWeight::MEDIUM).truncate().child("is unlinked"));
     let buttons = div()
         .flex()
         .justify_end()
@@ -73,7 +71,7 @@ pub fn unlinked_box(store: &Entity<Store>, server: &Server, cx: &App) -> impl In
         .border_color(c.border_composer)
         .shadow(c.shadow(theme::ShadowSize::Md, theme::Opacity::Shadow))
         .child(title.px(px(TEXT_INSET - 1.)))
-        .child(div().px(px(TEXT_INSET - 1.)).text_size(px(TEXT_SIZE)).text_color(c.muted_foreground).child(
+        .child(div().px(px(TEXT_INSET - 1.)).text_size(TEXT_SIZE).text_color(c.muted_foreground).child(
             "This thread is read-only. You can continue it on another server, or delete the server in settings.",
         ))
         .child(buttons)
@@ -90,7 +88,7 @@ fn name_chip(name: String, cx: &App) -> Div {
         .border_1()
         .border_color(c.at(c.warning, Opacity::ColorTintChart))
         .bg(c.wash(c.warning, false))
-        .text_size(px(TEXT_SIZE))
+        .text_size(TEXT_SIZE)
         .font_weight(FontWeight::MEDIUM)
         .whitespace_nowrap()
         .child(name)

@@ -772,7 +772,7 @@ private struct SettingsItem<Picture: View, Footer: View>: View {
             picture
             VStack(alignment: .leading, spacing: 2) {
                 Text(verbatim: title)
-                    .gatewayMarked(proxied, fontSize: UIFont.preferredFont(forTextStyle: .body).pointSize)
+                    .gatewayMarked(proxied, fontSize: .lg)
                     .foregroundStyle(Color.themeForeground)
                 Text(description)
                     .font(.footnote)

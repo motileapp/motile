@@ -40,6 +40,7 @@ import app.motile.core.pullDefaultBranchCaption
 import app.motile.onboarding.ConnectServerView
 import app.motile.platform.Platform
 import app.motile.platform.scaled
+import app.motile.theme.TextSize
 import app.motile.transcript.MediaFiles
 import app.motile.sidebar.ServerUpdateStatus
 import app.motile.theme.iconSize
@@ -434,7 +435,7 @@ internal fun ProjectSettingsPage(projectID: String) {
                 row {
                     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         ProjectIcon(project, Modifier.padding(bottom = 8.dp), size = IconSize.Hero)
-                        Text(project.name, size = 17f, weight = FontWeight.SemiBold, color = LocalPalette.current.foreground, align = TextAlign.Center)
+                        Text(project.name, size = TextSize.Xl, weight = FontWeight.SemiBold, color = LocalPalette.current.foreground, align = TextAlign.Center)
                         Text(
                             project.path, size = NOTE_TEXT, color = LocalPalette.current.mutedForeground, maxLines = 2,
                             overflow = TextOverflow.StartEllipsis, align = TextAlign.Center,

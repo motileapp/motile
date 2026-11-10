@@ -15,7 +15,7 @@ use crate::composer::Composer;
 use crate::composer::children::agent_bar;
 use crate::models::{AgentViewExt, Project};
 use crate::store::Store;
-use crate::theme::{self, ControlSize, IconSize, Radius, colors};
+use crate::theme::{self, ControlSize, IconSize, Radius, TextSize, colors};
 use crate::ui::menu::{Anchor, Menu, MenuIcon, Opened};
 use crate::ui::modal::{Answer, Confirmation, Modal, confirmation, present_sheet, presented};
 use crate::ui::{ActionButton, Highlight, TOOLBAR_WIDTH, icons, logos};
@@ -25,7 +25,7 @@ pub const COMPOSER_GAP: f32 = 80.;
 const COMPOSER_BOTTOM_GAP: f32 = 16.;
 /// How far above the middle the start is, as a part of the window's height.
 const START_LIFT: f32 = 0.03;
-const HEADLINE_SIZE: f32 = 28.;
+const HEADLINE_SIZE: TextSize = TextSize::Xxl;
 const TOAST_FADE: Duration = Duration::from_millis(150);
 
 /// How far the title starts from the pane's side beside the sidebar.
@@ -180,7 +180,7 @@ impl ThreadPane {
                             .child(
                                 div()
                                     .min_w_0()
-                                    .text_size(px(13.))
+                                    .text_size(TextSize::Sm)
                                     .font_weight(FontWeight::SEMIBOLD)
                                     .text_color(c.foreground)
                                     .truncate()
@@ -271,10 +271,10 @@ impl ThreadPane {
                         .flex_col()
                         .items_center()
                         .gap(px(10.))
-                        .child(div().text_size(px(28.)).child("Add a project to start"))
+                        .child(div().text_size(TextSize::Xxl).child("Add a project to start"))
                         .child(
                             div()
-                                .text_size(px(14.))
+                                .text_size(TextSize::Md)
                                 .text_color(c.muted_foreground)
                                 .child("A project is a folder on your server that threads work in."),
                         )
@@ -320,7 +320,7 @@ impl ThreadPane {
             .flex()
             .items_center()
             .gap(px(word_space))
-            .text_size(px(HEADLINE_SIZE))
+            .text_size(HEADLINE_SIZE)
             .text_color(c.foreground)
             .child(lead)
             .child(
@@ -436,7 +436,7 @@ impl ThreadPane {
                     .gap(px(12.))
                     .text_color(c.foreground)
                     .child(icons::symbol("paperclip", IconSize::Display))
-                    .child(div().text_size(px(17.)).font_weight(FontWeight::SEMIBOLD).child("Drop files here")),
+                    .child(div().text_size(TextSize::Xl).font_weight(FontWeight::SEMIBOLD).child("Drop files here")),
             )
     }
 }
@@ -622,7 +622,7 @@ fn project_line(project: Option<&Project>, parts: &[String], cx: &App) -> impl I
     div().min_w_0().flex().items_center().gap(px(4.)).child(logos::project_icon(project, IconSize::Sm, cx)).child(
         div()
             .min_w_0()
-            .text_size(px(11.))
+            .text_size(TextSize::Xs)
             .text_color(c.muted_foreground)
             .truncate()
             .child(crate::ui::control::dotted(parts.join(" · "), c)),

@@ -61,7 +61,7 @@ struct SpendingView: View {
             }
             ForEach(outdated) { server in
                 Text("Update \(server.name) to see what its agents spend.")
-                    .font(.caption)
+                    .font(.ui(.xxs))
                     .foregroundStyle(Color.themeMutedForeground)
             }
         }
@@ -73,22 +73,22 @@ struct SpendingView: View {
         VStack(alignment: .leading, spacing: 14) {
             VStack(alignment: .leading, spacing: 3) {
                 Text(measure == .cost ? Self.cost(report.costUSD) : Self.count(report.tokens))
-                    .font(.ui(size: 28, weight: .semibold))
+                    .font(.ui(.xxl, weight: .semibold))
                     .foregroundStyle(Color.themeForeground)
                     .monospacedDigit()
                 Text(measure == .cost ? "What the API would have charged" : "Tokens in and out")
-                    .font(.caption)
+                    .font(.ui(.xxs))
                     .foregroundStyle(Color.themeMutedForeground)
                 if report.writingTokens > 0 {
                     let written = measure == .cost ? Self.cost(report.writingCostUSD) : Self.count(report.writingTokens)
                     Text("\(written) for titles, branch names, etc.")
-                        .font(.caption)
+                        .font(.ui(.xxs))
                         .foregroundStyle(Color.themeMutedStrongerForeground)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 if measure == .cost && report.unpricedTokens > 0 {
                     Text("Without \(Self.count(report.unpricedTokens)) tokens of models whose price isn’t known")
-                        .font(.caption)
+                        .font(.ui(.xxs))
                         .foregroundStyle(Color.themeMutedStrongerForeground)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -106,7 +106,7 @@ struct SpendingView: View {
                             .foregroundStyle(Color.themeForeground)
                             .monospacedDigit()
                     }
-                    .font(.ui(size: 12))
+                    .font(.ui(.xs))
                 }
             }
         }
@@ -131,9 +131,9 @@ struct SpendingView: View {
                     .foregroundStyle(Color.themeForeground)
                     .monospacedDigit()
             }
-            .font(.ui(size: 12))
+            .font(.ui(.xs))
             Text("\(share.formatted(.percent.precision(.fractionLength(0...1)))) of \(measure == .cost ? "the cost" : "the tokens") · \(other)")
-                .font(.ui(size: 11))
+                .font(.ui(.xs))
                 .foregroundStyle(Color.themeMutedStrongerForeground)
                 .monospacedDigit()
                 .padding(.leading, 15)
@@ -172,7 +172,7 @@ struct SpendingView: View {
                     .foregroundStyle(Color.themeMutedForeground)
             }
         }
-        .font(.ui(size: 12))
+        .font(.ui(.xs))
     }
 
     private var chart: some View {
@@ -295,7 +295,7 @@ private struct UsageLineRow: View {
                 .frame(minHeight: scaled(36))
             }
         }
-        .font(.ui(size: 12))
+        .font(.ui(.xs))
         .monospacedDigit()
         .padding(.horizontal, 12)
     }
@@ -308,7 +308,7 @@ private struct UsageLineRow: View {
                     .frame(width: Self.dotWidth, height: Self.dotWidth)
             }
             Text(verbatim: line.name)
-                .gatewayMarked(line.gateway, fontSize: 12)
+                .gatewayMarked(line.gateway, fontSize: .xs)
                 .foregroundStyle(Color.themeForeground)
                 .lineLimit(1)
                 .truncationMode(.middle)

@@ -8,7 +8,7 @@ use std::rc::Rc;
 use gpui_kit::prelude::*;
 use gpui_kit::*;
 
-use crate::theme::{ControlSize, Layer, Opacity, Surface, colors};
+use crate::theme::{ControlSize, Layer, Opacity, Surface, TextSize, colors};
 use crate::ui::menu::Anchor;
 
 type OnValue = Rc<dyn Fn(f64, &mut Window, &mut App)>;
@@ -200,7 +200,7 @@ impl Slider {
             div()
                 .flex_1()
                 .min_w_0()
-                .text_size(px(13.))
+                .text_size(TextSize::Sm)
                 .line_height(px(Self::LABEL_LINE))
                 .text_color(c.foreground)
                 .child(label)
@@ -208,7 +208,7 @@ impl Slider {
         let readout = self.readout.clone().map(|readout| {
             div()
                 .flex_shrink_0()
-                .text_size(px(12.))
+                .text_size(TextSize::Xs)
                 .font_weight(FontWeight::MEDIUM)
                 .font_features(crate::ui::tabular_numbers())
                 .line_height(px(Self::READOUT_LINE))
@@ -229,9 +229,9 @@ impl Slider {
             let t = self.range.fraction(*value);
             let text = div()
                 .flex_shrink_0()
-                .text_size(px(11.))
+                .text_size(TextSize::Xs)
                 .font_features(crate::ui::tabular_numbers())
-                .line_height(px(14.))
+                .line_height(px(16.))
                 .whitespace_nowrap()
                 .text_color(c.muted_foreground)
                 .child(title.clone());

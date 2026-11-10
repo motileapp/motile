@@ -40,7 +40,7 @@ struct ActivityRow: View {
             (Text(entry.author).fontWeight(.semibold).foregroundStyle(Color.themeForeground)
                 + Text(entry.author.isEmpty ? entry.said : " \(entry.said)").foregroundStyle(Color.themeMutedForeground)
                 + Text(" · \(Time.ago(entry.at))").foregroundStyle(Color.themeMutedStrongerForeground))
-                .font(.ui(size: 12.5))
+                .font(.ui(.xs))
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 6)
             HStack(spacing: 0) {
@@ -67,10 +67,10 @@ struct ActivityRow: View {
                 } label: {
                     HStack(spacing: 8) {
                         Text(commit.oid)
-                            .font(.ui(size: 11.5, design: .monospaced))
+                            .font(.ui(.xs, design: .monospaced))
                             .foregroundStyle(Color.themePrimary)
                         Text(commit.headline)
-                            .font(.ui(size: 12.5))
+                            .font(.ui(.xs))
                             .foregroundStyle(Color.themeForeground)
                             .lineLimit(1)
                             .truncationMode(.tail)
@@ -143,13 +143,13 @@ struct ConversationCard: View {
                 Image(FileSymbol.symbol(for: thread.path), size: .sm)
                     .foregroundStyle(Color.themeMutedForeground)
                 Text(thread.path)
-                    .font(.ui(size: 12, weight: .medium))
+                    .font(.ui(.xs, weight: .medium))
                     .foregroundStyle(Color.themeForeground)
                     .lineLimit(1)
                     .truncationMode(.head)
                 if let line = thread.line {
                     Text("line \(line)")
-                        .font(.ui(size: 12))
+                        .font(.ui(.xs))
                         .foregroundStyle(Color.themeMutedStrongerForeground)
                         .fixedSize()
                 }
@@ -158,7 +158,7 @@ struct ConversationCard: View {
                 Spacer(minLength: 0)
                 if !isOpen {
                     Text(thread.comments.count == 1 ? "1 comment" : "\(thread.comments.count) comments")
-                        .font(.ui(size: 11.5))
+                        .font(.ui(.xs))
                         .foregroundStyle(Color.themeMutedStrongerForeground)
                 }
             }
@@ -219,7 +219,7 @@ private struct HunkView: View {
         VStack(alignment: .leading, spacing: 0) {
             ForEach(Array(lines.enumerated()), id: \.offset) { index, line in
                 Text(line.isEmpty ? " " : line)
-                    .font(.ui(size: 11.5, design: .monospaced))
+                    .font(.ui(.xs, design: .monospaced))
                     .foregroundStyle(Color.themeForeground)
                     .lineLimit(1)
                     .truncationMode(.tail)
@@ -249,7 +249,7 @@ private struct CommentView: View {
             HStack(spacing: 0) {
                 (Text(comment.author).fontWeight(.semibold).foregroundStyle(Color.themeForeground)
                     + Text(" · \(Time.ago(comment.at))").foregroundStyle(Color.themeMutedStrongerForeground))
-                    .font(.ui(size: 12.5))
+                    .font(.ui(.xs))
                 Spacer(minLength: 4)
                 HStack(spacing: 0) {
                     if comment.reactions.isEmpty {

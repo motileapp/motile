@@ -16,7 +16,9 @@ import app.motile.core.string
 import app.motile.core.objects
 import app.motile.platform.Platform
 import app.motile.theme.Palette
+import app.motile.theme.TextSize
 import app.motile.theme.Theme
+import app.motile.theme.fontSize
 import app.motile.theme.symbolSide
 
 /** A block of a prose row, drawn as a text of its own. */
@@ -105,8 +107,6 @@ object Typesetter {
             else -> heading
         }
     }
-
-    private fun sized(size: Float) = (size * Platform.scale).sp
 
     /** A message's line height: its text with five points between its lines. */
     val messageLineHeight: TextUnit get() = (14f * Platform.scale * 1.2f + 5f).sp
@@ -273,9 +273,9 @@ object Typesetter {
                 "cell" -> {
                     val header = para.header
                     val style = if (header) {
-                        SpanStyle(fontSize = sized(13f), fontWeight = FontWeight.SemiBold, color = palette.foreground)
+                        SpanStyle(fontSize = TextSize.Sm.fontSize, fontWeight = FontWeight.SemiBold, color = palette.foreground)
                     } else {
-                        SpanStyle(fontSize = sized(13f))
+                        SpanStyle(fontSize = TextSize.Sm.fontSize)
                     }
                     builder.addStyle(style, para.start, para.end)
                     if (header) headings += para.start until para.end
@@ -293,7 +293,7 @@ object Typesetter {
             when {
                 code -> {
                     val weight = if (bold || heading) FontWeight.SemiBold else FontWeight.Normal
-                    builder.addStyle(SpanStyle(fontFamily = Theme.mono, fontSize = sized(12.5f), fontWeight = weight, color = palette.foreground), start, end)
+                    builder.addStyle(SpanStyle(fontFamily = Theme.mono, fontSize = Theme.codeSize, fontWeight = weight, color = palette.foreground), start, end)
                     builder.addStringAnnotation(TextMarks.code, "", start, end)
                 }
                 heading -> if (italic) builder.addStyle(SpanStyle(fontStyle = FontStyle.Italic), start, end)

@@ -20,7 +20,7 @@ use objc2_core_media::{CMTime, kCMTimeZero};
 use objc2_core_video::CVPixelBuffer;
 use objc2_foundation::{NSDictionary, NSNumber, NSString, NSURL};
 
-use crate::theme::{IconSize, Radius, colors};
+use crate::theme::{IconSize, Radius, TextSize, colors};
 use crate::ui::icons;
 
 /// How long the controls stay once the pointer rests on a playing video.
@@ -374,7 +374,7 @@ impl Render for VideoPlayer {
             .pb(px(8.))
             .rounded(px(Radius::LG))
             .bg(c.control_over_picture)
-            .text_size(px(11.))
+            .text_size(TextSize::Xs)
             .text_color(bright)
             .font_features(crate::ui::tabular_numbers())
             .flex()

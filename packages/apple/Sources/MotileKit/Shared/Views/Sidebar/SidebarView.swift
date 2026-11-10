@@ -150,10 +150,10 @@ struct SidebarView: View {
                 case .empty:
                     Group {
                         if searching {
-                            SearchEmptyLine(size: 12)
+                            SearchEmptyLine(size: .xs)
                         } else {
                             Text(store.allThreads.isEmpty ? "No threads yet" : "No active threads")
-                                .font(.ui(size: 12))
+                                .font(.ui(.xs))
                                 .foregroundStyle(Color.themeMutedStrongerForeground)
                         }
                     }
@@ -271,7 +271,7 @@ private struct RenameThread: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Rename Thread")
-                .font(.ui(size: 15, weight: .semibold))
+                .font(.ui(.lg, weight: .semibold))
             InputField("Title", text: $title)
             HStack(spacing: 0) {
                 Spacer()
@@ -544,7 +544,7 @@ struct ThreadRow: View, Equatable {
             HStack(spacing: 6) {
                 ProjectIcon(project: project, size: .sm)
                 Text(project?.name ?? URL(fileURLWithPath: thread.cwd).lastPathComponent)
-                    .font(.ui(size: 11, weight: .medium))
+                    .font(.ui(.xs, weight: .medium))
                     .lineLimit(1)
                     .layoutPriority(1)
                 Spacer(minLength: 6)
@@ -567,7 +567,7 @@ struct ThreadRow: View, Equatable {
             .frame(height: scaled(22))
 
             Text(thread.title)
-                .font(.ui(size: 13, weight: .medium))
+                .font(.ui(.sm, weight: .medium))
                 .lineLimit(1)
                 .rowText()
                 .frame(height: Self.titleHeight)
@@ -659,7 +659,7 @@ private struct CheckoutLabel: View {
         HStack(spacing: 3) {
             Image(symbol, size: .sm)
             Text(text)
-                .font(.ui(size: 11))
+                .font(.ui(.xs))
                 .lineLimit(1)
                 .truncationMode(.middle)
         }
@@ -746,7 +746,7 @@ private struct DraftRow: View {
             HStack(spacing: 6) {
                 ProjectIcon(project: project, size: .sm)
                 Text(project?.name ?? "No project")
-                    .font(.ui(size: 11, weight: .medium))
+                    .font(.ui(.xs, weight: .medium))
                     .lineLimit(1)
                     .layoutPriority(1)
                 Spacer(minLength: 6)
@@ -754,7 +754,7 @@ private struct DraftRow: View {
                     HStack(spacing: 3) {
                         Spinner(size: .sm)
                         Text("Sending")
-                            .font(.ui(size: 11, weight: .medium))
+                            .font(.ui(.xs, weight: .medium))
                     }
                 } else if hovering {
                     ActionButton(icon: .x, help: "Discard draft", size: .small) { store.discard(listed.draft) }
@@ -763,7 +763,7 @@ private struct DraftRow: View {
                     HStack(spacing: 3) {
                         Image(.file, size: .sm)
                         Text("Draft")
-                            .font(.ui(size: 11, weight: .medium))
+                            .font(.ui(.xs, weight: .medium))
                     }
                 }
             }
@@ -771,7 +771,7 @@ private struct DraftRow: View {
             .frame(height: scaled(22))
 
             Text(listed.preview)
-                .font(.ui(size: 13, weight: .medium))
+                .font(.ui(.sm, weight: .medium))
                 .lineLimit(1)
                 .rowText()
                 .frame(height: ThreadRow.titleHeight)
@@ -831,7 +831,7 @@ struct UndoRow: View {
                     ShelfTitle("Undo", expanded: false)
                     Spacer()
                     Text(notice.text)
-                        .font(.ui(size: 11))
+                        .font(.ui(.xs))
                         .lineLimit(1)
                         .foregroundStyle(Color.themeMutedStrongerForeground)
                 }
@@ -985,7 +985,7 @@ struct SlimThreadRow: View, Equatable {
         HStack(spacing: 7) {
             ProjectIcon(project: project, size: .md)
             Text(thread.title)
-                .font(.ui(size: 13))
+                .font(.ui(.sm))
                 .lineLimit(1)
                 .rowText()
             Spacer(minLength: 6)
@@ -1038,7 +1038,7 @@ struct SlimThreadRow: View, Equatable {
                 Text(Time.ago(thread.archivedAt ?? thread.updatedAt, now: AgoClock.shared.now))
             }
         }
-        .font(.ui(size: 11))
+        .font(.ui(.xs))
         .foregroundStyle(Color.themeMutedStrongerForeground)
         .opacity(hovering ? 0 : 1)
     }
@@ -1052,7 +1052,7 @@ struct NewThreadRow: View {
         HStack(spacing: 7) {
             Image(.plus, size: .md)
             Text("Create a thread")
-                .font(.ui(size: 13))
+                .font(.ui(.sm))
                 .lineLimit(1)
             Spacer(minLength: 6)
         }
@@ -1170,7 +1170,7 @@ struct ThreadStatus: View {
             }
         } else {
             Text(Time.ago(thread.updatedAt, now: AgoClock.shared.now))
-                .font(.ui(size: 11))
+                .font(.ui(.xs))
                 .foregroundStyle(Color.themeMutedStrongerForeground)
         }
     }
@@ -1179,7 +1179,7 @@ struct ThreadStatus: View {
         HStack(spacing: 3) {
             icon()
             Text(text)
-                .font(.ui(size: 11, weight: .medium))
+                .font(.ui(.xs, weight: .medium))
                 .monospacedDigit()
         }
         .foregroundStyle(color)
@@ -1202,11 +1202,11 @@ struct SectionLine: View {
     var body: some View {
         HStack(spacing: 7) {
             Text(section.title)
-                .font(.ui(size: 12, weight: .medium))
+                .font(.ui(.xs, weight: .medium))
                 .lineLimit(1)
                 .foregroundStyle(lit || row != nil ? Color.themeForeground : Color.themeMutedForeground)
             Text("\(count)")
-                .font(.ui(size: 11))
+                .font(.ui(.xs))
                 .foregroundStyle(Color.themeMutedStrongestForeground)
                 .monospacedDigit()
             Spacer(minLength: 4)
@@ -1270,7 +1270,7 @@ struct ShelfTitle: View {
 
     var body: some View {
         Text(title)
-            .font(.ui(size: 12, weight: .medium))
+            .font(.ui(.xs, weight: .medium))
             .lineLimit(1)
             .modifier(ShelfTint(expanded: expanded))
     }
@@ -1298,7 +1298,7 @@ struct AllServersLine: View {
             ShelfTitle("Servers", expanded: expanded)
             Spacer(minLength: 4)
             Text(servers.reach)
-                .font(.ui(size: 11))
+                .font(.ui(.xs))
                 .foregroundStyle(Color.themeMutedStrongerForeground)
                 .monospacedDigit()
                 .lineLimit(1)
@@ -1337,7 +1337,7 @@ struct ServerErrors: View {
             VStack(alignment: .leading, spacing: 4) {
                 ForEach(failing, id: \.0.id) { server, error in
                     Text(servers.count > 1 ? "\(server.name): \(error)" : error)
-                        .font(.ui(size: 11))
+                        .font(.ui(.xs))
                         .foregroundStyle(Color.themeMutedStrongerForeground)
                         .lineLimit(3)
                         .fixedSize(horizontal: false, vertical: true)
@@ -1359,12 +1359,12 @@ struct ServerLine: View {
         HStack(spacing: 7) {
             ShelfLineMark { StateRing(tint: server.stateTint ?? .themeSuccess) }
             Text(server.name)
-                .font(.ui(size: 12, weight: .medium))
+                .font(.ui(.xs, weight: .medium))
                 .lineLimit(1)
             Spacer(minLength: 4)
             ServerUpdateStatus(server: server) {
                 Text(detail)
-                    .font(.ui(size: 11))
+                    .font(.ui(.xs))
                     .foregroundStyle(Color.themeMutedStrongerForeground)
                     .monospacedDigit()
             }

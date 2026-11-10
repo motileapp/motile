@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 use gpui_kit::prelude::*;
 use gpui_kit::*;
 
-use crate::theme::{self, IconSize, Opacity, Radius, Surface, colors};
+use crate::theme::{self, IconSize, Opacity, Radius, Surface, TextSize, colors};
 use crate::ui::icons;
 
 type Run = Rc<dyn Fn(&mut Window, &mut App)>;
@@ -800,7 +800,7 @@ fn card(menu: &Menu, level: Level, highlighted: Option<usize>, open_submenu: Opt
             .flex()
             .items_center()
             .gap(px(7.))
-            .text_size(px(12.5))
+            .text_size(TextSize::Xs)
             .font_weight(FontWeight::MEDIUM)
             .when(lit, |row| row.bg(Surface::Popover.layer(theme::Layer::Row, c)))
     };
@@ -818,7 +818,7 @@ fn card(menu: &Menu, level: Level, highlighted: Option<usize>, open_submenu: Opt
             .px(px(8.))
             .flex()
             .items_center()
-            .text_size(px(12.5))
+            .text_size(TextSize::Xs)
             .text_color(c.muted_stronger_foreground)
             .whitespace_nowrap()
             .overflow_hidden()

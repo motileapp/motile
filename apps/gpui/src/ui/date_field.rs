@@ -218,7 +218,7 @@ impl RenderOnce for DateField {
                 words
                     .flex_1()
                     .min_w_0()
-                    .text_size(px(size.text_size() + 0.5))
+                    .text_size(size.text_size())
                     .whitespace_nowrap()
                     .overflow_hidden()
                     .text_ellipsis(),

@@ -28,7 +28,7 @@ struct TextArea: View {
     }
 
     private static func font(_ size: ControlSize, monospaced: Bool) -> PlatformFont {
-        monospaced ? .uiMono(size.textSize + 0.5) : .ui(size.textSize + 0.5)
+        monospaced ? .uiMono(size.textSize) : .ui(size.textSize)
     }
 
     var body: some View {

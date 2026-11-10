@@ -6,7 +6,7 @@ use gpui_kit::component::input::{Input, InputState};
 use gpui_kit::prelude::*;
 use gpui_kit::*;
 
-use crate::theme::{ControlSize, IconSize, Radius, Surface, colors};
+use crate::theme::{ControlSize, IconSize, Radius, Surface, TextSize, colors};
 use crate::ui::{Highlight, edges, icons};
 
 /// The room between the card's edge and its rows.
@@ -16,7 +16,7 @@ pub const ROW_HEIGHT: f32 = ControlSize::Regular.height();
 pub const ROW_PADDING: f32 = 8.;
 /// The room between a row's symbol and its words.
 pub const GAP: f32 = 8.;
-pub const TEXT_SIZE: f32 = 13.;
+pub const TEXT_SIZE: TextSize = TextSize::Sm;
 pub const SYMBOL: IconSize = IconSize::Md;
 pub const CHECK: IconSize = IconSize::Sm;
 /// The room above and below a row with a line under its title.
@@ -39,7 +39,7 @@ pub fn row(id: impl Into<ElementId>, group: impl Into<SharedString>, cx: &App) -
         .flex()
         .items_center()
         .gap(px(GAP))
-        .text_size(px(TEXT_SIZE))
+        .text_size(TEXT_SIZE)
         .font_weight(FontWeight::NORMAL)
         .text_color(colors(cx).foreground)
 }
@@ -70,7 +70,7 @@ pub fn title(title: impl Into<SharedString>, about: Option<AnyElement>, cx: &App
         .flex()
         .items_center()
         .gap(px(GAP))
-        .text_size(px(ControlSize::Regular.text_size()))
+        .text_size(ControlSize::Regular.text_size())
         .font_weight(FontWeight::MEDIUM)
         .child(div().text_color(c.muted_foreground).child(title.into()))
         .when_some(about, |row, about| row.child(div().flex_1()).child(about))
@@ -90,5 +90,5 @@ pub fn search(id: impl Into<ElementId>, query: &Entity<InputState>, cx: &App) ->
         .cursor_text()
         .on_click(move |_, window, cx| focus.update(cx, |query, cx| query.focus(window, cx)))
         .child(icons::symbol("search", SYMBOL).text_color(colors(cx).muted_stronger_foreground))
-        .child(div().flex_1().child(Input::new(query).appearance(false).px_0().py_0().text_size(px(TEXT_SIZE))))
+        .child(div().flex_1().child(Input::new(query).appearance(false).px_0().py_0().text_size(TEXT_SIZE)))
 }

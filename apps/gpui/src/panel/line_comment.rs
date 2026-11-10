@@ -13,7 +13,7 @@ use crate::models::ago;
 use crate::store::Store;
 pub use crate::store::pull_requests::CommentedLine;
 use crate::store::pull_requests::Thread;
-use crate::theme::{self, IconSize, Layer, Radius, Surface, colors};
+use crate::theme::{self, IconSize, Layer, Radius, Surface, TextSize, colors};
 use crate::ui::icons;
 use crate::ui::modal::{modal, present_sheet};
 use crate::ui::{ActionButton, TextArea, beside, text_area_state};
@@ -145,7 +145,7 @@ impl Render for LineCommentSheet {
                             .flex_col()
                             .items_start()
                             .gap(px(4.))
-                            .child(div().text_size(px(12.5)).child(styled_line(vec![
+                            .child(div().text_size(TextSize::Xs).child(styled_line(vec![
                                 (comment.author.clone(), c.foreground, FontWeight::SEMIBOLD),
                                 (format!(" · {}", ago(comment.at)), c.muted_stronger_foreground, FontWeight::NORMAL),
                             ])))
@@ -197,7 +197,7 @@ impl Render for LineCommentSheet {
                             .child(
                                 div()
                                     .min_w_0()
-                                    .text_size(px(13.))
+                                    .text_size(TextSize::Sm)
                                     .font_weight(FontWeight::SEMIBOLD)
                                     .text_color(c.foreground)
                                     .whitespace_nowrap()
@@ -207,7 +207,7 @@ impl Render for LineCommentSheet {
                             )
                             .child(div().flex_shrink_0().child(label(
                                 format!("line {}", self.commented.line),
-                                12.5,
+                                TextSize::Xs,
                                 c.muted_stronger_foreground,
                             ))),
                     )
@@ -219,7 +219,7 @@ impl Render for LineCommentSheet {
                             .bg(Surface::Background.layer(Layer::Box, c))
                             .rounded(px(Radius::MD))
                             .font_family(theme::MONO_FONT)
-                            .text_size(px(12.))
+                            .text_size(TextSize::Xs)
                             .text_color(c.foreground)
                             .line_clamp(3)
                             .child(code),

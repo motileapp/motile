@@ -20,7 +20,7 @@ use super::prose::{self, CodeBox, ParaStyle, ProseBlock, TableCell, TextPara};
 use super::view::TranscriptView;
 use crate::models::{AttachedFile, duration, elapsed};
 use crate::store::Store;
-use crate::theme::{self, Colors, ControlSize, IconSize, Radius, Surface, colors};
+use crate::theme::{self, Colors, ControlSize, IconSize, Radius, Surface, TextSize, colors};
 use crate::ui::rich_text::Sent;
 use crate::ui::{ActionButton, GatewayMark, Highlight, edges, icons};
 
@@ -91,14 +91,14 @@ impl RowContext {
 /// How far GPUI sets a line's glyphs below the top of a line `line` tall, more than the Mac
 /// does: the Mac puts a paragraph's line spacing under its lines, GPUI around them. A text is
 /// pulled up and in by this much at its top and bottom so its lines fall where the Mac's do.
-pub fn trim(size: f32, line: f32) -> f32 {
-    ((line - size * 1.2) / 2.).max(0.)
+pub fn trim(size: TextSize, line: f32) -> f32 {
+    ((line - size.points() * 1.2) / 2.).max(0.)
 }
 
 /// A box of text `size` big on lines `line` tall, as tall as the Mac's text of that kind.
-pub fn text_box(size: f32, line: f32) -> Div {
+pub fn text_box(size: TextSize, line: f32) -> Div {
     let trim = trim(size, line);
-    div().text_size(px(size)).line_height(px(line)).mt(px(-trim)).mb(px(-trim))
+    div().text_size(size).line_height(px(line)).mt(px(-trim)).mb(px(-trim))
 }
 
 pub fn font(family: &str, weight: FontWeight, italic: bool) -> Font {
@@ -130,7 +130,7 @@ pub fn stamp(at: f64) -> String {
 /// heading.
 pub struct Plain<'a> {
     pub family: &'a str,
-    pub size: f32,
+    pub size: TextSize,
     pub color: Hsla,
     pub weight: FontWeight,
     pub heading: bool,
@@ -199,7 +199,7 @@ pub fn open_link(url: &str, _: &mut Window, cx: &mut App) {
 
 /// How a paragraph of prose is drawn: its size, weight and colour, and the row it is in.
 struct ParaLook {
-    size: f32,
+    size: TextSize,
     weight: FontWeight,
     color: Hsla,
     heading: bool,
@@ -223,7 +223,7 @@ fn paragraph(id: ElementId, para: &TextPara, look: ParaLook, marks: Option<&Mark
         .row(key)
         .links(para.links.clone(), open_link)
         .tinted(code, c.background_accent)
-        .tint_size(px(crate::fonts::inline_code_size(size)))
+        .tint_size(crate::fonts::inline_code_size(size).into())
         .found(found, cx)
         .sent(find::stretch(para.text.clone(), para.source))
         .into_any_element()
@@ -268,7 +268,13 @@ fn plain(
             found.iter().filter(|(range, _)| inside(range)).map(|(range, current)| (shift(range), *current)).collect();
         let words: SharedString = text[part.clone()].to_string().into();
         let breaks = 1 + words.len() - words.trim_end_matches('\n').len();
-        let plain = Plain { family: theme::UI_FONT, size: 0., color, weight: FontWeight::NORMAL, heading: false };
+        let plain = Plain {
+            family: theme::UI_FONT,
+            size: theme::PROSE_SIZE,
+            color,
+            weight: FontWeight::NORMAL,
+            heading: false,
+        };
         let runs = with_skill_names(text_runs(&words, &[], &links, plain, cx), &skills, cx);
         let text = crate::ui::rich_text::RichText::with_runs(SharedString::from(format!("{id}-{index}")), words, runs)
             .row(key)
@@ -402,7 +408,7 @@ fn spacer(width: f32, window: &mut Window) -> String {
     let measure = |space: char, window: &mut Window| {
         let text = SharedString::from(space.to_string());
         let runs = [run(text.len(), font(theme::UI_FONT, FontWeight::NORMAL, false), Hsla::default())];
-        f32::from(window.text_system().shape_line(text, px(theme::PROSE_SIZE), &runs, None).width)
+        f32::from(window.text_system().shape_line(text, theme::PROSE_SIZE.into(), &runs, None).width)
     };
     let (wide_width, narrow_width) = (measure(wide, window), measure(narrow, window));
     let fits = (0..=8usize)
@@ -507,7 +513,7 @@ fn code_header(language: &str, copy: AnyElement, cx: &App) -> impl IntoElement {
                 .flex_1()
                 .min_w_0()
                 .font_family(theme::MONO_FONT)
-                .text_size(px(11.5))
+                .text_size(TextSize::Xs)
                 .text_color(c.muted_foreground)
                 .truncate()
                 .child(if language.is_empty() { "text".to_string() } else { language.to_string() }),
@@ -543,7 +549,7 @@ pub fn code_box(
     let code_id = SharedString::from(format!("{id}-code")).into();
     let text = code_text(code_id, &code.code, code.spans.as_ref(), found, code.source, key, cx);
     let body =
-        div().px(px(14.)).pb(px(CODE_BOTTOM)).text_size(px(theme::CODE_SIZE)).line_height(px(theme::CODE_LINE_HEIGHT));
+        div().px(px(14.)).pb(px(CODE_BOTTOM)).text_size(theme::CODE_SIZE).line_height(px(theme::CODE_LINE_HEIGHT));
     div()
         .ml(px(code.indent))
         .mb(px(12.))
@@ -600,7 +606,7 @@ pub fn prose_blocks(
                 let (size, line, weight, color, before, after) = match &para.style {
                     ParaStyle::Heading(level) => (
                         theme::heading_size(*level),
-                        theme::heading_size(*level) * 1.2 + 3.,
+                        theme::heading_size(*level).points() * 1.2 + 3.,
                         FontWeight::SEMIBOLD,
                         c.foreground,
                         if index == 0 { 0. } else { prose::HEADING_GAP },
@@ -648,7 +654,7 @@ pub fn prose_blocks(
                                         .absolute()
                                         .top_0()
                                         .left(px(quote_indent + (*depth as f32 - 1.) * 22. + 4.))
-                                        .text_size(px(size))
+                                        .text_size(size)
                                         .line_height(px(line))
                                         .text_color(color)
                                         .child(marker),
@@ -728,9 +734,9 @@ fn table(
                     let weight = if cell.header { FontWeight::SEMIBOLD } else { FontWeight::NORMAL };
                     let color = if cell.header { c.foreground } else { c.muted_foreground };
                     let id = SharedString::from(format!("{row_id}-cell-{index}-{row_index}-{column}"));
-                    let look = ParaLook { size: 13., weight, color, heading: cell.header, key };
+                    let look = ParaLook { size: TextSize::Sm, weight, color, heading: cell.header, key };
                     slot.child(
-                        text_box(13., 18.6)
+                        text_box(TextSize::Sm, 18.6)
                             .text_color(color)
                             .when(cell.align == 1, |text| text.text_center())
                             .when(cell.align == 2, |text| text.text_right())
@@ -761,8 +767,12 @@ fn message_meta(
     let c = colors(cx);
     let copied = ctx.copied(row_id);
     let shown = ctx.meta_shown(row_id) || copied;
-    let time =
-        div().px(px(2.)).text_size(px(12.)).text_color(c.muted_stronger_foreground).whitespace_nowrap().child(stamp);
+    let time = div()
+        .px(px(2.))
+        .text_size(TextSize::Xs)
+        .text_color(c.muted_stronger_foreground)
+        .whitespace_nowrap()
+        .child(stamp);
     let button = copy_button(row_id.to_string(), help, copied, Surface::Background, ctx, copy).quiet();
     let meta = div().h(px(META_HEIGHT)).w_full().flex().items_center();
     let meta = if trailing { meta.justify_end().child(time).child(button) } else { meta.child(button).child(time) };
@@ -880,7 +890,7 @@ fn cut_fade(under: Hsla) -> Div {
 /// line after its first `CUT_LINES` starts, when it has more than `CUT_PAST_LINES`.
 fn cut_height(text: &str, width: f32, window: &Window) -> Option<f32> {
     let mut wrapper =
-        window.text_system().line_wrapper(font(theme::UI_FONT, FontWeight::NORMAL, false), px(theme::PROSE_SIZE));
+        window.text_system().line_wrapper(font(theme::UI_FONT, FontWeight::NORMAL, false), theme::PROSE_SIZE.into());
     let (mut lines, mut top, mut cut) = (0., 0., None);
     for part in plain_parts(text) {
         let words = &text[part];
@@ -1019,7 +1029,7 @@ fn queued_row(
                     div()
                         .ml(px(4.))
                         .min_w_0()
-                        .text_size(px(12.))
+                        .text_size(TextSize::Xs)
                         .text_color(c.muted_foreground)
                         .truncate()
                         .child(status.to_string()),
@@ -1175,7 +1185,7 @@ fn tool_detail_text(row_id: &str, parts: Vec<(String, Hsla)>, key: u64) -> Div {
         .filter(|(part, _)| !part.is_empty())
         .map(|(part, color)| run(part.len(), font(theme::MONO_FONT, FontWeight::NORMAL, false), *color))
         .collect();
-    text_box(11.5, theme::CODE_LINE_HEIGHT).child(
+    text_box(TextSize::Xs, theme::CODE_LINE_HEIGHT).child(
         crate::ui::rich_text::RichText::with_runs(SharedString::from(format!("{row_id}-detail")), text, runs).row(key),
     )
 }
@@ -1209,7 +1219,11 @@ fn tool_row(model: &RowModel, ctx: &RowContext, cx: &App) -> AnyElement {
             if expanded_here {
                 let id = format!("{row_id}-detail");
                 let thought = plain(&id, text, &[], &[], &[], None, c.muted_foreground, row_key(&row_id), cx);
-                detail = Some(detail_box(inset, text_box(13., 20.5).text_color(c.muted_foreground).child(thought), cx));
+                detail = Some(detail_box(
+                    inset,
+                    text_box(TextSize::Sm, 20.5).text_color(c.muted_foreground).child(thought),
+                    cx,
+                ));
             }
             ToolLine {
                 symbol: Some("brain"),
@@ -1262,10 +1276,10 @@ fn tool_row(model: &RowModel, ctx: &RowContext, cx: &App) -> AnyElement {
         } else {
             c.muted_foreground
         };
-        runs.push(run(line.target.len(), crate::fonts::inline_code(13., false), target_color));
+        runs.push(run(line.target.len(), crate::fonts::inline_code(TextSize::Sm, false), target_color));
         text.push_str(&line.target);
     }
-    let title = div().min_w_0().pr(px(4.)).text_size(px(13.)).overflow_hidden();
+    let title = div().min_w_0().pr(px(4.)).text_size(TextSize::Sm).overflow_hidden();
     let title: AnyElement = if line.running {
         title
             .child(Shimmer::new(SharedString::from(format!("{row_id}-shine")), text, runs, c.foreground))
@@ -1330,7 +1344,7 @@ fn tool_row(model: &RowModel, ctx: &RowContext, cx: &App) -> AnyElement {
                 div()
                     .ml(px(6.))
                     .flex_none()
-                    .text_size(px(12.))
+                    .text_size(TextSize::Xs)
                     .text_color(c.muted_stronger_foreground)
                     .whitespace_nowrap()
                     .child(StyledText::new(elapsed(started)).with_runs(vec![run(
@@ -1360,7 +1374,7 @@ fn tool_row(model: &RowModel, ctx: &RowContext, cx: &App) -> AnyElement {
         .h(px(TOOL_ROW_HEIGHT - 2.))
         .flex()
         .items_center()
-        .text_size(px(12.))
+        .text_size(TextSize::Xs)
         .text_color(c.muted_stronger_foreground)
         .whitespace_nowrap()
         .child(stamp(started));
@@ -1400,7 +1414,7 @@ const CARD_BELOW: f32 = 10. + CARD_LIGHT - LIGHT_GAP;
 /// where it runs through the gateway, then what it does or said.
 fn agent_line(agent: &AgentRow) -> Div {
     let said = if agent.detail.is_empty() && agent.runs_on.is_empty() { &agent.label } else { &agent.detail };
-    crate::ui::proxied_line(&agent.runs_on, GatewayMark::of(agent.gateway, agent.pinned), said, 12.)
+    crate::ui::proxied_line(&agent.runs_on, GatewayMark::of(agent.gateway, agent.pinned), said, TextSize::Xs)
 }
 
 /// When the thread's agent was told, for what it was told; else how long the agent has worked
@@ -1420,7 +1434,7 @@ fn agent_line_box(avatar: impl IntoElement, title: Div, line: Div, time: String,
     let c = colors(cx);
     let time = (!time.is_empty()).then(|| {
         let runs = vec![run(time.len(), digits_font(FontWeight::NORMAL), c.muted_stronger_foreground)];
-        div().pr(px(4.)).text_size(px(12.)).whitespace_nowrap().child(StyledText::new(time).with_runs(runs))
+        div().pr(px(4.)).text_size(TextSize::Xs).whitespace_nowrap().child(StyledText::new(time).with_runs(runs))
     });
     div()
         .relative()
@@ -1436,7 +1450,7 @@ fn agent_line_box(avatar: impl IntoElement, title: Div, line: Div, time: String,
                 .flex()
                 .flex_col()
                 .child(title.h(px(18.)).line_height(px(18.)).flex().items_center().overflow_hidden())
-                .child(line.h(px(16.)).line_height(px(16.)).text_size(px(12.)).truncate()),
+                .child(line.h(px(16.)).line_height(px(16.)).text_size(TextSize::Xs).truncate()),
         )
         .child(div().ml(px(12.)).flex_none().children(time))
         .child(
@@ -1491,7 +1505,7 @@ fn agent_row(model: &RowModel, agent: &AgentRow, ctx: &RowContext, cx: &App) -> 
             div()
                 .flex_shrink_0()
                 .max_w_full()
-                .text_size(px(13.))
+                .text_size(TextSize::Sm)
                 .font_weight(FontWeight::MEDIUM)
                 .text_color(c.foreground)
                 .truncate()
@@ -1499,14 +1513,14 @@ fn agent_row(model: &RowModel, agent: &AgentRow, ctx: &RowContext, cx: &App) -> 
         )
         .when_some(agent.role.clone(), |title, role| {
             title.child(
-                div().min_w_0().text_size(px(11.)).text_color(c.muted_stronger_foreground).truncate().child(role),
+                div().min_w_0().text_size(TextSize::Xs).text_color(c.muted_stronger_foreground).truncate().child(role),
             )
         })
         .when(agent.flagged, |title| {
             title.child(
                 div()
                     .min_w_0()
-                    .text_size(px(11.))
+                    .text_size(TextSize::Xs)
                     .font_weight(FontWeight::MEDIUM)
                     .text_color(label_color)
                     .truncate()
@@ -1549,7 +1563,7 @@ fn agents_row(model: &RowModel, ctx: &RowContext, cx: &App) -> AnyElement {
     let group: SharedString = format!("{}-agents", model.row.id).into();
     let avatars = crate::ui::AgentAvatars::new(avatars.iter().map(|avatar| avatar.agent).collect(), *more);
     let title = div()
-        .text_size(px(13.))
+        .text_size(TextSize::Sm)
         .font_weight(FontWeight::SEMIBOLD)
         .text_color(c.foreground)
         .child(div().min_w_0().truncate().child(title.clone()));
@@ -1630,7 +1644,7 @@ pub fn error_box(
                 .justify_center()
                 .child(icons::symbol("circle-alert", IconSize::Md).text_color(c.destructive)),
         )
-        .child(text_box(13., 20.5).flex_1().min_w_0().text_color(c.destructive).child(plain(
+        .child(text_box(TextSize::Sm, 20.5).flex_1().min_w_0().text_color(c.destructive).child(plain(
             id,
             message,
             &[],
@@ -1646,7 +1660,7 @@ pub fn error_box(
 /// "+12 −3" in green and red.
 pub fn line_counts(added: u32, removed: u32, cx: &App) -> impl IntoElement {
     let (text, runs) = crate::panel::code_view::counts_text(added, removed, colors(cx));
-    div().text_size(px(11.5)).whitespace_nowrap().child(StyledText::new(text).with_runs(runs))
+    div().text_size(TextSize::Xs).whitespace_nowrap().child(StyledText::new(text).with_runs(runs))
 }
 
 /// What a turn changed: how many files and lines, and the files under their folders. A click on
@@ -1685,9 +1699,17 @@ fn changes_row(
                         .pl(px(13.))
                         .flex()
                         .items_center()
-                        .child(div().text_size(px(13.)).font_weight(FontWeight::MEDIUM).text_color(c.foreground).child(
-                            if files == 1 { "1 changed file".to_string() } else { format!("{files} changed files") },
-                        ))
+                        .child(
+                            div()
+                                .text_size(TextSize::Sm)
+                                .font_weight(FontWeight::MEDIUM)
+                                .text_color(c.foreground)
+                                .child(if files == 1 {
+                                    "1 changed file".to_string()
+                                } else {
+                                    format!("{files} changed files")
+                                }),
+                        )
                         .child(div().ml(px(10.)).child(line_counts(added, removed, cx)))
                         .child(div().flex_1())
                         .child(
@@ -1784,7 +1806,7 @@ fn change_entry(entry: &ChangeEntry, item: &str, ctx: &RowContext, cx: &App) -> 
                     crate::ui::middle_truncated(entry.name.clone())
                         .flex_1()
                         .font_family(theme::MONO_FONT)
-                        .text_size(px(11.5))
+                        .text_size(TextSize::Xs)
                         .text_color(if entry.folder { c.muted_foreground } else { c.foreground }),
                 )
                 .child(div().ml(px(12.)).flex_none().child(line_counts(entry.added, entry.removed, cx))),
@@ -1875,7 +1897,7 @@ pub fn started_by(end: bool, parent: &str, ctx: &RowContext, cx: &App) -> AnyEle
         .child(
             div()
                 .min_w_0()
-                .text_size(px(size.text_size()))
+                .text_size(size.text_size())
                 .font_weight(FontWeight::MEDIUM)
                 .text_color(c.foreground)
                 .truncate()
@@ -1924,7 +1946,7 @@ pub fn working_line(activity: &crate::models::Activity, cx: &App) -> AnyElement 
     div()
         .h(px(TURN_END_HEIGHT))
         .pt(px(5.))
-        .text_size(px(13.))
+        .text_size(TextSize::Sm)
         .text_color(c.muted_stronger_foreground)
         .font(digits.clone())
         .child(if waiting {
@@ -1956,8 +1978,8 @@ fn handoff_row(from: &HandoffLabel, to: &HandoffLabel, ctx: &RowContext, window:
         (text.into(), runs)
     };
     let width = |end: &HandoffLabel, (text, runs): &(SharedString, Vec<TextRun>), window: &mut Window| {
-        let mark = crate::ui::gateway_mark_width_as(12., logo, GatewayMark::of(end.gateway, end.pinned));
-        f32::from(window.text_system().shape_line(text.clone(), px(12.), runs, None).width).ceil() + mark
+        let mark = crate::ui::gateway_mark_width_as(TextSize::Xs, logo, GatewayMark::of(end.gateway, end.pinned));
+        f32::from(window.text_system().shape_line(text.clone(), TextSize::Xs.into(), runs, None).width).ceil() + mark
     };
     let (from_text, to_text) = (text(from), text(to));
     let (from_width, to_width) = (width(from, &from_text, window), width(to, &to_text, window));
@@ -1973,15 +1995,16 @@ fn handoff_row(from: &HandoffLabel, to: &HandoffLabel, ctx: &RowContext, window:
             ];
             div().min_w_0().truncate().child(StyledText::new(format!(" · {account}")).with_runs(runs))
         });
-        let label = crate::ui::proxied_as(end.label.clone(), GatewayMark::of(end.gateway, end.pinned), 12., logo)
-            .children(account);
+        let label =
+            crate::ui::proxied_as(end.label.clone(), GatewayMark::of(end.gateway, end.pinned), TextSize::Xs, logo)
+                .children(account);
         div()
             .flex()
             .flex_none()
             .items_center()
             .gap(px(label_gap))
             .child(crate::ui::logos::agent_icon(end.agent, logo, cx))
-            .child(label.w(px(width)).text_size(px(12.)).text_color(c.foreground))
+            .child(label.w(px(width)).text_size(TextSize::Xs).text_color(c.foreground))
     };
     let rule = || div().flex_1().h(px(1.)).bg(c.border);
     div()

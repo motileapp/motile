@@ -59,14 +59,16 @@ struct AttachmentFileTile: View {
 
     var body: some View {
         Text(attachment.name)
-            .font(.ui(size: 12, weight: .medium))
+            .font(.ui(.xxs, weight: .medium))
             .foregroundStyle(Color.themeForeground)
             .lineLimit(3)
-            .padding(nameInset)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
             .frame(width: AttachmentTile.side, height: AttachmentTile.side, alignment: .bottomLeading)
             .overlay(alignment: .topLeading) {
                 if let kind = attachment.kind {
-                    Chip(kind, muted: true)
+                    Chip(kind, muted: true, small: true)
+                        .frame(maxWidth: kindWidth, alignment: .leading)
                         .padding(kindInset)
                 }
             }
@@ -75,10 +77,11 @@ struct AttachmentFileTile: View {
     }
 }
 
-private let nameInset: CGFloat = 8
 private let kindInset: CGFloat = 6
 /// The remove button sits level with a file's kind.
-private let removeInset = kindInset - (ControlSize.small.height - Chip.height) / 2
+private let removeInset = kindInset - (ControlSize.small.height - Chip.compactHeight) / 2
+/// A file's kind is cut short before the remove button.
+private let kindWidth = AttachmentTile.side - kindInset - 4 - ControlSize.small.height - removeInset
 
 /// The square of an attachment: its edge, how far its upload is along its bottom, and the button
 /// that removes it.
@@ -137,7 +140,7 @@ private struct ComposerChipLook: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .font(.ui(size: 12))
+            .font(.ui(.xs))
             .padding(.leading, 9)
             .padding([.vertical, .trailing], 2)
             .background(surface.color(.chip), in: Capsule())
@@ -158,14 +161,14 @@ private struct AttachmentProgress: View {
         case .uploading(let fraction):
             Text("\(Int(fraction * 100))%")
                 .monospacedDigit()
-                .font(.ui(size: 10, weight: .medium))
+                .font(.ui(.xxs, weight: .medium))
                 .foregroundStyle(Color.themeForegroundOverPicture)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 2)
                 .background(Color.themeScrim)
         case .failed(let reason):
             Label("Retry", symbol: .rotateCw, size: .xs)
-                .font(.ui(size: 10, weight: .medium))
+                .font(.ui(.xxs, weight: .medium))
                 .foregroundStyle(Color.themeDestructiveForeground)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 2)

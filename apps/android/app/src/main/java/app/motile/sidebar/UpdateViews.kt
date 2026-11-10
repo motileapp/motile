@@ -17,6 +17,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import app.motile.core.AppUpdater
 import app.motile.platform.Symbol
+import app.motile.theme.TextSize
 import app.motile.theme.iconSize
 import app.motile.theme.Radius
 import app.motile.theme.Surface
@@ -61,7 +62,7 @@ fun ServerUpdateStatus(
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("Waiting", size = 11f, color = muted)
+            Text("Waiting", size = TextSize.Xs, color = muted)
             ActionButton(
                 "Restart Now", help = "Stop the agents on ${server.name} and restart it. Their threads continue once it is back.",
                 variant = variant, size = size,
@@ -70,7 +71,7 @@ fun ServerUpdateStatus(
             }
         }
         update != null -> Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(progress(update), style = Theme.uiDigits(11f), color = muted)
+            Text(progress(update), style = Theme.uiDigits(TextSize.Xs), color = muted)
             Spinner(size.symbol, color = muted)
         }
         store.isOutdated(server) && store.isBusy(server) && store.canChooseRestart(server) -> ActionMenu("Update", variant = variant, size = size) {
@@ -116,7 +117,7 @@ fun AppUpdateRow(updater: AppUpdater, modifier: Modifier = Modifier, variant: Bu
         }
         is AppUpdater.State.Downloading -> Column(modifier, verticalArrangement = Arrangement.spacedBy(5.dp)) {
             UpdateLine("Downloading v${state.version}", Symbol.CircleArrowDown, tint = colors.foreground) {
-                Text("${(state.fraction * 100).toInt()}%", style = Theme.uiDigits(11f), color = colors.mutedStrongerForeground)
+                Text("${(state.fraction * 100).toInt()}%", style = Theme.uiDigits(TextSize.Xs), color = colors.mutedStrongerForeground)
                 ActionButton(icon = Symbol.X, help = "Cancel the download", size = size) { updater.cancelDownload() }
             }
             Box(Modifier.fillMaxWidth().height(3.dp).clip(RoundedCornerShape(Radius.xs)).background(Surface.Background.color(Surface.Layer.Control))) {
@@ -130,7 +131,7 @@ fun AppUpdateRow(updater: AppUpdater, modifier: Modifier = Modifier, variant: Bu
             UpdateLine("The update didn’t work", Symbol.TriangleAlert) {
                 ActionButton("Try Again", size = ControlSize.Small) { updater.retry() }
             }
-            Text(state.message, size = 11f, color = colors.mutedForeground)
+            Text(state.message, size = TextSize.Xs, color = colors.mutedForeground)
         }
     }
 }
@@ -155,6 +156,6 @@ private fun UpdateLine(
 fun UpdateLabel(text: String, symbol: Symbol, tint: Color = Theme.colors.mutedForeground, turning: Boolean = false, modifier: Modifier = Modifier) {
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically) {
         ShelfLineMark { TurningSymbol(symbol, turning, IconSize.Sm, color = tint) }
-        Text(text, size = 12f, weight = FontWeight.Medium, maxLines = 1)
+        Text(text, size = TextSize.Xs, weight = FontWeight.Medium, maxLines = 1)
     }
 }

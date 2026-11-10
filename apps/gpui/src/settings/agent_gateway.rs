@@ -21,7 +21,7 @@ use crate::panel::state::{CodeDocument, CodeMarks, Loaded};
 use crate::store::Store;
 use crate::store::gateway::{Captured, Enroll, LogRow};
 use crate::store::usage::LimitWindow;
-use crate::theme::{ControlSize, IconSize, LINE_HEIGHT, Layer, Opacity, Surface, colors};
+use crate::theme::{ControlSize, IconSize, LINE_HEIGHT, Layer, Opacity, Surface, TextSize, colors};
 use crate::ui::menu::Menu;
 use crate::ui::modal::{Answer, Confirmation, confirmation, modal, present_sheet, presented};
 use crate::ui::parts::FadingScroll;
@@ -38,7 +38,7 @@ const AGENTS: [Agent; 2] = [Agent::Claude, Agent::Codex];
 const CAPTURE_THREADS: usize = 12;
 /// How many requests "Capture the next" captures.
 const CAPTURE_NEXT: u32 = 20;
-const CODE_SIZE: f32 = 26.;
+const CODE_SIZE: TextSize = TextSize::Xxl;
 /// How tall the log grows before it scrolls.
 const LOG_HEIGHT: f32 = 420.;
 
@@ -172,7 +172,7 @@ impl AgentGatewayPage {
                 div()
                     .px(px(INSET))
                     .py(px(12.))
-                    .text_size(px(12.))
+                    .text_size(TextSize::Xs)
                     .text_color(c.muted_foreground)
                     .child(note.clone())
                     .into_any_element(),
@@ -305,7 +305,7 @@ impl AgentGatewayPage {
                 div()
                     .px(px(INSET))
                     .py(px(14.))
-                    .text_size(px(12.))
+                    .text_size(TextSize::Xs)
                     .text_color(c.muted_foreground)
                     .child(empty)
                     .into_any_element(),
@@ -342,7 +342,7 @@ impl AgentGatewayPage {
         .flatten()
         .collect();
         let line = |text: String, color: Hsla| {
-            div().min_w_0().text_size(px(11.5)).text_color(color).child(crate::ui::control::dotted(text, c))
+            div().min_w_0().text_size(TextSize::Xs).text_color(color).child(crate::ui::control::dotted(text, c))
         };
         let content = div()
             .flex_1()
@@ -358,7 +358,7 @@ impl AgentGatewayPage {
                     .child(
                         div()
                             .flex_shrink_0()
-                            .text_size(px(12.))
+                            .text_size(TextSize::Xs)
                             .font_features(crate::ui::tabular_numbers())
                             .text_color(c.muted_foreground)
                             .child(entry.time.clone()),
@@ -367,7 +367,7 @@ impl AgentGatewayPage {
                         div()
                             .flex_1()
                             .min_w_0()
-                            .text_size(px(13.))
+                            .text_size(TextSize::Sm)
                             .font_weight(FontWeight::MEDIUM)
                             .whitespace_nowrap()
                             .overflow_hidden()
@@ -377,7 +377,7 @@ impl AgentGatewayPage {
                     .child(
                         div()
                             .flex_shrink_0()
-                            .text_size(px(12.))
+                            .text_size(TextSize::Xs)
                             .font_features(crate::ui::tabular_numbers())
                             .text_color(c.muted_foreground)
                             .child(entry.latency.clone()),
@@ -386,7 +386,7 @@ impl AgentGatewayPage {
             )
             .child(line(second.join(" · "), c.muted_foreground))
             .when_some(entry.error.clone(), |content, error| {
-                content.child(div().text_size(px(11.5)).text_color(c.warning).child(error))
+                content.child(div().text_size(TextSize::Xs).text_color(c.warning).child(error))
             });
         let row = div()
             .id(("gateway-log-row", index))
@@ -578,7 +578,7 @@ fn account_label(account: &AccountRow, cx: &App) -> AnyElement {
                     div()
                         .min_w_0()
                         .truncate()
-                        .text_size(px(13.))
+                        .text_size(TextSize::Sm)
                         .font_weight(FontWeight::MEDIUM)
                         .child(account.name.clone()),
                 )
@@ -588,7 +588,7 @@ fn account_label(account: &AccountRow, cx: &App) -> AnyElement {
             label.child(
                 div()
                     .min_w_0()
-                    .text_size(px(11.5))
+                    .text_size(TextSize::Xs)
                     .text_color(c.muted_foreground)
                     .truncate()
                     .child(description.join(" · ")),
@@ -648,7 +648,7 @@ impl GatewayHeader {
         let error = view
             .error
             .clone()
-            .map(|error| div().text_size(px(11.5)).text_color(c.warning).child(error).into_any_element());
+            .map(|error| div().text_size(TextSize::Xs).text_color(c.warning).child(error).into_any_element());
         let (header, open) = (cx.weak_entity(), Rc::new(self.opens_add()));
         let removed = name.clone();
         let menu = more("gateway-menu", format!("What to do with {name}"), move |_, _| {
@@ -746,7 +746,9 @@ fn add_sheet(store: &Entity<Store>, enroll: Loaded<Enroll>, replaces: bool, cx: 
             .text_color(c.muted_foreground)
             .child(Spinner::regular().render(cx))
             .into_any_element(),
-        Loaded::Failed(error) => div().text_size(px(13.)).text_color(c.destructive).child(error).into_any_element(),
+        Loaded::Failed(error) => {
+            div().text_size(TextSize::Sm).text_color(c.destructive).child(error).into_any_element()
+        }
         Loaded::Ready(enroll) => enroll_steps(store, &enroll, replaces, cx),
     };
     let done = ActionButton::new("add-gateway-close", "Cancel").on_click({
@@ -759,7 +761,7 @@ fn add_sheet(store: &Entity<Store>, enroll: Loaded<Enroll>, replaces: bool, cx: 
         .flex_col()
         .gap(px(16.))
         .text_color(c.foreground)
-        .child(div().text_size(px(15.)).font_weight(FontWeight::SEMIBOLD).child(title))
+        .child(div().text_size(TextSize::Lg).font_weight(FontWeight::SEMIBOLD).child(title))
         .child(body)
         .child(div().flex().justify_end().child(done));
     modal("add-gateway", div().id("add-gateway-scroll").overflow_y_scroll().child(content), close).width(540.)
@@ -771,7 +773,7 @@ fn enroll_steps(store: &Entity<Store>, enroll: &Enroll, replaces: bool, cx: &App
         div()
             .flex()
             .gap(px(8.))
-            .text_size(px(13.))
+            .text_size(TextSize::Sm)
             .line_height(px(18.))
             .child(
                 div()
@@ -791,7 +793,7 @@ fn enroll_steps(store: &Entity<Store>, enroll: &Enroll, replaces: bool, cx: &App
             .flex()
             .items_center()
             .gap(px(10.))
-            .child(div().text_size(px(13.)).text_color(c.muted_foreground).child("The code has expired"))
+            .child(div().text_size(TextSize::Sm).text_color(c.muted_foreground).child("The code has expired"))
             .child(ActionButton::new("new-enroll-code", "New Code").on_click(move |_, _, cx| {
                 store.update(cx, |store, cx| {
                     store.open_add_gateway();
@@ -806,10 +808,10 @@ fn enroll_steps(store: &Entity<Store>, enroll: &Enroll, replaces: bool, cx: &App
             .gap(px(8.))
             .text_color(c.muted_foreground)
             .child(Spinner::regular().render(cx))
-            .child(div().text_size(px(13.)).child(waiting))
+            .child(div().text_size(TextSize::Sm).child(waiting))
             .child(
                 div()
-                    .text_size(px(12.))
+                    .text_size(TextSize::Xs)
                     .font_features(crate::ui::tabular_numbers())
                     .text_color(c.muted_stronger_foreground)
                     .child(format!("{}:{:02}", seconds / 60, seconds % 60)),
@@ -896,7 +898,7 @@ impl Render for SignInSheet {
                     .flex()
                     .items_center()
                     .gap(px(8.))
-                    .text_size(px(13.))
+                    .text_size(TextSize::Sm)
                     .text_color(c.muted_foreground)
                     .child(Spinner::regular().render(cx))
                     .child("Starting the sign-in on your gateway")
@@ -906,7 +908,7 @@ impl Render for SignInSheet {
             Some(sign_in) => {
                 body.push(
                     div()
-                        .text_size(px(13.))
+                        .text_size(TextSize::Sm)
                         .text_color(c.muted_foreground)
                         .child(sign_in.text.clone())
                         .into_any_element(),
@@ -927,7 +929,7 @@ impl Render for SignInSheet {
                             .py(px(6.))
                             .child(
                                 div()
-                                    .text_size(px(CODE_SIZE))
+                                    .text_size(CODE_SIZE)
                                     .font_weight(FontWeight::SEMIBOLD)
                                     .font_family(crate::theme::MONO_FONT)
                                     .child(user_code),
@@ -960,7 +962,7 @@ impl Render for SignInSheet {
                             .flex()
                             .items_center()
                             .gap(px(8.))
-                            .text_size(px(13.))
+                            .text_size(TextSize::Sm)
                             .text_color(c.muted_foreground)
                             .child(Spinner::regular().render(cx))
                             .child("Waiting for you to approve it")
@@ -971,7 +973,7 @@ impl Render for SignInSheet {
         }
         let start_again = error.is_some() && sign_in.as_ref().is_none_or(|sign_in| !sign_in.needs_code);
         if let Some(error) = error {
-            body.push(div().text_size(px(12.)).text_color(c.destructive).child(error).into_any_element());
+            body.push(div().text_size(TextSize::Xs).text_color(c.destructive).child(error).into_any_element());
         }
         let store = self.store.clone();
         let footer = div()
@@ -1006,9 +1008,10 @@ impl Render for SignInSheet {
                     .flex()
                     .flex_col()
                     .gap(px(2.))
-                    .child(div().text_size(px(15.)).font_weight(FontWeight::SEMIBOLD).child(title))
+                    .child(div().text_size(TextSize::Lg).font_weight(FontWeight::SEMIBOLD).child(title))
                     .children(
-                        account.map(|account| div().text_size(px(13.)).text_color(c.muted_foreground).child(account)),
+                        account
+                            .map(|account| div().text_size(TextSize::Sm).text_color(c.muted_foreground).child(account)),
                     ),
             )
             .children(body)
@@ -1081,7 +1084,7 @@ impl Render for RenameSheet {
             .flex_col()
             .gap(px(14.))
             .text_color(c.foreground)
-            .child(div().text_size(px(15.)).font_weight(FontWeight::SEMIBOLD).child("Rename Account"))
+            .child(div().text_size(TextSize::Lg).font_weight(FontWeight::SEMIBOLD).child("Rename Account"))
             .child(InputField::new(&self.name))
             .child(
                 div()
@@ -1169,7 +1172,7 @@ impl CapturedSheet {
         .flatten()
         .collect();
         div()
-            .text_size(px(12.))
+            .text_size(TextSize::Xs)
             .text_color(c.muted_foreground)
             .whitespace_nowrap()
             .overflow_hidden()
@@ -1197,7 +1200,7 @@ impl Render for CapturedSheet {
                 .flex()
                 .items_center()
                 .justify_center()
-                .text_size(px(13.))
+                .text_size(TextSize::Sm)
                 .text_color(color)
                 .child(text)
                 .into_any_element()
@@ -1256,7 +1259,7 @@ impl Render for CapturedSheet {
                         div()
                             .flex_1()
                             .min_w_0()
-                            .text_size(px(15.))
+                            .text_size(TextSize::Lg)
                             .font_weight(FontWeight::SEMIBOLD)
                             .child("Captured Request"),
                     )

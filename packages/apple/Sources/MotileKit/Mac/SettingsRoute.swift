@@ -25,7 +25,7 @@ struct SettingsRoute: View {
     /// The page's title, in the middle of the top bar over it.
     private func topBar(_ window: GeometryProxy, pastSidebar: CGFloat) -> some View {
         Text(section.title)
-            .font(.ui(size: 13, weight: .semibold))
+            .font(.ui(.sm, weight: .semibold))
             .lineLimit(1)
             .padding(.horizontal, 20)
             .frame(maxWidth: .infinity)

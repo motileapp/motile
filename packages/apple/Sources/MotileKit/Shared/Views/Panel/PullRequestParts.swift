@@ -89,7 +89,7 @@ struct PullRequestNoticeBar: View {
                     .foregroundStyle(notice.failed ? Color.themeDestructive : Color.themeSuccess)
                     .frame(height: Self.lineHeight)
                 Text(notice.text)
-                    .font(.ui(size: 12.5))
+                    .font(.ui(.xs))
                     .foregroundStyle(Color.themeForeground)
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
@@ -146,7 +146,7 @@ struct DescriptionEditor: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Text("Edit Description")
-                    .font(.ui(size: 15, weight: .semibold))
+                    .font(.ui(.lg, weight: .semibold))
                 Spacer()
                 Segmented([("Write", false), ("Preview", true)], selection: $previewing)
             }
@@ -154,7 +154,7 @@ struct DescriptionEditor: View {
                 ScrollView {
                     if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         Text("Nothing to preview")
-                            .font(.ui(size: 12.5))
+                            .font(.ui(.xs))
                             .foregroundStyle(Color.themeMutedStrongerForeground)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     } else {

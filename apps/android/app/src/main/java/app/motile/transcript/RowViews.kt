@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.text.rememberTextMeasurer
+import app.motile.theme.TextSize
 import app.motile.ui.edgeFade
 import app.motile.ui.ButtonVariant
 import app.motile.ui.ActionButton
@@ -278,7 +279,7 @@ private fun QueuedRow(row: RowModel, queued: QueuedContent) {
                 }
             }
             Row(Modifier.padding(start = Bubble.PADDING.dp, top = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(Symbol.Clock, iconSize(text = 12f), Modifier.padding(end = 4.dp), color = palette.mutedForeground)
+                Icon(Symbol.Clock, iconSize(text = TextSize.Xs), Modifier.padding(end = 4.dp), color = palette.mutedForeground)
                 Text(queued.status, Modifier.weight(1f, fill = false).padding(end = 6.dp), style = Theme.smallFont, color = palette.mutedForeground, maxLines = 1)
                 RowButton("Steer", "Send as a steer instead", bordered = true, margin = PaddingValues(start = 3.dp, end = 3.dp, top = 4.dp, bottom = 10.dp)) {
                     if (!waiting) actions.store.sendNow(row.itemID)
@@ -449,11 +450,11 @@ private fun ToolRow(row: RowModel) {
             ) {
                 Row(Modifier.padding(horizontal = bleed).height(line), verticalAlignment = Alignment.CenterVertically) {
                     if (symbol != null) {
-                        Icon(symbol, iconSize(text = 13f), color = palette.mutedStrongerForeground)
+                        Icon(symbol, iconSize(text = TextSize.Sm), color = palette.mutedStrongerForeground)
                         Spacer(Modifier.width(8.dp))
                     }
                     ShimmerText(
-                        title, Theme.ui(13f), palette.mutedStrongerForeground, palette.foreground, running,
+                        title, Theme.ui(TextSize.Sm), palette.mutedStrongerForeground, palette.foreground, running,
                         Modifier.weight(1f, fill = false),
                     )
                     if (hasDetail) {
@@ -461,7 +462,7 @@ private fun ToolRow(row: RowModel) {
                     }
                     if (startedAt != null) {
                         val now = ticking(true)
-                        Text(Time.elapsed(startedAt, now), Modifier.padding(start = 6.dp), style = Theme.uiDigits(12f), color = palette.mutedStrongerForeground, maxLines = 1)
+                        Text(Time.elapsed(startedAt, now), Modifier.padding(start = 6.dp), style = Theme.uiDigits(TextSize.Xs), color = palette.mutedStrongerForeground, maxLines = 1)
                     }
                 }
             }
@@ -480,7 +481,7 @@ private fun ToolRow(row: RowModel) {
                     .background(palette.backgroundSecondary, shape)
                     .padding(horizontal = 12.dp, vertical = 10.dp),
             ) {
-                val style = if (tool != null) Theme.smallMono.copy(lineHeight = Theme.codeLineHeight) else Theme.ui(13f).copy(lineHeight = (13f * Platform.scale * 1.2f + 5).sp)
+                val style = if (tool != null) Theme.smallMono.copy(lineHeight = Theme.codeLineHeight) else Theme.ui(TextSize.Sm).copy(lineHeight = (13f * Platform.scale * 1.2f + 5).sp)
                 SelectionContainer { Text(detail, style = style) }
             }
         }
@@ -548,17 +549,17 @@ private fun AgentRow(row: RowModel, content: AgentContent) {
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.Center) {
                         // The title first, then its role and its word in what room is left.
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(content.title, size = 13f, weight = FontWeight.Medium, color = palette.foreground, maxLines = 1)
-                            content.role?.let { Text(it, Modifier.padding(start = 6.dp), size = 11f, color = palette.mutedStrongerForeground, maxLines = 1) }
+                            Text(content.title, size = TextSize.Sm, weight = FontWeight.Medium, color = palette.foreground, maxLines = 1)
+                            content.role?.let { Text(it, Modifier.padding(start = 6.dp), size = TextSize.Xs, color = palette.mutedStrongerForeground, maxLines = 1) }
                             if (content.flagged) {
                                 val color = if (content.state.flagged) content.state.color else palette.mutedForeground
-                                Text(content.label, Modifier.padding(start = 6.dp), size = 11f, weight = FontWeight.Medium, color = color, maxLines = 1)
+                                Text(content.label, Modifier.padding(start = 6.dp), size = TextSize.Xs, weight = FontWeight.Medium, color = color, maxLines = 1)
                             }
                         }
                         val color = if (content.state == AgentState.Failed) palette.destructive else palette.mutedForeground
-                        Text(content.line, Modifier.padding(top = 1.dp), size = 12f, color = color, maxLines = 1, inlineContent = GatewayMark.content(color, 12f))
+                        Text(content.line, Modifier.padding(top = 1.dp), size = TextSize.Xs, color = color, maxLines = 1, inlineContent = GatewayMark.content(color, TextSize.Xs))
                     }
-                    if (time.isNotEmpty()) Text(time, Modifier.padding(start = 12.dp), style = Theme.uiDigits(12f), color = palette.mutedStrongerForeground, maxLines = 1)
+                    if (time.isNotEmpty()) Text(time, Modifier.padding(start = 12.dp), style = Theme.uiDigits(TextSize.Xs), color = palette.mutedStrongerForeground, maxLines = 1)
                     AgentRowChevron(open = false)
                 }
             }
@@ -601,10 +602,10 @@ private fun AgentsRow(row: RowModel, content: AgentsContent) {
                 AgentAvatars(content.avatars, content.more)
                 Spacer(Modifier.width(AgentRow.avatarGap))
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.Center) {
-                    Text(content.title, size = 13f, weight = FontWeight.SemiBold, color = palette.foreground, maxLines = 1)
-                    Text(summaryText(content.summary, palette), Modifier.padding(top = 1.dp), size = 12f, maxLines = 1)
+                    Text(content.title, size = TextSize.Sm, weight = FontWeight.SemiBold, color = palette.foreground, maxLines = 1)
+                    Text(summaryText(content.summary, palette), Modifier.padding(top = 1.dp), size = TextSize.Xs, maxLines = 1)
                 }
-                if (time.isNotEmpty()) Text(time, Modifier.padding(start = 12.dp), style = Theme.uiDigits(12f), color = palette.mutedStrongerForeground, maxLines = 1)
+                if (time.isNotEmpty()) Text(time, Modifier.padding(start = 12.dp), style = Theme.uiDigits(TextSize.Xs), color = palette.mutedStrongerForeground, maxLines = 1)
                 AgentRowChevron(content.open)
             }
         }
@@ -667,10 +668,10 @@ fun ErrorRow(
             .padding(start = 12.dp, end = 14.dp, top = 10.dp, bottom = 10.dp),
     ) {
         Box(Modifier.width(24.dp).height(scaled(18f).dp), contentAlignment = Alignment.CenterStart) {
-            Icon(Symbol.CircleAlert, iconSize(text = 13f), color = palette.destructive)
+            Icon(Symbol.CircleAlert, iconSize(text = TextSize.Sm), color = palette.destructive)
         }
         SelectionContainer {
-            val style = Theme.ui(13f).copy(lineHeight = (13f * Platform.scale * 1.2f + 5).sp, color = palette.destructive)
+            val style = Theme.ui(TextSize.Sm).copy(lineHeight = (13f * Platform.scale * 1.2f + 5).sp, color = palette.destructive)
             val text = remember(message, palette) { AnnotatedString(message, SpanStyle(color = palette.destructive)) }
             MarkedText(text, style, found = found, onCurrent = onCurrent, sent = sent)
         }
@@ -689,9 +690,9 @@ private fun ChangesRow(row: RowModel, changes: ChangesContent) {
                 val counts = remember(changes, palette) { Typesetter.lineCounts(changes.added, changes.removed, palette) }
                 val title = remember(changes, palette) {
                     buildAnnotatedString {
-                        withStyle(Theme.ui(13f, androidx.compose.ui.text.font.FontWeight.Medium).toSpanStyle().copy(color = palette.foreground)) { append(changes.title) }
+                        withStyle(Theme.ui(TextSize.Sm, androidx.compose.ui.text.font.FontWeight.Medium).toSpanStyle().copy(color = palette.foreground)) { append(changes.title) }
                         append("   ")
-                        withStyle(Theme.uiDigits(11.5f, androidx.compose.ui.text.font.FontWeight.Medium).toSpanStyle()) { append(counts) }
+                        withStyle(Theme.uiDigits(TextSize.Xs, androidx.compose.ui.text.font.FontWeight.Medium).toSpanStyle()) { append(counts) }
                     }
                 }
                 Text(title, Modifier.padding(start = 14.dp).weight(1f), maxLines = 1)
@@ -725,14 +726,14 @@ private fun ChangeEntryRow(row: RowModel, entry: ChangesContent.Entry) {
                 if (entry.folder) Icon(if (entry.open) Symbol.ChevronDown else Symbol.ChevronRight, IconSize.Xs, color = palette.mutedStrongerForeground)
             }
             Box(Modifier.width(24.dp)) {
-                Icon(if (entry.folder) Symbol.Folder else FileSymbol.symbol(entry.path), iconSize(text = 12f), color = palette.mutedForeground)
+                Icon(if (entry.folder) Symbol.Folder else FileSymbol.symbol(entry.path), iconSize(text = TextSize.Xs), color = palette.mutedForeground)
             }
             Text(
                 entry.name, Modifier.weight(1f).padding(end = 12.dp), style = Theme.smallMono,
                 color = if (entry.folder) palette.mutedForeground else palette.foreground, maxLines = 1, overflow = TextOverflow.MiddleEllipsis,
             )
             val counts = remember(entry, palette) { Typesetter.lineCounts(entry.added, entry.removed, palette) }
-            Text(counts, style = Theme.uiDigits(11.5f, androidx.compose.ui.text.font.FontWeight.Medium), maxLines = 1)
+            Text(counts, style = Theme.uiDigits(TextSize.Xs, androidx.compose.ui.text.font.FontWeight.Medium), maxLines = 1)
         }
     }
 }
@@ -785,7 +786,7 @@ private fun HandoffRow(handoff: HandoffContent) {
                 append(account)
             }
         }.proxied(end.gateway, end.pinned)
-        Text(label, style = Theme.smallFont, color = palette.foreground, maxLines = 1, inlineContent = GatewayMark.content(palette.foreground, 12f, ControlSize.Regular.symbol))
+        Text(label, style = Theme.smallFont, color = palette.foreground, maxLines = 1, inlineContent = GatewayMark.content(palette.foreground, TextSize.Xs, ControlSize.Regular.symbol))
     }
     Row(Modifier.fillMaxWidth().height(ControlSize.Large.height), verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.weight(1f).height(1.dp).background(palette.border))
@@ -815,7 +816,7 @@ fun WorkingLine(activity: Activity, modifier: Modifier = Modifier) {
     }
     Box(modifier.fillMaxWidth().height(WorkingLine.height)) {
         ShimmerText(
-            AnnotatedString(words), Theme.uiDigits(13f), palette.mutedStrongerForeground, palette.emphasizedForeground, asking == null,
+            AnnotatedString(words), Theme.uiDigits(TextSize.Sm), palette.mutedStrongerForeground, palette.emphasizedForeground, asking == null,
             Modifier.padding(top = 5.dp),
         )
     }

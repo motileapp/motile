@@ -43,6 +43,7 @@ import app.motile.theme.LocalForeground
 import app.motile.theme.LocalPalette
 import app.motile.theme.Opacity
 import app.motile.theme.Radius
+import app.motile.theme.TextSize
 import app.motile.theme.opacity
 import app.motile.theme.IconSize
 import app.motile.theme.iconSize
@@ -171,7 +172,7 @@ fun MenuPopup(state: MenuState, items: MenuBuilder.() -> Unit) {
 }
 
 private val menuPadding = 4.dp
-private const val menuText = 14f
+private val menuText = TextSize.Md
 /** The size of a menu's symbols and of the pictures its items show. */
 val menuIconSize = iconSize(text = menuText)
 
@@ -200,10 +201,10 @@ private fun MenuPage(title: String?, entries: List<MenuEntry>, back: () -> Unit,
                     }
                     is MenuEntry.Divider -> ThemeDivider(Modifier.padding(vertical = menuPadding))
                     is MenuEntry.Section -> Text(
-                        row.title ?: "", Modifier.padding(horizontal = 8.dp, vertical = 6.dp), size = 12f, weight = FontWeight.Medium,
+                        row.title ?: "", Modifier.padding(horizontal = 8.dp, vertical = 6.dp), size = TextSize.Xs, weight = FontWeight.Medium,
                         color = palette.mutedForeground, maxLines = 1,
                     )
-                    is MenuEntry.Note -> Text(row.text, Modifier.padding(horizontal = 8.dp, vertical = 6.dp), size = 12f, color = palette.mutedForeground)
+                    is MenuEntry.Note -> Text(row.text, Modifier.padding(horizontal = 8.dp, vertical = 6.dp), size = TextSize.Xs, color = palette.mutedForeground)
                 }
             }
         }
@@ -248,7 +249,7 @@ private fun ItemRow(item: MenuEntry.Item, checks: Boolean, close: () -> Unit) {
         Mark(item.symbol, item.picture)
         Column(Modifier.weight(1f)) {
             Text(item.title, size = menuText, maxLines = 2)
-            if (item.detail != null) Text(item.detail, size = 12f, color = palette.mutedForeground, maxLines = 3)
+            if (item.detail != null) Text(item.detail, size = TextSize.Xs, color = palette.mutedForeground, maxLines = 3)
         }
     }
 }

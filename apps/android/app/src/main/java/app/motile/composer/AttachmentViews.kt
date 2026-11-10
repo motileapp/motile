@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -36,6 +37,7 @@ import app.motile.core.ContinuedThread
 import app.motile.core.Pictures
 import app.motile.platform.Platform
 import app.motile.platform.Symbol
+import app.motile.theme.TextSize
 import app.motile.theme.iconSize
 import app.motile.theme.IconSize
 import app.motile.theme.ControlSize
@@ -99,11 +101,13 @@ fun AttachmentTile(attachment: Attachment, open: () -> Unit) {
     }
 }
 
-private val nameInset = 8.dp
 private val kindInset = 6.dp
 
 /** The remove button sits level with a file's kind. */
-private val removeInset get() = kindInset - (ControlSize.Small.height - Chip.height) / 2
+private val removeInset get() = kindInset - (ControlSize.Small.height - Chip.compactHeight) / 2
+
+/** A file's kind is cut short before the remove button. */
+private val kindWidth get() = AttachmentTile.side - kindInset - 4.dp - ControlSize.Small.height - removeInset
 
 /** A file in the composer that isn't shown as a picture, as a tile beside the pictures: its kind, its name, and how far it is on its way to the server. */
 @Composable
@@ -112,10 +116,10 @@ fun AttachmentFileTile(attachment: Attachment) {
     TileLook(attachment, open = null) {
         Box(Modifier.fillMaxSize().background(palette.backgroundSecondary)) {
             Text(
-                attachment.name, Modifier.align(Alignment.BottomStart).padding(nameInset),
-                size = 12f, weight = FontWeight.Medium, color = palette.foreground, maxLines = 3,
+                attachment.name, Modifier.align(Alignment.BottomStart).padding(horizontal = 10.dp, vertical = 8.dp),
+                size = TextSize.Xxs, weight = FontWeight.Medium, color = palette.foreground, maxLines = 3,
             )
-            attachment.kind?.let { Chip(it, Modifier.align(Alignment.TopStart).padding(kindInset), muted = true) }
+            attachment.kind?.let { Chip(it, Modifier.align(Alignment.TopStart).padding(kindInset).widthIn(max = kindWidth), muted = true, small = true) }
         }
     }
 }
@@ -145,8 +149,8 @@ private fun TileLook(attachment: Attachment, open: (() -> Unit)?, content: @Comp
 fun ContinuedThreadChip(from: ContinuedThread, modifier: Modifier = Modifier) {
     val store = LocalStore.current
     ComposerChip(modifier) {
-        Icon(Symbol.MessageSquareText, iconSize(text = 12f))
-        Text("Continues “${from.title}”", Modifier.weight(1f, fill = false), size = 12f, maxLines = 1)
+        Icon(Symbol.MessageSquareText, iconSize(text = TextSize.Xs))
+        Text("Continues “${from.title}”", Modifier.weight(1f, fill = false), size = TextSize.Xs, maxLines = 1)
         CompositionLocalProvider(LocalRow provides Surface.Layer.Chip) {
             ActionButton(icon = Symbol.X, help = "Start without it", size = ControlSize.Small, round = true) { store.dropContinuation() }
         }
@@ -176,7 +180,7 @@ private fun AttachmentProgress(attachment: Attachment) {
         Attachment.State.Ready, Attachment.State.Preparing -> Unit
         is Attachment.State.Uploading -> Text(
             "${(state.fraction * 100).toInt()}%", Modifier.fillMaxWidth().background(palette.scrim).padding(vertical = 2.dp),
-            style = Theme.uiDigits(10f, FontWeight.Medium), color = OverPicture.foreground, align = androidx.compose.ui.text.style.TextAlign.Center,
+            style = Theme.uiDigits(TextSize.Xxs, FontWeight.Medium), color = OverPicture.foreground, align = androidx.compose.ui.text.style.TextAlign.Center,
         )
         is Attachment.State.Failed -> {
             val help = "${state.message} Tap to try again."
@@ -187,8 +191,8 @@ private fun AttachmentProgress(attachment: Attachment) {
                         horizontalArrangement = Arrangement.spacedBy(3.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Icon(Symbol.RotateCw, iconSize(text = 10f))
-                        Text("Retry", size = 10f, weight = FontWeight.Medium)
+                        Icon(Symbol.RotateCw, iconSize(text = TextSize.Xxs))
+                        Text("Retry", size = TextSize.Xxs, weight = FontWeight.Medium)
                     }
                 }
             }

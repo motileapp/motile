@@ -31,6 +31,7 @@ import app.motile.platform.Symbol
 import app.motile.sidebar.doneRowHeight
 import app.motile.sidebar.sidebarRowInset
 import app.motile.sidebar.sidebarRowPadding
+import app.motile.theme.TextSize
 import app.motile.theme.iconSize
 import app.motile.theme.ControlSize
 import app.motile.theme.LocalPalette
@@ -106,13 +107,13 @@ private fun HeaderRow(entry: RicracListEntry.Header, fold: () -> Unit) {
             fill = palette.backgroundSecondaryAccent,
         ) {
             Row(Modifier.height(doneRowHeight).padding(horizontal = sidebarRowPadding), verticalAlignment = Alignment.CenterVertically) {
-                Icon(entry.state.symbol, iconSize(text = 12f), color = entry.state.color)
+                Icon(entry.state.symbol, iconSize(text = TextSize.Xs), color = entry.state.color)
                 Spacer(Modifier.width(8.dp))
-                Text(entry.state.name, size = 12f, weight = FontWeight.SemiBold, color = palette.foreground, maxLines = 1)
+                Text(entry.state.name, size = TextSize.Xs, weight = FontWeight.SemiBold, color = palette.foreground, maxLines = 1)
                 Spacer(Modifier.width(8.dp))
-                Text("${entry.count}", size = 12f, color = palette.mutedStrongerForeground, maxLines = 1)
+                Text("${entry.count}", size = TextSize.Xs, color = palette.mutedStrongerForeground, maxLines = 1)
                 Spacer(Modifier.weight(1f))
-                Icon(if (entry.folded) Symbol.ChevronRight else Symbol.ChevronDown, iconSize(text = 12f), color = palette.mutedStrongerForeground)
+                Icon(if (entry.folded) Symbol.ChevronRight else Symbol.ChevronDown, iconSize(text = TextSize.Xs), color = palette.mutedStrongerForeground)
             }
         }
     }
@@ -165,16 +166,16 @@ private fun IssueRow(
                     }
                 }
                 Spacer(Modifier.width(4.dp))
-                Text(row.identifier, size = 11.5f, color = palette.mutedStrongerForeground, maxLines = 1)
+                Text(row.identifier, size = TextSize.Xs, color = palette.mutedStrongerForeground, maxLines = 1)
                 Spacer(Modifier.width(4.dp))
-                Text(row.title, Modifier.weight(1f), size = 13f, color = palette.foreground, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(row.title, Modifier.weight(1f), size = TextSize.Sm, color = palette.foreground, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 if (!narrow) {
                     for (label in row.labels.take(2)) Chip(label.name, Modifier.padding(start = 4.dp), dot = label.color)
                 }
                 row.initials?.let { initials ->
                     Box(Modifier.padding(start = 4.dp)) { RicracInitials(initials, row.assignee ?: "") }
                 }
-                Text(Time.ago(row.updatedAt), Modifier.padding(start = 4.dp), size = 11.5f, color = palette.mutedStrongerForeground, maxLines = 1)
+                Text(Time.ago(row.updatedAt), Modifier.padding(start = 4.dp), size = TextSize.Xs, color = palette.mutedStrongerForeground, maxLines = 1)
             }
         }
         MenuPopup(menu) {

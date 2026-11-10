@@ -48,6 +48,7 @@ import app.motile.theme.LocalPalette
 import app.motile.theme.LocalSurface
 import app.motile.theme.Palette
 import app.motile.theme.Surface
+import app.motile.theme.TextSize
 import app.motile.theme.Theme
 import app.motile.sidebar.CustomSnoozeSheet
 import app.motile.thread.CommitSheet
@@ -166,9 +167,9 @@ fun Root(store: AppStore) {
             val (title, detail) = store.errorAlert
             AlertDialog(
                 onDismissRequest = { store.errorMessage = null },
-                confirmButton = { TextButton(onClick = { store.errorMessage = null }) { Text("OK", color = palette.primary, size = 14f) } },
-                title = { Text(title, size = 16f) },
-                text = if (detail.isEmpty()) null else ({ Text(detail, size = 14f, color = palette.mutedForeground) }),
+                confirmButton = { TextButton(onClick = { store.errorMessage = null }) { Text("OK", color = palette.primary, size = TextSize.Md) } },
+                title = { Text(title, size = TextSize.Lg) },
+                text = if (detail.isEmpty()) null else ({ Text(detail, size = TextSize.Md, color = palette.mutedForeground) }),
                 containerColor = palette.popover,
             )
         }

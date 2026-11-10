@@ -16,7 +16,7 @@ use super::{END_ROOM, ROW_MARGIN};
 use crate::models::ago;
 use crate::store::Store;
 use crate::store::pull_requests::{Row, Tone};
-use crate::theme::{IconSize, Radius, colors};
+use crate::theme::{IconSize, Radius, TextSize, colors};
 use crate::ui::menu::Menu;
 use crate::ui::{ActionButton, ActionMenu, Chip, InputField, edges, highlight, icons, middle_truncated};
 
@@ -223,7 +223,7 @@ impl PullRequestListView {
                 .when_some(empty.clone(), |header, empty| {
                     header.child(div().w_full().pt(px(40.)).flex().justify_center().child(label(
                         empty,
-                        12.5,
+                        TextSize::Xs,
                         colors(cx).muted_foreground,
                     )))
                 })
@@ -320,7 +320,7 @@ fn list_row(row: &Row, place: &RowPlace, cx: &App) -> Stateful<Div> {
                         .child(
                             div()
                                 .min_w_0()
-                                .text_size(px(13.))
+                                .text_size(TextSize::Sm)
                                 .font_weight(FontWeight::MEDIUM)
                                 .text_color(c.foreground)
                                 .line_clamp(2)
@@ -330,7 +330,7 @@ fn list_row(row: &Row, place: &RowPlace, cx: &App) -> Stateful<Div> {
                         .child(div().flex_1().min_w(px(4.)))
                         .child(signals),
                 )
-                .child(middle_truncated(subline).text_size(px(11.5)).text_color(c.muted_stronger_foreground)),
+                .child(middle_truncated(subline).text_size(TextSize::Xs).text_color(c.muted_stronger_foreground)),
         )
         .on_click(move |_, _, cx| {
             open.update(cx, |store, cx| {

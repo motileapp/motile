@@ -18,7 +18,7 @@ struct McpServerTile: View {
     var body: some View {
         let color = Color.mcpServerTint(tint)
         Text(monogram)
-            .font(.ui(size: size * 0.5, weight: .semibold))
+            .font(.ui(size <= scaled(18) ? .xxs : .md, weight: .semibold))
             .foregroundStyle(color)
             .frame(width: size, height: size)
             .background(color.wash(), in: RoundedRectangle(cornerRadius: size <= scaled(18) ? Radius.xs : Radius.sm, style: .continuous))
@@ -88,7 +88,7 @@ struct McpToolGroupRow: View {
                     .foregroundStyle(Color.themeMutedForeground)
             }
             Text(group.title)
-                .font(.ui(size: 13))
+                .font(.ui(.sm))
                 .foregroundStyle(Color.themeForeground)
                 .lineLimit(1)
             Chip("\(group.tools.count)", muted: true)
@@ -106,12 +106,12 @@ struct McpServerToolRow: View {
         HStack(spacing: 10) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(tool.title)
-                    .font(.ui(size: 13))
+                    .font(.ui(.sm))
                     .foregroundStyle(Color.themeForeground)
                     .lineLimit(1)
                 if let summary = tool.summary {
                     Text(summary)
-                        .font(.ui(size: 11.5))
+                        .font(.ui(.xs))
                         .foregroundStyle(Color.themeMutedForeground)
                         .lineLimit(1)
                 }
@@ -172,26 +172,26 @@ struct McpServerCallRowView: View {
                             .foregroundStyle(Color.themeWarning)
                     }
                     Text(row.mcpServer)
-                        .font(.ui(size: 13, weight: .medium))
+                        .font(.ui(.sm, weight: .medium))
                         .foregroundStyle(Color.themeForeground)
                     Text(row.tool)
-                        .font(.ui(size: 12, design: .monospaced))
+                        .font(.ui(.xs, design: .monospaced))
                         .foregroundStyle(Color.themeForeground)
                         .lineLimit(1)
                     Spacer(minLength: 8)
                     Text(dotted: "\(row.latency) · \(row.time)")
-                        .font(.ui(size: 12))
+                        .font(.ui(.xs))
                         .monospacedDigit()
                         .foregroundStyle(Color.themeMutedForeground)
                         .lineLimit(1)
                 }
                 Text(row.source)
-                    .font(.ui(size: 11.5))
+                    .font(.ui(.xs))
                     .foregroundStyle(Color.themeMutedForeground)
                     .lineLimit(1)
                 if let error = row.error {
                     Text(error)
-                        .font(.ui(size: 11.5))
+                        .font(.ui(.xs))
                         .foregroundStyle(Color.themeWarning)
                         .lineLimit(2)
                 }
@@ -225,7 +225,7 @@ struct McpServerTextBox: View {
 
     private var content: some View {
         Text(text)
-            .font(.ui(size: 12, design: .monospaced))
+            .font(.ui(.xs, design: .monospaced))
             .foregroundStyle(Color.themeForeground)
             .textSelection(.enabled)
             .fixedSize(horizontal: false, vertical: true)
@@ -254,7 +254,7 @@ private struct SheetLabel: View {
 
     var body: some View {
         Text(text)
-            .font(.ui(size: 12, weight: .medium))
+            .font(.ui(.xs, weight: .medium))
             .foregroundStyle(Color.themeMutedForeground)
     }
 }
@@ -311,7 +311,7 @@ struct McpServerAddSheet: View {
         }
         if let error = adder.error {
             Text(error)
-                .font(.ui(size: 12))
+                .font(.ui(.xs))
                 .foregroundStyle(Color.themeWarning)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -336,12 +336,12 @@ struct McpServerAddSheet: View {
                 }
             }
             Text("Your gateway reaches it there, and signs in or asks you for a key if it needs one.")
-                .font(.ui(size: 12.5))
+                .font(.ui(.xs))
                 .foregroundStyle(Color.themeMutedForeground)
                 .fixedSize(horizontal: false, vertical: true)
         } else if known.isEmpty {
             Text("Nothing known by that name. Paste its address instead.")
-                .font(.ui(size: 12.5))
+                .font(.ui(.xs))
                 .foregroundStyle(Color.themeMutedForeground)
         } else {
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: Self.knownColumns), spacing: 6) {
@@ -358,11 +358,11 @@ struct McpServerAddSheet: View {
                 McpServerTile(monogram: known.monogram, tint: known.tint)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(known.name)
-                        .font(.ui(size: 13, weight: .medium))
+                        .font(.ui(.sm, weight: .medium))
                         .foregroundStyle(Color.themeForeground)
                         .lineLimit(1)
                     Text(known.host)
-                        .font(.ui(size: 11.5))
+                        .font(.ui(.xs))
                         .foregroundStyle(Color.themeMutedForeground)
                         .lineLimit(1)
                         .truncationMode(.middle)
@@ -384,13 +384,13 @@ struct McpServerAddSheet: View {
     private var signingIn: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Approve Motile in the browser.")
-                .font(.ui(size: 13))
+                .font(.ui(.sm))
                 .foregroundStyle(Color.themeMutedForeground)
                 .fixedSize(horizontal: false, vertical: true)
             HStack(spacing: 8) {
                 Spinner(size: .md)
                 Text("Waiting for you to approve it")
-                    .font(.ui(size: 13))
+                    .font(.ui(.sm))
             }
             .foregroundStyle(Color.themeMutedForeground)
         }
@@ -398,7 +398,7 @@ struct McpServerAddSheet: View {
 
     @ViewBuilder private func keyStep(name: String, url: String, given: String?) -> some View {
         Text("Paste a key from \(name)'s settings.")
-            .font(.ui(size: 13))
+            .font(.ui(.sm))
             .foregroundStyle(Color.themeMutedForeground)
             .fixedSize(horizontal: false, vertical: true)
         InputField("Key", text: $key, monospaced: true, secure: true, focus: $keyFocused)
@@ -418,7 +418,7 @@ struct McpServerAddSheet: View {
     @ViewBuilder private func added(_ id: String) -> some View {
         if let mcpServer = store.mcpServer(id) {
             Text(mcpServer.toolsText)
-                .font(.ui(size: 13))
+                .font(.ui(.sm))
                 .foregroundStyle(Color.themeMutedForeground)
             if !mcpServer.groups.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
@@ -473,7 +473,7 @@ struct McpServerAddSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text(title)
-                .font(.ui(size: 15, weight: .semibold))
+                .font(.ui(.lg, weight: .semibold))
             content
             HStack(spacing: 0) {
                 Spacer()
@@ -522,7 +522,7 @@ private struct AgentName: View {
 
     var body: some View {
         Text(text)
-            .font(.ui(size: 11.5, design: .monospaced))
+            .font(.ui(.xs, design: .monospaced))
             .foregroundStyle(Color.themeMutedStrongerForeground)
             .lineLimit(1)
             .truncationMode(.middle)
@@ -558,7 +558,7 @@ struct McpServerRenameSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Rename \(mcpServer.name)")
-                .font(.ui(size: 15, weight: .semibold))
+                .font(.ui(.lg, weight: .semibold))
             fields
             HStack(spacing: 0) {
                 Spacer()
@@ -613,7 +613,7 @@ struct McpServerKeySheet: View {
     private var fields: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Paste a new key from \(mcpServer.name)'s settings.")
-                .font(.ui(size: 13))
+                .font(.ui(.sm))
                 .foregroundStyle(Color.themeMutedForeground)
                 .fixedSize(horizontal: false, vertical: true)
             InputField("Key", text: $key, monospaced: true, secure: true, focus: $focused)
@@ -624,7 +624,7 @@ struct McpServerKeySheet: View {
             }
             if let error {
                 Text(error)
-                    .font(.ui(size: 12))
+                    .font(.ui(.xs))
                     .foregroundStyle(Color.themeWarning)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -650,7 +650,7 @@ struct McpServerKeySheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("New Key for \(mcpServer.name)")
-                .font(.ui(size: 15, weight: .semibold))
+                .font(.ui(.lg, weight: .semibold))
             fields
             HStack(spacing: 0) {
                 Spacer()
@@ -754,11 +754,11 @@ struct McpServerTrySheet: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 4) {
                 Text(field.name)
-                    .font(.ui(size: 12, weight: .medium, design: .monospaced))
+                    .font(.ui(.xs, weight: .medium, design: .monospaced))
                     .foregroundStyle(Color.themeForeground)
                 if field.required {
                     Text("required")
-                        .font(.ui(size: 11.5))
+                        .font(.ui(.xs))
                         .foregroundStyle(Color.themeMutedStrongerForeground)
                 }
                 Spacer()
@@ -768,7 +768,7 @@ struct McpServerTrySheet: View {
             }
             if let description = field.description {
                 Text(description)
-                    .font(.ui(size: 11.5))
+                    .font(.ui(.xs))
                     .foregroundStyle(Color.themeMutedForeground)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -791,7 +791,7 @@ struct McpServerTrySheet: View {
     @ViewBuilder private var form: some View {
         if let summary = picked?.summary {
             Text(summary)
-                .font(.ui(size: 12.5))
+                .font(.ui(.xs))
                 .foregroundStyle(Color.themeMutedForeground)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -801,7 +801,7 @@ struct McpServerTrySheet: View {
                 Spinner().foregroundStyle(Color.themeMutedForeground).frame(maxWidth: .infinity)
             }
         case .failed(let message):
-            Text(message).font(.ui(size: 12)).foregroundStyle(Color.themeWarning)
+            Text(message).font(.ui(.xs)).foregroundStyle(Color.themeWarning)
         case .ready(let made):
             ForEach(made) { self.field($0) }
         }
@@ -809,13 +809,13 @@ struct McpServerTrySheet: View {
             HStack(spacing: 6) {
                 Image(.triangleAlert, size: .sm)
                 Text(McpServerText.runsForReal)
-                    .font(.ui(size: 12))
+                    .font(.ui(.xs))
             }
             .foregroundStyle(Color.themeWarning)
         }
         if let error {
             Text(error)
-                .font(.ui(size: 12))
+                .font(.ui(.xs))
                 .foregroundStyle(Color.themeWarning)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -834,7 +834,7 @@ struct McpServerTrySheet: View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
                 Text("Try a Tool")
-                    .font(.ui(size: 15, weight: .semibold))
+                    .font(.ui(.lg, weight: .semibold))
                 Spacer()
                 toolMenu
             }
@@ -897,14 +897,14 @@ struct McpServerCallSheet: View {
                 .foregroundStyle(Color.themeMutedForeground)
                 .frame(maxWidth: .infinity, minHeight: 120)
         case .failed(let message):
-            Text(message).font(.ui(size: 13)).foregroundStyle(Color.themeDestructive)
+            Text(message).font(.ui(.sm)).foregroundStyle(Color.themeDestructive)
         case .ready(nil):
             Text("Your gateway no longer has this call")
-                .font(.ui(size: 13))
+                .font(.ui(.sm))
                 .foregroundStyle(Color.themeMutedForeground)
         case .ready(let call?):
             Text(dotted: call.row.summary)
-                .font(.ui(size: 12))
+                .font(.ui(.xs))
                 .foregroundStyle(Color.themeMutedForeground)
                 .lineLimit(2)
             SheetLabel("Arguments")
@@ -912,7 +912,7 @@ struct McpServerCallSheet: View {
             if let error = call.error {
                 SheetLabel("Error")
                 Text(error)
-                    .font(.ui(size: 12.5))
+                    .font(.ui(.xs))
                     .foregroundStyle(Color.themeWarning)
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
@@ -935,7 +935,7 @@ struct McpServerCallSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Tool Call")
-                .font(.ui(size: 15, weight: .semibold))
+                .font(.ui(.lg, weight: .semibold))
             content
             HStack {
                 Spacer()

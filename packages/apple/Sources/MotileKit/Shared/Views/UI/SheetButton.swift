@@ -23,7 +23,7 @@ struct SheetButton: View {
                     Spinner(size: .lg)
                 }
             }
-            .font(.ui(size: 15, weight: .semibold))
+            .font(.ui(.lg, weight: .semibold))
             .frame(maxWidth: .infinity)
         }
         .controlSize(.large)

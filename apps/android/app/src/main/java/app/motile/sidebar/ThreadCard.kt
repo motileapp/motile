@@ -41,6 +41,7 @@ import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
 import app.motile.LocalStore
 import app.motile.platform.Symbol
+import app.motile.theme.TextSize
 import app.motile.theme.iconSize
 import app.motile.theme.LocalForeground
 import app.motile.theme.Theme
@@ -65,7 +66,7 @@ import kotlin.math.min
 object ThreadCard {
     val maxWidth = 320.dp
     /** The icon of each line, beside its words. */
-    val iconSize = iconSize(text = 12f)
+    val iconSize = iconSize(text = TextSize.Xs)
 }
 
 @Composable
@@ -76,7 +77,7 @@ fun ThreadCard(threadID: String, modifier: Modifier = Modifier) {
     val palette = Theme.colors
     DropdownCard(modifier.widthIn(max = ThreadCard.maxWidth)) {
         Column(Modifier.padding(12.dp)) {
-            Text(thread.title, size = 13f, weight = FontWeight.Medium, color = palette.foreground, maxLines = 1)
+            Text(thread.title, size = TextSize.Sm, weight = FontWeight.Medium, color = palette.foreground, maxLines = 1)
             Column(Modifier.padding(top = 10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 CardLine(project?.name ?: lastComponent(thread.cwd)) { ProjectIcon(project, size = ThreadCard.iconSize) }
                 val branch = project?.branch
@@ -93,8 +94,8 @@ fun ThreadCard(threadID: String, modifier: Modifier = Modifier) {
             ThemeDivider(Modifier.padding(vertical = 10.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Icon(pullRequest.state.symbol, ThreadCard.iconSize, color = pullRequest.state.color)
-                Text("#${pullRequest.number}", style = Theme.uiDigits(12f, FontWeight.Medium), color = palette.mutedStrongerForeground)
-                Text(pullRequest.title, size = 12f, color = palette.mutedForeground, maxLines = 1)
+                Text("#${pullRequest.number}", style = Theme.uiDigits(TextSize.Xs, FontWeight.Medium), color = palette.mutedStrongerForeground)
+                Text(pullRequest.title, size = TextSize.Xs, color = palette.mutedForeground, maxLines = 1)
             }
         }
     }
@@ -107,9 +108,9 @@ private fun CardLine(text: String, middle: Boolean = false, proxied: Boolean = f
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             icon()
             Text(
-                dotted(text, palette.mutedStrongerForeground).proxied(proxied, pinned), size = 12f, maxLines = 1,
+                dotted(text, palette.mutedStrongerForeground).proxied(proxied, pinned), size = TextSize.Xs, maxLines = 1,
                 overflow = if (middle) TextOverflow.MiddleEllipsis else TextOverflow.Ellipsis,
-                inlineContent = if (proxied) GatewayMark.content(palette.mutedForeground, 12f, ThreadCard.iconSize) else emptyMap(),
+                inlineContent = if (proxied) GatewayMark.content(palette.mutedForeground, TextSize.Xs, ThreadCard.iconSize) else emptyMap(),
             )
         }
     }

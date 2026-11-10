@@ -45,7 +45,7 @@ struct PullRequestSurface: View {
             Image(page.state.symbol, size: .sm)
                 .foregroundStyle(page.state.color)
             Text(verbatim: "#\(page.number)")
-                .font(.ui(size: 12.5, weight: .medium))
+                .font(.ui(.xs, weight: .medium))
                 .foregroundStyle(Color.themeForeground)
                 .monospacedDigit()
                 .padding(.leading, 2)
@@ -57,7 +57,7 @@ struct PullRequestSurface: View {
             }
         } else {
             Text("Pull Request")
-                .font(.ui(size: 12.5, weight: .medium))
+                .font(.ui(.xs, weight: .medium))
                 .foregroundStyle(Color.themeForeground)
         }
         Spacer(minLength: 4)
@@ -107,7 +107,7 @@ private struct NoPullRequest: View {
             Image(.gitPullRequest, size: .xxl)
                 .foregroundStyle(Color.themeMutedStrongerForeground)
             Text("This branch has no pull request yet.")
-                .font(.ui(size: 13))
+                .font(.ui(.sm))
                 .foregroundStyle(Color.themeMutedForeground)
             HStack(spacing: 0) {
                 if let project = store.gitProject, let create = creating {
@@ -248,7 +248,7 @@ private struct PullRequestPageView: View {
                     titleEditor(editing)
                 } else {
                     Text(page.title)
-                        .font(.ui(size: 15, weight: .semibold))
+                        .font(.ui(.lg, weight: .semibold))
                         .foregroundStyle(Color.themeForeground)
                         .textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
@@ -260,7 +260,7 @@ private struct PullRequestPageView: View {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Chip(page.state.title, icon: page.state.symbol, tone: page.state.color)
                 Text(page.byline)
-                    .font(.ui(size: 12))
+                    .font(.ui(.xs))
                     .foregroundStyle(Color.themeMutedForeground)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -282,7 +282,7 @@ private struct PullRequestPageView: View {
                             Text(AttributedString(LineCountText.text(added: page.additions, removed: page.deletions)))
                         }
                     }
-                    .font(.ui(size: 12))
+                    .font(.ui(.xs))
                     .padding(.horizontal, 6)
                     .frame(height: pressable(24))
                 }
@@ -301,7 +301,7 @@ private struct PullRequestPageView: View {
                             + Text(below.title).foregroundStyle(Color.themeForeground))
                             .lineLimit(1)
                     }
-                    .font(.ui(size: 12))
+                    .font(.ui(.xs))
                     .padding(.horizontal, 6)
                     .frame(height: pressable(24))
                 }
@@ -412,10 +412,10 @@ private struct PullRequestPageView: View {
     private var activityTitle: some View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
             Text("Activity")
-                .font(.ui(size: 13, weight: .semibold))
+                .font(.ui(.sm, weight: .semibold))
                 .foregroundStyle(Color.themeForeground)
             Text("Oldest first")
-                .font(.ui(size: 12))
+                .font(.ui(.xs))
                 .foregroundStyle(Color.themeMutedStrongerForeground)
         }
         .padding(.top, 6)
@@ -512,12 +512,12 @@ private struct PeopleRow<Chips: View>: View {
     var body: some View {
         HStack(alignment: .center, spacing: 8) {
             Text(title)
-                .font(.ui(size: 12))
+                .font(.ui(.xs))
                 .foregroundStyle(Color.themeMutedStrongerForeground)
                 .frame(width: 70, alignment: .leading)
             if let empty {
                 Text(empty)
-                    .font(.ui(size: 12))
+                    .font(.ui(.xs))
                     .foregroundStyle(Color.themeMutedStrongerForeground)
             } else {
                 FlowRow(spacing: 5) { chips }
@@ -579,7 +579,7 @@ private struct PendingComments: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text(comments.count == 1 ? "1 comment on a line goes with your review" : "\(comments.count) comments on lines go with your review")
-                .font(.ui(size: 12, weight: .medium))
+                .font(.ui(.xs, weight: .medium))
                 .foregroundStyle(Color.themeMutedForeground)
                 .padding(.horizontal, 12)
                 .padding(.top, 9)
@@ -587,10 +587,10 @@ private struct PendingComments: View {
             ForEach(comments) { comment in
                 HStack(alignment: .top, spacing: 8) {
                     Text(verbatim: "\(URL(fileURLWithPath: comment.path).lastPathComponent):\(comment.line)")
-                        .font(.ui(size: 11.5, design: .monospaced))
+                        .font(.ui(.xs, design: .monospaced))
                         .foregroundStyle(Color.themePrimary)
                     Text(comment.body)
-                        .font(.ui(size: 12.5))
+                        .font(.ui(.xs))
                         .foregroundStyle(Color.themeForeground)
                         .lineLimit(2)
                     Spacer(minLength: 4)
@@ -617,10 +617,10 @@ private struct StackCard: View {
                 Image(.layers, size: .md)
                     .foregroundStyle(Color.themeMutedForeground)
                 Text("Stack")
-                    .font(.ui(size: 13, weight: .medium))
+                    .font(.ui(.sm, weight: .medium))
                     .foregroundStyle(Color.themeForeground)
                 Text("\(stack.layers.count) pull requests onto \(stack.base)")
-                    .font(.ui(size: 12))
+                    .font(.ui(.xs))
                     .foregroundStyle(Color.themeMutedStrongerForeground)
                 Spacer(minLength: 4)
                 if let url = stack.url {
@@ -641,17 +641,17 @@ private struct StackCard: View {
                         Image(layer.state.symbol, size: .sm)
                             .foregroundStyle(layer.state.color)
                         Text(verbatim: "#\(layer.number)")
-                            .font(.ui(size: 12, weight: .medium))
+                            .font(.ui(.xs, weight: .medium))
                             .foregroundStyle(Color.themeMutedForeground)
                             .monospacedDigit()
                         Text(layer.title)
-                            .font(.ui(size: 12.5))
+                            .font(.ui(.xs))
                             .foregroundStyle(Color.themeForeground)
                             .lineLimit(1)
                         Spacer(minLength: 4)
                         if layer.current {
                             Text("This one")
-                                .font(.ui(size: 11.5))
+                                .font(.ui(.xs))
                                 .foregroundStyle(Color.themeMutedStrongerForeground)
                         }
                     }
@@ -764,17 +764,17 @@ private struct StatusRow: View {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
                     Text(status.title)
-                        .font(.ui(size: 13, weight: .medium))
+                        .font(.ui(.sm, weight: .medium))
                         .foregroundStyle(Color.themeForeground)
                     if let at = status.at {
                         Text(Time.ago(at))
-                            .font(.ui(size: 12))
+                            .font(.ui(.xs))
                             .foregroundStyle(Color.themeMutedStrongerForeground)
                     }
                 }
                 if let detail = status.detail {
                     Text(detail)
-                        .font(.ui(size: 12))
+                        .font(.ui(.xs))
                         .foregroundStyle(Color.themeMutedForeground)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -826,20 +826,20 @@ private struct CheckRow: View {
                 .frame(width: 7, height: 7)
                 .frame(width: 18)
             Text(check.name)
-                .font(.ui(size: 12.5))
+                .font(.ui(.xs))
                 .foregroundStyle(Color.themeForeground)
                 .lineLimit(1)
                 .help(check.description ?? check.name)
             if let workflow = check.workflow {
                 Text(workflow)
-                    .font(.ui(size: 12))
+                    .font(.ui(.xs))
                     .foregroundStyle(Color.themeMutedStrongerForeground)
                     .lineLimit(1)
                     .layoutPriority(-1)
             }
             Spacer(minLength: 6)
             Text(check.label)
-                .font(.ui(size: 12))
+                .font(.ui(.xs))
                 .foregroundStyle(check.tone == .neutral ? Color.themeMutedStrongerForeground : check.tone.color)
             if check.fix != nil || check.url != nil {
                 HStack(spacing: 0) {

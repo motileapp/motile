@@ -6,7 +6,7 @@ use gpui_kit::*;
 
 use crate::models::now;
 use crate::store::Store;
-use crate::theme::{ControlSize, IconSize, Radius, colors};
+use crate::theme::{ControlSize, IconSize, Radius, TextSize, colors};
 use crate::ui::{ActionButton, CommandBox, Spinner, Variant, icons, logos};
 
 pub struct SignIn {
@@ -34,11 +34,11 @@ impl Render for SignIn {
             .items_center()
             .child(div().flex_1())
             .child(logos::motile_mark(IconSize::Hero, cx))
-            .child(div().mt(px(14.)).text_size(px(30.)).font_weight(FontWeight::SEMIBOLD).child("Motile"))
+            .child(div().mt(px(14.)).text_size(TextSize::Xxl).font_weight(FontWeight::SEMIBOLD).child("Motile"))
             .child(
                 div()
                     .mt(px(6.))
-                    .text_size(px(15.))
+                    .text_size(TextSize::Lg)
                     .text_color(c.muted_foreground)
                     .child("The command center for coding agents."),
             )
@@ -56,7 +56,7 @@ impl Render for SignIn {
                 page.child(
                     div()
                         .mt(px(10.))
-                        .text_size(px(12.))
+                        .text_size(TextSize::Xs)
                         .text_color(c.muted_stronger_foreground)
                         .child("Waiting for the browser"),
                 )
@@ -77,7 +77,7 @@ impl Render for SignIn {
                     div()
                         .mt(px(14.))
                         .max_w(px(360.))
-                        .text_size(px(13.))
+                        .text_size(TextSize::Sm)
                         .text_color(c.destructive)
                         .text_center()
                         .child(error),
@@ -88,7 +88,7 @@ impl Render for SignIn {
                 div()
                     .mb(px(24.))
                     .px(px(20.))
-                    .text_size(px(12.))
+                    .text_size(TextSize::Xs)
                     .text_color(c.muted_stronger_foreground)
                     .text_center()
                     .child(format!(
@@ -155,7 +155,7 @@ impl ConnectServer {
         if store.enroll_token.as_ref().is_some_and(|token| token.is_expired(at)) {
             let regenerate = self.store.clone();
             return status
-                .child(div().text_size(px(13.)).text_color(c.muted_foreground).child("The command has expired"))
+                .child(div().text_size(TextSize::Sm).text_color(c.muted_foreground).child("The command has expired"))
                 .child(ActionButton::new("regenerate", "Regenerate").pending(store.enroll_token_pending).on_click(
                     move |_, _, cx| {
                         regenerate.update(cx, |store, cx| {
@@ -174,11 +174,11 @@ impl ConnectServer {
                     .gap(px(8.))
                     .text_color(c.muted_foreground)
                     .child(Spinner::regular().render(cx))
-                    .child(div().text_size(px(13.)).child("Waiting for your server")),
+                    .child(div().text_size(TextSize::Sm).child("Waiting for your server")),
             )
             .child(
                 div()
-                    .text_size(px(12.))
+                    .text_size(TextSize::Xs)
                     .font_features(crate::ui::tabular_numbers())
                     .text_color(c.muted_stronger_foreground)
                     .child(left),
@@ -224,7 +224,7 @@ impl Render for ConnectServer {
                 div()
                     .mt(px(18.))
                     .px(px(24.))
-                    .text_size(px(24.))
+                    .text_size(TextSize::Xxl)
                     .font_weight(FontWeight::SEMIBOLD)
                     .text_center()
                     .child(if is_first { "Connect your first server" } else { "Run this on your server" }),
@@ -234,7 +234,7 @@ impl Render for ConnectServer {
                     .mt(px(8.))
                     .px(px(24.))
                     .max_w(px(480.))
-                    .text_size(px(14.))
+                    .text_size(TextSize::Md)
                     .line_height(px(20.))
                     .text_color(c.muted_foreground)
                     .text_center()
@@ -251,7 +251,7 @@ impl Render for ConnectServer {
                             .mb(px(20.))
                             .flex()
                             .items_center()
-                            .text_size(px(12.))
+                            .text_size(TextSize::Xs)
                             .text_color(c.muted_stronger_foreground)
                             .child(format!("Signed in as {email}"))
                             .child(ActionButton::new("sign-out", "Sign out").variant(Variant::Link).small().on_click(

@@ -53,6 +53,7 @@ import app.motile.theme.LocalPalette
 import app.motile.theme.Opacity
 import app.motile.theme.Radius
 import app.motile.theme.ShadowSize
+import app.motile.theme.TextSize
 import app.motile.theme.Theme
 import app.motile.theme.iconSize
 import app.motile.theme.opacity
@@ -304,7 +305,7 @@ private fun RenameAccountDialog(account: GatewayAccount, onDismiss: () -> Unit) 
                     .padding(20.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                Text("Rename Account", size = 15f, weight = FontWeight.SemiBold)
+                Text("Rename Account", size = TextSize.Lg, weight = FontWeight.SemiBold)
                 InputField("Name", name, { name = it }, Modifier.fillMaxWidth(), size = ControlSize.Large, focusRequester = field, onSubmit = ::rename)
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                     ActionButton("Cancel", size = ControlSize.Large, margin = beside(end = 8.dp), onClick = onDismiss)
@@ -375,15 +376,15 @@ private fun EnrollStatus(enroll: GatewayEnroll?, gateway: Gateway, replacing: Bo
             return@Column
         }
         if (enroll.isExpired(now)) {
-            Text("The code has expired", size = 13f, color = palette.mutedForeground)
+            Text("The code has expired", size = TextSize.Sm, color = palette.mutedForeground)
             ActionButton("New Code", pending = gateway.enrollPending) { gateway.makeCode() }
             return@Column
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Spinner(iconSize(text = 13f), color = palette.mutedForeground)
-            Text(if (replacing) "Waiting for your new gateway" else "Waiting for your gateway", size = 13f, color = palette.mutedForeground)
+            Spinner(iconSize(text = TextSize.Sm), color = palette.mutedForeground)
+            Text(if (replacing) "Waiting for your new gateway" else "Waiting for your gateway", size = TextSize.Sm, color = palette.mutedForeground)
         }
-        Text("Works for ${enroll.timeLeft(now)}", style = Theme.uiDigits(12f), color = palette.mutedStrongerForeground)
+        Text("Works for ${enroll.timeLeft(now)}", style = Theme.uiDigits(TextSize.Xs), color = palette.mutedStrongerForeground)
     }
 }
 
@@ -424,7 +425,7 @@ private fun SignInSheet(signIn: GatewaySignIn) {
                 group(bare = true) {
                     row {
                         Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally), verticalAlignment = Alignment.CenterVertically) {
-                            Text(userCode, style = Theme.uiMono(28f, FontWeight.SemiBold), color = palette.foreground)
+                            Text(userCode, style = Theme.uiMono(TextSize.Xxl, FontWeight.SemiBold), color = palette.foreground)
                             CopyButton("Copy the code") { Platform.copy(userCode) }
                         }
                     }

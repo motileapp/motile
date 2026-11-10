@@ -18,6 +18,7 @@ import app.motile.theme.IconSize
 import app.motile.theme.LocalForeground
 import app.motile.theme.LocalPalette
 import app.motile.theme.Radius
+import app.motile.theme.TextSize
 
 /**
  * How every list a dropdown draws is set: rows as tall as a regular control, with the same room
@@ -31,7 +32,7 @@ object DropdownList {
     val rowPadding = 8.dp
     /** The room between a row's symbol and its words. */
     val gap = 8.dp
-    const val textSize = 13f
+    val textSize = TextSize.Sm
     val symbol = IconSize.Md
     val check = IconSize.Sm
     /** The room between two rows' lights: only drawn, so that the rows' presses meet. */
