@@ -2176,7 +2176,7 @@ impl Core {
                 self.cache.set_projects(server_id, &projects);
                 let Some(server) = self.server_mut(server_id) else { return };
                 server.info = Some(info);
-                self.reprogram(server_id);
+                self.reprogram(server_id, true);
                 let Some(server) = self.server_mut(server_id) else { return };
                 server.threads = threads.iter().map(|thread| (thread.id.clone(), thread.clone())).collect();
                 let views = threads.iter().map(|thread| self.thread_view(server_id, thread)).collect();
@@ -2203,7 +2203,7 @@ impl Core {
                 let Some(server) = self.server_mut(server_id) else { return };
                 let backup_changed = server.info.as_ref().map(|before| &before.backup) != Some(&info.backup);
                 server.info = Some(info);
-                self.reprogram(server_id);
+                self.reprogram(server_id, false);
                 self.emit_servers();
                 self.give_backup(server_id);
                 if backup_changed {
@@ -2638,33 +2638,38 @@ impl Core {
     }
 
     /// Draws the programs of the server's open threads again once what the server can do is known
-    /// or changed, and fetches what failed for want of it.
-    fn reprogram(&mut self, server_id: &str) {
+    /// or changed, and fetches again what failed once it can run programs or has just `connected`.
+    fn reprogram(&mut self, server_id: &str, connected: bool) {
         let thread_ids: Vec<String> =
             self.open.iter().filter(|(_, open)| open.server_id == server_id).map(|(id, _)| id.clone()).collect();
         for thread_id in thread_ids {
             let Some(before) = self.open.get(&thread_id).map(|open| open.programs.limited) else { continue };
             self.refresh_programs(&thread_id);
             let Some(open) = self.open.get_mut(&thread_id) else { continue };
-            if open.programs.limited == before {
-                continue;
-            }
-            let program_rows = |rows: &[Row]| -> Vec<Splice> {
-                let programs = rows.iter().enumerate().filter(|(_, row)| matches!(row.kind, RowKind::Ui { .. }));
-                programs.map(|(start, row)| Splice { start, remove: 1, rows: vec![row.clone()] }).collect()
-            };
-            let rows = program_rows(open.transcript.rows());
-            let agent_rows = open.agent.as_ref().map(|(_, agent)| program_rows(agent.rows())).unwrap_or_default();
             let limited = open.programs.limited;
-            for splice in rows {
-                self.emit_rows(&thread_id, false, splice);
+            let changed = limited != before;
+            if changed {
+                self.redraw_programs(&thread_id);
             }
-            for splice in agent_rows {
-                self.emit_agent_rows(&thread_id, false, splice);
-            }
-            if !limited {
+            if !limited && (changed || connected) {
                 self.with_programs(&thread_id, Programs::retry);
             }
+        }
+    }
+
+    fn redraw_programs(&mut self, thread_id: &str) {
+        let Some(open) = self.open.get(thread_id) else { return };
+        let program_rows = |rows: &[Row]| -> Vec<Splice> {
+            let programs = rows.iter().enumerate().filter(|(_, row)| matches!(row.kind, RowKind::Ui { .. }));
+            programs.map(|(start, row)| Splice { start, remove: 1, rows: vec![row.clone()] }).collect()
+        };
+        let rows = program_rows(open.transcript.rows());
+        let agent_rows = open.agent.as_ref().map(|(_, agent)| program_rows(agent.rows())).unwrap_or_default();
+        for splice in rows {
+            self.emit_rows(thread_id, false, splice);
+        }
+        for splice in agent_rows {
+            self.emit_agent_rows(thread_id, false, splice);
         }
     }
 
