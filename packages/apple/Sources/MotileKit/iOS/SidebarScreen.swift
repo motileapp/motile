@@ -34,15 +34,20 @@ struct SidebarScreen: View {
         let highlightedID = results.indices.contains(highlighted.index) ? results[highlighted.index].id : nil
         let shown = Shown(projects: store.projectsByID, selection: store.selection, swiped: swiped, highlighted: highlightedID)
         let items = searching ? searchItems(results) : items(active: active, sections: sections)
-        let revealedSection = sections.first { $0.threads.contains { $0.id == store.revealedThreadID } }?.section
+        let revealedIndex = items.firstIndex { $0.thread?.id == store.revealedThreadID }
+        // The thread goes to the top; its section's line only comes along when it is right above
+        // it, so that a thread near the line isn't left down the screen under it.
+        let revealedAnchor = revealedIndex.flatMap { index in
+            items.indices.contains(index - 1) && items[index - 1].isHeader ? items[index - 1].id : nil
+        }
         VStack(spacing: 0) {
             header
             RecycledList(
                 items: items, bottomInset: 12,
                 scrollTarget: searching
-                    ? highlighted.shown.flatMap { results.indices.contains($0) ? "result:\(results[$0].id)" : nil } : items.first { $0.thread?.id == store.revealedThreadID }?.id,
+                    ? highlighted.shown.flatMap { results.indices.contains($0) ? "result:\(results[$0].id)" : nil } : revealedIndex.map { items[$0].id },
                 scrollsTargetToTop: !searching && store.revealedThreadID != nil,
-                scrollAnchor: revealedSection.map { SidebarItem.header($0, 0).id },
+                scrollAnchor: revealedAnchor,
                 scrolled: { self.swiped = nil },
                 rowInset: UIEdgeInsets(top: rowMargin.top, left: rowMargin.leading, bottom: rowMargin.bottom, right: rowMargin.trailing),
                 rowRadius: 8,
@@ -453,6 +458,11 @@ private enum SidebarItem: Identifiable {
         // A slim row has an id of its own, or the list keeps the thread's active row for it.
         case .slim(let thread): "slim:\(thread.id)"
         }
+    }
+
+    var isHeader: Bool {
+        guard case .header = self else { return false }
+        return true
     }
 
     var activeThread: ThreadInfo? {
