@@ -208,13 +208,25 @@ impl Store {
             thread_id: thread.id.clone(),
             title: thread.title.clone(),
         };
-        let key =
-            self.project(Some(&thread.project_id)).map_or(Project::NO_PROJECT_KEY, |project| project.key.as_str());
-        let project = self.preferred_copy(key).or_else(|| self.preferred_copy(Project::NO_PROJECT_KEY));
+        let project = self
+            .project(Some(&thread.project_id))
+            .and_then(|project| self.continuation(project))
+            .or_else(|| self.preferred_copy(Project::NO_PROJECT_KEY));
         let project_id = project.map(|project| project.id.clone());
         self.start_new_thread(project_id, cx);
         self.update_draft(|draft| draft.from = Some(from));
         self.composer_focus += 1;
+    }
+
+    /// The removed server's project on a server that has it: the same repository, or else a folder
+    /// of the same name, for an older copy that doesn't say its repository.
+    fn continuation(&self, project: &Project) -> Option<&Project> {
+        if let Some(copy) = self.preferred_copy(&project.key) {
+            return Some(copy);
+        }
+        let named =
+            self.projects.iter().find(|other| !self.is_removed(&other.server_id) && other.name == project.name)?;
+        self.preferred_copy(&named.key)
     }
 
     /// The open draft no longer goes on from a removed server's thread.

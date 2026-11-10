@@ -2406,10 +2406,18 @@ final class AppStore {
     func continueOnAnotherServer() {
         guard let thread = selectedThread, isRemoved(thread.serverID) else { return }
         let from = ContinuedThread(origin: thread.serverID, threadID: thread.id, title: thread.title)
-        let key = project(thread.projectID)?.key ?? Project.noProjectKey
-        startNewThread(in: preferredCopy(of: key) ?? preferredCopy(of: Project.noProjectKey))
+        startNewThread(in: continuation(of: project(thread.projectID)) ?? preferredCopy(of: Project.noProjectKey))
         updateDraft { $0.from = from }
         composerFocus += 1
+    }
+
+    /// The removed server's project on a server that has it: the same repository, or else a folder
+    /// of the same name, for an older copy that doesn't say its repository.
+    private func continuation(of project: Project?) -> Project? {
+        guard let project else { return nil }
+        if let copy = preferredCopy(of: project.key) { return copy }
+        let named = projects.first { !isRemoved($0.serverID) && $0.name == project.name }
+        return named.flatMap { preferredCopy(of: $0.key) }
     }
 
     /// The open draft starts a thread of its own, not one that goes on from a removed server's.

@@ -34,6 +34,7 @@ pub(crate) const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/0022_message_search.sql"),
     include_str!("../migrations/0023_snooze.sql"),
     include_str!("../migrations/0024_thread_started_by.sql"),
+    include_str!("../migrations/0025_project_origins.sql"),
 ];
 
 pub struct Store {

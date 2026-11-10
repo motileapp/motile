@@ -2320,10 +2320,17 @@ class AppStore(private val context: Context) {
         val thread = selectedThread ?: return
         if (!isRemoved(thread.serverID)) return
         val from = ContinuedThread(thread.serverID, thread.id, thread.title)
-        val key = project(thread.projectID)?.key ?: Project.NO_PROJECT_KEY
-        startNewThread(preferredCopy(key) ?: preferredCopy(Project.NO_PROJECT_KEY))
+        startNewThread(continuation(project(thread.projectID)) ?: preferredCopy(Project.NO_PROJECT_KEY))
         updateDraft { it.copy(from = from) }
         composerFocus += 1
+    }
+
+    /** The removed server's project on a server that has it: the same repository, or else a folder of the same name, for an older copy that doesn't say its repository. */
+    private fun continuation(project: Project?): Project? {
+        if (project == null) return null
+        preferredCopy(project.key)?.let { return it }
+        val named = projects.firstOrNull { !isRemoved(it.serverID) && it.name == project.name } ?: return null
+        return preferredCopy(named.key)
     }
 
     /** The open draft starts a thread of its own, not one that goes on from a removed server's. */
