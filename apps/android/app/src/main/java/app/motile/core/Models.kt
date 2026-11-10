@@ -1283,6 +1283,9 @@ data class Attachment(
             return media?.let { ViewedMedia(name, video, ViewedMedia.Source.Media(it)) }
         }
 
+    /** Its extension, as "PDF", when it has one. */
+    val kind: String? get() = name.lastIndexOf('.').takeIf { it > 0 }?.let { name.substring(it + 1).uppercase() }?.ifEmpty { null }
+
     fun prepared(file: File): Attachment = copy(file = file, name = file.name, bytes = file.length(), state = State.Uploading(0.0))
 
     companion object {
