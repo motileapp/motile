@@ -18,7 +18,7 @@ use super::{
 use crate::models::{Server, ThreadInfo, section_label};
 use crate::prefs::Prefs;
 use crate::store::{Store, UndoNotice};
-use crate::theme::{self, IconSize, Opacity, colors};
+use crate::theme::{self, IconSize, Opacity, TextSize, colors};
 use crate::ui::{Highlight, divider, ease_out, icons, tabular_numbers, tooltip};
 
 /// How tall a shelf's list can get at least, when there is room, and before it is resized.
@@ -172,7 +172,7 @@ pub fn state_ring(tint: Hsla, cx: &App) -> Div {
 fn shelf_title(title: &'static str, lit: bool, cx: &App) -> Div {
     div()
         .min_w_0()
-        .text_size(px(12.))
+        .text_size(TextSize::Xs)
         .font_weight(FontWeight::MEDIUM)
         .truncate()
         .text_color(shelf_tint(lit, cx))
@@ -186,7 +186,7 @@ fn shelf_tint(lit: bool, cx: &App) -> Hsla {
 }
 
 /// A server's error, under its name, in lines of this size.
-const ERROR_SIZE: f32 = 11.;
+const ERROR_SIZE: TextSize = TextSize::Xs;
 const ERROR_LINE_HEIGHT: f32 = 15.;
 const ERROR_LINES: usize = 3;
 
@@ -218,7 +218,7 @@ fn server_error(server: &Server) -> Option<&str> {
 fn error_lines(server: &Server, width: f32, cx: &App) -> usize {
     let Some(error) = server_error(server) else { return 0 };
     let font = crate::transcript::rows::font(theme::UI_FONT, FontWeight::NORMAL, false);
-    let mut wrapper = cx.text_system().line_wrapper(font, px(ERROR_SIZE));
+    let mut wrapper = cx.text_system().line_wrapper(font, ERROR_SIZE.into());
     let breaks = wrapper.wrap_line(&[LineFragment::text(error)], px(width), IndentAdjustment::NoIndent).count();
     (breaks + 1).min(ERROR_LINES)
 }
@@ -301,7 +301,7 @@ impl Sidebar {
                             .child(
                                 div()
                                     .min_w_0()
-                                    .text_size(px(11.))
+                                    .text_size(TextSize::Xs)
                                     .text_color(c.muted_stronger_foreground)
                                     .truncate()
                                     .child(notice.text.clone()),
@@ -358,7 +358,7 @@ impl Sidebar {
                     .child(
                         div()
                             .min_w_0()
-                            .text_size(px(12.))
+                            .text_size(TextSize::Xs)
                             .font_weight(FontWeight::MEDIUM)
                             .truncate()
                             .text_color(color)
@@ -366,7 +366,7 @@ impl Sidebar {
                     )
                     .child(
                         div()
-                            .text_size(px(11.))
+                            .text_size(TextSize::Xs)
                             .text_color(c.muted_strongest_foreground)
                             .font_features(tabular_numbers())
                             .child(count.to_string()),
@@ -549,7 +549,7 @@ impl Sidebar {
             .child(div().flex_1().min_w(px(4.)))
             .child(
                 div()
-                    .text_size(px(11.))
+                    .text_size(TextSize::Xs)
                     .text_color(c.muted_stronger_foreground)
                     .font_features(tabular_numbers())
                     .whitespace_nowrap()
@@ -593,7 +593,7 @@ impl Sidebar {
             .child(
                 div()
                     .min_w_0()
-                    .text_size(px(12.))
+                    .text_size(TextSize::Xs)
                     .font_weight(FontWeight::MEDIUM)
                     .truncate()
                     .child(server.name.clone()),
@@ -602,7 +602,7 @@ impl Sidebar {
             .child(
                 ServerUpdateStatus::new(&self.store, server).otherwise(
                     div()
-                        .text_size(px(11.))
+                        .text_size(TextSize::Xs)
                         .text_color(c.muted_stronger_foreground)
                         .font_features(tabular_numbers())
                         .whitespace_nowrap()
@@ -612,7 +612,7 @@ impl Sidebar {
         let error = server_error(server).map(|error| {
             div()
                 .pl(px(IconSize::Md.side() + 7.))
-                .text_size(px(ERROR_SIZE))
+                .text_size(ERROR_SIZE)
                 .line_height(px(ERROR_LINE_HEIGHT))
                 .text_color(c.muted_stronger_foreground)
                 .line_clamp(ERROR_LINES)

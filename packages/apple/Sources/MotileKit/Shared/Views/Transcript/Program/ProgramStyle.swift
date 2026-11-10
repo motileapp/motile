@@ -26,28 +26,27 @@ enum ProgramStyle {
         let lineHeight: CGFloat
     }
 
-    static func look(_ style: UiTextStyle, narrow: Bool) -> Look {
+    static func look(_ style: UiTextStyle) -> Look {
         switch style {
         case .body: Look(font: Theme.proseFont, lineHeight: Theme.proseLineHeight)
         case .bodyCard: Look(font: Theme.proseFont, lineHeight: scaled(22))
-        case .large: Look(font: .ui(16), lineHeight: scaled(26))
-        case .small: Look(font: .ui(13), lineHeight: scaled(20))
+        case .large: Look(font: .ui(.lg), lineHeight: scaled(26))
+        case .small: Look(font: .ui(.sm), lineHeight: scaled(20))
         case .caption: Look(font: Theme.smallFont, lineHeight: scaled(18))
-        case .label: Look(font: .ui(13, weight: .medium), lineHeight: scaled(18))
-        case .titleSm: Look(font: .uiDigits(14, weight: .semibold), lineHeight: scaled(20))
-        case .titleMd: Look(font: .uiDigits(15, weight: .semibold), lineHeight: scaled(22))
-        case .titleLg, .word: Look(font: .uiDigits(17, weight: .semibold), lineHeight: scaled(24))
-        case .titleXl: Look(font: .uiDigits(20, weight: .semibold), lineHeight: scaled(26))
-        case .title2xl: Look(font: .uiDigits(narrow ? 24 : 26, weight: .semibold), lineHeight: scaled(narrow ? 28 : 30))
-        case .title3xl: Look(font: .uiDigits(narrow ? 28 : 32, weight: .semibold), lineHeight: scaled(narrow ? 32 : 36))
-        case .cardTitle: Look(font: .uiDigits(14, weight: .medium), lineHeight: scaled(20))
-        case .cardSubtitle: Look(font: .ui(13), lineHeight: scaled(18))
-        case .cardHeading: Look(font: .uiDigits(16, weight: .semibold), lineHeight: scaled(22))
-        case .readout: Look(font: .uiDigits(12, weight: .medium), lineHeight: scaled(18))
-        case .tick: Look(font: .uiDigits(11), lineHeight: scaled(14))
-        case .timer: Look(font: .uiDigits(28, weight: .semibold), lineHeight: scaled(32))
+        case .label: Look(font: .ui(.sm, weight: .medium), lineHeight: scaled(18))
+        case .titleSm: Look(font: .uiDigits(Theme.headingSize(4), weight: .semibold), lineHeight: scaled(20))
+        case .titleMd: Look(font: .uiDigits(Theme.headingSize(3), weight: .semibold), lineHeight: scaled(22))
+        case .titleLg, .word: Look(font: .uiDigits(Theme.headingSize(2), weight: .semibold), lineHeight: scaled(24))
+        case .titleXl: Look(font: .uiDigits(Theme.headingSize(1), weight: .semibold), lineHeight: scaled(26))
+        case .title2xl, .title3xl: Look(font: .uiDigits(.xxl, weight: .semibold), lineHeight: scaled(32))
+        case .cardTitle: Look(font: .uiDigits(.md, weight: .medium), lineHeight: scaled(20))
+        case .cardSubtitle: Look(font: .ui(.sm), lineHeight: scaled(18))
+        case .cardHeading: Look(font: .uiDigits(.lg, weight: .semibold), lineHeight: scaled(22))
+        case .readout: Look(font: .uiDigits(.xs, weight: .medium), lineHeight: scaled(18))
+        case .tick: Look(font: .uiDigits(.xs), lineHeight: scaled(16))
+        case .timer: Look(font: .uiDigits(.xxl, weight: .semibold), lineHeight: scaled(32))
         case .code: Look(font: Theme.codeFont, lineHeight: Theme.codeLineHeight)
-        case .wordBack: Look(font: .ui(14, weight: .medium), lineHeight: Theme.proseLineHeight)
+        case .wordBack: Look(font: .ui(.md, weight: .medium), lineHeight: Theme.proseLineHeight)
         }
     }
 

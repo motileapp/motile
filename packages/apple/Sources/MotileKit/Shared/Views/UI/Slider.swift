@@ -119,13 +119,13 @@ struct Slider: View {
         HStack(alignment: .firstTextBaseline, spacing: SliderTrack.headGap) {
             if let label {
                 Text(label)
-                    .lines(scaled(20), font: .ui(13))
+                    .lines(scaled(20), font: .ui(.sm))
                     .foregroundStyle(Color.themeForeground)
             }
             Spacer(minLength: 0)
             if let readout {
                 Text(readout)
-                    .lines(scaled(18), font: .uiDigits(12, weight: .medium))
+                    .lines(scaled(18), font: .uiDigits(.xs, weight: .medium))
                     .lineLimit(1)
                     .foregroundStyle(Color.themeForeground)
                     .fixedSize()
@@ -187,7 +187,7 @@ struct Slider: View {
             let fraction = SliderTrack.fraction(marks[index].value, in: range)
             let (x, anchor) = SliderTrack.place(fraction, first: index == 0, last: index == marks.count - 1, width: proxy.size.width)
             Text(marks[index].title)
-                .lines(scaled(14), font: .uiDigits(11))
+                .lines(scaled(16), font: .uiDigits(.xs))
                 .lineLimit(1)
                 .foregroundStyle(Color.themeMutedForeground)
                 .fixedSize()

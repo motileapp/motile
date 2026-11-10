@@ -37,6 +37,7 @@ import app.motile.platform.Platform
 import app.motile.platform.Symbol
 import app.motile.theme.IconSize
 import app.motile.theme.Radius
+import app.motile.theme.TextSize
 import app.motile.theme.Theme
 import kotlin.concurrent.thread
 
@@ -114,6 +115,6 @@ private fun DropCover() {
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Icon(Symbol.Paperclip, IconSize.Display)
-        Text("Drop files here", size = 17f, weight = FontWeight.SemiBold)
+        Text("Drop files here", size = TextSize.Xl, weight = FontWeight.SemiBold)
     }
 }

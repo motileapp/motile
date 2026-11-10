@@ -24,7 +24,7 @@ use crate::sidebar::{AppUpdateRow, ServerUpdateStatus};
 use crate::store::integrations::Integration;
 use crate::store::settings::{PULL_DEFAULT_BRANCH_CAPTION, SettingsSection};
 use crate::store::{PanelPage, Store};
-use crate::theme::{self, Appearance, ControlSize, IconSize, Layer, Radius, Surface, colors};
+use crate::theme::{self, Appearance, ControlSize, IconSize, Layer, Radius, Surface, TextSize, colors};
 use crate::ui::menu::Menu;
 use crate::ui::modal::{Answer, Confirmation, confirmation, modal, present_sheet, presented};
 use crate::ui::motion::{SPRING, Tween, spring};
@@ -571,11 +571,11 @@ impl SettingsPage {
             .gap(px(8.))
             .text_color(c.foreground)
             .child(icons::symbol("server", IconSize::Md))
-            .child(div().text_size(px(13.)).font_weight(FontWeight::MEDIUM).child(server.name.clone()))
+            .child(div().text_size(TextSize::Sm).font_weight(FontWeight::MEDIUM).child(server.name.clone()))
             .into_any_element();
-        let reason = unavailable
-            .clone()
-            .map(|reason| div().text_size(px(12.)).text_color(c.muted_foreground).child(reason).into_any_element());
+        let reason = unavailable.clone().map(|reason| {
+            div().text_size(TextSize::Xs).text_color(c.muted_foreground).child(reason).into_any_element()
+        });
         let mut rows = vec![row(vec![name], reason.into_iter().collect()).into_any_element()];
         if unavailable.is_some() {
             return rows;
@@ -1051,7 +1051,7 @@ fn state_label(server: &Server) -> String {
 /// The line under a server that says whether it has every thread of the others. Always one line,
 /// so the rows around it never move.
 fn sync_line(sync: &SyncView, cx: &App) -> AnyElement {
-    const SIZE: f32 = 11.5;
+    const SIZE: TextSize = TextSize::Xs;
     let symbol_size = IconSize::text(SIZE);
     let c = colors(cx);
     let symbol = match sync.state {
@@ -1066,7 +1066,7 @@ fn sync_line(sync: &SyncView, cx: &App) -> AnyElement {
         .flex()
         .items_center()
         .gap(px(5.))
-        .text_size(px(SIZE))
+        .text_size(SIZE)
         .text_color(c.muted_foreground)
         .child(div().flex_shrink_0().flex().child(symbol))
         .child(div().min_w_0().whitespace_nowrap().overflow_hidden().text_ellipsis().child(models::sync_line(sync)));
@@ -1210,11 +1210,11 @@ impl Render for SetupSheet {
             .text_color(c.foreground)
             .child(
                 div()
-                    .text_size(px(15.))
+                    .text_size(TextSize::Lg)
                     .font_weight(FontWeight::SEMIBOLD)
                     .child(format!("Worktree Setup for {}", self.project.name)),
             )
-            .child(div().text_size(px(10.)).text_color(c.muted_foreground).child(
+            .child(div().text_size(TextSize::Xxs).text_color(c.muted_foreground).child(
                 "A shell script that runs in each new worktree before the agent starts there, to install what the work needs. $MOTILE_PROJECT is the project's folder, as in: cp \"$MOTILE_PROJECT/.env\" . && pnpm install",
             ))
             .child(TextArea::new(&self.script).monospaced(true))

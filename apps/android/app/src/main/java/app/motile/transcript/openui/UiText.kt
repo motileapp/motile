@@ -56,6 +56,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
+import app.motile.theme.TextSize
 import kotlin.math.roundToInt
 import app.motile.core.UiItemMarker
 import app.motile.core.UiKind
@@ -218,14 +219,12 @@ private class InlineMeasure(val inlines: List<UiNode>, val measured: (List<Inlin
 
 @Composable
 fun UiTitle(node: UiNode, kind: UiKind.Title) {
-    val narrow = LocalUiNarrow.current
-    UiRichText(kind.text, UiStyle.text(kind.style, narrow), kind.color.color(), Modifier.uiNode(node).semantics { heading() })
+    UiRichText(kind.text, UiStyle.text(kind.style), kind.color.color(), Modifier.uiNode(node).semantics { heading() })
 }
 
 @Composable
 fun UiTextView(node: UiNode, kind: UiKind.Text) {
-    val narrow = LocalUiNarrow.current
-    val base = UiStyle.text(kind.style, narrow)
+    val base = UiStyle.text(kind.style)
     var style = base.copy(
         fontWeight = if (kind.weight == app.motile.core.UiWeight.Regular) base.fontWeight else UiStyle.weight(kind.weight),
         fontStyle = if (kind.italic) FontStyle.Italic else null,
@@ -237,12 +236,12 @@ fun UiTextView(node: UiNode, kind: UiKind.Text) {
 
 @Composable
 fun UiCaption(node: UiNode, kind: UiKind.Caption) {
-    UiRichText(kind.text, UiStyle.text(kind.style, LocalUiNarrow.current), kind.color.color(), Modifier.uiNode(node))
+    UiRichText(kind.text, UiStyle.text(kind.style), kind.color.color(), Modifier.uiNode(node))
 }
 
 @Composable
 fun UiLabel(node: UiNode, kind: UiKind.Label) {
-    Text(kind.text, Modifier.uiNode(node), style = UiStyle.text(UiTextStyle.Label, false), color = kind.color.color(), align = LocalUiTextAlign.current)
+    Text(kind.text, Modifier.uiNode(node), style = UiStyle.text(UiTextStyle.Label), color = kind.color.color(), align = LocalUiTextAlign.current)
 }
 
 /** Motile's chip, in the badge's tone. */
@@ -256,7 +255,7 @@ fun UiBadge(node: UiNode, kind: UiKind.Badge) {
 @Composable
 fun UiLink(node: UiNode, kind: UiKind.Link) {
     val palette = LocalPalette.current
-    val style = UiStyle.text(UiTextStyle.Body, false)
+    val style = UiStyle.text(UiTextStyle.Body)
     val url = kind.url
     if (url == null) {
         Text(kind.text, Modifier.uiNode(node), style = style, color = palette.foreground)
@@ -280,8 +279,8 @@ fun UiQuote(node: UiNode, kind: UiKind.Quote) {
             drawRect(palette.border, Offset(1.dp.toPx(), 0f), Size(2.dp.toPx(), size.height))
         }.padding(start = 14.dp),
     ) {
-        UiRichText(kind.text, UiStyle.text(UiTextStyle.Body, false), palette.mutedForeground)
-        kind.cite?.let { UiRichText(it, UiStyle.text(UiTextStyle.Small, false), palette.mutedStrongerForeground, Modifier.padding(top = 4.dp)) }
+        UiRichText(kind.text, UiStyle.text(UiTextStyle.Body), palette.mutedForeground)
+        kind.cite?.let { UiRichText(it, UiStyle.text(UiTextStyle.Small), palette.mutedStrongerForeground, Modifier.padding(top = 4.dp)) }
     }
 }
 
@@ -336,9 +335,9 @@ private fun UiListItem(node: UiNode, item: UiKind.ListItem, list: UiKind.List, l
     val palette = LocalPalette.current
     val surface = LocalSurface.current
     val narrow = LocalUiNarrow.current
-    val style = UiStyle.text(item.style, narrow).let { if (item.medium) it.copy(fontWeight = FontWeight.Medium) else it }
+    val style = UiStyle.text(item.style).let { if (item.medium) it.copy(fontWeight = FontWeight.Medium) else it }
     val density = LocalDensity.current
-    val textSize = UiStyle.size(item.style, narrow) * Platform.scale
+    val textSize = UiStyle.size(item.style) * Platform.scale
     val firstLine = with(density) { style.lineHeight.toDp() }
     val marker = item.marker
     val wide = list.wide || marker is UiItemMarker.Label
@@ -386,16 +385,16 @@ private fun UiListItem(node: UiNode, item: UiKind.ListItem, list: UiKind.List, l
                         Modifier.size(24.dp).background(palette.foreground, CircleShape),
                         contentAlignment = Alignment.Center,
                     ) {
-                        Text("${marker.number}", style = Theme.uiDigits(13f).lined(18f), color = surface.color(palette), maxLines = 1)
+                        Text("${marker.number}", style = Theme.uiDigits(TextSize.Sm).lined(18f), color = surface.color(palette), maxLines = 1)
                     }
                     is UiItemMarker.Chip -> Box(
                         Modifier.height(20.dp).widthIn(min = 20.dp).background(palette.foreground, CircleShape).padding(horizontal = 5.dp),
                         contentAlignment = Alignment.Center,
                     ) {
-                        Text(marker.text, style = Theme.uiDigits(12f, FontWeight.Medium), color = surface.color(palette), maxLines = 1)
+                        Text(marker.text, style = Theme.uiDigits(TextSize.Xs, FontWeight.Medium), color = surface.color(palette), maxLines = 1)
                     }
                     is UiItemMarker.Label -> Text(
-                        marker.text, Modifier.align(Alignment.CenterStart), style = Theme.uiDigits(13f),
+                        marker.text, Modifier.align(Alignment.CenterStart), style = Theme.uiDigits(TextSize.Sm),
                         color = palette.mutedForeground, maxLines = 1, overflow = TextOverflow.Visible,
                     )
                     UiItemMarker.Blank -> Unit
@@ -411,7 +410,7 @@ private fun UiListItem(node: UiNode, item: UiKind.ListItem, list: UiKind.List, l
         Column(Modifier.padding(start = inset.dp)) {
             UiRichText(item.title, style, palette.foreground)
             item.description?.let {
-                UiRichText(it, UiStyle.text(UiTextStyle.Small, narrow), palette.mutedForeground, Modifier.padding(top = 2.dp))
+                UiRichText(it, UiStyle.text(UiTextStyle.Small), palette.mutedForeground, Modifier.padding(top = 2.dp))
             }
             if (item.children.isNotEmpty()) {
                 Column(Modifier.padding(top = 8.dp)) { for (child in item.children) UiNodeView(child) }

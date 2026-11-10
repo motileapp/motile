@@ -14,7 +14,7 @@ struct WaitingStrip: View {
 
     var body: some View {
         content
-            .font(.ui(size: 12.5))
+            .font(.ui(.xs))
             .frame(maxWidth: .infinity, alignment: .leading)
             .modifier(ComposerStrip(edge: .top, height: nil))
     }
@@ -70,11 +70,11 @@ struct WaitingTitle: View {
         HStack(spacing: 6) {
             Image(symbol, size: .sm)
             Text(title)
-                .font(.ui(size: 12, weight: .semibold))
+                .font(.ui(.xs, weight: .semibold))
                 .lineLimit(1)
             if let place {
                 Text(place)
-                    .font(.ui(size: 12))
+                    .font(.ui(.xs))
                     .monospacedDigit()
                     .foregroundStyle(Color.themeMutedForeground)
                     .fixedSize()

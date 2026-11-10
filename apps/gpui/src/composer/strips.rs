@@ -19,7 +19,7 @@ use crate::models::{
 };
 use crate::panel::state::PanelTab;
 use crate::store::Store;
-use crate::theme::{self, ControlSize, IconSize, Radius, Surface, colors};
+use crate::theme::{self, ControlSize, IconSize, Radius, Surface, TextSize, colors};
 use crate::ui::control::{ControlIcon, ControlLabel};
 use crate::ui::dropdown::{backdrop, drop_from, light, over_content};
 use crate::ui::dropdown_list as list;
@@ -92,7 +92,7 @@ pub fn monitoring_strip(store: &Entity<Store>, thread: &ThreadInfo, width: f32, 
             div()
                 .flex_shrink_0()
                 .whitespace_nowrap()
-                .text_size(px(size.text_size()))
+                .text_size(size.text_size())
                 .font_weight(FontWeight::MEDIUM)
                 .font_features(tabular_numbers())
                 .text_color(c.foreground)
@@ -243,7 +243,7 @@ pub fn interruption_strip(store: &Entity<Store>, interruption: Interruption, cx:
             div()
                 .id("interruption")
                 .min_w_0()
-                .text_size(px(12.5))
+                .text_size(TextSize::Xs)
                 .tooltip(crate::ui::tooltip(help))
                 .child(NarrowFallback::new(title, detail)),
         )
@@ -270,7 +270,8 @@ impl RenderOnce for NarrowFallback {
         let c = colors(cx);
         let width = window.use_state(cx, |_, _| std::rc::Rc::new(std::cell::Cell::new(f32::MAX)));
         let room = width.read(cx).clone();
-        let measure = |text: &str, weight: FontWeight, window: &mut Window| text_width(text, 12.5, weight, window);
+        let measure =
+            |text: &str, weight: FontWeight, window: &mut Window| text_width(text, TextSize::Xs, weight, window);
         let full =
             measure(&self.title, FontWeight::MEDIUM, window) + 8. + measure(&self.detail, FontWeight::NORMAL, window);
         let fits = full <= room.get();
@@ -319,12 +320,12 @@ pub fn waiting_title(title: String, symbol: &'static str, place: Option<String>,
         .items_center()
         .gap(px(6.))
         .child(icons::symbol(symbol, IconSize::Sm))
-        .child(div().min_w_0().text_size(px(12.)).font_weight(FontWeight::SEMIBOLD).truncate().child(title))
+        .child(div().min_w_0().text_size(TextSize::Xs).font_weight(FontWeight::SEMIBOLD).truncate().child(title))
         .when_some(place, |title, place| {
             title.child(
                 div()
                     .flex_shrink_0()
-                    .text_size(px(12.))
+                    .text_size(TextSize::Xs)
                     .text_color(c.muted_foreground)
                     .font_features(crate::ui::tabular_numbers())
                     .child(place),
@@ -350,7 +351,7 @@ pub fn waiting_strip(
         Some(questions) => div().p(px(PADDING)).child(questions).into_any_element(),
         None => waiting_call(store, approval, count, cx).into_any_element(),
     };
-    strip(true, None, cx).child(div().w_full().min_w_0().text_size(px(12.5)).child(content))
+    strip(true, None, cx).child(div().w_full().min_w_0().text_size(TextSize::Xs).child(content))
 }
 
 fn waiting_call(store: &Entity<Store>, approval: &Waiting, count: usize, cx: &App) -> Div {
@@ -416,7 +417,7 @@ fn waiting_call(store: &Entity<Store>, approval: &Waiting, count: usize, cx: &Ap
                             .child(
                                 div()
                                     .font_family(theme::MONO_FONT)
-                                    .text_size(px(theme::CODE_SIZE))
+                                    .text_size(theme::CODE_SIZE)
                                     .line_height(px(theme::CODE_LINE_HEIGHT))
                                     .child(command(&approval.id, &approval.target, &approval.spans, cx)),
                             ),
@@ -473,7 +474,7 @@ fn part(title: String, icon: AnyElement, cx: &App) -> Div {
         .text_color(colors(cx).muted_foreground)
         .child(div().flex_shrink_0().child(icon))
         .when(!title.is_empty(), |part| {
-            let words = div().whitespace_nowrap().text_size(px(ControlSize::Regular.text_size()));
+            let words = div().whitespace_nowrap().text_size(ControlSize::Regular.text_size());
             part.child(words.font_weight(FontWeight::MEDIUM).child(title))
         })
 }
@@ -577,7 +578,7 @@ impl Words {
     }
 
     fn room(&self, window: &mut Window) -> Room {
-        let ideal = self.around + text_width(&self.title, 12., self.weight, window);
+        let ideal = self.around + text_width(&self.title, TextSize::Xs, self.weight, window);
         Room { least: if self.fixed { ideal } else { self.around }, ideal }
     }
 
@@ -589,7 +590,7 @@ impl Words {
         }
         let room = (width - self.around).max(0.);
         let font = crate::transcript::rows::font(theme::UI_FONT, self.weight, false);
-        crate::ui::elide_middle(&self.title.clone().into(), &font, px(12.), px(room), cx).to_string()
+        crate::ui::elide_middle(&self.title.clone().into(), &font, TextSize::Xs.into(), px(room), cx).to_string()
     }
 }
 
@@ -1139,7 +1140,7 @@ impl BranchPicker {
                     .child(div().flex_1().min_w(px(8.)))
                     .when_some(tag, |row, tag| {
                         row.child(
-                            div().relative().text_size(px(11.)).text_color(c.muted_stronger_foreground).child(tag),
+                            div().relative().text_size(TextSize::Xs).text_color(c.muted_stronger_foreground).child(tag),
                         )
                     })
                     .child(list::check(chosen))
@@ -1194,12 +1195,15 @@ impl Render for BranchPicker {
                 .p(px(list::PADDING))
                 .children((0..PLACEHOLDERS).map(|index| placeholder(index, cx)))
                 .into_any_element(),
-            Some(Err(error)) => {
-                div().p(px(16.)).text_size(px(12.5)).text_color(c.destructive).child(error.clone()).into_any_element()
-            }
+            Some(Err(error)) => div()
+                .p(px(16.))
+                .text_size(TextSize::Xs)
+                .text_color(c.destructive)
+                .child(error.clone())
+                .into_any_element(),
             Some(Ok(_)) if choices.is_empty() => div()
                 .p(px(16.))
-                .text_size(px(12.5))
+                .text_size(TextSize::Xs)
                 .text_color(c.muted_foreground)
                 .child("No branch matches.")
                 .into_any_element(),
@@ -1249,7 +1253,7 @@ impl Render for BranchPicker {
                     div()
                         .px(px(16.))
                         .py(px(8.))
-                        .text_size(px(11.5))
+                        .text_size(TextSize::Xs)
                         .line_height(px(16.))
                         .text_color(if working { c.muted_foreground } else { c.destructive })
                         .child(note),

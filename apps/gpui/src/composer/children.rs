@@ -10,10 +10,10 @@ use super::strips::{HEIGHT, margin, strip};
 use crate::models::{ask_label, ask_phrase};
 use crate::panel::view::agent_time;
 use crate::store::Store;
-use crate::theme::{self, ControlSize, IconSize, Surface, colors};
+use crate::theme::{self, ControlSize, IconSize, Surface, TextSize, colors};
 use crate::ui::{ActionButton, AgentAvatar, icons, text_width};
 
-const TEXT_SIZE: f32 = 12.5;
+const TEXT_SIZE: TextSize = TextSize::Xs;
 
 /// Above the composer of a thread whose agent started agents that wait for the user: which, and
 /// the way to the first of them, where it is answered.
@@ -35,7 +35,7 @@ pub fn children_strip(store: &Entity<Store>, text: String, first: &WaitingChild,
             div()
                 .id("children-waiting")
                 .min_w_0()
-                .text_size(px(TEXT_SIZE))
+                .text_size(TEXT_SIZE)
                 .font_weight(FontWeight::MEDIUM)
                 .text_color(c.warning)
                 .tooltip(crate::ui::tooltip(text.clone()))
@@ -126,7 +126,7 @@ pub fn agent_bar(store: &Entity<Store>, agent: &AgentView, cx: &App) -> impl Int
         .child(
             div()
                 .min_w_0()
-                .text_size(px(13.))
+                .text_size(TextSize::Sm)
                 .font_weight(FontWeight::MEDIUM)
                 .text_color(c.foreground)
                 .truncate()
@@ -138,7 +138,7 @@ pub fn agent_bar(store: &Entity<Store>, agent: &AgentView, cx: &App) -> impl Int
             div()
                 .min_w_0()
                 .mr(px(BACK_APART))
-                .text_size(px(TEXT_SIZE))
+                .text_size(TEXT_SIZE)
                 .text_color(c.muted_foreground)
                 .truncate()
                 .child("Runs on its own"),

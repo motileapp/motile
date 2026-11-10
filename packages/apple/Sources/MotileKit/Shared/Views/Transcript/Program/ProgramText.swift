@@ -38,7 +38,7 @@ enum ProgramText {
             guard range.location >= 0, range.length > 0, NSMaxRange(range) <= length else { continue }
             let style = run[2]
             if style & code != 0 {
-                let mono = PlatformFont.uiMono(12.5, weight: style & bold != 0 ? .semibold : .regular)
+                let mono = PlatformFont.uiMono(.xs, weight: style & bold != 0 ? .semibold : .regular)
                 result.addAttributes([.font: mono, .foregroundColor: Theme.foreground, .backgroundColor: Typesetter.inlineCodeBackground], range: range)
             } else if style & (bold | italicBit) != 0 {
                 var font = style & bold != 0 ? PlatformFont.systemFont(ofSize: base.pointSize, weight: .semibold) : base

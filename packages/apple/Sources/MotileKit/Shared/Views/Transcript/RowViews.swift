@@ -726,14 +726,14 @@ final class ToolRowView: RowView {
     private static let chevronSide = PlatformImage.symbolSide(.xs)
     private let header = FlippedView()
     private let highlight = SurfaceView()
-    private static let titleFont = PlatformFont.ui(13)
+    private static let titleFont = PlatformFont.ui(.sm)
 
     private let icon = SymbolView(tint: Theme.mutedStrongerForeground)
     private let title = TextLabel(font: ToolRowView.titleFont, color: Theme.mutedStrongerForeground)
     private let shine = ShimmerLabel.make(ToolRowView.titleFont)
     private let chevron = SymbolView(tint: Theme.mutedStrongerForeground)
     /// How long a call that still runs has been running.
-    private let elapsed = TextLabel(font: .uiDigits(12), color: Theme.mutedStrongerForeground)
+    private let elapsed = TextLabel(font: .uiDigits(.xs), color: Theme.mutedStrongerForeground)
     private var startedAt: Double?
     private var timer: Timer?
     private let detailSurface = SurfaceView()
@@ -947,7 +947,7 @@ final class ErrorBox {
     }
 
     static func message(_ text: String) -> NSAttributedString {
-        Typesetter.plain(text, color: Theme.destructive, size: 13 * Platform.scale)
+        Typesetter.plain(text, color: Theme.destructive, size: .sm)
     }
 
     static func height(_ message: NSAttributedString, width: CGFloat) -> CGFloat {
@@ -1219,11 +1219,11 @@ final class AgentRowView: RowView {
     private let card = SurfaceView()
     private let highlight = SurfaceView()
     private let avatar = AgentAvatarView()
-    private let title = TextLabel(font: .ui(13, weight: .medium), color: Theme.foreground)
-    private let role = TextLabel(font: .ui(11), color: Theme.mutedStrongerForeground)
-    private let label = TextLabel(font: .ui(11, weight: .medium), color: Theme.mutedForeground)
-    private let line = TextLabel(font: .ui(12), color: Theme.mutedForeground)
-    private let time = TextLabel(font: .uiDigits(12), color: Theme.mutedStrongerForeground)
+    private let title = TextLabel(font: .ui(.sm, weight: .medium), color: Theme.foreground)
+    private let role = TextLabel(font: .ui(.xs), color: Theme.mutedStrongerForeground)
+    private let label = TextLabel(font: .ui(.xs, weight: .medium), color: Theme.mutedForeground)
+    private let line = TextLabel(font: .ui(.xs), color: Theme.mutedForeground)
+    private let time = TextLabel(font: .uiDigits(.xs), color: Theme.mutedStrongerForeground)
     private let chevron = SymbolView(tint: Theme.mutedStrongerForeground)
     private var content: AgentContent?
     private var timer: Timer?
@@ -1273,7 +1273,7 @@ final class AgentRowView: RowView {
         label.string = content.label
         label.color = content.state.flagged ? content.state.platformColor : Theme.mutedForeground
         label.isHidden = !content.flagged
-        line.attributed = content.line(font: .ui(12), color: content.state == .failed ? Theme.destructive : Theme.mutedForeground)
+        line.attributed = content.line(font: .ui(.xs), color: content.state == .failed ? Theme.destructive : Theme.mutedForeground)
         chevron.show(.chevronRight, size: .xs)
         keepTime()
     }
@@ -1352,9 +1352,9 @@ final class AgentsRowView: RowView {
 
     private let highlight = SurfaceView()
     private var avatars: [AgentAvatarView] = []
-    private let title = TextLabel(font: .ui(13, weight: .semibold), color: Theme.foreground)
-    private let summary = TextLabel(font: .ui(12), color: Theme.mutedForeground)
-    private let time = TextLabel(font: .uiDigits(12), color: Theme.mutedStrongerForeground)
+    private let title = TextLabel(font: .ui(.sm, weight: .semibold), color: Theme.foreground)
+    private let summary = TextLabel(font: .ui(.xs), color: Theme.mutedForeground)
+    private let time = TextLabel(font: .uiDigits(.xs), color: Theme.mutedStrongerForeground)
     private let chevron = SymbolView(tint: Theme.mutedStrongerForeground)
     private var content: AgentsContent?
     private var timer: Timer?
@@ -1410,9 +1410,9 @@ final class AgentsRowView: RowView {
         let text = NSMutableAttributedString()
         for (index, count) in counts.enumerated() {
             if index > 0 {
-                text.append(NSAttributedString(string: " · ", attributes: [.font: PlatformFont.ui(12), .foregroundColor: Theme.mutedStrongerForeground]))
+                text.append(NSAttributedString(string: " · ", attributes: [.font: PlatformFont.ui(.xs), .foregroundColor: Theme.mutedStrongerForeground]))
             }
-            text.append(NSAttributedString(string: count.text, attributes: [.font: PlatformFont.ui(12), .foregroundColor: count.state.platformColor]))
+            text.append(NSAttributedString(string: count.text, attributes: [.font: PlatformFont.ui(.xs), .foregroundColor: count.state.platformColor]))
         }
         return text
     }
@@ -1703,7 +1703,7 @@ final class MessageMeta: FlippedView {
 /// Shown under the transcript while the agent is at work or waits for an approval.
 final class WorkingView: FlippedView {
     /// Digits of one width, so the line doesn't change size with every second.
-    private static let font = PlatformFont.uiDigits(13)
+    private static let font = PlatformFont.uiDigits(.sm)
 
     private let text = TextLabel(font: WorkingView.font, color: Theme.mutedStrongerForeground)
     private let shine = ShimmerLabel.make(WorkingView.font)

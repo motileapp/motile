@@ -9,7 +9,7 @@ use motile_protocol::wire::{Agent, AgentAccount, Variable};
 use super::page::SettingsPage;
 use crate::models::{AgentAccountExt, Server, agent_name};
 use crate::store::Store;
-use crate::theme::{ControlSize, colors};
+use crate::theme::{ControlSize, TextSize, colors};
 use crate::ui::modal::modal;
 use crate::ui::{ActionButton, CommandBox, InputField, Segmented, Switch, beside};
 
@@ -385,7 +385,7 @@ impl AccountSheet {
                 div()
                     .min_w_0()
                     .px(px(4.))
-                    .text_size(px(13.))
+                    .text_size(TextSize::Sm)
                     .font_weight(FontWeight::MEDIUM)
                     .text_color(if who.is_none() { c.muted_foreground } else { c.foreground })
                     .whitespace_nowrap()
@@ -492,10 +492,10 @@ fn failing_field(
         .flex()
         .flex_col()
         .gap(px(6.))
-        .child(div().px(px(4.)).text_size(px(12.)).font_weight(FontWeight::MEDIUM).child(title.to_string()))
+        .child(div().px(px(4.)).text_size(TextSize::Xs).font_weight(FontWeight::MEDIUM).child(title.to_string()))
         .child(content)
         .when_some(failure.or(caption), |field, caption| {
-            field.child(div().px(px(4.)).text_size(px(11.5)).text_color(tint).child(caption))
+            field.child(div().px(px(4.)).text_size(TextSize::Xs).text_color(tint).child(caption))
         })
 }
 
@@ -549,11 +549,11 @@ impl Render for AccountSheet {
                         .gap(px(2.))
                         .child(
                             div()
-                                .text_size(px(13.))
+                                .text_size(TextSize::Sm)
                                 .font_weight(FontWeight::MEDIUM)
                                 .child(format!("Share sessions with {}", account.usual_folder())),
                         )
-                        .child(div().text_size(px(11.5)).text_color(c.muted_foreground).child(
+                        .child(div().text_size(TextSize::Xs).text_color(c.muted_foreground).child(
                             "The folder keeps only the sign-in. Threads move between the two and go on where they were.",
                         )),
                 )
@@ -612,7 +612,7 @@ impl Render for AccountSheet {
             .flex_col()
             .gap(px(14.))
             .text_color(c.foreground)
-            .child(div().text_size(px(15.)).font_weight(FontWeight::SEMIBOLD).child(title))
+            .child(div().text_size(TextSize::Lg).font_weight(FontWeight::SEMIBOLD).child(title))
             .children(picker.map(|picker| div().flex().child(picker)))
             .child(field("Name", None, InputField::new(&self.name), cx))
             .child(folder)

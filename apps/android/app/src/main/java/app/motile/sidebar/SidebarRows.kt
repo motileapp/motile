@@ -2,6 +2,7 @@ package app.motile.sidebar
 
 import androidx.compose.foundation.border
 import app.motile.theme.Opacity
+import app.motile.theme.TextSize
 import app.motile.theme.symbolSide
 import app.motile.core.ThreadSection
 import app.motile.theme.at
@@ -251,10 +252,10 @@ fun ThreadRow(
                 .padding(start = ThreadRow.sidePadding, end = ThreadRow.sidePadding, top = ThreadRow.topPadding, bottom = ThreadRow.bottomPadding),
         ) {
             Row(Modifier.height(scaled(22f).dp), verticalAlignment = Alignment.CenterVertically) {
-                ProjectIcon(project, size = iconSize(text = 11f))
+                ProjectIcon(project, size = iconSize(text = TextSize.Xs))
                 Text(
                     project?.name ?: lastComponent(thread.cwd), Modifier.weight(1f).padding(start = 6.dp, end = 6.dp),
-                    size = 11f, weight = FontWeight.Medium, color = palette.mutedForeground, maxLines = 1,
+                    size = TextSize.Xs, weight = FontWeight.Medium, color = palette.mutedForeground, maxLines = 1,
                 )
                 CompositionLocalProvider(LocalForeground provides palette.mutedForeground) {
                     if (jump != null) KeyCaps(listOf(jump)) else ThreadStatus(thread, readOnly)
@@ -263,7 +264,7 @@ fun ThreadRow(
             Text(
                 thread.title,
                 Modifier.height(ThreadRow.titleHeight).padding(top = 1.dp),
-                size = 13f, weight = FontWeight.Medium, maxLines = 1,
+                size = TextSize.Sm, weight = FontWeight.Medium, maxLines = 1,
                 color = rowText(),
             )
             Spacer(Modifier.height(5.dp))
@@ -280,7 +281,7 @@ fun ThreadRow(
                     Row(Modifier.padding(start = 6.dp), horizontalArrangement = Arrangement.spacedBy(statusGap), verticalAlignment = Alignment.CenterVertically) {
                         if (!readOnly) project?.pullRequest(thread)?.let { ThreadPullRequestLabel(thread, it, open = open) }
                         ThreadServerLabel(thread.serverID)
-                        AgentIcon(thread.agent, size = iconSize(text = 11f))
+                        AgentIcon(thread.agent, size = iconSize(text = TextSize.Xs))
                     }
                 }
             }
@@ -309,8 +310,8 @@ fun ThreadFolderLabel(serverID: String, folder: String) {
 @Composable
 private fun CheckoutLabel(symbol: Symbol, text: String) {
     Row(horizontalArrangement = Arrangement.spacedBy(3.dp), verticalAlignment = Alignment.CenterVertically) {
-        Icon(symbol, iconSize(text = 11f))
-        Text(text, size = 11f, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
+        Icon(symbol, iconSize(text = TextSize.Xs))
+        Text(text, size = TextSize.Xs, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
     }
 }
 
@@ -392,17 +393,17 @@ private fun DraftRow(listed: ListedDraft, modifier: Modifier = Modifier, onLongC
         ) {
             CompositionLocalProvider(LocalForeground provides palette.mutedForeground) {
                 Row(Modifier.height(scaled(22f).dp), verticalAlignment = Alignment.CenterVertically) {
-                    ProjectIcon(project, size = iconSize(text = 11f))
-                    Text(project?.name ?: "No project", Modifier.weight(1f).padding(horizontal = 6.dp), size = 11f, weight = FontWeight.Medium, maxLines = 1)
+                    ProjectIcon(project, size = iconSize(text = TextSize.Xs))
+                    Text(project?.name ?: "No project", Modifier.weight(1f).padding(horizontal = 6.dp), size = TextSize.Xs, weight = FontWeight.Medium, maxLines = 1)
                     when {
                         listed.sending -> Row(horizontalArrangement = Arrangement.spacedBy(3.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Spinner(iconSize(text = 11f))
-                            Text("Sending", size = 11f, weight = FontWeight.Medium)
+                            Spinner(iconSize(text = TextSize.Xs))
+                            Text("Sending", size = TextSize.Xs, weight = FontWeight.Medium)
                         }
                         hovering -> ActionButton(icon = Symbol.X, help = "Discard draft", size = ControlSize.Small) { store.discard(listed.draft) }
                         else -> Row(horizontalArrangement = Arrangement.spacedBy(3.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Symbol.File, iconSize(text = 11f))
-                            Text("Draft", size = 11f, weight = FontWeight.Medium)
+                            Icon(Symbol.File, iconSize(text = TextSize.Xs))
+                            Text("Draft", size = TextSize.Xs, weight = FontWeight.Medium)
                         }
                     }
                 }
@@ -410,7 +411,7 @@ private fun DraftRow(listed: ListedDraft, modifier: Modifier = Modifier, onLongC
             Text(
                 listed.preview,
                 Modifier.height(ThreadRow.titleHeight).padding(top = 1.dp),
-                size = 13f, weight = FontWeight.Medium, maxLines = 1,
+                size = TextSize.Sm, weight = FontWeight.Medium, maxLines = 1,
                 color = rowText(),
             )
             Spacer(Modifier.height(5.dp))
@@ -425,7 +426,7 @@ private fun DraftRow(listed: ListedDraft, modifier: Modifier = Modifier, onLongC
                     }
                     Row(Modifier.padding(start = 6.dp), horizontalArrangement = Arrangement.spacedBy(statusGap), verticalAlignment = Alignment.CenterVertically) {
                         project?.let { ThreadServerLabel(it.serverID) }
-                        store.agentOf(listed.draft)?.let { AgentIcon(it, size = iconSize(text = 11f)) }
+                        store.agentOf(listed.draft)?.let { AgentIcon(it, size = iconSize(text = TextSize.Xs)) }
                     }
                 }
             }
@@ -462,8 +463,8 @@ fun SlimThreadRow(
             Modifier.fillMaxWidth().padding(rowMargin).padding(horizontal = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            ProjectIcon(project, size = iconSize(text = 13f))
-            Text(thread.title, Modifier.weight(1f).padding(start = 7.dp, end = 6.dp), size = 13f, maxLines = 1, color = rowText())
+            ProjectIcon(project, size = iconSize(text = TextSize.Sm))
+            Text(thread.title, Modifier.weight(1f).padding(start = 7.dp, end = 6.dp), size = TextSize.Sm, maxLines = 1, color = rowText())
             Row(horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically) {
                 project?.pullRequest(thread)?.let { ThreadPullRequestLabel(thread, it, colored = false, open = open) }
                 val until = thread.snoozedUntil
@@ -474,7 +475,7 @@ fun SlimThreadRow(
                     ) { Icon(Symbol.AlarmClock, statusSymbol) }
                     else -> {
                         val ago = Time.ago(thread.archivedAt ?: thread.updatedAt, AgoClock.now)
-                        Text(ago, Modifier.alpha(if (hovering) 0f else 1f), size = 11f, color = palette.mutedStrongerForeground)
+                        Text(ago, Modifier.alpha(if (hovering) 0f else 1f), size = TextSize.Xs, color = palette.mutedStrongerForeground)
                     }
                 }
             }
@@ -505,8 +506,8 @@ fun NewThreadRow(modifier: Modifier = Modifier) {
     val store = LocalStore.current
     HighlightButton(onClick = { store.newThread() }, modifier = modifier, radius = Radius.md, inset = rowMargin, faded = true, opaque = true, contentAlignment = Alignment.CenterStart) {
         Row(Modifier.fillMaxWidth().padding(rowMargin).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(Symbol.Plus, iconSize(text = 13f))
-            Text("Create a thread", Modifier.padding(start = 7.dp), size = 13f, maxLines = 1)
+            Icon(Symbol.Plus, iconSize(text = TextSize.Sm))
+            Text("Create a thread", Modifier.padding(start = 7.dp), size = TextSize.Sm, maxLines = 1)
         }
     }
 }
@@ -548,7 +549,7 @@ fun ThreadStatus(thread: ThreadInfo, readOnly: Boolean = false) {
         }
         thread.woke -> StatusLabel("Woke", palette.warning) { Icon(Symbol.AlarmClock, statusSymbol) }
         thread.unread -> StatusLabel("Finished", palette.success) { Icon(Symbol.Flag, statusSymbol) }
-        else -> Text(Time.ago(thread.updatedAt, AgoClock.now), size = 11f, color = palette.mutedStrongerForeground)
+        else -> Text(Time.ago(thread.updatedAt, AgoClock.now), size = TextSize.Xs, color = palette.mutedStrongerForeground)
     }
 }
 
@@ -557,14 +558,14 @@ private const val readOnlyHelp = "Its server is unlinked, so this thread can onl
 private fun capitalized(text: String): String = text.split(" ").joinToString(" ") { word -> word.replaceFirstChar { it.uppercase() } }
 
 /** A status's symbol, beside its words. */
-private val statusSymbol = iconSize(text = 11f)
+private val statusSymbol = iconSize(text = TextSize.Xs)
 
 @Composable
 private fun StatusLabel(text: String, color: Color, modifier: Modifier = Modifier, icon: @Composable () -> Unit) {
     CompositionLocalProvider(LocalForeground provides color) {
         Row(modifier, horizontalArrangement = Arrangement.spacedBy(3.dp), verticalAlignment = Alignment.CenterVertically) {
             icon()
-            Text(text, style = Theme.uiDigits(11f, FontWeight.Medium), color = color, maxLines = 1)
+            Text(text, style = Theme.uiDigits(TextSize.Xs, FontWeight.Medium), color = color, maxLines = 1)
         }
     }
 }
@@ -593,8 +594,8 @@ fun SectionLine(section: ThreadSection, count: Int, expanded: Boolean, modifier:
     val lit = LocalRow.current != null
     val color = if (lit) palette.foreground else palette.mutedForeground
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(section.title, size = 12f, weight = FontWeight.Medium, color = color, maxLines = 1)
-        Text("$count", style = Theme.uiDigits(11f), color = palette.mutedStrongestForeground)
+        Text(section.title, size = TextSize.Xs, weight = FontWeight.Medium, color = color, maxLines = 1)
+        Text("$count", style = Theme.uiDigits(TextSize.Xs), color = palette.mutedStrongestForeground)
         Spacer(Modifier.weight(1f))
         SidebarChevron(expanded, lit)
     }
@@ -616,7 +617,7 @@ fun SidebarChevron(expanded: Boolean, lit: Boolean = false) {
 /** The name of a sidebar line like Done's: muted while it is closed and not lit. */
 @Composable
 fun ShelfTitle(title: String, expanded: Boolean) {
-    Text(title, size = 12f, weight = FontWeight.Medium, color = shelfTint(expanded), maxLines = 1)
+    Text(title, size = TextSize.Xs, weight = FontWeight.Medium, color = shelfTint(expanded), maxLines = 1)
 }
 
 /** The colour of a sidebar line's name, and of a mark that goes with it. */
@@ -641,7 +642,7 @@ fun UndoRow(notice: UndoNotice, modifier: Modifier = Modifier) {
                 ShelfLineMark { Icon(Symbol.Undo2, IconSize.Sm, color = shelfTint(expanded = false)) }
                 ShelfTitle("Undo", expanded = false)
                 Spacer(Modifier.weight(1f))
-                Text(notice.text, size = 11f, color = palette.mutedStrongerForeground, maxLines = 1)
+                Text(notice.text, size = TextSize.Xs, color = palette.mutedStrongerForeground, maxLines = 1)
             }
         }
     }
@@ -654,7 +655,7 @@ fun AllServersLine(servers: List<Server>, expanded: Boolean, modifier: Modifier 
         ShelfLineMark { StateRing(servers.worstTint(Theme.colors)) }
         ShelfTitle("Servers", expanded)
         Spacer(Modifier.weight(1f))
-        Text(servers.reach, style = Theme.uiDigits(11f), color = Theme.colors.mutedStrongerForeground, maxLines = 1)
+        Text(servers.reach, style = Theme.uiDigits(TextSize.Xs), color = Theme.colors.mutedStrongerForeground, maxLines = 1)
     }
 }
 
@@ -693,9 +694,9 @@ fun ServerLine(server: Server, modifier: Modifier = Modifier) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         ShelfLineMark { StateRing(server.stateTint ?: palette.success) }
-        Text(server.name, Modifier.weight(1f).padding(start = 7.dp, end = 4.dp), size = 12f, weight = FontWeight.Medium, maxLines = 1)
+        Text(server.name, Modifier.weight(1f).padding(start = 7.dp, end = 4.dp), size = TextSize.Xs, weight = FontWeight.Medium, maxLines = 1)
         ServerUpdateStatus(server) {
-            Text(detail, style = Theme.uiDigits(11f), color = palette.mutedStrongerForeground, maxLines = 1)
+            Text(detail, style = Theme.uiDigits(TextSize.Xs), color = palette.mutedStrongerForeground, maxLines = 1)
         }
     }
 }

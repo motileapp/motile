@@ -36,6 +36,7 @@ import app.motile.core.ThreadInfo
 import app.motile.core.Time
 import app.motile.core.ToolStatus
 import app.motile.platform.Symbol
+import app.motile.theme.TextSize
 import app.motile.theme.iconSize
 import app.motile.theme.ControlSize
 import app.motile.theme.LocalPalette
@@ -85,7 +86,7 @@ fun AgentsSurface() {
     val list = remember(key) { key?.let(store.rightPanel::agentList) ?: LazyListState() }
     Column(Modifier.fillMaxSize()) {
         PanelBar {
-            Text(AgentsSummary.styled(agents, palette), Modifier.weight(1f), size = 12f, weight = FontWeight.Medium, color = palette.mutedForeground, maxLines = 1)
+            Text(AgentsSummary.styled(agents, palette), Modifier.weight(1f), size = TextSize.Xs, weight = FontWeight.Medium, color = palette.mutedForeground, maxLines = 1)
         }
         LazyColumn(
             Modifier.fillMaxSize(),
@@ -139,8 +140,8 @@ private fun ParentRow(thread: ThreadInfo) {
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(Symbol.CornerLeftUp, iconSize(text = 13f), color = palette.foreground)
-            Text("Go back to parent thread", Modifier.weight(1f), size = 13f, weight = FontWeight.Medium, color = palette.foreground, maxLines = 1)
+            Icon(Symbol.CornerLeftUp, iconSize(text = TextSize.Sm), color = palette.foreground)
+            Text("Go back to parent thread", Modifier.weight(1f), size = TextSize.Sm, weight = FontWeight.Medium, color = palette.foreground, maxLines = 1)
         }
     }
 }
@@ -156,11 +157,11 @@ private fun EndedHeader(agents: List<AgentInfo>, shown: Boolean, toggle: () -> U
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("Previous agents", size = 12f, weight = FontWeight.SemiBold, color = palette.foreground, maxLines = 1)
-            Text("${agents.size}", size = 12f, color = palette.mutedStrongerForeground, maxLines = 1)
-            if (failed > 0) Text("$failed failed", size = 12f, color = palette.destructive, maxLines = 1)
+            Text("Previous agents", size = TextSize.Xs, weight = FontWeight.SemiBold, color = palette.foreground, maxLines = 1)
+            Text("${agents.size}", size = TextSize.Xs, color = palette.mutedStrongerForeground, maxLines = 1)
+            if (failed > 0) Text("$failed failed", size = TextSize.Xs, color = palette.destructive, maxLines = 1)
             Spacer(Modifier.weight(1f))
-            Icon(if (shown) Symbol.ChevronDown else Symbol.ChevronRight, iconSize(text = 12f), color = palette.mutedStrongerForeground)
+            Icon(if (shown) Symbol.ChevronDown else Symbol.ChevronRight, iconSize(text = TextSize.Xs), color = palette.mutedStrongerForeground)
         }
     }
 }
@@ -204,21 +205,21 @@ private fun AgentRow(agent: AgentInfo) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         // The kind gives way to the title and its word.
                         Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
-                            Text(agent.title, size = 13f, weight = FontWeight.Medium, color = palette.foreground, maxLines = 1)
+                            Text(agent.title, size = TextSize.Sm, weight = FontWeight.Medium, color = palette.foreground, maxLines = 1)
                             agent.kind?.let {
-                                Text(it, Modifier.padding(start = 6.dp).weight(1f, fill = false), size = 11f, color = palette.mutedForeground, maxLines = 1)
+                                Text(it, Modifier.padding(start = 6.dp).weight(1f, fill = false), size = TextSize.Xs, color = palette.mutedForeground, maxLines = 1)
                             }
                             if (agent.state.flagged) {
-                                Text(agent.label, Modifier.padding(start = 6.dp), size = 11f, weight = FontWeight.Medium, color = agent.state.color, maxLines = 1)
+                                Text(agent.label, Modifier.padding(start = 6.dp), size = TextSize.Xs, weight = FontWeight.Medium, color = agent.state.color, maxLines = 1)
                             }
                         }
                         AgentTime(agent, Modifier.padding(start = 6.dp))
                     }
                     // Always one line, so that a row keeps its height as what its agent does changes.
                     val color = if (agent.status == ToolStatus.Failed) palette.destructive else palette.mutedForeground
-                    Text(agent.detail, size = 12f, color = color, maxLines = 1)
+                    Text(agent.detail, size = TextSize.Xs, color = color, maxLines = 1)
                     facts?.let {
-                        Text(it, size = 11f, color = palette.mutedStrongerForeground, maxLines = 1, inlineContent = GatewayMark.content(palette.mutedStrongerForeground, 11f))
+                        Text(it, size = TextSize.Xs, color = palette.mutedStrongerForeground, maxLines = 1, inlineContent = GatewayMark.content(palette.mutedStrongerForeground, TextSize.Xs))
                     }
                 }
             }
@@ -255,5 +256,5 @@ fun AgentTime(agent: AgentInfo, modifier: Modifier = Modifier) {
 
 @Composable
 private fun AgentTimeText(text: String, color: Color, modifier: Modifier) {
-    Text(text, modifier, style = Theme.uiDigits(11f, FontWeight.Medium), color = color, maxLines = 1)
+    Text(text, modifier, style = Theme.uiDigits(TextSize.Xs, FontWeight.Medium), color = color, maxLines = 1)
 }

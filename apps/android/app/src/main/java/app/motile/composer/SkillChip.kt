@@ -14,13 +14,14 @@ import androidx.compose.ui.text.style.BaselineShift
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.motile.R
-import app.motile.platform.Platform
 import app.motile.platform.Symbol
 import app.motile.theme.IconSize
 import app.motile.theme.Opacity
 import app.motile.theme.Palette
 import app.motile.theme.Radius
+import app.motile.theme.TextSize
 import app.motile.theme.at
+import app.motile.theme.fontSize
 import app.motile.theme.symbolSide
 
 /**
@@ -29,7 +30,7 @@ import app.motile.theme.symbolSide
  */
 object SkillChip {
     val symbol = Symbol.Box
-    private const val textSize = 13f
+    private val textSize = TextSize.Sm
     /** Smaller than the icon for its text, to keep clear of the box's edges, which hug the text. */
     private val symbolSize = IconSize.Sm
     val radius = Radius.sm
@@ -49,7 +50,7 @@ object SkillChip {
 
     /** The style of what the chip shows, and of its symbol, the second character of it. */
     fun styles(palette: Palette): Pair<SpanStyle, SpanStyle> {
-        val text = SpanStyle(color = palette.skill, fontSize = (textSize * Platform.scale).sp, fontWeight = FontWeight.Normal)
+        val text = SpanStyle(color = palette.skill, fontSize = textSize.fontSize, fontWeight = FontWeight.Normal)
         val mark = SpanStyle(fontFamily = lucide, fontSize = symbolSide(symbolSize).value.sp, baselineShift = BaselineShift(-0.12f))
         return text to mark
     }

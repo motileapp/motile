@@ -29,14 +29,14 @@ use self::questions::Questions;
 use self::strips::{BranchPicker, agents_strip, context_strip, interruption_strip, monitoring_strip, waiting_strip};
 use crate::models::{ComposerPickerPart, ThreadInfo, access_label, section_label};
 use crate::store::Store;
-use crate::theme::{self, ControlSize, IconSize, Surface, colors};
+use crate::theme::{self, ControlSize, IconSize, Surface, TextSize, colors};
 use crate::ui::control::Look;
 use crate::ui::menu::Anchor;
 use crate::ui::{ActionButton, GatewayMark, Variant, edges, icons, logos, text_width};
 
 pub const RADIUS: f32 = theme::Radius::XXL;
 /// The text's font and line, as the Mac sets them: 14 with 3 between lines.
-const TEXT_SIZE: f32 = 14.;
+const TEXT_SIZE: TextSize = TextSize::Md;
 const LINE_HEIGHT: f32 = 20.;
 /// The room above the first line and under the last, which puts the lines where the Mac's are:
 /// its lines are only spaced between each other.
@@ -403,7 +403,7 @@ impl Composer {
                 .flex()
                 .items_center()
                 .gap(px(8.))
-                .text_size(px(12.5))
+                .text_size(TextSize::Xs)
                 .text_color(c.foreground)
                 .children(symbol.map(|symbol| icons::symbol(symbol, IconSize::Sm).text_color(c.foreground)))
                 .child(div().font_weight(FontWeight::MEDIUM).child(title))
@@ -705,7 +705,7 @@ impl Composer {
         let text = Textarea::new(&self.text)
             .appearance(false)
             .xsmall()
-            .text_size(px(TEXT_SIZE))
+            .text_size(TEXT_SIZE)
             .line_height(px(LINE_HEIGHT))
             .px(px(0.))
             .pt(px(TEXT_TOP))
@@ -770,7 +770,7 @@ impl Composer {
                             .pt(px(12.))
                             .min_h(px(MIN_TEXT_HEIGHT + 12.))
                             .max_h(px(MAX_TEXT_HEIGHT + 12.))
-                            .text_size(px(TEXT_SIZE))
+                            .text_size(TEXT_SIZE)
                             .line_height(px(LINE_HEIGHT))
                             .child(text),
                     ),
@@ -827,7 +827,7 @@ fn settings_part(mark: Option<AnyElement>, title: Option<String>, gateway_mark: 
     };
     div().h(px(size.height())).ml(px(-outset)).flex().items_center().gap(px(MENU_GAP)).children(mark.map(square)).child(
         div()
-            .text_size(px(size.text_size()))
+            .text_size(size.text_size())
             .font_weight(FontWeight::MEDIUM)
             .whitespace_nowrap()
             .child(crate::ui::proxied_dotted(title, gateway_mark, size.text_size(), size.symbol(), c)),

@@ -30,7 +30,7 @@ use self::search::RESULT_ROW_HEIGHT;
 pub use self::updates::{AppUpdateRow, ServerUpdateStatus};
 use crate::models::ThreadInfo;
 use crate::store::{ListedDraft, SearchResult, Store, UndoNotice, snooze_presets};
-use crate::theme::{self, ControlSize, Layer, colors};
+use crate::theme::{self, ControlSize, Layer, TextSize, colors};
 use crate::ui::menu::Menu;
 use crate::ui::modal::{Answer, Confirmation, confirmation, modal, presented};
 use crate::ui::{ActionButton, InputField, InputVariant, beside, divider, edges};
@@ -831,7 +831,7 @@ impl Sidebar {
                     .flex()
                     .flex_col()
                     .gap(px(14.))
-                    .child(div().text_size(px(15.)).font_weight(FontWeight::SEMIBOLD).child("Rename Thread"))
+                    .child(div().text_size(TextSize::Lg).font_weight(FontWeight::SEMIBOLD).child("Rename Thread"))
                     .child(InputField::new(title))
                     .child(
                         div()

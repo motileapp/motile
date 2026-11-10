@@ -103,7 +103,7 @@ struct AgentAccountSheet: View {
         #if os(macOS)
         VStack(alignment: .leading, spacing: 14) {
             Text(title)
-                .font(.ui(size: 15, weight: .semibold))
+                .font(.ui(.lg, weight: .semibold))
             form
             HStack(spacing: 0) {
                 Spacer()
@@ -334,9 +334,9 @@ struct AgentAccountSheet: View {
                 HStack(spacing: 10) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Share sessions with \(account.usualFolder)")
-                            .font(.ui(size: 13, weight: .medium))
+                            .font(.ui(.sm, weight: .medium))
                         Text("The folder keeps only the sign-in. Threads move between the two and go on where they were.")
-                            .font(.ui(size: 11.5))
+                            .font(.ui(.xs))
                             .foregroundStyle(Color.themeMutedForeground)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -387,7 +387,7 @@ struct AgentAccountSheet: View {
         default:
             HStack(spacing: 10) {
                 Text(signedInAs.map { "Signed in as \($0)" } ?? "Not signed in")
-                    .font(.ui(size: 13, weight: .medium))
+                    .font(.ui(.sm, weight: .medium))
                     .foregroundStyle(signedInAs == nil ? Color.themeMutedForeground : Color.themeForeground)
                     .lineLimit(1)
                     .truncationMode(.middle)
@@ -425,12 +425,12 @@ struct AgentAccountSheet: View {
     ) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(title)
-                .font(.ui(size: 12, weight: .medium))
+                .font(.ui(.xs, weight: .medium))
                 .padding(.horizontal, 4)
             content()
             if let caption = failure ?? caption {
                 Text(caption)
-                    .font(.ui(size: 11.5))
+                    .font(.ui(.xs))
                     .foregroundStyle(failure == nil ? Color.themeMutedStrongerForeground : Color.themeDestructive)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, 4)

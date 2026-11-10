@@ -71,6 +71,7 @@ import androidx.compose.ui.unit.round
 import app.motile.platform.Platform
 import app.motile.platform.Symbol
 import app.motile.platform.scaled
+import app.motile.theme.TextSize
 import app.motile.theme.iconSize
 import app.motile.theme.IconSize
 import app.motile.theme.ControlSize
@@ -105,8 +106,8 @@ private object CodeSheet {
     /** The height of an image or a video until its picture is there. */
     val mediaWaitingHeight = 96.dp
     val textInset = 8.dp
-    const val FONT = 12.5f
-    const val NUMBER_FONT = 11f
+    val FONT = TextSize.Xs
+    val NUMBER_FONT = TextSize.Xs
     /** A line is drawn no longer than this, which no screen shows past anyway. */
     const val MOST_COLUMNS = 3000
 }
@@ -180,10 +181,10 @@ fun CodeView(
     val palette = LocalPalette.current
     val density = LocalDensity.current
     val codeStyle = remember(density) {
-        TextStyle(fontFamily = FontFamily.Monospace, fontSize = with(density) { CodeSheet.FONT.dp.toSp() }, color = palette.foreground)
+        TextStyle(fontFamily = FontFamily.Monospace, fontSize = with(density) { CodeSheet.FONT.points.dp.toSp() }, color = palette.foreground)
     }
     val numberStyle = remember(density) {
-        TextStyle(fontSize = with(density) { CodeSheet.NUMBER_FONT.dp.toSp() }, fontFeatureSettings = "tnum")
+        TextStyle(fontSize = with(density) { CodeSheet.NUMBER_FONT.points.dp.toSp() }, fontFeatureSettings = "tnum")
     }
     val measurer = rememberTextMeasurer()
     val advance = remember(codeStyle) { measurer.measure("0000000000", codeStyle).size.width / 10f }
@@ -361,9 +362,9 @@ private fun CodeHeading(file: CodeFile, closed: Boolean, marks: CodeMarks, onTog
             HighlightButton(onClick = onToggle, modifier = Modifier.fillMaxWidth().height(CodeSheet.headingHeight - 1.dp), radius = 0.dp) {
                 Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
                     Icon(if (closed) Symbol.ChevronRight else Symbol.ChevronDown, IconSize.Xs, Modifier.padding(start = 9.dp), color = palette.mutedStrongerForeground)
-                    Icon(FileSymbol.symbol(file.path), iconSize(text = 12.5f), Modifier.padding(start = 6.dp), color = palette.mutedForeground)
+                    Icon(FileSymbol.symbol(file.path), iconSize(text = TextSize.Xs), Modifier.padding(start = 6.dp), color = palette.mutedForeground)
                     Text(
-                        headingTitle(file, palette), Modifier.padding(start = 4.dp).weight(1f), size = 12.5f, maxLines = 1,
+                        headingTitle(file, palette), Modifier.padding(start = 4.dp).weight(1f), size = TextSize.Xs, maxLines = 1,
                         overflow = TextOverflow.MiddleEllipsis,
                     )
                     Spacer(Modifier.width(10.dp))
@@ -392,7 +393,7 @@ private fun headingTitle(file: CodeFile, palette: Palette): AnnotatedString = bu
         "renamed" -> file.from?.let { "was $it" }
         else -> null
     }
-    if (note != null) withStyle(SpanStyle(color = palette.mutedStrongerForeground, fontSize = Theme.ui(11.5f).fontSize)) { append("   $note") }
+    if (note != null) withStyle(SpanStyle(color = palette.mutedStrongerForeground, fontSize = Theme.ui(TextSize.Xs).fontSize)) { append("   $note") }
 }
 
 /** The box that marks a file of a pull request viewed. */
@@ -415,7 +416,7 @@ private fun ViewedBox(viewed: Boolean, onViewed: () -> Unit) {
         } else {
             Box(box.border(1.dp, palette.border, shape))
         }
-        Text("Viewed", Modifier.padding(start = 6.dp), size = 11.5f, color = if (viewed) palette.foreground else palette.mutedForeground, maxLines = 1)
+        Text("Viewed", Modifier.padding(start = 6.dp), size = TextSize.Xs, color = if (viewed) palette.foreground else palette.mutedForeground, maxLines = 1)
     }
 }
 
@@ -434,7 +435,7 @@ private fun CodeMediaBlock(file: CodeFile, media: CodeMedia, onMedia: () -> Unit
                 if (media.failed) {
                     Text(
                         if (media.video) "This video couldn't be shown." else "This image couldn't be shown.",
-                        size = 12.5f, color = palette.mutedForeground,
+                        size = TextSize.Xs, color = palette.mutedForeground,
                     )
                 }
             }

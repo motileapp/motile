@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.draw.dropShadow
 import app.motile.platform.Platform
 import app.motile.platform.scaled
+import kotlin.math.abs
 import kotlin.math.roundToInt
 
 /** The palette in effect, and whether it is the dark one. */
@@ -81,38 +82,48 @@ object Theme {
     }
 
     // Type, in sizes as on the Mac, enlarged.
-    val proseSize: TextUnit = (14 * Platform.scale).sp
-    val codeSize: TextUnit = (12.5f * Platform.scale).sp
+    val proseSize: TextUnit = TextSize.Md.fontSize
+    val codeSize: TextUnit = TextSize.Xs.fontSize
     val proseLineHeight: TextUnit = scaled(24f).sp
     val codeLineHeight: TextUnit = scaled(18f).sp
     val mono: FontFamily = FontFamily.Monospace
 
-    /** The system's font at a size given as it is on the Mac. */
-    fun ui(size: Float, weight: FontWeight = FontWeight.Normal, italic: Boolean = false): TextStyle = TextStyle(
-        fontSize = (size * Platform.scale).sp,
+    /** The system's font at one of the text sizes. */
+    fun ui(size: TextSize, weight: FontWeight = FontWeight.Normal, italic: Boolean = false): TextStyle =
+        font(size.fontSize, weight, italic)
+
+    fun uiMono(size: TextSize, weight: FontWeight = FontWeight.Normal): TextStyle =
+        ui(size, weight).copy(fontFamily = mono)
+
+    /** Digits that keep their width, for numbers that count. */
+    fun uiDigits(size: TextSize, weight: FontWeight = FontWeight.Normal): TextStyle =
+        ui(size, weight).copy(fontFeatureSettings = "tnum")
+
+    /** The system's font at `points` as on the Mac. Only for what the core lays out in points: a program's canvas and map. */
+    fun programUi(points: Float, weight: FontWeight = FontWeight.Normal, italic: Boolean = false): TextStyle =
+        font((points * Platform.scale).sp, weight, italic)
+
+    /** [programUi] with digits that keep their width. */
+    fun programDigits(points: Float, weight: FontWeight = FontWeight.Normal): TextStyle =
+        programUi(points, weight).copy(fontFeatureSettings = "tnum")
+
+    private fun font(size: TextUnit, weight: FontWeight, italic: Boolean): TextStyle = TextStyle(
+        fontSize = size,
         fontWeight = weight,
         fontStyle = if (italic) FontStyle.Italic else FontStyle.Normal,
     )
 
-    fun uiMono(size: Float, weight: FontWeight = FontWeight.Normal): TextStyle =
-        ui(size, weight).copy(fontFamily = mono)
-
-    /** Digits that keep their width, for numbers that count. */
-    fun uiDigits(size: Float, weight: FontWeight = FontWeight.Normal): TextStyle =
-        ui(size, weight).copy(fontFeatureSettings = "tnum")
-
     val proseFont: TextStyle get() = TextStyle(fontSize = proseSize)
     val proseBold: TextStyle get() = TextStyle(fontSize = proseSize, fontWeight = FontWeight.SemiBold)
     val codeFont: TextStyle get() = TextStyle(fontSize = codeSize, fontFamily = mono)
-    val inlineCodeFont: TextStyle get() = uiMono(12.5f)
-    val smallFont: TextStyle get() = ui(12f)
-    val smallMono: TextStyle get() = uiMono(11.5f)
+    val inlineCodeFont: TextStyle get() = uiMono(TextSize.Xs)
+    val smallFont: TextStyle get() = ui(TextSize.Xs)
+    val smallMono: TextStyle get() = uiMono(TextSize.Xs)
 
     fun heading(level: Int): TextStyle = when (level) {
-        1 -> ui(20f, FontWeight.SemiBold)
-        2 -> ui(17f, FontWeight.SemiBold)
-        3 -> ui(15f, FontWeight.SemiBold)
-        else -> ui(14f, FontWeight.SemiBold)
+        1, 2 -> ui(TextSize.Xl, FontWeight.SemiBold)
+        3 -> ui(TextSize.Lg, FontWeight.SemiBold)
+        else -> ui(TextSize.Md, FontWeight.SemiBold)
     }
 
     // Layout
@@ -173,14 +184,19 @@ object OverPicture {
 }
 
 /** The icon that goes with text of `size`: about a fifth larger, as on the web. */
-fun iconSize(text: Float): IconSize = when {
-    text < 11 -> IconSize.Xs
-    text < 13 -> IconSize.Sm
-    text < 15 -> IconSize.Md
-    text < 17 -> IconSize.Lg
-    text < 20 -> IconSize.Xl
-    else -> IconSize.Xxl
+fun iconSize(text: TextSize): IconSize = when (text) {
+    TextSize.Xxs -> IconSize.Xs
+    TextSize.Xs -> IconSize.Sm
+    TextSize.Sm, TextSize.Md -> IconSize.Md
+    TextSize.Lg -> IconSize.Lg
+    TextSize.Xl, TextSize.Xxl -> IconSize.Xxl
 }
+
+/** The text size nearest `points`, for text sized by what it sits in, like the letter on a disc. */
+fun nearestTextSize(points: Float): TextSize = TextSize.entries.minBy { abs(it.points - points) }
+
+/** The size text of this size is drawn at, enlarged. */
+val TextSize.fontSize: TextUnit get() = (points * Platform.scale).sp
 
 /**
  * How tall what floats over the client is: a glass button, a search bar on glass, and the composer's
@@ -243,11 +259,10 @@ enum class ControlSize {
             Large -> IconSize.Md
         }
 
-    val textSize: Float
+    val textSize: TextSize
         get() = when (this) {
-            Small, Inset -> 11.5f
-            Regular -> 12f
-            Large -> 13f
+            Small, Inset, Regular -> TextSize.Xs
+            Large -> TextSize.Sm
         }
 
     val font: TextStyle get() = Theme.ui(textSize, FontWeight.Medium)

@@ -312,7 +312,7 @@ struct UsageNote: View {
 
     var body: some View {
         Text(text)
-            .font(.ui(size: 12))
+            .font(.ui(.xs))
             .foregroundStyle(Color.themeMutedForeground)
             .multilineTextAlignment(.center)
             .frame(maxWidth: .infinity, minHeight: 240)

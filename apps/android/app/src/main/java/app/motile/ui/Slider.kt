@@ -55,6 +55,7 @@ import app.motile.theme.LocalPalette
 import app.motile.theme.LocalSurface
 import app.motile.theme.Opacity
 import app.motile.theme.Surface
+import app.motile.theme.TextSize
 import app.motile.theme.Theme
 import app.motile.theme.opacity
 import kotlin.math.roundToInt
@@ -102,13 +103,13 @@ private fun SliderHead(label: String?, readout: String?) {
     val palette = LocalPalette.current
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         if (label != null) {
-            Text(label, Modifier.weight(1f).alignByBaseline(), style = Theme.ui(13f).lined(20f), color = palette.foreground)
+            Text(label, Modifier.weight(1f).alignByBaseline(), style = Theme.ui(TextSize.Sm).lined(20f), color = palette.foreground)
         } else {
             Spacer(Modifier.weight(1f))
         }
         if (readout != null) {
             Text(
-                readout, Modifier.alignByBaseline(), style = Theme.uiDigits(12f, FontWeight.Medium).lined(18f), color = palette.foreground,
+                readout, Modifier.alignByBaseline(), style = Theme.uiDigits(TextSize.Xs, FontWeight.Medium).lined(18f), color = palette.foreground,
                 maxLines = 1, overflow = TextOverflow.Visible,
             )
         }
@@ -226,7 +227,7 @@ private fun SliderControl(
 @Composable
 private fun SliderMarks(marks: List<Pair<Double, String>>, range: ClosedFloatingPointRange<Double>, modifier: Modifier) {
     val muted = LocalPalette.current.mutedForeground
-    val style = Theme.uiDigits(11f).lined(14f)
+    val style = Theme.uiDigits(TextSize.Xs).lined(16f)
     Layout(
         content = { marks.forEach { Text(it.second, style = style, color = muted, maxLines = 1, overflow = TextOverflow.Visible) } },
         modifier = modifier.fillMaxWidth().height(marksHeight),

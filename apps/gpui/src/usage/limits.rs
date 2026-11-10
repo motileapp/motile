@@ -6,7 +6,7 @@ use gpui_kit::*;
 
 use crate::models::agent_name;
 use crate::store::usage::{LimitWindow, LimitsReport, LimitsSection, Pace, Tone};
-use crate::theme::{IconSize, Layer, Opacity, Radius, Surface, colors};
+use crate::theme::{IconSize, Layer, Opacity, Radius, Surface, TextSize, colors};
 use crate::ui::{Chip, card_default, divider_on, icons, logos, tabular_numbers, tooltip};
 
 /// Narrower than this, a window puts its bar under its numbers.
@@ -42,14 +42,17 @@ pub fn limits(report: &LimitsReport, width: f32, cx: &App) -> AnyElement {
                 .child(header(section, cx))
                 .when_some(section.note.clone(), |section, note| {
                     section.child(card_default(
-                        div().w_full().p(px(16.)).text_size(px(12.)).text_color(c.muted_foreground).child(note),
+                        div().w_full().p(px(16.)).text_size(TextSize::Xs).text_color(c.muted_foreground).child(note),
                         cx,
                     ))
                 })
                 .children(windows)
         }))
         .children(
-            report.notes.iter().map(|note| div().text_size(px(10.)).text_color(c.muted_foreground).child(note.clone())),
+            report
+                .notes
+                .iter()
+                .map(|note| div().text_size(TextSize::Xxs).text_color(c.muted_foreground).child(note.clone())),
         )
         .into_any_element()
 }
@@ -68,7 +71,7 @@ fn header(section: &LimitsSection, cx: &App) -> Div {
         .child(
             div()
                 .flex_shrink_0()
-                .text_size(px(14.))
+                .text_size(TextSize::Md)
                 .font_weight(FontWeight::MEDIUM)
                 .text_color(c.foreground)
                 .child(agent_name(section.agent)),
@@ -79,7 +82,7 @@ fn header(section: &LimitsSection, cx: &App) -> Div {
             header.child(
                 div()
                     .min_w_0()
-                    .text_size(px(12.))
+                    .text_size(TextSize::Xs)
                     .text_color(c.muted_foreground)
                     .whitespace_nowrap()
                     .overflow_hidden()
@@ -104,7 +107,7 @@ pub fn limit_row(id: (usize, usize), window: &LimitWindow, beside: bool, cx: &Ap
         .gap(px(2.))
         .child(
             div()
-                .text_size(px(13.))
+                .text_size(TextSize::Sm)
                 .font_weight(FontWeight::MEDIUM)
                 .text_color(c.foreground)
                 .whitespace_nowrap()
@@ -119,13 +122,13 @@ pub fn limit_row(id: (usize, usize), window: &LimitWindow, beside: bool, cx: &Ap
                 .gap(px(5.))
                 .child(
                     div()
-                        .text_size(px(28.))
+                        .text_size(TextSize::Xxl)
                         .font_weight(FontWeight::SEMIBOLD)
                         .font_features(tabular_numbers())
                         .text_color(c.foreground)
                         .child(window.used.clone()),
                 )
-                .child(div().text_size(px(13.)).text_color(c.muted_foreground).child("used")),
+                .child(div().text_size(TextSize::Sm).text_color(c.muted_foreground).child("used")),
         )
         .when_some(window.pace, |numbers, pace| {
             let (symbol, label, help) = match pace {
@@ -140,7 +143,7 @@ pub fn limit_row(id: (usize, usize), window: &LimitWindow, beside: bool, cx: &Ap
                     .flex()
                     .items_center()
                     .gap(px(5.))
-                    .text_size(px(12.))
+                    .text_size(TextSize::Xs)
                     .text_color(c.muted_stronger_foreground)
                     .child(icons::symbol(symbol, IconSize::Sm))
                     .child(label)
@@ -167,7 +170,7 @@ fn limit_bar(id: (usize, usize), window: &LimitWindow, tone: Hsla, cx: &App) -> 
         .flex()
         .items_center()
         .gap(px(6.))
-        .text_size(px(11.))
+        .text_size(TextSize::Xs)
         .font_weight(FontWeight::MEDIUM)
         .when_some(window.resets_in.clone(), |end, resets_in| {
             end.child(
@@ -210,7 +213,7 @@ fn limit_bar(id: (usize, usize), window: &LimitWindow, tone: Hsla, cx: &App) -> 
                 .gap(px(8.))
                 .text_color(c.foreground)
                 .font_features(tabular_numbers())
-                .child(div().text_size(px(11.)).font_weight(FontWeight::SEMIBOLD).child(window.used.clone()))
+                .child(div().text_size(TextSize::Xs).font_weight(FontWeight::SEMIBOLD).child(window.used.clone()))
                 .child(div().flex_1())
                 .child(end),
         )

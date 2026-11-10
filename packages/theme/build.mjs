@@ -6,7 +6,7 @@ import { readFileSync, writeFileSync } from "node:fs"
 
 const here = (path) => new URL(path, import.meta.url)
 const tokens = JSON.parse(readFileSync(here("tokens.json"), "utf8"))
-const { radius, icon, colors, opacity, shadow } = tokens
+const { radius, text, icon, colors, opacity, shadow } = tokens
 const names = Object.keys(colors.light)
 const opacities = Object.keys(opacity.light)
 
@@ -41,6 +41,9 @@ ${theme("dark")}
 :root {
 ${Object.entries(icon)
   .map(([name, value]) => `  --icon-${name}: ${value}px;`)
+  .join("\n")}
+${Object.entries(text)
+  .map(([name, value]) => `  --type-${name}: ${value}px;`)
   .join("\n")}
 }
 
@@ -150,6 +153,13 @@ ${Object.entries(radius)
   .join("\n")}
 }
 
+/// How large text is, as on the Mac. Every text in the clients is one of these.
+enum TextSize: CGFloat, CaseIterable {
+${Object.entries(text)
+  .map(([name, value]) => `    case ${swiftName(name)} = ${value}`)
+  .join("\n")}
+}
+
 /// How large an icon is, of any kind: the side of its square, as on the Mac. Every icon is one
 /// of these.
 enum IconSize: CGFloat, CaseIterable {
@@ -248,6 +258,22 @@ ${Object.entries(radius)
   .join("\n")}
 }
 
+/// How large text is, as on the Mac. Every text in the app is one of these.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum TextSize {
+${Object.keys(text).map((name) => `    ${pascal(name)},`).join("\n")}
+}
+
+impl TextSize {
+    pub const fn points(self) -> f32 {
+        match self {
+${Object.entries(text)
+  .map(([name, value]) => `            TextSize::${pascal(name)} => ${float(value)},`)
+  .join("\n")}
+        }
+    }
+}
+
 /// How large an icon is, of any kind: the side of its square, as on the Mac. Every icon is one
 /// of these.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -328,6 +354,13 @@ ${opacities.map((name) => `    ${pascal(name)}(${opacity.light[name]}f, ${opacit
 object Radius {
 ${Object.entries(radius)
   .map(([name, value]) => `    val ${kotlinName(name)} = ${value}.dp`)
+  .join("\n")}
+}
+
+/** How large text is, as on the Mac. Every text in the app is one of these. */
+enum class TextSize(val points: Float) {
+${Object.entries(text)
+  .map(([name, value]) => `    ${pascal(name)}(${value}f),`)
   .join("\n")}
 }
 

@@ -24,6 +24,7 @@ import app.motile.theme.Opacity
 import app.motile.theme.Palette
 import app.motile.theme.Radius
 import app.motile.theme.Surface
+import app.motile.theme.TextSize
 import app.motile.theme.Theme
 import app.motile.theme.at
 import app.motile.ui.lined
@@ -62,31 +63,30 @@ object UiStyle {
     fun cardPadding(narrow: Boolean): Float = if (narrow) 16f else 20f
 
     /** A text style of LAYOUT.md's type table, its line height fixed. */
-    fun text(style: UiTextStyle, narrow: Boolean): TextStyle = when (style) {
-        UiTextStyle.Body -> TextStyle(fontSize = Theme.proseSize).lined(24f)
-        UiTextStyle.BodyCard -> TextStyle(fontSize = Theme.proseSize).lined(22f)
-        UiTextStyle.Large -> Theme.ui(16f).lined(26f)
-        UiTextStyle.Small -> Theme.ui(13f).lined(20f)
+    fun text(style: UiTextStyle): TextStyle = when (style) {
+        UiTextStyle.Body -> Theme.proseFont.lined(24f)
+        UiTextStyle.BodyCard -> Theme.proseFont.lined(22f)
+        UiTextStyle.Large -> Theme.ui(TextSize.Lg).lined(26f)
+        UiTextStyle.Small -> Theme.ui(TextSize.Sm).lined(20f)
         UiTextStyle.Caption -> Theme.smallFont.lined(18f)
-        UiTextStyle.Label -> Theme.ui(13f, FontWeight.Medium).lined(18f)
+        UiTextStyle.Label -> Theme.ui(TextSize.Sm, FontWeight.Medium).lined(18f)
         UiTextStyle.TitleSm -> Theme.heading(4).digits().lined(20f)
         UiTextStyle.TitleMd -> Theme.heading(3).digits().lined(22f)
         UiTextStyle.TitleLg, UiTextStyle.Word -> Theme.heading(2).digits().lined(24f)
         UiTextStyle.TitleXl -> Theme.heading(1).digits().lined(26f)
-        UiTextStyle.Title2xl -> if (narrow) Theme.uiDigits(24f, FontWeight.SemiBold).lined(28f) else Theme.uiDigits(26f, FontWeight.SemiBold).lined(30f)
-        UiTextStyle.Title3xl -> if (narrow) Theme.uiDigits(28f, FontWeight.SemiBold).lined(32f) else Theme.uiDigits(32f, FontWeight.SemiBold).lined(36f)
-        UiTextStyle.CardTitle -> Theme.uiDigits(14f, FontWeight.Medium).lined(20f)
-        UiTextStyle.CardSubtitle -> Theme.ui(13f).lined(18f)
-        UiTextStyle.CardHeading -> Theme.uiDigits(16f, FontWeight.SemiBold).lined(22f)
-        UiTextStyle.Readout -> Theme.uiDigits(12f, FontWeight.Medium).lined(18f)
-        UiTextStyle.Tick -> Theme.uiDigits(11f).lined(14f)
-        UiTextStyle.Timer -> Theme.uiDigits(28f, FontWeight.SemiBold).lined(32f)
+        UiTextStyle.Title2xl, UiTextStyle.Title3xl -> Theme.uiDigits(TextSize.Xxl, FontWeight.SemiBold).lined(32f)
+        UiTextStyle.CardTitle -> Theme.uiDigits(TextSize.Md, FontWeight.Medium).lined(20f)
+        UiTextStyle.CardSubtitle -> Theme.ui(TextSize.Sm).lined(18f)
+        UiTextStyle.CardHeading -> Theme.uiDigits(TextSize.Lg, FontWeight.SemiBold).lined(22f)
+        UiTextStyle.Readout -> Theme.uiDigits(TextSize.Xs, FontWeight.Medium).lined(18f)
+        UiTextStyle.Tick -> Theme.uiDigits(TextSize.Xs).lined(16f)
+        UiTextStyle.Timer -> Theme.uiDigits(TextSize.Xxl, FontWeight.SemiBold).lined(32f)
         UiTextStyle.Code -> Theme.codeFont.copy(lineHeight = Theme.codeLineHeight)
-        UiTextStyle.WordBack -> TextStyle(fontSize = Theme.proseSize, fontWeight = FontWeight.Medium).lined(24f)
+        UiTextStyle.WordBack -> Theme.proseFont.copy(fontWeight = FontWeight.Medium).lined(24f)
     }
 
     /** The size the style's text is, as on the Mac, for what is measured in it. */
-    fun size(style: UiTextStyle, narrow: Boolean): Float = text(style, narrow).fontSize.value / app.motile.platform.Platform.scale
+    fun size(style: UiTextStyle): Float = text(style).fontSize.value / app.motile.platform.Platform.scale
 
     fun weight(weight: UiWeight): FontWeight = when (weight) {
         UiWeight.Regular -> FontWeight.Normal

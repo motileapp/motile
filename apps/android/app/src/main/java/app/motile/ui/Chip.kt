@@ -23,6 +23,7 @@ import app.motile.theme.LocalForeground
 import app.motile.theme.LocalPalette
 import app.motile.theme.LocalSurface
 import app.motile.theme.Surface
+import app.motile.theme.TextSize
 import app.motile.theme.Theme
 import app.motile.theme.accentTint
 import app.motile.theme.symbolSide
@@ -32,7 +33,8 @@ import app.motile.theme.wash
  * A word or two that says what something is: a state, a label, a name. With a `tone` it is in that
  * colour on a wash of it; without, it is bordered. With a `dot` the colour is the dot's and the
  * words stay plain. A `muted` one marks quietly, as a default does: its words muted on the accent's
- * tint, with no line. Its symbol is a `Symbol`, or a Lucide `glyph` by its character.
+ * tint, with no line. A `small` one is as tall as a compact one, with smaller words, for a label in a
+ * tight corner. Its symbol is a `Symbol`, or a Lucide `glyph` by its character.
  */
 object Chip {
     val height = scaled(20f).dp
@@ -50,6 +52,7 @@ fun Chip(
     monospaced: Boolean = false,
     muted: Boolean = false,
     compact: Boolean = false,
+    small: Boolean = false,
 ) {
     val palette = LocalPalette.current
     val surface = LocalSurface.current
@@ -62,14 +65,16 @@ fun Chip(
     }
     CompositionLocalProvider(LocalForeground provides foreground) {
         Row(
-            modifier.height(if (compact) Chip.compactHeight else Chip.height).background(fill, CircleShape).then(bordered).padding(horizontal = 7.dp),
+            modifier.height(if (compact || small) Chip.compactHeight else Chip.height).background(fill, CircleShape).then(bordered)
+                .padding(horizontal = if (small) 6.dp else 7.dp),
             horizontalArrangement = Arrangement.spacedBy(5.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (dot != null) Box(Modifier.size(7.dp).background(dot, CircleShape))
             if (icon != null) Icon(icon, IconSize.Xs)
             if (glyph != null) Glyph(glyph, symbolSide(IconSize.Xs))
-            Text(title, style = if (monospaced) Theme.uiMono(11.5f, FontWeight.Medium) else Theme.ui(11.5f, FontWeight.Medium), maxLines = 1)
+            val size = if (small) TextSize.Xxs else TextSize.Xs
+            Text(title, style = if (monospaced) Theme.uiMono(size, FontWeight.Medium) else Theme.ui(size, FontWeight.Medium), maxLines = 1)
         }
     }
 }

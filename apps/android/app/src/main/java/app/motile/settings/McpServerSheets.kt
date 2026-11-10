@@ -53,6 +53,7 @@ import app.motile.theme.ControlSize
 import app.motile.theme.IconSize
 import app.motile.theme.LocalPalette
 import app.motile.theme.Radius
+import app.motile.theme.TextSize
 import app.motile.theme.Theme
 import app.motile.theme.iconSize
 import app.motile.ui.ActionButton
@@ -87,19 +88,19 @@ private fun McpServerSheetFrame(title: String, content: @Composable ColumnScope.
 /** A small heading over a part of a sheet. */
 @Composable
 private fun SheetLabel(text: String) {
-    Text(text, size = 12f, weight = FontWeight.Medium, color = LocalPalette.current.mutedForeground)
+    Text(text, size = TextSize.Xs, weight = FontWeight.Medium, color = LocalPalette.current.mutedForeground)
 }
 
 @Composable
 private fun Failure(text: String) {
-    Text(text, size = 12f, color = LocalPalette.current.warning)
+    Text(text, size = TextSize.Xs, color = LocalPalette.current.warning)
 }
 
 /** How agents will name an MCP server's tools, under its name. */
 @Composable
 private fun AgentName(text: String) {
     SelectionContainer {
-        Text(text, style = Theme.uiMono(11.5f), color = LocalPalette.current.mutedStrongerForeground, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
+        Text(text, style = Theme.uiMono(TextSize.Xs), color = LocalPalette.current.mutedStrongerForeground, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
     }
 }
 
@@ -118,7 +119,7 @@ private fun McpServerTextBox(text: String, height: Dp) {
             .horizontalScroll(rememberScrollState()),
     ) {
         SelectionContainer {
-            Text(text, Modifier.padding(10.dp), style = Theme.uiMono(12f), color = palette.foreground)
+            Text(text, Modifier.padding(10.dp), style = Theme.uiMono(TextSize.Xs), color = palette.foreground)
         }
     }
 }
@@ -211,11 +212,11 @@ private fun Pick(
             )
             McpServerRow.slugOf(name)?.let { AgentName("mcp__${it}__…") }
         }
-        Text("Your gateway reaches it there, and signs in or asks you for a key if it needs one.", size = 12.5f, color = palette.mutedForeground)
+        Text("Your gateway reaches it there, and signs in or asks you for a key if it needs one.", size = TextSize.Xs, color = palette.mutedForeground)
         return
     }
     if (known.isEmpty()) {
-        Text("Nothing known by that name. Paste its address instead.", size = 12.5f, color = palette.mutedForeground)
+        Text("Nothing known by that name. Paste its address instead.", size = TextSize.Xs, color = palette.mutedForeground)
         return
     }
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -236,8 +237,8 @@ private fun KnownTile(known: KnownMcpServer, adder: McpServerAdder, modifier: Mo
         Row(Modifier.fillMaxWidth().padding(8.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
             McpServerTile(known.monogram, known.tint)
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                Text(known.name, size = 13f, weight = FontWeight.Medium, color = palette.foreground, maxLines = 1)
-                Text(known.host, size = 11.5f, color = palette.mutedForeground, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
+                Text(known.name, size = TextSize.Sm, weight = FontWeight.Medium, color = palette.foreground, maxLines = 1)
+                Text(known.host, size = TextSize.Xs, color = palette.mutedForeground, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
             }
             if (adder.adding == known.url) Spinner(IconSize.Md, color = palette.mutedForeground)
         }
@@ -247,10 +248,10 @@ private fun KnownTile(known: KnownMcpServer, adder: McpServerAdder, modifier: Mo
 @Composable
 private fun SigningIn() {
     val palette = LocalPalette.current
-    Text("Approve Motile in the browser.", size = 13f, color = palette.mutedForeground)
+    Text("Approve Motile in the browser.", size = TextSize.Sm, color = palette.mutedForeground)
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-        Spinner(iconSize(text = 13f), color = palette.mutedForeground)
-        Text("Waiting for you to approve it", size = 13f, color = palette.mutedForeground)
+        Spinner(iconSize(text = TextSize.Sm), color = palette.mutedForeground)
+        Text("Waiting for you to approve it", size = TextSize.Sm, color = palette.mutedForeground)
     }
 }
 
@@ -259,7 +260,7 @@ private fun SigningIn() {
 private fun KeyFields(caption: String?, key: String, onKey: (String) -> Unit, header: String, onHeader: (String) -> Unit, submit: () -> Unit) {
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
-    caption?.let { Text(it, size = 13f, color = LocalPalette.current.mutedForeground) }
+    caption?.let { Text(it, size = TextSize.Sm, color = LocalPalette.current.mutedForeground) }
     InputField(
         "Key", key, onKey, Modifier.fillMaxWidth(), size = ControlSize.Large, monospaced = true, secure = true, focusRequester = focus,
         keyboardOptions = plainKeyboard.copy(imeAction = ImeAction.Done), onSubmit = submit,
@@ -280,7 +281,7 @@ private fun Added(id: String) {
         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { Spinner(color = palette.mutedForeground) }
         return
     }
-    Text(mcpServer.toolsText, size = 13f, color = palette.mutedForeground)
+    Text(mcpServer.toolsText, size = TextSize.Sm, color = palette.mutedForeground)
     if (mcpServer.groups.isEmpty()) return
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         SheetLabel("Tool permissions")
@@ -387,7 +388,7 @@ fun McpServerTrySheet(mcpServer: McpServerRow) {
         ActionMenu(picked?.title ?: "Pick a Tool", variant = ButtonVariant.Outline, size = ControlSize.Large) {
             for (each in mcpServer.tools) item(each.title, checked = each.name == tool) { pick(each.name) }
         }
-        picked?.summary?.let { Text(it, size = 12.5f, color = palette.mutedForeground) }
+        picked?.summary?.let { Text(it, size = TextSize.Xs, color = palette.mutedForeground) }
         when (val shown = fields) {
             Loaded.Loading -> if (tool.isNotEmpty()) Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { Spinner(color = palette.mutedForeground) }
             is Loaded.Failed -> Failure(shown.message)
@@ -397,7 +398,7 @@ fun McpServerTrySheet(mcpServer: McpServerRow) {
         }
         if (picked != null && picked.kind != "read") Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(Symbol.TriangleAlert, IconSize.Sm, color = palette.warning)
-            Text(McpServerText.runsForReal, size = 12f, color = palette.warning)
+            Text(McpServerText.runsForReal, size = TextSize.Xs, color = palette.warning)
         }
         error?.let { Failure(it) }
         answer?.let { answered ->
@@ -420,12 +421,12 @@ private fun FieldInput(field: McpServerField, value: String, onChange: (String) 
     val palette = LocalPalette.current
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(field.name, style = Theme.uiMono(12f, FontWeight.Medium), color = palette.foreground)
-            if (field.required) Text("required", size = 11.5f, color = palette.mutedStrongerForeground)
+            Text(field.name, style = Theme.uiMono(TextSize.Xs, FontWeight.Medium), color = palette.foreground)
+            if (field.required) Text("required", size = TextSize.Xs, color = palette.mutedStrongerForeground)
             Spacer(Modifier.weight(1f))
             if (field.kind == McpServerField.Kind.Toggle) Switch(value == "true", { onChange(if (it) "true" else "false") })
         }
-        field.description?.let { Text(it, size = 11.5f, color = palette.mutedForeground) }
+        field.description?.let { Text(it, size = TextSize.Xs, color = palette.mutedForeground) }
         when (field.kind) {
             McpServerField.Kind.Text -> InputField(field.name, value, onChange, Modifier.fillMaxWidth(), size = ControlSize.Large, keyboardOptions = plainKeyboard)
             McpServerField.Kind.Number -> InputField(
@@ -458,19 +459,19 @@ fun McpServerCallSheet(entry: Long) {
             Loaded.Loading -> Box(Modifier.fillMaxWidth().heightIn(min = 120.dp), contentAlignment = Alignment.Center) {
                 Spinner(color = palette.mutedForeground)
             }
-            is Loaded.Failed -> Text(shown.message, size = 13f, color = palette.destructive)
+            is Loaded.Failed -> Text(shown.message, size = TextSize.Sm, color = palette.destructive)
             is Loaded.Ready -> {
                 val view = shown.value
                 if (view == null) {
-                    Text("Your gateway no longer has this call", size = 13f, color = palette.mutedForeground)
+                    Text("Your gateway no longer has this call", size = TextSize.Sm, color = palette.mutedForeground)
                     return@McpServerSheetFrame
                 }
-                Text(dotted(view.row.summary, palette.mutedStrongerForeground), size = 12f, color = palette.mutedForeground, maxLines = 2)
+                Text(dotted(view.row.summary, palette.mutedStrongerForeground), size = TextSize.Xs, color = palette.mutedForeground, maxLines = 2)
                 SheetLabel("Arguments")
                 McpServerTextBox(view.arguments, scaled(180f).dp)
                 view.error?.let { failure ->
                     SheetLabel("Error")
-                    SelectionContainer { Text(failure, size = 12.5f, color = palette.warning) }
+                    SelectionContainer { Text(failure, size = TextSize.Xs, color = palette.warning) }
                 }
                 SheetLabel("Result")
                 McpServerTextBox(view.result, scaled(280f).dp)

@@ -30,7 +30,7 @@ struct ToastView: View {
             .frame(height: Self.titleHeight)
             VStack(alignment: .leading, spacing: 4) {
                 Text(toast.title)
-                    .font(.ui(size: 13, weight: .medium))
+                    .font(.ui(.sm, weight: .medium))
                     .foregroundStyle(Color.themeForeground)
                     .frame(minHeight: Self.titleHeight)
                 if let description = toast.description {
@@ -38,7 +38,7 @@ struct ToastView: View {
                         output(description)
                     } else {
                         Text(description)
-                            .font(.ui(size: 12.5))
+                            .font(.ui(.xs))
                             .foregroundStyle(Color.themeMutedForeground)
                             .lineLimit(2)
                             .textSelection(.enabled)
@@ -94,7 +94,7 @@ struct ToastView: View {
         return actions
     }
 
-    private static let outputFont = PlatformFont.uiMono(11.5)
+    private static let outputFont = PlatformFont.uiMono(.xs)
     private static let outputPadding: CGFloat = scaled(8)
     /// Eight lines of output and the room around them.
     private static let outputHeight = (outputFont.textLineHeight + 2) * 8 + outputPadding * 2
@@ -103,7 +103,7 @@ struct ToastView: View {
     private func output(_ text: String) -> some View {
         FadingScroll(maxHeight: Self.outputHeight, anchor: .bottom, padding: Self.outputPadding) {
             Text(text)
-                .font(.ui(size: 11.5, design: .monospaced))
+                .font(.ui(.xs, design: .monospaced))
                 .foregroundStyle(Color.themeMutedForeground)
                 .lineSpacing(2)
                 .textSelection(.enabled)

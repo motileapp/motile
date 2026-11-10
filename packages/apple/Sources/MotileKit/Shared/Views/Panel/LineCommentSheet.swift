@@ -35,16 +35,16 @@ struct LineCommentSheet: View {
                     Image(FileSymbol.symbol(for: commented.path), size: .md)
                         .foregroundStyle(Color.themeMutedForeground)
                     Text(commented.path)
-                        .font(.ui(size: 13, weight: .semibold))
+                        .font(.ui(.sm, weight: .semibold))
                         .lineLimit(1)
                         .truncationMode(.head)
                     Text("line \(commented.line)")
-                        .font(.ui(size: 12.5))
+                        .font(.ui(.xs))
                         .foregroundStyle(Color.themeMutedStrongerForeground)
                         .fixedSize()
                 }
                 Text(commented.code.isEmpty ? " " : commented.code)
-                    .font(.ui(size: 12, design: .monospaced))
+                    .font(.ui(.xs, design: .monospaced))
                     .foregroundStyle(Color.themeForeground)
                     .lineLimit(3)
                     .padding(.horizontal, 10)
@@ -60,7 +60,7 @@ struct LineCommentSheet: View {
                                 VStack(alignment: .leading, spacing: 4) {
                                     (Text(comment.author).fontWeight(.semibold).foregroundStyle(Color.themeForeground)
                                         + Text(" · \(Time.ago(comment.at))").foregroundStyle(Color.themeMutedStrongerForeground))
-                                        .font(.ui(size: 12.5))
+                                        .font(.ui(.xs))
                                     PullRequestTextView(blocks: comment.body)
                                 }
                             }

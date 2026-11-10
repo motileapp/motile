@@ -33,6 +33,7 @@ import app.motile.core.Time
 import app.motile.platform.Platform
 import app.motile.platform.Symbol
 import app.motile.platform.scaled
+import app.motile.theme.TextSize
 import app.motile.theme.symbolSide
 import app.motile.theme.iconSize
 import app.motile.theme.IconSize
@@ -82,7 +83,7 @@ fun ActivityRow(entry: PullRequestPage.Entry, actions: PullRequestActions, modif
         else -> Symbol.MessageSquareText
     }
     Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        val symbolSize = iconSize(text = 12.5f)
+        val symbolSize = iconSize(text = TextSize.Xs)
         Box(Modifier.size(width = symbolSide(symbolSize), height = lineHeight), contentAlignment = Alignment.Center) {
             Icon(symbol, symbolSize, color = if (entry.tone == Tone.Neutral) palette.mutedForeground else entry.tone.color)
         }
@@ -108,7 +109,7 @@ fun ActivityRow(entry: PullRequestPage.Entry, actions: PullRequestActions, modif
 @Composable
 private fun Byline(entry: PullRequestPage.Entry, actions: PullRequestActions) {
     Row(verticalAlignment = Alignment.Top) {
-        Text(byline(entry.author, entry.said, entry.at), Modifier.weight(1f), size = 12.5f)
+        Text(byline(entry.author, entry.said, entry.at), Modifier.weight(1f), size = TextSize.Xs)
         Spacer(Modifier.width(6.dp))
         Row(Modifier.height(lineHeight), verticalAlignment = Alignment.CenterVertically) {
             val subject = entry.subject
@@ -141,8 +142,8 @@ private fun Commits(commits: List<PullRequestPage.Commit>, actions: PullRequestA
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(commit.oid, style = Theme.uiMono(11.5f), color = palette.primary)
-                    Text(commit.headline, Modifier.weight(1f), size = 12.5f, color = palette.foreground, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(commit.oid, style = Theme.uiMono(TextSize.Xs), color = palette.primary)
+                    Text(commit.headline, Modifier.weight(1f), size = TextSize.Xs, color = palette.foreground, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
         }
@@ -180,18 +181,18 @@ private fun ConversationHeader(thread: PullRequestPage.Thread, isOpen: Boolean, 
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(if (isOpen) Symbol.ChevronDown else Symbol.ChevronRight, IconSize.Xs, color = palette.mutedStrongerForeground)
-            Icon(FileSymbol.symbol(thread.path), iconSize(text = 12f), color = palette.mutedForeground)
+            Icon(FileSymbol.symbol(thread.path), iconSize(text = TextSize.Xs), color = palette.mutedForeground)
             Text(
-                thread.path, Modifier.weight(1f, fill = false), size = 12f, weight = FontWeight.Medium, color = palette.foreground,
+                thread.path, Modifier.weight(1f, fill = false), size = TextSize.Xs, weight = FontWeight.Medium, color = palette.foreground,
                 maxLines = 1, overflow = TextOverflow.StartEllipsis,
             )
-            thread.line?.let { Text("line $it", size = 12f, color = palette.mutedStrongerForeground, maxLines = 1) }
+            thread.line?.let { Text("line $it", size = TextSize.Xs, color = palette.mutedStrongerForeground, maxLines = 1) }
             if (thread.outdated) Chip("Outdated", tone = palette.warning)
             if (thread.resolved) Chip("Resolved", tone = palette.success)
             Spacer(Modifier.weight(1f))
             if (!isOpen) {
                 val count = thread.comments.size
-                Text(if (count == 1) "1 comment" else "$count comments", size = 11.5f, color = palette.mutedStrongerForeground, maxLines = 1)
+                Text(if (count == 1) "1 comment" else "$count comments", size = TextSize.Xs, color = palette.mutedStrongerForeground, maxLines = 1)
             }
         }
     }
@@ -253,7 +254,7 @@ private fun HunkView(lines: List<String>) {
                 else -> androidx.compose.ui.graphics.Color.Transparent
             }
             Box(Modifier.fillMaxWidth().heightIn(min = 18.dp).background(fill).padding(horizontal = 12.dp), contentAlignment = Alignment.CenterStart) {
-                Text(line.ifEmpty { " " }, style = Theme.uiMono(11.5f), color = palette.foreground, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(line.ifEmpty { " " }, style = Theme.uiMono(TextSize.Xs), color = palette.foreground, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
     }
@@ -264,7 +265,7 @@ private fun HunkView(lines: List<String>) {
 private fun CommentView(comment: PullRequestPage.Comment, react: (subject: String, kind: String, on: Boolean) -> Unit) {
     Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(byline(comment.author, null, comment.at), Modifier.weight(1f), size = 12.5f)
+            Text(byline(comment.author, null, comment.at), Modifier.weight(1f), size = TextSize.Xs)
             Row(Modifier.offset(x = 6.dp).height(lineHeight), verticalAlignment = Alignment.CenterVertically) {
                 if (comment.reactions.isEmpty()) ReactionPicker(emptyList(), ControlSize.Small) { kind, on -> react(comment.id, kind, on) }
                 comment.url?.let { url ->

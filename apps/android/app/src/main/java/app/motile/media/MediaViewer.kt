@@ -92,6 +92,7 @@ import app.motile.theme.LocalPalette
 import app.motile.theme.Opacity
 import app.motile.theme.OverPicture
 import app.motile.theme.Palette
+import app.motile.theme.TextSize
 import app.motile.theme.value
 import app.motile.transcript.MediaFiles
 import app.motile.transcript.mediaFile
@@ -198,9 +199,9 @@ private fun Viewer(viewing: Viewing) {
                     Modifier.align(Alignment.Center).padding(horizontal = GlassButton.side + 8.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    Text(item.name, size = 13f, weight = FontWeight.SemiBold, color = OverPicture.foreground, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
+                    Text(item.name, size = TextSize.Sm, weight = FontWeight.SemiBold, color = OverPicture.foreground, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
                     if (viewing.items.size > 1) {
-                        Text("${viewing.index + 1} of ${viewing.items.size}", size = 10.5f, color = OverPicture.mutedForeground)
+                        Text("${viewing.index + 1} of ${viewing.items.size}", size = TextSize.Xs, color = OverPicture.mutedForeground)
                     }
                 }
                 GlassButton(Symbol.X, "Close", onClick = { store.closeViewer() }, symbolSize = IconSize.Xl)
@@ -286,7 +287,7 @@ private fun MediaPage(item: ViewedMedia, shown: Boolean, onZoom: (Boolean) -> Un
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(14.dp, Alignment.CenterVertically),
         ) {
-            Text("This video can't be played here.", size = 13f, color = OverPicture.foreground)
+            Text("This video can't be played here.", size = TextSize.Sm, color = OverPicture.foreground)
             ActionButton("Open in Another App", variant = ButtonVariant.Primary, size = ControlSize.Large) { MediaFiles.open(shownNow.file, item.name) }
         }
         null -> Box(tapping, contentAlignment = Alignment.Center) {
@@ -295,9 +296,9 @@ private fun MediaPage(item: ViewedMedia, shown: Boolean, onZoom: (Boolean) -> Un
             when {
                 failed -> Text(
                     if (item.video) "This video couldn't be loaded." else "This image couldn't be loaded.",
-                    size = 13f, color = OverPicture.mutedForeground, align = TextAlign.Center,
+                    size = TextSize.Sm, color = OverPicture.mutedForeground, align = TextAlign.Center,
                 )
-                fraction != null -> Text("Downloading ${item.name} · ${(fraction * 100).toInt()}%", style = app.motile.theme.Theme.uiDigits(13f), color = OverPicture.mutedForeground)
+                fraction != null -> Text("Downloading ${item.name} · ${(fraction * 100).toInt()}%", style = app.motile.theme.Theme.uiDigits(TextSize.Sm), color = OverPicture.mutedForeground)
                 else -> Spinner(ControlSize.Large.symbol, color = OverPicture.mutedForeground)
             }
         }

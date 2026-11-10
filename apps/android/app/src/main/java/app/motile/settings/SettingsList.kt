@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import app.motile.layout.KeyboardFocus
 import app.motile.platform.Symbol
 import app.motile.platform.scaled
+import app.motile.theme.TextSize
 import app.motile.theme.iconSize
 import app.motile.theme.IconSize
 import app.motile.theme.ControlSize
@@ -63,9 +64,9 @@ import app.motile.ui.proxied
 import kotlinx.coroutines.delay
 
 /** The text of a row, as iOS's body. */
-internal const val ROW_TEXT = 14.5f
+internal val ROW_TEXT = TextSize.Md
 /** The text under a row's title, and of the headers and footers, as iOS's footnote. */
-internal const val NOTE_TEXT = 12f
+internal val NOTE_TEXT = TextSize.Xs
 private val rowPadding = 16.dp
 
 /** One of the system's inset groups: a header over a card of rows and a footer under it. Its `id` is what a search scrolls to. */

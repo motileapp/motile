@@ -51,6 +51,7 @@ import app.motile.LocalStore
 import app.motile.core.Loaded
 import app.motile.platform.Platform
 import app.motile.platform.Symbol
+import app.motile.theme.TextSize
 import app.motile.theme.iconSize
 import app.motile.theme.IconSize
 import app.motile.theme.LocalPalette
@@ -77,9 +78,9 @@ fun FilesSurface(target: PanelTarget) {
     var asked by remember { mutableIntStateOf(0) }
     Column(Modifier.fillMaxSize()) {
         PanelBar {
-            Icon(Symbol.Folder, iconSize(text = 12.5f), color = palette.mutedForeground)
+            Icon(Symbol.Folder, iconSize(text = TextSize.Xs), color = palette.mutedForeground)
             Text(
-                target.name, Modifier.padding(start = 3.dp).weight(1f), size = 12.5f, weight = FontWeight.Medium, color = palette.foreground,
+                target.name, Modifier.padding(start = 3.dp).weight(1f), size = TextSize.Xs, weight = FontWeight.Medium, color = palette.foreground,
                 maxLines = 1,
             )
             ActionButton(icon = Symbol.RotateCw, help = "Read the folder again", pending = PanelTab.Files in content.reading) { asked += 1 }
@@ -121,11 +122,11 @@ private fun FileRow(node: FileNode) {
                 color = palette.mutedStrongerForeground,
             )
             Icon(
-                if (node.folder) Symbol.Folder else FileSymbol.symbol(node.path), iconSize(text = 12.5f),
+                if (node.folder) Symbol.Folder else FileSymbol.symbol(node.path), iconSize(text = TextSize.Xs),
                 color = if (node.ignored) palette.mutedStrongestForeground else palette.mutedForeground,
             )
             Text(
-                node.name, size = 12.5f, color = if (node.ignored) palette.mutedStrongestForeground else palette.foreground, maxLines = 1,
+                node.name, size = TextSize.Xs, color = if (node.ignored) palette.mutedStrongestForeground else palette.foreground, maxLines = 1,
                 overflow = TextOverflow.MiddleEllipsis,
             )
         }
@@ -148,7 +149,7 @@ fun FileSurface(target: PanelTarget, path: String) {
                 if (folder.isNotEmpty()) withStyle(SpanStyle(color = palette.mutedForeground)) { append("$folder/") }
                 withStyle(SpanStyle(color = palette.foreground)) { append(path.substringAfterLast('/')) }
             }
-            Text(title, Modifier.weight(1f), size = 12.5f, weight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.StartEllipsis)
+            Text(title, Modifier.weight(1f), size = TextSize.Xs, weight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.StartEllipsis)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 CopyButton("Copy the path", margin = beside(end = panelBarGap)) { Platform.copy(path) }
                 ActionButton(icon = Symbol.RotateCw, help = "Read the file again", pending = tab in content.reading) { asked += 1 }
@@ -241,7 +242,7 @@ fun ChangeSurface(target: PanelTarget, turn: String, path: String) {
     var closed by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize()) {
         PanelBar {
-            Text(panel.nameOfTurn(turn), Modifier.weight(1f), size = 12.5f, weight = FontWeight.Medium, color = LocalPalette.current.foreground, maxLines = 1)
+            Text(panel.nameOfTurn(turn), Modifier.weight(1f), size = TextSize.Xs, weight = FontWeight.Medium, color = LocalPalette.current.foreground, maxLines = 1)
             ActionButton(icon = Symbol.Diff, help = "Show everything this turn changed") { panel.showDiff(DiffScope.Turn(turn), revealing = path) }
         }
         val loaded = content.contents[PanelTab.Change(turn, path)]

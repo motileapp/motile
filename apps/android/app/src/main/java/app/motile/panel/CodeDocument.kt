@@ -21,6 +21,7 @@ import app.motile.core.optionalString
 import app.motile.core.string
 import app.motile.core.strings
 import app.motile.theme.LocalPalette
+import app.motile.theme.TextSize
 import app.motile.theme.Theme
 
 /** An image or a video a diff shows in place of a file's lines, by the blob git keeps it as. */
@@ -156,7 +157,7 @@ data class CodePlace(val file: Int, val line: Int)
 
 /** The lines added and removed, as they are written everywhere: `+12 −3`. */
 object LineCountText {
-    val style: TextStyle get() = Theme.uiDigits(11.5f, FontWeight.Medium)
+    val style: TextStyle get() = Theme.uiDigits(TextSize.Xs, FontWeight.Medium)
 
     @Composable
     @ReadOnlyComposable

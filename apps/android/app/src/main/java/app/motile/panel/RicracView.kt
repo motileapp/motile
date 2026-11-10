@@ -37,6 +37,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import app.motile.LocalStore
+import app.motile.theme.TextSize
 import app.motile.ui.reaching
 import app.motile.core.Loaded
 import app.motile.core.RicracChoice
@@ -86,15 +87,15 @@ private fun RicracConnect(target: PanelTarget) {
         Column(Modifier.widthIn(max = 320.dp), verticalArrangement = Arrangement.spacedBy(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Icon(Symbol.Ricrac, IconSize.Display, color = palette.foreground)
             Column(verticalArrangement = Arrangement.spacedBy(6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("Connect Ricrac", size = 15f, weight = FontWeight.SemiBold, color = palette.foreground)
+                Text("Connect Ricrac", size = TextSize.Lg, weight = FontWeight.SemiBold, color = palette.foreground)
                 Text(
                     "See your issues and hand them to your agents. The connection is kept on your server.",
-                    size = 12.5f, color = palette.mutedForeground, align = TextAlign.Center,
+                    size = TextSize.Xs, color = palette.mutedForeground, align = TextAlign.Center,
                 )
             }
             ActionButton("Connect Ricrac", variant = ButtonVariant.Primary, pending = ricrac.connecting == target.serverID) { ricrac.connect(target.serverID) }
             ricrac.error?.let { error ->
-                SelectionContainer { Text(error, size = 12.5f, color = palette.destructive, align = TextAlign.Center) }
+                SelectionContainer { Text(error, size = TextSize.Xs, color = palette.destructive, align = TextAlign.Center) }
             }
         }
     }
@@ -257,7 +258,7 @@ internal fun RicracInitials(initials: String, name: String) {
         Modifier.size(scaled(18f).dp).background(palette.backgroundAccent, CircleShape).semantics { contentDescription = name },
         contentAlignment = Alignment.Center,
     ) {
-        Text(initials, size = 9f, weight = FontWeight.SemiBold, color = palette.mutedForeground, maxLines = 1)
+        Text(initials, size = TextSize.Xxs, weight = FontWeight.SemiBold, color = palette.mutedForeground, maxLines = 1)
     }
 }
 
@@ -271,7 +272,7 @@ fun RicracIssueSurface(target: PanelTarget, workspace: String, id: String) {
     val page = ricrac.pages[id] ?: Loaded.Loading
     Column(Modifier.fillMaxSize()) {
         PanelBar {
-            Text(page.value?.row?.identifier ?: "", size = 12.5f, weight = FontWeight.Medium, color = palette.mutedForeground)
+            Text(page.value?.row?.identifier ?: "", size = TextSize.Xs, weight = FontWeight.Medium, color = palette.mutedForeground)
             Spacer(Modifier.weight(1f).widthIn(min = 4.dp))
             val url = page.value?.row?.url
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -301,7 +302,7 @@ private fun IssuePage(page: RicracPage, target: PanelTarget, workspace: String, 
     var comment by rememberSaveable(id) { mutableStateOf("") }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = panelEndRoom)) {
         item("title") {
-            SelectionContainer { Text(page.row.title, size = 17f, weight = FontWeight.SemiBold, color = palette.foreground) }
+            SelectionContainer { Text(page.row.title, size = TextSize.Xl, weight = FontWeight.SemiBold, color = palette.foreground) }
         }
         item("properties") {
             FlowRow(Modifier.padding(top = 16.dp).reaching(top = propertyGap, end = propertyGap)) {
@@ -324,7 +325,7 @@ private fun IssuePage(page: RicracPage, target: PanelTarget, workspace: String, 
         item("description") {
             Box(Modifier.padding(top = 16.dp)) {
                 if (page.description.isEmpty()) {
-                    Text("No description.", size = 12.5f, color = palette.mutedStrongerForeground)
+                    Text("No description.", size = TextSize.Xs, color = palette.mutedStrongerForeground)
                 } else {
                     PullRequestTextView(page.description)
                 }
@@ -335,7 +336,7 @@ private fun IssuePage(page: RicracPage, target: PanelTarget, workspace: String, 
             Column(Modifier.padding(top = 16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                     RicracInitials(comment.initials, comment.author)
-                    Text(byline(comment.author, null, comment.at), size = 12.5f)
+                    Text(byline(comment.author, null, comment.at), size = TextSize.Xs)
                 }
                 PullRequestTextView(comment.body)
             }
@@ -399,7 +400,7 @@ private fun RicracNewIssue(target: PanelTarget, workspace: String, team: String?
     val state = states.firstOrNull { it.id == stateID } ?: states.firstOrNull { it.kind == "unstarted" } ?: states.firstOrNull()
     val users = ricrac.users[workspace] ?: emptyList()
     Column(Modifier.fillMaxSize().navigationBarsPadding().padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("New Issue", size = 15f, weight = FontWeight.SemiBold)
+        Text("New Issue", size = TextSize.Lg, weight = FontWeight.SemiBold)
         InputField("Title", title, { title = it }, Modifier.fillMaxWidth())
         TextArea("Add a description", description, { description = it }, Modifier.weight(1f).fillMaxWidth(), lines = 4, fills = true)
         FlowRow(Modifier.reaching(top = propertyGap, end = propertyGap)) {
@@ -430,7 +431,7 @@ private fun RicracNewIssue(target: PanelTarget, workspace: String, team: String?
                 RicracChoices.assignees(this, users, assigneeID) { assigneeID = it }
             }
         }
-        ricrac.error?.let { Text(it, size = 12.5f, color = palette.destructive) }
+        ricrac.error?.let { Text(it, size = TextSize.Xs, color = palette.destructive) }
         Row {
             Spacer(Modifier.weight(1f))
             ActionButton("Cancel", margin = beside(end = 8.dp)) { close() }

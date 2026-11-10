@@ -15,15 +15,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.motile.LocalStore
 import app.motile.core.Account
+import app.motile.platform.Platform
 import app.motile.theme.LocalPalette
+import app.motile.theme.Theme
+import app.motile.theme.nearestTextSize
 import java.net.URL
 
 /**
@@ -67,9 +68,8 @@ fun AccountPicture(account: Account, modifier: Modifier = Modifier) {
             return@Box
         }
         BoxWithConstraints(Modifier.fillMaxSize().background(palette.border), contentAlignment = Alignment.Center) {
-            val size = with(LocalDensity.current) { (maxHeight * 0.5f).toSp() }
             val initial = (account.name ?: account.email).take(1).uppercase()
-            Text(initial, style = TextStyle(fontSize = size, fontWeight = FontWeight.SemiBold), color = palette.foreground, maxLines = 1)
+            Text(initial, style = Theme.ui(nearestTextSize(maxHeight.value * 0.5f / Platform.scale), FontWeight.SemiBold), color = palette.foreground, maxLines = 1)
         }
     }
 }

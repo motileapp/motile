@@ -45,6 +45,7 @@ import app.motile.layout.SIDEBAR_WIDTH
 import app.motile.platform.Symbol
 import app.motile.theme.LocalPalette
 import app.motile.theme.Surface
+import app.motile.theme.TextSize
 import app.motile.ui.SheetBackButton
 import app.motile.ui.SheetBar
 import app.motile.ui.HighlightButton
@@ -290,7 +291,7 @@ private fun Results(query: String, modifier: Modifier, choose: (SettingsSection)
     val found = remember(query) { SettingsEntry.matching(query) }
     if (found.isEmpty()) {
         Column(modifier.fillMaxWidth().padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text("No Results for “$query”", size = 17f, weight = FontWeight.SemiBold, align = TextAlign.Center)
+            Text("No Results for “$query”", size = TextSize.Xl, weight = FontWeight.SemiBold, align = TextAlign.Center)
             Text("Check the spelling or try a new search.", size = NOTE_TEXT, color = palette.mutedForeground, align = TextAlign.Center)
         }
         return

@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.motile.platform.Symbol
 import app.motile.theme.IconSize
+import app.motile.theme.TextSize
 import app.motile.theme.symbolSide
 
 /** The gateway's symbol in a line of text, after what runs through the gateway, centred on the line, where DM Sans centres its capitals, and a pin after it where that is pinned to one of the gateway's accounts. */
@@ -37,18 +38,18 @@ object GatewayMark {
     }
 
     /** The symbol's size beside words of `fontSize`, or a step smaller than `icon`, an icon beside it, as the Mac app sizes it. */
-    fun size(fontSize: Float, icon: IconSize? = null): IconSize {
+    fun size(fontSize: TextSize, icon: IconSize? = null): IconSize {
         if (icon != null) return IconSize.entries.lastOrNull { it.side < icon.side } ?: icon
-        return when {
-            fontSize <= 12.5f -> IconSize.Xxs
-            fontSize <= 15f -> IconSize.Xs
-            else -> IconSize.Sm
+        return when (fontSize) {
+            TextSize.Xxs, TextSize.Xs -> IconSize.Xxs
+            TextSize.Sm, TextSize.Md -> IconSize.Xs
+            TextSize.Lg, TextSize.Xl, TextSize.Xxl -> IconSize.Sm
         }
     }
 
     /** What draws the symbols of `appendMark` beside words of `fontSize`, in `color`, a step smaller than `symbol` where they go with an icon beside them. */
     @Composable
-    fun content(color: Color, fontSize: Float, symbol: IconSize? = null): Map<String, InlineTextContent> {
+    fun content(color: Color, fontSize: TextSize, symbol: IconSize? = null): Map<String, InlineTextContent> {
         val size = size(fontSize, symbol)
         val side = symbolSide(size)
         val density = LocalDensity.current

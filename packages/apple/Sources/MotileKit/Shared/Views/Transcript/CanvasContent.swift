@@ -194,10 +194,10 @@ private enum TextStyle {
     var font: PlatformFont {
         switch self {
         case .caption: Theme.smallFont
-        case .tipTitle: .ui(12, weight: .semibold)
-        case .readout: .uiDigits(12, weight: .medium)
-        case .small: .ui(13)
-        case .share: .uiDigits(13, weight: .medium)
+        case .tipTitle: .ui(.xs, weight: .semibold)
+        case .readout: .uiDigits(.xs, weight: .medium)
+        case .small: .ui(.sm)
+        case .share: .uiDigits(.sm, weight: .medium)
         }
     }
 

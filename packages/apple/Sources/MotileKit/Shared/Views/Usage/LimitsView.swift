@@ -19,7 +19,7 @@ struct LimitsView: View {
                     header(section)
                     if let note = section.note {
                         Text(note)
-                            .font(.ui(size: 12))
+                            .font(.ui(.xs))
                             .foregroundStyle(Color.themeMutedForeground)
                             .fixedSize(horizontal: false, vertical: true)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -41,7 +41,7 @@ struct LimitsView: View {
             }
             ForEach(report.notes, id: \.self) { note in
                 Text(note)
-                    .font(.caption)
+                    .font(.ui(.xxs))
                     .foregroundStyle(Color.themeMutedForeground)
             }
         }
@@ -55,7 +55,7 @@ struct LimitsView: View {
             HStack(spacing: 8) {
                 AgentIcon(agent: section.agent, size: .md)
                 Text(section.agent.name)
-                    .font(.ui(size: 14, weight: .medium))
+                    .font(.ui(.md, weight: .medium))
                     .foregroundStyle(Color.themeForeground)
                     .layoutPriority(1)
                 if let plan = section.plan {
@@ -77,7 +77,7 @@ struct LimitsView: View {
     /// "Work · a@b.c", or whichever of the two is known.
     private func account(_ section: LimitsReport.Section) -> some View {
         Text(dotted: [section.name, section.account].compactMap { $0 }.map { Text(verbatim: $0) })
-            .font(.ui(size: 12))
+            .font(.ui(.xs))
             .foregroundStyle(Color.themeMutedForeground)
             .truncationMode(.middle)
     }
@@ -114,23 +114,23 @@ struct LimitRow: View {
     private var numbers: some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(window.label)
-                .font(.ui(size: 13, weight: .medium))
+                .font(.ui(.sm, weight: .medium))
                 .foregroundStyle(Color.themeForeground)
                 .lineLimit(1)
             HStack(alignment: .firstTextBaseline, spacing: 5) {
                 Text(window.used)
-                    .font(.ui(size: 28, weight: .semibold))
+                    .font(.ui(.xxl, weight: .semibold))
                     .foregroundStyle(Color.themeForeground)
                     .monospacedDigit()
                 Text("used")
-                    .font(.ui(size: 13))
+                    .font(.ui(.sm))
                     .foregroundStyle(Color.themeMutedForeground)
             }
             if let pace = window.pace {
                 HStack(spacing: 5) {
                     Image(Self.symbol(of: pace), size: .sm)
                     Text(Self.label(of: pace))
-                        .font(.ui(size: 12))
+                        .font(.ui(.xs))
                 }
                 .foregroundStyle(Color.themeMutedStrongerForeground)
                 .help(Self.help(of: pace))
@@ -202,7 +202,7 @@ private struct LimitBar: View {
     }
 
     private var used: some View {
-        Text(window.used).font(.ui(size: 11, weight: .semibold))
+        Text(window.used).font(.ui(.xs, weight: .semibold))
     }
 
     @ViewBuilder private var end: some View {
@@ -222,6 +222,6 @@ private struct LimitBar: View {
                 .help(window.resetCredits == 1 ? "1 reset to use" : "\(window.resetCredits) resets to use")
             }
         }
-        .font(.ui(size: 11, weight: .medium))
+        .font(.ui(.xs, weight: .medium))
     }
 }

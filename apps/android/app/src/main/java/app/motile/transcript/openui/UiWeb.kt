@@ -187,7 +187,7 @@ fun UiHtmlView(node: UiNode, kind: UiKind.HtmlView) {
         when {
             kind.streaming -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Spinner(ControlSize.Small.symbol, color = palette.mutedForeground)
-                Text("Preparing the interactive view", style = UiStyle.text(UiTextStyle.Small, false), color = palette.mutedForeground)
+                Text("Preparing the interactive view", style = UiStyle.text(UiTextStyle.Small), color = palette.mutedForeground)
             }
             gone -> Still(kind.title, "Interactive view") { gone = false }
             loaded != null -> PageView(loaded, Modifier.fillMaxSize(), opensYouTube = false, onGone = { gone = true }) { reportedHeight ->
@@ -231,8 +231,8 @@ fun UiYouTube(node: UiNode, kind: UiKind.YouTube) {
 private fun Still(title: String, kind: String, reload: () -> Unit) {
     val palette = LocalPalette.current
     Column(Modifier.padding(horizontal = 16.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        if (title.isNotEmpty()) Text(title, style = UiStyle.text(UiTextStyle.CardTitle, false), color = palette.foreground, textAlign = TextAlign.Center)
-        Text(kind, style = UiStyle.text(UiTextStyle.Small, false), color = palette.mutedForeground)
+        if (title.isNotEmpty()) Text(title, style = UiStyle.text(UiTextStyle.CardTitle), color = palette.foreground, textAlign = TextAlign.Center)
+        Text(kind, style = UiStyle.text(UiTextStyle.Small), color = palette.mutedForeground)
         ActionButton("Reload", Symbol.RotateCw, onClick = reload)
     }
 }

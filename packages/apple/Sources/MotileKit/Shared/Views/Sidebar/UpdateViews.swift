@@ -28,7 +28,7 @@ struct AppUpdateRow: View {
             VStack(alignment: .leading, spacing: 5) {
                 line("Downloading v\(version)", symbol: .circleArrowDown, tint: .themeForeground) {
                     Text("\(Int(fraction * 100))%")
-                        .font(.ui(size: 11))
+                        .font(.ui(.xs))
                         .foregroundStyle(Color.themeMutedStrongerForeground)
                         .monospacedDigit()
                     ActionButton(icon: .x, help: "Cancel the download", size: size) { updater.cancelDownload() }
@@ -50,7 +50,7 @@ struct AppUpdateRow: View {
                     ActionButton("Try Again", size: .small) { updater.retry() }
                 }
                 Text(message)
-                    .font(.ui(size: 11))
+                    .font(.ui(.xs))
                     .foregroundStyle(Color.themeMutedForeground)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -92,7 +92,7 @@ struct UpdateLabel: View {
             ShelfLineMark { TurningSymbol(symbol: symbol, size: .sm, turning: turning) }
                 .foregroundStyle(tint)
             Text(text)
-                .font(.ui(size: 12, weight: .medium))
+                .font(.ui(.xs, weight: .medium))
                 .lineLimit(1)
         }
     }
@@ -116,7 +116,7 @@ struct ServerUpdateStatus<Otherwise: View>: View {
         if let update = store.serverUpdate(of: server), update.waiting, !update.restarting {
             HStack(spacing: 6) {
                 Text("Waiting")
-                    .font(.ui(size: 11))
+                    .font(.ui(.xs))
                     .foregroundStyle(Color.themeMutedForeground)
                 ActionButton(
                     "Restart Now", help: "Stop the agents on \(server.name) and restart it. Their threads continue once it is back.",
@@ -129,7 +129,7 @@ struct ServerUpdateStatus<Otherwise: View>: View {
         } else if let update = store.serverUpdate(of: server) {
             HStack(spacing: 6) {
                 Text(progress(of: update))
-                    .font(.ui(size: 11))
+                    .font(.ui(.xs))
                     .foregroundStyle(Color.themeMutedForeground)
                     .monospacedDigit()
                 Spinner(size: size.symbol)

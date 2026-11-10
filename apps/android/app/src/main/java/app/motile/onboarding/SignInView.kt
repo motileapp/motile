@@ -25,6 +25,7 @@ import app.motile.platform.Platform
 import app.motile.theme.ControlSize
 import app.motile.theme.LocalPalette
 import app.motile.theme.Palette
+import app.motile.theme.TextSize
 import app.motile.ui.ActionButton
 import app.motile.ui.LogoMark
 import app.motile.ui.Text
@@ -37,8 +38,8 @@ fun SignInView() {
     Column(Modifier.fillMaxSize().safeDrawingPadding(), horizontalAlignment = Alignment.CenterHorizontally) {
         Spacer(Modifier.weight(1f))
         MotileMark(color = palette.emphasizedForeground)
-        Text("Motile", Modifier.padding(top = 14.dp), size = 30f, weight = FontWeight.SemiBold)
-        Text("The command center for coding agents.", Modifier.padding(top = 6.dp), size = 15f, color = palette.mutedForeground)
+        Text("Motile", Modifier.padding(top = 14.dp), size = TextSize.Xxl, weight = FontWeight.SemiBold)
+        Text("The command center for coding agents.", Modifier.padding(top = 6.dp), size = TextSize.Lg, color = palette.mutedForeground)
 
         ActionButton(
             "Continue with Google",
@@ -49,14 +50,14 @@ fun SignInView() {
             fills = true,
         ) { store.signIn() }
         if (store.signingIn) {
-            Text("Waiting for the browser", Modifier.padding(top = 10.dp), size = 12f, color = palette.mutedStrongerForeground)
+            Text("Waiting for the browser", Modifier.padding(top = 10.dp), size = TextSize.Xs, color = palette.mutedStrongerForeground)
         }
 
         store.signInError?.let { error ->
             Text(
                 error,
                 Modifier.padding(top = 14.dp).widthIn(max = 360.dp),
-                size = 13f,
+                size = TextSize.Sm,
                 color = palette.destructive,
                 align = TextAlign.Center,
             )
@@ -65,7 +66,7 @@ fun SignInView() {
         Text(
             "Signing in links this ${Platform.device} to your account. Your threads stay on your own machines.",
             Modifier.padding(start = 20.dp, end = 20.dp, bottom = 24.dp),
-            size = 12f,
+            size = TextSize.Xs,
             color = palette.mutedStrongerForeground,
             align = TextAlign.Center,
         )

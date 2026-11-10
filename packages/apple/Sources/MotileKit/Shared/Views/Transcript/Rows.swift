@@ -102,7 +102,7 @@ final class RowModel {
         case "tool":
             kind = .tool(ToolContent(json: json))
         case "thinking":
-            kind = .thinking(Typesetter.plain(json.string("text"), color: Theme.mutedForeground, size: 13 * Platform.scale))
+            kind = .thinking(Typesetter.plain(json.string("text"), color: Theme.mutedForeground, size: .sm))
         case "media":
             kind = .media(MediaContent(json: json))
         case "file":
@@ -382,7 +382,7 @@ struct ChangesContent {
         at = json.double("at")
         let title = NSMutableAttributedString(
             string: files == 1 ? "1 changed file" : "\(files) changed files",
-            attributes: [.font: PlatformFont.ui(13, weight: .medium), .foregroundColor: Theme.foreground])
+            attributes: [.font: PlatformFont.ui(.sm, weight: .medium), .foregroundColor: Theme.foreground])
         title.append(NSAttributedString(string: "   "))
         title.append(LineCountText.text(added: json.int("added"), removed: json.int("removed")))
         self.title = title
@@ -597,7 +597,7 @@ enum Typesetter {
 
     private static let italicFont = Theme.proseFont.italicised
     private static let boldItalicFont = Theme.proseBold.italicised
-    private static let inlineCodeBold = PlatformFont.uiMono(12.5, weight: .semibold)
+    private static let inlineCodeBold = PlatformFont.uiMono(.xs, weight: .semibold)
 
     /// What a paragraph, a list, a quote and a table keep from what follows them.
     private static let blockGap: CGFloat = 12
@@ -655,13 +655,13 @@ enum Typesetter {
         return style
     }()
 
-    static func plain(_ text: String, color: PlatformColor, size: CGFloat = Theme.proseSize) -> NSAttributedString {
+    static func plain(_ text: String, color: PlatformColor, size: TextSize = .md) -> NSAttributedString {
         let style = NSMutableParagraphStyle()
         style.lineSpacing = 5
         style.paragraphSpacing = 6
         return NSAttributedString(
             string: text,
-            attributes: [.font: PlatformFont.systemFont(ofSize: size), .foregroundColor: color, .paragraphStyle: style]
+            attributes: [.font: PlatformFont.ui(size), .foregroundColor: color, .paragraphStyle: style]
         )
     }
 
@@ -673,7 +673,7 @@ enum Typesetter {
     }
 
     /// The font of a message's text, which its skills' chips are as tall as.
-    static let messageFont = PlatformFont.systemFont(ofSize: Theme.proseSize)
+    static let messageFont = Theme.proseFont
 
     private static func link(_ text: NSMutableAttributedString, _ json: JSON) {
         for link in json.objects("links") {
@@ -812,9 +812,9 @@ enum Typesetter {
                 style.lineSpacing = 3
                 style.alignment = [NSTextAlignment.left, .center, .right][min(2, max(0, para.int("align")))]
                 tables.set(para, style: style)
-                result.addAttributes([.paragraphStyle: style, .font: PlatformFont.ui(13)], range: range)
+                result.addAttributes([.paragraphStyle: style, .font: PlatformFont.ui(.sm)], range: range)
                 if para.bool("header") {
-                    let bold = PlatformFont.ui(13, weight: .semibold)
+                    let bold = PlatformFont.ui(.sm, weight: .semibold)
                     result.addAttributes([.font: bold, .foregroundColor: Theme.foreground], range: range)
                     headingRanges.append((range, bold))
                 }

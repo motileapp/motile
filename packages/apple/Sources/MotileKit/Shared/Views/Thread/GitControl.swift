@@ -299,9 +299,9 @@ struct CommitSheet: View {
         VStack(alignment: .leading, spacing: 14) {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Commit Changes")
-                    .font(.ui(size: 15, weight: .semibold))
+                    .font(.ui(.lg, weight: .semibold))
                 Text("Review and confirm your commit. Leave the message empty to have one written.")
-                    .font(.ui(size: 12))
+                    .font(.ui(.xs))
                     .foregroundStyle(Color.themeMutedForeground)
             }
             HStack(spacing: 8) {
@@ -315,11 +315,11 @@ struct CommitSheet: View {
                         .foregroundStyle(Color.themeWarning)
                 }
             }
-            .font(.ui(size: 12.5))
+            .font(.ui(.xs))
             fileList
             VStack(alignment: .leading, spacing: 6) {
                 Text("Commit message (optional)")
-                    .font(.ui(size: 12.5, weight: .medium))
+                    .font(.ui(.xs, weight: .medium))
                 TextArea("Leave empty to have one written", text: $message, lines: 4)
             }
             #if os(macOS)
@@ -362,10 +362,10 @@ struct CommitSheet: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 8) {
                 Text("Files")
-                    .font(.ui(size: 12.5, weight: .medium))
+                    .font(.ui(.xs, weight: .medium))
                 if !excluded.isEmpty, !editing {
                     Text("\(included.count) of \(files.count)")
-                        .font(.ui(size: 12))
+                        .font(.ui(.xs))
                         .foregroundStyle(Color.themeMutedForeground)
                 }
                 Spacer()
@@ -380,7 +380,7 @@ struct CommitSheet: View {
                 .padding(.vertical, -4)
                 .padding(.trailing, -ControlSize.small.padding)
             }
-            .font(.ui(size: 12))
+            .font(.ui(.xs))
             ScrollView {
                 LazyVStack(spacing: 0) {
                     ForEach(files) { file in
@@ -428,7 +428,7 @@ struct CommitSheet: View {
                     .foregroundStyle(Color.themeMutedStrongerForeground)
             }
         }
-        .font(.ui(size: 12.5))
+        .font(.ui(.xs))
         .frame(height: Self.rowHeight)
         // While editing all of the row toggles its file, so no click falls between two marks.
         .contentShape(Rectangle())
@@ -468,6 +468,6 @@ private struct LineCounts: View {
                 Text("−\(removed)").foregroundStyle(Color.themeDestructive)
             }
         }
-        .font(.ui(size: 11, weight: .medium).monospacedDigit())
+        .font(.ui(.xs, weight: .medium).monospacedDigit())
     }
 }

@@ -16,7 +16,7 @@ use crate::models::{
     shortened,
 };
 use crate::store::{ListedDraft, Selection, stage_label};
-use crate::theme::{ControlSize, IconSize, Opacity, Radius, Surface, colors};
+use crate::theme::{ControlSize, IconSize, Opacity, Radius, Surface, TextSize, colors};
 use crate::ui::logos::{self, PullRequestLabel};
 use crate::ui::menu::Menu;
 use crate::ui::{ActionButton, ActionMenu, Highlight, KeyCaps, Spinner, divider, icons, tabular_numbers, tooltip};
@@ -47,7 +47,7 @@ fn checkout_label(symbol: &'static str, text: String) -> Div {
         .items_center()
         .gap(px(3.))
         .child(icons::symbol(symbol, IconSize::Sm))
-        .child(crate::ui::middle_truncated(text).text_size(px(11.)))
+        .child(crate::ui::middle_truncated(text).text_size(TextSize::Xs))
 }
 
 impl Sidebar {
@@ -69,7 +69,7 @@ impl Sidebar {
             return None;
         }
         let server = store.server(Some(server_id))?;
-        Some(div().min_w_0().child(logos::server_label(server, 11., false, cx)).into_any_element())
+        Some(div().min_w_0().child(logos::server_label(server, TextSize::Xs, false, cx)).into_any_element())
     }
 
     /// A thread's pull request in its row. A click opens the thread and then the pull request's
@@ -137,7 +137,7 @@ impl Sidebar {
                     .child(
                         div()
                             .min_w_0()
-                            .text_size(px(11.))
+                            .text_size(TextSize::Xs)
                             .font_weight(FontWeight::MEDIUM)
                             .truncate()
                             .child(project_name),
@@ -150,7 +150,7 @@ impl Sidebar {
                     .h(px(TITLE_HEIGHT))
                     .mt(px(1.))
                     .mb(px(5.))
-                    .text_size(px(13.))
+                    .text_size(TextSize::Sm)
                     .line_height(px(TITLE_HEIGHT))
                     .font_weight(FontWeight::MEDIUM)
                     .truncate()
@@ -295,7 +295,7 @@ impl Sidebar {
                 .items_center()
                 .gap(px(3.))
                 .child(Spinner::new(IconSize::Sm).render(cx))
-                .child(div().text_size(px(11.)).font_weight(FontWeight::MEDIUM).child("Sending"))
+                .child(div().text_size(TextSize::Xs).font_weight(FontWeight::MEDIUM).child("Sending"))
                 .into_any_element()
         } else if hovering {
             let (store, draft) = (self.store.clone(), listed.draft.clone());
@@ -315,7 +315,7 @@ impl Sidebar {
                 .items_center()
                 .gap(px(3.))
                 .child(icons::symbol("file", IconSize::Sm))
-                .child(div().text_size(px(11.)).font_weight(FontWeight::MEDIUM).child("Draft"))
+                .child(div().text_size(TextSize::Xs).font_weight(FontWeight::MEDIUM).child("Draft"))
                 .into_any_element()
         };
         let group = SharedString::from(key.clone());
@@ -348,9 +348,18 @@ impl Sidebar {
                             .gap(px(6.))
                             .text_color(c.muted_foreground)
                             .child(logos::project_icon(project.as_ref(), IconSize::Sm, cx))
-                            .child(div().min_w_0().text_size(px(11.)).font_weight(FontWeight::MEDIUM).truncate().child(
-                                project.as_ref().map_or("No project".to_string(), |project| project.name.clone()),
-                            ))
+                            .child(
+                                div()
+                                    .min_w_0()
+                                    .text_size(TextSize::Xs)
+                                    .font_weight(FontWeight::MEDIUM)
+                                    .truncate()
+                                    .child(
+                                        project
+                                            .as_ref()
+                                            .map_or("No project".to_string(), |project| project.name.clone()),
+                                    ),
+                            )
                             .child(div().flex_1().min_w(px(6.)))
                             .child(div().flex_shrink_0().child(status)),
                     )
@@ -359,7 +368,7 @@ impl Sidebar {
                             .h(px(TITLE_HEIGHT))
                             .mt(px(1.))
                             .mb(px(5.))
-                            .text_size(px(13.))
+                            .text_size(TextSize::Sm)
                             .line_height(px(TITLE_HEIGHT))
                             .font_weight(FontWeight::MEDIUM)
                             .truncate()
@@ -467,7 +476,7 @@ impl Sidebar {
                     .child(
                         div()
                             .min_w_0()
-                            .text_size(px(13.))
+                            .text_size(TextSize::Sm)
                             .text_color(if selected || hovering { c.foreground } else { c.muted_foreground })
                             .truncate()
                             .child(thread.title.clone()),
@@ -479,7 +488,7 @@ impl Sidebar {
                     .child(
                         div()
                             .flex_shrink_0()
-                            .text_size(px(11.))
+                            .text_size(TextSize::Xs)
                             .text_color(c.muted_stronger_foreground)
                             .when(hovering && back.is_some(), |time| time.opacity(0.))
                             .child(trailing),
@@ -574,7 +583,7 @@ impl Sidebar {
                                 .justify_center()
                                 .child(icons::symbol("plus", IconSize::Md)),
                         )
-                        .child(div().min_w_0().text_size(px(13.)).truncate().child("Create a thread")),
+                        .child(div().min_w_0().text_size(TextSize::Sm).truncate().child("Create a thread")),
                     cx,
                 ),
             )
@@ -600,7 +609,7 @@ impl Sidebar {
             .flex()
             .items_center()
             .gap(px(6.))
-            .text_size(px(12.))
+            .text_size(TextSize::Xs)
             .text_color(c.muted_stronger_foreground);
         if !store.is_searching_threads() {
             let text = if store.all_threads().next().is_none() { "No threads yet" } else { "No active threads" };
@@ -623,7 +632,7 @@ pub fn thread_status(thread: &ThreadInfo, read_only: bool, cx: &App) -> AnyEleme
     let label = |text: String, color: Hsla, icon: AnyElement| {
         div().flex().items_center().gap(px(3.)).text_color(color).child(icon).child(
             div()
-                .text_size(px(11.))
+                .text_size(TextSize::Xs)
                 .font_weight(FontWeight::MEDIUM)
                 .font_features(tabular_numbers())
                 .whitespace_nowrap()
@@ -700,7 +709,7 @@ pub fn thread_status(thread: &ThreadInfo, read_only: bool, cx: &App) -> AnyEleme
         return label("Finished".into(), c.success, symbol("flag")).into_any_element();
     }
     div()
-        .text_size(px(11.))
+        .text_size(TextSize::Xs)
         .text_color(c.muted_stronger_foreground)
         .whitespace_nowrap()
         .child(ago(thread.updated_at))

@@ -23,7 +23,7 @@ pub use self::page::top_fade;
 use self::sidebar::SettingsSidebar;
 use crate::main_view::{PANE_REACH, THREAD_REACH, shown_sidebar_width, sidebar_widths};
 use crate::store::Store;
-use crate::theme::{self, colors};
+use crate::theme::{self, TextSize, colors};
 use crate::ui::{ActionButton, TOOLBAR_MARGIN, even};
 
 /// Whether the window is the one with the threads in it, which ⌘W must not close while a tab or
@@ -145,7 +145,7 @@ impl Render for SettingsRoute {
                     .justify_center()
                     .child(
                         div()
-                            .text_size(px(13.))
+                            .text_size(TextSize::Sm)
                             .font_weight(FontWeight::SEMIBOLD)
                             .whitespace_nowrap()
                             .overflow_hidden()

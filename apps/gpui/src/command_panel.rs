@@ -16,7 +16,7 @@ use crate::models::{
 };
 use crate::store::settings::SettingsSection;
 use crate::store::{AddingProject, PanelPage, Store};
-use crate::theme::{Colors, ControlSize, IconSize, Layer, Opacity, Radius, ShadowSize, Surface, colors};
+use crate::theme::{Colors, ControlSize, IconSize, Layer, Opacity, Radius, ShadowSize, Surface, TextSize, colors};
 use crate::ui::parts::with_edge_fades;
 use crate::ui::{ActionButton, InputField, InputVariant, KeyCaps, Spinner, icons, logos};
 
@@ -1242,7 +1242,7 @@ impl CommandPanel {
                     InputField::new(&self.query)
                         .variant(InputVariant::Bare)
                         .size(field_size)
-                        .text_size(16.)
+                        .text_size(TextSize::Lg)
                         .surface(SURFACE),
                 ),
             )
@@ -1294,7 +1294,7 @@ impl CommandPanel {
                 .w_full()
                 .px(px(24.))
                 .py(px(28.))
-                .text_size(px(13.))
+                .text_size(TextSize::Sm)
                 .text_color(c.muted_stronger_foreground)
                 .text_center()
                 .child(text.clone())
@@ -1303,7 +1303,7 @@ impl CommandPanel {
                 .px(px(SIDE_MARGIN + 10.))
                 .pt(px(10.))
                 .pb(px(4.))
-                .text_size(px(12.))
+                .text_size(TextSize::Xs)
                 .font_weight(FontWeight::MEDIUM)
                 .text_color(c.muted_stronger_foreground)
                 .child(self.shown[*section].title.clone())
@@ -1317,7 +1317,7 @@ impl CommandPanel {
                 .px(px(SIDE_MARGIN + 10.))
                 .flex()
                 .items_center()
-                .text_size(px(12.))
+                .text_size(TextSize::Xs)
                 .text_color(c.destructive)
                 .line_clamp(2)
                 .child(notice.clone())
@@ -1345,7 +1345,7 @@ impl CommandPanel {
         } else if let Some(note) = &item.note {
             Some(
                 div()
-                    .text_size(px(12.))
+                    .text_size(TextSize::Xs)
                     .font_weight(FontWeight::MEDIUM)
                     .text_color(if item.warns { c.warning } else { c.muted_stronger_foreground })
                     .when(item.warns, |note| note.px(px(8.)).py(px(3.)).rounded_full().bg(c.wash(c.warning, false)))
@@ -1357,7 +1357,7 @@ impl CommandPanel {
             let digit = |digit: usize| shortcuts.keys_label(&format!("mod+{digit}"));
             item.keys.clone().or_else(|| item.shortcut.map(digit)).map(|keys| {
                 div()
-                    .text_size(px(12.))
+                    .text_size(TextSize::Xs)
                     .font_weight(FontWeight::MEDIUM)
                     .text_color(c.muted_stronger_foreground)
                     .child(keys)
@@ -1437,7 +1437,7 @@ impl CommandPanel {
                 .gap(px(5.))
                 .text_color(c.muted_foreground)
                 .child(KeyCaps::new(caps))
-                .child(div().text_size(px(12.)).child(text.to_string()))
+                .child(div().text_size(TextSize::Xs).child(text.to_string()))
         };
         let folder = matches!(self.page(), PanelPage::Folder(_));
         let github = matches!(self.page(), PanelPage::Github(_));
@@ -1458,13 +1458,17 @@ impl CommandPanel {
 
 /// The title and the detail, or the detail's parts each after its symbol.
 fn lines(item: &Item, c: &Colors) -> Div {
-    let title =
-        div().h(px(TITLE_HEIGHT)).text_size(px(14.)).line_height(px(TITLE_HEIGHT)).truncate().child(item.title.clone());
+    let title = div()
+        .h(px(TITLE_HEIGHT))
+        .text_size(TextSize::Md)
+        .line_height(px(TITLE_HEIGHT))
+        .truncate()
+        .child(item.title.clone());
     if item.one_line {
         return div().flex().items_center().gap(px(DOT_GAP)).min_w_0().child(title.flex_shrink_0()).when(
             !item.detail_parts.is_empty(),
             |line| {
-                line.child(div().text_size(px(12.)).text_color(c.muted_stronger_foreground).child("·"))
+                line.child(div().text_size(TextSize::Xs).text_color(c.muted_stronger_foreground).child("·"))
                     .child(detail_parts(&item.detail_parts, c).min_w_0())
             },
         );
@@ -1480,7 +1484,7 @@ fn lines(item: &Item, c: &Colors) -> Div {
             text.child(
                 crate::ui::middle_truncated(item.detail.clone())
                     .h(px(DETAIL_HEIGHT))
-                    .text_size(px(12.))
+                    .text_size(TextSize::Xs)
                     .line_height(px(DETAIL_HEIGHT))
                     .text_color(c.muted_foreground),
             )
@@ -1493,7 +1497,7 @@ fn detail_parts(parts: &[(&'static str, String)], c: &Colors) -> Div {
         .flex()
         .items_center()
         .gap(px(DOT_GAP))
-        .text_size(px(12.))
+        .text_size(TextSize::Xs)
         .line_height(px(DETAIL_HEIGHT))
         .text_color(c.muted_foreground);
     for (position, (symbol, text)) in parts.iter().enumerate() {

@@ -34,6 +34,7 @@ import app.motile.platform.Symbol
 import app.motile.theme.IconSize
 import app.motile.theme.ControlSize
 import app.motile.theme.LocalPalette
+import app.motile.theme.TextSize
 import app.motile.theme.Theme
 import app.motile.ui.ActionButton
 import app.motile.ui.beside
@@ -180,7 +181,7 @@ fun AgentAccountSheet(server: Server, initial: AgentAccount) {
                     if (step is AccountSignIn.Step.Waiting) {
                         row {
                             SettingsRow {
-                                Text(step.url, Modifier.weight(1f), style = Theme.uiMono(13f), color = LocalPalette.current.mutedForeground, maxLines = 1)
+                                Text(step.url, Modifier.weight(1f), style = Theme.uiMono(TextSize.Sm), color = LocalPalette.current.mutedForeground, maxLines = 1)
                             }
                         }
                         row { SettingsPressRow({ Platform.open(step.url) }) { SettingsActionLabel("Open the Sign-In Page", Symbol.SquareArrowOutUpRight) } }
@@ -219,7 +220,7 @@ fun AgentAccountSheet(server: Server, initial: AgentAccount) {
                 row {
                     SettingsRow {
                         SelectionContainer(Modifier.weight(1f)) {
-                            Text(account.signInCommand, style = Theme.uiMono(13f), color = LocalPalette.current.foreground)
+                            Text(account.signInCommand, style = Theme.uiMono(TextSize.Sm), color = LocalPalette.current.foreground)
                         }
                     }
                 }

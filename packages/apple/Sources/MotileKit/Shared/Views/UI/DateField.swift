@@ -70,7 +70,7 @@ struct DateField: View {
         Button { picking = true } label: {
             HStack(spacing: size.gap) {
                 Text(text ?? placeholder)
-                    .font(.ui(size: size.textSize + 0.5))
+                    .font(.ui(size.textSize))
                     .foregroundStyle(text == nil ? Color.themeMutedStrongerForeground : Color.themeForeground)
                     .lineLimit(1)
                     .frame(maxWidth: .infinity, alignment: .leading)

@@ -11,6 +11,7 @@ import androidx.compose.ui.unit.dp
 import app.motile.core.ServerSync
 import app.motile.core.Time
 import app.motile.platform.Symbol
+import app.motile.theme.TextSize
 import app.motile.theme.iconSize
 import app.motile.theme.LocalPalette
 import app.motile.ui.Icon
@@ -21,7 +22,7 @@ import kotlinx.coroutines.delay
 /** The line under a server that says how its copies of the other servers' threads stand. It is
  *  always one line, whatever it says, so the rows around it never move. */
 @Composable
-fun ServerSyncLine(sync: ServerSync, size: Float = NOTE_TEXT) {
+fun ServerSyncLine(sync: ServerSync, size: TextSize = NOTE_TEXT) {
     val palette = LocalPalette.current
     val now by produceState(Time.now()) {
         while (true) {

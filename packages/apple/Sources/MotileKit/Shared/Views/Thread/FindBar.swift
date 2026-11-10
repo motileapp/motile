@@ -23,7 +23,7 @@ struct FindBar: View {
                 .onReturn { store.stepFind(back: Self.shiftHeld) }
             if !find.label.isEmpty {
                 Text(find.label)
-                    .font(.ui(size: ControlSize.regular.textSize))
+                    .font(.ui(ControlSize.regular.textSize))
                     .monospacedDigit()
                     .foregroundStyle(find.count == 0 ? Color.themeMutedStrongerForeground : Color.themeMutedForeground)
                     .padding(.horizontal, ControlSize.regular.gap)

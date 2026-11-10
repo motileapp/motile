@@ -355,7 +355,7 @@ struct BranchPicker: View {
             if let note {
                 ThemeDivider()
                 Text(note)
-                    .font(.ui(size: 11.5))
+                    .font(.ui(.xs))
                     .foregroundStyle(working ? Color.themeMutedForeground : Color.themeDestructive)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -396,14 +396,14 @@ struct BranchPicker: View {
             #endif
         } else if let listProblem {
             Text(listProblem)
-                .font(.ui(size: 12.5))
+                .font(.ui(.xs))
                 .foregroundStyle(Color.themeDestructive)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(16)
         } else if choices.isEmpty {
             Text("No branch matches.")
-                .font(.ui(size: 12.5))
+                .font(.ui(.xs))
                 .foregroundStyle(Color.themeMutedForeground)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(16)
@@ -448,7 +448,7 @@ struct BranchPicker: View {
                     : branch.isDefault ? "default" : branch.remote ? "remote" : nil
                 if let tag {
                     Text(tag)
-                        .font(.ui(size: 11))
+                        .font(.ui(.xs))
                         .foregroundStyle(Color.themeMutedStrongerForeground)
                 }
                 Image(.check, size: DropdownList.check)

@@ -8,7 +8,7 @@ use motile_protocol::wire::Bucket;
 use super::account_sheet::field;
 use super::page::SettingsPage;
 use crate::store::Store;
-use crate::theme::colors;
+use crate::theme::{TextSize, colors};
 use crate::ui::modal::modal;
 use crate::ui::{ActionButton, InputField, beside};
 
@@ -131,13 +131,13 @@ impl Render for BackupSheet {
             .flex_col()
             .gap(px(14.))
             .text_color(c.foreground)
-            .child(div().text_size(px(15.)).font_weight(FontWeight::SEMIBOLD).child("S3 Backup"))
+            .child(div().text_size(TextSize::Lg).font_weight(FontWeight::SEMIBOLD).child("S3 Backup"))
             .child(field("Endpoint", caption("Empty for AWS."), InputField::new(&self.endpoint), cx))
             .child(field("Region", None, InputField::new(&self.region), cx))
             .child(field("Bucket", None, InputField::new(&self.bucket), cx))
             .child(field("Access key", None, InputField::new(&self.access_key).monospaced(true), cx))
             .child(field("Secret key", None, InputField::new(&self.secret_key).monospaced(true).secure(true), cx))
-            .child(div().px(px(4.)).text_size(px(11.5)).text_color(tint).child(footnote))
+            .child(div().px(px(4.)).text_size(TextSize::Xs).text_color(tint).child(footnote))
             .child(div().flex().justify_end().child(cancel).child(save));
         let (close, save) = (cx.weak_entity(), cx.weak_entity());
         modal("backup", div().id("backup-scroll").overflow_y_scroll().child(content), move |_, cx| {

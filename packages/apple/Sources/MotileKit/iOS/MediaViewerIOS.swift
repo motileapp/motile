@@ -123,12 +123,12 @@ struct MediaViewer: View {
     private func title(_ item: ViewedMedia) -> some View {
         VStack(spacing: 1) {
             Text(item.name)
-                .font(.system(size: 15, weight: .semibold))
+                .font(.ui(.sm, weight: .semibold))
                 .lineLimit(1)
                 .truncationMode(.middle)
             if viewing.items.count > 1 {
                 Text("\(viewing.index + 1) of \(viewing.items.count)")
-                    .font(.system(size: 12))
+                    .font(.ui(.xxs))
                     .foregroundStyle(Color.themeMutedForegroundOverPicture)
             }
         }
@@ -213,7 +213,7 @@ private struct MediaPage: View {
                 }
                 .buttonStyle(.control(.primary, size: .large))
             }
-            .font(.system(size: 15))
+            .font(.ui(.sm))
             .foregroundStyle(Color.themeForegroundOverPicture)
             .tappable(tapped)
         case nil:
@@ -226,7 +226,7 @@ private struct MediaPage: View {
                     Spinner(size: ControlSize.large.symbol)
                 }
             }
-            .font(.system(size: 15))
+            .font(.ui(.sm))
             .foregroundStyle(Color.themeMutedForegroundOverPicture)
             .tappable(tapped)
         }

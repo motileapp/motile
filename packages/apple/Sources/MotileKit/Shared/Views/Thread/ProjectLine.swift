@@ -4,7 +4,7 @@ import SwiftUI
 struct ProjectLine: View {
     let project: Project?
     let parts: [String]
-    let size: CGFloat
+    let size: TextSize
 
     var body: some View {
         HStack(spacing: 4) {
@@ -12,7 +12,7 @@ struct ProjectLine: View {
             parts.dropFirst().reduce(Text(parts.first ?? "")) { line, part in
                 Text("\(line)\(Text(" · ").foregroundStyle(Color.themeMutedStrongerForeground))\(part)")
             }
-            .font(.system(size: size))
+            .font(.ui(size))
             .foregroundStyle(Color.themeMutedForeground)
         }
     }

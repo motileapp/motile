@@ -130,7 +130,7 @@ impl Render for FindBar {
                     div()
                         .flex_none()
                         .px(px(size.gap()))
-                        .text_size(px(size.text_size()))
+                        .text_size(size.text_size())
                         .text_color(if none { c.muted_stronger_foreground } else { c.muted_foreground })
                         .child(label),
                 )

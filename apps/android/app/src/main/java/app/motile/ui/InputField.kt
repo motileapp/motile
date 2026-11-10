@@ -155,7 +155,7 @@ fun InputField(
 
 /** The text of a field of the size. */
 internal fun fieldStyle(size: ControlSize, monospaced: Boolean, color: Color): TextStyle {
-    val style = if (monospaced) Theme.uiMono(size.textSize + 0.5f) else Theme.ui(size.textSize + 0.5f)
+    val style = if (monospaced) Theme.uiMono(size.textSize) else Theme.ui(size.textSize)
     return style.copy(color = color)
 }
 

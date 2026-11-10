@@ -29,6 +29,7 @@ import app.motile.LocalCloseSheet
 import app.motile.LocalStore
 import app.motile.core.Time
 import app.motile.platform.Symbol
+import app.motile.theme.TextSize
 import app.motile.theme.iconSize
 import app.motile.theme.IconSize
 import app.motile.theme.ControlSize
@@ -76,11 +77,11 @@ fun ConnectServerView(isFirst: Boolean, titled: Boolean = !isFirst) {
                 Text(
                     if (isFirst) "Connect your first server" else "Run this on your server",
                     Modifier.padding(start = 24.dp, end = 24.dp, top = 18.dp),
-                    size = 24f,
+                    size = TextSize.Xxl,
                     weight = FontWeight.SemiBold,
                     align = TextAlign.Center,
                 )
-                val explained = Theme.ui(14f)
+                val explained = Theme.ui(TextSize.Md)
                 Text(
                     "Run the command below on the server that will run your agents",
                     Modifier.widthIn(max = 480.dp).padding(start = 24.dp, end = 24.dp, top = 8.dp),
@@ -102,7 +103,7 @@ fun ConnectServerView(isFirst: Boolean, titled: Boolean = !isFirst) {
                 Spacer(Modifier.height(lift))
                 if (isFirst) {
                     Row(Modifier.padding(bottom = 20.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text("Signed in as ${store.account.email}", size = 12f, color = palette.mutedStrongerForeground)
+                        Text("Signed in as ${store.account.email}", size = TextSize.Xs, color = palette.mutedStrongerForeground)
                         ActionButton("Sign out", variant = ButtonVariant.Link, size = ControlSize.Small) { store.signOut() }
                     }
                 }
@@ -125,14 +126,14 @@ private fun Status(modifier: Modifier) {
     val token = store.enrollToken
     Column(modifier, verticalArrangement = Arrangement.spacedBy(14.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         if (token != null && token.isExpired(now)) {
-            Text("The command has expired", size = 13f, color = palette.mutedForeground)
+            Text("The command has expired", size = TextSize.Sm, color = palette.mutedForeground)
             ActionButton("Regenerate", pending = store.enrollTokenPending) { store.regenerateEnrollToken() }
             return@Column
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Spinner(iconSize(text = 13f), color = palette.mutedForeground)
-            Text("Waiting for your server", size = 13f, color = palette.mutedForeground)
+            Spinner(iconSize(text = TextSize.Sm), color = palette.mutedForeground)
+            Text("Waiting for your server", size = TextSize.Sm, color = palette.mutedForeground)
         }
-        Text(token?.timeLeft(now) ?: "15:00", style = Theme.uiDigits(12f), color = palette.mutedStrongerForeground)
+        Text(token?.timeLeft(now) ?: "15:00", style = Theme.uiDigits(TextSize.Xs), color = palette.mutedStrongerForeground)
     }
 }

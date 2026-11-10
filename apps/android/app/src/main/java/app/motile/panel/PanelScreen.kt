@@ -29,6 +29,7 @@ import app.motile.platform.Platform
 import app.motile.platform.Symbol
 import app.motile.theme.ControlSize
 import app.motile.theme.LocalPalette
+import app.motile.theme.TextSize
 import app.motile.ui.ActionButton
 import app.motile.ui.GlassButton
 import app.motile.ui.Text
@@ -56,7 +57,7 @@ fun PanelScreen(beside: Boolean) {
             Box(Modifier.fillMaxWidth().height(52.dp), contentAlignment = Alignment.Center) {
                 GlassButton(Symbol.ChevronLeft, "Back", onClick = { panel.isOpen = false }, modifier = Modifier.align(Alignment.CenterStart).padding(start = 12.dp))
                 Text(
-                    store.panelTarget?.name ?: "Files", Modifier.padding(horizontal = 64.dp), size = 15f, weight = FontWeight.SemiBold,
+                    store.panelTarget?.name ?: "Files", Modifier.padding(horizontal = 64.dp), size = TextSize.Lg, weight = FontWeight.SemiBold,
                     color = palette.foreground, maxLines = 1,
                 )
             }

@@ -18,7 +18,7 @@ use super::paint::{self, Pin, View};
 use super::style::style;
 use super::tiles::{self, Slot};
 use super::{height, pool};
-use crate::theme::{ControlSize, Opacity, Radius, ShadowSize, Surface, colors};
+use crate::theme::{ControlSize, Opacity, Radius, ShadowSize, Surface, TextSize, colors};
 use crate::transcript::kit::paint_corners;
 use crate::ui::control::{ActionButton, ActionMenu, Variant};
 use crate::ui::menu::Menu;
@@ -699,7 +699,7 @@ impl MapView {
                 .border_color(c.border_popover)
                 .rounded(px(Radius::LG))
                 .shadow(c.shadow(ShadowSize::Md, Opacity::Shadow))
-                .text_size(px(12.))
+                .text_size(TextSize::Xs)
                 .line_height(px(18.))
                 .text_color(c.muted_foreground)
                 .child(text)
@@ -737,7 +737,7 @@ impl MapView {
                         .py(px(2.))
                         .rounded(px(Radius::SM))
                         .bg(lit)
-                        .text_size(px(10.))
+                        .text_size(TextSize::Xxs)
                         .line_height(px(16.))
                         .text_color(c.muted_foreground)
                         .child("Route overview"),
@@ -750,7 +750,7 @@ impl MapView {
                     .py(px(1.))
                     .flex()
                     .bg(lit)
-                    .text_size(px(9.))
+                    .text_size(TextSize::Xxs)
                     .line_height(px(12.))
                     .text_color(c.muted_foreground)
                     .children(ATTRIBUTION.iter().enumerate().map(|(index, (text, link))| {

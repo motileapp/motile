@@ -11,7 +11,7 @@ use super::{BUTTON_OUTSET, SIDEBAR_EDGE};
 /// the sides, apart from the list's.
 const FOOTER_EDGE: f32 = 16.;
 use crate::store::Store;
-use crate::theme::{ControlSize, IconSize, colors};
+use crate::theme::{ControlSize, IconSize, TextSize, colors};
 use crate::ui::control::Alignment;
 use crate::ui::menu::Menu;
 use crate::ui::{ActionButton, ActionMenu, TOOLBAR_MARGIN, edges};
@@ -95,7 +95,7 @@ fn account_picture(file: Option<std::path::PathBuf>, initial: String, cx: &App) 
             .justify_center()
             .bg(border)
             .text_color(foreground)
-            .text_size(px(PICTURE_SIDE * 0.5))
+            .text_size(TextSize::nearest(PICTURE_SIDE * 0.5))
             .font_weight(FontWeight::SEMIBOLD)
             .child(initial.clone())
             .into_any_element()

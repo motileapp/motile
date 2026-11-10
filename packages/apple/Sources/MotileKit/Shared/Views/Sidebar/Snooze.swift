@@ -80,7 +80,7 @@ struct CustomSnoozeSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Snooze Until")
-                .font(.ui(size: 15, weight: .semibold))
+                .font(.ui(.lg, weight: .semibold))
             HStack(spacing: 8) {
                 DateField(day.date.formatted(date: .abbreviated, time: .omitted), day: day, earliest: .today) {
                     day = $0
@@ -92,7 +92,7 @@ struct CustomSnoozeSheet: View {
             }
             if let error {
                 Text(error)
-                    .font(.ui(size: 12))
+                    .font(.ui(.xs))
                     .foregroundStyle(Color.themeDestructive)
             }
             HStack(spacing: 0) {

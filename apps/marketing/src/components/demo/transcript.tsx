@@ -86,12 +86,12 @@ export function Transcript({
         )
       })}
       {thread.status.kind === "working" && (
-        <Shimmer className="mt-2 self-start text-[13px] tabular-nums">
+        <Shimmer className="mt-2 self-start text-(length:--type-sm) tabular-nums">
           Working for {elapsed(thread.status.since)}
         </Shimmer>
       )}
       {thread.status.kind === "approval" && (
-        <p className="mt-2 text-[13px] text-muted-stronger-foreground">
+        <p className="mt-2 text-(length:--type-sm) text-muted-stronger-foreground">
           Waiting for your approval
         </p>
       )}
@@ -114,7 +114,7 @@ function Row({
     case "user":
       return (
         <div className="mb-5 flex justify-end pt-1">
-          <p className="max-w-[80%] rounded-xl bg-background-secondary px-3.5 py-2.5 text-[14px] leading-6 text-foreground">
+          <p className="max-w-[80%] rounded-xl bg-background-secondary px-3.5 py-2.5 text-(length:--type-md) leading-6 text-foreground">
             {item.text}
           </p>
         </div>
@@ -124,11 +124,11 @@ function Row({
     case "code":
       return (
         <div className="my-3 overflow-hidden rounded-lg bg-background-secondary">
-          <div className="flex h-8 items-center justify-between px-3.5 text-[11.5px] text-muted-stronger-foreground">
+          <div className="flex h-8 items-center justify-between px-3.5 text-(length:--type-xs) text-muted-stronger-foreground">
             {item.lang}
             <CopyIcon className="size-4" />
           </div>
-          <pre className="overflow-x-auto px-3.5 pb-3 font-mono text-[12.5px] leading-[18px] text-foreground">
+          <pre className="overflow-x-auto px-3.5 pb-3 font-mono text-(length:--type-xs) leading-[18px] text-foreground">
             {item.code.split("\n").map((line, index) => (
               <div key={index}>{line ? highlight(line) : " "}</div>
             ))}
@@ -140,17 +140,17 @@ function Row({
     case "tool": {
       const Icon = TOOL_ICONS[item.tool]
       return (
-        <div className="-mx-2 flex h-7 items-center gap-2 rounded-md px-2 text-[13px] text-muted-stronger-foreground">
+        <div className="-mx-2 flex h-7 items-center gap-2 rounded-md px-2 text-(length:--type-sm) text-muted-stronger-foreground">
           <Icon className="size-3.5 shrink-0" />
           {item.running ? (
             <Shimmer className="truncate">
               {item.verb}{" "}
-              <span className="font-mono text-[12px]">{item.target}</span>
+              <span className="font-mono text-(length:--type-xs)">{item.target}</span>
             </Shimmer>
           ) : (
             <span className="truncate">
               {item.verb}{" "}
-              <span className="font-mono text-[12px] text-muted-foreground">
+              <span className="font-mono text-(length:--type-xs) text-muted-foreground">
                 {item.target}
               </span>
             </span>
@@ -178,7 +178,7 @@ function Row({
       )
     case "handoff":
       return (
-        <div className="flex h-9 items-center text-[12px] text-muted-stronger-foreground">
+        <div className="flex h-9 items-center text-(length:--type-xs) text-muted-stronger-foreground">
           <span className="h-px flex-1 bg-border" />
           <span className="mx-[11px] flex items-center gap-2">
             <Handoff end={item.from} />
@@ -232,7 +232,7 @@ function FoldRow({
       <button
         type="button"
         onClick={onToggle}
-        className="-mx-2 flex h-7 items-center gap-2 self-start rounded-md px-2 text-[13px] text-muted-stronger-foreground hover:bg-background-accent-larger"
+        className="-mx-2 flex h-7 items-center gap-2 self-start rounded-md px-2 text-(length:--type-sm) text-muted-stronger-foreground hover:bg-background-accent-larger"
       >
         {worked}
         <Chevron className="-ml-1 size-3 shrink-0" />
@@ -245,7 +245,7 @@ function FoldRow({
 /** The line under a turn's answer; how long it worked, unless its fold says so. */
 function TurnEnd({ worked }: { worked?: string }) {
   return (
-    <div className="mt-2 mb-4 flex h-7 items-center gap-2 pl-[7px] text-[12px] text-muted-stronger-foreground">
+    <div className="mt-2 mb-4 flex h-7 items-center gap-2 pl-[7px] text-(length:--type-xs) text-muted-stronger-foreground">
       {worked}
       <CopyIcon className="size-4" />
     </div>
@@ -303,18 +303,18 @@ function AgentRow({
       <AgentAvatar agent={run.agent} state={told ? "done" : run.state} />
       <span className="min-w-0 flex-1">
         <span className="flex items-baseline gap-1.5">
-          <span className="truncate text-[13px] font-medium text-foreground">
+          <span className="truncate text-(length:--type-sm) font-medium text-foreground">
             {run.title}
           </span>
           {run.role && !told && (
-            <span className="shrink-0 text-[11px] text-muted-stronger-foreground">
+            <span className="shrink-0 text-(length:--type-xs) text-muted-stronger-foreground">
               {run.role}
             </span>
           )}
           {flagged && (
             <span
               className={cn(
-                "shrink-0 text-[11px] font-medium",
+                "shrink-0 text-(length:--type-xs) font-medium",
                 told ? "text-muted-foreground" : STATE_TEXT[run.state]
               )}
             >
@@ -324,7 +324,7 @@ function AgentRow({
         </span>
         <span
           className={cn(
-            "block truncate text-[12px]",
+            "block truncate text-(length:--type-xs)",
             run.state === "failed"
               ? "text-destructive"
               : "text-muted-foreground"
@@ -333,7 +333,7 @@ function AgentRow({
           {line}
         </span>
       </span>
-      <span className="shrink-0 text-[12px] text-muted-stronger-foreground tabular-nums">
+      <span className="shrink-0 text-(length:--type-xs) text-muted-stronger-foreground tabular-nums">
         {time}
       </span>
       <ChevronRightIcon className="size-3 shrink-0 text-muted-stronger-foreground" />
@@ -373,10 +373,10 @@ function AgentGroup({
           ))}
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block text-[13px] font-semibold text-foreground">
+          <span className="block text-(length:--type-sm) font-semibold text-foreground">
             {agents.length} agents
           </span>
-          <span className="block truncate text-[12px]">
+          <span className="block truncate text-(length:--type-xs)">
             {counted.map((state, index) => (
               <Fragment key={state}>
                 {index > 0 && (
@@ -389,7 +389,7 @@ function AgentGroup({
             ))}
           </span>
         </span>
-        <span className="shrink-0 text-[12px] text-muted-stronger-foreground tabular-nums">
+        <span className="shrink-0 text-(length:--type-xs) text-muted-stronger-foreground tabular-nums">
           {working.length > 0 ? elapsed(longest) : took}
         </span>
         <Chevron className="size-3 shrink-0 text-muted-stronger-foreground" />
@@ -433,13 +433,13 @@ export function Shimmer({
 /** The bit of Markdown the replies use: paragraphs, headings, lists, `code` and **bold**. */
 function Prose({ text }: { text: string }) {
   return (
-    <div className="my-2 text-[14px] leading-6 text-muted-foreground">
+    <div className="my-2 text-(length:--type-md) leading-6 text-muted-foreground">
       {text.split("\n\n").map((block, index) => {
         if (block.startsWith("### ")) {
           return (
             <h3
               key={index}
-              className="mt-4 mb-1 text-[15px] font-semibold text-foreground"
+              className="mt-4 mb-1 text-(length:--type-lg) font-semibold text-foreground"
             >
               {inline(block.slice(4).split("\n")[0])}
               {block.includes("\n") && (
@@ -462,7 +462,7 @@ function Prose({ text }: { text: string }) {
 
 function List({ lines }: { lines: string[] }) {
   return (
-    <ul className="mt-2 flex list-disc flex-col gap-1 pl-5 text-[14px] font-normal text-muted-foreground marker:text-muted-stronger-foreground">
+    <ul className="mt-2 flex list-disc flex-col gap-1 pl-5 text-(length:--type-md) font-normal text-muted-foreground marker:text-muted-stronger-foreground">
       {lines.map((line, index) => (
         <li key={index}>{inline(line.slice(2))}</li>
       ))}
@@ -476,7 +476,7 @@ function inline(text: string) {
       return (
         <code
           key={index}
-          className="rounded-xs bg-background-accent px-1 py-px font-mono text-[12.5px] text-foreground"
+          className="rounded-xs bg-background-accent px-1 py-px font-mono text-(length:--type-xs) text-foreground"
         >
           {part.slice(1, -1)}
         </code>
@@ -507,14 +507,14 @@ function Changes({
   return (
     <div className="mt-3 mb-3 rounded-lg border bg-background-secondary pb-1.5">
       <div className="flex h-10 items-center justify-between pr-1.5 pl-3.5">
-        <span className="text-[13px] font-medium text-foreground">
+        <span className="text-(length:--type-sm) font-medium text-foreground">
           {files.length} files changed{" "}
           <LineCounts added={added} removed={removed} />
         </span>
         <button
           type="button"
           onClick={onOpenDiff}
-          className="h-8 rounded-md px-2 text-[12.5px] font-medium text-foreground hover:bg-background-secondary-accent"
+          className="h-8 rounded-md px-2 text-(length:--type-xs) font-medium text-foreground hover:bg-background-secondary-accent"
         >
           Open diff
         </button>
@@ -524,7 +524,7 @@ function Changes({
           type="button"
           key={file.path}
           onClick={onOpenDiff}
-          className="mx-1.5 flex h-7 w-[calc(100%-12px)] items-center gap-2 rounded-md px-1.5 text-left text-[12.5px] hover:bg-background-secondary-accent active:bg-background-secondary-accent"
+          className="mx-1.5 flex h-7 w-[calc(100%-12px)] items-center gap-2 rounded-md px-1.5 text-left text-(length:--type-xs) hover:bg-background-secondary-accent active:bg-background-secondary-accent"
         >
           <FileTextIcon className="size-3 shrink-0 text-muted-foreground" />
           <span className="truncate text-foreground">
@@ -548,7 +548,7 @@ export function LineCounts({
   removed: number
 }) {
   return (
-    <span className="font-mono text-[11.5px] font-normal tabular-nums">
+    <span className="font-mono text-(length:--type-xs) font-normal tabular-nums">
       {added > 0 && <span className="text-success">+{added}</span>}
       {added > 0 && removed > 0 && " "}
       {removed > 0 && <span className="text-destructive">−{removed}</span>}

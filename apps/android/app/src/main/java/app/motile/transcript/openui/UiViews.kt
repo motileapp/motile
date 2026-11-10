@@ -433,9 +433,8 @@ private class PopoverPlacement(val point: Float) : PopupPositionProvider {
 @Composable
 fun UiSlotView(slot: UiSlot, popover: Boolean = false) {
     val palette = LocalPalette.current
-    val narrow = LocalUiNarrow.current
     slot.text?.let { text ->
-        val style = UiStyle.text(slot.style, narrow).let { if (popover && slot.style == UiTextStyle.Body) it.copy(lineHeight = scaled(21f).sp) else it }
+        val style = UiStyle.text(slot.style).let { if (popover && slot.style == UiTextStyle.Body) it.copy(lineHeight = scaled(21f).sp) else it }
         UiRichText(text, style, palette.foreground)
     }
     slot.children.forEach { UiNodeView(it) }

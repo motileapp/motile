@@ -29,6 +29,8 @@ import app.motile.core.string
 import app.motile.core.strings
 import app.motile.theme.LocalPalette
 import app.motile.theme.Palette
+import app.motile.theme.TextSize
+import app.motile.theme.fontSize
 import app.motile.theme.Theme
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonPrimitive
@@ -302,7 +304,7 @@ sealed interface PullRequestText {
 
     companion object {
         /** The panel's text size, as it is on the Mac. */
-        const val SIZE = 13f
+        val SIZE = TextSize.Sm
 
         fun blocks(json: List<JSON>): List<PullRequestText> = json.map { block ->
             if (block.string("kind") == "code") Code(ProseSetter.code(block.string("code"), block.ints("spans"))) else Prose(ProseSetter.prose(block))
@@ -337,8 +339,16 @@ sealed interface ProsePart {
 
 /** Sets the core's prose as the transcript's typesetter does, smaller. Safe to call from any thread. */
 private object ProseSetter {
-    private val factor = PullRequestText.SIZE / 14f
-    private val bodySize get() = Theme.ui(PullRequestText.SIZE).fontSize
+    private val factor = PullRequestText.SIZE.points / TextSize.Md.points
+    private val bodySize get() = PullRequestText.SIZE.fontSize
+    private val codeSize get() = TextSize.Xs.fontSize
+
+    /** A heading's size: the transcript's, a step smaller. */
+    private fun headingSize(level: Int): TextUnit = when (level) {
+        1, 2 -> TextSize.Lg
+        3 -> TextSize.Md
+        else -> TextSize.Sm
+    }.fontSize
     private const val BLOCK_GAP = 12f
     private const val HEADING_GAP = 14f
     private const val LIST_INDENT = 22f
@@ -347,7 +357,7 @@ private object ProseSetter {
         val palette = Theme.palette
         return buildAnnotatedString {
             append(code)
-            addStyle(SpanStyle(color = palette.foreground, fontFamily = Theme.mono, fontSize = Theme.codeSize * factor), 0, code.length)
+            addStyle(SpanStyle(color = palette.foreground, fontFamily = Theme.mono, fontSize = codeSize), 0, code.length)
             colour(this, spans, 0, code.length, palette)
         }
     }
@@ -422,7 +432,7 @@ private object ProseSetter {
             }
             if (kind != "cell" || para.int("table") != tableIndex) endTable()
             when (kind) {
-                "heading" -> parts += ProsePart.Paragraph(piece, lineHeight(3f, Theme.heading(para.int("level")).fontSize * factor), above, 0f, null, 0)
+                "heading" -> parts += ProsePart.Paragraph(piece, lineHeight(3f, headingSize(para.int("level"))), above, 0f, null, 0)
                 "list_item" -> {
                     val depth = maxOf(1, para.int("depth"))
                     val quote = para.int("quote")
@@ -472,16 +482,15 @@ private object ProseSetter {
             if (!inRange(start, len)) continue
             when (para.string("kind")) {
                 "heading" -> {
-                    val font = Theme.heading(para.int("level"))
-                    addStyle(SpanStyle(fontSize = font.fontSize * factor, fontWeight = font.fontWeight, color = palette.foreground), start, start + len)
+                    addStyle(SpanStyle(fontSize = headingSize(para.int("level")), fontWeight = FontWeight.SemiBold, color = palette.foreground), start, start + len)
                     headings += start until start + len
                 }
                 "pre" -> {
-                    addStyle(SpanStyle(fontFamily = Theme.mono, fontSize = Theme.codeSize * factor, color = palette.foreground), start, start + len)
+                    addStyle(SpanStyle(fontFamily = Theme.mono, fontSize = codeSize, color = palette.foreground), start, start + len)
                     colour(this, para.ints("spans"), start, start + len, palette)
                 }
                 "cell" -> {
-                    addStyle(SpanStyle(fontSize = Theme.ui(13f).fontSize * factor), start, start + len)
+                    addStyle(SpanStyle(fontSize = TextSize.Xs.fontSize), start, start + len)
                     if (para.bool("header")) addStyle(SpanStyle(fontWeight = FontWeight.SemiBold, color = palette.foreground), start, start + len)
                 }
             }
@@ -496,7 +505,7 @@ private object ProseSetter {
             when {
                 code -> addStyle(
                     SpanStyle(
-                        fontFamily = Theme.mono, fontSize = Theme.inlineCodeFont.fontSize * factor, color = palette.foreground,
+                        fontFamily = Theme.mono, fontSize = codeSize, color = palette.foreground,
                         background = palette.backgroundAccent, fontWeight = if (bold || heading) FontWeight.SemiBold else null,
                     ),
                     start, start + len,

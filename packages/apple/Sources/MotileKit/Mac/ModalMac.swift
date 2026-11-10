@@ -182,11 +182,11 @@ struct ConfirmationView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text(confirmation.title)
-                .font(.ui(size: 15, weight: .semibold))
+                .font(.ui(.lg, weight: .semibold))
                 .fixedSize(horizontal: false, vertical: true)
             if !confirmation.message.isEmpty {
                 Text(confirmation.message)
-                    .font(.ui(size: 13))
+                    .font(.ui(.sm))
                     .foregroundStyle(Color.themeMutedForeground)
                     .lineSpacing(2)
                     .fixedSize(horizontal: false, vertical: true)

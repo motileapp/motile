@@ -224,8 +224,8 @@ private final class LinearHeaderCell: LinearCell {
 
     private let light = SurfaceView()
     private let symbol = SymbolView(size: .sm)
-    private let name = TextLabel(font: .ui(12, weight: .semibold), color: Theme.foreground)
-    private let count = TextLabel(font: .ui(12), color: Theme.mutedStrongerForeground)
+    private let name = TextLabel(font: .ui(.xs, weight: .semibold), color: Theme.foreground)
+    private let count = TextLabel(font: .ui(.xs), color: Theme.mutedStrongerForeground)
     private let chevron = SymbolView(.chevronDown, size: .sm, tint: Theme.mutedStrongerForeground)
     private var stateID = ""
 
@@ -288,11 +288,11 @@ private final class LinearIssueCell: LinearCell {
     private let light = SurfaceView()
     private let priority = LinearRowButton()
     private let status = LinearRowButton()
-    private let key = TextLabel(font: .ui(11.5), color: Theme.mutedStrongerForeground)
-    private let title = TextLabel(font: .ui(13), color: Theme.foreground)
+    private let key = TextLabel(font: .ui(.xs), color: Theme.mutedStrongerForeground)
+    private let title = TextLabel(font: .ui(.sm), color: Theme.foreground)
     private let chips = [LinearChipView(), LinearChipView()]
     private let initials = LinearInitialsView()
-    private let time = TextLabel(font: .ui(11.5), color: Theme.mutedStrongerForeground)
+    private let time = TextLabel(font: .ui(.xs), color: Theme.mutedStrongerForeground)
     private var row: LinearRow?
     private var state: LinearState?
     private var states: [LinearState] = []
@@ -491,7 +491,7 @@ private final class LinearChipView: FlippedView {
 
     private let fill = SurfaceView()
     private let dot = SurfaceView()
-    private let words = TextLabel(font: .ui(11.5, weight: .medium), color: Theme.foreground)
+    private let words = TextLabel(font: .ui(.xs, weight: .medium), color: Theme.foreground)
     private(set) var width: CGFloat = 0
 
     var lit = false {
@@ -534,7 +534,7 @@ private final class LinearInitialsView: FlippedView {
     static let side = scaled(18)
 
     private let disc = SurfaceView()
-    private let letters = TextLabel(font: .ui(9, weight: .semibold), color: Theme.mutedForeground)
+    private let letters = TextLabel(font: .ui(.xxs, weight: .semibold), color: Theme.mutedForeground)
 
     override init(frame: CGRect) {
         super.init(frame: frame)

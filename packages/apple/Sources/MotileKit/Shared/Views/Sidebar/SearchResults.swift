@@ -100,7 +100,7 @@ private struct SearchKeys: ViewModifier {
 /// found nothing.
 struct SearchEmptyLine: View {
     @Environment(AppStore.self) private var store
-    let size: CGFloat
+    let size: TextSize
 
     var body: some View {
         HStack(spacing: 6) {
@@ -111,7 +111,7 @@ struct SearchEmptyLine: View {
                 Text("No threads found")
             }
         }
-        .font(.ui(size: size))
+        .font(.ui(size))
         .foregroundStyle(Color.themeMutedStrongerForeground)
     }
 }
@@ -136,7 +136,7 @@ struct SearchResultRow: View {
                 ProjectIcon(project: project, size: .md)
                     .modifier(FadedUnlit(faded: isDone))
                 Text(title)
-                    .font(.ui(size: 13, weight: .medium))
+                    .font(.ui(.sm, weight: .medium))
                     .lineLimit(1)
                     .rowText(unlit: isDone ? .themeMutedStrongerForeground : .themeMutedForeground)
                     .layoutPriority(1)
@@ -148,7 +148,7 @@ struct SearchResultRow: View {
             }
             .frame(height: scaled(22))
             detail(project: project)
-                .font(.ui(size: 12))
+                .font(.ui(.xs))
                 .lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .frame(height: scaled(18))
@@ -190,7 +190,7 @@ struct SearchResultRow: View {
             HStack(spacing: 3) {
                 Image(.file, size: .sm)
                 Text("Draft")
-                    .font(.ui(size: 11, weight: .medium))
+                    .font(.ui(.xs, weight: .medium))
             }
             .foregroundStyle(Color.themeMutedForeground)
         case .thread(let thread, _):
@@ -205,7 +205,7 @@ struct SearchResultRow: View {
                 ThreadStatus(thread: thread, readOnly: true)
             } else if thread.isArchived {
                 Text(Time.ago(thread.archivedAt ?? thread.updatedAt, now: AgoClock.shared.now))
-                    .font(.ui(size: 11))
+                    .font(.ui(.xs))
                     .foregroundStyle(Color.themeMutedStrongerForeground)
             } else {
                 ThreadStatus(thread: thread)
@@ -226,11 +226,11 @@ struct SearchResultRow: View {
     private static func excerpt(_ found: MessageMatch) -> AttributedString {
         var line = AttributedString(found.byUser ? "You: " : "Agent: ")
         line.foregroundColor = .themeMutedForeground
-        line.font = .ui(size: 12, weight: .medium)
+        line.font = .ui(.xs, weight: .medium)
         for part in found.parts {
             var piece = AttributedString(part.text)
             piece.foregroundColor = part.matched ? .themeForeground : .themeMutedStrongerForeground
-            if part.matched { piece.font = .ui(size: 12, weight: .semibold) }
+            if part.matched { piece.font = .ui(.xs, weight: .semibold) }
             line += piece
         }
         return line

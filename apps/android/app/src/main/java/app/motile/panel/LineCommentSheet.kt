@@ -24,6 +24,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.motile.LocalStore
 import app.motile.core.string
+import app.motile.theme.TextSize
 import app.motile.theme.iconSize
 import app.motile.theme.ControlSize
 import app.motile.theme.LocalPalette
@@ -72,17 +73,17 @@ fun LineCommentSheet(target: PanelTarget, page: PullRequestPage, commented: Comm
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(FileSymbol.symbol(commented.path), iconSize(text = 13f), color = palette.mutedForeground)
+                Icon(FileSymbol.symbol(commented.path), iconSize(text = TextSize.Sm), color = palette.mutedForeground)
                 Text(
-                    commented.path, Modifier.weight(1f, fill = false), size = 13f, weight = FontWeight.SemiBold,
+                    commented.path, Modifier.weight(1f, fill = false), size = TextSize.Sm, weight = FontWeight.SemiBold,
                     maxLines = 1, overflow = TextOverflow.StartEllipsis,
                 )
-                Text("line ${commented.line}", size = 12.5f, color = palette.mutedStrongerForeground, maxLines = 1)
+                Text("line ${commented.line}", size = TextSize.Xs, color = palette.mutedStrongerForeground, maxLines = 1)
             }
             SurfaceBox(RoundedCornerShape(Radius.md), Modifier.fillMaxWidth()) {
                 Text(
                     commented.code.ifEmpty { " " }, Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
-                    style = Theme.uiMono(12f), color = palette.foreground, maxLines = 3,
+                    style = Theme.uiMono(TextSize.Xs), color = palette.foreground, maxLines = 3,
                 )
             }
         }
@@ -92,7 +93,7 @@ fun LineCommentSheet(target: PanelTarget, page: PullRequestPage, commented: Comm
                     for (thread in threads) {
                         for (comment in thread.comments) {
                             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                Text(byline(comment.author, null, comment.at), size = 12.5f)
+                                Text(byline(comment.author, null, comment.at), size = TextSize.Xs)
                                 PullRequestTextView(comment.body)
                             }
                         }

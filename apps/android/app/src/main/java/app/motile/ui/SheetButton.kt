@@ -8,6 +8,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.text.font.FontWeight
+import app.motile.theme.TextSize
 import app.motile.theme.iconSize
 import app.motile.theme.ControlSize
 import app.motile.platform.Platform
@@ -21,8 +22,8 @@ fun SheetButton(title: String, modifier: Modifier = Modifier, pending: Boolean =
     val height = max(ControlSize.Large.height.value, Platform.minimumPress).dp
     ControlButton(look, onClick, modifier.fillMaxWidth(), pending = pending, disabled = disabled, help = title) {
         Box(Modifier.fillMaxWidth().heightIn(min = height), contentAlignment = Alignment.Center) {
-            Text(title, Modifier.alpha(if (pending) 0f else 1f), size = 15f, weight = FontWeight.SemiBold, maxLines = 1)
-            if (pending) Spinner(iconSize(text = 15f))
+            Text(title, Modifier.alpha(if (pending) 0f else 1f), size = TextSize.Lg, weight = FontWeight.SemiBold, maxLines = 1)
+            if (pending) Spinner(iconSize(text = TextSize.Lg))
         }
     }
 }

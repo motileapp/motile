@@ -145,10 +145,10 @@ struct ThreadScreen: View {
     private var title: some View {
         VStack(alignment: .leading, spacing: 1) {
             if let parts = store.composerProjectLine {
-                ProjectLine(project: store.composerProject, parts: parts, size: 12)
+                ProjectLine(project: store.composerProject, parts: parts, size: .xxs)
             }
             Text(store.shownAgent?.title ?? store.selectedThread?.title ?? "New thread")
-                .font(.system(size: 15, weight: .semibold))
+                .font(.ui(.sm, weight: .semibold))
                 .foregroundStyle(Color.themeForeground)
         }
         .lineLimit(1)
@@ -160,9 +160,9 @@ struct ThreadScreen: View {
         VStack(spacing: 10) {
             if store.projects.isEmpty && store.noProjects.isEmpty {
                 Text("Add a project to start")
-                    .font(.system(size: 26, weight: .regular))
+                    .font(.ui(.xl))
                 Text("A project is a folder on your server that threads work in.")
-                    .font(.system(size: 16))
+                    .font(.ui(.md))
                     .foregroundStyle(Color.themeMutedForeground)
                     .multilineTextAlignment(.center)
                 ActionButton("Add Project", icon: .folderPlus, variant: .primary, size: .large) { store.addProject() }
@@ -206,7 +206,7 @@ struct ThreadScreen: View {
             }
             .buttonStyle(.plain)
         }
-        .font(.system(size: 26, weight: .regular))
+        .font(.ui(.xl))
     }
 }
 #endif

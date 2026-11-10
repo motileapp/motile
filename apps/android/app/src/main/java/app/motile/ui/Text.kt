@@ -15,14 +15,15 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.sp
 import app.motile.platform.scaled
 import app.motile.theme.LocalForeground
+import app.motile.theme.TextSize
 import app.motile.theme.Theme
 
-/** Text in the system's font at a size given as on the Mac, in the foreground colour unless told otherwise. */
+/** Text in the system's font at one of the text sizes, in the foreground colour unless told otherwise. */
 @Composable
 fun Text(
     text: String,
     modifier: Modifier = Modifier,
-    size: Float = 13f,
+    size: TextSize = TextSize.Sm,
     weight: FontWeight = FontWeight.Normal,
     color: Color = LocalForeground.current,
     style: TextStyle? = null,
@@ -46,7 +47,7 @@ fun Text(
 fun Text(
     text: AnnotatedString,
     modifier: Modifier = Modifier,
-    size: Float = 13f,
+    size: TextSize = TextSize.Sm,
     weight: FontWeight = FontWeight.Normal,
     color: Color = LocalForeground.current,
     style: TextStyle? = null,

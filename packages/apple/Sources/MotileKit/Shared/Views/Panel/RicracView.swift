@@ -32,10 +32,10 @@ private struct RicracConnect: View {
                 .foregroundStyle(Color.themeForeground)
             VStack(spacing: 6) {
                 Text("Connect Ricrac")
-                    .font(.ui(size: 15, weight: .semibold))
+                    .font(.ui(.lg, weight: .semibold))
                     .foregroundStyle(Color.themeForeground)
                 Text("See your issues and hand them to your agents. The connection is kept on your server.")
-                    .font(.ui(size: 12.5))
+                    .font(.ui(.xs))
                     .foregroundStyle(Color.themeMutedForeground)
                     .multilineTextAlignment(.center)
             }
@@ -44,7 +44,7 @@ private struct RicracConnect: View {
             }
             if let error = ricrac.error {
                 Text(error)
-                    .font(.ui(size: 12.5))
+                    .font(.ui(.xs))
                     .foregroundStyle(Color.themeDestructive)
                     .multilineTextAlignment(.center)
                     .textSelection(.enabled)
@@ -253,7 +253,7 @@ private struct RicracInitials: View {
 
     var body: some View {
         Text(verbatim: initials)
-            .font(.ui(size: 9, weight: .semibold))
+            .font(.ui(.xxs, weight: .semibold))
             .foregroundStyle(Color.themeMutedForeground)
             .frame(width: scaled(18), height: scaled(18))
             .background(Color.themeBackgroundAccent, in: Circle())
@@ -282,7 +282,7 @@ struct RicracIssueSurface: View {
         VStack(spacing: 0) {
             PanelBar {
                 Text(verbatim: page.value?.row.identifier ?? "")
-                    .font(.ui(size: 12.5, weight: .medium))
+                    .font(.ui(.xs, weight: .medium))
                     .foregroundStyle(Color.themeMutedForeground)
                 Spacer(minLength: 4)
                 HStack(spacing: 0) {
@@ -313,7 +313,7 @@ struct RicracIssueSurface: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 Text(page.row.title)
-                    .font(.ui(size: 17, weight: .semibold))
+                    .font(.ui(.xl, weight: .semibold))
                     .foregroundStyle(Color.themeForeground)
                     .textSelection(.enabled)
                 ViewThatFits(in: .horizontal) {
@@ -332,7 +332,7 @@ struct RicracIssueSurface: View {
                 }
                 if page.description.isEmpty {
                     Text("No description.")
-                        .font(.ui(size: 12.5))
+                        .font(.ui(.xs))
                         .foregroundStyle(Color.themeMutedStrongerForeground)
                 } else {
                     PullRequestTextView(blocks: page.description)
@@ -345,7 +345,7 @@ struct RicracIssueSurface: View {
                                 RicracInitials(initials: comment.initials, name: comment.author)
                                 (Text(comment.author).fontWeight(.semibold).foregroundStyle(Color.themeForeground)
                                     + Text(" · \(Time.ago(comment.at))").foregroundStyle(Color.themeMutedStrongerForeground))
-                                    .font(.ui(size: 12.5))
+                                    .font(.ui(.xs))
                             }
                             PullRequestTextView(blocks: comment.body)
                         }
@@ -422,14 +422,14 @@ private struct RicracNewIssue: View {
         let users = ricrac.users[workspace] ?? []
         VStack(alignment: .leading, spacing: 12) {
             Text("New Issue")
-                .font(.ui(size: 15, weight: .semibold))
+                .font(.ui(.lg, weight: .semibold))
             InputField("Title", text: $title)
             TextArea("Add a description", text: $description, lines: 4, fills: true)
             FlowRow(spacing: 0) { properties(teams: teams, picked: picked, states: states, state: state, users: users) }
                 .padding(-3)
             if let error = ricrac.error {
                 Text(error)
-                    .font(.ui(size: 12.5))
+                    .font(.ui(.xs))
                     .foregroundStyle(Color.themeDestructive)
             }
             HStack(spacing: 0) {

@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use gpui_kit::prelude::*;
 use gpui_kit::*;
 
-use crate::theme::{ControlSize, IconSize, Surface, colors};
+use crate::theme::{ControlSize, IconSize, Surface, TextSize, colors};
 use crate::ui::menu::Menu;
 use crate::ui::{ActionMenu, Switch, card_default, icons};
 
@@ -110,9 +110,10 @@ pub fn group_title(title: impl Into<SharedString>, caption: Option<&str>, cx: &A
         .flex()
         .flex_col()
         .gap(px(2.))
-        .child(div().text_size(px(13.)).text_color(c.foreground).child(title.into()))
+        .child(div().text_size(TextSize::Sm).text_color(c.foreground).child(title.into()))
         .when_some(caption, |heading, caption| {
-            heading.child(div().text_size(px(11.5)).text_color(c.muted_stronger_foreground).child(caption.to_string()))
+            heading
+                .child(div().text_size(TextSize::Xs).text_color(c.muted_stronger_foreground).child(caption.to_string()))
         })
 }
 
@@ -244,7 +245,7 @@ pub fn label(
 /// the title says. Such a title is cut on its line rather than wrapped.
 pub fn proxied_label(title: String, description: Option<String>, proxied: bool, cx: &App) -> AnyElement {
     let title = if proxied {
-        crate::ui::proxied(title, crate::ui::GatewayMark::Gateway, 13.).into_any_element()
+        crate::ui::proxied(title, crate::ui::GatewayMark::Gateway, TextSize::Sm).into_any_element()
     } else {
         title.into_any_element()
     };
@@ -288,11 +289,11 @@ fn titled_label(
                 .flex()
                 .flex_col()
                 .gap(px(2.))
-                .child(div().text_size(px(13.)).font_weight(FontWeight::MEDIUM).child(title))
+                .child(div().text_size(TextSize::Sm).font_weight(FontWeight::MEDIUM).child(title))
                 .when_some(description, |label, description| {
                     label.child(
                         div()
-                            .text_size(px(11.5))
+                            .text_size(TextSize::Xs)
                             .text_color(c.muted_foreground)
                             .when(cut != Cut::Wraps, |text| text.whitespace_nowrap().overflow_hidden())
                             .map(|text| match cut {
@@ -311,8 +312,11 @@ fn titled_label(
 /// Said on a page with nothing to set yet.
 pub fn note(text: impl Into<SharedString>, cx: &App) -> AnyElement {
     let c = colors(cx);
-    card_default(div().w_full().p(px(INSET)).text_size(px(13.)).text_color(c.muted_foreground).child(text.into()), cx)
-        .into_any_element()
+    card_default(
+        div().w_full().p(px(INSET)).text_size(TextSize::Sm).text_color(c.muted_foreground).child(text.into()),
+        cx,
+    )
+    .into_any_element()
 }
 
 /// The row's other actions, under its three dots.

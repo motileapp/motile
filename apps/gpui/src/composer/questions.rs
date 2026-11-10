@@ -11,7 +11,7 @@ use motile_core::render::rows::{Question, Waiting};
 
 use crate::composer::strips::waiting_title;
 use crate::store::Store;
-use crate::theme::{ControlSize, Layer, Radius, Surface, colors};
+use crate::theme::{ControlSize, Layer, Radius, Surface, TextSize, colors};
 use crate::ui::{ActionButton, InputField, InputVariant, PickMark, Variant, beside};
 
 /// How far past its text an option's light and the room to press it reach.
@@ -192,7 +192,7 @@ impl Questions {
                     .gap(px(2.))
                     .child(
                         div()
-                            .text_size(px(13.))
+                            .text_size(TextSize::Sm)
                             .line_height(px(18.))
                             .font_weight(FontWeight::MEDIUM)
                             .text_color(c.foreground)
@@ -200,7 +200,11 @@ impl Questions {
                     )
                     .when(!detail.is_empty(), |text| {
                         text.child(
-                            div().text_size(px(12.)).line_height(px(16.)).text_color(c.muted_foreground).child(detail),
+                            div()
+                                .text_size(TextSize::Xs)
+                                .line_height(px(16.))
+                                .text_color(c.muted_foreground)
+                                .child(detail),
                         )
                     }),
             );
@@ -265,7 +269,7 @@ impl Render for Questions {
                     .child(waiting_title(title, "message-circle-question-mark", place, cx).text_color(c.warning))
                     .child(
                         div()
-                            .text_size(px(13.5))
+                            .text_size(TextSize::Sm)
                             .line_height(px(19.))
                             .font_weight(FontWeight::MEDIUM)
                             .text_color(c.foreground)

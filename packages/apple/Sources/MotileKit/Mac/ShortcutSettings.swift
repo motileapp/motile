@@ -92,14 +92,14 @@ struct ShortcutSettings: View {
                 Image(.triangleAlert, size: .md)
                     .foregroundStyle(Color.themeWarning)
                 Text("Some of keybindings.json is skipped")
-                    .font(.ui(size: 13, weight: .medium))
+                    .font(.ui(.sm, weight: .medium))
                 Spacer(minLength: 12)
                 ActionButton("Open", variant: .outline, size: .large) { store.openShortcutsFile() }
                     .padding(.trailing, -rowOutset(for: ControlSize.large.height))
             }
             ForEach(issues, id: \.self) { issue in
                 Text(issue)
-                    .font(.ui(size: 11.5))
+                    .font(.ui(.xs))
                     .foregroundStyle(Color.themeMutedForeground)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -134,7 +134,7 @@ private struct ShortcutRowView: View {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Text(row.label)
-                        .font(.ui(size: 13, weight: .medium))
+                        .font(.ui(.sm, weight: .medium))
                         .help(row.command)
                     if row.custom {
                         Chip("Custom")
@@ -293,9 +293,9 @@ private struct ConditionEditor: View {
         VStack(alignment: .leading, spacing: 10) {
             VStack(alignment: .leading, spacing: 2) {
                 Text("When")
-                    .font(.ui(size: 13, weight: .semibold))
+                    .font(.ui(.sm, weight: .semibold))
                 Text("The shortcut runs only while this holds. Join names with ! for not, && for and, || for or.")
-                    .font(.ui(size: 11.5))
+                    .font(.ui(.xs))
                     .foregroundStyle(Color.themeMutedForeground)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -345,7 +345,7 @@ private struct ConditionEditor: View {
             Text(text)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .font(.ui(size: 11.5))
+        .font(.ui(.xs))
         .foregroundStyle(color)
     }
 }

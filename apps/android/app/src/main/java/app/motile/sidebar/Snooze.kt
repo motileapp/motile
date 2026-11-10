@@ -28,6 +28,7 @@ import app.motile.core.optionalString
 import app.motile.core.parseJSON
 import app.motile.core.string
 import app.motile.theme.ControlSize
+import app.motile.theme.TextSize
 import app.motile.theme.Theme
 import app.motile.ui.ActionButton
 import app.motile.ui.ButtonVariant
@@ -98,7 +99,7 @@ fun CustomSnoozeSheet(snooze: CustomSnooze) {
         Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 20.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        Text("Snooze Until", size = 15f, weight = FontWeight.SemiBold)
+        Text("Snooze Until", size = TextSize.Lg, weight = FontWeight.SemiBold)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             DateField(
                 day.format(DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM)), day,
@@ -117,7 +118,7 @@ fun CustomSnoozeSheet(snooze: CustomSnooze) {
                 Modifier.width(110.dp), size = ControlSize.Large, onSubmit = ::submit,
             )
         }
-        error?.let { Text(it, size = 12f, color = Theme.colors.destructive) }
+        error?.let { Text(it, size = TextSize.Xs, color = Theme.colors.destructive) }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
             ActionButton("Cancel", size = ControlSize.Large, margin = beside(end = 8.dp), onClick = close)
             ActionButton("Snooze", variant = ButtonVariant.Primary, size = ControlSize.Large, onClick = ::submit)

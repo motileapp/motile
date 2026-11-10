@@ -285,7 +285,7 @@ fn table(
                     let word = if column.numeric { line } else { widest_word(&text.text, ty, window) };
                     (word, line)
                 }
-                Some(TableCell::Node { node }) => match node_width(node, cx.narrow(), window) {
+                Some(TableCell::Node { node }) => match node_width(node, window) {
                     Some(width) => (width, width),
                     None => (UNKNOWN_CELL.0, UNKNOWN_CELL.1),
                 },
@@ -387,9 +387,8 @@ fn widest_word(text: &str, ty: Type, window: &Window) -> f32 {
 const UNKNOWN_CELL: (f32, f32) = (120., 240.);
 
 /// How wide a component in a cell is on one line: a text with its inline parts, a badge, an icon.
-fn node_width(node: &UiNode, narrow: bool, window: &Window) -> Option<f32> {
-    let words =
-        |text: &str, style: TextStyle| style::type_of(style, narrow).width(&text.replace('\u{fffc}', ""), window);
+fn node_width(node: &UiNode, window: &Window) -> Option<f32> {
+    let words = |text: &str, style: TextStyle| style::type_of(style).width(&text.replace('\u{fffc}', ""), window);
     match &node.kind {
         UiKind::Badge { text, tone, icon } => {
             Some(super::text::badge_width(text, tone.is_some(), icon.is_some(), window))
@@ -397,7 +396,7 @@ fn node_width(node: &UiNode, narrow: bool, window: &Window) -> Option<f32> {
         UiKind::Icon { size, .. } => Some(*size),
         UiKind::Text { text, inlines, style, .. } => {
             let parts: f32 =
-                inlines.iter().filter_map(|inline| node_width(inline, narrow, window)).map(|width| width + 2.).sum();
+                inlines.iter().filter_map(|inline| node_width(inline, window)).map(|width| width + 2.).sum();
             Some(words(&text.text, *style) + parts)
         }
         UiKind::Title { text, style, .. } | UiKind::Caption { text, style, .. } => Some(words(&text.text, *style)),

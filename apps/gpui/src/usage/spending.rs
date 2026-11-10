@@ -11,7 +11,7 @@ use crate::format::{self, abbreviated as count, percent, usd as cost};
 use crate::models::agent_name;
 use crate::store::Store;
 use crate::store::usage::{UsageLine, UsagePeriod, UsageReport, UsageSeries, UsageTab};
-use crate::theme::{Colors, IconSize, Layer, Opacity, Surface, colors};
+use crate::theme::{Colors, IconSize, Layer, Opacity, Surface, TextSize, colors};
 use crate::ui::menu::Anchor;
 use crate::ui::{Segmented, card_default, divider_on, logos, tabular_numbers, text_width};
 
@@ -23,7 +23,7 @@ const X_GUTTER: f32 = 18.;
 const PLOT_PADDING: f32 = 16.;
 const BAR_WIDTH: f32 = 72.;
 const DOT: f32 = 8.;
-const CAPTION: f32 = 10.;
+const CAPTION: TextSize = TextSize::Xxs;
 /// Narrower than this, the chart goes under the totals.
 const BESIDE_WIDTH: f32 = 640.;
 /// Narrower than this, a row's bar goes under its name and numbers.
@@ -102,7 +102,7 @@ impl SpendingView {
             .gap(px(3.))
             .child(
                 div()
-                    .text_size(px(28.))
+                    .text_size(TextSize::Xxl)
                     .font_weight(FontWeight::SEMIBOLD)
                     .font_features(tabular_numbers())
                     .text_color(c.foreground)
@@ -133,7 +133,7 @@ impl SpendingView {
                         .flex()
                         .items_center()
                         .gap(px(8.))
-                        .text_size(px(12.))
+                        .text_size(TextSize::Xs)
                         .child(div().flex_1().text_color(c.muted_foreground).child("Saved by the cache"))
                         .child(
                             div()
@@ -154,7 +154,7 @@ impl SpendingView {
             .flex()
             .items_center()
             .gap(px(14.))
-            .text_size(px(12.))
+            .text_size(TextSize::Xs)
             .children(report.agents.iter().map(|series| {
                 let total = if cost_shown { series.cost_usd } else { series.tokens as f64 };
                 let shown = index.map(|index| value(series, index, cost_shown)).unwrap_or(total);
@@ -221,7 +221,7 @@ impl SpendingView {
                                 .top(px(-7.))
                                 .w(px(Y_GUTTER))
                                 .pl(px(6.))
-                                .text_size(px(CAPTION))
+                                .text_size(CAPTION)
                                 .text_color(c.muted_foreground)
                                 .whitespace_nowrap()
                                 .child(amount(value, cost_shown)),
@@ -264,7 +264,7 @@ impl SpendingView {
                                         .pt(px(4.))
                                         .flex()
                                         .justify_center()
-                                        .text_size(px(CAPTION))
+                                        .text_size(CAPTION)
                                         .text_color(c.muted_foreground)
                                         .whitespace_nowrap()
                                         .child(axis_label(report.starts[index], self.period))
@@ -339,10 +339,10 @@ impl SpendingView {
         let c = colors(cx);
         let numbers = 64. + 72.;
         let dot_room = if line.agent.is_some() { DOT + 10. } else { 0. };
-        let mut name_width = text_width(&line.name, 12., FontWeight::NORMAL, window);
-        name_width += crate::ui::gateway_mark_width(12., crate::ui::GatewayMark::of(line.gateway, false));
+        let mut name_width = text_width(&line.name, TextSize::Xs, FontWeight::NORMAL, window);
+        name_width += crate::ui::gateway_mark_width(TextSize::Xs, crate::ui::GatewayMark::of(line.gateway, false));
         if let Some(server) = &line.server {
-            name_width += 10. + text_width(server, 12., FontWeight::NORMAL, window);
+            name_width += 10. + text_width(server, TextSize::Xs, FontWeight::NORMAL, window);
         }
         let room = self.width - 24. - dot_room - numbers - 3. * 10. - 8.;
         let bar_shown = !stacked && name_width + BAR_WIDTH + 10. <= room;
@@ -355,7 +355,7 @@ impl SpendingView {
                 crate::ui::proxied(
                     crate::ui::middle_truncated(line.name.clone()),
                     crate::ui::GatewayMark::of(line.gateway, false),
-                    12.,
+                    TextSize::Xs,
                 )
                 .flex_shrink(1.)
                 .text_color(c.foreground),
@@ -381,7 +381,7 @@ impl SpendingView {
                     .text_color(if cost_shown && line.cost_usd.is_some() { c.foreground } else { c.muted_foreground })
                     .child(line.cost_usd.map(cost).unwrap_or_else(|| "No price".into())),
             );
-        let row = div().px(px(12.)).text_size(px(12.)).font_features(tabular_numbers()).flex().flex_col();
+        let row = div().px(px(12.)).text_size(TextSize::Xs).font_features(tabular_numbers()).flex().flex_col();
         let row = if stacked {
             row.py(px(11.)).gap(px(8.)).child(main).child(div().pl(px(dot_room)).child(bar(line.share, None, c)))
         } else {
@@ -457,7 +457,7 @@ fn agent_line(report: &UsageReport, series: &UsageSeries, cost_shown: bool, cx: 
                 .flex()
                 .items_center()
                 .gap(px(7.))
-                .text_size(px(12.))
+                .text_size(TextSize::Xs)
                 .child(dot(logos::agent_color(series.agent, c)))
                 .child(logos::agent_icon(series.agent, IconSize::Sm, cx))
                 .child(div().flex_1().text_color(c.foreground).child(agent_name(series.agent)))
@@ -466,7 +466,7 @@ fn agent_line(report: &UsageReport, series: &UsageSeries, cost_shown: bool, cx: 
         .child(
             div()
                 .pl(px(15.))
-                .text_size(px(11.))
+                .text_size(TextSize::Xs)
                 .text_color(c.muted_stronger_foreground)
                 .font_features(tabular_numbers())
                 .child(format!("{} of {of} · {other}", percent(share))),
@@ -504,7 +504,7 @@ fn dot(color: Hsla) -> Div {
 }
 
 fn caption(text: impl Into<SharedString>, color: Hsla) -> Div {
-    div().text_size(px(CAPTION)).text_color(color).child(text.into())
+    div().text_size(CAPTION).text_color(color).child(text.into())
 }
 
 /// The y axis: a round step with about four of them under the highest point, and the top line.

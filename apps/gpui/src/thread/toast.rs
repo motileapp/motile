@@ -4,7 +4,7 @@ use gpui_kit::prelude::*;
 use gpui_kit::*;
 
 use crate::store::{Store, Toast};
-use crate::theme::{ControlSize, IconSize, Layer, Radius, Surface, colors};
+use crate::theme::{ControlSize, IconSize, Layer, Radius, Surface, TextSize, colors};
 use crate::ui::rich_text::RichText;
 use crate::ui::{ActionButton, FadingScroll, Spinner, Variant, icons, sharing};
 
@@ -39,7 +39,7 @@ pub fn toast_view(store: &Entity<Store>, toast: &Toast, cx: &App) -> impl IntoEl
     let description = toast.description.clone().map(|description| {
         let text = RichText::new(SharedString::from(format!("toast-{}", toast.serial)), description);
         if !toast.failed {
-            return div().text_size(px(12.5)).text_color(c.muted_foreground).line_clamp(2).child(text);
+            return div().text_size(TextSize::Xs).text_color(c.muted_foreground).line_clamp(2).child(text);
         }
         // The end is where a hook says what it found.
         let output = FadingScroll::new("toast-output", OUTPUT_LINES * OUTPUT_LINE_HEIGHT + 2. * OUTPUT_PADDING)
@@ -48,7 +48,7 @@ pub fn toast_view(store: &Entity<Store>, toast: &Toast, cx: &App) -> impl IntoEl
             .fill(Surface::Popover.layer(Layer::Box, c))
             .child(
                 div()
-                    .text_size(px(11.5))
+                    .text_size(TextSize::Xs)
                     .line_height(px(OUTPUT_LINE_HEIGHT))
                     .font_family(crate::theme::MONO_FONT)
                     .text_color(c.muted_foreground)
@@ -101,7 +101,7 @@ pub fn toast_view(store: &Entity<Store>, toast: &Toast, cx: &App) -> impl IntoEl
                         .min_h(px(TITLE_HEIGHT))
                         .flex()
                         .items_center()
-                        .text_size(px(13.))
+                        .text_size(TextSize::Sm)
                         .font_weight(FontWeight::MEDIUM)
                         .text_color(c.foreground)
                         .child(toast.title.clone()),

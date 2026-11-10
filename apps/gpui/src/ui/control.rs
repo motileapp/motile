@@ -10,7 +10,7 @@ use std::rc::Rc;
 use gpui_kit::prelude::*;
 use gpui_kit::*;
 
-use crate::theme::{Colors, ControlSize, IconSize, Layer, Opacity, Radius, ShadowSize, Surface, colors};
+use crate::theme::{Colors, ControlSize, IconSize, Layer, Opacity, Radius, ShadowSize, Surface, TextSize, colors};
 use crate::ui::menu::{Anchor, Menu, Opened};
 use crate::ui::{OnClick, tooltip};
 use crate::ui::{icons, motion};
@@ -316,7 +316,7 @@ impl ControlLabel {
         }
     }
 
-    fn text_size(&self) -> f32 {
+    fn text_size(&self) -> TextSize {
         if self.prose { crate::theme::PROSE_SIZE } else { self.size.text_size() }
     }
 
@@ -332,7 +332,7 @@ impl ControlLabel {
         let height = self.size.height();
         let system = cx.text_system();
         let id = system.resolve_font(&crate::transcript::rows::font(crate::theme::UI_FONT, self.weight(), false));
-        let size = px(self.text_size());
+        let size = Pixels::from(self.text_size());
         let (cap, x) = (f32::from(system.cap_height(id, size)), f32::from(system.x_height(id, size)));
         let baseline = (height / 2. + (cap + x) / 4.).round();
         // A line centres its ascent and descent, which the font gives below its baseline as negative.
@@ -452,7 +452,7 @@ impl ControlLabel {
                     row.child(
                         div()
                             .min_w_0()
-                            .text_size(px(text_size))
+                            .text_size(text_size)
                             .font_weight(weight)
                             .when(prose, |text| text.line_height(px(line)).relative().top(px(words_shift)))
                             .whitespace_nowrap()
@@ -910,7 +910,7 @@ impl ActionButton {
     /// give it: before them, and above and below.
     fn inline_bleed(&self, window: &Window) -> (f32, f32) {
         let size = self.label.size;
-        let line = window.text_style().line_height.to_pixels(px(size.text_size()).into(), window.rem_size());
+        let line = window.text_style().line_height.to_pixels(size.text_size().into(), window.rem_size());
         let vertical = (size.height() - f32::from(line)) / 2.;
         let leading = match self.label.wordless() {
             true => (size.height() - self.label.symbol_size.unwrap_or(size.wordless_symbol()).side()) / 2.,
@@ -1404,12 +1404,17 @@ pub struct Chip {
     muted: bool,
     /// Less tall, to sit on a line of text without making it taller.
     compact: bool,
+    /// As tall as a compact one, with smaller words, for a label in a tight corner.
+    small: bool,
+    /// The widest it gets, its words cut short past it.
+    max_width: Option<f32>,
 }
 
 impl Chip {
     pub const HEIGHT: f32 = 20.;
     pub const COMPACT_HEIGHT: f32 = 18.;
     pub const SYMBOL: IconSize = IconSize::Xs;
+    pub const TEXT_SIZE: TextSize = TextSize::Xs;
 
     pub fn new(title: impl Into<SharedString>) -> Self {
         Self {
@@ -1424,6 +1429,8 @@ impl Chip {
             selectable: None,
             muted: false,
             compact: false,
+            small: false,
+            max_width: None,
         }
     }
 
@@ -1462,6 +1469,16 @@ impl Chip {
 
     pub fn compact(mut self, compact: bool) -> Self {
         self.compact = compact;
+        self
+    }
+
+    pub fn small(mut self, small: bool) -> Self {
+        self.small = small;
+        self
+    }
+
+    pub fn max_width(mut self, width: f32) -> Self {
+        self.max_width = Some(width);
         self
     }
 
@@ -1505,8 +1522,9 @@ impl RenderOnce for Chip {
         div()
             .when(!self.middle, |chip| chip.flex_shrink_0())
             .when(self.middle, |chip| chip.min_w_0())
-            .h(px(if self.compact { Self::COMPACT_HEIGHT } else { Self::HEIGHT }))
-            .px(px(7.))
+            .when_some(self.max_width, |chip, width| chip.max_w(px(width)))
+            .h(px(if self.compact || self.small { Self::COMPACT_HEIGHT } else { Self::HEIGHT }))
+            .px(px(if self.small { 6. } else { 7. }))
             .rounded_full()
             .bg(background)
             .when(self.tone.is_none() && !self.muted, |chip| chip.border_1().border_color(self.surface.border(c)))
@@ -1518,9 +1536,10 @@ impl RenderOnce for Chip {
             .when_some(self.icon, |chip, icon| chip.child(icons::symbol(icon, Self::SYMBOL)))
             .child(
                 div()
-                    .text_size(px(11.5))
+                    .text_size(if self.small { TextSize::Xxs } else { Self::TEXT_SIZE })
                     .font_weight(FontWeight::MEDIUM)
                     .whitespace_nowrap()
+                    .when(self.max_width.is_some(), |text| text.min_w_0().truncate())
                     .when(self.middle, |text| text.min_w_0().overflow_hidden().text_ellipsis_middle())
                     .when(self.monospaced, |text| text.font_family(crate::theme::MONO_FONT))
                     .child(words),
@@ -1809,7 +1828,7 @@ impl RenderOnce for Segmented {
                             .flex()
                             .items_center()
                             .justify_center()
-                            .text_size(px(size.text_size()))
+                            .text_size(size.text_size())
                             .font_weight(FontWeight::MEDIUM)
                             .whitespace_nowrap()
                             .text_color(text)
@@ -1881,7 +1900,7 @@ pub struct InputField {
     surface: Surface,
     /// What is typed is this large instead of the size's text, like a search that is what a
     /// panel is about.
-    text_size: Option<f32>,
+    text_size: Option<TextSize>,
 }
 
 impl InputField {
@@ -1899,7 +1918,7 @@ impl InputField {
         }
     }
 
-    pub fn text_size(mut self, text_size: f32) -> Self {
+    pub fn text_size(mut self, text_size: TextSize) -> Self {
         self.text_size = Some(text_size);
         self
     }
@@ -1989,7 +2008,7 @@ impl RenderOnce for InputField {
                         .px_0()
                         .py_0()
                         .h(px(size.height() - 2.))
-                        .text_size(px(self.text_size.unwrap_or(size.text_size() + 0.5)))
+                        .text_size(self.text_size.unwrap_or(size.text_size()))
                         .when(self.monospaced, |input| input.font_family(crate::theme::MONO_FONT)),
                 ),
             )
@@ -2098,7 +2117,7 @@ impl RenderOnce for TextArea {
                 component::input::Textarea::new(&self.state)
                     .appearance(false)
                     .when(self.fills, |area| area.h(relative(1.)))
-                    .text_size(px(size.text_size() + 0.5))
+                    .text_size(size.text_size())
                     .when(self.monospaced, |area| area.font_family(crate::theme::MONO_FONT)),
             )
     }

@@ -7,7 +7,7 @@ use std::rc::Rc;
 use gpui_kit::prelude::*;
 use gpui_kit::*;
 
-use crate::theme::colors;
+use crate::theme::{TextSize, colors};
 use crate::ui::dropdown_list as list;
 use crate::ui::menu::Anchor;
 use crate::ui::{ActionButton, Variant, dropdown_card, icons};
@@ -195,7 +195,7 @@ impl ChoiceDropdown {
                     .children(
                         choice
                             .detail
-                            .map(|detail| div().text_size(px(12.)).text_color(c.muted_foreground).child(detail)),
+                            .map(|detail| div().text_size(TextSize::Xs).text_color(c.muted_foreground).child(detail)),
                     ),
             )
             .child(list::check(choice.chosen).ml(px(4.)))

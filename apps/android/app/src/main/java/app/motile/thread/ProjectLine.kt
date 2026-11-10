@@ -15,6 +15,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.motile.core.Project
+import app.motile.theme.TextSize
 import app.motile.theme.iconSize
 import app.motile.theme.Theme
 import app.motile.ui.ProjectIcon
@@ -22,7 +23,7 @@ import app.motile.ui.Text
 
 /** The line over a thread's title: its project's icon, then its parts with muted dots between. */
 @Composable
-fun ProjectLine(project: Project?, parts: List<String>, size: Float, modifier: Modifier = Modifier) {
+fun ProjectLine(project: Project?, parts: List<String>, size: TextSize, modifier: Modifier = Modifier) {
     val palette = Theme.colors
     val line = buildAnnotatedString {
         parts.forEachIndexed { index, part ->
@@ -37,7 +38,7 @@ fun ProjectLine(project: Project?, parts: List<String>, size: Float, modifier: M
 }
 
 /** The system's font at a size as iOS gives it, where the Apple client doesn't use the client's scaled sizes. */
-internal fun system(size: Float, weight: FontWeight = FontWeight.Normal): TextStyle = TextStyle(fontSize = size.sp, fontWeight = weight)
+internal fun system(size: TextSize, weight: FontWeight = FontWeight.Normal): TextStyle = TextStyle(fontSize = size.points.sp, fontWeight = weight)
 
 /** Lets the content reach past its place by the given amounts, as a negative padding does in SwiftUI. */
 internal fun Modifier.outset(start: Dp = 0.dp, end: Dp = 0.dp, vertical: Dp = 0.dp): Modifier = layout { measurable, constraints ->

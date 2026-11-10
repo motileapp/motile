@@ -74,11 +74,11 @@ object Canvases {
 
 /** The text styles of the legend and the tooltip, as LAYOUT.md names them. */
 private object CanvasType {
-    val caption: TextStyle get() = Theme.smallFont.lined(18f)
-    val captionTitle: TextStyle get() = Theme.ui(12f, FontWeight.SemiBold).lined(18f)
-    val readout: TextStyle get() = Theme.uiDigits(12f, FontWeight.Medium).lined(18f)
-    val small: TextStyle get() = Theme.ui(13f).lined(20f)
-    val share: TextStyle get() = Theme.uiDigits(13f, FontWeight.Medium).lined(20f)
+    val caption: TextStyle get() = Theme.programUi(12f).lined(18f)
+    val captionTitle: TextStyle get() = Theme.programUi(12f, FontWeight.SemiBold).lined(18f)
+    val readout: TextStyle get() = Theme.programDigits(12f, FontWeight.Medium).lined(18f)
+    val small: TextStyle get() = Theme.programUi(13f).lined(20f)
+    val share: TextStyle get() = Theme.programDigits(13f, FontWeight.Medium).lined(20f)
 }
 
 private object Legend {

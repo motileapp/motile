@@ -469,6 +469,32 @@ impl Radius {
     pub const XXL: f32 = 24.;
 }
 
+/// How large text is, as on the Mac. Every text in the app is one of these.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum TextSize {
+    Xxs,
+    Xs,
+    Sm,
+    Md,
+    Lg,
+    Xl,
+    Xxl,
+}
+
+impl TextSize {
+    pub const fn points(self) -> f32 {
+        match self {
+            TextSize::Xxs => 10.,
+            TextSize::Xs => 12.,
+            TextSize::Sm => 13.,
+            TextSize::Md => 14.,
+            TextSize::Lg => 16.,
+            TextSize::Xl => 20.,
+            TextSize::Xxl => 28.,
+        }
+    }
+}
+
 /// How large an icon is, of any kind: the side of its square, as on the Mac. Every icon is one
 /// of these.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]

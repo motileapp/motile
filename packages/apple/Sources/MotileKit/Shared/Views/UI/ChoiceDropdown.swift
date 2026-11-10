@@ -46,7 +46,7 @@ struct ChoiceDropdown: View {
                 Text(choice.title)
                 if let detail = choice.detail {
                     Text(detail)
-                        .font(.ui(size: 12))
+                        .font(.ui(.xs))
                         .foregroundStyle(Color.themeMutedForeground)
                 }
             }

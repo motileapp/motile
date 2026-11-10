@@ -4,7 +4,7 @@
 use gpui_kit::prelude::*;
 use gpui_kit::*;
 
-use crate::theme::{IconSize, Opacity, Radius, colors};
+use crate::theme::{IconSize, Opacity, Radius, TextSize, colors};
 use crate::ui::icons;
 
 pub const SYMBOL: &str = "box";
@@ -13,7 +13,7 @@ pub const PADDING: f32 = 5.;
 const GAP: f32 = 4.;
 /// The room between the chip and the text on either side.
 pub const MARGIN: f32 = 1.;
-pub const TEXT_SIZE: f32 = 13.;
+pub const TEXT_SIZE: TextSize = TextSize::Sm;
 /// As tall as a line of the composer's text.
 const HEIGHT: f32 = 20.;
 
@@ -44,7 +44,7 @@ pub fn chip(label: SharedString, selected: bool, height: Pixels, cx: &App) -> Di
         .child(icons::symbol(SYMBOL, SYMBOL_SIZE).text_color(c.skill))
         .child(
             div()
-                .text_size(px(TEXT_SIZE))
+                .text_size(TEXT_SIZE)
                 .font_weight(FontWeight::NORMAL)
                 .text_color(c.skill)
                 .whitespace_nowrap()

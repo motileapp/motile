@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.motile.platform.Symbol
 import app.motile.platform.scaled
+import app.motile.theme.TextSize
 import app.motile.theme.symbolSide
 import app.motile.theme.IconSize
 import app.motile.theme.LocalDark
@@ -108,21 +109,21 @@ private fun Words(item: PanelItem) {
     val palette = LocalPalette.current
     if (item.oneLine) {
         Row(Modifier.height(PanelRow.titleHeight), horizontalArrangement = Arrangement.spacedBy(PanelRow.dotGap), verticalAlignment = Alignment.CenterVertically) {
-            Text(item.title, size = 14f, maxLines = 1)
+            Text(item.title, size = TextSize.Md, maxLines = 1)
             if (item.detailParts.isNotEmpty()) {
-                Text("·", size = 12f, color = palette.mutedStrongerForeground)
+                Text("·", size = TextSize.Xs, color = palette.mutedStrongerForeground)
                 DetailParts(item.detailParts)
             }
         }
         return
     }
     Box(Modifier.height(PanelRow.titleHeight), contentAlignment = Alignment.CenterStart) {
-        Text(item.title, size = 14f, maxLines = 1)
+        Text(item.title, size = TextSize.Md, maxLines = 1)
     }
     when {
         item.detailParts.isNotEmpty() -> DetailParts(item.detailParts)
         item.detail.isNotEmpty() -> Box(Modifier.height(PanelRow.detailHeight), contentAlignment = Alignment.CenterStart) {
-            Text(item.detail, size = 12f, color = palette.mutedForeground, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
+            Text(item.detail, size = TextSize.Xs, color = palette.mutedForeground, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
         }
     }
 }
@@ -132,12 +133,12 @@ private fun DetailParts(parts: List<Pair<Symbol, String>>) {
     val palette = LocalPalette.current
     Row(Modifier.height(PanelRow.detailHeight), horizontalArrangement = Arrangement.spacedBy(PanelRow.dotGap), verticalAlignment = Alignment.CenterVertically) {
         parts.forEachIndexed { position, (symbol, text) ->
-            if (position > 0) Text("·", size = 12f, color = palette.mutedStrongerForeground)
+            if (position > 0) Text("·", size = TextSize.Xs, color = palette.mutedStrongerForeground)
             // The first part keeps its room; the ones after it are cut short first.
             val room = if (position == 0) Modifier else Modifier.weight(1f, fill = false)
             Row(room, horizontalArrangement = Arrangement.spacedBy(3.dp), verticalAlignment = Alignment.CenterVertically) {
                 Icon(symbol, IconSize.Sm, color = palette.mutedForeground)
-                Text(text, size = 12f, color = palette.mutedForeground, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
+                Text(text, size = TextSize.Xs, color = palette.mutedForeground, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
             }
         }
     }
@@ -173,13 +174,13 @@ private fun Trailing(item: PanelItem) {
         note != null && item.warns -> Text(
             note,
             Modifier.background(palette.warning.wash(), CircleShape).padding(horizontal = 8.dp, vertical = 3.dp),
-            size = 12f,
+            size = TextSize.Xs,
             weight = FontWeight.Medium,
             color = palette.warning,
             maxLines = 1,
         )
-        note != null -> Text(note, size = 12f, weight = FontWeight.Medium, color = palette.mutedStrongerForeground, maxLines = 1)
-        keys != null -> Text(keys, style = Theme.uiDigits(12f, FontWeight.Medium), color = palette.mutedStrongerForeground, maxLines = 1)
+        note != null -> Text(note, size = TextSize.Xs, weight = FontWeight.Medium, color = palette.mutedStrongerForeground, maxLines = 1)
+        keys != null -> Text(keys, style = Theme.uiDigits(TextSize.Xs, FontWeight.Medium), color = palette.mutedStrongerForeground, maxLines = 1)
     }
 }
 

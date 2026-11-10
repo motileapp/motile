@@ -11,7 +11,7 @@ use super::rows::{quieted, thread_status};
 use super::{BOTTOM_PADDING, FIRST_LINE_HEIGHT, ROW_PADDING, Sidebar, TOP_PADDING, row_margin};
 use crate::models::{ago, last_component};
 use crate::store::SearchResult;
-use crate::theme::{IconSize, Radius, colors};
+use crate::theme::{IconSize, Radius, TextSize, colors};
 use crate::ui::logos::{self, PullRequestLabel};
 use crate::ui::{Highlight, KeyCaps, icons};
 
@@ -75,7 +75,7 @@ impl Sidebar {
                 .gap(px(3.))
                 .text_color(c.muted_foreground)
                 .child(icons::symbol("file", IconSize::Sm))
-                .child(div().text_size(px(11.)).font_weight(FontWeight::MEDIUM).child("Draft")),
+                .child(div().text_size(TextSize::Xs).font_weight(FontWeight::MEDIUM).child("Draft")),
             SearchResult::Thread(thread, _) => {
                 let read_only = store.on_removed_server(thread);
                 let pull_request =
@@ -86,7 +86,7 @@ impl Sidebar {
                     thread_status(thread, true, cx)
                 } else if done {
                     div()
-                        .text_size(px(11.))
+                        .text_size(TextSize::Xs)
                         .text_color(c.muted_stronger_foreground)
                         .child(ago(thread.archived_at.unwrap_or(thread.updated_at)))
                         .into_any_element()
@@ -158,7 +158,7 @@ impl Sidebar {
                             .child(
                                 div()
                                     .min_w_0()
-                                    .text_size(px(13.))
+                                    .text_size(TextSize::Sm)
                                     .font_weight(FontWeight::MEDIUM)
                                     .text_color(title_color)
                                     .truncate()
@@ -167,7 +167,7 @@ impl Sidebar {
                             .child(div().flex_1().min_w(px(6.)))
                             .child(div().flex_shrink_0().child(status)),
                     )
-                    .child(detail.h(px(18.)).line_height(px(18.)).min_w_0().text_size(px(12.)).truncate()),
+                    .child(detail.h(px(18.)).line_height(px(18.)).min_w_0().text_size(TextSize::Xs).truncate()),
             )
             .on_hover(cx.listener(move |this, hovered: &bool, _, cx| {
                 if *hovered && this.highlighted != index {

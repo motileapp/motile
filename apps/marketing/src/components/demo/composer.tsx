@@ -46,13 +46,13 @@ export function Composer({
       {status.kind === "monitoring" && (
         <Strip edge="top">
           <EyeIcon className="mr-1 ml-[10.5px] size-3.5 shrink-0 text-foreground" />
-          <span className="text-[12.5px] font-medium text-foreground tabular-nums">
+          <span className="text-(length:--type-xs) font-medium text-foreground tabular-nums">
             Monitoring: {elapsed(status.since)}
           </span>
           <button
             type="button"
             onClick={onStop}
-            className="mr-[2px] ml-auto h-8 rounded-md px-[11px] text-[12px] font-medium text-muted-foreground hover:bg-border-composer hover:text-foreground"
+            className="mr-[2px] ml-auto h-8 rounded-md px-[11px] text-(length:--type-xs) font-medium text-muted-foreground hover:bg-border-composer hover:text-foreground"
           >
             Stop
           </button>
@@ -63,7 +63,7 @@ export function Composer({
           <Strip edge="top">
             <button
               type="button"
-              className="ml-[3px] flex h-8 min-w-0 items-center gap-1 rounded-md pr-[11px] pl-[7.5px] text-[12px] font-medium text-process hover:bg-border-composer"
+              className="ml-[3px] flex h-8 min-w-0 items-center gap-1 rounded-md pr-[11px] pl-[7.5px] text-(length:--type-xs) font-medium text-process hover:bg-border-composer"
             >
               <BotIcon className="size-3.5 shrink-0" />
               <span className="truncate">{working.length} working</span>
@@ -71,7 +71,7 @@ export function Composer({
             {status.kind === "agents" && (
               <button
                 type="button"
-                className="mr-[2px] ml-auto h-8 shrink-0 rounded-md px-[11px] text-[12px] font-medium text-muted-foreground hover:bg-border-composer hover:text-foreground"
+                className="mr-[2px] ml-auto h-8 shrink-0 rounded-md px-[11px] text-(length:--type-xs) font-medium text-muted-foreground hover:bg-border-composer hover:text-foreground"
               >
                 Stop
               </button>
@@ -82,25 +82,25 @@ export function Composer({
         <Strip edge="top" tall>
           <div className="flex items-center gap-2">
             <SquareTerminalIcon className="size-3.5 text-warning" />
-            <span className="text-[12px] font-semibold text-warning">
+            <span className="text-(length:--type-xs) font-semibold text-warning">
               {thread.approval.verb}
             </span>
             <button
               type="button"
               onClick={() => onAnswer(false)}
-              className="ml-auto h-6 rounded-sm bg-border-composer px-2 text-[11.5px] font-medium"
+              className="ml-auto h-6 rounded-sm bg-border-composer px-2 text-(length:--type-xs) font-medium"
             >
               Refuse
             </button>
             <button
               type="button"
               onClick={() => onAnswer(true)}
-              className="h-6 rounded-sm bg-warning px-2 text-[11.5px] font-medium text-warning-foreground hover:bg-warning/(--opacity-lit)"
+              className="h-6 rounded-sm bg-warning px-2 text-(length:--type-xs) font-medium text-warning-foreground hover:bg-warning/(--opacity-lit)"
             >
               Allow
             </button>
           </div>
-          <p className="mt-2 rounded-md bg-border-composer p-2.5 font-mono text-[12.5px] break-words">
+          <p className="mt-2 rounded-md bg-border-composer p-2.5 font-mono text-(length:--type-xs) break-words">
             <Command text={thread.approval.target} />
           </p>
         </Strip>
@@ -119,7 +119,7 @@ export function Composer({
           placeholder={
             status.kind === "working" ? "Send a follow-up" : "Ask anything"
           }
-          className="block w-full resize-none bg-transparent px-3.5 pt-3 text-[14px] leading-5 outline-none placeholder:text-muted-stronger-foreground pointer-coarse:text-[16px]"
+          className="block w-full resize-none bg-transparent px-3.5 pt-3 text-(length:--type-md) leading-5 outline-none placeholder:text-muted-stronger-foreground pointer-coarse:text-(length:--type-lg)"
         />
         <div
           onClick={(event) => {
@@ -131,7 +131,7 @@ export function Composer({
           <span className="mx-[3px] flex size-8 cursor-default items-center justify-center rounded-full text-foreground hover:bg-border-composer">
             <PlusIcon className="size-[18px]" />
           </span>
-          <span className="mr-0.5 ml-auto flex h-8 cursor-default items-center rounded-md px-[11px] text-[12px] font-medium text-muted-foreground hover:bg-border-composer hover:text-foreground">
+          <span className="mr-0.5 ml-auto flex h-8 cursor-default items-center rounded-md px-[11px] text-(length:--type-xs) font-medium text-muted-foreground hover:bg-border-composer hover:text-foreground">
             <Setting icon={<AgentIcon agent={thread.agent} size={14} />}>
               <Dotted text={thread.model} />
             </Setting>
@@ -210,7 +210,7 @@ function Control({
   return (
     <span
       className={cn(
-        "flex h-8 cursor-default items-center gap-1.5 rounded-md text-[12px] font-medium text-muted-foreground",
+        "flex h-8 cursor-default items-center gap-1.5 rounded-md text-(length:--type-xs) font-medium text-muted-foreground",
         !plain && "hover:bg-border-composer hover:text-foreground",
         icon ? "pl-[9px]" : "pl-[11px]",
         plain ? "pr-[11px]" : "pr-[9px]"
@@ -253,8 +253,8 @@ function Strip({
   return (
     <div
       className={cn(
-        "mx-[22px] border border-border-composer bg-composer text-[12px] text-muted-foreground",
-        tall ? "p-3 text-[12.5px]" : "flex h-[39px] items-center",
+        "mx-[22px] border border-border-composer bg-composer text-(length:--type-xs) text-muted-foreground",
+        tall ? "p-3 text-(length:--type-xs)" : "flex h-[39px] items-center",
         edge === "top"
           ? cn(
               "-mb-px rounded-t-lg text-foreground",

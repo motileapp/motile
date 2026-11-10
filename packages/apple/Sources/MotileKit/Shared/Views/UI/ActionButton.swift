@@ -850,7 +850,7 @@ extension Text {
 
     /// "Opus 5.5 · Work" with the gateway's symbol after the name, ahead of the account, where it runs
     /// through the gateway, inside a line of fixed height.
-    init(dotted text: String, proxied: Bool, pinned: Bool = false, fontSize: CGFloat, size: IconSize? = nil) {
+    init(dotted text: String, proxied: Bool, pinned: Bool = false, fontSize: TextSize, size: IconSize? = nil) {
         let parts = text.components(separatedBy: " · ").map { Text(verbatim: $0) }
         guard proxied, let name = parts.first else {
             self.init(dotted: parts)
@@ -862,11 +862,11 @@ extension Text {
     /// The gateway's symbol beside words of `fontSize` that stand alone, centred on their line, a
     /// step smaller than `size` where it goes with an icon beside it. It stands outside the line,
     /// which a symbol moved off the baseline would make taller.
-    func gatewayMarked(_ proxied: Bool, pinned: Bool = false, fontSize: CGFloat, size: IconSize? = nil) -> some View {
-        HStack(spacing: (fontSize / 4).rounded() + GatewayMark.gap) {
+    func gatewayMarked(_ proxied: Bool, pinned: Bool = false, fontSize: TextSize, size: IconSize? = nil) -> some View {
+        HStack(spacing: (fontSize.rawValue / 4).rounded() + GatewayMark.gap) {
             self
             if proxied {
-                let size = GatewayMark.size(for: fontSize, beside: size)
+                let size = GatewayMark.size(for: fontSize.rawValue, beside: size)
                 HStack(spacing: GatewayMark.pinGap) {
                     Image(.waypoints, size: size)
                     if pinned {
@@ -880,9 +880,9 @@ extension Text {
     /// The gateway's symbol after words of `fontSize` inside a line of fixed height, which says what
     /// they name runs through the gateway: centred on their capitals rather than standing on their
     /// baseline, and a step smaller than `size` where it goes with an icon beside it.
-    func proxied(_ proxied: Bool, pinned: Bool = false, fontSize: CGFloat, size: IconSize? = nil) -> Text {
+    func proxied(_ proxied: Bool, pinned: Bool = false, fontSize: TextSize, size: IconSize? = nil) -> Text {
         guard proxied else { return self }
-        let size = GatewayMark.size(for: fontSize, beside: size)
+        let size = GatewayMark.size(for: fontSize.rawValue, beside: size)
         let rise = ((PlatformFont.ui(fontSize).capHeight - PlatformImage.symbolSide(size)) / 2).rounded()
         let symbol = { (name: Symbol) in Text(Image(name, size: size)).baselineOffset(rise) }
         let marked = Text("\(self)\(Text(verbatim: " ").kerning(GatewayMark.gap))\(symbol(.waypoints))")
@@ -904,14 +904,14 @@ struct ProxiedLine: View {
     let proxied: Bool
     /// It is pinned to one of the gateway's accounts, which a pin after the gateway's symbol says.
     var pinned = false
-    let fontSize: CGFloat
+    let fontSize: TextSize
     var size: IconSize? = nil
 
-    init(_ text: String, proxied: Bool, pinned: Bool = false, fontSize: CGFloat, size: IconSize? = nil) {
+    init(_ text: String, proxied: Bool, pinned: Bool = false, fontSize: TextSize, size: IconSize? = nil) {
         self.init(parts: text.components(separatedBy: " · "), proxied: proxied, pinned: pinned, fontSize: fontSize, size: size)
     }
 
-    init(parts: [String], proxied: Bool, pinned: Bool = false, fontSize: CGFloat, size: IconSize? = nil) {
+    init(parts: [String], proxied: Bool, pinned: Bool = false, fontSize: TextSize, size: IconSize? = nil) {
         self.parts = parts
         self.proxied = proxied
         self.pinned = pinned

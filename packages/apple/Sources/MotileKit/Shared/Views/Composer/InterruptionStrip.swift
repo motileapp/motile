@@ -18,7 +18,7 @@ struct InterruptionStrip: View {
                 ViewThatFits(in: .horizontal) {
                     HStack(spacing: 8) {
                         Text(interruption.title)
-                            .font(.ui(size: 12.5, weight: .medium))
+                            .font(.ui(.xs, weight: .medium))
                             .foregroundStyle(Color.themeWarning)
                         Text(interruption.detail(now: now))
                             .foregroundStyle(Color.themeMutedForeground)
@@ -27,7 +27,7 @@ struct InterruptionStrip: View {
                         .foregroundStyle(Color.themeWarning)
                         .truncationMode(.middle)
                 }
-                .font(.ui(size: 12.5))
+                .font(.ui(.xs))
                 .lineLimit(1)
                 .help("\(interruption.title). \(interruption.detail(now: now)).")
                 Spacer(minLength: 8)
