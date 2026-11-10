@@ -17,7 +17,7 @@ struct ThreadCard: View {
     private func card(_ thread: ThreadInfo, project: Project?) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             Text(thread.title)
-                .font(.ui(size: 13, weight: .medium))
+                .font(.ui(.sm, weight: .medium))
                 .foregroundStyle(Color.themeForeground)
                 .lineLimit(1)
             VStack(alignment: .leading, spacing: 10) {
@@ -46,11 +46,11 @@ struct ThreadCard: View {
                     Image(pullRequest.state.symbol, size: Self.iconSize)
                         .foregroundStyle(pullRequest.state.color)
                     Text(verbatim: "#\(pullRequest.number)")
-                        .font(.ui(size: 12, weight: .medium))
+                        .font(.ui(.xs, weight: .medium))
                         .monospacedDigit()
                         .foregroundStyle(Color.themeMutedStrongerForeground)
                     Text(pullRequest.title)
-                        .font(.ui(size: 12))
+                        .font(.ui(.xs))
                         .foregroundStyle(Color.themeMutedForeground)
                         .lineLimit(1)
                 }
@@ -72,8 +72,8 @@ private struct CardLine<Icon: View>: View {
     var body: some View {
         HStack(spacing: 8) {
             icon()
-            ProxiedLine(text, proxied: proxied, pinned: pinned, fontSize: 12, size: ThreadCard.iconSize)
-                .font(.ui(size: 12))
+            ProxiedLine(text, proxied: proxied, pinned: pinned, fontSize: .xs, size: ThreadCard.iconSize)
+                .font(.ui(.xs))
                 .lineLimit(1)
                 .truncationMode(middle ? .middle : .tail)
         }

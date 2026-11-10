@@ -100,7 +100,7 @@ function ThreadCard({
         className
       )}
     >
-      <p className="truncate text-[13px] font-medium text-foreground">
+      <p className="truncate text-(length:--type-sm) font-medium text-foreground">
         {thread.title}
       </p>
       <div className="flex flex-col gap-2.5 pt-2.5">
@@ -118,7 +118,7 @@ function ThreadCard({
       {thread.pullRequest && (
         <>
           <div className="my-2.5 h-px bg-border-popover" />
-          <p className="flex items-center gap-2 text-[12px]">
+          <p className="flex items-center gap-2 text-(length:--type-xs)">
             <span className="flex w-3.5 justify-center text-success">
               <GitPullRequestIcon className="size-3.5" />
             </span>
@@ -137,7 +137,7 @@ function ThreadCard({
 
 function Line({ icon, children }: { icon: ReactNode; children: ReactNode }) {
   return (
-    <p className="flex items-center gap-2 text-[12px] text-muted-foreground">
+    <p className="flex items-center gap-2 text-(length:--type-xs) text-muted-foreground">
       <span className="flex size-3.5 shrink-0 items-center justify-center">
         {icon}
       </span>

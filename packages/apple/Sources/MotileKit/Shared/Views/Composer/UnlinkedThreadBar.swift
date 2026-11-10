@@ -24,7 +24,7 @@ struct UnlinkedThreadBar: View {
         VStack(alignment: .leading, spacing: 6) {
             title
             Text("This thread is read-only. You can continue it on another server, or delete the server in settings.")
-                .font(.ui(size: 13))
+                .font(.ui(.sm))
                 .foregroundStyle(Color.themeMutedForeground)
                 .fixedSize(horizontal: false, vertical: true)
             HStack(spacing: 0) {
@@ -47,7 +47,7 @@ struct UnlinkedThreadBar: View {
             nameChip
             Text("is unlinked")
         }
-        .font(.ui(size: 13, weight: .medium))
+        .font(.ui(.sm, weight: .medium))
         .lineLimit(1)
         .foregroundStyle(Color.themeWarning)
     }
@@ -57,7 +57,7 @@ struct UnlinkedThreadBar: View {
     private var nameChip: some View {
         let shape = RoundedRectangle(cornerRadius: SkillChip.radius, style: .continuous)
         return Text(server.name)
-            .font(.ui(size: 13, weight: .medium))
+            .font(.ui(.sm, weight: .medium))
             .lineLimit(1)
             .padding(.horizontal, scaled(SkillChip.padding))
             .padding(.vertical, 1)

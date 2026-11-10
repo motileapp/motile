@@ -10,7 +10,7 @@ use motile_core::render::openui::canvas::Tip;
 use super::hit::hit;
 use super::legend::{Arrangement, arrange, paint_legend};
 use super::paint::{Palette, Prepared, paint_scene};
-use crate::theme::{Radius, Surface, UI_FONT, colors};
+use crate::theme::{Radius, Surface, TextSize, UI_FONT, colors};
 use crate::ui::{popover_card, tabular_numbers};
 
 const TIP_PADDING_X: f32 = 12.;
@@ -20,7 +20,7 @@ const TIP_ROW_GAP: f32 = 3.;
 const TIP_DOT: f32 = 8.;
 const TIP_DOT_GAP: f32 = 6.;
 const TIP_VALUE_GAP: f32 = 8.;
-const TIP_TEXT: f32 = 12.;
+const TIP_TEXT: TextSize = TextSize::Xs;
 const TIP_LINE: f32 = 18.;
 /// Half the room the tooltip is centred in, wider than any.
 const TIP_ROOM: f32 = 600.;
@@ -175,7 +175,7 @@ fn tooltip(tip: &Tip, scene_at: Point<Pixels>, palette: &Palette, cx: &App) -> D
         .px(px(TIP_PADDING_X))
         .py(px(TIP_PADDING_Y))
         .font_family(UI_FONT)
-        .text_size(px(TIP_TEXT))
+        .text_size(TIP_TEXT)
         .line_height(px(TIP_LINE))
         .whitespace_nowrap()
         .child(title)

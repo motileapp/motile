@@ -5,7 +5,7 @@ import SwiftUI
 /// The composer's text: grows with what is typed, sends on Return, and takes dropped files. A
 /// `TextArea` is the same view with Return as a line break and no focus of its own.
 struct ComposerTextView: NSViewRepresentable {
-    static let font = NSFont.systemFont(ofSize: 14)
+    static let font = NSFont.ui(.md)
     static let paragraphStyle: NSParagraphStyle = {
         let style = NSMutableParagraphStyle()
         style.lineSpacing = 3

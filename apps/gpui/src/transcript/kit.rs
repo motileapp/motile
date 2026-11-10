@@ -123,7 +123,7 @@ impl RenderOnce for RowButton {
                     .rounded(px(self.radius))
                     .when(bordered, |light| light.border_1().border_color(c.border).px(px(padding - 1.)))
                     .when_some(fill, |light, fill| light.bg(fill))
-                    .text_size(px(Self::METRICS.text_size()))
+                    .text_size(Self::METRICS.text_size())
                     .when(bordered, |light| light.font_weight(FontWeight::MEDIUM))
                     .text_color(text)
                     .whitespace_nowrap()

@@ -69,6 +69,7 @@ import app.motile.composer.SkillChip.drawBox
 import app.motile.platform.Platform
 import app.motile.platform.scaled
 import app.motile.theme.LocalDark
+import app.motile.theme.TextSize
 import app.motile.theme.Theme
 import app.motile.ui.ImageFiles
 import app.motile.ui.Text
@@ -84,7 +85,7 @@ import kotlin.math.min
 /** The composer's text: its font, and how tall it grows. */
 object ComposerText {
     /** Seventeen, as iOS's composer, with lines a chip fits on. */
-    val style = Theme.ui(15f).copy(lineHeight = scaled(19f).sp)
+    val style = Theme.ui(TextSize.Lg).copy(lineHeight = scaled(19f).sp)
     val verticalInset = 8.dp
     /** One line: a phone has no room to spare, and the composer grows with what is typed. */
     val minimumHeight = scaled(19f).dp + verticalInset * 2

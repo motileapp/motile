@@ -60,7 +60,7 @@ struct InputField: View {
             }
             field
                 .textFieldStyle(.plain)
-                .font(.ui(size: size.textSize + 0.5, design: monospaced ? .monospaced : .default))
+                .font(.ui(size.textSize, design: monospaced ? .monospaced : .default))
                 .focused(focus ?? $ownFocus)
                 .numberKeypad(numeric)
                 .onEscape(clearable && !text.isEmpty ? { text = "" } : nil)
@@ -97,7 +97,7 @@ extension InputField {
 
     @ViewBuilder fileprivate var field: some View {
         #if os(macOS)
-        let font: NSFont = monospaced ? .uiMono(size.textSize + 0.5) : .ui(size.textSize + 0.5)
+        let font: NSFont = monospaced ? .uiMono(size.textSize) : .ui(size.textSize)
         LineField(text: $text, font: font, secure: secure).placeholder(placeholder, shown: text.isEmpty)
         #else
         if secure {

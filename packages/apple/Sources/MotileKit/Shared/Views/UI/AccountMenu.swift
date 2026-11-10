@@ -16,12 +16,12 @@ struct AccountMenu: View {
     var body: some View {
         #if os(macOS)
         ActionMenu(
-            picture: AnyView(AccountPicture(account: store.account)), help: store.account.email,
+            picture: AnyView(AccountPicture(account: store.account, initialSize: .xxs)), help: store.account.email,
             symbolSize: Self.picture, margin: margin
         ) { items }
         #else
         Menu { items } label: {
-            AccountPicture(account: store.account)
+            AccountPicture(account: store.account, initialSize: .lg)
                 .frame(width: Self.glassPicture, height: Self.glassPicture)
                 .frame(width: GlassButtonStyle.side, height: GlassButtonStyle.side)
                 .contentShape(Circle())
@@ -47,6 +47,8 @@ struct AccountMenu: View {
 /// The account's picture, or the first letter of its name on a disc until there is one.
 struct AccountPicture: View {
     let account: Account
+    /// Half as tall as the disc.
+    let initialSize: TextSize
 
     var body: some View {
         AsyncImage(url: account.picture) { image in
@@ -60,12 +62,10 @@ struct AccountPicture: View {
     }
 
     private var initial: some View {
-        GeometryReader { disc in
-            Text((account.name ?? account.email).prefix(1).uppercased())
-                .font(.ui(size: disc.size.height * 0.5, weight: .semibold))
-                .foregroundStyle(Color.themeForeground)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color.themeBorder)
-        }
+        Text((account.name ?? account.email).prefix(1).uppercased())
+            .font(.ui(initialSize, weight: .semibold))
+            .foregroundStyle(Color.themeForeground)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color.themeBorder)
     }
 }

@@ -22,7 +22,7 @@ use crate::store::pull_requests::{
     Button, Check, Choice, Entry, EntryKind, Notice, Page, PendingLineComment, REACTIONS, Stack, Status, StatusKind,
     Style, Text, Thread, Toggle, Tone, emoji, read_blocks,
 };
-use crate::theme::{self, ControlSize, IconSize, Radius, Surface, colors};
+use crate::theme::{self, ControlSize, IconSize, Radius, Surface, TextSize, colors};
 use crate::ui::menu::Menu;
 use crate::ui::modal::{Answer, Confirmation, confirmation, modal, present_sheet, presented};
 use crate::ui::{
@@ -50,7 +50,7 @@ pub fn panel_message(text: impl Into<SharedString>, failed: bool, cx: &App) -> A
             // As wide as the panel, so that a long message wraps in it.
             div()
                 .w_full()
-                .text_size(px(12.5))
+                .text_size(TextSize::Xs)
                 .text_color(if failed { c.destructive } else { c.muted_foreground })
                 .text_center()
                 .child(crate::ui::rich_text::RichText::new(SharedString::from(format!("panel-message-{text}")), text)),
@@ -80,8 +80,8 @@ pub fn panel_bar(content: impl IntoElement, cx: &App) -> Div {
         .child(divider(cx))
 }
 
-pub fn label(text: impl Into<SharedString>, size: f32, color: Hsla) -> Div {
-    div().text_size(px(size)).text_color(color).child(text.into())
+pub fn label(text: impl Into<SharedString>, size: TextSize, color: Hsla) -> Div {
+    div().text_size(size).text_color(color).child(text.into())
 }
 
 fn ui_font(weight: FontWeight) -> Font {
@@ -121,7 +121,7 @@ pub fn line_counts(added: u32, removed: u32, cx: &App) -> Option<Div> {
         return None;
     }
     let (text, runs) = super::code_view::counts_text(added, removed, colors(cx));
-    Some(div().text_size(px(11.5)).child(StyledText::new(text).with_runs(runs)))
+    Some(div().text_size(TextSize::Xs).child(StyledText::new(text).with_runs(runs)))
 }
 
 /// Markdown from the pull request, drawn as the transcript draws a reply, on `surface`.
@@ -129,7 +129,7 @@ pub fn text_blocks(id: &str, blocks: &[Text], surface: Surface, cx: &App) -> Div
     div().w_full().flex().flex_col().gap(px(10.)).children(blocks.iter().enumerate().map(|(index, block)| {
         let block_id = format!("{id}-{index}");
         match block {
-            Text::Prose(prose) => crate::ui::rich_text::prose_blocks(&block_id, prose, 13., surface, cx),
+            Text::Prose(prose) => crate::ui::rich_text::prose_blocks(&block_id, prose, TextSize::Sm, surface, cx),
             Text::Code { code, spans, .. } => crate::ui::rich_text::code_block(&block_id, code, spans, surface, cx),
         }
     }))
@@ -204,7 +204,7 @@ pub fn notice_bar(notice: &Notice, store: &Entity<Store>, cx: &App) -> Div {
                             .text_color(if notice.failed { c.destructive } else { c.success }),
                     ),
                 )
-                .child(div().flex_1().min_w_0().min_h(px(LINE)).text_size(px(12.5)).text_color(c.foreground).child(
+                .child(div().flex_1().min_w_0().min_h(px(LINE)).text_size(TextSize::Xs).text_color(c.foreground).child(
                     crate::ui::rich_text::RichText::new(
                         SharedString::from(format!("pr-notice-{}", notice.text)),
                         notice.text.clone(),
@@ -619,7 +619,7 @@ impl PullRequestView {
             .when_some(page, |bar, page| {
                 bar.child(icons::symbol(page.state.symbol(), IconSize::Sm).text_color(page.state.color(c)))
                     .child(
-                        label(format!("#{}", page.number), 12.5, c.foreground)
+                        label(format!("#{}", page.number), TextSize::Xs, c.foreground)
                             .pl(px(2.))
                             .font_weight(FontWeight::MEDIUM)
                             .font_features(crate::ui::tabular_numbers()),
@@ -637,7 +637,7 @@ impl PullRequestView {
                     })
             })
             .when(page.is_none(), |bar| {
-                bar.child(label("Pull Request", 12.5, c.foreground).font_weight(FontWeight::MEDIUM))
+                bar.child(label("Pull Request", TextSize::Xs, c.foreground).font_weight(FontWeight::MEDIUM))
             })
             .child(div().flex_1().min_w(px(4.)))
             .when(url.is_some() || refreshes, |bar| {
@@ -693,7 +693,7 @@ impl PullRequestView {
             .justify_center()
             .gap(px(14.))
             .child(icons::symbol("git-pull-request", IconSize::Xxl).text_color(c.muted_stronger_foreground))
-            .child(label("This branch has no pull request yet.", 13., c.muted_foreground))
+            .child(label("This branch has no pull request yet.", TextSize::Sm, c.muted_foreground))
             .child(
                 div()
                     .flex()
@@ -769,8 +769,8 @@ impl PullRequestView {
             .flex()
             .items_baseline()
             .gap(px(6.))
-            .child(label("Activity", 13., c.foreground).font_weight(FontWeight::SEMIBOLD))
-            .child(label("Oldest first", 12., c.muted_stronger_foreground));
+            .child(label("Activity", TextSize::Sm, c.foreground).font_weight(FontWeight::SEMIBOLD))
+            .child(label("Oldest first", TextSize::Xs, c.muted_stronger_foreground));
         let activity = div()
             .w_full()
             .flex()
@@ -840,7 +840,7 @@ impl PullRequestView {
             .child(div().relative().child(icons::symbol("diff", IconSize::Sm).text_color(c.muted_foreground)))
             .child(div().relative().child(label(
                 if page.files == 1 { "1 file".to_string() } else { format!("{} files", page.files) },
-                12.,
+                TextSize::Xs,
                 c.foreground,
             )))
             .children(line_counts(page.additions, page.deletions, cx).map(|counts| div().relative().child(counts)))
@@ -862,7 +862,7 @@ impl PullRequestView {
                     div()
                         .flex_1()
                         .min_w_0()
-                        .text_size(px(15.))
+                        .text_size(TextSize::Lg)
                         .line_height(px(20.))
                         .font_weight(FontWeight::SEMIBOLD)
                         .text_color(c.foreground)
@@ -885,7 +885,7 @@ impl PullRequestView {
                 .gap(px(6.))
                 .child(highlight("pr-stacked-on", Radius::SM, edges(0., 0., 0., 0.), false, cx))
                 .child(div().relative().child(icons::symbol("layers", IconSize::Sm).text_color(c.muted_foreground)))
-                .child(div().relative().min_w_0().text_size(px(12.)).truncate().child(styled_line(vec![
+                .child(div().relative().min_w_0().text_size(TextSize::Xs).truncate().child(styled_line(vec![
                     ("Stacked on ".into(), c.muted_foreground, FontWeight::NORMAL),
                     (format!("#{} ", below.number), below.state.color(c), FontWeight::NORMAL),
                     (below.title.clone(), c.foreground, FontWeight::NORMAL),
@@ -914,7 +914,7 @@ impl PullRequestView {
                     .child(Chip::new(page.state.title()).icon(page.state.symbol()).tone(page.state.color(c)))
                     .child(div().flex_1().min_w_0().pt(px(2.)).child(label(
                         page.byline.clone(),
-                        12.,
+                        TextSize::Xs,
                         c.muted_foreground,
                     ))),
             )
@@ -1006,8 +1006,8 @@ impl PullRequestView {
                 .flex()
                 .items_center()
                 .gap(px(8.))
-                .child(div().w(px(70.)).flex_shrink_0().child(label(title, 12., c.muted_stronger_foreground)))
-                .when(empty, |row| row.child(label("None yet", 12., c.muted_stronger_foreground)))
+                .child(div().w(px(70.)).flex_shrink_0().child(label(title, TextSize::Xs, c.muted_stronger_foreground)))
+                .when(empty, |row| row.child(label("None yet", TextSize::Xs, c.muted_stronger_foreground)))
                 .when(!empty, |row| row.child(div().flex().flex_wrap().items_center().gap(px(5.)).children(chips)))
                 .when(!choices.is_empty(), |row| {
                     row.child(
@@ -1194,10 +1194,10 @@ impl PullRequestView {
                     .items_center()
                     .gap(px(6.))
                     .child(icons::symbol("layers", IconSize::Md).text_color(c.muted_foreground))
-                    .child(label("Stack", 13., c.foreground).font_weight(FontWeight::MEDIUM))
+                    .child(label("Stack", TextSize::Sm, c.foreground).font_weight(FontWeight::MEDIUM))
                     .child(label(
                         format!("{} pull requests onto {}", stack.layers.len(), stack.base),
-                        12.,
+                        TextSize::Xs,
                         c.muted_stronger_foreground,
                     ))
                     .child(div().flex_1().min_w(px(4.)))
@@ -1244,7 +1244,7 @@ impl PullRequestView {
                     )
                     .child(
                         div().relative().child(
-                            label(format!("#{}", layer.number), 12., c.muted_foreground)
+                            label(format!("#{}", layer.number), TextSize::Xs, c.muted_foreground)
                                 .font_weight(FontWeight::MEDIUM)
                                 .font_features(crate::ui::tabular_numbers()),
                         ),
@@ -1253,14 +1253,14 @@ impl PullRequestView {
                         div()
                             .relative()
                             .min_w_0()
-                            .text_size(px(12.5))
+                            .text_size(TextSize::Xs)
                             .text_color(c.foreground)
                             .truncate()
                             .child(layer.title.clone()),
                     )
                     .child(div().flex_1().min_w(px(4.)))
                     .when(layer.current, |row| {
-                        row.child(div().relative().child(label("This one", 11.5, c.muted_stronger_foreground)))
+                        row.child(div().relative().child(label("This one", TextSize::Xs, c.muted_stronger_foreground)))
                     })
                     .when(!layer.current, |row| {
                         row.on_click(move |_, _, cx| {
@@ -1346,13 +1346,15 @@ impl PullRequestView {
                             .flex()
                             .items_center()
                             .gap(px(6.))
-                            .child(label(status.title.clone(), 13., c.foreground).font_weight(FontWeight::MEDIUM))
+                            .child(
+                                label(status.title.clone(), TextSize::Sm, c.foreground).font_weight(FontWeight::MEDIUM),
+                            )
                             .when_some(status.at, |row, at| {
-                                row.child(label(ago(at), 12., c.muted_stronger_foreground))
+                                row.child(label(ago(at), TextSize::Xs, c.muted_stronger_foreground))
                             }),
                     )
                     .when_some(status.detail.clone(), |column, detail| {
-                        column.child(label(detail, 12., c.muted_foreground))
+                        column.child(label(detail, TextSize::Xs, c.muted_foreground))
                     })
                     .when(!status.buttons.is_empty(), |column| {
                         let count = status.buttons.len();
@@ -1433,7 +1435,7 @@ impl PullRequestView {
                     .min_w_0()
                     .flex_shrink_0()
                     .max_w(relative(0.6))
-                    .text_size(px(12.5))
+                    .text_size(TextSize::Xs)
                     .text_color(c.foreground)
                     .truncate()
                     .child(check.name.clone())
@@ -1443,7 +1445,7 @@ impl PullRequestView {
                 row.child(
                     div()
                         .min_w_0()
-                        .text_size(px(12.))
+                        .text_size(TextSize::Xs)
                         .text_color(c.muted_stronger_foreground)
                         .truncate()
                         .child(workflow),
@@ -1452,7 +1454,7 @@ impl PullRequestView {
             .child(div().flex_1().min_w(px(6.)))
             .child(label(
                 check.label.clone(),
-                12.,
+                TextSize::Xs,
                 if check.tone == Tone::Neutral { c.muted_stronger_foreground } else { check.tone.color(c) },
             ))
             .when(fix.is_some() || opens, |row| {
@@ -1633,7 +1635,7 @@ impl PullRequestView {
             .w_full()
             .flex()
             .items_start()
-            .child(div().flex_1().min_w_0().text_size(px(12.5)).line_height(px(LINE)).child(line))
+            .child(div().flex_1().min_w_0().text_size(TextSize::Xs).line_height(px(LINE)).child(line))
             .child(div().w(px(6.)).flex_shrink_0())
             .child(
                 div()
@@ -1703,7 +1705,7 @@ impl PullRequestView {
                         div()
                             .relative()
                             .font_family(theme::MONO_FONT)
-                            .text_size(px(11.5))
+                            .text_size(TextSize::Xs)
                             .text_color(c.primary)
                             .child(commit.oid.clone()),
                     )
@@ -1711,7 +1713,7 @@ impl PullRequestView {
                         div()
                             .relative()
                             .min_w_0()
-                            .text_size(px(12.5))
+                            .text_size(TextSize::Xs)
                             .text_color(c.foreground)
                             .truncate()
                             .child(commit.headline.clone()),
@@ -1760,7 +1762,7 @@ impl PullRequestView {
                 div()
                     .relative()
                     .min_w_0()
-                    .text_size(px(12.))
+                    .text_size(TextSize::Xs)
                     .font_weight(FontWeight::MEDIUM)
                     .text_color(c.foreground)
                     .whitespace_nowrap()
@@ -1771,7 +1773,7 @@ impl PullRequestView {
             .when_some(thread.line, |row, line| {
                 row.child(div().relative().flex_shrink_0().child(label(
                     format!("line {line}"),
-                    12.,
+                    TextSize::Xs,
                     c.muted_stronger_foreground,
                 )))
             })
@@ -1781,7 +1783,7 @@ impl PullRequestView {
             .when(!open, |row| {
                 row.child(div().relative().flex_shrink_0().child(label(
                     if comments == 1 { "1 comment".to_string() } else { format!("{comments} comments") },
-                    11.5,
+                    TextSize::Xs,
                     c.muted_stronger_foreground,
                 )))
             })
@@ -1829,7 +1831,7 @@ impl PullRequestView {
                 .items_center()
                 .bg(fill)
                 .font_family(theme::MONO_FONT)
-                .text_size(px(11.5))
+                .text_size(TextSize::Xs)
                 .text_color(c.foreground)
                 .whitespace_nowrap()
                 .overflow_hidden()
@@ -1860,7 +1862,7 @@ impl PullRequestView {
                     .w_full()
                     .flex()
                     .items_center()
-                    .child(div().flex_1().min_w_0().text_size(px(12.5)).child(styled_line(vec![
+                    .child(div().flex_1().min_w_0().text_size(TextSize::Xs).child(styled_line(vec![
                         (comment.author.clone(), c.foreground, FontWeight::SEMIBOLD),
                         (format!(" · {}", ago(comment.at)), c.muted_stronger_foreground, FontWeight::NORMAL),
                     ])))
@@ -2108,7 +2110,7 @@ impl PullRequestView {
                     .px(px(12.))
                     .pt(px(9.))
                     .pb(px(4.))
-                    .child(label(title, 12., c.muted_foreground).font_weight(FontWeight::MEDIUM)),
+                    .child(label(title, TextSize::Xs, c.muted_foreground).font_weight(FontWeight::MEDIUM)),
             )
             .children(comments.iter().map(|comment| {
                 let (store, id) = (self.store.clone(), comment.id);
@@ -2123,7 +2125,7 @@ impl PullRequestView {
                         div()
                             .flex_shrink_0()
                             .font_family(theme::MONO_FONT)
-                            .text_size(px(11.5))
+                            .text_size(TextSize::Xs)
                             .text_color(c.primary)
                             .child(format!("{}:{}", crate::models::last_component(&comment.path), comment.line)),
                     )
@@ -2131,7 +2133,7 @@ impl PullRequestView {
                         div()
                             .flex_1()
                             .min_w_0()
-                            .text_size(px(12.5))
+                            .text_size(TextSize::Xs)
                             .text_color(c.foreground)
                             .line_clamp(2)
                             .child(comment.body.clone()),
@@ -2358,7 +2360,9 @@ impl Render for DescriptionEditor {
                 .p(px(12.))
                 .bg(c.background_secondary)
                 .rounded(px(Radius::MD))
-                .when(empty, |preview| preview.child(label("Nothing to preview", 12.5, c.muted_stronger_foreground)))
+                .when(empty, |preview| {
+                    preview.child(label("Nothing to preview", TextSize::Xs, c.muted_stronger_foreground))
+                })
                 .when(!empty, |preview| {
                     preview.child(text_blocks("pr-description-preview", &self.preview, Surface::Secondary, cx))
                 })
@@ -2391,7 +2395,7 @@ impl Render for DescriptionEditor {
                     .w_full()
                     .flex()
                     .items_center()
-                    .child(label("Edit Description", 15., c.foreground).font_weight(FontWeight::SEMIBOLD))
+                    .child(label("Edit Description", TextSize::Lg, c.foreground).font_weight(FontWeight::SEMIBOLD))
                     .child(div().flex_1())
                     .child(
                         Segmented::new(

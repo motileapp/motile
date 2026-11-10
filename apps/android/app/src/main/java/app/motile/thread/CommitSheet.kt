@@ -35,6 +35,7 @@ import app.motile.platform.Symbol
 import app.motile.theme.ControlSize
 import app.motile.theme.Radius
 import app.motile.theme.SurfaceBox
+import app.motile.theme.TextSize
 import app.motile.theme.Theme
 import app.motile.ui.ActionButton
 import app.motile.ui.ButtonVariant
@@ -75,17 +76,17 @@ fun CommitSheet(project: Project) {
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text("Commit Changes", size = 15f, weight = FontWeight.SemiBold)
-            Text("Review and confirm your commit. Leave the message empty to have one written.", size = 12f, color = palette.mutedForeground)
+            Text("Commit Changes", size = TextSize.Lg, weight = FontWeight.SemiBold)
+            Text("Review and confirm your commit. Leave the message empty to have one written.", size = TextSize.Xs, color = palette.mutedForeground)
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("Branch", size = 12.5f, color = palette.mutedForeground)
-            Text(project.git?.branch ?: "No branch", Modifier.weight(1f), size = 12.5f, weight = FontWeight.Medium, maxLines = 1)
-            if (project.git?.isDefault == true) Text("Default branch", size = 12.5f, color = palette.warning)
+            Text("Branch", size = TextSize.Xs, color = palette.mutedForeground)
+            Text(project.git?.branch ?: "No branch", Modifier.weight(1f), size = TextSize.Xs, weight = FontWeight.Medium, maxLines = 1)
+            if (project.git?.isDefault == true) Text("Default branch", size = TextSize.Xs, color = palette.warning)
         }
         FileList(files, excluded) { excluded = it }
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text("Commit message (optional)", size = 12.5f, weight = FontWeight.Medium)
+            Text("Commit message (optional)", size = TextSize.Xs, weight = FontWeight.Medium)
             TextArea("Leave empty to have one written", message, { message = it }, Modifier.fillMaxWidth(), lines = 4)
         }
         val below = PaddingValues(bottom = 8.dp)
@@ -109,8 +110,8 @@ private fun FileList(files: List<ChangedFile>, excluded: Set<String>, setExclude
     val included = files.count { it.path !in excluded }
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Files", size = 12.5f, weight = FontWeight.Medium)
-            if (excluded.isNotEmpty() && !editing) Text("$included of ${files.size}", size = 12f, color = palette.mutedForeground)
+            Text("Files", size = TextSize.Xs, weight = FontWeight.Medium)
+            if (excluded.isNotEmpty() && !editing) Text("$included of ${files.size}", size = TextSize.Xs, color = palette.mutedForeground)
             Spacer(Modifier.weight(1f))
             Row(Modifier.outset(end = ControlSize.Small.padding, vertical = 4.dp)) {
                 if (editing) {
@@ -148,14 +149,14 @@ private fun FileRow(file: ChangedFile, isExcluded: Boolean, editing: Boolean, to
             Spacer(Modifier.width(8.dp))
         }
         Text(
-            file.path, Modifier.weight(1f), size = 12.5f, maxLines = 1, overflow = TextOverflow.StartEllipsis,
+            file.path, Modifier.weight(1f), size = TextSize.Xs, maxLines = 1, overflow = TextOverflow.StartEllipsis,
             color = if (isExcluded) palette.mutedStrongerForeground else palette.foreground,
         )
         Spacer(Modifier.width(8.dp))
         when {
-            isExcluded -> Text("Excluded", size = 12.5f, color = palette.mutedStrongerForeground)
+            isExcluded -> Text("Excluded", size = TextSize.Xs, color = palette.mutedStrongerForeground)
             file.added + file.removed > 0 -> LineCounts(file.added, file.removed)
-            else -> Text(if (file.change == "added") "new" else file.change, size = 12.5f, color = palette.mutedStrongerForeground)
+            else -> Text(if (file.change == "added") "new" else file.change, size = TextSize.Xs, color = palette.mutedStrongerForeground)
         }
     }
 }
@@ -164,7 +165,7 @@ private fun FileRow(file: ChangedFile, isExcluded: Boolean, editing: Boolean, to
 @Composable
 private fun LineCounts(added: Int, removed: Int) {
     val palette = Theme.colors
-    val style = Theme.uiDigits(11f, FontWeight.Medium)
+    val style = Theme.uiDigits(TextSize.Xs, FontWeight.Medium)
     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         if (added > 0) Text("+$added", style = style, color = palette.success)
         if (removed > 0) Text("−$removed", style = style, color = palette.destructive)

@@ -77,7 +77,7 @@ struct PanelMessage: View {
 
     var body: some View {
         Text(text)
-            .font(.ui(size: 12.5))
+            .font(.ui(.xs))
             .foregroundStyle(failed ? Color.themeDestructive : Color.themeMutedForeground)
             .multilineTextAlignment(.center)
             .textSelection(.enabled)
@@ -95,7 +95,7 @@ private struct NoRepositoryMessage: View {
     var body: some View {
         VStack(spacing: 12) {
             Text("This folder isn't a git repository.")
-                .font(.ui(size: 12.5))
+                .font(.ui(.xs))
                 .foregroundStyle(Color.themeMutedForeground)
                 .multilineTextAlignment(.center)
             if let project = store.project(projectID), store.canInitializeGit(of: project) {
@@ -165,7 +165,7 @@ struct PanelNote: View {
     var body: some View {
         VStack(spacing: 0) {
             Text(text)
-                .font(.ui(size: 12))
+                .font(.ui(.xs))
                 .foregroundStyle(Color.themeWarning)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 12)
@@ -257,7 +257,7 @@ struct PanelTabChip: View {
         HStack(spacing: 6) {
             Image(tab.symbol, size: .sm)
             Text(tab.title)
-                .font(.ui(size: 12, weight: .medium))
+                .font(.ui(.xs, weight: .medium))
                 .lineLimit(1)
                 .truncationMode(.middle)
             Color.clear
@@ -306,7 +306,7 @@ private struct PanelLauncher: View {
     var body: some View {
         VStack(spacing: 12) {
             Text("Open")
-                .font(.ui(size: 13, weight: .semibold))
+                .font(.ui(.sm, weight: .semibold))
                 .foregroundStyle(Color.themeForeground)
             VStack(spacing: 0) {
                 row(.bot, "Agents", count: store.agents.filter(\.working).count, command: "rightPanel.agents", reason: nil) {
@@ -357,7 +357,7 @@ private struct PanelLauncher: View {
                         Text(title)
                     }
                 }
-                .font(.ui(size: 13))
+                .font(.ui(.sm))
                 Spacer()
                 #if os(macOS)
                 if let command, let caps = store.shortcuts.effective(command).first?.caps {
@@ -450,7 +450,7 @@ struct DiffSurface: View {
                 if case .pullRequest = scope, let page = page(for: scope), store.pullRequestsExtended, !page.viewed.isEmpty {
                     let viewed = page.viewed.values.filter { $0 }.count
                     Text("\(viewed) of \(page.viewed.count) viewed")
-                        .font(.ui(size: 12))
+                        .font(.ui(.xs))
                         .foregroundStyle(Color.themeMutedStrongerForeground)
                         .padding(.leading, 6)
                         .help(page.canReviewLines ? "Click a line's number to comment on it" : "")
@@ -614,7 +614,7 @@ struct FilesSurface: View {
                 Image(.folder, size: .sm)
                     .foregroundStyle(Color.themeMutedForeground)
                 Text(target.name)
-                    .font(.ui(size: 12.5, weight: .medium))
+                    .font(.ui(.xs, weight: .medium))
                     .foregroundStyle(Color.themeForeground)
                     .lineLimit(1)
                     .padding(.leading, 3)
@@ -660,7 +660,7 @@ private struct FileRow: View {
             Image(node.folder ? .folder : FileSymbol.symbol(for: node.path), size: .sm)
                 .foregroundStyle(node.ignored ? Color.themeMutedStrongestForeground : Color.themeMutedForeground)
             Text(node.name)
-                .font(.ui(size: 12.5))
+                .font(.ui(.xs))
                 .foregroundStyle(node.ignored ? Color.themeMutedStrongestForeground : Color.themeForeground)
                 .lineLimit(1)
                 .truncationMode(.middle)
@@ -691,7 +691,7 @@ struct FileSurface: View {
         VStack(spacing: 0) {
             PanelBar {
                 (Text(folder).foregroundStyle(Color.themeMutedForeground) + Text((path as NSString).lastPathComponent).foregroundStyle(Color.themeForeground))
-                    .font(.ui(size: 12.5, weight: .medium))
+                    .font(.ui(.xs, weight: .medium))
                     .lineLimit(1)
                     .truncationMode(.head)
                 Spacer(minLength: 4)
@@ -759,7 +759,7 @@ struct ChangeSurface: View {
         VStack(spacing: 0) {
             PanelBar {
                 Text(panel.name(ofTurn: turn))
-                    .font(.ui(size: 12.5, weight: .medium))
+                    .font(.ui(.xs, weight: .medium))
                     .foregroundStyle(Color.themeForeground)
                     .lineLimit(1)
                 Spacer(minLength: 4)

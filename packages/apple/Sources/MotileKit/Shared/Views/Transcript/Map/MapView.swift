@@ -427,7 +427,7 @@ private final class MapOverviewView: FlippedView {
         box.fill = Theme.thinned(Theme.background, .lit)
         box.radius = Radius.sm
         words.oneLine = true
-        words.text = ControlText.wrapped(MapLayout.routeOverview, font: .ui(10), lineHeight: scaled(16), color: Theme.mutedForeground)
+        words.text = ControlText.wrapped(MapLayout.routeOverview, font: .ui(.xxs), lineHeight: scaled(16), color: Theme.mutedForeground)
         addSubview(box)
         addSubview(words)
         describe(MapLayout.routeOverview)
@@ -449,7 +449,7 @@ private final class MapOverviewView: FlippedView {
 
 /// The style's attribution at the map's bottom left, each name a link that opens in the browser.
 private final class MapAttributionView: FlippedView {
-    private static let font = PlatformFont.ui(9)
+    private static let font = PlatformFont.ui(.xxs)
     private static let line = scaled(12)
 
     private let box = SurfaceView()

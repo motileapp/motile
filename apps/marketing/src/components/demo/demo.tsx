@@ -76,7 +76,7 @@ export function Demo() {
       <div className="h-[calc(760px*var(--demo-scale))] [--demo-scale:var(--demo-fit,min(1,tan(atan2(100cqw,1200px))))]">
         <div
           ref={demoWindow}
-          className="relative flex h-[760px] w-[1200px] origin-top-left scale-(--demo-scale) overflow-hidden rounded-xl bg-background text-[13px] text-foreground ring-1 ring-border select-none"
+          className="relative flex h-[760px] w-[1200px] origin-top-left scale-(--demo-scale) overflow-hidden rounded-xl bg-background text-(length:--type-sm) text-foreground ring-1 ring-border select-none"
         >
           <div className="absolute top-5 left-5 z-20">
             <TrafficLights />
@@ -135,7 +135,7 @@ export function Demo() {
               )}
             >
               <div className="min-w-0">
-                <p className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                <p className="flex items-center gap-1 text-(length:--type-xs) text-muted-foreground">
                   <ProjectIcon project={thread.project} size={14} />
                   <span>
                     {thread.project.name}{" "}
@@ -143,7 +143,7 @@ export function Demo() {
                     {thread.branch}
                   </span>
                 </p>
-                <p className="truncate text-[13px] font-semibold">
+                <p className="truncate text-(length:--type-sm) font-semibold">
                   {thread.title}
                 </p>
               </div>
@@ -256,7 +256,7 @@ function WindowButton({
 
 function GitButton() {
   return (
-    <span className="mx-1.5 ml-auto flex h-8 shrink-0 items-center overflow-hidden rounded-md border border-border text-[12px] font-medium">
+    <span className="mx-1.5 ml-auto flex h-8 shrink-0 items-center overflow-hidden rounded-md border border-border text-(length:--type-xs) font-medium">
       <span className="flex h-full items-center gap-1.5 pr-[11px] pl-[9px] hover:bg-background-accent">
         <GitCommitHorizontalIcon className="size-3.5" />
         Commit

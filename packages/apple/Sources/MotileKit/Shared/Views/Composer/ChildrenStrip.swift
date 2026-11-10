@@ -21,7 +21,7 @@ struct ChildrenStrip: View {
                 Text(count == 1 ? "Agent \(first.ask.phrase)" : text)
                     .truncationMode(.tail)
             }
-            .font(.ui(size: 12.5, weight: .medium))
+            .font(.ui(.xs, weight: .medium))
             .foregroundStyle(Color.themeWarning)
             .lineLimit(1)
             .help(text)
@@ -67,14 +67,14 @@ struct AgentBar: View {
         HStack(spacing: 8) {
             AgentAvatar(agent: agent.agent, state: agent.state)
             Text(agent.title)
-                .font(.ui(size: 13, weight: .medium))
+                .font(.ui(.sm, weight: .medium))
                 .foregroundStyle(Color.themeForeground)
                 .lineLimit(1)
             AgentTime(agent: agent)
             Spacer(minLength: 8)
             if saying {
                 Text("Runs on its own")
-                    .font(.ui(size: 12.5))
+                    .font(.ui(.xs))
                     .foregroundStyle(Color.themeMutedForeground)
                     .lineLimit(1)
                     .fixedSize()

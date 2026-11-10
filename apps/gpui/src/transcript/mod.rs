@@ -32,6 +32,6 @@ pub fn warm_up(window: &mut Window) {
             underline: None,
             strikethrough: None,
         };
-        window.text_system().shape_line(text, px(crate::theme::PROSE_SIZE), &[run], None);
+        window.text_system().shape_line(text, crate::theme::PROSE_SIZE.into(), &[run], None);
     }
 }

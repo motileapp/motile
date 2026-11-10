@@ -13,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.motile.theme.Radius
+import app.motile.theme.TextSize
 import app.motile.theme.Theme
 import app.motile.theme.accentTint
 
@@ -34,7 +35,7 @@ fun KeyCaps(caps: List<String>, modifier: Modifier = Modifier, joined: Boolean =
                     .padding(horizontal = 6.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                Text(cap, style = Theme.uiMono(11f, FontWeight.Medium), maxLines = 1)
+                Text(cap, style = Theme.uiMono(TextSize.Xs, FontWeight.Medium), maxLines = 1)
             }
         }
     }

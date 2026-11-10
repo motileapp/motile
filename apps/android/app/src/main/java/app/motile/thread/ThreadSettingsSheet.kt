@@ -52,6 +52,7 @@ import app.motile.core.Project
 import app.motile.platform.Symbol
 import app.motile.layout.handleShortcut
 import app.motile.theme.IconSize
+import app.motile.theme.TextSize
 import app.motile.theme.iconSize
 import app.motile.theme.LocalForeground
 import app.motile.theme.Radius
@@ -71,8 +72,8 @@ import app.motile.ui.pressable
 import app.motile.ui.proxied
 import app.motile.usage.LimitPills
 
-private const val rowText = 15f
-private const val noteText = 12f
+private val rowText = TextSize.Lg
+private val noteText = TextSize.Xs
 /** A row's symbol and check, and the lighter chevron that opens what it chooses, as the iOS app's list draws them. */
 private val rowSymbol = IconSize.Md
 private val rowChevron = IconSize.Sm
@@ -152,7 +153,7 @@ private fun PageBar(title: String, back: (() -> Unit)? = null, close: (() -> Uni
         } else if (close != null) {
             SheetCloseButton(Modifier.align(Alignment.CenterStart), onClose = close)
         }
-        Text(title, style = system(17f, FontWeight.SemiBold), maxLines = 1)
+        Text(title, style = system(TextSize.Xl, FontWeight.SemiBold), maxLines = 1)
     }
 }
 

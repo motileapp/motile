@@ -371,7 +371,7 @@ enum PullRequestText {
     case prose(NSAttributedString)
     case code(NSAttributedString)
 
-    static let size: CGFloat = 13 * Platform.scale
+    static let size = TextSize.sm.points
 
     static func blocks(_ json: [JSON]) -> [PullRequestText] {
         json.map { block in

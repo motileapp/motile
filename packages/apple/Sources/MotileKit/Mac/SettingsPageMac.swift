@@ -366,13 +366,13 @@ struct SettingsPage: View {
             HStack(spacing: 8) {
                 Image(.server, size: .md)
                 Text(server.name)
-                    .font(.ui(size: 13, weight: .medium))
+                    .font(.ui(.sm, weight: .medium))
             }
             .foregroundStyle(Color.themeForeground)
         } trailing: {
             if let reason = server.accountsUnavailable {
                 Text(reason)
-                    .font(.ui(size: 12))
+                    .font(.ui(.xs))
                     .foregroundStyle(Color.themeMutedForeground)
             }
         }
@@ -509,9 +509,9 @@ private struct SetupSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Worktree Setup for \(project.name)")
-                .font(.ui(size: 15, weight: .semibold))
+                .font(.ui(.lg, weight: .semibold))
             Text("A shell script that runs in each new worktree before the agent starts there, to install what the work needs. $MOTILE_PROJECT is the project's folder, as in: cp \"$MOTILE_PROJECT/.env\" . && pnpm install")
-                .font(.caption)
+                .font(.ui(.xxs))
                 .foregroundStyle(Color.themeMutedForeground)
                 .fixedSize(horizontal: false, vertical: true)
             TextArea("cp \"$MOTILE_PROJECT/.env\" . && pnpm install", text: $script, monospaced: true, lines: 5, maxLines: 14)
@@ -584,11 +584,11 @@ struct SettingsGroupTitle: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(title)
-                .font(.ui(size: 13))
+                .font(.ui(.sm))
                 .foregroundStyle(Color.themeForeground)
             if let caption {
                 Text(caption)
-                    .font(.ui(size: 11.5))
+                    .font(.ui(.xs))
                     .foregroundStyle(Color.themeMutedStrongerForeground)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -629,11 +629,11 @@ struct SettingsLabel<Footer: View>: View {
             }
             VStack(alignment: .leading, spacing: 2) {
                 Text(verbatim: title)
-                    .gatewayMarked(proxied, fontSize: 13)
-                    .font(.ui(size: 13, weight: .medium))
+                    .gatewayMarked(proxied, fontSize: .sm)
+                    .font(.ui(.sm, weight: .medium))
                 if let description {
                     Text(description)
-                        .font(.ui(size: 11.5))
+                        .font(.ui(.xs))
                         .foregroundStyle(Color.themeMutedForeground)
                         .lineLimit(truncates == nil ? nil : 1)
                         .truncationMode(truncates ?? .tail)
@@ -690,7 +690,7 @@ struct SettingsNote: View {
 
     var body: some View {
         Text(text)
-            .font(.ui(size: 13))
+            .font(.ui(.sm))
             .foregroundStyle(Color.themeMutedForeground)
             .fixedSize(horizontal: false, vertical: true)
             .padding(settingsInset)

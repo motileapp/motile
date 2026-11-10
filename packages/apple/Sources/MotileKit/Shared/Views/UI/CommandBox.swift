@@ -25,12 +25,12 @@ struct CommandBox: View {
     }
 
     /// Puts the first line of the command level with the middle of the buttons.
-    private static let textInset = ((ControlSize.regular.height - PlatformFont.uiMono(12.5).textLineHeight) / 2).rounded()
+    private static let textInset = ((ControlSize.regular.height - PlatformFont.uiMono(.xs).textLineHeight) / 2).rounded()
 
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
             Text(command.map { Self.highlighted($0, spans: spans) } ?? AttributedString(placeholder))
-                .font(.ui(size: 12.5, design: .monospaced))
+                .font(.ui(.xs, design: .monospaced))
                 .foregroundStyle(command == nil ? Color.themeMutedStrongerForeground : Color.themeForeground)
                 .lineSpacing(3)
                 .lineLimit(link == nil ? nil : 1)

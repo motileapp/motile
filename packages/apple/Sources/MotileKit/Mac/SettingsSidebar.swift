@@ -38,7 +38,7 @@ struct SettingsSidebar: View {
         HStack(spacing: 7) {
             Image(section.symbol, size: .md)
             Text(section.title)
-                .font(.ui(size: 13))
+                .font(.ui(.sm))
             Spacer(minLength: 0)
         }
         .padding(.horizontal, sidebarRowPadding)
@@ -55,9 +55,9 @@ struct SettingsSidebar: View {
                 Image(entry.section.symbol, size: .md)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(entry.title)
-                        .font(.ui(size: 13, weight: .medium))
+                        .font(.ui(.sm, weight: .medium))
                     Text(entry.section.title)
-                        .font(.ui(size: 11))
+                        .font(.ui(.xs))
                         .foregroundStyle(Color.themeMutedStrongerForeground)
                 }
                 .lineLimit(1)
@@ -75,7 +75,7 @@ struct SettingsSidebar: View {
         }
         if found.isEmpty {
             Text("No settings found")
-                .font(.ui(size: 13))
+                .font(.ui(.sm))
                 .foregroundStyle(Color.themeMutedStrongerForeground)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, sidebarEdge)

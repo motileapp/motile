@@ -404,7 +404,7 @@ fn step_paging(track: &Entity<Track>, window: &mut Window, cx: &mut App) {
 pub fn slot(slot: &Slot, id: &str, color: Hsla, cx: &UiCx, window: &mut Window, app: &mut App) -> Vec<AnyElement> {
     let mut parts = Vec::new();
     if let Some(text) = &slot.text {
-        let ty = style::type_of(slot.style, cx.narrow());
+        let ty = style::type_of(slot.style);
         let look = Look::new(ty, color);
         parts.push(super::text::rich(cx.id(id, "text"), text, look, cx, app).into_any_element());
     }

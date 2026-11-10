@@ -14,7 +14,7 @@ use motile_protocol::wire::{Access, Agent, AgentAccount, ModelContext, ModelInfo
 use super::{access_symbol, effort_label, effort_symbol};
 use crate::models::{ACCESSES, AGENTS, ComposerPickerPart, ModelInfoExt, access_detail, access_label, agent_name};
 use crate::store::Store;
-use crate::theme::{ControlSize, IconSize, Layer, Opacity, Radius, Surface, colors};
+use crate::theme::{ControlSize, IconSize, Layer, Opacity, Radius, Surface, TextSize, colors};
 use crate::ui::dropdown::{backdrop, over_content};
 use crate::ui::dropdown_list::{self as list, PADDING};
 use crate::ui::menu::Anchor;
@@ -458,7 +458,7 @@ impl ComposerPicker {
                     .px(px(list::ROW_PADDING))
                     .flex()
                     .items_center()
-                    .text_size(px(list::TEXT_SIZE))
+                    .text_size(list::TEXT_SIZE)
                     .text_color(c.muted_foreground)
                     .child("No model matches")
                     .into_any_element(),
@@ -542,7 +542,7 @@ impl ComposerPicker {
             children.push(
                 div()
                     .p(px(8.))
-                    .text_size(px(12.))
+                    .text_size(TextSize::Xs)
                     .text_color(c.muted_foreground)
                     .child(format!("{name} has no settings to choose"))
                     .into_any_element(),
@@ -701,7 +701,7 @@ impl ComposerPicker {
             .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
             .child(
                 div()
-                    .text_size(px(ControlSize::Regular.text_size()))
+                    .text_size(ControlSize::Regular.text_size())
                     .font_weight(FontWeight::MEDIUM)
                     .text_color(c.muted_foreground)
                     .child("Access"),
@@ -712,10 +712,10 @@ impl ComposerPicker {
                     .flex()
                     .flex_col()
                     .gap(px(2.))
-                    .child(div().text_size(px(13.)).text_color(c.foreground).child(access_label(shown)))
+                    .child(div().text_size(TextSize::Sm).text_color(c.foreground).child(access_label(shown)))
                     .child(
                         div()
-                            .text_size(px(12.))
+                            .text_size(TextSize::Xs)
                             .line_height(px(DETAIL_LINE))
                             .truncate()
                             .text_color(c.muted_foreground)
@@ -767,7 +767,7 @@ fn header(group: &Group, cx: &App) -> Div {
                 .min_w_0()
                 .flex()
                 .items_center()
-                .text_size(px(ControlSize::Regular.text_size()))
+                .text_size(ControlSize::Regular.text_size())
                 .font_weight(FontWeight::MEDIUM)
                 .text_color(c.muted_foreground)
                 .child(
@@ -795,9 +795,9 @@ fn header(group: &Group, cx: &App) -> Div {
 fn title_descent(cx: &App) -> f32 {
     let system = cx.text_system();
     let font = crate::transcript::rows::font(crate::theme::UI_FONT, FontWeight::MEDIUM, false);
-    let (id, size) = (system.resolve_font(&font), px(ControlSize::Regular.text_size()));
+    let (id, size) = (system.resolve_font(&font), Pixels::from(ControlSize::Regular.text_size()));
     let (ascent, descent) = (f32::from(system.ascent(id, size)), f32::from(system.descent(id, size)).abs());
-    let line = ControlSize::Regular.text_size() * crate::theme::LINE_HEIGHT;
+    let line = ControlSize::Regular.text_size().points() * crate::theme::LINE_HEIGHT;
     (line - ascent - descent) / 2. + descent
 }
 

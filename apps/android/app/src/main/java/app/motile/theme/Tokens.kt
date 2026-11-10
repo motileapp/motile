@@ -403,6 +403,17 @@ object Radius {
     val xxl = 24.dp
 }
 
+/** How large text is, as on the Mac. Every text in the app is one of these. */
+enum class TextSize(val points: Float) {
+    Xxs(10f),
+    Xs(12f),
+    Sm(13f),
+    Md(14f),
+    Lg(16f),
+    Xl(20f),
+    Xxl(28f),
+}
+
 /** How large an icon is, of any kind: the side of its square, as on the Mac. Every icon is one of these. */
 enum class IconSize(val side: Float) {
     Xxs(10f),

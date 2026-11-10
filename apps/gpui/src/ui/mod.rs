@@ -22,7 +22,7 @@ use std::rc::Rc;
 use gpui_kit::prelude::*;
 use gpui_kit::*;
 
-use crate::theme::{ControlSize, IconSize, Layer, Opacity, Radius, Surface, colors};
+use crate::theme::{ControlSize, IconSize, Layer, Opacity, Radius, Surface, TextSize, colors};
 pub use agent_avatar::{AgentAvatar, AgentAvatars};
 pub use control::{
     ActionButton, ActionMenu, Chip, InputField, InputVariant, Segmented, Select, Spinner, Switch, TextArea, Variant,
@@ -246,17 +246,17 @@ pub fn dims<E: StatefulInteractiveElement + Styled>(element: E, cx: &App) -> E {
 }
 
 /// How wide a line of the interface's type is drawn.
-pub fn text_width(text: &str, size: f32, weight: FontWeight, window: &mut Window) -> f32 {
+pub fn text_width(text: &str, size: TextSize, weight: FontWeight, window: &mut Window) -> f32 {
     line_width(text, size, crate::transcript::rows::font(crate::theme::UI_FONT, weight, false), window)
 }
 
 /// How wide a line of the interface's type is drawn with `tabular_numbers`.
-pub fn tabular_text_width(text: &str, size: f32, weight: FontWeight, window: &mut Window) -> f32 {
+pub fn tabular_text_width(text: &str, size: TextSize, weight: FontWeight, window: &mut Window) -> f32 {
     let font = crate::transcript::rows::font(crate::theme::UI_FONT, weight, false);
     line_width(text, size, Font { features: tabular_numbers(), ..font }, window)
 }
 
-fn line_width(text: &str, size: f32, font: Font, window: &mut Window) -> f32 {
+fn line_width(text: &str, size: TextSize, font: Font, window: &mut Window) -> f32 {
     let run = TextRun {
         len: text.len(),
         font,
@@ -265,7 +265,7 @@ fn line_width(text: &str, size: f32, font: Font, window: &mut Window) -> f32 {
         underline: None,
         strikethrough: None,
     };
-    f32::from(window.text_system().shape_line(text.to_string().into(), px(size), &[run], None).width).ceil()
+    f32::from(window.text_system().shape_line(text.to_string().into(), size.into(), &[run], None).width).ceil()
 }
 
 /// One line of text that gives up its middle for an ellipsis when it doesn't fit, as the Mac's

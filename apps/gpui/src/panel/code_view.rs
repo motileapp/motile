@@ -23,7 +23,7 @@ use super::state::{
     tab_columns,
 };
 use crate::media::pictures::{Picture, Pictures, Shown};
-use crate::theme::{self, IconSize, colors};
+use crate::theme::{self, IconSize, TextSize, colors};
 use crate::transcript::rows::font;
 
 pub const HEADING_HEIGHT: f32 = 34.;
@@ -612,7 +612,7 @@ impl CodeView {
         let x = position.x - origin.x + scroll.x - px(layout.gutter + TEXT_INSET);
         let shaped = window.text_system().shape_line(
             text.clone().into(),
-            px(theme::CODE_SIZE),
+            theme::CODE_SIZE.into(),
             &[run(text.len(), font(theme::MONO_FONT, FontWeight::NORMAL, false), transparent_black())],
             None,
         );
@@ -837,8 +837,12 @@ impl CodeView {
                             } else {
                                 line_runs(&file.lines[line], spans.get(line), c.foreground, &c)
                             };
-                            let shaped =
-                                window.text_system().shape_line(text.clone().into(), px(theme::CODE_SIZE), &runs, None);
+                            let shaped = window.text_system().shape_line(
+                                text.clone().into(),
+                                theme::CODE_SIZE.into(),
+                                &runs,
+                                None,
+                            );
                             // A note stays where it is while the lines move sideways.
                             let text_x = if note {
                                 bounds.origin.x + px(gutter + TEXT_INSET)
@@ -888,7 +892,8 @@ impl CodeView {
                                 }
                                 let number = number.to_string();
                                 let runs = vec![run(number.len(), digits.clone(), c.muted_stronger_foreground)];
-                                let shaped = window.text_system().shape_line(number.into(), px(11.), &runs, None);
+                                let shaped =
+                                    window.text_system().shape_line(number.into(), TextSize::Xs.into(), &runs, None);
                                 let x = bounds.origin.x + px(right - 6.) - shaped.width;
                                 let _ = shaped.paint(point(x, y), px(LINE_HEIGHT), TextAlign::Left, None, window, cx);
                             }
@@ -1186,7 +1191,7 @@ fn paint_media(
         if matches!(shown, MediaShown::Failed) {
             let note = if video { "This video couldn't be shown." } else { "This image couldn't be shown." };
             let runs = vec![run(note.len(), font(theme::UI_FONT, FontWeight::NORMAL, false), c.muted_foreground)];
-            let shaped = window.text_system().shape_line(note.into(), px(12.5), &runs, None);
+            let shaped = window.text_system().shape_line(note.into(), TextSize::Xs.into(), &runs, None);
             let at = point(room.center().x - shaped.width / 2., room.origin.y);
             let _ = shaped.paint(at, room.size.height, TextAlign::Left, None, window, cx);
         }
@@ -1234,7 +1239,7 @@ fn viewed_box(
 
 fn counts_width(added: u32, removed: u32, c: &theme::Colors, window: &mut Window) -> f32 {
     let (text, runs) = counts_text(added, removed, c);
-    f32::from(window.text_system().shape_line(text.into(), px(11.5), &runs, None).width)
+    f32::from(window.text_system().shape_line(text.into(), TextSize::Xs.into(), &runs, None).width)
 }
 
 fn paint_viewed(viewed: bool, left: f32, bounds: Bounds<Pixels>, c: &theme::Colors, window: &mut Window, cx: &mut App) {
@@ -1254,7 +1259,7 @@ fn paint_viewed(viewed: bool, left: f32, bounds: Bounds<Pixels>, c: &theme::Colo
         font(theme::UI_FONT, FontWeight::NORMAL, false),
         if viewed { c.foreground } else { c.muted_foreground },
     )];
-    let shaped = window.text_system().shape_line(label.into(), px(11.5), &runs, None);
+    let shaped = window.text_system().shape_line(label.into(), TextSize::Xs.into(), &runs, None);
     let _ = shaped.paint(
         point(box_bounds.right() + px(6.), bounds.origin.y),
         bounds.size.height,
@@ -1322,7 +1327,7 @@ fn paint_heading(
     let mut counts_x = open_x - px(4.);
     if file.added + file.removed > 0 {
         let (text, runs) = counts_text(file.added, file.removed, c);
-        let shaped = window.text_system().shape_line(text.into(), px(11.5), &runs, None);
+        let shaped = window.text_system().shape_line(text.into(), TextSize::Xs.into(), &runs, None);
         counts_x -= shaped.width;
         let _ = shaped.paint(point(counts_x, bounds.origin.y), bounds.size.height, TextAlign::Left, None, window, cx);
     } else {
@@ -1358,14 +1363,15 @@ fn paint_heading(
     let note = note.map(|note| {
         let note = format!("   {note}");
         let runs = vec![run(note.len(), ui(FontWeight::NORMAL), c.muted_stronger_foreground)];
-        window.text_system().shape_line(note.into(), px(11.5), &runs, None)
+        window.text_system().shape_line(note.into(), TextSize::Xs.into(), &runs, None)
     });
     let note_width = note.as_ref().map_or(px(0.), |note| note.width);
     let name_x = bounds.origin.x + px(50.);
     let end = viewed.map(|(left, _)| bounds.origin.x + px(left)).unwrap_or(counts_x);
     let room = (end - px(10.) - name_x).max(px(0.));
-    let (text, runs) = crate::ui::elide_middle_runs(text.into(), runs, px(12.5), (room - note_width).max(px(0.)), cx);
-    let shaped = window.text_system().shape_line(text, px(12.5), &runs, None);
+    let (text, runs) =
+        crate::ui::elide_middle_runs(text.into(), runs, TextSize::Xs.into(), (room - note_width).max(px(0.)), cx);
+    let shaped = window.text_system().shape_line(text, TextSize::Xs.into(), &runs, None);
     let baseline = |line: &ShapedLine| (bounds.size.height - line.ascent - line.descent) / 2. + line.ascent;
     let name_baseline = baseline(&shaped);
     window.with_content_mask(

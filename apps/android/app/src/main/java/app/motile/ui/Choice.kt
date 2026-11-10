@@ -18,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.unit.dp
 import app.motile.platform.Symbol
+import app.motile.theme.TextSize
 import app.motile.theme.iconSize
 import app.motile.theme.LocalForeground
 import app.motile.theme.LocalPalette
@@ -29,7 +30,7 @@ import app.motile.theme.symbolSide
  */
 data class Choice(val title: String, val symbol: Symbol? = null, val chosen: Boolean = false, val run: () -> Unit)
 
-private const val choiceText = 15f
+private val choiceText = TextSize.Lg
 private val choiceSymbol = iconSize(text = choiceText)
 
 /** Shows `offered` while it isn't empty; picking one, or closing the sheet, calls `onDismiss`. */

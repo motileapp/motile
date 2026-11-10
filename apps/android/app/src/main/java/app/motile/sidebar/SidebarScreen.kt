@@ -83,6 +83,7 @@ import app.motile.theme.ControlSize
 import app.motile.theme.Opacity
 import app.motile.theme.Radius
 import app.motile.theme.ShadowSize
+import app.motile.theme.TextSize
 import app.motile.theme.Theme
 import app.motile.theme.opacity
 import app.motile.theme.shadow
@@ -396,9 +397,9 @@ fun SidebarScreen(underThread: Boolean) {
                         }
                         SidebarItem.Empty -> Box(Modifier.fillMaxWidth().padding(horizontal = sidebarEdge, vertical = 10.dp)) {
                             if (searching) {
-                                SearchEmptyLine(13f)
+                                SearchEmptyLine(TextSize.Sm)
                             } else {
-                                Text(if (store.allThreads.isEmpty()) "No threads yet" else "No active threads", size = 13f, color = Theme.colors.mutedStrongerForeground)
+                                Text(if (store.allThreads.isEmpty()) "No threads yet" else "No active threads", size = TextSize.Sm, color = Theme.colors.mutedStrongerForeground)
                             }
                         }
                         SidebarItem.NewThread -> NewThreadRow(Modifier.fillMaxWidth().height(lineHeight))
@@ -683,7 +684,7 @@ private fun ServerErrors(servers: List<Server>) {
         Text(
             if (servers.size == 1) error else "${server.name}: $error",
             Modifier.fillMaxWidth().padding(start = sidebarEdge + 16.dp, end = sidebarEdge, bottom = 10.dp),
-            size = 11f,
+            size = TextSize.Xs,
             color = Theme.colors.mutedStrongerForeground,
             maxLines = 3,
         )
@@ -732,7 +733,7 @@ private fun RenameDialog(thread: ThreadInfo, onDismiss: () -> Unit) {
                     .padding(20.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                Text("Rename thread", size = 15f, weight = FontWeight.SemiBold)
+                Text("Rename thread", size = TextSize.Lg, weight = FontWeight.SemiBold)
                 InputField(
                     "Title", title, { title = it }, Modifier.fillMaxWidth(), size = ControlSize.Large, focusRequester = field,
                     onSubmit = ::rename,

@@ -30,7 +30,7 @@ enum ProgramWeb {
         let height = min(wanted, maxHeight(window: env.window.height))
         let size = CGSize(width: width, height: height)
         guard view.streaming else { return ProgramBox(node, size: size, surface: env.surface) }
-        let look = ProgramStyle.look(.small, narrow: env.narrow)
+        let look = ProgramStyle.look(.small)
         let text = ProgramText.plain(waiting, look: look, color: Theme.mutedForeground)
         let side = ControlSize.small.symbolSide
         let textWidth = min(ProgramText.width(text).rounded(.up), max(0, width - side - spinnerGap))

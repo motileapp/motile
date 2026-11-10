@@ -44,6 +44,7 @@ import app.motile.theme.Opacity
 import app.motile.theme.Radius
 import app.motile.theme.ShadowSize
 import app.motile.theme.Surface
+import app.motile.theme.TextSize
 import app.motile.theme.scrim
 import app.motile.theme.shadow
 import kotlinx.coroutines.launch
@@ -165,9 +166,9 @@ fun ConfirmationDialog(confirmation: Confirmation, onDismiss: () -> Unit) {
                     }
                     .padding(20.dp),
             ) {
-                Text(confirmation.title, size = 15f, weight = FontWeight.SemiBold)
+                Text(confirmation.title, size = TextSize.Lg, weight = FontWeight.SemiBold)
                 if (confirmation.message.isNotEmpty()) {
-                    Text(confirmation.message, Modifier.padding(top = 6.dp), size = 13f, color = palette.mutedForeground)
+                    Text(confirmation.message, Modifier.padding(top = 6.dp), size = TextSize.Sm, color = palette.mutedForeground)
                 }
                 val gap = 8.dp
                 val margin = PaddingValues(start = gap, bottom = gap)

@@ -244,7 +244,7 @@ struct ComposerView: View {
             Spacer()
             ActionButton(action, variant: .link, round: true, action: perform)
         }
-        .font(.ui(size: 12.5))
+        .font(.ui(.xs))
         .padding(.leading, 16)
         .padding(.trailing, Self.bannerButtonInset)
         .padding(.top, Self.bannerButtonInset)

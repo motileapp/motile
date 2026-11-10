@@ -28,7 +28,7 @@ struct QuestionsView: View {
                 )
                 .foregroundStyle(Color.themeWarning)
                 Text(question.text)
-                    .font(.ui(size: 13.5, weight: .medium))
+                    .font(.ui(.sm, weight: .medium))
                     .lineSpacing(2)
                     .fixedSize(horizontal: false, vertical: true)
                 if question.multiple {
@@ -66,11 +66,11 @@ struct QuestionsView: View {
                     .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 4.5 }
                 VStack(alignment: .leading, spacing: 2) {
                     Text(option.label)
-                        .font(.ui(size: 13, weight: .medium))
+                        .font(.ui(.sm, weight: .medium))
                         .foregroundStyle(Color.themeForeground)
                     if !option.detail.isEmpty {
                         Text(option.detail)
-                            .font(.ui(size: 12))
+                            .font(.ui(.xs))
                             .foregroundStyle(Color.themeMutedForeground)
                             .lineSpacing(1.5)
                             .fixedSize(horizontal: false, vertical: true)

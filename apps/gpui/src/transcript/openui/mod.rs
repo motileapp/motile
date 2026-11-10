@@ -31,7 +31,7 @@ use super::model::RowModel;
 use super::rows::{RowContext, error_box, row_key};
 use super::view::TranscriptView;
 use crate::store::Store;
-use crate::theme::Surface;
+use crate::theme::{Surface, TextSize};
 
 /// Under this column width the narrow rules apply.
 const NARROW: f32 = 640.;
@@ -56,7 +56,7 @@ pub struct UiCx {
     pub width: f32,
     pub window_height: f32,
     /// The size of the text around the node, which a formula is set to.
-    pub text_size: f32,
+    pub text_size: TextSize,
     pub surface: Surface,
     /// The program still streams in.
     pub streaming: bool,

@@ -43,6 +43,7 @@ import app.motile.core.Branch
 import app.motile.core.Project
 import app.motile.core.coreError
 import app.motile.platform.Symbol
+import app.motile.theme.TextSize
 import app.motile.theme.symbolSide
 import app.motile.theme.LocalSurface
 import app.motile.theme.Opacity
@@ -139,9 +140,9 @@ fun BranchPicker(project: Project, base: String? = null) {
                     }
                     listed.isFailure -> Text(
                         listed.coreError?.message ?: "Couldn't list the branches.", Modifier.fillMaxWidth().padding(16.dp),
-                        size = 12.5f, color = palette.destructive,
+                        size = TextSize.Xs, color = palette.destructive,
                     )
-                    choices.isEmpty() -> Text("No branch matches.", Modifier.fillMaxWidth().padding(16.dp), size = 12.5f, color = palette.mutedForeground)
+                    choices.isEmpty() -> Text("No branch matches.", Modifier.fillMaxWidth().padding(16.dp), size = TextSize.Xs, color = palette.mutedForeground)
                     else -> BranchList(choices, base, working, highlighted, ::choose)
                 }
             }
@@ -149,7 +150,7 @@ fun BranchPicker(project: Project, base: String? = null) {
             if (note != null) {
                 ThemeDivider()
                 Text(
-                    note, Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), size = 11.5f,
+                    note, Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), size = TextSize.Xs,
                     color = if (working) palette.mutedForeground else palette.destructive,
                 )
             }
@@ -200,7 +201,7 @@ private fun RowScope.BranchRow(choice: BranchChoice, base: String?) {
                 branch.remote -> "remote"
                 else -> null
             }
-            if (tag != null) Text(tag, size = 11f, color = palette.mutedStrongerForeground)
+            if (tag != null) Text(tag, size = TextSize.Xs, color = palette.mutedStrongerForeground)
             Icon(Symbol.Check, DropdownList.check, Modifier.alpha(if (chosen) 1f else 0f))
         }
         is BranchChoice.Create -> {

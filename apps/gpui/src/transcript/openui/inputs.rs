@@ -529,7 +529,7 @@ fn timer(
     app: &App,
 ) -> Stateful<Div> {
     let c = colors(app);
-    let clock = style::type_of(motile_core::render::openui::tree::TextStyle::Timer, cx.narrow());
+    let clock = style::type_of(motile_core::render::openui::tree::TextStyle::Timer);
     let read = div()
         .flex()
         .flex_col()

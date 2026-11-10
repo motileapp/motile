@@ -74,7 +74,7 @@ private struct AgentsList: View {
             VStack(spacing: 0) {
                 PanelBar {
                     AgentsSurface.summary(of: agents)
-                        .font(.ui(size: 12, weight: .medium))
+                        .font(.ui(.xs, weight: .medium))
                         .foregroundStyle(Color.themeMutedForeground)
                     Spacer()
                 }
@@ -109,7 +109,7 @@ private struct ParentRow: View {
                 Image(.cornerLeftUp, size: .md)
                     .foregroundStyle(Color.themeForeground)
                 Text("Go back to parent thread")
-                    .font(.ui(size: 13, weight: .medium))
+                    .font(.ui(.sm, weight: .medium))
                     .foregroundStyle(Color.themeForeground)
                     .lineLimit(1)
                 Spacer(minLength: 6)
@@ -135,14 +135,14 @@ private struct EndedHeader: View {
         Button(action: toggle) {
             HStack(spacing: 8) {
                 Text("Previous agents")
-                    .font(.ui(size: 12, weight: .semibold))
+                    .font(.ui(.xs, weight: .semibold))
                     .foregroundStyle(Color.themeForeground)
                 Text("\(agents.count)")
-                    .font(.ui(size: 12))
+                    .font(.ui(.xs))
                     .foregroundStyle(Color.themeMutedStrongerForeground)
                 if failed > 0 {
                     Text("\(failed) failed")
-                        .font(.ui(size: 12))
+                        .font(.ui(.xs))
                         .foregroundStyle(Color.themeDestructive)
                 }
                 Spacer(minLength: 6)
@@ -178,19 +178,19 @@ private struct AgentRow: View {
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 6) {
                         Text(agent.title)
-                            .font(.ui(size: 13, weight: .medium))
+                            .font(.ui(.sm, weight: .medium))
                             .foregroundStyle(Color.themeForeground)
                             .lineLimit(1)
                         if let kind = agent.kind {
                             Text(kind)
-                                .font(.ui(size: 11))
+                                .font(.ui(.xs))
                                 .foregroundStyle(Color.themeMutedForeground)
                                 .lineLimit(1)
                                 .layoutPriority(-1)
                         }
                         if agent.state.flagged {
                             Text(agent.label)
-                                .font(.ui(size: 11, weight: .medium))
+                                .font(.ui(.xs, weight: .medium))
                                 .foregroundStyle(agent.state.color)
                                 .lineLimit(1)
                         }
@@ -200,11 +200,11 @@ private struct AgentRow: View {
                     }
                     // Always one line, so that a row keeps its height as what its agent does changes.
                     Text(agent.detail)
-                        .font(.ui(size: 12))
+                        .font(.ui(.xs))
                         .foregroundStyle(agent.status == .failed ? Color.themeDestructive : Color.themeMutedForeground)
                         .lineLimit(1, reservesSpace: true)
                     facts
-                        .font(.ui(size: 11))
+                        .font(.ui(.xs))
                         .foregroundStyle(Color.themeMutedStrongerForeground)
                         .lineLimit(1)
                 }
@@ -245,7 +245,7 @@ private struct AgentRow: View {
         let runsOn = [agent.model, agent.account].compactMap { $0 }
         let usage = agent.usage?.components(separatedBy: " · ") ?? []
         if !(runsOn + usage).isEmpty {
-            ProxiedLine(parts: runsOn + usage, proxied: agent.gateway && !runsOn.isEmpty, pinned: agent.pinned, fontSize: 11)
+            ProxiedLine(parts: runsOn + usage, proxied: agent.gateway && !runsOn.isEmpty, pinned: agent.pinned, fontSize: .xs)
         }
     }
 
@@ -277,7 +277,7 @@ struct AgentTime: View {
 
     private func time(_ text: String, _ color: Color) -> some View {
         Text(text)
-            .font(.ui(size: 11, weight: .medium))
+            .font(.ui(.xs, weight: .medium))
             .monospacedDigit()
             .foregroundStyle(color)
             .fixedSize()

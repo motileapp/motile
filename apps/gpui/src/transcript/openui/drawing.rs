@@ -13,7 +13,7 @@ use motile_core::render::openui::tree::{Canvas, Slot, UiKind, UiNode};
 use super::UiCx;
 use super::layout::slot;
 use super::style;
-use crate::theme::{Layer, colors};
+use crate::theme::{Layer, TextSize, colors};
 use crate::transcript::canvas::{ConfettiOverlay, Prepared, SceneView, laid_out, squashed, turned};
 
 const MATH_MARGIN: f32 = 4.;
@@ -82,7 +82,7 @@ pub fn scene(
     id: &str,
     canvas: &Canvas,
     width: f32,
-    text_size: f32,
+    text_size: TextSize,
     cx: &UiCx,
     window: &mut Window,
     app: &mut App,
@@ -91,7 +91,7 @@ pub fn scene(
         "kind": canvas.kind,
         "props": canvas.props,
         "width": width,
-        "text_size": text_size,
+        "text_size": text_size.points(),
     });
     laid_out(cx.id(id, "scene"), input, window, app)
 }

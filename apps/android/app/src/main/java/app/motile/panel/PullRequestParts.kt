@@ -50,6 +50,7 @@ import app.motile.layout.KeyboardFocus
 import app.motile.platform.Platform
 import app.motile.platform.Symbol
 import app.motile.platform.scaled
+import app.motile.theme.TextSize
 import app.motile.theme.iconSize
 import app.motile.theme.ControlSize
 import app.motile.theme.LocalPalette
@@ -157,10 +158,10 @@ fun PullRequestNoticeBar(notice: PullRequestNotice) {
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Box(Modifier.height(line), contentAlignment = Alignment.Center) {
-                Icon(if (notice.failed) Symbol.CircleAlert else Symbol.CircleCheck, iconSize(text = 12.5f), color = tint)
+                Icon(if (notice.failed) Symbol.CircleAlert else Symbol.CircleCheck, iconSize(text = TextSize.Xs), color = tint)
             }
             SelectionContainer(Modifier.weight(1f).heightIn(min = line)) {
-                Text(notice.text, size = 12.5f, color = palette.foreground)
+                Text(notice.text, size = TextSize.Xs, color = palette.foreground)
             }
             Row(Modifier.height(line), verticalAlignment = Alignment.CenterVertically) {
                 notice.url?.let { url ->
@@ -191,7 +192,7 @@ fun PullRequestTextView(blocks: List<PullRequestText>, modifier: Modifier = Modi
 @Composable
 private fun CodeBox(text: androidx.compose.ui.text.AnnotatedString, modifier: Modifier = Modifier) {
     SurfaceBox(RoundedCornerShape(Radius.lg), modifier.fillMaxWidth()) {
-        Text(text, Modifier.padding(10.dp), style = TextStyle(lineHeight = Theme.codeLineHeight * (PullRequestText.SIZE / 14f)))
+        Text(text, Modifier.padding(10.dp), style = TextStyle(lineHeight = Theme.codeLineHeight * (PullRequestText.SIZE.points / TextSize.Md.points)))
     }
 }
 
@@ -264,14 +265,14 @@ fun DescriptionEditor(original: String, save: (String) -> Unit) {
     }
     Column(Modifier.fillMaxSize().navigationBarsPadding().padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Edit Description", Modifier.weight(1f), size = 15f, weight = FontWeight.SemiBold)
+            Text("Edit Description", Modifier.weight(1f), size = TextSize.Lg, weight = FontWeight.SemiBold)
             Segmented(listOf("Write" to false, "Preview" to true), previewing, { previewing = it })
         }
         if (previewing) {
             SurfaceBox(RoundedCornerShape(Radius.md), Modifier.weight(1f).fillMaxWidth()) {
                 Column(Modifier.verticalScroll(rememberScrollState()).padding(12.dp)) {
                     if (text.isBlank()) {
-                        Text("Nothing to preview", size = 12.5f, color = LocalPalette.current.mutedStrongerForeground)
+                        Text("Nothing to preview", size = TextSize.Xs, color = LocalPalette.current.mutedStrongerForeground)
                     } else {
                         PullRequestTextView(preview)
                     }

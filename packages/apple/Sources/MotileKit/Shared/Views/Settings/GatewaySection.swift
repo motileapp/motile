@@ -95,10 +95,10 @@ struct GatewayAccountLabel: View {
     }
 
     #if os(macOS)
-    private static let titleFont = Font.ui(size: 13, weight: .medium)
-    private static let descriptionFont = Font.ui(size: 11.5)
-    private static let titleLine = PlatformFont.ui(13, weight: .medium).textLineHeight
-    private static let descriptionLine = PlatformFont.ui(11.5).textLineHeight
+    private static let titleFont = Font.ui(.sm, weight: .medium)
+    private static let descriptionFont = Font.ui(.xs)
+    private static let titleLine = PlatformFont.ui(.sm, weight: .medium).textLineHeight
+    private static let descriptionLine = PlatformFont.ui(.xs).textLineHeight
     #else
     private static let titleFont = Font.body
     private static let descriptionFont = Font.footnote
@@ -172,12 +172,12 @@ struct GatewayLogRowView: View {
                 place
                 #endif
                 Text(dotted: row.details)
-                    .font(.ui(size: 11.5, design: .monospaced))
+                    .font(.ui(.xs, design: .monospaced))
                     .foregroundStyle(Color.themeMutedForeground)
                     .fixedSize(horizontal: false, vertical: true)
                 if let error = row.error {
                     Text(error)
-                        .font(.ui(size: 11.5))
+                        .font(.ui(.xs))
                         .foregroundStyle(Color.themeWarning)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -192,21 +192,21 @@ struct GatewayLogRowView: View {
 
     private var time: some View {
         Text(row.time)
-            .font(.ui(size: 12))
+            .font(.ui(.xs))
             .monospacedDigit()
             .foregroundStyle(Color.themeMutedForeground)
     }
 
     private var place: some View {
         Text(dotted: "\(row.server) · \(row.thread)")
-            .font(.ui(size: 13, weight: .medium))
+            .font(.ui(.sm, weight: .medium))
             .foregroundStyle(Color.themeForeground)
             .lineLimit(1)
     }
 
     private var latency: some View {
         Text(row.latency)
-            .font(.ui(size: 12))
+            .font(.ui(.xs))
             .monospacedDigit()
             .foregroundStyle(Color.themeMutedForeground)
     }
@@ -278,7 +278,7 @@ struct GatewayAddSheet: View {
             if enroll.isExpired(at: date) {
                 HStack(spacing: 10) {
                     Text("The code has expired")
-                        .font(.ui(size: 13))
+                        .font(.ui(.sm))
                         .foregroundStyle(Color.themeMutedForeground)
                     ActionButton("New Code", pending: pending) { makeCode() }
                 }
@@ -286,9 +286,9 @@ struct GatewayAddSheet: View {
                 HStack(spacing: 8) {
                     Spinner(size: .md)
                     Text(replacing == nil ? "Waiting for your gateway" : "Waiting for your new gateway")
-                        .font(.ui(size: 13))
+                        .font(.ui(.sm))
                     Text(enroll.timeLeft(at: date))
-                        .font(.ui(size: 12))
+                        .font(.ui(.xs))
                         .monospacedDigit()
                         .foregroundStyle(Color.themeMutedStrongerForeground)
                 }
@@ -314,12 +314,12 @@ struct GatewayAddSheet: View {
     private var form: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text(title)
-                .font(.ui(size: 15, weight: .semibold))
+                .font(.ui(.lg, weight: .semibold))
             if let enroll = enroll.value {
                 steps(enroll)
             } else if let failure {
                 Text(failure)
-                    .font(.ui(size: 13))
+                    .font(.ui(.sm))
                     .foregroundStyle(Color.themeDestructive)
                     .fixedSize(horizontal: false, vertical: true)
                 ActionButton("Try Again", pending: pending) { makeCode() }
@@ -349,7 +349,7 @@ struct GatewayAddSheet: View {
                             .foregroundStyle(Color.themeMutedForeground)
                             .fixedSize(horizontal: false, vertical: true)
                     }
-                    .font(.ui(size: 13))
+                    .font(.ui(.sm))
                 }
             }
             CommandBox(command: enroll.command, spans: enroll.spans)
@@ -433,7 +433,7 @@ struct GatewaySignInSheet: View {
     private func userCode(_ userCode: String) -> some View {
         HStack(spacing: 10) {
             Text(userCode)
-                .font(.ui(size: 26, weight: .semibold, design: .monospaced))
+                .font(.ui(.xxl, weight: .semibold, design: .monospaced))
                 .foregroundStyle(Color.themeForeground)
                 .textSelection(.enabled)
             CopyButton(help: "Copy the code") { Platform.copy(userCode) }
@@ -445,7 +445,7 @@ struct GatewaySignInSheet: View {
         HStack(spacing: 8) {
             Spinner(size: .md)
             Text("Waiting for you to approve it")
-                .font(.ui(size: 13))
+                .font(.ui(.sm))
         }
         .foregroundStyle(Color.themeMutedForeground)
     }
@@ -453,7 +453,7 @@ struct GatewaySignInSheet: View {
     /// What to do, the link, and the code: the same on every system.
     @ViewBuilder private func steps(_ signIn: GatewaySignIn) -> some View {
         Text(signIn.text)
-            .font(.ui(size: 13))
+            .font(.ui(.sm))
             .foregroundStyle(Color.themeMutedForeground)
             .fixedSize(horizontal: false, vertical: true)
         if let url = signIn.url {
@@ -475,7 +475,7 @@ struct GatewaySignInSheet: View {
         }
         if let error = signIn.error {
             Text(error)
-                .font(.ui(size: 12))
+                .font(.ui(.xs))
                 .foregroundStyle(Color.themeDestructive)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -487,10 +487,10 @@ struct GatewaySignInSheet: View {
             if let signIn = store.gateway.signIn {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(signIn.title)
-                        .font(.ui(size: 15, weight: .semibold))
+                        .font(.ui(.lg, weight: .semibold))
                     if let account = signIn.account {
                         Text(account)
-                            .font(.ui(size: 13))
+                            .font(.ui(.sm))
                             .foregroundStyle(Color.themeMutedForeground)
                     }
                 }
@@ -541,10 +541,10 @@ struct GatewaySignInSheet: View {
     private func title(_ title: String, account: String) -> some View {
         VStack(spacing: 1) {
             Text(title)
-                .font(.ui(size: 15, weight: .semibold))
+                .font(.ui(.lg, weight: .semibold))
                 .foregroundStyle(Color.themeForeground)
             Text(account)
-                .font(.ui(size: 12))
+                .font(.ui(.xs))
                 .foregroundStyle(Color.themeMutedForeground)
         }
         .lineLimit(1)
@@ -582,7 +582,7 @@ struct GatewayCapturedSheet: View {
 
     private func note(_ text: String, color: Color) -> some View {
         Text(text)
-            .font(.ui(size: 13))
+            .font(.ui(.sm))
             .foregroundStyle(color)
             .multilineTextAlignment(.center)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -591,7 +591,7 @@ struct GatewayCapturedSheet: View {
     @ViewBuilder private var summary: some View {
         if let row = captured.value??.row {
             Text(dotted: row.summary)
-                .font(.ui(size: 12))
+                .font(.ui(.xs))
                 .foregroundStyle(Color.themeMutedForeground)
                 .lineLimit(1)
         }
@@ -611,7 +611,7 @@ struct GatewayCapturedSheet: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 12) {
                 Text("Captured Request")
-                    .font(.ui(size: 15, weight: .semibold))
+                    .font(.ui(.lg, weight: .semibold))
                 Spacer()
                 tabs
             }

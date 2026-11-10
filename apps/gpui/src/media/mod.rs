@@ -20,7 +20,7 @@ use pictures::{Failure, Picture, Pictures};
 
 use crate::models::{AttachedFile, MediaSource, ViewedMedia};
 use crate::store::Store;
-use crate::theme::{ControlSize, Radius, colors};
+use crate::theme::{ControlSize, Radius, TextSize, colors};
 use crate::transcript::kit::RowButton;
 use crate::transcript::model::RowModel;
 use crate::transcript::rows::RowContext;
@@ -404,7 +404,7 @@ pub fn media_row(model: &RowModel, ctx: &RowContext, window: &mut Window, cx: &m
                         div()
                             .mt(px(STACK_GAP))
                             .h(px(LINE_HEIGHT))
-                            .text_size(px(12.))
+                            .text_size(TextSize::Xs)
                             .font_features(crate::ui::tabular_numbers())
                             .text_color(c.muted_foreground)
                             .child(format!("{}%", (fraction * 100.) as u32)),
@@ -418,7 +418,7 @@ pub fn media_row(model: &RowModel, ctx: &RowContext, window: &mut Window, cx: &m
                         .max_w_full()
                         .px(px(12.))
                         .h(px(LINE_HEIGHT))
-                        .text_size(px(12.))
+                        .text_size(TextSize::Xs)
                         .text_color(c.muted_foreground)
                         .truncate()
                         .child(message),
@@ -485,7 +485,7 @@ pub fn media_row(model: &RowModel, ctx: &RowContext, window: &mut Window, cx: &m
                             .right(px(11.))
                             .bottom(px(9.))
                             .h(px(LINE_HEIGHT))
-                            .text_size(px(12.))
+                            .text_size(TextSize::Xs)
                             .text_color(c.muted_foreground)
                             .child(crate::ui::middle_truncated(caption)),
                     )

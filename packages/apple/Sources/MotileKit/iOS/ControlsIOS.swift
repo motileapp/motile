@@ -38,7 +38,7 @@ final class FieldView: FlippedView {
         frameView.radius = size.radius
         frameView.fill = fieldFill(surface)
         field.borderStyle = .none
-        field.font = .ui(size.textSize + 0.5)
+        field.font = .ui(size.textSize)
         field.textColor = Theme.foreground
         field.tintColor = Theme.primary
         field.keyboardType = numeric ? .decimalPad : .default
@@ -68,7 +68,7 @@ final class FieldView: FlippedView {
 
     private func showPlaceholder() {
         field.attributedPlaceholder = NSAttributedString(
-            string: placeholder, attributes: [.font: PlatformFont.ui(size.textSize + 0.5), .foregroundColor: Theme.mutedStrongerForeground])
+            string: placeholder, attributes: [.font: PlatformFont.ui(size.textSize), .foregroundColor: Theme.mutedStrongerForeground])
         field.accessibilityLabel = placeholder
     }
 
@@ -130,7 +130,7 @@ final class TextAreaView: FlippedView, UITextViewDelegate {
 
     required init?(coder: NSCoder) { fatalError("not used") }
 
-    private static func font(_ size: ControlSize) -> UIFont { .ui(size.textSize + 0.5) }
+    private static func font(_ size: ControlSize) -> UIFont { .ui(size.textSize) }
 
     private static func padding(_ size: ControlSize) -> CGSize {
         CGSize(width: size.padding - 2, height: max(0, size.padding - ComposerTextView.verticalInset))

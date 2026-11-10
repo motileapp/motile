@@ -23,6 +23,7 @@ import app.motile.core.UsageModel
 import app.motile.core.UsageReport
 import app.motile.theme.LocalPalette
 import app.motile.theme.Opacity
+import app.motile.theme.TextSize
 import app.motile.theme.at
 import app.motile.ui.color
 import java.text.SimpleDateFormat
@@ -53,7 +54,7 @@ fun SpendingChart(report: UsageReport, measure: Measure, period: UsageModel.Peri
     val palette = LocalPalette.current
     val density = LocalDensity.current
     val measurer = rememberTextMeasurer()
-    val labelStyle = app.motile.theme.Theme.uiDigits(11f).copy(color = palette.mutedForeground)
+    val labelStyle = app.motile.theme.Theme.uiDigits(TextSize.Xs).copy(color = palette.mutedForeground)
     val series = report.agents.map { it.agent.color(palette) to it.points(measure) }
     val fills = report.agents.map { it.agent.color(palette).at(Opacity.ColorTintChart) }
     val highest = series.maxOfOrNull { (_, points) -> points.maxOrNull() ?: 0.0 } ?: 0.0

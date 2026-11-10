@@ -41,6 +41,7 @@ import app.motile.platform.Platform
 import app.motile.platform.Symbol
 import app.motile.platform.scaled
 import app.motile.theme.IconSize
+import app.motile.theme.TextSize
 import app.motile.theme.symbolSide
 import app.motile.theme.iconSize
 import app.motile.theme.LocalPalette
@@ -128,7 +129,7 @@ private fun Rows(target: PanelTarget, shown: List<PullRequestRow>, listed: Strin
         if (shown.isEmpty()) {
             item("none") {
                 val words = if (search.isEmpty()) "No ${if (listed == "all") "" else "$listed "}pull requests." else "None match “$search”."
-                Text(words, Modifier.fillMaxWidth().padding(top = 40.dp), size = 12.5f, color = LocalPalette.current.mutedForeground, align = TextAlign.Center)
+                Text(words, Modifier.fillMaxWidth().padding(top = 40.dp), size = TextSize.Xs, color = LocalPalette.current.mutedForeground, align = TextAlign.Center)
             }
         }
         items(shown, key = { it.number }) { row ->
@@ -154,20 +155,20 @@ private fun PullRequestListRow(row: PullRequestRow, target: PanelTarget, linked:
                 Modifier.padding(panelRowMargin).padding(horizontal = 10.dp, vertical = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                val stateSize = iconSize(text = 13f)
+                val stateSize = iconSize(text = TextSize.Sm)
                 Box(Modifier.size(width = symbolSide(stateSize), height = scaled(18f).dp), contentAlignment = Alignment.Center) {
                     Icon(row.state.symbol, stateSize, color = row.state.color(palette))
                 }
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.Top) {
-                        Text(row.title, Modifier.weight(1f, fill = false), size = 13f, weight = FontWeight.Medium, color = palette.foreground, maxLines = 2)
+                        Text(row.title, Modifier.weight(1f, fill = false), size = TextSize.Sm, weight = FontWeight.Medium, color = palette.foreground, maxLines = 2)
                         if (linked) Chip("This thread", tone = palette.primary)
                         Spacer(Modifier.weight(0.001f).widthIn(min = 4.dp))
                         Signals(row)
                     }
                     Text(
                         "#${row.number} · ${row.author} · ${row.head} → ${row.base} · ${Time.ago(row.updatedAt)}",
-                        size = 11.5f, color = palette.mutedStrongerForeground, maxLines = 1, overflow = TextOverflow.MiddleEllipsis,
+                        size = TextSize.Xs, color = palette.mutedStrongerForeground, maxLines = 1, overflow = TextOverflow.MiddleEllipsis,
                     )
                 }
             }

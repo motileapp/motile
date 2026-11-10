@@ -25,7 +25,7 @@ private struct FileDrop: ViewModifier {
         VStack(spacing: 12 * Platform.scale) {
             Image(.paperclip, size: .display)
             Text("Drop files here")
-                .font(.ui(size: 17, weight: .semibold))
+                .font(.ui(.xl, weight: .semibold))
         }
         .foregroundStyle(Color.themeForeground)
         .frame(maxWidth: .infinity, maxHeight: .infinity)

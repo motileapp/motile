@@ -11,7 +11,7 @@ use self::spending::SpendingView;
 use crate::panel::state::Loaded;
 use crate::store::Store;
 use crate::store::usage::{UsagePeriod, UsageTab};
-use crate::theme::{self, ControlSize, colors};
+use crate::theme::{self, ControlSize, TextSize, colors};
 use crate::ui::menu::Menu;
 use crate::ui::parts::{Check, CheckMenu};
 use crate::ui::{ActionButton, ActionMenu, Segmented, Spinner, Variant, beside, text_width};
@@ -76,7 +76,7 @@ impl UsageRoute {
             .flex()
             .items_center()
             .gap(px(size.padding()))
-            .text_size(px(size.text_size()))
+            .text_size(size.text_size())
             .font_weight(FontWeight::MEDIUM)
             .whitespace_nowrap()
             .child(div().text_color(c.muted_foreground).child("Usage"))
@@ -282,7 +282,7 @@ pub fn note(text: impl Into<SharedString>, cx: &App) -> AnyElement {
         .flex()
         .items_center()
         .justify_center()
-        .text_size(px(12.))
+        .text_size(TextSize::Xs)
         .text_color(colors(cx).muted_foreground)
         .text_center()
         .child(text.into())

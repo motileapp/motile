@@ -168,8 +168,8 @@ final class CodeSheet {
     /// The pictures of images and videos are decoded no larger than this on a side.
     static let mediaPixels: CGFloat = 1600
     private static let textInset: CGFloat = 8
-    private static let font = PlatformFont.monospacedSystemFont(ofSize: 12.5, weight: .regular)
-    private static let numberFont = PlatformFont.monospacedDigitSystemFont(ofSize: 11, weight: .regular)
+    private static let font = PlatformFont.monospacedSystemFont(ofSize: TextSize.xs.rawValue, weight: .regular)
+    private static let numberFont = PlatformFont.monospacedDigitSystemFont(ofSize: TextSize.xs.rawValue, weight: .regular)
     private static let advance = font.letterWidth
     /// How far under a line's top its text stands.
     private static let baseline: CGFloat = 13
@@ -419,7 +419,7 @@ final class CodeSheet {
             }
             let note = NSAttributedString(
                 string: media.video ? "This video couldn't be shown." : "This image couldn't be shown.",
-                attributes: [.font: PlatformFont.ui(12.5), .foregroundColor: Theme.mutedForeground])
+                attributes: [.font: PlatformFont.ui(.xs), .foregroundColor: Theme.mutedForeground])
             let size = note.size()
             note.draw(at: CGPoint(x: (room.midX - size.width / 2).rounded(), y: (room.midY - size.height / 2).rounded()))
             return
@@ -550,11 +550,11 @@ final class CodeSheet {
     private static func title(of file: CodeFile) -> NSAttributedString {
         let style = NSMutableParagraphStyle()
         style.lineBreakMode = .byTruncatingMiddle
-        let font = PlatformFont.ui(12.5, weight: .medium)
+        let font = PlatformFont.ui(.xs, weight: .medium)
         let folder = (file.path as NSString).deletingLastPathComponent
         let title = NSMutableAttributedString()
         if !folder.isEmpty {
-            title.append(NSAttributedString(string: folder + "/", attributes: [.font: PlatformFont.ui(12.5), .foregroundColor: Theme.mutedForeground]))
+            title.append(NSAttributedString(string: folder + "/", attributes: [.font: PlatformFont.ui(.xs), .foregroundColor: Theme.mutedForeground]))
         }
         title.append(NSAttributedString(string: (file.path as NSString).lastPathComponent, attributes: [.font: font, .foregroundColor: Theme.foreground]))
         let note: String? =
@@ -565,7 +565,7 @@ final class CodeSheet {
             default: nil
             }
         if let note {
-            title.append(NSAttributedString(string: "   \(note)", attributes: [.font: PlatformFont.ui(11.5), .foregroundColor: Theme.mutedStrongerForeground]))
+            title.append(NSAttributedString(string: "   \(note)", attributes: [.font: PlatformFont.ui(.xs), .foregroundColor: Theme.mutedStrongerForeground]))
         }
         title.addAttribute(.paragraphStyle, value: style, range: NSRange(location: 0, length: title.length))
         return title
@@ -592,7 +592,7 @@ final class CodeSheet {
             RoundedBox.stroke(box.insetBy(dx: 0.5, dy: 0.5), radius: Radius.xs)
         }
         let label = NSAttributedString(string: "Viewed", attributes: [
-            .font: PlatformFont.ui(11.5), .foregroundColor: viewed ? Theme.foreground : Theme.mutedForeground,
+            .font: PlatformFont.ui(.xs), .foregroundColor: viewed ? Theme.foreground : Theme.mutedForeground,
         ])
         let size = label.size()
         label.draw(at: CGPoint(x: box.maxX + 6, y: rect.minY + ((rect.height - size.height) / 2).rounded()))

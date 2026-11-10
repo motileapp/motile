@@ -152,19 +152,19 @@ enum ProgramLayout {
         case .celebration(let celebration):
             return ProgramBox(node, size: .zero, surface: surface, extra: scene(celebration.canvas, width: env.column)?.motion)
         case .title(let title):
-            let look = ProgramStyle.look(title.style, narrow: env.narrow)
+            let look = ProgramStyle.look(title.style)
             let color = ProgramStyle.color(title.color, on: surface)
             let text = ProgramText.set(title.text, look: look, color: color, options: .init(alignment: env.align))
             return textBox(node, text, look: look, width: width, fill: fill, env: env)
         case .text(let text):
             return self.text(node, text, width: width, fill: fill, env: env)
         case .caption(let caption):
-            let look = ProgramStyle.look(caption.style, narrow: env.narrow)
+            let look = ProgramStyle.look(caption.style)
             let color = ProgramStyle.color(caption.color, on: surface, current: Theme.mutedForeground)
             let text = ProgramText.set(caption.text, look: look, color: color, options: .init(alignment: env.align))
             return textBox(node, text, look: look, width: width, fill: fill, env: env)
         case .label(let label):
-            let look = ProgramStyle.look(.label, narrow: env.narrow)
+            let look = ProgramStyle.look(.label)
             let text = ProgramText.plain(label.text, look: look, color: ProgramStyle.color(label.color, on: surface), options: .init(alignment: env.align))
             return textBox(node, text, look: look, width: width, fill: fill, env: env)
         case .badge(let badge):
@@ -553,7 +553,7 @@ enum ProgramLayout {
         var texts: [String: ProgramTextPart] = [:]
         var height: CGFloat = 0
         if let rich = slot.text, !rich.text.isEmpty {
-            let look = ProgramStyle.look(slot.style, narrow: env.narrow)
+            let look = ProgramStyle.look(slot.style)
             let text = ProgramText.set(rich, look: look, color: Theme.foreground)
             let size = CGSize(width: min(width, ProgramText.width(text)), height: ProgramText.height(text, width: width, lineHeight: look.lineHeight))
             texts["text"] = ProgramTextPart(text: text, frame: CGRect(origin: .zero, size: size), lift: ControlText.lift(look.font, lineHeight: look.lineHeight))
@@ -584,7 +584,7 @@ enum ProgramLayout {
     private static func slotNatural(_ slot: UiSlot, gap: CGFloat, env: ProgramEnv) -> CGFloat {
         var parts: [CGFloat] = []
         if let rich = slot.text, !rich.text.isEmpty {
-            parts.append(ProgramText.width(ProgramText.set(rich, look: ProgramStyle.look(slot.style, narrow: env.narrow), color: Theme.foreground)))
+            parts.append(ProgramText.width(ProgramText.set(rich, look: ProgramStyle.look(slot.style), color: Theme.foreground)))
         }
         parts += slot.children.map { natural($0, env: env.inner) }
         return parts.reduce(0, +) + gap * CGFloat(max(0, parts.count - 1))
@@ -608,7 +608,7 @@ enum ProgramLayout {
     }
 
     private static func text(_ node: UiNode, _ text: UiKind.Text, width: CGFloat, fill: Bool, env: ProgramEnv) -> ProgramBox {
-        let look = ProgramStyle.look(text.style, narrow: env.narrow)
+        let look = ProgramStyle.look(text.style)
         let color = ProgramStyle.color(text.color, on: env.surface)
         let options = ProgramText.Options(
             weight: text.weight == .regular ? nil : text.weight, italic: text.italic, strike: text.strike, digits: text.digits, alignment: env.align)
@@ -622,7 +622,7 @@ enum ProgramLayout {
     }
 
     private static func link(_ node: UiNode, _ link: UiKind.Link, width: CGFloat, fill: Bool, env: ProgramEnv) -> ProgramBox {
-        let look = ProgramStyle.look(.body, narrow: env.narrow)
+        let look = ProgramStyle.look(.body)
         let color = link.url == nil ? ProgramStyle.color(.token("foreground"), on: env.surface) : Theme.primary
         let text = ProgramText.plain(link.text, look: look, color: color, options: .init(alignment: env.align))
         let arrow = link.url == nil ? 0 : ProgramLink.arrowSide(look) + ProgramLink.arrowGap
@@ -664,7 +664,7 @@ enum ProgramLayout {
     }
 
     static func listItem(_ node: UiNode, _ item: UiKind.ListItem, lane: ProgramList.Lane, last: Bool, width: CGFloat, env: ProgramEnv) -> ProgramBox {
-        let look = ProgramStyle.look(item.style, narrow: env.narrow)
+        let look = ProgramStyle.look(item.style)
         let (laneWidth, gap) = lane.room(for: item.marker)
         let x = laneWidth + gap
         let bodyWidth = max(0, width - x)
@@ -676,7 +676,7 @@ enum ProgramLayout {
         texts["title"] = ProgramTextPart(text: title, frame: CGRect(x: x, y: 0, width: bodyWidth, height: titleHeight), lift: lift)
         y = titleHeight
         if let description = item.description {
-            let small = ProgramStyle.look(.small, narrow: env.narrow)
+            let small = ProgramStyle.look(.small)
             let text = ProgramText.set(description, look: small, color: Theme.mutedForeground)
             let height = ProgramText.height(text, width: bodyWidth, lineHeight: small.lineHeight)
             y += ProgramList.descriptionGap
@@ -733,7 +733,7 @@ enum ProgramLayout {
     }
 
     private static func quote(_ node: UiNode, _ quote: UiKind.Quote, width: CGFloat, env: ProgramEnv) -> ProgramBox {
-        let body = ProgramStyle.look(.body, narrow: env.narrow)
+        let body = ProgramStyle.look(.body)
         let textWidth = max(0, width - ProgramQuote.inset)
         let text = ProgramText.set(quote.text, look: body, color: Theme.mutedForeground)
         let height = ProgramText.height(text, width: textWidth, lineHeight: body.lineHeight)
@@ -744,7 +744,7 @@ enum ProgramLayout {
         ]
         var y = height
         if let cite = quote.cite {
-            let small = ProgramStyle.look(.small, narrow: env.narrow)
+            let small = ProgramStyle.look(.small)
             let citeText = ProgramText.set(cite, look: small, color: Theme.mutedStrongerForeground)
             let citeHeight = ProgramText.height(citeText, width: textWidth, lineHeight: small.lineHeight)
             y += ProgramQuote.citeGap
@@ -800,7 +800,7 @@ enum ProgramLayout {
         let back = face(node, card.back, back: true, width: inner, env: env.on(env.surface.inBox).inner)
         let content = max(front.height, back.height)
         let height = max(ProgramFlashcard.least, content + ProgramFlashcard.top + ProgramFlashcard.bottom)
-        let hintLook = ProgramStyle.look(.tick, narrow: env.narrow)
+        let hintLook = ProgramStyle.look(.tick)
         let hint = ProgramText.plain(card.hint, look: hintLook, color: Theme.mutedStrongerForeground, options: .init(alignment: .center))
         let hintFrame = CGRect(x: 0, y: height - ProgramFlashcard.hintBottom - hintLook.lineHeight, width: width, height: hintLook.lineHeight)
         var texts = ["hint": ProgramTextPart(text: hint, frame: hintFrame, lift: ControlText.lift(hintLook.font, lineHeight: hintLook.lineHeight))]
@@ -831,7 +831,7 @@ enum ProgramLayout {
         var y: CGFloat = 0
         var part: ProgramTextPart?
         if let rich = slot.text, !rich.text.isEmpty {
-            let look = ProgramStyle.look(slot.style, narrow: env.narrow)
+            let look = ProgramStyle.look(slot.style)
             let text = ProgramText.set(rich, look: look, color: Theme.foreground, options: .init(alignment: .center))
             let height = ProgramText.height(text, width: width, lineHeight: look.lineHeight)
             part = ProgramTextPart(text: text, frame: CGRect(x: 0, y: 0, width: width, height: height), lift: ControlText.lift(look.font, lineHeight: look.lineHeight))
@@ -888,7 +888,7 @@ enum ProgramBadge {
     static let padding: CGFloat = 7
     static let iconSize = IconSize.sm
     static let gap: CGFloat = 5
-    static let font = PlatformFont.ui(11.5, weight: .medium)
+    static let font = PlatformFont.ui(.xs, weight: .medium)
 
     static func size(_ badge: UiKind.Badge) -> CGSize {
         let words = ProgramText.width(ControlText.line(badge.text, font: font, color: Theme.foreground))

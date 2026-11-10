@@ -13,7 +13,7 @@ use motile_core::render::rows::RowKind;
 use super::{MediaFiles, SAVE_TITLE, file_size, named_copy, native};
 use crate::models::AttachedFile;
 use crate::store::Store;
-use crate::theme::{ControlSize, Radius, colors};
+use crate::theme::{ControlSize, Radius, TextSize, colors};
 use crate::transcript::kit::{RowButton, progress_ring};
 use crate::transcript::model::RowModel;
 use crate::transcript::rows::RowContext;
@@ -470,14 +470,14 @@ fn file_card(
         .child(
             crate::ui::middle_truncated(file.name.clone())
                 .h(px(LINE_HEIGHT))
-                .text_size(px(13.))
+                .text_size(TextSize::Sm)
                 .font_weight(FontWeight::MEDIUM)
                 .text_color(c.foreground),
         )
         .child(
             div()
                 .h(px(LINE_HEIGHT))
-                .text_size(px(12.))
+                .text_size(TextSize::Xs)
                 .font_features(crate::ui::tabular_numbers())
                 .text_color(if matches!(state, Download::Failed(_)) { c.destructive } else { c.muted_foreground })
                 .truncate()

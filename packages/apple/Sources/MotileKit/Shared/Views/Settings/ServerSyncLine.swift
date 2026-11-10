@@ -4,7 +4,7 @@ import SwiftUI
 /// always one line, whatever it says, so the rows around it never move.
 struct ServerSyncLine: View {
     let sync: ServerSync
-    var size: CGFloat = 11.5
+    var size = TextSize.xs
     private var symbolSize: IconSize { IconSize(text: size) }
 
     var body: some View {
@@ -12,7 +12,7 @@ struct ServerSyncLine: View {
             HStack(spacing: 5) {
                 symbol
                 Text(sync.line(now: context.date.timeIntervalSince1970))
-                    .font(.ui(size: size))
+                    .font(.ui(size))
                     .monospacedDigit()
                     .foregroundStyle(Color.themeMutedForeground)
                     .lineLimit(1)

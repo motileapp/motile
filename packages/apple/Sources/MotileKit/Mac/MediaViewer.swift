@@ -62,7 +62,7 @@ struct MediaViewer: View {
                             .foregroundStyle(Color.themeMutedForegroundOverPicture)
                     }
                 }
-                .font(.ui(size: 13, weight: .medium))
+                .font(.ui(.sm, weight: .medium))
                 .foregroundStyle(Color.themeForegroundOverPicture)
                 .padding(.horizontal, 10)
                 .frame(height: 24)
@@ -138,7 +138,7 @@ struct MediaViewer: View {
                     Spinner(size: ControlSize.large.symbol)
                 }
             }
-            .font(.ui(size: 13))
+            .font(.ui(.sm))
             .foregroundStyle(Color.themeMutedForegroundOverPicture)
         }
     }

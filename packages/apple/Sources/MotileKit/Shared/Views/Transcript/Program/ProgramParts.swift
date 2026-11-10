@@ -63,7 +63,7 @@ enum ProgramList {
             guard lane.timeline else { return Marker(frame: centered(dot, ((laneWidth - dot) / 2).rounded()), kind: .dot) }
             return Marker(frame: centered(ring, 12 - ring / 2), kind: .ring)
         case .number(let number):
-            let look = ProgramStyle.Look(font: .uiDigits(13), lineHeight: numberLine)
+            let look = ProgramStyle.Look(font: .uiDigits(.sm), lineHeight: numberLine)
             let text = ProgramText.plain("\(number.number)", look: look, color: onSurface, options: .init(alignment: .center))
             let frame = centered(Self.number, 0)
             let part = ProgramTextPart(
@@ -71,7 +71,7 @@ enum ProgramList {
                 lift: ControlText.lift(look.font, lineHeight: look.lineHeight))
             return Marker(frame: frame, text: part, kind: .number)
         case .chip(let chip):
-            let look = ProgramStyle.Look(font: .uiDigits(12, weight: .medium), lineHeight: scaled(16))
+            let look = ProgramStyle.Look(font: .uiDigits(.xs, weight: .medium), lineHeight: scaled(16))
             let text = ProgramText.plain(chip.text, look: look, color: onSurface, options: .init(alignment: .center))
             let width = max(Self.chip, ceil(ProgramText.width(text)) + 10)
             let frame = CGRect(x: max(0, ((laneWidth - width) / 2).rounded()), y: ((firstLine - Self.chip) / 2).rounded(), width: width, height: Self.chip)
@@ -80,7 +80,7 @@ enum ProgramList {
                 lift: ControlText.lift(look.font, lineHeight: look.lineHeight))
             return Marker(frame: frame, text: part, kind: .chip)
         case .label(let label):
-            let look = ProgramStyle.Look(font: .uiDigits(13), lineHeight: scaled(20))
+            let look = ProgramStyle.Look(font: .uiDigits(.sm), lineHeight: scaled(20))
             let text = ProgramText.plain(label.text, look: look, color: Theme.mutedForeground, options: .init(oneLine: true))
             let frame = CGRect(x: 0, y: ((firstLine - look.lineHeight) / 2).rounded(), width: laneWidth, height: look.lineHeight)
             let ring = lane.timeline ? wideRing(lane: laneWidth, narrow: lane.narrow, firstLine: firstLine) : .zero
@@ -180,14 +180,14 @@ extension NSString {
 /// The fields of inputs: a label over the control, an error under it.
 enum ProgramFields {
     static func labelPart(_ label: String, width: CGFloat, env: ProgramEnv) -> ProgramTextPart {
-        let look = ProgramStyle.look(.label, narrow: env.narrow)
+        let look = ProgramStyle.look(.label)
         let text = ProgramText.plain(label, look: look, color: Theme.foreground)
         let height = ProgramText.height(text, width: width, lineHeight: look.lineHeight)
         return ProgramTextPart(text: text, frame: CGRect(x: 0, y: 0, width: width, height: height), lift: ControlText.lift(look.font, lineHeight: look.lineHeight))
     }
 
     static func errorPart(_ error: String, at y: CGFloat, width: CGFloat, env: ProgramEnv) -> ProgramTextPart {
-        let look = ProgramStyle.look(.caption, narrow: env.narrow)
+        let look = ProgramStyle.look(.caption)
         let text = ProgramText.plain(error, look: look, color: Theme.destructive)
         let height = ProgramText.height(text, width: width, lineHeight: look.lineHeight)
         return ProgramTextPart(text: text, frame: CGRect(x: 0, y: y, width: width, height: height), lift: ControlText.lift(look.font, lineHeight: look.lineHeight))
@@ -305,7 +305,7 @@ enum ProgramFields {
             read = part.frame.height + timerLabelGap
             readWidth = ProgramText.width(part.text)
         }
-        let look = ProgramStyle.look(.timer, narrow: env.narrow)
+        let look = ProgramStyle.look(.timer)
         let time = ProgramText.plain(timer.time, look: look, color: timer.done ? Theme.success : Theme.foreground)
         let timeWidth = ProgramText.width(time)
         texts["time"] = ProgramTextPart(
@@ -352,8 +352,8 @@ enum ProgramTable {
 
     static func layout(_ node: UiNode, _ table: UiKind.Table, width: CGFloat, env: ProgramEnv) -> ProgramBox {
         let pad = padding(narrow: env.narrow)
-        let header = ProgramStyle.look(.label, narrow: env.narrow)
-        let body = ProgramStyle.look(.small, narrow: env.narrow)
+        let header = ProgramStyle.look(.label)
+        let body = ProgramStyle.look(.small)
         let cellEnv = env.on(.card).inner
         let count = max(table.columns.count, table.rows.map(\.count).max() ?? 0)
         guard count > 0 else { return ProgramBox(node, size: CGSize(width: width, height: 0), surface: env.surface, inner: .card) }

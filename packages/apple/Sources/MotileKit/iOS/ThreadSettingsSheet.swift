@@ -109,7 +109,7 @@ struct ThreadSettingsSheet: View {
                                 // "Claude Code", the gateway's symbol, then the account its bars are from, a step quieter.
                                 HStack(spacing: 0) {
                                     Text(verbatim: choices.title)
-                                        .gatewayMarked(choices.account.gateway, fontSize: UIFont.preferredFont(forTextStyle: .body).pointSize, size: Self.logoSize)
+                                        .gatewayMarked(choices.account.gateway, fontSize: .lg, size: Self.logoSize)
                                         .layoutPriority(1)
                                     if let next = store.composerServer?.nextAccounts[id] {
                                         Text(verbatim: " · ")

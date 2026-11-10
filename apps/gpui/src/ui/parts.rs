@@ -10,7 +10,7 @@ use std::time::{Duration, Instant};
 use gpui_kit::prelude::*;
 use gpui_kit::*;
 
-use crate::theme::{Colors, ControlSize, IconSize, Layer, Opacity, Radius, ShadowSize, Surface, colors};
+use crate::theme::{Colors, ControlSize, IconSize, Layer, Opacity, Radius, ShadowSize, Surface, TextSize, colors};
 use crate::ui::control::{ActionButton, Variant, dotted};
 use crate::ui::dropdown_list as list;
 use crate::ui::menu::Anchor;
@@ -55,8 +55,8 @@ impl GatewayMark {
 const PIN_GAP: f32 = 2.;
 
 /// The gateway's symbol beside words of `font_size`, as the Mac app sizes it.
-pub fn gateway_mark_size(font_size: f32) -> IconSize {
-    match font_size {
+pub fn gateway_mark_size(font_size: TextSize) -> IconSize {
+    match font_size.points() {
         size if size <= 12.5 => IconSize::Xxs,
         size if size <= 15. => IconSize::Xs,
         _ => IconSize::Sm,
@@ -78,16 +78,16 @@ fn gateway_mark_beside(icon: IconSize) -> IconSize {
 }
 
 /// How much wider the gateway's mark makes words of `font_size`: its gap, and itself.
-pub fn gateway_mark_width(font_size: f32, mark: GatewayMark) -> f32 {
+pub fn gateway_mark_width(font_size: TextSize, mark: GatewayMark) -> f32 {
     marked_width(font_size, gateway_mark_size(font_size), mark)
 }
 
 /// How much wider the gateway's mark beside an icon of `size` makes words of `font_size`.
-pub fn gateway_mark_width_as(font_size: f32, size: IconSize, mark: GatewayMark) -> f32 {
+pub fn gateway_mark_width_as(font_size: TextSize, size: IconSize, mark: GatewayMark) -> f32 {
     marked_width(font_size, gateway_mark_beside(size), mark)
 }
 
-fn marked_width(font_size: f32, size: IconSize, mark: GatewayMark) -> f32 {
+fn marked_width(font_size: TextSize, size: IconSize, mark: GatewayMark) -> f32 {
     if !mark.shown() {
         return 0.;
     }
@@ -95,13 +95,13 @@ fn marked_width(font_size: f32, size: IconSize, mark: GatewayMark) -> f32 {
 }
 
 /// A space of DM Sans, and a point more.
-fn gateway_gap(font_size: f32) -> f32 {
-    font_size * 0.266 + 1.
+fn gateway_gap(font_size: TextSize) -> f32 {
+    font_size.points() * 0.266 + 1.
 }
 
 /// The gateway's symbol after words of `font_size`, and the pin after it where `mark` is pinned,
 /// centred on their capitals, which DM Sans centres in the line.
-fn gateway_mark(font_size: f32, size: IconSize, mark: GatewayMark, spaced: bool) -> Div {
+fn gateway_mark(font_size: TextSize, size: IconSize, mark: GatewayMark, spaced: bool) -> Div {
     div()
         .flex_none()
         .when(spaced, |shown| shown.ml(px(gateway_gap(font_size))))
@@ -114,16 +114,16 @@ fn gateway_mark(font_size: f32, size: IconSize, mark: GatewayMark, spaced: bool)
 
 /// The words with the gateway's mark after them where what they name runs through the gateway,
 /// cut at their end before the mark is.
-pub fn proxied(words: impl IntoElement, mark: GatewayMark, font_size: f32) -> Div {
+pub fn proxied(words: impl IntoElement, mark: GatewayMark, font_size: TextSize) -> Div {
     marked(words, mark, font_size, gateway_mark_size(font_size))
 }
 
 /// `proxied`, with the mark a step smaller than `size`, an icon beside it.
-pub fn proxied_as(words: impl IntoElement, mark: GatewayMark, font_size: f32, size: IconSize) -> Div {
+pub fn proxied_as(words: impl IntoElement, mark: GatewayMark, font_size: TextSize, size: IconSize) -> Div {
     marked(words, mark, font_size, gateway_mark_beside(size))
 }
 
-fn marked(words: impl IntoElement, mark: GatewayMark, font_size: f32, size: IconSize) -> Div {
+fn marked(words: impl IntoElement, mark: GatewayMark, font_size: TextSize, size: IconSize) -> Div {
     div()
         .min_w_0()
         .flex()
@@ -135,7 +135,7 @@ fn marked(words: impl IntoElement, mark: GatewayMark, font_size: f32, size: Icon
 /// "Opus 5.5 · Work" with its dots muted, and the gateway's mark after the name, ahead of the
 /// account, where it runs through the gateway, a step smaller than `size`, an icon beside it: what
 /// follows the name is cut at its end first.
-pub fn proxied_dotted(text: String, mark: GatewayMark, font_size: f32, size: IconSize, c: &Colors) -> Div {
+pub fn proxied_dotted(text: String, mark: GatewayMark, font_size: TextSize, size: IconSize, c: &Colors) -> Div {
     let Some((name, rest)) = text.split_once(" · ").filter(|_| mark.shown()) else {
         return proxied_as(dotted(text, c), mark, font_size, size);
     };
@@ -157,10 +157,10 @@ pub fn proxied_dotted(text: String, mark: GatewayMark, font_size: f32, size: Ico
 
 /// What something runs on, "Opus 5.5 · Work", with the gateway's mark after the model where it
 /// runs through the gateway, then `rest` after a dot: one line of `font_size`, cut at its end.
-pub fn proxied_line(runs_on: &str, mark: GatewayMark, rest: &str, font_size: f32) -> Div {
+pub fn proxied_line(runs_on: &str, mark: GatewayMark, rest: &str, font_size: TextSize) -> Div {
     if !mark.shown() {
         let words = [runs_on, rest].into_iter().filter(|part| !part.is_empty()).collect::<Vec<_>>().join(" · ");
-        return div().min_w_0().text_size(px(font_size)).truncate().child(words);
+        return div().min_w_0().text_size(font_size).truncate().child(words);
     }
     let (name, account) = runs_on.split_once(" · ").unwrap_or((runs_on, ""));
     let rest = [account, rest].into_iter().filter(|part| !part.is_empty()).collect::<Vec<_>>().join(" · ");
@@ -169,7 +169,7 @@ pub fn proxied_line(runs_on: &str, mark: GatewayMark, rest: &str, font_size: f32
         .flex()
         .items_center()
         .overflow_hidden()
-        .text_size(px(font_size))
+        .text_size(font_size)
         .when(!name.is_empty(), |line| line.child(div().flex_none().whitespace_nowrap().child(name.to_string())))
         .child(gateway_mark(font_size, gateway_mark_size(font_size), mark, !name.is_empty()))
         .when(!rest.is_empty(), |line| line.child(div().min_w_0().truncate().child(format!(" · {rest}"))))
@@ -213,7 +213,7 @@ impl RenderOnce for KeyCaps {
                 .justify_center()
                 .rounded(px(Radius::XS))
                 .bg(fill)
-                .text_size(px(11.))
+                .text_size(TextSize::Xs)
                 .font_family(crate::theme::MONO_FONT)
                 .font_weight(FontWeight::MEDIUM)
                 .whitespace_nowrap()
@@ -377,7 +377,7 @@ pub struct CommandBox {
 const BUTTON_GAP: f32 = 4.;
 
 impl CommandBox {
-    const TEXT_SIZE: f32 = 12.5;
+    const TEXT_SIZE: TextSize = TextSize::Xs;
     const LINE_HEIGHT: f32 = 18.;
 
     pub fn new(id: impl Into<ElementId>, command: Option<impl Into<SharedString>>) -> Self {
@@ -476,7 +476,7 @@ impl RenderOnce for CommandBox {
                     .py(px(inset))
                     .pl(px(inset + 2.))
                     .font_family(crate::theme::MONO_FONT)
-                    .text_size(px(Self::TEXT_SIZE))
+                    .text_size(Self::TEXT_SIZE)
                     .line_height(px(Self::LINE_HEIGHT))
                     .text_color(c.foreground)
                     .child(text),

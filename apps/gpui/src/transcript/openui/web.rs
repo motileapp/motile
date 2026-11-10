@@ -71,7 +71,7 @@ pub fn html_view(
     }
     let style = PageStyle {
         dark: c.dark,
-        text_size: theme::PROSE_SIZE,
+        text_size: theme::PROSE_SIZE.points(),
         line_height: theme::PROSE_LINE_HEIGHT,
         color: css(c.foreground),
         background: css(cx.surface.color(c)),
@@ -84,7 +84,7 @@ pub fn html_view(
         return card.child(view);
     }
     let still = catches_glide(card, cx)
-        .child(style::type_of(TextStyle::CardTitle, false).text_box().text_color(c.foreground).child(title.to_string()))
+        .child(style::type_of(TextStyle::CardTitle).text_box().text_color(c.foreground).child(title.to_string()))
         .child(SMALL.text_box().text_color(c.muted_foreground).child("Interactive view"));
     let button = ActionButton::new(cx.id(id, "open"), live::OPEN).symbol("play.fill");
     let (background, transcript) = (cx.surface.color(c), cx.transcript.clone());

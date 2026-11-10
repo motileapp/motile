@@ -22,7 +22,7 @@ use crate::panel::state::{CodeDocument, CodeMarks, Loaded};
 use crate::sign_in::Session;
 use crate::store::Store;
 use crate::store::mcp_servers::{Answer, CallRow, Field, FieldKind, MCP_REDIRECT};
-use crate::theme::{ControlSize, IconSize, Layer, Opacity, Radius, Surface, colors};
+use crate::theme::{ControlSize, IconSize, Layer, Opacity, Radius, Surface, TextSize, colors};
 use crate::ui::menu::{Menu, MenuIcon};
 use crate::ui::modal::{Answer as Choice, Confirmation, confirmation, modal, present_sheet, presented};
 use crate::ui::parts::FadingScroll;
@@ -63,7 +63,7 @@ fn tile(monogram: &str, tint: &str, side: f32, cx: &App) -> Div {
         .flex()
         .items_center()
         .justify_center()
-        .text_size(px((side * 0.46).round()))
+        .text_size(TextSize::nearest(side * 0.46))
         .font_weight(FontWeight::SEMIBOLD)
         .text_color(color)
         .child(monogram.to_string())
@@ -123,19 +123,19 @@ fn text_of(input: &Entity<InputState>, cx: &App) -> String {
 }
 
 fn sheet_title(title: impl Into<SharedString>) -> Div {
-    div().text_size(px(15.)).font_weight(FontWeight::SEMIBOLD).child(title.into())
+    div().text_size(TextSize::Lg).font_weight(FontWeight::SEMIBOLD).child(title.into())
 }
 
 fn caption(text: impl Into<SharedString>, cx: &App) -> Div {
-    div().text_size(px(13.)).text_color(colors(cx).muted_foreground).child(text.into())
+    div().text_size(TextSize::Sm).text_color(colors(cx).muted_foreground).child(text.into())
 }
 
 fn field_label(text: impl Into<SharedString>, cx: &App) -> Div {
-    div().text_size(px(11.5)).text_color(colors(cx).muted_foreground).child(text.into())
+    div().text_size(TextSize::Xs).text_color(colors(cx).muted_foreground).child(text.into())
 }
 
 fn warning_line(text: impl Into<SharedString>, cx: &App) -> Div {
-    div().text_size(px(12.)).text_color(colors(cx).warning).child(text.into())
+    div().text_size(TextSize::Xs).text_color(colors(cx).warning).child(text.into())
 }
 
 /// A name field, and under it how agents will name the MCP server's tools once it is called that.
@@ -147,7 +147,7 @@ fn name_field(name: &Entity<InputState>, tool: Option<&str>, fallback: Option<&s
         |field, slug| {
             field.child(
                 div()
-                    .text_size(px(11.5))
+                    .text_size(TextSize::Xs)
                     .font_family(crate::theme::MONO_FONT)
                     .text_color(colors(cx).muted_foreground)
                     .truncate()
@@ -210,9 +210,9 @@ fn tool_label(tool: &ToolRow, cx: &App) -> AnyElement {
         .flex()
         .flex_col()
         .gap(px(2.))
-        .child(div().min_w_0().truncate().text_size(px(13.)).child(tool.title.clone()))
+        .child(div().min_w_0().truncate().text_size(TextSize::Sm).child(tool.title.clone()))
         .when_some(tool.summary.clone(), |label, summary| {
-            label.child(div().text_size(px(11.5)).text_color(c.muted_foreground).truncate().child(summary))
+            label.child(div().text_size(TextSize::Xs).text_color(c.muted_foreground).truncate().child(summary))
         })
         .into_any_element()
 }
@@ -267,7 +267,7 @@ fn group_row(
                         .child(icons::symbol("chevron-right", IconSize::Md).rotate(if open { 90. } else { 0. })),
                 )
         })
-        .child(div().text_size(px(13.)).child(group.title.clone()))
+        .child(div().text_size(TextSize::Sm).child(group.title.clone()))
         .child(Chip::new(group.tools.len().to_string()).surface(surface).muted(true))
         .child(div().flex_1())
         .child(dropdown);
@@ -412,10 +412,10 @@ impl McpGatewayPage {
             .flex_col()
             .gap(px(2.))
             .py(px(4.))
-            .child(div().text_size(px(13.)).font_weight(FontWeight::MEDIUM).child(mcp_server.name.clone()))
+            .child(div().text_size(TextSize::Sm).font_weight(FontWeight::MEDIUM).child(mcp_server.name.clone()))
             .child(
                 div()
-                    .text_size(px(11.5))
+                    .text_size(TextSize::Xs)
                     .text_color(if warns { c.warning } else { c.muted_foreground })
                     .child(mcp_server.status_text.clone()),
             );
@@ -547,7 +547,7 @@ impl McpGatewayPage {
                 div()
                     .px(px(INSET))
                     .py(px(14.))
-                    .text_size(px(12.))
+                    .text_size(TextSize::Xs)
                     .text_color(c.muted_foreground)
                     .child(empty)
                     .into_any_element(),
@@ -593,7 +593,7 @@ impl McpGatewayPage {
             .child(call_line(call, cx))
             .when_some(call.error.clone(), |row, error| {
                 row.child(
-                    div().pl(px(SMALL_TILE + 8.)).text_size(px(11.5)).text_color(c.warning).truncate().child(error),
+                    div().pl(px(SMALL_TILE + 8.)).text_size(TextSize::Xs).text_color(c.warning).truncate().child(error),
                 )
             })
             .on_click(move |_, _, cx| {
@@ -731,13 +731,13 @@ fn call_line(call: &CallRow, cx: &App) -> Div {
                 .items_center()
                 .gap(px(4.))
                 .overflow_hidden()
-                .child(div().text_size(px(13.)).font_weight(FontWeight::MEDIUM).child(call.mcp_server.clone()))
-                .child(div().text_size(px(13.)).text_color(c.muted_foreground).child("·"))
+                .child(div().text_size(TextSize::Sm).font_weight(FontWeight::MEDIUM).child(call.mcp_server.clone()))
+                .child(div().text_size(TextSize::Sm).text_color(c.muted_foreground).child("·"))
                 .child(
                     div()
                         .min_w_0()
                         .truncate()
-                        .text_size(px(12.))
+                        .text_size(TextSize::Xs)
                         .font_family(crate::theme::MONO_FONT)
                         .child(call.tool.clone()),
                 ),
@@ -747,14 +747,14 @@ fn call_line(call: &CallRow, cx: &App) -> Div {
                 .flex_1()
                 .min_w_0()
                 .truncate()
-                .text_size(px(12.))
+                .text_size(TextSize::Xs)
                 .text_color(c.muted_foreground)
                 .child(call.source.clone()),
         )
         .child(
             div()
                 .flex_shrink_0()
-                .text_size(px(12.))
+                .text_size(TextSize::Xs)
                 .font_features(crate::ui::tabular_numbers())
                 .text_color(c.muted_foreground)
                 .child(crate::ui::control::dotted(format!("{} · {}", call.latency, call.time), c)),
@@ -1056,10 +1056,18 @@ impl AddSheet {
                     .flex()
                     .flex_col()
                     .child(
-                        div().text_size(px(13.)).font_weight(FontWeight::MEDIUM).truncate().child(known.name.clone()),
+                        div()
+                            .text_size(TextSize::Sm)
+                            .font_weight(FontWeight::MEDIUM)
+                            .truncate()
+                            .child(known.name.clone()),
                     )
                     .child(
-                        div().text_size(px(11.5)).text_color(c.muted_foreground).truncate().child(known.host.clone()),
+                        div()
+                            .text_size(TextSize::Xs)
+                            .text_color(c.muted_foreground)
+                            .truncate()
+                            .child(known.host.clone()),
                     ),
             )
             .when(pending, |tile| tile.child(div().text_color(c.muted_foreground).child(Spinner::regular().render(cx))))
@@ -1077,7 +1085,7 @@ impl AddSheet {
                 .flex()
                 .items_center()
                 .gap(px(8.))
-                .text_size(px(13.))
+                .text_size(TextSize::Sm)
                 .text_color(c.muted_foreground)
                 .child(Spinner::regular().render(cx))
                 .child(waiting)
@@ -1628,15 +1636,18 @@ impl TrySheet {
                     .flex()
                     .items_center()
                     .gap(px(6.))
-                    .child(div().text_size(px(12.5)).font_weight(FontWeight::MEDIUM).child(field.field.name.clone()))
+                    .child(
+                        div().text_size(TextSize::Xs).font_weight(FontWeight::MEDIUM).child(field.field.name.clone()),
+                    )
                     .when(field.field.required, |name| {
-                        name.child(div().text_size(px(11.5)).text_color(c.muted_stronger_foreground).child("required"))
+                        name.child(
+                            div().text_size(TextSize::Xs).text_color(c.muted_stronger_foreground).child("required"),
+                        )
                     });
-                let description = field
-                    .field
-                    .description
-                    .clone()
-                    .map(|description| div().text_size(px(11.5)).text_color(c.muted_foreground).child(description));
+                let description =
+                    field.field.description.clone().map(|description| {
+                        div().text_size(TextSize::Xs).text_color(c.muted_foreground).child(description)
+                    });
                 let sheet = cx.weak_entity();
                 let control: Option<AnyElement> = match &field.input {
                     Input::Line(input) => Some(
@@ -1723,7 +1734,9 @@ impl Render for TrySheet {
                         .items_center()
                         .gap(px(10.))
                         .child(tile(&mcp_server.monogram, &mcp_server.tint, TILE, cx))
-                        .child(div().flex_1().min_w_0().truncate().text_size(px(13.)).child(mcp_server.name.clone()))
+                        .child(
+                            div().flex_1().min_w_0().truncate().text_size(TextSize::Sm).child(mcp_server.name.clone()),
+                        )
                         .child(self.picker(&mcp_server, cx))
                         .into_any_element(),
                 );
@@ -1743,7 +1756,7 @@ impl Render for TrySheet {
                             |line| {
                                 line.child(icons::symbol("triangle-alert", IconSize::Sm)).child(
                                     div()
-                                        .text_size(px(12.))
+                                        .text_size(TextSize::Xs)
                                         .child("It changes things for real, as an agent's call would."),
                                 )
                             },

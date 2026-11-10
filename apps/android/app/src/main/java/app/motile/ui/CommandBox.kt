@@ -24,6 +24,7 @@ import app.motile.theme.LocalPalette
 import app.motile.theme.Palette
 import app.motile.theme.Radius
 import app.motile.theme.SurfaceBox
+import app.motile.theme.TextSize
 import app.motile.theme.Theme
 import kotlin.math.roundToInt
 
@@ -49,7 +50,7 @@ fun CommandBox(
     val noun = if (link == null) "command" else "link"
     val palette = LocalPalette.current
     val density = LocalDensity.current
-    val style = Theme.uiMono(12.5f).copy(lineHeight = Theme.codeLineHeight)
+    val style = Theme.uiMono(TextSize.Xs).copy(lineHeight = Theme.codeLineHeight)
     // Puts the first line of the command level with the middle of the buttons.
     val textInset = with(density) { ((ControlSize.Regular.height.toPx() - Theme.codeLineHeight.toPx()) / 2).roundToInt().toDp() }
     val shown = remember(command, spans, palette, link) {

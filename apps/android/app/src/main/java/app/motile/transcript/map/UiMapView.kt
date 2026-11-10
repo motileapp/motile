@@ -65,6 +65,7 @@ import app.motile.theme.LocalPalette
 import app.motile.theme.LocalSurface
 import app.motile.theme.Opacity
 import app.motile.theme.Radius
+import app.motile.theme.TextSize
 import app.motile.theme.Theme
 import app.motile.theme.at
 import app.motile.transcript.openui.UiStyle
@@ -274,7 +275,7 @@ private fun BoxScope.MapChrome(node: UiKind.Map, director: MapDirector, expanded
         Text(
             "Route overview",
             Modifier.align(Alignment.BottomStart).padding(start = 12.dp, bottom = 22.dp).background(lit, RoundedCornerShape(Radius.sm)).padding(horizontal = 7.dp, vertical = 2.dp),
-            style = Theme.ui(10f).lined(16f),
+            style = Theme.ui(TextSize.Xxs).lined(16f),
             color = palette.mutedForeground,
         )
     }
@@ -302,5 +303,5 @@ private fun Attribution(modifier: Modifier) {
             link("OpenStreetMap", "https://www.openstreetmap.org/copyright")
         }
     }
-    Text(text, modifier, style = Theme.ui(9f).lined(12f), color = LocalPalette.current.mutedForeground, maxLines = 1)
+    Text(text, modifier, style = Theme.ui(TextSize.Xxs).lined(12f), color = LocalPalette.current.mutedForeground, maxLines = 1)
 }

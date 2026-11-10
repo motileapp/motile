@@ -260,8 +260,8 @@ final class FileCard: FlippedView {
     private let tile = SurfaceView()
     private let ring = ProgressRingView()
     private let icon = SymbolView(.file, size: ControlSize.large.symbol, tint: Theme.mutedForeground)
-    private let name = TextLabel(font: .ui(13, weight: .medium), color: Theme.foreground)
-    private let detail = TextLabel(font: .uiDigits(12), color: Theme.mutedForeground)
+    private let name = TextLabel(font: .ui(.sm, weight: .medium), color: Theme.foreground)
+    private let detail = TextLabel(font: .uiDigits(.xs), color: Theme.mutedForeground)
     private var revealButton: RowButton!
     private weak var owner: RowOwner?
     private var content: SentFile?

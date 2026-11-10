@@ -8,20 +8,20 @@ use std::rc::Rc;
 use gpui_kit::prelude::*;
 use gpui_kit::*;
 
-use crate::theme::{ControlSize, Layer, Opacity, Radius, Surface, colors};
+use crate::theme::{ControlSize, Layer, Opacity, Radius, Surface, TextSize, colors};
 use crate::ui::{PickMark, motion};
 
 type OnPress = Rc<dyn Fn(&mut Window, &mut App)>;
 
 const DETAIL_GAP: f32 = 2.;
-const DETAIL_SIZE: f32 = 13.;
+const DETAIL_SIZE: TextSize = TextSize::Sm;
 const DETAIL_LINE: f32 = 20.;
 
 /// The words under a choice's title that say more of it.
 fn detail_text(detail: SharedString, cx: &App) -> Div {
     div()
         .mt(px(DETAIL_GAP))
-        .text_size(px(DETAIL_SIZE))
+        .text_size(DETAIL_SIZE)
         .line_height(px(DETAIL_LINE))
         .text_color(colors(cx).muted_foreground)
         .child(detail)
@@ -131,7 +131,7 @@ impl RenderOnce for PickRow {
             .child(PickMark::new(mark_id, self.picked, self.multiple))
             .when(ring, |mark| mark.child(crate::ui::focus_ring(mark_radius, cx)));
         let title = div()
-            .text_size(px(crate::theme::PROSE_SIZE))
+            .text_size(crate::theme::PROSE_SIZE)
             .line_height(px(Self::TITLE_LINE))
             .text_color(if self.struck { c.muted_foreground } else { c.foreground })
             .when(self.struck, |title| title.line_through())
@@ -264,7 +264,7 @@ impl RenderOnce for OptionCard {
             .flex_col()
             .child(
                 div()
-                    .text_size(px(crate::theme::PROSE_SIZE))
+                    .text_size(crate::theme::PROSE_SIZE)
                     .font_weight(FontWeight::MEDIUM)
                     .line_height(px(Self::TITLE_LINE))
                     .text_color(c.foreground)

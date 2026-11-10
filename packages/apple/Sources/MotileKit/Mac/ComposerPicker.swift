@@ -456,7 +456,7 @@ private struct ComposerPicker: View {
             }
             if settings.isEmpty {
                 Text("\(model?.name ?? "This model") has no settings to choose")
-                    .font(.ui(size: 12))
+                    .font(.ui(.xs))
                     .foregroundStyle(Color.themeMutedForeground)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(8)
@@ -551,10 +551,10 @@ private struct ComposerPicker: View {
             .padding(.horizontal, -Self.accessTabsOutset)
             VStack(alignment: .leading, spacing: 2) {
                 Text(shown.label)
-                    .font(.ui(size: 13))
+                    .font(.ui(.sm))
                     .foregroundStyle(Color.themeForeground)
                 Text(shown.detail)
-                    .font(.ui(size: 12))
+                    .font(.ui(.xs))
                     .foregroundStyle(Color.themeMutedForeground)
                     .lineLimit(1)
             }

@@ -14,7 +14,7 @@ use super::layout::{
 };
 use crate::store::Store;
 use crate::store::shortcuts::ShortcutCheck;
-use crate::theme::{ControlSize, IconSize, Opacity, ShadowSize, Surface, colors};
+use crate::theme::{ControlSize, IconSize, Opacity, ShadowSize, Surface, TextSize, colors};
 use crate::ui::control::Look;
 use crate::ui::menu::{Anchor, Menu};
 use crate::ui::motion;
@@ -276,7 +276,7 @@ impl KeybindingsPage {
                     .child(
                         div()
                             .flex_1()
-                            .text_size(px(13.))
+                            .text_size(TextSize::Sm)
                             .font_weight(FontWeight::MEDIUM)
                             .child("Some of keybindings.json is skipped"),
                     )
@@ -291,7 +291,7 @@ impl KeybindingsPage {
                     ),
             )
             .children(issues.iter().map(|issue| {
-                div().text_size(px(11.5)).text_color(c.muted_foreground).child(issue.clone()).into_any_element()
+                div().text_size(TextSize::Xs).text_color(c.muted_foreground).child(issue.clone()).into_any_element()
             }))
             .into_any_element()
     }
@@ -389,7 +389,7 @@ impl KeybindingsPage {
         let editing = self.editing.as_ref().is_some_and(|(editing, _)| *editing == Editing::Row(id.clone()));
         let title = div()
             .id(SharedString::from(format!("label-{id}")))
-            .text_size(px(13.))
+            .text_size(TextSize::Sm)
             .min_w_0()
             .font_weight(FontWeight::MEDIUM)
             .child(shortcut.label.clone())
@@ -708,14 +708,14 @@ impl RenderOnce for ShortcutField {
             if recording || self.caps.is_empty() { size.padding() } else { (size.height() - KeyCaps::HEIGHT) / 2. };
         let label: AnyElement = if recording {
             div()
-                .text_size(px(size.text_size()))
+                .text_size(size.text_size())
                 .font_weight(FontWeight::MEDIUM)
                 .text_color(c.primary)
                 .child("Press keys")
                 .into_any_element()
         } else if self.caps.is_empty() {
             div()
-                .text_size(px(size.text_size()))
+                .text_size(size.text_size())
                 .font_weight(FontWeight::MEDIUM)
                 .text_color(c.muted_foreground)
                 .child(self.placeholder)
@@ -848,7 +848,7 @@ impl Render for ConditionEditor {
                 .flex()
                 .items_start()
                 .gap(px(6.))
-                .text_size(px(11.5))
+                .text_size(TextSize::Xs)
                 .text_color(color)
                 .child(div().pt(px(1.)).child(icons::symbol(symbol, IconSize::Sm)))
                 .child(div().flex_1().min_w_0().child(text))
@@ -895,8 +895,8 @@ impl Render for ConditionEditor {
                     .flex()
                     .flex_col()
                     .gap(px(2.))
-                    .child(div().text_size(px(13.)).font_weight(FontWeight::SEMIBOLD).child("When"))
-                    .child(div().text_size(px(11.5)).text_color(c.muted_foreground).child(
+                    .child(div().text_size(TextSize::Sm).font_weight(FontWeight::SEMIBOLD).child("When"))
+                    .child(div().text_size(TextSize::Xs).text_color(c.muted_foreground).child(
                         "The shortcut runs only while this holds. Join names with ! for not, && for and, || for or.",
                     )),
             )

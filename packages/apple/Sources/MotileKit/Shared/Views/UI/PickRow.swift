@@ -3,8 +3,8 @@ import SwiftUI
 /// The text of a choice that is more than a word, as every client sets it.
 enum PickText {
     static let title = (font: Theme.proseFont, lineHeight: Theme.proseLineHeight)
-    static let cardTitle = (font: PlatformFont.ui(14, weight: .medium), lineHeight: scaled(20))
-    static let detail = (font: PlatformFont.ui(13), lineHeight: scaled(20))
+    static let cardTitle = (font: PlatformFont.ui(.md, weight: .medium), lineHeight: scaled(20))
+    static let detail = (font: PlatformFont.ui(.sm), lineHeight: scaled(20))
     /// The room between the mark and the words.
     static let gap: CGFloat = 8
     /// The room between a title and what it means.

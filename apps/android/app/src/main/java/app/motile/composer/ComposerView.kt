@@ -45,6 +45,7 @@ import app.motile.layout.KeyboardFocus
 import app.motile.panel.PanelTab
 import app.motile.platform.Symbol
 import app.motile.platform.scaled
+import app.motile.theme.TextSize
 import app.motile.theme.iconSize
 import app.motile.theme.ControlSize
 import app.motile.theme.IconSize
@@ -257,8 +258,8 @@ private fun PutAwayBanner(thread: ThreadInfo) {
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        thread.section.symbol?.let { Icon(it, iconSize(text = 12.5f), color = Theme.colors.foreground) }
-        Text(title, size = 12.5f, weight = FontWeight.Medium, color = Theme.colors.foreground)
+        thread.section.symbol?.let { Icon(it, iconSize(text = TextSize.Xs), color = Theme.colors.foreground) }
+        Text(title, size = TextSize.Xs, weight = FontWeight.Medium, color = Theme.colors.foreground)
         Spacer(Modifier.weight(1f))
         ActionButton(action, variant = ButtonVariant.Link, round = true, onClick = perform)
     }

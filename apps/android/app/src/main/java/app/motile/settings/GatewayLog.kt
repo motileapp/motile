@@ -29,6 +29,7 @@ import app.motile.core.GatewayLogRow
 import app.motile.core.coreError
 import app.motile.platform.Platform
 import app.motile.theme.LocalPalette
+import app.motile.theme.TextSize
 import app.motile.theme.Theme
 import app.motile.ui.Card
 import app.motile.ui.Chip
@@ -157,14 +158,14 @@ private fun LogRow(row: GatewayLogRow, open: (() -> Unit)?) {
         HighlightButton(open ?: {}, Modifier.fillMaxWidth(), enabled = open != null, radius = 0.dp) {
             Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(row.time, style = Theme.uiDigits(12f), color = palette.mutedForeground, maxLines = 1)
+                    Text(row.time, style = Theme.uiDigits(TextSize.Xs), color = palette.mutedForeground, maxLines = 1)
                     Chip(row.status.toString(), tone = if (row.ok) null else palette.warning, monospaced = true)
-                    Text(row.latency, Modifier.weight(1f), size = 12f, color = palette.mutedForeground, maxLines = 1)
+                    Text(row.latency, Modifier.weight(1f), size = TextSize.Xs, color = palette.mutedForeground, maxLines = 1)
                     if (row.captured) Chip("Captured", muted = true)
                 }
                 Text("${row.server} · ${row.thread}")
-                Text(details, size = 11.5f, color = palette.mutedForeground)
-                row.error?.let { Text(it, size = 11.5f, color = palette.warning) }
+                Text(details, size = TextSize.Xs, color = palette.mutedForeground)
+                row.error?.let { Text(it, size = TextSize.Xs, color = palette.warning) }
             }
         }
     }

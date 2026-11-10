@@ -39,6 +39,7 @@ import app.motile.core.UsageModel
 import app.motile.core.UsageReport
 import app.motile.core.abbreviated
 import app.motile.platform.scaled
+import app.motile.theme.TextSize
 import app.motile.theme.iconSize
 import app.motile.theme.LocalPalette
 import app.motile.theme.LocalSurface
@@ -117,7 +118,7 @@ fun SpendingView(report: UsageReport, measure: Measure, period: UsageModel.Perio
                 }
                 Lines(report, measure, stacked = width < stackWidth)
             }
-            for (server in outdated) Text("Update ${server.name} to see what its agents spend.", size = 11f, color = palette.mutedForeground)
+            for (server in outdated) Text("Update ${server.name} to see what its agents spend.", size = TextSize.Xs, color = palette.mutedForeground)
         }
     }
 }
@@ -129,26 +130,26 @@ private fun Summary(report: UsageReport, measure: Measure) {
     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Text(
-                if (cost) cost(report.costUSD) else count(report.tokens), style = Theme.uiDigits(28f, FontWeight.SemiBold), color = palette.foreground,
+                if (cost) cost(report.costUSD) else count(report.tokens), style = Theme.uiDigits(TextSize.Xxl, FontWeight.SemiBold), color = palette.foreground,
             )
-            Text(if (cost) "What the API would have charged" else "Tokens in and out", size = 11f, color = palette.mutedForeground)
+            Text(if (cost) "What the API would have charged" else "Tokens in and out", size = TextSize.Xs, color = palette.mutedForeground)
             if (report.writingTokens > 0) {
                 val written = if (cost) cost(report.writingCostUSD) else count(report.writingTokens)
                 Text(
                     "$written for titles, branch names, etc.",
-                    size = 11f, color = palette.mutedStrongerForeground,
+                    size = TextSize.Xs, color = palette.mutedStrongerForeground,
                 )
             }
             if (cost && report.unpricedTokens > 0) {
-                Text("Without ${count(report.unpricedTokens)} tokens of models whose price isn’t known", size = 11f, color = palette.mutedStrongerForeground)
+                Text("Without ${count(report.unpricedTokens)} tokens of models whose price isn’t known", size = TextSize.Xs, color = palette.mutedStrongerForeground)
             }
         }
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             for (series in report.agents) AgentLine(report, series, measure)
             if (report.cacheSavingsUSD > 0) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Saved by the cache", Modifier.weight(1f).padding(end = 8.dp), size = 12f, color = palette.mutedForeground)
-                    Text(cost(report.cacheSavingsUSD), style = Theme.uiDigits(12f), color = palette.foreground)
+                    Text("Saved by the cache", Modifier.weight(1f).padding(end = 8.dp), size = TextSize.Xs, color = palette.mutedForeground)
+                    Text(cost(report.cacheSavingsUSD), style = Theme.uiDigits(TextSize.Xs), color = palette.foreground)
                 }
             }
         }
@@ -167,13 +168,13 @@ private fun AgentLine(report: UsageReport, series: UsageReport.Series, measure: 
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically) {
             Dot(series.agent.color(palette))
-            AgentIcon(series.agent, size = iconSize(text = 12f))
-            Text(series.agent.title, Modifier.weight(1f).padding(end = 8.dp), size = 12f, color = palette.foreground, maxLines = 1)
-            Text(amount(part, measure), style = Theme.uiDigits(12f), color = palette.foreground)
+            AgentIcon(series.agent, size = iconSize(text = TextSize.Xs))
+            Text(series.agent.title, Modifier.weight(1f).padding(end = 8.dp), size = TextSize.Xs, color = palette.foreground, maxLines = 1)
+            Text(amount(part, measure), style = Theme.uiDigits(TextSize.Xs), color = palette.foreground)
         }
         Text(
             "${percent.format(share)} of ${if (cost) "the cost" else "the tokens"} · $other",
-            Modifier.padding(start = 15.dp), style = Theme.uiDigits(11f), color = palette.mutedStrongerForeground,
+            Modifier.padding(start = 15.dp), style = Theme.uiDigits(TextSize.Xs), color = palette.mutedStrongerForeground,
         )
     }
 }
@@ -187,13 +188,13 @@ private fun Legend(report: UsageReport, measure: Measure, period: UsageModel.Per
         for (series in report.agents) {
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                 Dot(series.agent.color(palette))
-                Text(series.agent.title, size = 12f, color = palette.foreground, maxLines = 1)
+                Text(series.agent.title, size = TextSize.Xs, color = palette.foreground, maxLines = 1)
                 val value = index?.let { series.points(measure).getOrElse(it) { 0.0 } } ?: if (measure == Measure.Cost) series.costUSD else series.tokens.toDouble()
-                Text(amount(value, measure), style = Theme.uiDigits(12f), color = palette.mutedForeground, maxLines = 1)
+                Text(amount(value, measure), style = Theme.uiDigits(TextSize.Xs), color = palette.mutedForeground, maxLines = 1)
             }
         }
         Spacer(Modifier.weight(1f))
-        if (index != null) Text(legendTime(report.starts[index], period), size = 12f, color = palette.mutedForeground, maxLines = 1)
+        if (index != null) Text(legendTime(report.starts[index], period), size = TextSize.Xs, color = palette.mutedForeground, maxLines = 1)
     }
 }
 
@@ -252,10 +253,10 @@ private fun LineRow(line: UsageReport.Line, measure: Measure, stacked: Boolean) 
     BoxWithConstraints(Modifier.fillMaxWidth().heightIn(min = scaled(36f).dp).padding(horizontal = 12.dp), contentAlignment = Alignment.CenterStart) {
         val measurer = rememberTextMeasurer()
         val density = LocalDensity.current
-        val style = Theme.ui(12f)
+        val style = Theme.ui(TextSize.Xs)
         val named = with(density) {
             val name = measurer.measure(if (line.gateway) "${line.name} " else line.name, style, maxLines = 1).size.width.toDp() +
-                if (line.gateway) symbolSide(GatewayMark.size(12f)) + GatewayMark.gap else 0.dp
+                if (line.gateway) symbolSide(GatewayMark.size(TextSize.Xs)) + GatewayMark.gap else 0.dp
             val server = line.server?.let { measurer.measure(it, style, maxLines = 1).size.width.toDp() + spacing } ?: 0.dp
             name + server
         }
@@ -267,13 +268,13 @@ private fun LineRow(line: UsageReport.Line, measure: Measure, stacked: Boolean) 
 @Composable
 private fun LineNumbers(line: UsageReport.Line, measure: Measure, bar: Boolean) {
     val palette = LocalPalette.current
-    val style = Theme.uiDigits(12f)
+    val style = Theme.uiDigits(TextSize.Xs)
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(spacing), verticalAlignment = Alignment.CenterVertically) {
         line.agent?.let { Dot(it.color(palette)) }
         Row(Modifier.weight(1f).padding(end = 8.dp), horizontalArrangement = Arrangement.spacedBy(spacing), verticalAlignment = Alignment.CenterVertically) {
             Text(
                 AnnotatedString(line.name).proxied(line.gateway), Modifier.weight(1f, fill = false), style = style, color = palette.foreground, maxLines = 1,
-                overflow = TextOverflow.MiddleEllipsis, inlineContent = GatewayMark.content(palette.foreground, 12f),
+                overflow = TextOverflow.MiddleEllipsis, inlineContent = GatewayMark.content(palette.foreground, TextSize.Xs),
             )
             line.server?.let {
                 Text(it, Modifier.weight(1f, fill = false), style = style, color = palette.mutedForeground, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)

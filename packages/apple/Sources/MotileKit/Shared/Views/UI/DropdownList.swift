@@ -10,10 +10,10 @@ enum DropdownList {
     static let rowPadding: CGFloat = 8
     /// The room between a row's symbol and its words.
     static let gap: CGFloat = 8
-    static let font = Font.ui(size: 13)
+    static let font = Font.ui(.sm)
     #if os(macOS)
     /// `font` for the search's `LineField`.
-    static let lineFont = NSFont.ui(13)
+    static let lineFont = NSFont.ui(.sm)
     #endif
     static let symbol = IconSize.md
     static let check = IconSize.sm

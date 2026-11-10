@@ -107,10 +107,10 @@ struct ThreadPane: View {
     private var title: some View {
         VStack(alignment: .leading, spacing: 2) {
             if let parts = store.composerProjectLine {
-                ProjectLine(project: store.composerProject, parts: parts, size: 11)
+                ProjectLine(project: store.composerProject, parts: parts, size: .xs)
             }
             Text(store.shownAgent?.title ?? store.selectedThread?.title ?? "New thread")
-                .font(.ui(size: 13, weight: .semibold))
+                .font(.ui(.sm, weight: .semibold))
                 .foregroundStyle(Color.themeForeground)
         }
         .lineLimit(1)
@@ -136,9 +136,9 @@ struct ThreadPane: View {
             if store.projects.isEmpty && store.noProjects.isEmpty {
                 VStack(spacing: 10) {
                     Text("Add a project to start")
-                        .font(.ui(size: 28, weight: .regular))
+                        .font(.ui(.xxl, weight: .regular))
                     Text("A project is a folder on your server that threads work in.")
-                        .font(.ui(size: 14))
+                        .font(.ui(.md))
                         .foregroundStyle(Color.themeMutedForeground)
                     ActionButton("Add Project", icon: .folderPlus, variant: .primary, size: .large) { store.addProject() }
                     .disabled(!store.servers.contains { $0.state == .connected })
@@ -193,11 +193,11 @@ struct ThreadPane: View {
                 RoundedRectangle(cornerRadius: Radius.lg, style: .continuous).stroke(Color.themeBorder, lineWidth: 1)
             }
         }
-        .font(.ui(size: Self.headlineSize, weight: .regular))
+        .font(.ui(Self.headlineSize))
     }
 
-    private static let headlineSize: CGFloat = 28
+    private static let headlineSize = TextSize.xxl
     private static let headlineIcon = IconSize(text: headlineSize)
-    private static let headlineWordSpace = (" " as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: headlineSize)]).width
+    private static let headlineWordSpace = (" " as NSString).size(withAttributes: [.font: NSFont.ui(headlineSize)]).width
 }
 #endif

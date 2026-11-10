@@ -8,14 +8,17 @@ use gpui_kit::*;
 use crate::media::pictures::{Picture, Pictures};
 use crate::models::{Attachment, UploadState};
 use crate::store::Store;
-use crate::theme::{ControlSize, IconSize, Layer, Opacity, Radius, ShadowSize, Surface, colors};
+use crate::theme::{ControlSize, IconSize, Layer, Opacity, Radius, ShadowSize, Surface, TextSize, colors};
 use crate::ui::{ActionButton, Chip, icons};
 
 pub const TILE: f32 = 96.;
-const NAME_INSET: f32 = 8.;
+const NAME_INSET_X: f32 = 10.;
+const NAME_INSET_Y: f32 = 8.;
 const KIND_INSET: f32 = 6.;
 /// The remove button sits level with a file's kind.
-const REMOVE_INSET: f32 = KIND_INSET - (ControlSize::Small.height() - Chip::HEIGHT) / 2.;
+const REMOVE_INSET: f32 = KIND_INSET - (ControlSize::Small.height() - Chip::COMPACT_HEIGHT) / 2.;
+/// A file's kind is cut short before the remove button.
+const KIND_WIDTH: f32 = TILE - KIND_INSET - 4. - ControlSize::Small.height() - REMOVE_INSET;
 /// How wide the title of the thread a draft goes on from gets before it is cut.
 const CONTINUES_WIDTH: f32 = 320.;
 
@@ -93,21 +96,24 @@ fn tile(attachment: &Attachment, store: Entity<Store>, cx: &mut App) -> Stateful
 /// A file that isn't shown as a picture: its kind, level with the remove button, and its name.
 fn file_tile(attachment: &Attachment, store: Entity<Store>, cx: &mut App) -> Stateful<Div> {
     let c = colors(cx);
-    let tile =
-        frame(attachment, cx)
-            .child(
-                div().size_full().flex().flex_col().justify_end().p(px(NAME_INSET)).child(
-                    div()
-                        .text_size(px(12.))
-                        .font_weight(FontWeight::MEDIUM)
-                        .text_color(c.foreground)
-                        .line_clamp(3)
-                        .child(attachment.name.clone()),
-                ),
-            )
-            .children(kind(&attachment.name).map(|kind| {
-                div().absolute().top(px(KIND_INSET)).left(px(KIND_INSET)).child(Chip::new(kind).muted(true))
-            }));
+    let tile = frame(attachment, cx)
+        .child(
+            div().size_full().flex().flex_col().justify_end().px(px(NAME_INSET_X)).py(px(NAME_INSET_Y)).child(
+                div()
+                    .text_size(TextSize::Xxs)
+                    .font_weight(FontWeight::MEDIUM)
+                    .text_color(c.foreground)
+                    .line_clamp(3)
+                    .child(attachment.name.clone()),
+            ),
+        )
+        .children(kind(&attachment.name).map(|kind| {
+            div()
+                .absolute()
+                .top(px(KIND_INSET))
+                .left(px(KIND_INSET))
+                .child(Chip::new(kind).muted(true).small(true).max_width(KIND_WIDTH))
+        }));
     finish(tile, attachment, store, cx)
 }
 
@@ -177,7 +183,7 @@ fn continues_chip(title: &str, store: &Entity<Store>, cx: &App) -> impl IntoElem
         .bg(Surface::Composer.layer(Layer::Chip, c))
         .border_1()
         .border_color(c.border_accent)
-        .text_size(px(12.))
+        .text_size(TextSize::Xs)
         .child(icons::symbol("history", IconSize::Sm))
         .child(div().max_w(px(CONTINUES_WIDTH)).truncate().child(format!("Continues “{title}”")))
         .child(
@@ -207,7 +213,7 @@ fn progress(attachment: &Attachment, store: &Entity<Store>, cx: &App) -> AnyElem
             .bg(c.scrim)
             .flex()
             .justify_center()
-            .text_size(px(10.))
+            .text_size(TextSize::Xxs)
             .font_weight(FontWeight::MEDIUM)
             .text_color(c.foreground_over_picture)
             .font_features(crate::ui::tabular_numbers())
@@ -225,7 +231,7 @@ fn progress(attachment: &Attachment, store: &Entity<Store>, cx: &App) -> AnyElem
                 .items_center()
                 .justify_center()
                 .gap(px(3.))
-                .text_size(px(10.))
+                .text_size(TextSize::Xxs)
                 .font_weight(FontWeight::MEDIUM)
                 .text_color(c.destructive_foreground);
             crate::ui::dims(strip, cx)

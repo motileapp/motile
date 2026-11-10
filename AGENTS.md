@@ -144,8 +144,8 @@ top of both.
 
 ### packages/theme
 
-The design tokens. `tokens.json` is the one source of every colour, opacity, shadow and radius
-in the repo; `pnpm tokens` (`build.mjs`) writes it out as `tokens.css` (plain variables, for the
+The design tokens. `tokens.json` is the one source of every colour, opacity, shadow, radius and
+text size in the repo; `pnpm tokens` (`build.mjs`) writes it out as `tokens.css` (plain variables, for the
 auth page), `theme.css` (Tailwind, for the web projects), the clients' `Tokens.swift` and the
 GPUI app's `apps/gpui/src/tokens.rs`, and the Android app's `Tokens.kt` with the few colours Android
 itself draws before the app does (`res/values/tokens.xml` and `res/values-night/tokens.xml`). It
@@ -474,7 +474,7 @@ to be AppKit on the Mac and UIKit on iOS has a twin in each, named alike (`KitMa
   off as in SwiftUI's plain field. Return in one is `onReturn`, a key a view steers with
   `onLineKey`, in place of SwiftUI's `onSubmit` and `onKeyPress`, which don't reach it.
 - `Shared/Theme/Theme.swift`: the design tokens, generated into `Tokens.swift` beside it from
-  `packages/theme/tokens.json`. Every colour is a `Theme` token, every opacity one of `Opacity`,
+  `packages/theme/tokens.json`. Every colour is a `Theme` token, every text size one of `TextSize`, every opacity one of `Opacity`,
   every shadow a `ShadowSize` at one of the shadow opacities and every radius one of `Radius`. A view lies on a `Surface` (the page, a box, a card or a popover) and what it
   draws on it, a control, a row or a box, takes that surface's accent. A colour's wash is
   `.wash()`, a whole disabled view `.opacity(.disabled)`.

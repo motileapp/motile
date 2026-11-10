@@ -16,10 +16,12 @@ struct Chip: View {
     var muted = false
     /// Less tall, to sit on a line of text without making it taller.
     var compact = false
+    /// As tall as a compact one, with smaller words, for a label in a tight corner.
+    var small = false
     @Environment(\.surface) private var surface
     @Environment(\.row) private var row
 
-    init(_ title: String, icon: Symbol? = nil, dot: Color? = nil, tone: Color? = nil, monospaced: Bool = false, muted: Bool = false, compact: Bool = false) {
+    init(_ title: String, icon: Symbol? = nil, dot: Color? = nil, tone: Color? = nil, monospaced: Bool = false, muted: Bool = false, compact: Bool = false, small: Bool = false) {
         self.title = title
         self.icon = icon
         self.dot = dot
@@ -27,6 +29,7 @@ struct Chip: View {
         self.monospaced = monospaced
         self.muted = muted
         self.compact = compact
+        self.small = small
     }
 
     var body: some View {
@@ -40,12 +43,12 @@ struct Chip: View {
                 Image(icon, size: .xs)
             }
             Text(title)
-                .font(.ui(size: 11.5, weight: .medium, design: monospaced ? .monospaced : .default))
+                .font(.ui(small ? .xxs : .xs, weight: .medium, design: monospaced ? .monospaced : .default))
                 .lineLimit(1)
         }
         .foregroundStyle(muted ? Color.themeMutedForeground : dot == nil ? tone ?? Color.themeForeground : Color.themeForeground)
-        .padding(.horizontal, 7)
-        .frame(height: compact ? Self.compactHeight : Self.height)
+        .padding(.horizontal, small ? 6 : 7)
+        .frame(height: compact || small ? Self.compactHeight : Self.height)
         .background(background, in: Capsule())
         .overlay {
             if tone == nil && !muted && surface != .glass {

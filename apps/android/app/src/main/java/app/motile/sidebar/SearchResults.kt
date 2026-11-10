@@ -22,7 +22,6 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import app.motile.LocalStore
 import app.motile.core.AppStore
 import app.motile.core.MessageMatch
@@ -32,6 +31,8 @@ import app.motile.core.searchResults
 import app.motile.platform.Platform
 import app.motile.platform.Symbol
 import app.motile.platform.scaled
+import app.motile.theme.TextSize
+import app.motile.theme.fontSize
 import app.motile.theme.iconSize
 import app.motile.theme.ControlSize
 import app.motile.theme.LocalForeground
@@ -98,7 +99,7 @@ fun Modifier.steersSearch(store: AppStore, highlighted: Highlight): Modifier = o
 
 /** The line under what the search found while the servers still search, or in its place when it found nothing. */
 @Composable
-fun SearchEmptyLine(size: Float) {
+fun SearchEmptyLine(size: TextSize) {
     val store = LocalStore.current
     val color = Theme.colors.mutedStrongerForeground
     CompositionLocalProvider(LocalForeground provides color) {
@@ -148,9 +149,9 @@ fun SearchResultRow(
         ) {
             Row(Modifier.height(scaled(22f).dp), verticalAlignment = Alignment.CenterVertically) {
                 val lit = LocalRow.current != null
-                ProjectIcon(project, Modifier.opacity(Opacity.Disabled, on = isDone && !lit), size = iconSize(text = 13f))
+                ProjectIcon(project, Modifier.opacity(Opacity.Disabled, on = isDone && !lit), size = iconSize(text = TextSize.Sm))
                 Text(
-                    title, Modifier.weight(1f).padding(start = 6.dp, end = 6.dp), size = 13f, weight = FontWeight.Medium, maxLines = 1,
+                    title, Modifier.weight(1f).padding(start = 6.dp, end = 6.dp), size = TextSize.Sm, weight = FontWeight.Medium, maxLines = 1,
                     color = rowText(unlit = if (isDone) palette.mutedStrongerForeground else palette.mutedForeground),
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -160,10 +161,10 @@ fun SearchResultRow(
             val found = (result as? SearchResult.Thread)?.match
             val detail = Modifier.fillMaxWidth().height(scaled(18f).dp)
             if (found != null) {
-                Text(excerpt(found, palette), detail, size = 12f, maxLines = 1)
+                Text(excerpt(found, palette), detail, size = TextSize.Xs, maxLines = 1)
             } else {
                 val place = project?.name ?: result.threadInfo?.let { lastComponent(it.cwd) } ?: "No project"
-                Text(place, detail, size = 12f, maxLines = 1, color = palette.mutedStrongerForeground)
+                Text(place, detail, size = TextSize.Xs, maxLines = 1, color = palette.mutedStrongerForeground)
             }
         }
     }
@@ -176,8 +177,8 @@ private fun ResultStatus(result: SearchResult, jump: String?) {
     when (result) {
         is SearchResult.Draft -> CompositionLocalProvider(LocalForeground provides palette.mutedForeground) {
             Row(horizontalArrangement = Arrangement.spacedBy(3.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(Symbol.File, iconSize(text = 11f))
-                Text("Draft", size = 11f, weight = FontWeight.Medium)
+                Icon(Symbol.File, iconSize(text = TextSize.Xs))
+                Text("Draft", size = TextSize.Xs, weight = FontWeight.Medium)
             }
         }
         is SearchResult.Thread -> {
@@ -187,7 +188,7 @@ private fun ResultStatus(result: SearchResult, jump: String?) {
             when {
                 jump != null -> CompositionLocalProvider(LocalForeground provides palette.foreground) { KeyCaps(listOf(jump)) }
                 readOnly -> ThreadStatus(thread, readOnly = true)
-                thread.isArchived -> Text(Time.ago(thread.archivedAt ?: thread.updatedAt, AgoClock.now), size = 11f, color = palette.mutedStrongerForeground)
+                thread.isArchived -> Text(Time.ago(thread.archivedAt ?: thread.updatedAt, AgoClock.now), size = TextSize.Xs, color = palette.mutedStrongerForeground)
                 else -> ThreadStatus(thread)
             }
         }
@@ -196,7 +197,7 @@ private fun ResultStatus(result: SearchResult, jump: String?) {
 
 /** Who wrote the message, then the message with what was searched for set off. */
 private fun excerpt(found: MessageMatch, palette: Palette): AnnotatedString = buildAnnotatedString {
-    val size = (12 * Platform.scale).sp
+    val size = TextSize.Xs.fontSize
     withStyle(SpanStyle(color = palette.mutedForeground, fontWeight = FontWeight.Medium, fontSize = size)) {
         append(if (found.byUser) "You: " else "Agent: ")
     }

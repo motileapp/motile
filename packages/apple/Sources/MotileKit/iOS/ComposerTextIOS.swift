@@ -7,7 +7,7 @@ import UniformTypeIdentifiers
 /// line break on the screen's keyboard and sends from a keyboard with keys. A `TextArea` is the
 /// same view with Return always a line break.
 struct ComposerTextView: UIViewRepresentable {
-    static let font = UIFont.systemFont(ofSize: 17)
+    static let font = UIFont.ui(.md)
     static let verticalInset: CGFloat = 8
     /// One line: a phone has no room to spare, and the composer grows with what is typed.
     static let minimumHeight = height(of: 1, in: font)

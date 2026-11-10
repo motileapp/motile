@@ -25,6 +25,7 @@ import app.motile.core.Toast
 import app.motile.platform.Platform
 import app.motile.platform.Symbol
 import app.motile.platform.scaled
+import app.motile.theme.TextSize
 import app.motile.theme.iconSize
 import app.motile.theme.ControlSize
 import app.motile.theme.LocalForeground
@@ -59,10 +60,10 @@ object ToastView {
     internal val shape = RoundedCornerShape(radius)
     internal val edge = padding
 
-    internal const val outputSize = 11.5f
+    internal val outputSize = TextSize.Xs
     internal val outputPadding = scaled(8f).dp
     /** A line of output with the room between lines. */
-    internal val outputLine = (outputSize * Platform.scale * 1.2f + 2).dp
+    internal val outputLine = (outputSize.points * Platform.scale * 1.2f + 2).dp
     /** Eight lines of output and the room around them. */
     internal val outputHeight = outputLine * 8 + outputPadding * 2
 }
@@ -84,7 +85,7 @@ fun ToastView(toast: Toast, modifier: Modifier = Modifier) {
                 verticalAlignment = Alignment.Top,
             ) {
                 Box(Modifier.height(ToastView.titleHeight), contentAlignment = Alignment.Center) {
-                    val symbolSize = iconSize(text = 13f)
+                    val symbolSize = iconSize(text = TextSize.Sm)
                     when {
                         toast.pending -> Spinner(symbolSize)
                         toast.failed -> Icon(Symbol.CircleAlert, symbolSize, color = palette.destructive)
@@ -93,14 +94,14 @@ fun ToastView(toast: Toast, modifier: Modifier = Modifier) {
                 }
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Box(Modifier.heightIn(min = ToastView.titleHeight), contentAlignment = Alignment.CenterStart) {
-                        Text(toast.title, size = 13f, weight = FontWeight.Medium)
+                        Text(toast.title, size = TextSize.Sm, weight = FontWeight.Medium)
                     }
                     toast.description?.let { description ->
                         if (toast.failed) {
                             Output(description)
                         } else {
                             SelectionContainer {
-                                Text(description, size = 12.5f, color = palette.mutedForeground, maxLines = 2)
+                                Text(description, size = TextSize.Xs, color = palette.mutedForeground, maxLines = 2)
                             }
                         }
                     }

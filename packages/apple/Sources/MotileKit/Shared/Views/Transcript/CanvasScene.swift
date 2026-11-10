@@ -71,7 +71,7 @@ struct CanvasText {
 /// the UI typeface at a size. They are the scene's own sizes, which iOS doesn't enlarge.
 enum CanvasFont {
     case tick, caption
-    case ui(size: CGFloat, weight: PlatformFont.Weight)
+    case ui(points: CGFloat, weight: PlatformFont.Weight)
 
     var font: PlatformFont {
         switch self {
@@ -356,7 +356,7 @@ private struct RawItem: Decodable {
         case "caption": return .caption
         default:
             let weight: PlatformFont.Weight = weight == "medium" ? .medium : weight == "semibold" ? .semibold : .regular
-            return .ui(size: size ?? 14, weight: weight)
+            return .ui(points: size ?? 14, weight: weight)
         }
     }
 

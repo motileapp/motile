@@ -12,7 +12,7 @@ use gpui_kit::prelude::*;
 use gpui_kit::*;
 
 use super::pictures::{Picture, Pictures};
-use crate::theme::{ControlSize, colors};
+use crate::theme::{ControlSize, TextSize, colors};
 use crate::ui::Spinner;
 
 const MAX_ZOOM: f32 = 8.;
@@ -280,7 +280,7 @@ impl Render for ZoomableImage {
                 .flex()
                 .items_center()
                 .justify_center()
-                .text_size(px(13.))
+                .text_size(TextSize::Sm)
                 .text_color(quiet)
                 .child("This image couldn't be loaded.")
                 .into_any_element(),

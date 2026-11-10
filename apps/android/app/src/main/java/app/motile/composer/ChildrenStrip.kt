@@ -20,6 +20,7 @@ import app.motile.core.AgentInfo
 import app.motile.core.ThreadChildren
 import app.motile.panel.AgentTime
 import app.motile.platform.Symbol
+import app.motile.theme.TextSize
 import app.motile.theme.iconSize
 import app.motile.theme.ControlSize
 import app.motile.theme.ShadowSize
@@ -36,9 +37,9 @@ fun ChildrenStrip(text: String, first: ThreadChildren.Waiting, count: Int) {
     val store = LocalStore.current
     val palette = Theme.colors
     Row(Modifier.fillMaxWidth().composerStrip(ComposerStrip.Edge.Top), verticalAlignment = Alignment.CenterVertically) {
-        Icon(first.ask.symbol, iconSize(text = 12.5f), Modifier.padding(start = 14.dp, end = 7.dp), color = palette.warning)
+        Icon(first.ask.symbol, iconSize(text = TextSize.Xs), Modifier.padding(start = 14.dp, end = 7.dp), color = palette.warning)
         // A narrow composer says what is asked without naming the agent.
-        val said = @Composable { words: String -> Text(words, size = 12.5f, weight = FontWeight.Medium, color = palette.warning, maxLines = 1) }
+        val said = @Composable { words: String -> Text(words, size = TextSize.Xs, weight = FontWeight.Medium, color = palette.warning, maxLines = 1) }
         FirstThatFits(
             Modifier.weight(1f).padding(end = 8.dp).semantics { contentDescription = text },
             { said(text) },
@@ -72,7 +73,7 @@ fun AgentBar(agent: AgentInfo, modifier: Modifier = Modifier) {
     ) {
         AgentAvatar(agent.agent, agent.state)
         val title = @Composable { modifier: Modifier ->
-            Text(agent.title, modifier, size = 13f, weight = FontWeight.Medium, color = palette.foreground, maxLines = 1)
+            Text(agent.title, modifier, size = TextSize.Sm, weight = FontWeight.Medium, color = palette.foreground, maxLines = 1)
         }
         // A narrow bar leaves out that the agent runs on its own.
         FirstThatFits(
@@ -82,7 +83,7 @@ fun AgentBar(agent: AgentInfo, modifier: Modifier = Modifier) {
                     title(Modifier)
                     AgentTime(agent)
                     Spacer(Modifier.weight(1f))
-                    Text("Runs on its own", Modifier.padding(end = BACK_APART), size = 12.5f, color = palette.mutedForeground, maxLines = 1)
+                    Text("Runs on its own", Modifier.padding(end = BACK_APART), size = TextSize.Xs, color = palette.mutedForeground, maxLines = 1)
                 }
             },
             {

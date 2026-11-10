@@ -12,7 +12,7 @@ use super::zoom::ZoomableImage;
 use super::{MediaFiles, SAVE_TITLE};
 use crate::models::{MediaSource, ViewedMedia};
 use crate::store::Store;
-use crate::theme::{ControlSize, Radius, colors};
+use crate::theme::{ControlSize, Radius, TextSize, colors};
 use crate::ui::menu::Menu;
 use crate::ui::parts::CopyButton;
 use crate::ui::{ActionButton, Spinner, Variant, beside};
@@ -279,7 +279,7 @@ impl MediaViewer {
             .flex()
             .items_center()
             .justify_center()
-            .text_size(px(13.))
+            .text_size(TextSize::Sm)
             .text_color(c.muted_foreground_over_picture)
             .child(words)
     }
@@ -315,7 +315,7 @@ impl Render for MediaViewer {
             .flex()
             .items_center()
             .gap(px(8.))
-            .text_size(px(13.))
+            .text_size(TextSize::Sm)
             .font_weight(FontWeight::MEDIUM)
             .text_color(c.foreground_over_picture)
             .child(crate::ui::middle_truncated(item.name.clone()))

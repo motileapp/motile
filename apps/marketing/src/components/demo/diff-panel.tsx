@@ -47,7 +47,7 @@ export function DiffPanel({
           pastWindowButtons ? "pl-[116px]" : "pl-2.5"
         )}
       >
-        <span className="flex h-8 items-center gap-1.5 rounded-md bg-background-accent-stronger pr-0.5 pl-[9px] text-[12px] font-medium">
+        <span className="flex h-8 items-center gap-1.5 rounded-md bg-background-accent-stronger pr-0.5 pl-[9px] text-(length:--type-xs) font-medium">
           <DiffIcon className="size-3.5" />
           Diff
           <button
@@ -64,7 +64,7 @@ export function DiffPanel({
         </span>
       </div>
       <div className="flex h-9 shrink-0 items-center gap-0.5 border-t border-b pr-1 pl-3">
-        <span className="-ml-2 flex h-8 items-center gap-1.5 rounded-md px-[11px] text-[12px] font-medium text-muted-foreground hover:bg-background-accent hover:text-foreground">
+        <span className="-ml-2 flex h-8 items-center gap-1.5 rounded-md px-[11px] text-(length:--type-xs) font-medium text-muted-foreground hover:bg-background-accent hover:text-foreground">
           Uncommitted
           <MenuChevron />
         </span>
@@ -99,7 +99,7 @@ export function DiffPanel({
         </span>
       </div>
       {files.length === 0 ? (
-        <p className="m-auto text-[12.5px] text-muted-foreground">
+        <p className="m-auto text-(length:--type-xs) text-muted-foreground">
           Everything is committed.
         </p>
       ) : (
@@ -143,7 +143,7 @@ function File({
         type="button"
         onClick={onToggle}
         className={cn(
-          "flex h-[34px] w-full items-center border-b bg-background-secondary pr-1.5 text-left text-[12.5px] hover:bg-background-secondary-accent",
+          "flex h-[34px] w-full items-center border-b bg-background-secondary pr-1.5 text-left text-(length:--type-xs) hover:bg-background-secondary-accent",
           !first && "border-t"
         )}
       >
@@ -159,7 +159,7 @@ function File({
           <span className="text-muted-foreground">{folderOf(file.path)}</span>
           <span className="font-medium">{nameOf(file.path)}</span>
           {file.isNew && (
-            <span className="ml-3 text-[11.5px] text-muted-stronger-foreground">
+            <span className="ml-3 text-(length:--type-xs) text-muted-stronger-foreground">
               new
             </span>
           )}
@@ -174,13 +174,13 @@ function File({
         </span>
       </button>
       {!closed && (
-        <div className="min-w-max font-mono text-[12.5px] leading-[18px]">
+        <div className="min-w-max font-mono text-(length:--type-xs) leading-[18px]">
           {file.lines.map((line, index) => (
             <div key={index} className={cn("flex", LINE_FILLS[line.kind])}>
-              <span className="w-9 shrink-0 pr-1.5 text-right text-[11px] text-muted-stronger-foreground tabular-nums select-none">
+              <span className="w-9 shrink-0 pr-1.5 text-right text-(length:--type-xs) text-muted-stronger-foreground tabular-nums select-none">
                 {line.old}
               </span>
-              <span className="w-9 shrink-0 pr-1.5 text-right text-[11px] text-muted-stronger-foreground tabular-nums select-none">
+              <span className="w-9 shrink-0 pr-1.5 text-right text-(length:--type-xs) text-muted-stronger-foreground tabular-nums select-none">
                 {line.new}
               </span>
               <span className="pr-3 pl-2 whitespace-pre">

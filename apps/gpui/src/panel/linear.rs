@@ -21,7 +21,7 @@ use crate::store::Store;
 use crate::store::linear::{
     Group, KINDS, LinearChoice, LinearFilter, PRIORITIES, Page, Row, priority_name, priority_symbol, state_symbol,
 };
-use crate::theme::{ControlSize, IconSize, Layer, Radius, Surface, colors};
+use crate::theme::{ControlSize, IconSize, Layer, Radius, Surface, TextSize, colors};
 use crate::ui::control::Spinner;
 use crate::ui::menu::{Menu, MenuIcon};
 use crate::ui::modal::{modal, present_sheet};
@@ -526,12 +526,12 @@ impl LinearView {
                             .gap(px(6.))
                             .child(
                                 div()
-                                    .text_size(px(15.))
+                                    .text_size(TextSize::Lg)
                                     .font_weight(FontWeight::SEMIBOLD)
                                     .text_color(c.foreground)
                                     .child("Connect Linear"),
                             )
-                            .child(div().text_size(px(12.5)).text_color(c.muted_foreground).text_center().child(
+                            .child(div().text_size(TextSize::Xs).text_color(c.muted_foreground).text_center().child(
                                 "See your issues and hand them to your agents. The connection is kept on your server.",
                             )),
                     )
@@ -557,7 +557,7 @@ impl LinearView {
                         ))
                     })
                     .when_some(error, |column, error| {
-                        column.child(div().text_size(px(12.5)).text_color(c.destructive).text_center().child(error))
+                        column.child(div().text_size(TextSize::Xs).text_color(c.destructive).text_center().child(error))
                     }),
             )
             .into_any_element()
@@ -599,7 +599,7 @@ impl LinearView {
         let bar = bar_row(cx)
             .child(
                 div()
-                    .text_size(px(12.5))
+                    .text_size(TextSize::Xs)
                     .font_weight(FontWeight::MEDIUM)
                     .text_color(c.muted_foreground)
                     .child(identifier),
@@ -734,7 +734,7 @@ impl LinearView {
             });
         let description: AnyElement = if page.description.is_empty() {
             div()
-                .text_size(px(12.5))
+                .text_size(TextSize::Xs)
                 .text_color(c.muted_stronger_foreground)
                 .child("No description.")
                 .into_any_element()
@@ -755,7 +755,7 @@ impl LinearView {
                         .child(initials_disc(comment.initials.clone(), comment.author.clone(), cx))
                         .child(
                             div()
-                                .text_size(px(12.5))
+                                .text_size(TextSize::Xs)
                                 .flex()
                                 .child(
                                     div()
@@ -812,7 +812,7 @@ impl LinearView {
                     .gap(px(16.))
                     .child(
                         div()
-                            .text_size(px(17.))
+                            .text_size(TextSize::Xl)
                             .font_weight(FontWeight::SEMIBOLD)
                             .text_color(c.foreground)
                             .child(crate::ui::rich_text::RichText::new("issue-title", page.row.title.clone())),
@@ -1108,7 +1108,11 @@ impl Render for NewIssue {
             .flex_col()
             .gap(px(12.))
             .child(
-                div().text_size(px(15.)).font_weight(FontWeight::SEMIBOLD).text_color(c.foreground).child("New Issue"),
+                div()
+                    .text_size(TextSize::Lg)
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .text_color(c.foreground)
+                    .child("New Issue"),
             )
             .child(InputField::new(&self.title))
             .child(div().flex_1().min_h_0().child(TextArea::new(&self.description).fills(true)))
@@ -1123,7 +1127,7 @@ impl Render for NewIssue {
                     .child(assignee_menu.margin(even(PROPERTY_GAP / 2.))),
             )
             .when_some(error, |column, error| {
-                column.child(div().text_size(px(12.5)).text_color(c.destructive).child(error))
+                column.child(div().text_size(TextSize::Xs).text_color(c.destructive).child(error))
             })
             .child(
                 div().flex().justify_end().child(cancel.margin(beside(0., 4.))).child(create.margin(beside(4., 0.))),
@@ -1205,12 +1209,12 @@ fn header(state: &LinearState, count: usize, folded: bool, place: &ListPlace, cx
             )
             .child(
                 div()
-                    .text_size(px(12.))
+                    .text_size(TextSize::Xs)
                     .font_weight(FontWeight::SEMIBOLD)
                     .text_color(c.foreground)
                     .child(state.name.clone()),
             )
-            .child(div().text_size(px(12.)).text_color(c.muted_stronger_foreground).child(count.to_string()))
+            .child(div().text_size(TextSize::Xs).text_color(c.muted_stronger_foreground).child(count.to_string()))
             .child(div().flex_1())
             .child(
                 div()
@@ -1327,7 +1331,7 @@ fn issue_row(row: &Row, state: &LinearState, states: &[LinearState], place: &Lis
             div()
                 .ml(px(4.))
                 .flex_shrink_0()
-                .text_size(px(11.5))
+                .text_size(TextSize::Xs)
                 .text_color(c.muted_stronger_foreground)
                 .child(row.identifier.clone()),
         )
@@ -1336,7 +1340,7 @@ fn issue_row(row: &Row, state: &LinearState, states: &[LinearState], place: &Lis
                 .ml(px(4.))
                 .flex_1()
                 .min_w_0()
-                .text_size(px(13.))
+                .text_size(TextSize::Sm)
                 .text_color(c.foreground)
                 .whitespace_nowrap()
                 .overflow_hidden()
@@ -1352,7 +1356,9 @@ fn issue_row(row: &Row, state: &LinearState, states: &[LinearState], place: &Lis
                 .gap(px(8.))
                 .children(labels)
                 .when_some(initials, |side, (initials, name)| side.child(initials_disc(initials, name, cx)))
-                .child(div().text_size(px(11.5)).text_color(c.muted_stronger_foreground).child(ago(row.updated_at))),
+                .child(
+                    div().text_size(TextSize::Xs).text_color(c.muted_stronger_foreground).child(ago(row.updated_at)),
+                ),
         );
     div()
         .id(group.clone())
@@ -1434,7 +1440,7 @@ fn label_chip(label: &motile_protocol::wire::Label, row: &SharedString, cx: &App
         .child(div().size(px(7.)).rounded_full().bg(hex_color(&label.color, c)))
         .child(
             div()
-                .text_size(px(11.5))
+                .text_size(TextSize::Xs)
                 .font_weight(FontWeight::MEDIUM)
                 .text_color(c.foreground)
                 .whitespace_nowrap()
@@ -1535,7 +1541,7 @@ fn initials_disc(initials: String, name: String, cx: &App) -> impl IntoElement {
         .flex()
         .items_center()
         .justify_center()
-        .text_size(px(9.))
+        .text_size(TextSize::Xxs)
         .font_weight(FontWeight::SEMIBOLD)
         .text_color(c.muted_foreground)
         .child(initials)
@@ -1576,7 +1582,7 @@ fn note(text: String, cx: &App) -> Div {
                 .px(px(12.))
                 .py(px(7.))
                 .bg(c.warning_tint)
-                .text_size(px(12.))
+                .text_size(TextSize::Xs)
                 .text_color(c.warning)
                 .child(text),
         )

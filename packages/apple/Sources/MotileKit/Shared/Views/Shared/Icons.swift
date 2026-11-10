@@ -213,7 +213,7 @@ struct ProjectIcon: View {
 /// The server a thread or project is on, for when there is more than one.
 struct ServerLabel: View {
     let server: Server
-    var size: CGFloat = 11
+    var size = TextSize.xs
     var weight: Font.Weight = .regular
     var showsState = false
 
@@ -222,7 +222,7 @@ struct ServerLabel: View {
             Image(.server, size: IconSize(text: size))
                 .foregroundStyle(showsState ? server.stateTint ?? .themeMutedStrongerForeground : .themeMutedStrongerForeground)
             Text(server.shortName)
-                .font(.ui(size: size, weight: weight))
+                .font(.ui(size, weight: weight))
                 .lineLimit(1)
         }
         .foregroundStyle(Color.themeMutedStrongerForeground)
@@ -292,7 +292,7 @@ struct PullRequestLabel: View {
         HStack(spacing: 3) {
             Image(pullRequest.state.symbol, size: .sm)
             Text(verbatim: "\(pullRequest.number)")
-                .font(.ui(size: 11, weight: .medium))
+                .font(.ui(.xs, weight: .medium))
                 .monospacedDigit()
                 .underline(hovering)
         }

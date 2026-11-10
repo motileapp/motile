@@ -683,12 +683,12 @@ final class SliderView: FlippedView {
 
     required init?(coder: NSCoder) { fatalError("not used") }
 
-    private static let labelFont = PlatformFont.ui(13)
+    private static let labelFont = PlatformFont.ui(.sm)
     private static let labelLine = scaled(20)
-    private static let readoutFont = PlatformFont.uiDigits(12, weight: .medium)
+    private static let readoutFont = PlatformFont.uiDigits(.xs, weight: .medium)
     private static let readoutLine = scaled(18)
-    private static let tickFont = PlatformFont.uiDigits(11)
-    private static let tickLine = scaled(14)
+    private static let tickFont = PlatformFont.uiDigits(.xs)
+    private static let tickLine = scaled(16)
 
     static func label(_ text: String) -> NSAttributedString {
         ControlText.wrapped(text, font: labelFont, lineHeight: labelLine, color: Theme.foreground)
@@ -866,7 +866,7 @@ final class DateFieldView: FlippedView {
 
     private func paint() {
         frameView.fill = fieldFill(surface)
-        let font = PlatformFont.ui(size.textSize + 0.5)
+        let font = PlatformFont.ui(size.textSize)
         words.text = ControlText.line(text ?? placeholder, font: font, color: text == nil ? Theme.mutedStrongerForeground : Theme.foreground)
     }
 

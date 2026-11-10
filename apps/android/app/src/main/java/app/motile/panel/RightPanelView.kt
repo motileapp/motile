@@ -38,6 +38,7 @@ import app.motile.LocalStore
 import app.motile.core.Integration
 import app.motile.platform.Platform
 import app.motile.platform.Symbol
+import app.motile.theme.TextSize
 import app.motile.theme.iconSize
 import app.motile.theme.ControlSize
 import app.motile.theme.LocalPalette
@@ -95,7 +96,7 @@ fun PanelMessage(text: String, failed: Boolean = false) {
     val palette = LocalPalette.current
     Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
         SelectionContainer {
-            Text(text, size = 12.5f, color = if (failed) palette.destructive else palette.mutedForeground, align = TextAlign.Center)
+            Text(text, size = TextSize.Xs, color = if (failed) palette.destructive else palette.mutedForeground, align = TextAlign.Center)
         }
     }
 }
@@ -109,7 +110,7 @@ internal fun NoRepositoryMessage(projectID: String) {
         verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text("This folder isn't a git repository.", size = 12.5f, color = LocalPalette.current.mutedForeground, align = TextAlign.Center)
+        Text("This folder isn't a git repository.", size = TextSize.Xs, color = LocalPalette.current.mutedForeground, align = TextAlign.Center)
         val project = store.project(projectID)
         if (project != null && store.canInitializeGit(project)) {
             ActionButton("Initialize git", Symbol.GitBranch, pending = project.id in store.initializingGit) { store.initializeGit(project) }
@@ -171,7 +172,7 @@ fun PanelNote(text: String) {
     Column(Modifier.fillMaxWidth()) {
         Text(
             text, Modifier.fillMaxWidth().background(palette.warning.wash()).padding(horizontal = 12.dp, vertical = 7.dp),
-            size = 12f, color = palette.warning,
+            size = TextSize.Xs, color = palette.warning,
         )
         PanelLine()
     }
@@ -239,8 +240,8 @@ fun PanelTabChip(tab: PanelTab, active: Boolean) {
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(tab.symbol, iconSize(text = 12f))
-                Text(tab.title, Modifier.weight(1f, fill = false), size = 12f, weight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
+                Icon(tab.symbol, iconSize(text = TextSize.Xs))
+                Text(tab.title, Modifier.weight(1f, fill = false), size = TextSize.Xs, weight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
                 Spacer(Modifier.size(closeSize))
             }
             MenuPopup(menu) {
@@ -278,7 +279,7 @@ private fun PanelLauncher(target: PanelTarget) {
         verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text("Open", size = 13f, weight = FontWeight.SemiBold, color = LocalPalette.current.foreground)
+        Text("Open", size = TextSize.Sm, weight = FontWeight.SemiBold, color = LocalPalette.current.foreground)
         Column(Modifier.width(250.dp)) {
             LauncherRow(Symbol.Bot, "Agents", null, count = store.agents.count { it.working }) { panel.open(PanelTab.Agents) }
             LauncherRow(Symbol.Folder, "Files", null) { panel.open(PanelTab.Files) }
@@ -315,7 +316,7 @@ private fun LauncherRow(symbol: Symbol, title: String, reason: String?, count: I
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(symbol, iconSize(text = 13f), color = foreground)
+                Icon(symbol, iconSize(text = TextSize.Sm), color = foreground)
                 // How many of its things work, in the working colour.
                 val words = buildAnnotatedString {
                     append(title)
@@ -325,7 +326,7 @@ private fun LauncherRow(symbol: Symbol, title: String, reason: String?, count: I
                         withStyle(SpanStyle(color = palette.process)) { append(" $count") }
                     }
                 }
-                Text(words, size = 13f, color = foreground, maxLines = 1)
+                Text(words, size = TextSize.Sm, color = foreground, maxLines = 1)
             }
         }
     }

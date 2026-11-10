@@ -7,7 +7,7 @@ use motile_protocol::wire::RestartWhen;
 
 use crate::models::{Server, ServerUpdate};
 use crate::store::Store;
-use crate::theme::{ControlSize, IconSize, Radius, Surface, colors};
+use crate::theme::{ControlSize, IconSize, Radius, Surface, TextSize, colors};
 use crate::ui::control::turning_symbol;
 use crate::ui::menu::Menu;
 use crate::ui::{ActionButton, ActionMenu, Spinner, Variant, beside, tabular_numbers, tooltip};
@@ -54,7 +54,7 @@ impl RenderOnce for UpdateLabel {
                 super::shelves::line_mark(turning_symbol(self.symbol.into(), IconSize::Sm, self.turning))
                     .text_color(tint),
             )
-            .child(div().min_w_0().text_size(px(12.)).font_weight(FontWeight::MEDIUM).truncate().child(self.text))
+            .child(div().min_w_0().text_size(TextSize::Xs).font_weight(FontWeight::MEDIUM).truncate().child(self.text))
     }
 }
 
@@ -147,7 +147,7 @@ impl RenderOnce for AppUpdateRow {
                         })
                     });
                 let percent = div()
-                    .text_size(px(11.))
+                    .text_size(TextSize::Xs)
                     .text_color(c.muted_stronger_foreground)
                     .font_features(tabular_numbers())
                     .child(format!("{}%", (fraction * 100.) as u32));
@@ -194,7 +194,7 @@ impl RenderOnce for AppUpdateRow {
                             .into_any_element(),
                     ],
                 ))
-                .child(div().text_size(px(11.)).text_color(c.muted_foreground).child(message)),
+                .child(div().text_size(TextSize::Xs).text_color(c.muted_foreground).child(message)),
         }
     }
 }
@@ -300,7 +300,7 @@ impl RenderOnce for ServerUpdateStatus {
                 .items_center()
                 .gap(px(6.))
                 .pl(px(margin.left))
-                .child(div().text_size(px(11.)).text_color(c.muted_foreground).child("Waiting"))
+                .child(div().text_size(TextSize::Xs).text_color(c.muted_foreground).child("Waiting"))
                 .child(
                     ActionButton::new(id("restart-now"), "Restart Now")
                         .help(format!(
@@ -324,7 +324,7 @@ impl RenderOnce for ServerUpdateStatus {
                 .pl(px(margin.left))
                 .pr(px(margin.right))
                 .text_color(c.muted_foreground)
-                .child(div().text_size(px(11.)).font_features(tabular_numbers()).child(progress(&update)))
+                .child(div().text_size(TextSize::Xs).font_features(tabular_numbers()).child(progress(&update)))
                 .child(Spinner::new(self.size.symbol()).render(cx))
                 .into_any_element();
         }

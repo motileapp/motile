@@ -80,7 +80,7 @@ struct AgentGatewaySettings: View {
             if let note = account.note {
                 ThemeDivider()
                 Text(note)
-                    .font(.ui(size: 12))
+                    .font(.ui(.xs))
                     .foregroundStyle(Color.themeMutedForeground)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -121,7 +121,7 @@ struct AgentGatewaySettings: View {
             if let empty = log.emptyText {
                 ThemeDivider()
                 Text(empty)
-                    .font(.ui(size: 12))
+                    .font(.ui(.xs))
                     .foregroundStyle(Color.themeMutedForeground)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, settingsInset)
@@ -173,7 +173,7 @@ private struct GatewayRenameSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Rename Account")
-                .font(.ui(size: 15, weight: .semibold))
+                .font(.ui(.lg, weight: .semibold))
             InputField("Work", text: $name, focus: $focused)
                 .onReturn(save)
             HStack(spacing: 0) {
@@ -217,7 +217,7 @@ struct GatewayHeader: View {
                     SettingsLabel(name, description: [gateway.statusText, gateway.version.map { "version \($0)" }].compactMap { $0 }.joined(separator: " · "), icon: .waypoints) {
                         if let error = gateway.error {
                             Text(error)
-                                .font(.ui(size: 11.5))
+                                .font(.ui(.xs))
                                 .foregroundStyle(Color.themeWarning)
                                 .fixedSize(horizontal: false, vertical: true)
                         }

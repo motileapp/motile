@@ -24,12 +24,12 @@ struct ConnectServerView: View {
                 .background(Color.themePrimary.wash(), in: RoundedRectangle(cornerRadius: Radius.lg, style: .continuous))
                 .padding(.top, centred ? 0 : 32)
             Text(isFirst ? "Connect your first server" : "Run this on your server")
-                .font(.ui(size: 24, weight: .semibold))
+                .font(.ui(.xxl, weight: .semibold))
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 24)
                 .padding(.top, 18)
             Text("Run the command below on the server that will run your agents")
-                .font(.ui(size: 14))
+                .font(.ui(.md))
                 .foregroundStyle(Color.themeMutedForeground)
                 .multilineTextAlignment(.center)
                 .lineSpacing(3)
@@ -53,7 +53,7 @@ struct ConnectServerView: View {
                     Text("Signed in as \(store.account.email)")
                     ActionButton("Sign out", variant: .link, size: .small) { store.signOut() }
                 }
-                .font(.ui(size: 12))
+                .font(.ui(.xs))
                 .foregroundStyle(Color.themeMutedStrongerForeground)
                 .padding(.bottom, 20)
             } else if centred {
@@ -85,7 +85,7 @@ struct ConnectServerView: View {
         if let token = store.enrollToken, token.isExpired(at: date) {
             VStack(spacing: 14) {
                 Text("The command has expired")
-                    .font(.ui(size: 13))
+                    .font(.ui(.sm))
                     .foregroundStyle(Color.themeMutedForeground)
                 ActionButton("Regenerate", pending: store.enrollTokenPending) { store.regenerateEnrollToken() }
             }
@@ -95,11 +95,11 @@ struct ConnectServerView: View {
                     Spinner(size: .md)
                         .foregroundStyle(Color.themeMutedForeground)
                     Text("Waiting for your server")
-                        .font(.ui(size: 13))
+                        .font(.ui(.sm))
                         .foregroundStyle(Color.themeMutedForeground)
                 }
                 Text(store.enrollToken?.timeLeft(at: date) ?? "15:00")
-                    .font(.ui(size: 12))
+                    .font(.ui(.xs))
                     .monospacedDigit()
                     .foregroundStyle(Color.themeMutedStrongerForeground)
             }

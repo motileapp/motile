@@ -47,6 +47,7 @@ import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import app.motile.theme.Opacity
 import app.motile.theme.ShadowSize
+import app.motile.theme.TextSize
 import app.motile.theme.at
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -303,8 +304,8 @@ private fun MenuIcon(attention: Color?) {
 private fun Title(modifier: Modifier) {
     val store = LocalStore.current
     Column(modifier, verticalArrangement = Arrangement.spacedBy(1.dp)) {
-        store.composerProjectLine?.let { parts -> ProjectLine(store.composerProject, parts, size = 12f) }
-        Text(store.shownAgent?.title ?: store.selectedThread?.title ?: "New thread", style = system(15f, FontWeight.SemiBold), maxLines = 1)
+        store.composerProjectLine?.let { parts -> ProjectLine(store.composerProject, parts, size = TextSize.Xs) }
+        Text(store.shownAgent?.title ?: store.selectedThread?.title ?: "New thread", style = system(TextSize.Lg, FontWeight.SemiBold), maxLines = 1)
     }
 }
 
@@ -322,9 +323,9 @@ private fun Start(composerHeight: androidx.compose.ui.unit.Dp) {
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         if (store.projects.isEmpty() && store.noProjects.isEmpty()) {
-            Text("Add a project to start", style = system(26f))
+            Text("Add a project to start", style = system(TextSize.Xxl))
             Text(
-                "A project is a folder on your server that threads work in.", style = system(16f), color = palette.mutedForeground,
+                "A project is a folder on your server that threads work in.", style = system(TextSize.Lg), color = palette.mutedForeground,
                 align = TextAlign.Center,
             )
             ActionButton(
@@ -345,7 +346,7 @@ private fun Headline() {
     val (lead, name) = Project.headline(selected)
     val shape = RoundedCornerShape(Radius.lg)
     Column(verticalArrangement = Arrangement.spacedBy(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(lead, style = system(26f))
+        Text(lead, style = system(TextSize.Xxl))
         DimButton(onClick = { store.openPanel(PanelPage.DraftProject) }, contentAlignment = Alignment.Center) {
             Row(
                 Modifier
@@ -355,8 +356,8 @@ private fun Headline() {
                 horizontalArrangement = Arrangement.spacedBy(9.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                ProjectIcon(selected, size = iconSize(text = 26f))
-                Text(name, Modifier.weight(1f, fill = false), style = system(26f), maxLines = 1)
+                ProjectIcon(selected, size = iconSize(text = TextSize.Xxl))
+                Text(name, Modifier.weight(1f, fill = false), style = system(TextSize.Xxl), maxLines = 1)
                 Icon(Symbol.ChevronDown, IconSize.Md, color = palette.mutedStrongerForeground)
             }
         }

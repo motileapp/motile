@@ -48,6 +48,7 @@ import app.motile.core.Time
 import app.motile.platform.Platform
 import app.motile.platform.Symbol
 import app.motile.platform.scaled
+import app.motile.theme.TextSize
 import app.motile.theme.symbolSide
 import app.motile.theme.iconSize
 import app.motile.theme.IconSize
@@ -119,17 +120,17 @@ private fun androidx.compose.foundation.layout.RowScope.PullRequestBar(page: Pul
     val store = LocalStore.current
     val palette = LocalPalette.current
     if (page != null) {
-        Icon(page.state.symbol, iconSize(text = 12.5f), color = page.state.color(palette))
-        Text("#${page.number}", Modifier.padding(start = 2.dp), style = Theme.uiDigits(12.5f, FontWeight.Medium), color = palette.foreground)
+        Icon(page.state.symbol, iconSize(text = TextSize.Xs), color = page.state.color(palette))
+        Text("#${page.number}", Modifier.padding(start = 2.dp), style = Theme.uiDigits(TextSize.Xs, FontWeight.Medium), color = palette.foreground)
         if (page.number == target.pullRequest && store.selectedThread?.watching == true) {
             Icon(
-                Symbol.Eye, iconSize(text = 12.5f),
+                Symbol.Eye, iconSize(text = TextSize.Xs),
                 Modifier.padding(start = 4.dp).semantics { contentDescription = "The agent hears when its checks finish, someone comments or it conflicts" },
                 color = palette.primary,
             )
         }
     } else {
-        Text("Pull Request", size = 12.5f, weight = FontWeight.Medium, color = palette.foreground)
+        Text("Pull Request", size = TextSize.Xs, weight = FontWeight.Medium, color = palette.foreground)
     }
     Spacer(Modifier.weight(1f).widthIn(min = 4.dp))
     val opens = page != null && page.url.isNotEmpty()
@@ -162,7 +163,7 @@ private fun NoPullRequest(target: PanelTarget) {
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Icon(Symbol.GitPullRequest, IconSize.Xxl, color = palette.mutedStrongerForeground)
-        Text("This branch has no pull request yet.", size = 13f, color = palette.mutedForeground)
+        Text("This branch has no pull request yet.", size = TextSize.Sm, color = palette.mutedForeground)
         Row {
             val project = store.gitProject
             val create = project?.gitControl?.menu?.firstOrNull { it.action == "create_pr" }
@@ -313,18 +314,18 @@ private fun Header(
                 TitleEditor(page, target, number, title, setTitle)
             } else {
                 SelectionContainer(Modifier.weight(1f)) {
-                    Text(page.title, size = 15f, weight = FontWeight.SemiBold, color = palette.foreground)
+                    Text(page.title, size = TextSize.Lg, weight = FontWeight.SemiBold, color = palette.foreground)
                 }
                 MoreMenu(page, target, number, extended, Modifier.offset(y = (-4).dp), { setTitle(page.title) }, describe, run)
             }
         }
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp), itemVerticalAlignment = Alignment.CenterVertically) {
             Chip(page.state.title, icon = page.state.symbol, tone = page.state.color(palette))
-            Text(page.byline, size = 12f, color = palette.mutedForeground)
+            Text(page.byline, size = TextSize.Xs, color = palette.mutedForeground)
         }
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
             BranchName(page.base, Modifier.weight(1f, fill = false))
-            Icon(Symbol.ArrowLeft, iconSize(text = 11.5f), color = palette.mutedStrongerForeground)
+            Icon(Symbol.ArrowLeft, iconSize(text = TextSize.Xs), color = palette.mutedStrongerForeground)
             BranchName(page.head, Modifier.weight(1f, fill = false))
             Spacer(Modifier.width(2.dp))
             HighlightButton(
@@ -337,8 +338,8 @@ private fun Header(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Icon(Symbol.Diff, iconSize(text = 12f), color = palette.mutedForeground)
-                    Text(if (page.files == 1) "1 file" else "${page.files} files", size = 12f, color = palette.foreground, maxLines = 1)
+                    Icon(Symbol.Diff, iconSize(text = TextSize.Xs), color = palette.mutedForeground)
+                    Text(if (page.files == 1) "1 file" else "${page.files} files", size = TextSize.Xs, color = palette.foreground, maxLines = 1)
                     if (page.additions + page.deletions > 0) Text(LineCountText.text(page.additions, page.deletions), style = LineCountText.style, maxLines = 1)
                 }
             }
@@ -355,13 +356,13 @@ private fun Header(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Icon(Symbol.Layers, iconSize(text = 12f), color = palette.mutedForeground)
+                    Icon(Symbol.Layers, iconSize(text = TextSize.Xs), color = palette.mutedForeground)
                     val words = buildAnnotatedString {
                         withStyle(SpanStyle(color = palette.mutedForeground)) { append("Stacked on ") }
                         withStyle(SpanStyle(color = below.state.color(palette))) { append("#${below.number} ") }
                         withStyle(SpanStyle(color = palette.foreground)) { append(below.title) }
                     }
-                    Text(words, size = 12f, maxLines = 1)
+                    Text(words, size = TextSize.Xs, maxLines = 1)
                 }
             }
         }
@@ -443,9 +444,9 @@ private fun PeopleRow(
 ) {
     val palette = LocalPalette.current
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(title, Modifier.width(70.dp), size = 12f, color = palette.mutedStrongerForeground)
+        Text(title, Modifier.width(70.dp), size = TextSize.Xs, color = palette.mutedStrongerForeground)
         if (empty != null) {
-            Text(empty, size = 12f, color = palette.mutedStrongerForeground)
+            Text(empty, size = TextSize.Xs, color = palette.mutedStrongerForeground)
         } else {
             FlowRow(Modifier.weight(1f, fill = false), horizontalArrangement = Arrangement.spacedBy(5.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) { chips() }
         }
@@ -511,8 +512,8 @@ private fun MoreMenu(
 private fun ActivityTitle(modifier: Modifier) {
     val palette = LocalPalette.current
     Row(modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.Bottom) {
-        Text("Activity", size = 13f, weight = FontWeight.SemiBold, color = palette.foreground)
-        Text("Oldest first", size = 12f, color = palette.mutedStrongerForeground)
+        Text("Activity", size = TextSize.Sm, weight = FontWeight.SemiBold, color = palette.foreground)
+        Text("Oldest first", size = TextSize.Xs, color = palette.mutedStrongerForeground)
     }
 }
 
@@ -571,12 +572,12 @@ private fun PendingComments(comments: List<PendingLineComment>, remove: (Pending
         Column(Modifier.padding(bottom = 6.dp)) {
             Text(
                 if (comments.size == 1) "1 comment on a line goes with your review" else "${comments.size} comments on lines go with your review",
-                Modifier.padding(start = 12.dp, end = 12.dp, top = 9.dp, bottom = 4.dp), size = 12f, weight = FontWeight.Medium, color = palette.mutedForeground,
+                Modifier.padding(start = 12.dp, end = 12.dp, top = 9.dp, bottom = 4.dp), size = TextSize.Xs, weight = FontWeight.Medium, color = palette.mutedForeground,
             )
             for (comment in comments) {
                 Row(Modifier.padding(horizontal = 12.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Top) {
-                    Text("${comment.path.substringAfterLast('/')}:${comment.line}", style = Theme.uiMono(11.5f), color = palette.primary)
-                    Text(comment.body, Modifier.weight(1f), size = 12.5f, color = palette.foreground, maxLines = 2)
+                    Text("${comment.path.substringAfterLast('/')}:${comment.line}", style = Theme.uiMono(TextSize.Xs), color = palette.primary)
+                    Text(comment.body, Modifier.weight(1f), size = TextSize.Xs, color = palette.foreground, maxLines = 2)
                     ActionButton(icon = Symbol.X, help = "Take it back", size = ControlSize.Small, modifier = Modifier.offset(y = (-4).dp)) { remove(comment) }
                 }
             }
@@ -595,9 +596,9 @@ private fun StackCard(stack: PullRequestPage.Stack, modifier: Modifier, open: (I
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(Symbol.Layers, iconSize(text = 13f), color = palette.mutedForeground)
-                Text("Stack", size = 13f, weight = FontWeight.Medium, color = palette.foreground)
-                Text("${stack.layers.size} pull requests onto ${stack.base}", Modifier.weight(1f), size = 12f, color = palette.mutedStrongerForeground, maxLines = 1)
+                Icon(Symbol.Layers, iconSize(text = TextSize.Sm), color = palette.mutedForeground)
+                Text("Stack", size = TextSize.Sm, weight = FontWeight.Medium, color = palette.foreground)
+                Text("${stack.layers.size} pull requests onto ${stack.base}", Modifier.weight(1f), size = TextSize.Xs, color = palette.mutedStrongerForeground, maxLines = 1)
                 stack.url?.let { url ->
                     ActionButton("Open on GitHub", help = "A stack merges on GitHub, bottom first", variant = ButtonVariant.Link, size = ControlSize.Small) {
                         Platform.open(url)
@@ -614,10 +615,10 @@ private fun StackCard(stack: PullRequestPage.Stack, modifier: Modifier, open: (I
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Icon(layer.state.symbol, iconSize(text = 12.5f), color = layer.state.color(palette))
-                        Text("#${layer.number}", style = Theme.uiDigits(12f, FontWeight.Medium), color = palette.mutedForeground)
-                        Text(layer.title, Modifier.weight(1f), size = 12.5f, color = palette.foreground, maxLines = 1)
-                        if (layer.current) Text("This one", size = 11.5f, color = palette.mutedStrongerForeground)
+                        Icon(layer.state.symbol, iconSize(text = TextSize.Xs), color = layer.state.color(palette))
+                        Text("#${layer.number}", style = Theme.uiDigits(TextSize.Xs, FontWeight.Medium), color = palette.mutedForeground)
+                        Text(layer.title, Modifier.weight(1f), size = TextSize.Xs, color = palette.foreground, maxLines = 1)
+                        if (layer.current) Text("This one", size = TextSize.Xs, color = palette.mutedStrongerForeground)
                     }
                 }
             }
@@ -701,14 +702,14 @@ private fun StatusRow(status: PullRequestPage.Status, working: PullRequestWork?,
         else -> Symbol.CircleAlert
     }
     Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        val symbolSize = iconSize(text = 13f)
+        val symbolSize = iconSize(text = TextSize.Sm)
         Box(Modifier.size(width = symbolSide(symbolSize), height = scaled(17f).dp), contentAlignment = Alignment.Center) { Icon(symbol, symbolSize, color = status.tone.color) }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(status.title, size = 13f, weight = FontWeight.Medium, color = palette.foreground)
-                status.at?.let { Text(Time.ago(it), size = 12f, color = palette.mutedStrongerForeground) }
+                Text(status.title, size = TextSize.Sm, weight = FontWeight.Medium, color = palette.foreground)
+                status.at?.let { Text(Time.ago(it), size = TextSize.Xs, color = palette.mutedStrongerForeground) }
             }
-            status.detail?.let { Text(it, size = 12f, color = palette.mutedForeground) }
+            status.detail?.let { Text(it, size = TextSize.Xs, color = palette.mutedForeground) }
             if (status.buttons.isNotEmpty()) {
                 Row(Modifier.padding(top = 5.dp)) {
                     status.buttons.forEachIndexed { index, button ->
@@ -737,11 +738,11 @@ private fun CheckRow(check: PullRequestPage.Check) {
         Box(Modifier.width(18.dp), contentAlignment = Alignment.Center) { Box(Modifier.size(7.dp).background(check.tone.color, CircleShape)) }
         Text(
             check.name, Modifier.weight(1f, fill = false).semantics { contentDescription = check.description ?: check.name },
-            size = 12.5f, color = palette.foreground, maxLines = 1, overflow = TextOverflow.Ellipsis,
+            size = TextSize.Xs, color = palette.foreground, maxLines = 1, overflow = TextOverflow.Ellipsis,
         )
-        check.workflow?.let { Text(it, Modifier.weight(1f, fill = false), size = 12f, color = palette.mutedStrongerForeground, maxLines = 1) }
+        check.workflow?.let { Text(it, Modifier.weight(1f, fill = false), size = TextSize.Xs, color = palette.mutedStrongerForeground, maxLines = 1) }
         Spacer(Modifier.weight(0.001f).widthIn(min = 6.dp))
-        Text(check.label, size = 12f, color = if (check.tone == Tone.Neutral) palette.mutedStrongerForeground else check.tone.color, maxLines = 1)
+        Text(check.label, size = TextSize.Xs, color = if (check.tone == Tone.Neutral) palette.mutedStrongerForeground else check.tone.color, maxLines = 1)
         val fix = check.fix
         val url = check.url
         if (fix == null && url == null) return@Row

@@ -89,23 +89,25 @@ enum Theme {
     ]
 
     // Type
-    static let proseSize: CGFloat = 14 * Platform.scale
-    static let codeSize: CGFloat = 12.5 * Platform.scale
-    static let proseFont = PlatformFont.systemFont(ofSize: proseSize)
-    static let proseBold = PlatformFont.systemFont(ofSize: proseSize, weight: .semibold)
-    static let codeFont = PlatformFont.monospacedSystemFont(ofSize: codeSize, weight: .regular)
-    static let inlineCodeFont = PlatformFont.uiMono(12.5)
-    static let smallFont = PlatformFont.ui(12)
-    static let smallMono = PlatformFont.uiMono(11.5)
+    static let proseSize = TextSize.md.points
+    static let proseFont = PlatformFont.ui(.md)
+    static let proseBold = PlatformFont.ui(.md, weight: .semibold)
+    static let codeFont = PlatformFont.uiMono(.xs)
+    static let inlineCodeFont = PlatformFont.uiMono(.xs)
+    static let smallFont = PlatformFont.ui(.xs)
+    static let smallMono = PlatformFont.uiMono(.xs)
     static let proseLineHeight: CGFloat = scaled(24)
     static let codeLineHeight: CGFloat = scaled(18)
 
     static func heading(_ level: Int) -> PlatformFont {
+        PlatformFont.ui(headingSize(level), weight: .semibold)
+    }
+
+    static func headingSize(_ level: Int) -> TextSize {
         switch level {
-        case 1: PlatformFont.ui(20, weight: .semibold)
-        case 2: PlatformFont.ui(17, weight: .semibold)
-        case 3: PlatformFont.ui(15, weight: .semibold)
-        default: PlatformFont.ui(14, weight: .semibold)
+        case 1, 2: .xl
+        case 3: .lg
+        default: .md
         }
     }
 
@@ -184,8 +186,8 @@ extension View {
 
 extension IconSize {
     /// The icon that goes with text of `size`: about a fifth larger, as on the web.
-    init(text size: CGFloat) {
-        switch size {
+    init(text size: TextSize) {
+        switch size.rawValue {
         case ..<11: self = .xs
         case ..<13: self = .sm
         case ..<15: self = .md
@@ -261,15 +263,14 @@ enum ControlSize {
         }
     }
 
-    var textSize: CGFloat {
+    var textSize: TextSize {
         switch self {
-        case .small, .inset: 11.5
-        case .regular: 12
-        case .large: 13
+        case .small, .inset, .regular: .xs
+        case .large: .sm
         }
     }
 
-    var font: Font { .ui(size: textSize, weight: .medium) }
+    var font: Font { .ui(textSize, weight: .medium) }
 
     /// The room between what it says and its sides.
     var padding: CGFloat {

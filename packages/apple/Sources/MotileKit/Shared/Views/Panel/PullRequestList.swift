@@ -67,7 +67,7 @@ struct PullRequestListSurface: View {
                     }
                     if shown.isEmpty {
                         Text(search.isEmpty ? "No \(state == "all" ? "" : "\(state) ")pull requests." : "None match “\(search)”.")
-                            .font(.ui(size: 12.5))
+                            .font(.ui(.xs))
                             .foregroundStyle(Color.themeMutedForeground)
                             .frame(maxWidth: .infinity)
                             .padding(.top, 40)
@@ -110,7 +110,7 @@ private struct PullRequestListRow: View {
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(alignment: .firstTextBaseline, spacing: 6) {
                         Text(row.title)
-                            .font(.ui(size: 13, weight: .medium))
+                            .font(.ui(.sm, weight: .medium))
                             .foregroundStyle(Color.themeForeground)
                             .lineLimit(2)
                             .multilineTextAlignment(.leading)
@@ -122,7 +122,7 @@ private struct PullRequestListRow: View {
                         signals
                     }
                     (Text(verbatim: "#\(row.number)") + Text(" · \(row.author) · \(row.head) → \(row.base) · \(Time.ago(row.updatedAt))"))
-                        .font(.ui(size: 11.5))
+                        .font(.ui(.xs))
                         .foregroundStyle(Color.themeMutedStrongerForeground)
                         .lineLimit(1)
                         .truncationMode(.middle)
@@ -161,7 +161,7 @@ private struct PullRequestListRow: View {
             }
             if row.additions + row.deletions > 0 {
                 Text(AttributedString(LineCountText.text(added: row.additions, removed: row.deletions)))
-                    .font(.ui(size: 11.5))
+                    .font(.ui(.xs))
             }
         }
         .fixedSize()

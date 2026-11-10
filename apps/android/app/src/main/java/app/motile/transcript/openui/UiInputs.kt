@@ -219,9 +219,9 @@ fun UiPressable(node: UiNode, kind: UiKind.Pressable) {
 private fun Field(node: UiNode, label: String?, error: String?, content: @Composable () -> Unit) {
     val palette = LocalPalette.current
     Column(Modifier.uiNode(node).fillMaxWidth()) {
-        if (label != null) Text(label, Modifier.padding(bottom = 8.dp), style = UiStyle.text(UiTextStyle.Label, false), color = palette.foreground)
+        if (label != null) Text(label, Modifier.padding(bottom = 8.dp), style = UiStyle.text(UiTextStyle.Label), color = palette.foreground)
         content()
-        if (error != null) Text(error, Modifier.padding(top = 4.dp), style = UiStyle.text(UiTextStyle.Caption, false), color = palette.destructive)
+        if (error != null) Text(error, Modifier.padding(top = 4.dp), style = UiStyle.text(UiTextStyle.Caption), color = palette.destructive)
     }
 }
 
@@ -343,7 +343,7 @@ fun UiRadioGroup(node: UiNode, kind: UiKind.RadioGroup) {
     val disabled = kind.disabled != null
     val pick = { index: Int -> host?.send(node.id, "value", "value" to kind.options[index].value) }
     Column(Modifier.uiNode(node).fillMaxWidth()) {
-        if (kind.label != null) Text(kind.label, Modifier.padding(bottom = 10.dp), style = UiStyle.text(UiTextStyle.Label, false), color = palette.foreground)
+        if (kind.label != null) Text(kind.label, Modifier.padding(bottom = 10.dp), style = UiStyle.text(UiTextStyle.Label), color = palette.foreground)
         when (kind.variant) {
             UiRadioVariant.List -> Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 kind.options.forEachIndexed { index, option ->
@@ -365,7 +365,7 @@ fun UiRadioGroup(node: UiNode, kind: UiKind.RadioGroup) {
                 }
             }
         }
-        if (kind.error != null) Text(kind.error, Modifier.padding(top = 4.dp), style = UiStyle.text(UiTextStyle.Caption, false), color = palette.destructive)
+        if (kind.error != null) Text(kind.error, Modifier.padding(top = 4.dp), style = UiStyle.text(UiTextStyle.Caption), color = palette.destructive)
     }
 }
 
@@ -399,8 +399,8 @@ fun UiTimer(node: UiNode, kind: UiKind.Timer) {
         modifier = Modifier.uiNode(node).fillMaxWidth().border(1.dp, surface.border, shape).padding(horizontal = 16.dp, vertical = 12.dp),
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            kind.label?.let { Text(it, style = UiStyle.text(UiTextStyle.Label, false), color = palette.foreground) }
-            Text(kind.time, style = UiStyle.text(UiTextStyle.Timer, false), color = if (kind.done) palette.success else palette.foreground, maxLines = 1)
+            kind.label?.let { Text(it, style = UiStyle.text(UiTextStyle.Label), color = palette.foreground) }
+            Text(kind.time, style = UiStyle.text(UiTextStyle.Timer), color = if (kind.done) palette.success else palette.foreground, maxLines = 1)
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             val size = ControlSize.Small
