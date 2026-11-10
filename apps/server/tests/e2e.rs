@@ -1344,16 +1344,7 @@ async fn a_message_sent_to_steer_is_taken_by_the_turn_that_runs() {
     let mut transcript = Transcript::default();
     let mut follow = open(&connection, &thread_id, 0).await;
 
-    let steer = Request::Send {
-        thread_id: Some(thread_id.clone()),
-        new_thread: None,
-        text: "Just say pineapple".to_string(),
-        attachments: Vec::new(),
-        now: true,
-        context: None,
-        message_id: None,
-    };
-    assert_eq!(connection.request(&steer).await.unwrap(), Message::Sent { thread_id: thread_id.clone() });
+    steer(&connection, &thread_id, "Just say pineapple").await;
     transcript.follow_until_idle(&mut follow).await;
 
     assert_eq!(
@@ -1364,6 +1355,65 @@ async fn a_message_sent_to_steer_is_taken_by_the_turn_that_runs() {
     assert!(transcript.texts().last().unwrap().ends_with("You also said: Just say pineapple"));
     assert!(transcript.queued.is_empty());
     assert_eq!(harness.recorded_turns().len(), 1);
+}
+
+#[tokio::test]
+async fn a_message_sent_now_that_the_next_one_cuts_off_before_its_answer_lets_the_thread_rest() {
+    let harness = Harness::start(fixture(Agent::Claude), "0").await;
+    let connection = harness.connect().await;
+    let new_thread = harness.new_thread(&connection, Agent::Claude).await;
+    let thread_id = send(&connection, None, new_thread, "Give me a long reply with a lot of code").await;
+    let mut transcript = Transcript::default();
+    let mut follow = open(&connection, &thread_id, 0).await;
+
+    steer(&connection, &thread_id, "Wait for more").await;
+    steer(&connection, &thread_id, "Just say pineapple").await;
+    transcript.follow_until_idle(&mut follow).await;
+
+    assert_eq!(
+        messages_and_turn_ends(&transcript),
+        vec!["Give me a long reply with a lot of code", "Wait for more", "Just say pineapple", "(turn end)"]
+    );
+    assert!(transcript.texts().last().unwrap().ends_with("You also said: Just say pineapple"));
+    assert_eq!(harness.recorded_turns().len(), 1);
+}
+
+#[tokio::test]
+async fn a_message_codex_refuses_as_its_turn_ends_starts_the_next_turn() {
+    let harness = Harness::start_with(fixture(Agent::Codex), "0", &[("FAKE_AGENT_CHILD_STEP", "0.3")]).await;
+    let connection = harness.connect().await;
+    let new_thread = harness.new_thread(&connection, Agent::Codex).await.unwrap();
+    let new_thread = NewThread { access: AgentAccess::Full, ..new_thread };
+    let thread_id = send(&connection, None, Some(new_thread), "Look over greet.py").await;
+    let mut transcript = Transcript::default();
+    let mut follow = open(&connection, &thread_id, 0).await;
+    while transcript.tools().is_empty() {
+        transcript.apply(next(&mut follow).await);
+    }
+
+    steer(&connection, &thread_id, "Too late: look over the tests too").await;
+    transcript.follow_until_idle(&mut follow).await;
+
+    assert_eq!(
+        messages_and_turn_ends(&transcript),
+        vec!["Look over greet.py", "Too late: look over the tests too", "(turn end)", "(turn end)"]
+    );
+    assert_eq!(transcript.texts().len(), 2, "both messages were answered");
+    assert_eq!(harness.recorded_turns().len(), 1, "the process that worked takes the message");
+}
+
+/// Sends a message to the turn that runs, which takes it at once.
+async fn steer(connection: &Connection, thread_id: &str, text: &str) {
+    let request = Request::Send {
+        thread_id: Some(thread_id.to_string()),
+        new_thread: None,
+        text: text.to_string(),
+        attachments: Vec::new(),
+        now: true,
+        context: None,
+        message_id: None,
+    };
+    assert_eq!(connection.request(&request).await.unwrap(), Message::Sent { thread_id: thread_id.to_string() });
 }
 
 /// Sends a message to a thread whose turn waits for an approval, and follows the thread until

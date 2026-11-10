@@ -228,6 +228,13 @@ impl Parser {
                 Some(id) => vec![AgentEvent::Taken { id: id.to_string() }],
                 None => vec![],
             },
+            // A message the next one cut off before the model answered it is never repeated.
+            Some("command_lifecycle") if matches!(object["state"].as_str(), Some("started" | "completed")) => {
+                match object["command_uuid"].as_str() {
+                    Some(id) => vec![AgentEvent::Taken { id: id.to_string() }],
+                    None => vec![],
+                }
+            }
             Some("user") => parse_user(&object["message"]),
             Some("control_request") => parse_control_request(&object),
             Some("control_cancel_request") => {
@@ -241,7 +248,9 @@ impl Parser {
                 self.ended = true;
                 let usage = self.parse_usage(&object["modelUsage"]);
                 let limited = self.limit(&object);
-                usage.into_iter().chain(limited).chain([parse_result(&object, self.api_error.take())]).collect()
+                let result = parse_result(&object, self.api_error.take());
+                let taken = consumed(&object, &result);
+                usage.into_iter().chain(limited).chain(taken).chain([result]).collect()
             }
             _ => vec![],
         }
@@ -590,6 +599,16 @@ fn parse_result(object: &Value, api_error: Option<String>) -> AgentEvent {
     }
 }
 
+/// The messages a turn that ended took. A turn cut short for a message goes on with it, which
+/// says itself when it takes it.
+fn consumed(object: &Value, result: &AgentEvent) -> Vec<AgentEvent> {
+    if matches!(result, AgentEvent::Completed { preempted: true, .. }) {
+        return vec![];
+    }
+    let ids = object["user_message_uuids"].as_array().map(Vec::as_slice).unwrap_or_default();
+    ids.iter().filter_map(Value::as_str).map(|id| AgentEvent::Taken { id: id.to_string() }).collect()
+}
+
 fn content_text(content: &Value) -> String {
     if let Some(text) = content.as_str() {
         return text.to_string();
@@ -916,6 +935,25 @@ mod tests {
         assert!(matches!(parser.parse(stopped)[..], [AgentEvent::Completed { preempted: true, .. }]));
         let ended = r#"{"type":"result","subtype":"success","is_error":false,"terminal_reason":"completed"}"#;
         assert!(matches!(parser.parse(ended)[..], [AgentEvent::Completed { preempted: false, .. }]));
+    }
+
+    #[test]
+    fn a_message_cut_off_before_it_was_answered_is_still_taken() {
+        let mut parser = Parser::default();
+        let taken = |id: &str| AgentEvent::Taken { id: id.to_string() };
+        let started = r#"{"type":"command_lifecycle","command_uuid":"m2","state":"started"}"#;
+        assert_eq!(parser.parse(started), vec![taken("m2")]);
+        let queued = r#"{"type":"command_lifecycle","command_uuid":"m3","state":"queued"}"#;
+        assert_eq!(parser.parse(queued), vec![]);
+
+        let cut = r#"{"type":"result","subtype":"error_during_execution","is_error":true,
+            "terminal_reason":"aborted_streaming","user_message_uuids":["m2"]}"#;
+        assert!(matches!(parser.parse(cut)[..], [AgentEvent::Completed { preempted: true, .. }]));
+        let ended = r#"{"type":"result","subtype":"success","is_error":false,"terminal_reason":"completed",
+            "user_message_uuids":["m2","m3"]}"#;
+        let events = parser.parse(ended);
+        assert_eq!(events[..2], [taken("m2"), taken("m3")]);
+        assert!(matches!(events[2], AgentEvent::Completed { preempted: false, .. }));
     }
 
     #[test]

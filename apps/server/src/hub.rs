@@ -3888,6 +3888,7 @@ impl Hub {
                 if preempted && live.steering() {
                     return Ok(());
                 }
+                live.fail_dropped_tools(store)?;
                 if let Some(run) = &mut live.run {
                     run.received_result = true;
                     run.turn_id = None;
@@ -3927,6 +3928,11 @@ impl Hub {
                 }
             }
             AgentEvent::Woke => self.resume(live)?,
+            AgentEvent::TooLate { id } => {
+                let Some(message) = live.given.iter().find(|given| given.id == id) else { return Ok(()) };
+                let prompt = prompt(message);
+                live.write_prompt(&prompt, &id);
+            }
             AgentEvent::Taken { id } => {
                 live.given.retain(|given| given.id != id);
                 if live.turn.as_ref().is_some_and(|turn| turn.prompt_id == id) {
@@ -4750,6 +4756,26 @@ impl Live {
         for id in std::mem::take(&mut self.unsaved) {
             let Some(item) = self.open.get(&id) else { continue };
             store.save_item(&self.stored.thread.id, item)?;
+        }
+        Ok(())
+    }
+
+    /// Fails the thread's tool calls that a turn ended without: the agent dropped them unrun.
+    fn fail_dropped_tools(&mut self, store: &Store) -> anyhow::Result<()> {
+        let dropped: Vec<(String, ToolCall)> = self
+            .open
+            .values()
+            .filter(|item| item.parent.is_none())
+            .filter_map(|item| match &item.kind {
+                ItemKind::Tool { call } if call.status == ToolStatus::Running && call.agent.is_none() => {
+                    Some((item.id.clone(), call.clone()))
+                }
+                _ => None,
+            })
+            .collect();
+        for (id, mut call) in dropped {
+            call.status = ToolStatus::Failed;
+            self.upsert(store, id, ItemKind::Tool { call })?;
         }
         Ok(())
     }
