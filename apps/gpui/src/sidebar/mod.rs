@@ -50,9 +50,11 @@ const BUTTON_OUTSET: f32 = 4.;
 const SHELF_LIST_TOP: f32 = 2.;
 /// The height of a row of one line.
 pub const DONE_ROW_HEIGHT: f32 = ControlSize::Regular.height();
-/// The least the gap over the sections takes, when the list is fuller than its room: never
-/// nothing, as a row of no height is no row.
-const GAP_LEAST: f32 = 1.;
+/// The least the gap over the sections takes, when the list is fuller than its room: the divider
+/// it draws then.
+const GAP_LEAST: f32 = LIST_DIVIDER;
+/// How close the sections may come under the rows above them before the gap draws a divider.
+const GAP_DIVIDED: f32 = 80.;
 /// How far a row's lines stand from its highlight's top and bottom.
 const TOP_PADDING: f32 = 5.;
 const BOTTOM_PADDING: f32 = 7.;
@@ -744,6 +746,9 @@ impl Sidebar {
                 }
                 Item::Empty => self.empty_line(cx),
                 Item::NewThread => self.new_thread_row(cx),
+                Item::Gap if layout.heights[index] <= GAP_DIVIDED => {
+                    div().size_full().flex().flex_col().justify_end().child(list_divider(cx)).into_any_element()
+                }
                 Item::Gap => div().into_any_element(),
                 Item::SectionEnd(_) => list_divider(cx),
                 Item::Section(shelf) => self.section_row(shelf, cx),
