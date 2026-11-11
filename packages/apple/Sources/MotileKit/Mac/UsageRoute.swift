@@ -16,7 +16,7 @@ struct UsageRoute: View {
             UsageContent(model: model, top: 36)
                 .fadesUnderTopBar()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color.themeBackground.ignoresSafeArea())
+                .background(Color.themeBackground.ignoresSafeArea().allowsHitTesting(false))
                 .overlay(alignment: .topLeading) {
                     HStack(spacing: 12) {
                         HStack(spacing: ControlSize.regular.padding) {

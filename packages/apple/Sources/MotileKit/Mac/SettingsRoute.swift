@@ -17,7 +17,7 @@ struct SettingsRoute: View {
                     .zIndex(1)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Color.themeBackground.ignoresSafeArea())
+            .background(Color.themeBackground.ignoresSafeArea().allowsHitTesting(false))
             .overlay(alignment: .topLeading) { topBar(window, pastSidebar: shownWidth + 1) }
         }
     }
