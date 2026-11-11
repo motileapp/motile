@@ -134,7 +134,7 @@ fun SpendingChart(report: UsageReport, measure: Measure, period: UsageModel.Peri
 fun UsageReport.Series.points(measure: Measure): List<Double> = if (measure == Measure.Cost) costPoints else tokenPoints
 
 /** About `desired` steps from nothing to past `highest`, each 1, 2 or 5 of a power of ten. */
-private fun niceTicks(highest: Double, desired: Int): List<Double> {
+fun niceTicks(highest: Double, desired: Int): List<Double> {
     if (highest <= 0) return listOf(0.0)
     val rough = highest / desired
     val magnitude = 10.0.pow(floor(log10(rough)))
@@ -144,7 +144,7 @@ private fun niceTicks(highest: Double, desired: Int): List<Double> {
 }
 
 /** The buckets labelled under the chart: about `desired`, evenly apart from the first. */
-private fun timeTicks(count: Int, desired: Int): List<Int> {
+fun timeTicks(count: Int, desired: Int): List<Int> {
     if (count == 0) return emptyList()
     val stride = max(1, ceil(count / desired.toDouble()).toInt())
     return (0 until count step stride).toList()
@@ -183,14 +183,14 @@ private fun monotone(points: List<Offset>): Path {
 /** What a measure of `value` reads as: dollars, or tokens counted short. */
 fun amount(value: Double, measure: Measure): String = if (measure == Measure.Cost) cost(value) else count(value.roundToInt().toLong())
 
-private fun formatted(seconds: Double, skeleton: String): String {
+fun formatted(seconds: Double, skeleton: String): String {
     val locale = Locale.getDefault()
     val pattern = DateFormat.getBestDateTimePattern(locale, skeleton)
     return SimpleDateFormat(pattern, locale).format(Date((seconds * 1000).toLong()))
 }
 
 /** A time under the chart: the hour over a day, the day otherwise. */
-private fun axisTime(seconds: Double, period: UsageModel.Period): String = formatted(seconds, if (period == UsageModel.Period.Day) "j" else "MMMd")
+fun axisTime(seconds: Double, period: UsageModel.Period): String = formatted(seconds, if (period == UsageModel.Period.Day) "j" else "MMMd")
 
 /** The time pointed at, in the legend: with its weekday. */
 fun legendTime(seconds: Double, period: UsageModel.Period): String = formatted(seconds, if (period == UsageModel.Period.Day) "EEEj" else "EEEMMMd")

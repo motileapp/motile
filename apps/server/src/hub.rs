@@ -19,12 +19,12 @@ use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use motile_protocol::gateway_wire::GatewayAccount;
 use motile_protocol::wire::{
-    AccountSkills, Activity, Agent, AgentAccount, AgentLimits, AgentNotice, Approval, BackupState, BranchInstructions,
-    CONTINUE_PROMPT, ChangedFile, ContinueSettings, CopiedThread, DiffScope, FileKind, GitAction, GitHubState,
-    GitStage, GitStatus, HandoffEnd, Interruption, Item, ItemKind, Media, MergeMethod, Message, ModelInfo, NewThread,
-    NoticeEvent, OriginUsage, Project, PullRequest, PullRequestAction, Queued, RunsOn, ServerInfo, ServerUpdate,
-    SkillMention, Subagent, Thread, ThreadChange, ThreadParent, ToolCall, ToolStatus, TurnChanges, TurnSummary,
-    Worktree,
+    AccountSkills, ActionRecord, Activity, Actor, Agent, AgentAccount, AgentLimits, AgentNotice, Approval, BackupState,
+    BranchInstructions, CONTINUE_PROMPT, ChangedFile, ContinueSettings, CopiedThread, DiffScope, FileKind, GitAction,
+    GitHubState, GitStage, GitStatus, HandoffEnd, Interruption, Item, ItemKind, Media, MergeMethod, Message, ModelInfo,
+    NewThread, NoticeEvent, OriginActivity, OriginUsage, Project, PullRequest, PullRequestAction, Queued, Request,
+    RunsOn, ServerInfo, ServerUpdate, SkillMention, Subagent, Thread, ThreadChange, ThreadParent, ToolCall, ToolStatus,
+    TurnChanges, TurnOutcome, TurnStarter, TurnSummary, Worktree,
 };
 use motile_protocol::{error_text, now};
 use serde_json::Value;
@@ -33,6 +33,7 @@ use tokio::process::{Child, ChildStdin, Command};
 use tokio::sync::{Mutex, OwnedMutexGuard, broadcast, mpsc, oneshot, watch};
 use tokio::task::AbortHandle;
 
+use crate::activity::{self, Sender, Tally};
 use crate::agents::environment::Environment;
 use crate::agents::{self, AgentEvent, Background, Parser, Settings, Turn, claude, executable_name, models, skills};
 use crate::files::FileBytes;
@@ -309,6 +310,8 @@ struct Live {
     /// The approvals the server asks for itself, of calls to the gateway's MCP servers, by id: told
     /// the user's answer, or dropped as a refusal.
     server_asks: HashMap<String, oneshot::Sender<bool>>,
+    /// What the turn that runs has done, kept once it ends.
+    tally: Option<Tally>,
 }
 
 struct StartedTurn {
@@ -1057,7 +1060,7 @@ impl Hub {
         let hub = self.clone();
         tokio::spawn(async move {
             for thread_id in threads {
-                if let Err(error) = hub.continue_thread(&thread_id).await {
+                if let Err(error) = hub.continue_thread(&thread_id, None).await {
                     tracing::warn!(thread_id, "couldn't continue a thread the restart cut off: {error:#}");
                 }
             }
@@ -1065,8 +1068,10 @@ impl Hub {
     }
 
     /// Has the thread's agent go on with what it was doing.
-    pub async fn continue_thread(self: &Arc<Self>, thread_id: &str) -> anyhow::Result<()> {
-        self.send(Some(thread_id.to_string()), None, NewMessage::text(CONTINUE_PROMPT)).await?;
+    /// Has the thread's agent go on: for the client of `sender`, or by itself without one.
+    pub async fn continue_thread(self: &Arc<Self>, thread_id: &str, sender: Option<Sender>) -> anyhow::Result<()> {
+        self.send(Some(thread_id.to_string()), None, NewMessage { sender, ..NewMessage::text(CONTINUE_PROMPT) })
+            .await?;
         Ok(())
     }
 
@@ -1077,7 +1082,7 @@ impl Hub {
             loop {
                 tokio::time::sleep(every).await;
                 for thread_id in hub.limits_reset().await {
-                    if let Err(error) = hub.continue_thread(&thread_id).await {
+                    if let Err(error) = hub.continue_thread(&thread_id, None).await {
                         tracing::warn!(thread_id, "couldn't continue a thread after its usage limit: {error:#}");
                     }
                 }
@@ -1230,7 +1235,8 @@ impl Hub {
         message: NewMessage,
         started_by: Option<String>,
     ) -> anyhow::Result<String> {
-        let NewMessage { text, attachments, now, context, message_id } = message;
+        let NewMessage { text, attachments, now, context, message_id, sender } = message;
+        let uses = activity_uses(&thread_id, &new_thread, now, &context);
         let text = text.trim().to_string();
         if text.is_empty() && attachments.is_empty() && context.is_none() {
             bail!("There is nothing to send.");
@@ -1307,8 +1313,14 @@ impl Hub {
             held: false,
             sending: false,
             notice: None,
+            device: sender.as_ref().map(|sender| sender.device.clone()),
             context,
         };
+        // Continuing is a feature of its own, which its request keeps.
+        if let Some(sender) = sender.as_ref().filter(|_| text != CONTINUE_PROMPT) {
+            let thread = &live.stored.thread;
+            activity::keep_used(&self.store, sender, uses, &thread.id, &thread.project_id);
+        }
         if live.preparing.is_some() {
             live.queued.push(message);
             live.save_queued(&self.store)?;
@@ -1748,6 +1760,9 @@ impl Hub {
             live.server_asks.insert(id.clone(), asked);
             live.set_thinking(false);
             live.activity.approvals.push(Approval { id, tool_name, input });
+            if let Some(tally) = &mut live.tally {
+                tally.asked();
+            }
             if let Err(error) = self.announce_approvals(live) {
                 tracing::warn!(thread_id, "couldn't ask for a tool call: {error:#}");
             }
@@ -1759,6 +1774,7 @@ impl Hub {
     fn announce_approvals(&self, live: &mut Live) -> anyhow::Result<()> {
         let Live { server_asks, activity, .. } = live;
         server_asks.retain(|id, _| activity.approvals.iter().any(|approval| approval.id == *id));
+        live.note_waiting();
         let asks = !live.activity.approvals.is_empty();
         if asks && !live.stored.thread.needs_approval {
             wake(&mut live.stored.thread, true);
@@ -2542,6 +2558,30 @@ impl Hub {
             copies.push(OriginUsage { origin: origin.clone(), buckets });
         }
         Ok(Message::Usage { buckets, copies })
+    }
+
+    /// What was done, as `usage` asks it, with the accounts by their names.
+    pub fn activity(
+        &self,
+        since: f64,
+        until: f64,
+        bucket_secs: u32,
+        utc_offset_secs: i32,
+        removed: &[String],
+    ) -> anyhow::Result<Message> {
+        let mut report = self.store.activity_of(None, since, until, bucket_secs, utc_offset_secs)?;
+        let accounts = self.agent_accounts();
+        for bucket in &mut report.turns {
+            if let Some(account) = accounts.iter().find(|account| account.id == bucket.agent_account) {
+                bucket.agent_account = account.name.clone();
+            }
+        }
+        let mut copies = Vec::new();
+        for origin in removed {
+            let report = self.store.activity_of(Some(origin), since, until, bucket_secs, utc_offset_secs)?;
+            copies.push(OriginActivity { origin: origin.clone(), report });
+        }
+        Ok(Message::ActivityReport { report, copies })
     }
 
     /// What changed in a log after `after`: this server's own, or its copy of `origin`'s. The own
@@ -3446,6 +3486,7 @@ impl Hub {
     }
 
     fn start_turn(self: &Arc<Self>, live: &mut Live, prompt: String) -> anyhow::Result<()> {
+        live.tally.get_or_insert_with(|| Tally::new(TurnStarter::Server, None, now()));
         if !Path::new(&live.stored.thread.cwd).is_dir() {
             live.let_go();
         }
@@ -3822,6 +3863,16 @@ impl Hub {
                 }
             }
             AgentEvent::Accepted => self.accept(live)?,
+            AgentEvent::Fast(fast) => {
+                if let Some(tally) = &mut live.tally {
+                    tally.fast(fast);
+                }
+            }
+            AgentEvent::Reasoning(tokens) => {
+                if let Some(tally) = &mut live.tally {
+                    tally.reasoned(tokens);
+                }
+            }
             AgentEvent::SessionMissing => self.session_missing(live)?,
             AgentEvent::TextStarted { .. } => live.set_thinking(false),
             AgentEvent::TextDelta { id, text } => live.hold_text(store, id, text)?,
@@ -3837,14 +3888,19 @@ impl Hub {
             AgentEvent::ThinkingText { id, text } => live.upsert(store, id, ItemKind::Thinking { text })?,
             AgentEvent::ToolStarted { id, name } => {
                 live.set_thinking(false);
+                self.note_tool(live, &id, &name);
                 if !live.open.contains_key(&id) {
                     live.upsert(store, id.clone(), ItemKind::Tool { call: new_tool_call(id, name) })?;
                 }
             }
-            AgentEvent::ToolInput { id, name, input } => live.tool_input(store, id, name, input)?,
+            AgentEvent::ToolInput { id, name, input } => {
+                self.note_tool(live, &id, &name);
+                live.tool_input(store, id, name, input)?
+            }
             AgentEvent::ToolResult { id, output, is_error } => live.tool_result(store, id, output, is_error)?,
             AgentEvent::Tool { mut call } => {
                 live.set_thinking(false);
+                self.note_tool(live, &call.id, &call.name);
                 if let Some(agent) = call.agent.as_mut().filter(|agent| agent.runs_on.is_none()) {
                     agent.runs_on = Some(Box::new(self.runs_on(live, &call.input)));
                 }
@@ -3857,6 +3913,9 @@ impl Hub {
                 added?;
             }
             AgentEvent::Task { tool_id, mut agent } => {
+                if let Some(tally) = &mut live.tally {
+                    tally.subagent(&tool_id);
+                }
                 if agent.runs_on.is_none() {
                     let input = live.tool_call(&tool_id).map(|call| call.input).unwrap_or_default();
                     agent.runs_on = Some(Box::new(self.runs_on(live, &input)));
@@ -3873,7 +3932,10 @@ impl Hub {
             AgentEvent::Usage { spent, total, context_window, context_used } => {
                 let thread = &live.stored.thread;
                 let session_id = live.stored.session_id.as_deref().unwrap_or(&thread.id);
-                let cost = store.save_usage(now(), thread, session_id, &spent, total)?;
+                let (cost, output) = store.save_usage(now(), thread, session_id, &spent, total)?;
+                if let Some(tally) = &mut live.tally {
+                    tally.spent(output);
+                }
                 live.cost_usd = cost.map(|cost| cost + live.cost_usd.unwrap_or_default()).or(live.cost_usd);
                 if context_window.is_some() || context_used.is_some() {
                     self.change_session(thread, |session| {
@@ -3907,6 +3969,7 @@ impl Hub {
                 }
                 live.activity.approvals.clear();
                 live.server_asks.clear();
+                live.note_waiting();
                 live.stored.thread.needs_approval = false;
                 live.stored.thread.asking = None;
                 summary.cost_usd = live.cost_usd.take();
@@ -3916,6 +3979,9 @@ impl Hub {
             AgentEvent::Approval(approval) => {
                 live.set_thinking(false);
                 live.activity.approvals.push(approval);
+                if let Some(tally) = &mut live.tally {
+                    tally.asked();
+                }
                 self.announce_approvals(live)?;
             }
             AgentEvent::ApprovalWithdrawn { id } => {
@@ -3966,6 +4032,30 @@ impl Hub {
             }
         }
         Ok(())
+    }
+
+    /// Counts a tool call of the turn's agent, and keeps its use of a motile tool as a feature's.
+    fn note_tool(&self, live: &mut Live, id: &str, name: &str) {
+        let Some(tally) = &mut live.tally else { return };
+        if !tally.tool(id, name) {
+            return;
+        }
+        let Some(feature) = motile_protocol::activity::agent_tool(name) else { return };
+        let thread = &live.stored.thread;
+        let action = ActionRecord {
+            at: now(),
+            actor: Actor::Agent,
+            device: None,
+            feature: feature.to_string(),
+            variant: String::new(),
+            thread_id: thread.id.clone(),
+            project_id: thread.project_id.clone(),
+            path: None,
+            rtt_ms: None,
+        };
+        if let Err(error) = self.store.save_action(&action) {
+            tracing::warn!(thread_id = thread.id, "couldn't keep an agent's use of a tool: {error:#}");
+        }
     }
 
     /// The agent has taken its turn, and with it what it was told of the thread: its session has
@@ -4094,6 +4184,7 @@ impl Hub {
         // What the agent was given and didn't take starts the next turn, already in the transcript.
         let given = std::mem::take(&mut live.given);
         if !interrupted && !given.is_empty() {
+            live.tally = Some(Tally::new(starter_of(&given[0]), given[0].device.clone(), now()));
             let prompts: Vec<String> = given.iter().map(prompt).collect();
             if let Err(error) = self.start_turn(live, prompts.join("\n\n")) {
                 tracing::error!(thread_id, "couldn't start the next turn: {error:#}");
@@ -4274,6 +4365,7 @@ impl Live {
             tools: None,
             deleted: false,
             server_asks: HashMap::new(),
+            tally: None,
             session_model: None,
             handoff_item: None,
             skills: Vec::new(),
@@ -4334,13 +4426,18 @@ impl Live {
         }
         if running {
             let items = store.items_since(&thread.id, 0)?;
-            let working = items.into_iter().filter(|item| matches!(&item.kind, ItemKind::Tool { call } if works(call)));
-            self.open = working.map(|item| (item.id.clone(), item)).collect();
+            let working = items.iter().filter(|item| matches!(&item.kind, ItemKind::Tool { call } if works(call)));
+            self.open = working.map(|item| (item.id.clone(), item.clone())).collect();
             self.cut_off_tools(store, true)?;
             self.open.clear();
             let message = "Your server restarted before the agent finished.".to_string();
             self.append(store, ItemKind::Error { message })?;
-            self.end_turn(store, TurnSummary { is_error: true, ..TurnSummary::default() })?;
+            let started =
+                items.iter().rev().find(|item| matches!(item.kind, ItemKind::User { .. } | ItemKind::Notice { .. }));
+            let started_at = started.map_or_else(now, |item| item.created_at);
+            self.tally = Some(Tally::new(TurnStarter::Other, None, started_at));
+            let summary = TurnSummary { is_error: true, ..TurnSummary::default() };
+            self.end_turn_as(store, summary, Some(TurnOutcome::Restart))?;
             self.ended = None;
         }
         let thread = &mut self.stored.thread;
@@ -4514,11 +4611,45 @@ impl Live {
 
     /// Adds the item that ends a turn. What the turn changed joins it once that has been read.
     fn end_turn(&mut self, store: &Store, summary: TurnSummary) -> anyhow::Result<()> {
+        self.end_turn_as(store, summary, None)
+    }
+
+    /// `end_turn`, kept as ending with `outcome` in place of what the summary says.
+    fn end_turn_as(&mut self, store: &Store, summary: TurnSummary, outcome: Option<TurnOutcome>) -> anyhow::Result<()> {
+        let limited = matches!(self.stored.thread.interruption, Some(Interruption::Limit { .. }));
+        let outcome = outcome.unwrap_or(match () {
+            _ if summary.stopped => TurnOutcome::Stopped,
+            _ if limited => TurnOutcome::Limit,
+            _ if summary.is_error => TurnOutcome::Failed,
+            _ => TurnOutcome::Done,
+        });
         let item = self.new_item(new_id(), ItemKind::TurnEnd { summary });
         store.save_item(&self.stored.thread.id, &item)?;
         self.ended = Some(item.id.clone());
+        self.keep_turn(store, item.id.clone(), outcome);
         let _ = self.updates.send(Message::Items { items: vec![item] });
         Ok(())
+    }
+
+    /// Keeps what the turn that ran did, as ending now with `outcome`.
+    fn keep_turn(&mut self, store: &Store, id: String, outcome: TurnOutcome) {
+        let started = self.run.as_ref().map(|run| now() - run.started.elapsed().as_secs_f64());
+        let tally =
+            self.tally.take().unwrap_or_else(|| Tally::new(TurnStarter::Server, None, started.unwrap_or_else(now)));
+        let thread = &self.stored.thread;
+        let model = self.session_model.as_deref().or(thread.model.as_deref()).unwrap_or_default();
+        let turn = tally.record(id, thread, model, outcome, now());
+        if let Err(error) = store.save_turn(&turn) {
+            tracing::warn!(thread_id = thread.id, "couldn't keep a turn: {error:#}");
+        }
+    }
+
+    /// Notes whether the turn waits for the user now.
+    fn note_waiting(&mut self) {
+        let waiting = !self.activity.approvals.is_empty();
+        if let Some(tally) = &mut self.tally {
+            tally.waits(waiting, now());
+        }
     }
 
     fn set_changes(&mut self, store: &Store, item_id: &str, changes: TurnChanges) -> anyhow::Result<()> {
@@ -4572,6 +4703,10 @@ impl Live {
     /// to it, or as the notice it is. A queued message keeps its id, so that the client can tell
     /// which waiting row it replaces.
     fn append_queued(&mut self, store: &Store, queued: Queued) -> anyhow::Result<()> {
+        match &mut self.tally {
+            Some(tally) => tally.steered(),
+            None => self.tally = Some(Tally::new(starter_of(&queued), queued.device.clone(), now())),
+        }
         let Queued { id, text, attachments, media, skills, notice, context, programs, .. } = queued;
         let item = match notice {
             Some(notice) => self.new_item(id, ItemKind::Notice { notice, text }),
@@ -4844,7 +4979,9 @@ impl Live {
             (true, Some(code)) => format!("{agent} exited unexpectedly (status {code})."),
             (true, None) => format!("{agent} exited unexpectedly."),
         };
-        self.append(store, ItemKind::Error { message })
+        self.append(store, ItemKind::Error { message })?;
+        self.keep_turn(store, new_id(), TurnOutcome::Failed);
+        Ok(())
     }
 }
 
@@ -4977,6 +5114,8 @@ pub struct NewMessage {
     pub context: Option<Value>,
     /// The id the client gave it, which a message sent again is known by.
     pub message_id: Option<String>,
+    /// The client that sent it.
+    pub sender: Option<Sender>,
 }
 
 impl NewMessage {
@@ -5046,9 +5185,38 @@ fn plain_message(text: String) -> Queued {
         held: false,
         sending: false,
         notice: None,
+        device: None,
         context: None,
         programs: Vec::new(),
     }
+}
+
+/// What a message that starts a turn says started it.
+fn starter_of(message: &Queued) -> TurnStarter {
+    match (&message.notice, &message.device) {
+        (Some(_), _) => TurnStarter::Notice,
+        (None, Some(_)) => TurnStarter::User,
+        (None, None) if message.text == CONTINUE_PROMPT => TurnStarter::Server,
+        (None, None) => TurnStarter::Agent,
+    }
+}
+
+/// The features a message uses, as the request that sent it says.
+fn activity_uses(
+    thread_id: &Option<String>,
+    new_thread: &Option<NewThread>,
+    now: bool,
+    context: &Option<Value>,
+) -> Vec<motile_protocol::activity::Use> {
+    motile_protocol::activity::uses(&Request::Send {
+        thread_id: thread_id.clone(),
+        new_thread: new_thread.clone(),
+        text: String::new(),
+        attachments: Vec::new(),
+        now,
+        context: context.clone(),
+        message_id: None,
+    })
 }
 
 fn prompt(message: &Queued) -> String {
@@ -5186,6 +5354,7 @@ mod tests {
             held: false,
             sending: false,
             notice: None,
+            device: None,
             context: Some(serde_json::json!(["User clicked: Book it", {"people": 4}])),
             programs: Vec::new(),
         };

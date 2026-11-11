@@ -26,6 +26,7 @@ async fn main() -> anyhow::Result<()> {
         direct_addr: std::env::var("MOTILE_SERVER_ADDR").ok(),
         direct_addrs: Default::default(),
         media_limit: None,
+        client: None,
     };
     let sink = Arc::new(|event: Event| println!("{}", serde_json::to_string(&event).unwrap_or_default()));
     let handle = motile_core::core::start(config, sink)?;

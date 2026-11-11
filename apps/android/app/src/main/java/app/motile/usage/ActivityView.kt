@@ -1,0 +1,611 @@
+package app.motile.usage
+
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.drawText
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.max
+import androidx.compose.ui.unit.min
+import app.motile.LocalStore
+import app.motile.core.ActivityReport
+import app.motile.core.Preferences
+import app.motile.core.Server
+import app.motile.core.Time
+import app.motile.core.UsageModel
+import app.motile.platform.scaled
+import app.motile.theme.ControlSize
+import app.motile.theme.IconSize
+import app.motile.theme.LocalPalette
+import app.motile.theme.LocalSurface
+import app.motile.theme.Opacity
+import app.motile.theme.Palette
+import app.motile.theme.Radius
+import app.motile.theme.Surface
+import app.motile.theme.TextSize
+import app.motile.theme.Theme
+import app.motile.theme.at
+import app.motile.theme.wash
+import app.motile.ui.ActionButton
+import app.motile.ui.ButtonVariant
+import app.motile.ui.Card
+import app.motile.ui.Chip
+import app.motile.ui.Icon
+import app.motile.ui.Segmented
+import app.motile.ui.Text
+import app.motile.ui.ThemeDivider
+import app.motile.ui.color
+import app.motile.ui.dotted
+import java.text.NumberFormat
+
+private enum class ActivityMeasure(val raw: String, val label: String) {
+    Messages("messages", "Messages"), Turns("turns", "Turns"), Time("time", "Agent time");
+
+    fun points(source: ActivityReport.Source): List<Double> = when (this) {
+        Messages -> source.messagePoints
+        Turns -> source.turnPoints
+        Time -> source.secondPoints
+    }
+
+    fun total(source: ActivityReport.Source): Double = when (this) {
+        Messages -> source.messages.toDouble()
+        Turns -> source.turns.toDouble()
+        Time -> source.seconds
+    }
+
+    fun amount(value: Double): String = if (this == Time) activityDuration(value) else Math.round(value).toInt().grouped
+}
+
+private enum class TurnBreakdown(val raw: String, val label: String) {
+    Agents("agents", "Agents"), Models("models", "Models"), Projects("projects", "Projects"), Starters("starters", "Started by"),
+}
+
+private enum class Who(val raw: String, val label: String) { You("you", "You"), Agents("agents", "Agents") }
+
+private const val MEASURE_KEY = "activity.measure"
+private const val BREAKDOWN_KEY = "activity.breakdown"
+private const val WHO_KEY = "activity.who"
+
+/** Narrower than this, the tiles go two to a row and the turns' cards under each other. */
+private val besideWidth = 640.dp
+
+private val integers = NumberFormat.getIntegerInstance()
+private val Int.grouped: String get() = integers.format(this)
+
+/**
+ * What the user and the agents did on the servers counted, the Activity tab: the headline numbers,
+ * the work over time by where it came from, the clients it came from, the hours of the week, how
+ * the turns went and the features used.
+ */
+@Composable
+fun ActivityView(report: ActivityReport, period: UsageModel.Period) {
+    val store = LocalStore.current
+    val palette = LocalPalette.current
+    var pointed by remember { mutableStateOf<Int?>(null) }
+    LaunchedEffect(period) { pointed = null }
+    val outdated = store.servers.filter { it.state == Server.State.Connected && it.protocolVersion < 40 }
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val beside = maxWidth >= besideWidth
+        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(36.dp)) {
+            if (report.empty) {
+                UsageNote("Nothing was done in this time. Your servers keep what is done from the version that shows this on.")
+            } else {
+                StatGrid(report.tiles.map { Stat(it.label, it.value, it.detail) }, if (beside) 4 else 2, TextSize.Xl)
+                OverTime(report, period, beside, pointed) { pointed = it }
+                if (report.clients.isNotEmpty()) Clients(report, beside)
+                Section("When you work", report.busiest) {
+                    Card(Modifier.fillMaxWidth()) { Heatmap(report.hours, Modifier.padding(16.dp)) }
+                }
+                if (report.outcomes.isNotEmpty()) Turns(report, beside)
+                if (report.features.isNotEmpty() || report.agentFeatures.isNotEmpty()) Features(report, beside)
+            }
+            for (server in outdated) Text("Update ${server.name} to see what was done on it.", size = TextSize.Xxs, color = palette.mutedForeground)
+        }
+    }
+}
+
+/**
+ * A section's title, with what it says under it and a control on its right, or `stacked` across
+ * the row under it, where a narrow page has no room beside the title. What it shows comes under.
+ */
+@Composable
+private fun Section(
+    title: String,
+    detail: String? = null,
+    stacked: Boolean = false,
+    trailing: @Composable () -> Unit = {},
+    content: @Composable () -> Unit,
+) {
+    val palette = LocalPalette.current
+    val words = @Composable { modifier: Modifier ->
+        Column(modifier, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(title, size = TextSize.Md, weight = FontWeight.Medium, color = palette.foreground)
+            detail?.let { Text(it, size = TextSize.Xs, color = palette.mutedForeground) }
+        }
+    }
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        if (stacked) {
+            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                words(Modifier.padding(horizontal = 4.dp))
+                trailing()
+            }
+        } else {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                words(Modifier.weight(1f))
+                trailing()
+            }
+        }
+        content()
+    }
+}
+
+/** The items in rows of `columns`, each as wide as the others, the last row's gaps left empty. With `even`, every item of a row is as tall as its tallest. */
+@Composable
+private fun <T> Grid(items: List<T>, columns: Int, spacing: Dp, even: Boolean = false, content: @Composable (T, Modifier) -> Unit) {
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(spacing)) {
+        for (row in items.chunked(columns)) {
+            Row(
+                Modifier.fillMaxWidth().then(if (even) Modifier.height(IntrinsicSize.Min) else Modifier),
+                horizontalArrangement = Arrangement.spacedBy(spacing),
+                verticalAlignment = Alignment.Top,
+            ) {
+                for (item in row) content(item, if (even) Modifier.weight(1f).fillMaxHeight() else Modifier.weight(1f))
+                repeat(columns - row.size) { Spacer(Modifier.weight(1f)) }
+            }
+        }
+    }
+}
+
+private data class Stat(val label: String, val value: String, val detail: String)
+
+/** Numbers in cards, `columns` to a row, every card of a row as tall as its tallest. */
+@Composable
+private fun StatGrid(stats: List<Stat>, columns: Int, valueSize: TextSize) {
+    val palette = LocalPalette.current
+    Grid(stats, columns, 10.dp, even = true) { stat, modifier ->
+        Card(modifier) {
+            Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(stat.label, size = TextSize.Xs, color = palette.mutedForeground, maxLines = 1)
+                Text(stat.value, style = Theme.uiDigits(valueSize, FontWeight.SemiBold), color = palette.foreground, maxLines = 1)
+                Text(stat.detail, style = Theme.uiDigits(TextSize.Xxs), color = palette.mutedStrongerForeground)
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun OverTime(report: ActivityReport, period: UsageModel.Period, beside: Boolean, pointed: Int?, point: (Int?) -> Unit) {
+    val palette = LocalPalette.current
+    var measure by remember { mutableStateOf(ActivityMeasure.entries.firstOrNull { it.raw == Preferences.string(MEASURE_KEY) } ?: ActivityMeasure.Messages) }
+    val shown = report.sources.filter { measure.total(it) > 0 }
+    val index = pointed?.takeIf { it in report.starts.indices }
+    Section("Over time", stacked = !beside, trailing = {
+        Segmented(ActivityMeasure.entries.map { it.label to it }, measure, {
+            measure = it
+            Preferences.set(MEASURE_KEY, it.raw)
+        }, size = ControlSize.Small, fills = !beside)
+    }) {
+        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.Top) {
+                FlowRow(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    for (source in shown) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Dot(palette.chart(source.color))
+                            Icon(source.symbol, IconSize.Xs, color = palette.mutedForeground)
+                            Text(source.label, size = TextSize.Xs, color = palette.foreground, maxLines = 1)
+                            val value = index?.let { measure.points(source).getOrElse(it) { 0.0 } } ?: measure.total(source)
+                            Text(measure.amount(value), style = Theme.uiDigits(TextSize.Xs), color = palette.mutedForeground, maxLines = 1)
+                        }
+                    }
+                }
+                if (index != null) Text(pointedTime(report.starts[index], period), size = TextSize.Xs, color = palette.mutedForeground, maxLines = 1)
+            }
+            ActivityChart(report.starts, shown.map { palette.chart(it.color) to measure.points(it) }, period, index, measure::amount, point)
+        }
+    }
+}
+
+@Composable
+private fun Clients(report: ActivityReport, beside: Boolean) {
+    Section("Clients", "Where your messages came from") {
+        Card(Modifier.fillMaxWidth()) {
+            report.clients.forEachIndexed { index, client ->
+                if (index > 0) ThemeDivider()
+                ClientRow(client, beside)
+            }
+        }
+    }
+}
+
+private val badgeSide = scaled(32f).dp
+
+/**
+ * A client: its device, what it is, how it reaches the servers, and its part of the messages: in
+ * one row when `beside`, else with its part under its words, which get the whole width.
+ */
+@Composable
+private fun ClientRow(client: ActivityReport.Client, beside: Boolean) {
+    val palette = LocalPalette.current
+    val color = palette.chart(client.color)
+    val seen = client.lastSeen?.let { Time.ago(it) }?.let { if (it == "now") "Seen just now" else "Seen $it ago" }
+    Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(badgeSide).background(color.wash(), RoundedCornerShape(Radius.md)), contentAlignment = Alignment.Center) {
+                Icon(client.symbol, IconSize.Md, color = color)
+            }
+            Column(Modifier.weight(1f).padding(end = if (beside) 8.dp else 0.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        client.name, Modifier.weight(1f, fill = false), size = TextSize.Sm, weight = FontWeight.Medium, color = palette.foreground,
+                        maxLines = 1, overflow = TextOverflow.MiddleEllipsis,
+                    )
+                    if (client.thisDevice) Chip("This device", small = true)
+                    if (client.removed) Chip("Removed", muted = true, small = true)
+                }
+                if (beside) {
+                    Text(
+                        dotted(listOf(client.client, client.detail).filter { it.isNotEmpty() }.joinToString(" · "), palette.mutedStrongerForeground),
+                        size = TextSize.Xs, color = palette.mutedForeground, maxLines = 1,
+                    )
+                } else {
+                    Text(client.client, size = TextSize.Xs, color = palette.mutedForeground, maxLines = 1)
+                    if (client.detail.isNotEmpty()) Text(client.detail, size = TextSize.Xs, color = palette.mutedForeground)
+                }
+            }
+            if (beside) {
+                ActivityBar(client.share, color, Modifier.width(96.dp))
+                Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text(messages(client.messages), style = Theme.uiDigits(TextSize.Xs), color = palette.foreground, maxLines = 1)
+                    seen?.let { Text(it, style = Theme.uiDigits(TextSize.Xxs), color = palette.mutedStrongerForeground, maxLines = 1) }
+                }
+            }
+        }
+        if (!beside) {
+            Column(Modifier.fillMaxWidth().padding(start = badgeSide + 12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                ActivityBar(client.share, color, Modifier.fillMaxWidth())
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(messages(client.messages), Modifier.weight(1f), style = Theme.uiDigits(TextSize.Xxs), color = palette.foreground, maxLines = 1)
+                    seen?.let { Text(it, style = Theme.uiDigits(TextSize.Xxs), color = palette.mutedStrongerForeground, maxLines = 1) }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun Turns(report: ActivityReport, beside: Boolean) {
+    Section("Turns") {
+        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            if (beside) {
+                Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.Top) {
+                    Outcomes(report, Modifier.weight(1f).fillMaxHeight())
+                    Breakdown(report, Modifier.weight(1f).fillMaxHeight())
+                }
+            } else {
+                Outcomes(report, Modifier.fillMaxWidth())
+                Breakdown(report, Modifier.fillMaxWidth())
+            }
+            if (report.facts.isNotEmpty()) StatGrid(report.facts.map { Stat(it.label, it.value, it.detail) }, if (beside) 4 else 2, TextSize.Lg)
+        }
+    }
+}
+
+@Composable
+private fun Outcomes(report: ActivityReport, modifier: Modifier) {
+    val palette = LocalPalette.current
+    Card(modifier) {
+        Box(Modifier.fillMaxWidth().heightIn(min = scaled(40f).dp).padding(horizontal = 14.dp), contentAlignment = Alignment.CenterStart) {
+            Text("How they ended", size = TextSize.Sm, weight = FontWeight.Medium, color = palette.foreground)
+        }
+        ThemeDivider()
+        report.outcomes.forEachIndexed { index, line ->
+            if (index > 0) ThemeDivider()
+            LineRow(line, palette.outcome(line.name))
+        }
+    }
+}
+
+/** The turns by agent, model, project or who started them, picked by the segments over them. Projects are offered once there is more than one. */
+@Composable
+private fun Breakdown(report: ActivityReport, modifier: Modifier) {
+    var breakdown by remember { mutableStateOf(TurnBreakdown.entries.firstOrNull { it.raw == Preferences.string(BREAKDOWN_KEY) } ?: TurnBreakdown.Agents) }
+    val offered = TurnBreakdown.entries.filter { it != TurnBreakdown.Projects || report.projects.size > 1 }
+    val current = if (breakdown in offered) breakdown else TurnBreakdown.Agents
+    val shown = when (current) {
+        TurnBreakdown.Agents -> report.agents
+        TurnBreakdown.Models -> report.models
+        TurnBreakdown.Projects -> report.projects
+        TurnBreakdown.Starters -> report.starters
+    }
+    Card(modifier) {
+        Box(Modifier.fillMaxWidth().heightIn(min = scaled(40f).dp).padding(horizontal = 8.dp), contentAlignment = Alignment.Center) {
+            Segmented(offered.map { it.label to it }, current, {
+                breakdown = it
+                Preferences.set(BREAKDOWN_KEY, it.raw)
+            }, size = ControlSize.Small, fills = true)
+        }
+        ThemeDivider()
+        shown.forEachIndexed { index, line ->
+            if (index > 0) ThemeDivider()
+            LineRow(line, null)
+        }
+    }
+}
+
+/** An outcome, an agent, a model, a project or a starter: its name, how long its turns took, and its part of them. */
+@Composable
+private fun LineRow(line: ActivityReport.Line, tint: Color?) {
+    val palette = LocalPalette.current
+    val style = Theme.uiDigits(TextSize.Xs)
+    val dot = line.agent?.color(palette) ?: tint
+    Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 11.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            dot?.let { Dot(it) }
+            Row(Modifier.weight(1f).padding(end = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(line.name, Modifier.weight(1f, fill = false), style = style, color = palette.foreground, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
+                line.server?.let { Text(it, Modifier.weight(1f, fill = false), style = style, color = palette.mutedForeground, maxLines = 1) }
+            }
+            Text(line.detail, style = style, color = palette.mutedForeground, maxLines = 1)
+            Text(line.turns.grouped, Modifier.widthIn(min = scaled(36f).dp), style = style, color = palette.foreground, maxLines = 1, align = TextAlign.End)
+        }
+        ActivityBar(line.share, tint ?: dot ?: palette.mutedForeground, Modifier.fillMaxWidth())
+    }
+}
+
+@Composable
+private fun Features(report: ActivityReport, beside: Boolean) {
+    var who by remember { mutableStateOf(Who.entries.firstOrNull { it.raw == Preferences.string(WHO_KEY) } ?: Who.You) }
+    val offered = Who.entries.filter { if (it == Who.You) report.features.isNotEmpty() else report.agentFeatures.isNotEmpty() }
+    val current = if (who in offered) who else offered.firstOrNull() ?: Who.You
+    Section("Features", stacked = !beside && offered.size > 1, trailing = {
+        if (offered.size > 1) {
+            Segmented(offered.map { it.label to it }, current, {
+                who = it
+                Preferences.set(WHO_KEY, it.raw)
+            }, size = ControlSize.Small, fills = !beside)
+        }
+    }) {
+        when (current) {
+            Who.You -> Grid(report.features, if (beside) 2 else 1, 12.dp) { group, modifier ->
+                key(group.name) { FeatureCard(group.name, group.count, group.features, modifier) }
+            }
+            Who.Agents -> FeatureCard("Motile tools", report.agentFeatures.sumOf { it.count }, report.agentFeatures, Modifier.fillMaxWidth())
+        }
+    }
+}
+
+private const val FEATURES_SHOWN = 5
+
+/** The features of a group, each with how often it was used: the five used most, and the rest once asked for. */
+@Composable
+private fun FeatureCard(title: String, count: Int, features: List<ActivityReport.Feature>, modifier: Modifier) {
+    val palette = LocalPalette.current
+    var all by remember { mutableStateOf(false) }
+    val listed = if (all) features else features.take(FEATURES_SHOWN)
+    Card(modifier) {
+        Row(Modifier.fillMaxWidth().heightIn(min = scaled(40f).dp).padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(title, Modifier.weight(1f).padding(end = 8.dp), size = TextSize.Sm, weight = FontWeight.Medium, color = palette.foreground)
+            Text(count.grouped, style = Theme.uiDigits(TextSize.Xs), color = palette.mutedForeground)
+        }
+        ThemeDivider()
+        listed.forEachIndexed { index, feature ->
+            if (index > 0) ThemeDivider()
+            FeatureRow(feature)
+        }
+        if (features.size > FEATURES_SHOWN) {
+            ThemeDivider()
+            Box(Modifier.fillMaxWidth().padding(6.dp), contentAlignment = Alignment.Center) {
+                ActionButton(if (all) "Show fewer" else "Show all ${features.size}", variant = ButtonVariant.Ghost, size = ControlSize.Small) { all = !all }
+            }
+        }
+    }
+}
+
+@Composable
+private fun FeatureRow(feature: ActivityReport.Feature) {
+    val palette = LocalPalette.current
+    val style = Theme.uiDigits(TextSize.Xs)
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = scaled(40f).dp).padding(horizontal = 14.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f).padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(feature.label, style = style, color = palette.foreground, maxLines = 2)
+            if (feature.detail.isNotEmpty()) Text(feature.detail, size = TextSize.Xxs, color = palette.mutedForeground, maxLines = 1)
+        }
+        Spacer(Modifier.width(8.dp))
+        ActivityBar(feature.share, palette.chart1, Modifier.width(scaled(56f).dp))
+        Text(feature.count.grouped, Modifier.widthIn(min = scaled(32f).dp), style = style, color = palette.foreground, maxLines = 1, align = TextAlign.End)
+    }
+}
+
+/** A part of the whole as a thin bar across what it is given. */
+@Composable
+private fun ActivityBar(share: Double, color: Color, modifier: Modifier) {
+    val track = LocalSurface.current.color(Surface.Layer.Control)
+    Canvas(modifier.height(4.dp)) {
+        val radius = CornerRadius(size.height / 2)
+        drawRoundRect(track, cornerRadius = radius)
+        if (share <= 0) return@Canvas
+        val width = maxOf(size.width * share.toFloat().coerceAtMost(1f), 4.dp.toPx())
+        drawRoundRect(color, size = Size(width, size.height), cornerRadius = radius)
+    }
+}
+
+private val days = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+private val weekdays = listOf("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
+private val cellGap = 3.dp
+private val keySide = 10.dp
+
+/** The hours of the week, a row a day, each as busy as its colour is strong. The hour last tapped says what was done in it. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun Heatmap(hours: List<ActivityReport.Hour>, modifier: Modifier) {
+    val palette = LocalPalette.current
+    val density = LocalDensity.current
+    val surface = LocalSurface.current
+    var chosen by remember(hours) { mutableStateOf<ActivityReport.Hour?>(null) }
+    val fills = listOf(
+        surface.color(Surface.Layer.Control),
+        palette.chart1.at(Opacity.ColorTintChart),
+        palette.chart1.at(Opacity.ColorTintChartStronger),
+        palette.chart1.at(Opacity.ColorTintChartStrongest),
+        palette.chart1,
+    )
+    val measurer = rememberTextMeasurer()
+    val labelStyle = Theme.ui(TextSize.Xxs).copy(color = palette.mutedForeground)
+    val dayLabels = days.map { measurer.measure(it, labelStyle) }
+    val labels = scaled(30f).dp
+    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        BoxWithConstraints(Modifier.fillMaxWidth()) {
+            val side = max((maxWidth - labels - cellGap * 24) / 24, 4.dp)
+            val cell = min(side, scaled(18f).dp)
+            val corner = min(Radius.xs, side / 4)
+            val span = with(density) { (side * 6 + cellGap * 5).roundToPx() }
+            val hourLabels = listOf(0, 6, 12, 18).map {
+                measurer.measure(hourLabel(it), labelStyle, overflow = TextOverflow.Ellipsis, maxLines = 1, constraints = Constraints(maxWidth = span))
+            }
+            val hourHeight = with(density) { (hourLabels.maxOfOrNull { it.size.height } ?: 0).toDp() }
+            Canvas(
+                Modifier
+                    .fillMaxWidth()
+                    .height(cell * 7 + cellGap * 7 + 2.dp + hourHeight)
+                    .pointerInput(hours, side, cell) {
+                        detectTapGestures { at ->
+                            val column = ((at.x - (labels + cellGap).toPx()) / (side + cellGap).toPx()).toInt()
+                            val row = (at.y / (cell + cellGap).toPx()).toInt()
+                            if (at.x < (labels + cellGap).toPx() || column !in 0 until 24 || row !in 0 until 7) return@detectTapGestures
+                            val hour = hours.getOrNull(row * 24 + column) ?: return@detectTapGestures
+                            chosen = if (chosen?.id == hour.id) null else hour
+                        }
+                    },
+            ) {
+                val (sidePx, cellPx, gapPx) = Triple(side.toPx(), cell.toPx(), cellGap.toPx())
+                val start = labels.toPx() + gapPx
+                val radius = CornerRadius(corner.toPx())
+                for (day in 0 until 7) {
+                    val y = day * (cellPx + gapPx)
+                    val label = dayLabels[day]
+                    drawText(label, topLeft = Offset(0f, y + (cellPx - label.size.height) / 2))
+                    for (hour in 0 until 24) {
+                        val cellHour = hours.getOrNull(day * 24 + hour)
+                        val topLeft = Offset(start + hour * (sidePx + gapPx), y)
+                        drawRoundRect(fills[(cellHour?.level ?: 0).coerceIn(0, 4)], topLeft, Size(sidePx, cellPx), radius)
+                        if (cellHour == null || cellHour.id != chosen?.id) continue
+                        val stroke = 1.dp.toPx()
+                        drawRoundRect(
+                            palette.foreground, topLeft + Offset(stroke / 2, stroke / 2), Size(sidePx - stroke, cellPx - stroke), radius, style = Stroke(stroke),
+                        )
+                    }
+                }
+                val labelsTop = 7 * (cellPx + gapPx) + 2.dp.toPx()
+                hourLabels.forEachIndexed { index, label ->
+                    drawText(label, topLeft = Offset(start + index * 6 * (sidePx + gapPx), labelsTop))
+                }
+            }
+        }
+        FlowRow(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            val shown = chosen
+            val said = Modifier.padding(end = 8.dp).align(Alignment.CenterVertically)
+            if (shown != null) {
+                val text = "${weekdays[shown.weekday]}, ${hourLabel(shown.hour)}–${hourLabel((shown.hour + 1) % 24)} · ${messages(shown.messages)} · ${turns(shown.turns)}"
+                Text(dotted(text, palette.mutedStrongerForeground), said, style = Theme.uiDigits(TextSize.Xxs), color = palette.mutedForeground)
+            } else {
+                Text("Tap an hour to see what was done in it", said, size = TextSize.Xxs, color = palette.mutedStrongerForeground)
+            }
+            Row(Modifier.align(Alignment.CenterVertically), horizontalArrangement = Arrangement.spacedBy(cellGap), verticalAlignment = Alignment.CenterVertically) {
+                Text("Less", Modifier.padding(end = 3.dp), size = TextSize.Xxs, color = palette.mutedForeground, maxLines = 1)
+                for (fill in fills) Box(Modifier.size(keySide).background(fill, RoundedCornerShape(min(Radius.xs, keySide / 4))))
+                Text("More", Modifier.padding(start = 3.dp), size = TextSize.Xxs, color = palette.mutedForeground, maxLines = 1)
+            }
+        }
+    }
+}
+
+/** A source's or a client's colour: one of the six chart colours, or muted for clients that didn't say which they are. */
+private fun Palette.chart(index: Int): Color = when (index) {
+    1 -> chart1
+    2 -> chart2
+    3 -> chart3
+    4 -> chart4
+    5 -> chart5
+    6 -> chart6
+    else -> mutedForeground
+}
+
+private fun Palette.outcome(name: String): Color = when (name) {
+    "Finished" -> success
+    "Stopped" -> mutedForeground
+    "Hit the usage limit" -> warning
+    else -> destructive
+}
+
+private fun messages(count: Int): String = if (count == 1) "1 message" else "${count.grouped} messages"
+
+private fun turns(count: Int): String = if (count == 1) "1 turn" else "${count.grouped} turns"
+
+/** The time pointed at, in the legend: the weekday and the hour over a day, the weekday and the date otherwise. */
+private fun pointedTime(seconds: Double, period: UsageModel.Period): String =
+    formatted(seconds, if (period == UsageModel.Period.Day) "EEEEj" else "EEEEMMMMd")
+
+private fun hourLabel(hour: Int): String = when (hour) {
+    0 -> "12 am"
+    12 -> "12 pm"
+    in 1 until 12 -> "$hour am"
+    else -> "${hour - 12} pm"
+}
+
+private fun activityDuration(value: Double): String {
+    val seconds = Math.round(maxOf(value, 0.0)).toInt()
+    if (seconds < 60) return "${seconds}s"
+    if (seconds < 3600) return "${seconds / 60}m"
+    val hours = seconds / 3600
+    val minutes = seconds % 3600 / 60
+    return if (minutes == 0 || hours >= 100) "${hours}h" else "${hours}h ${minutes}m"
+}

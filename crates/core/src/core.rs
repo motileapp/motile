@@ -55,7 +55,7 @@ use crate::ricrac;
 use crate::search;
 use crate::skills;
 use crate::sync::{self as relay, Origin, SYNC_PROTOCOL};
-use crate::usage;
+use crate::{activity, usage};
 
 /// The newest items are rendered and sent first, so a long thread opens at once.
 const FIRST_ITEMS: usize = 30;
@@ -77,6 +77,8 @@ const ACCOUNT_CHECK_TICKS: u64 = 30;
 const LIMITS_CHECK_TICKS: u64 = 30;
 /// The servers before this one don't keep what their agents spend.
 const USAGE_PROTOCOL: u32 = 10;
+/// The first protocol whose servers keep what was done.
+const ACTIVITY_PROTOCOL: u32 = 40;
 /// The servers before this one can't say what the agents' accounts have used of their plans.
 const LIMITS_PROTOCOL: u32 = 17;
 /// The servers before this one can't search their threads' messages.
@@ -1483,6 +1485,9 @@ impl Core {
             let address =
                 ServerAddr { key: server_id.clone(), direct: direct.and_then(|address| address.parse().ok()) };
             let link = Link::connect(endpoint.clone(), address, self.away.clone(), self.link_events.clone());
+            if let Some(client) = &self.config.client {
+                link.describe(client.info());
+            }
             // Threads the client opened before there was a connection to follow them on.
             for (thread_id, open) in self.open.iter().filter(|(_, open)| open.server_id == server_id) {
                 link.open(thread_id.clone(), open.rev);
@@ -3684,6 +3689,115 @@ impl Core {
                     let answer = match failure {
                         Some(failure) if spent.is_empty() => Err(failure),
                         _ => serde_json::to_value(usage::view(&spent, window, &project_names, &server_names, &proxied))
+                            .map_err(|error| error.to_string()),
+                    };
+                    if let Ok(view) = &answer {
+                        let _ = inputs.send(Input::Keep { key, value: view.clone() });
+                    }
+                    reply(&sink, id, answer);
+                });
+            }
+            Command::Activity { bucket_secs, buckets, utc_offset_secs, servers, kept } => {
+                let key = format!("activity:{}", &usage_key(bucket_secs, buckets, servers.as_ref())["usage:".len()..]);
+                if kept {
+                    let last: Option<Value> = self.cache.kept(&key);
+                    return self.reply(id, last.ok_or_else(|| "Nothing was kept.".to_string()));
+                }
+                let window = usage::Window::ending(now(), bucket_secs, buckets, utc_offset_secs);
+                let mut names = activity::Names {
+                    this_device: self.key.public(),
+                    devices: self
+                        .me
+                        .devices
+                        .iter()
+                        .map(|device| (device.public_key.clone(), (device.name.clone(), device.platform.clone())))
+                        .collect(),
+                    ..activity::Names::default()
+                };
+                let (removed, holder) = self.removed_and_holder();
+                let removed: Vec<String> = removed
+                    .into_iter()
+                    .filter(|origin| servers.as_ref().is_none_or(|ids| ids.contains(origin)))
+                    .collect();
+                for origin in &removed {
+                    for project in self.cache.projects(origin) {
+                        names.projects.insert((origin.clone(), project.id), project.name);
+                    }
+                    let name = self.servers.iter().find(|server| &server.device.public_key == origin);
+                    names
+                        .servers
+                        .insert(origin.clone(), name.map(|server| server.device.name.clone()).unwrap_or_default());
+                }
+                let holder_link = holder.as_ref().and_then(|holder| self.peers().get(holder).cloned());
+                let asked = self
+                    .servers
+                    .iter()
+                    .filter(|server| servers.as_ref().is_none_or(|ids| ids.contains(&server.device.public_key)))
+                    .filter(|server| server.info.as_ref().is_some_and(|info| info.protocol >= ACTIVITY_PROTOCOL));
+                let mut links: Vec<(String, Arc<Link>)> = Vec::new();
+                for server in asked {
+                    let Some(link) = server.link.clone() else { continue };
+                    let server_id = server.device.public_key.clone();
+                    for project in self.cache.projects(&server_id) {
+                        names.projects.insert((server_id.clone(), project.id), project.name);
+                    }
+                    names.servers.insert(server_id.clone(), server.device.name.clone());
+                    links.push((server_id, link));
+                }
+                let holder = holder_link.and(holder).filter(|_| !removed.is_empty());
+                if let Some(holder) = holder.as_ref().filter(|holder| !links.iter().any(|(id, _)| id == *holder)) {
+                    links.extend(self.peers().get(holder).map(|link| (holder.clone(), link.clone())));
+                }
+                if links.is_empty() {
+                    let outdated = self.servers.iter().any(|server| server.info.is_some());
+                    let why = if outdated {
+                        "Update your servers to see what was done on them."
+                    } else {
+                        "None of the servers is connected."
+                    };
+                    return self.reply(id, Err(why.to_string()));
+                }
+                let mut asked = tokio::task::JoinSet::new();
+                let chosen = |server_id: &String| servers.as_ref().is_none_or(|ids| ids.contains(server_id));
+                for (server_id, link) in links {
+                    let own = chosen(&server_id);
+                    let request = Request::ActivityReport {
+                        since: window.since,
+                        until: window.until,
+                        bucket_secs: window.bucket_secs,
+                        utc_offset_secs: window.utc_offset_secs,
+                        removed: if holder.as_ref() == Some(&server_id) { removed.clone() } else { Vec::new() },
+                    };
+                    asked.spawn(async move { (server_id, own, link.request(&request).await) });
+                }
+                let (sink, inputs) = (self.sink.clone(), self.inputs.clone());
+                tokio::spawn(async move {
+                    let mut done = Vec::new();
+                    let mut failure = None;
+                    while let Some(Ok((server_id, own, answer))) = asked.join_next().await {
+                        match answer {
+                            Ok(Message::ActivityReport { report, copies }) => {
+                                // A server that wasn't chosen still says which clients it knows.
+                                let report = if own {
+                                    report
+                                } else {
+                                    motile_protocol::wire::ActivityReport {
+                                        clients: report.clients,
+                                        ..Default::default()
+                                    }
+                                };
+                                done.push(activity::Done { server_id, report });
+                                for copy in copies {
+                                    done.push(activity::Done { server_id: copy.origin, report: copy.report });
+                                }
+                            }
+                            Ok(other) => failure = Some(unexpected(&other)),
+                            Err(error) => failure = Some(error_text(error)),
+                        }
+                    }
+                    let answer = match failure {
+                        Some(failure) if done.is_empty() => Err(failure),
+                        _ => serde_json::to_value(activity::view(&done, window, &names))
                             .map_err(|error| error.to_string()),
                     };
                     if let Ok(view) = &answer {

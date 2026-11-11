@@ -6,9 +6,9 @@ use std::path::PathBuf;
 use motile_protocol::auth_api::User;
 use motile_protocol::gateway_wire::{AccountChange, Capture, McpChange};
 use motile_protocol::wire::{
-    Activity, Agent, Bucket, ContinueSettings, DiffScope, GitAction, GitStage, LinearStateKind, MergeMethod, NewThread,
-    Project, PullRequestAction, PullRequestEdit, PullRequestSettings, PullRequestState, Request, RestartWhen,
-    RicracStateKind, ServerInfo, Thread,
+    Activity, Agent, Bucket, ClientForm, ClientInfo, ClientKind, ContinueSettings, DiffScope, GitAction, GitStage,
+    LinearStateKind, MergeMethod, NewThread, Project, PullRequestAction, PullRequestEdit, PullRequestSettings,
+    PullRequestState, Request, RestartWhen, RicracStateKind, ServerInfo, Thread,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -48,6 +48,29 @@ pub struct Config {
     /// without it.
     #[serde(default)]
     pub media_limit: Option<u64>,
+    /// Which client this is, which every server is told once it connects.
+    #[serde(default)]
+    pub client: Option<ClientDescription>,
+}
+
+/// Which client this is and where it runs. The core adds its version.
+#[derive(Deserialize, Clone, Debug)]
+pub struct ClientDescription {
+    pub kind: ClientKind,
+    /// `macos`, `ios`, `ipados`, `android`, `linux` or `windows`.
+    pub system: String,
+    pub form: ClientForm,
+}
+
+impl ClientDescription {
+    pub fn info(&self) -> ClientInfo {
+        ClientInfo {
+            kind: self.kind,
+            system: self.system.clone(),
+            form: self.form,
+            version: env!("CARGO_PKG_VERSION").to_string(),
+        }
+    }
 }
 
 /// Where finding in a thread starts: the first row that shows below the client's bars, and how
@@ -345,6 +368,18 @@ pub enum Command {
         issue: String,
         #[serde(default)]
         comment: Option<String>,
+    },
+    /// What was done on the connected `servers`, or all of them, in the last `buckets` spans of
+    /// `bucket_secs`, on a clock `utc_offset_secs` ahead of UTC: an `activity::View`. `kept`
+    /// answers at once with what was last read.
+    Activity {
+        bucket_secs: u32,
+        buckets: u32,
+        utc_offset_secs: i32,
+        #[serde(default)]
+        servers: Option<Vec<String>>,
+        #[serde(default)]
+        kept: bool,
     },
     /// What the agents spent on the connected `servers`, or all of them, in the last `buckets`
     /// spans of `bucket_secs`, on a clock `utc_offset_secs` ahead of UTC: a `usage::View`. `kept`

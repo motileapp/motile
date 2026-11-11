@@ -30,7 +30,7 @@ impl Window {
         Self { since, until: last + size, bucket_secs: bucket_secs.max(60), utc_offset_secs }
     }
 
-    fn starts(&self) -> Vec<f64> {
+    pub(crate) fn starts(&self) -> Vec<f64> {
         let size = f64::from(self.bucket_secs);
         let count = ((self.until - self.since) / size).round() as usize;
         (0..count).map(|index| self.since + size * index as f64).collect()

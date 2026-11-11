@@ -1,12 +1,14 @@
-//! What the agents spent and what is left of their plans, in place of the thread: the title and
-//! the choices in the top bar over it, after the way back.
+//! What was done, what the agents spent and what is left of their plans, in place of the thread:
+//! the title and the choices in the top bar over it, after the way back.
 
+mod activity;
 pub mod limits;
 mod spending;
 
 use gpui_kit::prelude::*;
 use gpui_kit::*;
 
+use self::activity::ActivityView;
 use self::spending::SpendingView;
 use crate::panel::state::Loaded;
 use crate::store::Store;
@@ -27,6 +29,7 @@ const CONTROL_GAP: f32 = 8.;
 pub struct UsageRoute {
     store: Entity<Store>,
     spending: Entity<SpendingView>,
+    activity: Entity<ActivityView>,
     /// How far the title starts from the pane's left edge: past the window's buttons when the
     /// sidebar is hidden.
     pub title_inset: f32,
@@ -42,10 +45,12 @@ pub struct UsageRoute {
 impl UsageRoute {
     pub fn new(store: Entity<Store>, cx: &mut Context<Self>) -> Self {
         let spending = cx.new(|cx| SpendingView::new(store.clone(), cx));
+        let activity = cx.new(|cx| ActivityView::new(store.clone(), cx));
         let subscription = cx.observe(&store, |_, _, cx| cx.notify());
         Self {
             store,
             spending,
+            activity,
             title_inset: 20.,
             width: 0.,
             trailing_room: 0.,
@@ -90,13 +95,13 @@ impl UsageRoute {
             )
     }
 
-    /// The tabs, the period of the cost and the tokens, and the way to read it all again, in a
-    /// row; the period as a menu when the row doesn't fit.
+    /// The tabs, the period of the activity, the cost and the tokens, and the way to read it all again, in a
+    /// row: the period as a menu where they don't fit, and the tabs too where even that doesn't.
     fn controls(&self, room: f32, window: &mut Window, cx: &App) -> Div {
         let store = self.store.read(cx);
         let (tab, period) = (store.usage_tab(), store.usage_period());
         let handle = self.store.clone();
-        let tabs = Segmented::new(
+        let segmented_tabs = Segmented::new(
             "usage-tabs",
             UsageTab::ALL.iter().map(|tab| SharedString::from(tab.label())).collect(),
             UsageTab::ALL.iter().position(|shown| *shown == tab).unwrap_or(0),
@@ -108,11 +113,31 @@ impl UsageRoute {
             })
         });
         let periods: Vec<&str> = UsagePeriod::ALL.iter().map(|period| period.label()).collect();
-        let fits = room
-            >= segmented_width(&["Cost", "Tokens", "Limits"], window)
-                + segmented_width(&periods, window)
-                + ControlSize::Regular.height()
-                + 2. * CONTROL_GAP;
+        let tabs_width = segmented_width(&UsageTab::ALL.map(UsageTab::label), window);
+        let refresh_width = ControlSize::Regular.height() + 2. * CONTROL_GAP;
+        let fits = room >= tabs_width + segmented_width(&periods, window) + refresh_width;
+        let size = ControlSize::Regular;
+        let period_menu_width = text_width(period.label(), size.text_size(), FontWeight::MEDIUM, window)
+            + 2. * size.padding()
+            + size.height();
+        let tabs = if fits || room >= tabs_width + period_menu_width + refresh_width {
+            segmented_tabs.into_any_element()
+        } else {
+            let handle = self.store.clone();
+            ActionMenu::new("usage-tabs-menu", tab.label(), move |_, _| {
+                UsageTab::ALL.iter().fold(Menu::new(), |menu, choice| {
+                    let (handle, choice) = (handle.clone(), *choice);
+                    menu.checked(choice == tab, choice.label(), move |_, cx| {
+                        handle.update(cx, |store, cx| {
+                            store.set_usage_tab(choice);
+                            cx.notify();
+                        })
+                    })
+                })
+            })
+            .button(|button| button.variant(Variant::Outline))
+            .into_any_element()
+        };
         let picker = if fits {
             let handle = self.store.clone();
             let picker = Segmented::new(
@@ -142,7 +167,7 @@ impl UsageRoute {
                 })
             })
             .margin(beside(CONTROL_GAP, 0.))
-            .button(|button| button.variant(Variant::Secondary).disabled(tab == UsageTab::Limits))
+            .button(|button| button.variant(Variant::Outline).disabled(tab == UsageTab::Limits))
             .into_any_element()
         };
         let handle = self.store.clone();
@@ -176,6 +201,16 @@ impl UsageRoute {
                 Loaded::Loading => loading(),
                 Loaded::Failed(message) => note(message.clone(), cx),
                 Loaded::Ready(report) => limits::limits(report, content_width, cx),
+            };
+        }
+        if store.usage_tab() == UsageTab::Activity {
+            return match &store.usage.activity {
+                Loaded::Loading => loading(),
+                Loaded::Failed(message) => note(message.clone(), cx),
+                Loaded::Ready(_) => {
+                    self.activity.update(cx, |activity, _| activity.width = content_width);
+                    self.activity.clone().into_any_element()
+                }
             };
         }
         match &store.usage.spending {

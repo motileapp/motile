@@ -492,6 +492,7 @@ class AppStore(private val context: Context) {
             put("auth_url", authURL)
             put("device_name", Platform.deviceName)
             put("platform", Platform.name)
+            put("client", Platform.client)
             put("local_only", environment["MOTILE_LOCAL"] == "1")
             environment["MOTILE_SERVER_ADDR"]?.let { put("direct_addr", it) }
             // `key=address,…`: each device at an address of its own, as the dev stack's gateway is.
@@ -2123,6 +2124,18 @@ class AppStore(private val context: Context) {
             servers?.let { put("servers", it.toList()) }
         }
         core.send("usage", command, read = { UsageReport(it) }, reply = reply)
+    }
+
+    /** What was done on the connected `servers`, or all of them, in the last `buckets` spans of `bucketSeconds`, by this device's clock. `kept` answers at once with what was last read. */
+    fun loadActivity(bucketSeconds: Int, buckets: Int, kept: Boolean, servers: Set<String>?, reply: (Result<ActivityReport>) -> Unit) {
+        val command = buildMap<String, Any?> {
+            put("bucket_secs", bucketSeconds)
+            put("buckets", buckets)
+            put("utc_offset_secs", TimeZone.getDefault().getOffset(System.currentTimeMillis()) / 1000)
+            put("kept", kept)
+            servers?.let { put("servers", it.toList()) }
+        }
+        core.send("activity", command, read = { ActivityReport(it) }, reply = reply)
     }
 
     /** How much of their plans the agents' accounts on the connected `servers`, or all of them, have used, as the servers read it now. `kept` answers at once with what was last read. */

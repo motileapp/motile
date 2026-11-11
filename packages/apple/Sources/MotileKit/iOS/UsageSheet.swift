@@ -1,8 +1,9 @@
 #if os(iOS)
 import SwiftUI
 
-/// What the agents spent and what is left of their plans, in a sheet: the tabs across it, under
-/// them the servers counted and the period, and the way to read it all again in its bar.
+/// What was done, what the agents spent and what is left of their plans, in a sheet: the tabs
+/// pinned under its bar, which the page fades under, the period at the top of the page, and the
+/// servers counted in the bar's menu once there are several. Pulling the page down reads it again.
 struct UsageSheet: View {
     private static let margin: CGFloat = 16
 
@@ -13,45 +14,61 @@ struct UsageSheet: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                VStack(spacing: 8) {
+            UsageContent(model: model, margin: Self.margin, top: 4, periodInPage: true)
+                .refreshable { await model.refreshed() }
+                .pinnedOnTop {
                     UsageTabs(model: model, fills: true)
-                    if picksServers || model.tab != .limits {
-                        let both = picksServers && model.tab != .limits
-                        HStack(spacing: 0) {
-                            if picksServers {
-                                UsageServersMenu(model: model, margin: .beside(trailing: both ? 4 : 0))
-                            }
-                            if model.tab != .limits {
-                                UsagePeriodMenu(model: model, margin: .beside(leading: both ? 4 : 0))
-                            }
-                            Spacer(minLength: 0)
-                        }
+                        .padding(.horizontal, Self.margin)
+                        .padding(.top, 4)
+                        .padding(.bottom, 8)
+                }
+                .dropdowns()
+                .background(Color.themeBackground.ignoresSafeArea())
+                .navigationTitle("Usage")
+                .navigationBarTitleDisplayMode(.inline)
+                .serversSubtitle(picksServers ? model.serversLabel(among: store.usageServers) : nil)
+                .toolbar {
+                    GlassToolbarItem(placement: .topBarLeading) { SheetCloseButton() }
+                    if picksServers {
+                        GlassToolbarItem(placement: .topBarTrailing) { servers }
                     }
                 }
-                .padding(.horizontal, Self.margin)
-                .padding(.vertical, 8)
-                UsageContent(model: model, margin: Self.margin)
-            }
-            .dropdowns()
-            .background(Color.themeBackground.ignoresSafeArea())
-            .navigationTitle("Usage")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                GlassToolbarItem(placement: .topBarLeading) { SheetCloseButton() }
-                GlassToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        model.refresh()
-                    } label: {
-                        TurningSymbol(symbol: .refreshCw, size: .lg, turning: model.refreshing)
-                    }
-                    .disabled(model.refreshing)
-                    .accessibilityLabel("Refresh")
-                }
-            }
         }
         .presentationSizing(.page)
         .presentationDragIndicator(.visible)
+    }
+
+    /// The servers counted, each checked or not.
+    private var servers: some View {
+        Menu {
+            ForEach(model.serverChecks(among: store.usageServers)) { check in
+                Toggle(check.title, isOn: Binding { check.checked } set: { _ in check.toggle() })
+            }
+        } label: {
+            Image(.server, size: .lg)
+        }
+        .accessibilityLabel("Servers counted")
+    }
+}
+
+private extension View {
+    /// What stays over the top of the page while it scrolls: on the bar's glass edge where the
+    /// system has one, which the page fades under, else on the page's own background.
+    @ViewBuilder func pinnedOnTop(@ViewBuilder _ content: () -> some View) -> some View {
+        if #available(iOS 26, *) {
+            safeAreaBar(edge: .top, spacing: 0, content: content)
+                .scrollEdgeEffectStyle(.soft, for: .top)
+        } else {
+            safeAreaInset(edge: .top, spacing: 0) { content().background(Color.themeBackground) }
+        }
+    }
+
+    @ViewBuilder func serversSubtitle(_ subtitle: String?) -> some View {
+        if #available(iOS 26, *), let subtitle {
+            navigationSubtitle(subtitle)
+        } else {
+            self
+        }
     }
 }
 #endif

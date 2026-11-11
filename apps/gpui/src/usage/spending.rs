@@ -15,15 +15,15 @@ use crate::theme::{Colors, IconSize, Layer, Opacity, Surface, TextSize, colors};
 use crate::ui::menu::Anchor;
 use crate::ui::{Segmented, card_default, divider_on, logos, tabular_numbers, text_width};
 
-const CHART_HEIGHT: f32 = 190.;
+pub(super) const CHART_HEIGHT: f32 = 190.;
 /// Room for the labels of the y axis on the right and of the x axis below.
-const Y_GUTTER: f32 = 48.;
-const X_GUTTER: f32 = 18.;
+pub(super) const Y_GUTTER: f32 = 48.;
+pub(super) const X_GUTTER: f32 = 18.;
 /// How far the first and the last point stand from the plot's sides.
 const PLOT_PADDING: f32 = 16.;
 const BAR_WIDTH: f32 = 72.;
 const DOT: f32 = 8.;
-const CAPTION: TextSize = TextSize::Xxs;
+pub(super) const CAPTION: TextSize = TextSize::Xxs;
 /// Narrower than this, the chart goes under the totals.
 const BESIDE_WIDTH: f32 = 640.;
 /// Narrower than this, a row's bar goes under its name and numbers.
@@ -499,16 +499,16 @@ fn bar(share: f64, width: Option<f32>, c: &Colors) -> Div {
         .child(div().w(relative(share)).h_full().rounded_full().bg(c.muted_foreground))
 }
 
-fn dot(color: Hsla) -> Div {
+pub(super) fn dot(color: Hsla) -> Div {
     div().size(px(DOT)).rounded_full().bg(color).flex_shrink_0()
 }
 
-fn caption(text: impl Into<SharedString>, color: Hsla) -> Div {
+pub(super) fn caption(text: impl Into<SharedString>, color: Hsla) -> Div {
     div().text_size(CAPTION).text_color(color).child(text.into())
 }
 
 /// The y axis: a round step with about four of them under the highest point, and the top line.
-fn ticks(max: f64) -> (f64, f64) {
+pub(super) fn ticks(max: f64) -> (f64, f64) {
     if max <= 0. {
         return (1., 4.);
     }
@@ -605,7 +605,7 @@ fn monotone_tangents(points: &[Point<Pixels>]) -> Vec<f32> {
     tangents
 }
 
-fn axis_label(start: f64, period: UsagePeriod) -> String {
+pub(super) fn axis_label(start: f64, period: UsagePeriod) -> String {
     if period == UsagePeriod::Day { format::date(start, "j", "%-I %p") } else { format::date(start, "MMMd", "%b %-d") }
 }
 
@@ -620,7 +620,7 @@ fn pointed_label(start: f64, period: UsagePeriod) -> String {
 /// The points the time axis is labelled at, where Swift Charts puts its aligned marks for the
 /// period: every six hours or every other day from the first point, or every week or every other
 /// week from the start of the first point's week.
-fn axis_ticks(starts: &[f64], period: UsagePeriod) -> Vec<usize> {
+pub(super) fn axis_ticks(starts: &[f64], period: UsagePeriod) -> Vec<usize> {
     let Some(first) = starts.first() else { return Vec::new() };
     let (every, lead) = match period {
         UsagePeriod::Day => (6, 0),

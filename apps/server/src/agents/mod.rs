@@ -93,6 +93,10 @@ pub enum AgentEvent {
     },
     /// The agent has taken the turn it was started for, with what it was told of the thread.
     Accepted,
+    /// Whether the turn ran in fast mode, as Claude Code says when it ends.
+    Fast(bool),
+    /// Output tokens that went into reasoning since it last said, as Codex counts them.
+    Reasoning(u64),
     /// The session the agent was told to resume isn't there; nothing of the turn was done.
     SessionMissing,
     TextStarted {

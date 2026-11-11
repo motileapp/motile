@@ -75,6 +75,7 @@ async fn main() -> anyhow::Result<()> {
         direct_addr: std::env::var("MOTILE_SERVER_ADDR").ok(),
         direct_addrs: Default::default(),
         media_limit: None,
+        client: None,
     };
     let (sender, events) = unbounded_channel();
     let handle = motile_core::core::start(

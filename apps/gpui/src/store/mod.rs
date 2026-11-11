@@ -27,12 +27,13 @@ use std::path::PathBuf;
 use futures::StreamExt;
 use gpui_kit::prelude::*;
 use gpui_kit::*;
-use motile_core::api::{AccountView, BackupView, Command, Config, Event, Section};
+use motile_core::api::{AccountView, BackupView, ClientDescription, Command, Config, Event, Section};
 use motile_core::outbox::Outgoing;
 use motile_core::render::agents::AgentView;
 use motile_protocol::wire::{
     Access, AgentAccount, Branch, ChangedFile, GitHubState, GitStage, ModelContext, ModelInfo, NewThread, Repo, Request,
 };
+use motile_protocol::wire::{ClientForm, ClientKind};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -577,6 +578,11 @@ impl Store {
             direct_addr: std::env::var("MOTILE_SERVER_ADDR").ok(),
             direct_addrs: direct_addrs(),
             media_limit: None,
+            client: Some(ClientDescription {
+                kind: ClientKind::Gpui,
+                system: std::env::consts::OS.to_string(),
+                form: ClientForm::Desktop,
+            }),
         };
         match Bridge::start(config) {
             Ok((bridge, mut events)) => {

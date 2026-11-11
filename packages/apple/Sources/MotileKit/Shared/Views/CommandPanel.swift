@@ -692,7 +692,7 @@ struct CommandPanel: View {
         let settings = keyed(PanelItem(id: "settings", title: "Settings", detail: "Appearance, servers and projects", icon: .symbol(.settings)) {
             store.openSettings()
         }, "settings.open")
-        let usage = keyed(PanelItem(id: "usage", title: "Usage", detail: "Limits, cost and tokens", icon: .symbol(.chartColumn)) {
+        let usage = keyed(PanelItem(id: "usage", title: "Usage", detail: "Activity, cost, tokens and limits", icon: .symbol(.chartColumn)) {
             store.openUsage()
         }, "usage.open")
         #if os(macOS)

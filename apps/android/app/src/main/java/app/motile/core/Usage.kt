@@ -7,10 +7,19 @@ import androidx.compose.runtime.setValue
 /** What the usage route shows, kept while it is closed so that it opens with what was last read. */
 class UsageModel {
     enum class Tab(val raw: String) {
-        Cost("cost"), Tokens("tokens"), Limits("limits");
+        Activity("activity"), Cost("cost"), Tokens("tokens"), Limits("limits");
+
+        /** What the tab asks the servers for; the cost and the tokens are read together. */
+        val reads: Int
+            get() = when (this) {
+                Activity -> 0
+                Cost, Tokens -> 1
+                Limits -> 2
+            }
 
         val label: String
             get() = when (this) {
+                Activity -> "Activity"
                 Cost -> "Cost"
                 Tokens -> "Tokens"
                 Limits -> "Limits"
@@ -39,14 +48,14 @@ class UsageModel {
             }
     }
 
-    private var tabState by mutableStateOf(Tab.entries.firstOrNull { it.raw == Preferences.string(TAB_KEY) } ?: Tab.Limits)
+    private var tabState by mutableStateOf(Tab.entries.firstOrNull { it.raw == Preferences.string(TAB_KEY) } ?: Tab.Activity)
     var tab: Tab
         get() = tabState
         set(value) {
             val old = tabState
             tabState = value
             Preferences.set(TAB_KEY, value.raw)
-            if ((old == Tab.Limits) != (value == Tab.Limits)) load()
+            if (old.reads != value.reads) load()
         }
 
     private var periodState by mutableStateOf(Period.entries.firstOrNull { it.raw == Preferences.string(PERIOD_KEY) } ?: Period.Month)
@@ -71,6 +80,8 @@ class UsageModel {
     var limits by mutableStateOf<Loaded<LimitsReport>>(Loaded.Loading)
         private set
     var spending by mutableStateOf<Loaded<UsageReport>>(Loaded.Loading)
+        private set
+    var activity by mutableStateOf<Loaded<ActivityReport>>(Loaded.Loading)
         private set
     var refreshing by mutableStateOf(false)
         private set
@@ -121,6 +132,18 @@ class UsageModel {
                     if (number != asked) return@loadLimits
                     refreshing = false
                     limits = Loaded.of(again, limits)
+                }
+            }
+        } else if (tab == Tab.Activity) {
+            val seconds = period.bucketSeconds
+            val buckets = period.buckets
+            store.loadActivity(seconds, buckets, kept = true, servers = counted) { kept ->
+                if (number != asked) return@loadActivity
+                kept.getOrNull()?.let { activity = Loaded.Ready(it) }
+                store.loadActivity(seconds, buckets, kept = false, servers = counted) { result ->
+                    if (number != asked) return@loadActivity
+                    refreshing = false
+                    activity = Loaded.of(result, activity)
                 }
             }
         } else {
