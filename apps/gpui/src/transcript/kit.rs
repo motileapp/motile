@@ -26,7 +26,6 @@ pub struct RowButton {
     radius: f32,
     bordered: bool,
     hover: Option<Hsla>,
-    rest: Option<Hsla>,
     insets: Edges<f32>,
     height: f32,
     on_click: Option<OnClick>,
@@ -45,7 +44,6 @@ impl RowButton {
             radius: Self::METRICS.radius(),
             bordered: false,
             hover: None,
-            rest: None,
             insets: edges(0., 0., 0., 0.),
             height: Self::METRICS.height(),
             on_click: None,
@@ -65,12 +63,6 @@ impl RowButton {
     /// What lights it, a step above the surface it lies on.
     pub fn hover(mut self, hover: Hsla) -> Self {
         self.hover = Some(hover);
-        self
-    }
-
-    /// What fills it unlit.
-    pub fn rest(mut self, rest: Hsla) -> Self {
-        self.rest = Some(rest);
         self
     }
 
@@ -102,7 +94,7 @@ impl RenderOnce for RowButton {
         let (fill, text) = if lit {
             (Some(self.hover.unwrap_or(c.background_secondary)), c.foreground)
         } else {
-            (self.rest, if bordered { c.foreground } else { c.muted_foreground })
+            (None, if bordered { c.foreground } else { c.muted_foreground })
         };
         div()
             .id(self.id)

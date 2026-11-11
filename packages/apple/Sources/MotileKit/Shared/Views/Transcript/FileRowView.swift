@@ -289,7 +289,6 @@ final class FileCard: FlippedView {
             radius: RowButton.metrics.radius,
             bordered: true,
             hover: Theme.backgroundSecondaryAccent,
-            rest: Theme.background,
             insets: PlatformEdgeInsets(top: 0, left: 0, bottom: 0, right: 0)
         ) { [weak self] in self?.reveal() }
         card.addSubview(revealButton)
