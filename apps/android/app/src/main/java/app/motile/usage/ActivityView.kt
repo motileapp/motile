@@ -76,6 +76,7 @@ import app.motile.ui.Text
 import app.motile.ui.ThemeDivider
 import app.motile.ui.color
 import app.motile.ui.dotted
+import app.motile.ui.reaching
 import java.text.NumberFormat
 
 private enum class ActivityMeasure(val raw: String, val label: String) {
@@ -202,9 +203,10 @@ private fun Section(
                 trailing()
             }
         } else {
+            val overhang = (ControlSize.Regular.height - ControlSize.Small.height) / 2
             Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                 words(Modifier.weight(1f))
-                trailing()
+                Box(Modifier.reaching(top = overhang, bottom = overhang)) { trailing() }
             }
         }
         content()
@@ -363,7 +365,7 @@ private fun Turns(report: ActivityReport, beside: Boolean) {
 private fun Outcomes(report: ActivityReport, modifier: Modifier) {
     val palette = LocalPalette.current
     Card(modifier) {
-        Box(Modifier.tableHeader().padding(horizontal = 14.dp), contentAlignment = Alignment.CenterStart) {
+        Box(Modifier.tableHeader(breakdownHeaderHeight()).padding(horizontal = 14.dp), contentAlignment = Alignment.CenterStart) {
             Text("How they ended", size = TextSize.Sm, weight = FontWeight.Medium, color = palette.foreground)
         }
         ThemeDivider()
@@ -373,6 +375,11 @@ private fun Outcomes(report: ActivityReport, modifier: Modifier) {
         }
     }
 }
+
+private val BREAKDOWN_PADDING = 4.dp
+
+/** The breakdown's picker with its padding, which the outcomes' header beside it matches. */
+private fun breakdownHeaderHeight(): Dp = ControlSize.Regular.height + (Segmented.inset + Segmented.border + BREAKDOWN_PADDING) * 2
 
 /** The turns by agent, model or project, picked by the segments over them. Projects are offered once there is more than one. */
 @Composable
@@ -386,7 +393,7 @@ private fun Breakdown(report: ActivityReport, modifier: Modifier) {
         TurnBreakdown.Projects -> report.projects
     }
     Card(modifier) {
-        Box(Modifier.fillMaxWidth().padding(8.dp), contentAlignment = Alignment.Center) {
+        Box(Modifier.fillMaxWidth().padding(BREAKDOWN_PADDING), contentAlignment = Alignment.Center) {
             Segmented(offered.map { it.label to it }, current, {
                 breakdown = it
                 Preferences.set(BREAKDOWN_KEY, it.raw)
@@ -448,7 +455,7 @@ private fun Features(report: ActivityReport, beside: Boolean) {
 
 /** The header row of a card that is a table, filled as a table's header is. */
 @Composable
-private fun Modifier.tableHeader(): Modifier = fillMaxWidth().background(LocalPalette.current.cardAccent).heightIn(min = scaled(40f).dp)
+private fun Modifier.tableHeader(minHeight: Dp = scaled(40f).dp): Modifier = fillMaxWidth().background(LocalPalette.current.cardAccent).heightIn(min = minHeight)
 
 /** The features of a group as a table under a header of its name and total, each with how often it was used, scrolling past half the screen. */
 @Composable

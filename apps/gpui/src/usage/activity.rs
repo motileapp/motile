@@ -190,7 +190,6 @@ impl ActivityView {
             offered.iter().map(|choice| SharedString::from(label(*choice))).collect(),
             offered.iter().position(|choice| *choice == current).unwrap_or(0),
         )
-        .size(ControlSize::Small)
         .on_select(move |index, _, cx| {
             store.update(cx, |store, cx| {
                 store.prefs.set(key, offered[index]);
@@ -652,6 +651,7 @@ impl ActivityView {
         card_default(div().flex().flex_col(), cx)
             .child(
                 table_header(cx)
+                    .min_h(px(breakdown_header_height()))
                     .px(px(14.))
                     .text_size(TextSize::Sm)
                     .font_weight(FontWeight::MEDIUM)
@@ -677,7 +677,7 @@ impl ActivityView {
         let rows = separated(shown.iter().map(|line| line_row(line, None, cx)).collect(), cx);
         let picker = self.picker(BREAKDOWN_KEY, offered, current, Breakdown::label).fills(true);
         card_default(div().flex().flex_col(), cx)
-            .child(div().p(px(8.)).flex().items_center().child(picker))
+            .child(div().p(px(BREAKDOWN_PADDING)).flex().items_center().child(picker))
             .child(divider_on(Surface::Card, cx))
             .child(FadingScroll::new("activity-breakdown", list_height(window)).fill(colors(cx).card).children(rows))
     }
@@ -759,6 +759,13 @@ impl ActivityView {
     }
 }
 
+const BREAKDOWN_PADDING: f32 = 4.;
+
+/// The breakdown's picker with its padding, which the outcomes' header beside it matches.
+fn breakdown_header_height() -> f32 {
+    ControlSize::Regular.height() + 2. * (Segmented::INSET + Segmented::BORDER + BREAKDOWN_PADDING)
+}
+
 /// The header row of a card that is a table, filled as a table's header is.
 fn table_header(cx: &App) -> Div {
     div().min_h(px(40.)).flex().items_center().rounded_t(px(Radius::LG)).bg(colors(cx).card_accent)
@@ -828,7 +835,14 @@ fn heading(title: &str, detail: Option<String>, trailing: Option<AnyElement>, st
     if stacked {
         return div().flex().flex_col().gap(px(10.)).child(words.px(px(4.))).children(trailing);
     }
-    div().px(px(4.)).flex().items_center().gap(px(12.)).child(words.flex_1().min_w_0()).children(trailing)
+    let overhang = (ControlSize::Regular.height() - ControlSize::Small.height()) / 2.;
+    div()
+        .px(px(4.))
+        .flex()
+        .items_center()
+        .gap(px(12.))
+        .child(words.flex_1().min_w_0())
+        .children(trailing.map(|trailing| div().my(px(-overhang)).child(trailing)))
 }
 
 /// An outcome, an agent, a model, a project or a starter: its name, how long its turns took, and
