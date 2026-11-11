@@ -514,7 +514,9 @@ function Section({
         <Chevron open={open} />
       </button>
       {open && children}
-      {open && divided && <div className="mx-4 my-[5px] h-px bg-border" />}
+      {open && divided && (
+        <div className="mx-4 my-[5px] h-px bg-[repeating-linear-gradient(to_right,var(--color-border)_0_4px,transparent_4px_7px)]" />
+      )}
     </>
   )
 }

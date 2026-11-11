@@ -566,6 +566,25 @@ pub fn divider_on(surface: Surface, cx: &App) -> Div {
     div().h(px(1.)).w_full().flex_shrink_0().bg(surface.border(colors(cx)))
 }
 
+/// A dashed line across the background, in its border.
+pub fn dashed_divider(cx: &App) -> Div {
+    let color = Surface::Background.border(colors(cx));
+    let line = canvas(
+        |_, _, _| {},
+        move |bounds, _, window, _| {
+            let y = bounds.top() + px(0.5);
+            let mut line = PathBuilder::stroke(px(1.)).dash_array(&[px(4.), px(3.)]);
+            line.move_to(point(bounds.left(), y));
+            line.line_to(point(bounds.right(), y));
+            if let Ok(path) = line.build() {
+                window.paint_path(path, color);
+            }
+        },
+    )
+    .size_full();
+    div().h(px(1.)).w_full().flex_shrink_0().child(line)
+}
+
 /// The spinner of a small control.
 pub fn spinner(size: IconSize, cx: &App) -> impl IntoElement {
     Spinner::new(size).render(cx)
