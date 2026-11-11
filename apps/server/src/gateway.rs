@@ -72,8 +72,6 @@ pub fn variables(agent: Agent, port: u16, token: &str) -> Vec<(String, String)> 
             ("ANTHROPIC_AUTH_TOKEN", token.to_string()),
             // A conversation's cache lasts an hour, as it does on a subscription, and not five minutes.
             ("ENABLE_PROMPT_CACHING_1H", "1".to_string()),
-            // It asks the gateway for the models the account adds, as the 1M context window.
-            ("CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY", "1".to_string()),
         ],
         Agent::Codex => vec![(CODEX_TOKEN_VARIABLE, token.to_string())],
     };

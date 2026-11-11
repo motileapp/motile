@@ -84,9 +84,6 @@ pub async fn serve(
     mut send: SendStream,
     mut recv: RecvStream,
 ) -> anyhow::Result<()> {
-    if asks_model_options(&incoming) {
-        return serve_model_options(gateway, incoming, send).await;
-    }
     let started = Instant::now();
     let at = now();
     let body = recv.read_to_end(MAX_REQUEST).await.context("The request's body didn't arrive whole.")?;
@@ -292,53 +289,6 @@ pub async fn serve(
     Ok(())
 }
 
-/// Claude Code asks a gateway's `/v1/models` for the models the account adds to its picker, as it
-/// asks Anthropic's bootstrap when it is signed in itself: the 1M context window, for one.
-fn asks_model_options(incoming: &Incoming) -> bool {
-    let listing = incoming.path == "/v1/models" || incoming.path.starts_with("/v1/models?");
-    incoming.agent == Agent::Claude && incoming.method == "GET" && listing
-}
-
-/// Answers `/v1/models` with what Anthropic's bootstrap offers the account the thread is on, as
-/// the list a gateway gives. An account that can't be asked offers nothing more.
-async fn serve_model_options(gateway: Arc<Gateway>, incoming: Incoming, mut send: SendStream) -> anyhow::Result<()> {
-    let asked =
-        Asked { agent: incoming.agent, model: None, cache_lifetime: CLAUDE_CACHE, pin: incoming.pin.as_deref() };
-    let account = gateway.choose(&incoming.key(), asked, &[], now()).map(|account| account.id);
-    let bootstrap = match &account {
-        Some(account) => bootstrap(&gateway, &incoming, account).await,
-        None => None,
-    };
-    let options = bootstrap.as_ref().map_or_else(|| json!({"data": []}), gateway_models);
-    let body = serde_json::to_vec(&options)?;
-    let headers = vec![("content-type".to_string(), "application/json".to_string())];
-    write_frame(&mut send, &GatewayReply::HttpHead { status: 200, headers, account }).await?;
-    send.write_all(&body).await?;
-    let _ = send.finish();
-    Ok(())
-}
-
-/// What Anthropic's bootstrap says of `account`, asked with its token.
-async fn bootstrap(gateway: &Gateway, incoming: &Incoming, account: &str) -> Option<Value> {
-    let tokens = gateway.tokens(account).await?;
-    let request = gateway.http.get(upstream_url(gateway, Agent::Claude, "/api/claude_cli/bootstrap"));
-    let request = upstream_headers(Agent::Claude, &incoming.headers, &tokens)
-        .into_iter()
-        .fold(request, |request, (name, value)| request.header(name, value));
-    let response = request.send().await.ok().filter(|response| response.status().is_success())?;
-    response.json().await.ok()
-}
-
-/// The bootstrap's model options that the account may use, as a gateway's `/v1/models` lists them.
-pub fn gateway_models(bootstrap: &Value) -> Value {
-    let offered = bootstrap["additional_model_options"].as_array().into_iter().flatten();
-    let usable = offered.filter(|option| option["disabled_reason"].is_null() && option["model"].is_string());
-    let models: Vec<Value> = usable
-        .map(|option| json!({"id": option["model"], "display_name": option["name"], "description": option["description"]}))
-        .collect();
-    json!({"data": models})
-}
-
 /// How long the request's prompt cache lasts: an hour when Claude Code asks for it.
 pub fn cache_lifetime(agent: Agent, body: &[u8]) -> f64 {
     match agent {
@@ -523,18 +473,6 @@ fn claude_claim(resets_in: f64) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn the_bootstraps_usable_model_options_are_listed_as_a_gateways_models() {
-        let bootstrap = json!({"additional_model_options": [
-            {"model": "claude-fable-5-1[1m]", "name": "Fable", "description": "Fable 5.1", "disabled_reason": null},
-            {"model": "claude-opus-5-5[1m]", "name": "Opus", "description": "Opus 5.5", "disabled_reason": "plan"},
-        ]});
-        let listed =
-            json!({"data": [{"id": "claude-fable-5-1[1m]", "display_name": "Fable", "description": "Fable 5.1"}]});
-        assert_eq!(gateway_models(&bootstrap), listed);
-        assert_eq!(gateway_models(&json!({})), json!({"data": []}));
-    }
 
     fn pairs(list: &[(&str, &str)]) -> Vec<(String, String)> {
         list.iter().map(|(name, value)| (name.to_string(), value.to_string())).collect()
