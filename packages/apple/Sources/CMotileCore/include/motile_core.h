@@ -31,6 +31,10 @@ char *motile_model_search(const char *input_json);
 // on any thread. Free the answer with `motile_free_string`.
 char *motile_snooze(const char *input_json);
 
+// Marks up an image (`markup::markup_json`), on any thread; ask `flatten` off the main thread.
+// Free the answer with `motile_free_string`.
+char *motile_markup(const char *input_json);
+
 // Frees a string the core answered with.
 void motile_free_string(char *string);
 

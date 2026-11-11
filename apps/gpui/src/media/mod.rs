@@ -2,6 +2,7 @@
 //! rows and tiles that show them, posters for the videos that are attached, and playing them.
 
 pub mod file;
+pub mod markup;
 pub mod native;
 pub mod pictures;
 pub mod poster;
@@ -237,6 +238,7 @@ pub fn attached_files(
                 name: file.name.clone(),
                 video: file.video,
                 source: MediaSource::Media(media.clone()),
+                attachment: None,
             })
         })
         .collect();
@@ -355,7 +357,8 @@ pub fn media_row(model: &RowModel, ctx: &RowContext, window: &mut Window, cx: &m
     };
     let loading = matches!(picture, Some(Picture::Loading));
     let caption = (video && poster.is_none()).then(|| format!("{name} · {}", file_size(*size)));
-    let viewed = vec![ViewedMedia { name: name.clone(), video, source: MediaSource::Media(media.clone()) }];
+    let viewed =
+        vec![ViewedMedia { name: name.clone(), video, source: MediaSource::Media(media.clone()), attachment: None }];
     let open = {
         let store = ctx.store.clone();
         let ready = shown.is_some();

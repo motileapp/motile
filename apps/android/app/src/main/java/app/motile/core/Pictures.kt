@@ -2,7 +2,7 @@ package app.motile.core
 
 import androidx.core.graphics.scale
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
+import android.graphics.ImageDecoder
 import android.media.MediaMetadataRetriever
 import java.io.File
 import java.util.UUID
@@ -22,13 +22,14 @@ object Pictures {
         }
     }.getOrNull()
 
-    /** The image, no larger than `maxPixels` on its longer side. */
+    /** The image, turned as its camera says, no larger than `maxPixels` on its longer side. */
     fun decode(file: File, maxPixels: Int): Bitmap? = runCatching {
-        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        BitmapFactory.decodeFile(file.path, bounds)
-        var sample = 1
-        while (max(bounds.outWidth, bounds.outHeight) / (sample * 2) >= maxPixels) sample *= 2
-        val bitmap = BitmapFactory.decodeFile(file.path, BitmapFactory.Options().apply { inSampleSize = sample }) ?: return null
+        val bitmap = ImageDecoder.decodeBitmap(ImageDecoder.createSource(file)) { decoder, info, _ ->
+            decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+            var sample = 1
+            while (max(info.size.width, info.size.height) / (sample * 2) >= maxPixels) sample *= 2
+            decoder.setTargetSampleSize(sample)
+        }
         fit(bitmap, maxPixels)
     }.getOrNull()
 

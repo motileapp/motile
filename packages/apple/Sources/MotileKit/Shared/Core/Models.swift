@@ -1311,6 +1311,8 @@ struct Attachment: Equatable, Identifiable {
     var path: String?
     var media: String?
     var poster: String?
+    /// What it was marked up from, to be marked up again.
+    var markup: SavedMarkup?
 
     init(file: URL, serverID: String) {
         id = UUID().uuidString
@@ -1362,8 +1364,8 @@ struct Attachment: Equatable, Identifiable {
     }
 
     var viewed: ViewedMedia? {
-        if let file { return ViewedMedia(name: name, video: video, source: .file(file)) }
-        return media.map { ViewedMedia(name: name, video: video, source: .media($0)) }
+        if let file { return ViewedMedia(name: name, video: video, source: .file(file), attachment: id) }
+        return media.map { ViewedMedia(name: name, video: video, source: .media($0), attachment: id) }
     }
 
     /// Its extension, as "PDF", when it has one.
@@ -1389,6 +1391,8 @@ struct ViewedMedia: Equatable {
     let name: String
     let video: Bool
     let source: Source
+    /// The composer's attachment it is, which marking it up replaces.
+    var attachment: String?
 }
 
 /// What the viewer has open: the images and videos of one message or of the composer, and

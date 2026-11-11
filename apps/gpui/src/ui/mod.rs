@@ -16,6 +16,7 @@ pub mod pick;
 pub mod rich_text;
 pub mod skill_chip;
 pub mod slider;
+pub mod swatch;
 
 use std::rc::Rc;
 
@@ -37,6 +38,7 @@ pub use parts::{
 };
 pub use pick::{OptionCard, PickRow};
 pub use slider::Slider;
+pub use swatch::Swatch;
 
 pub type OnClick = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
 
