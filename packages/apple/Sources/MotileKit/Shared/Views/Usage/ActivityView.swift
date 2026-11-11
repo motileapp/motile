@@ -329,8 +329,7 @@ struct ActivityView: View {
             }
         return VStack(alignment: .leading, spacing: 0) {
             Segmented(offered.map { ($0.label, $0) }, selection: Binding { current } set: { breakdown = $0 }, size: Platform.pageSegments, fills: true)
-                .padding(.horizontal, 8)
-                .frame(minHeight: scaled(40))
+                .padding(8)
             ThemeDivider()
             FadingScroll(maxHeight: listHeight) {
                 VStack(spacing: 0) {
