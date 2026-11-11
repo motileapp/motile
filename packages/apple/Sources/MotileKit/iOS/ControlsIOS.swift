@@ -177,6 +177,19 @@ extension Choice {
     }
 }
 
+/// The sizes the system's pickers take, which a popover doesn't give them on its own.
+@MainActor enum SystemPickerSize {
+    static let calendar = fitting(.date, .inline)
+    static let wheels = fitting(.time, .wheels)
+
+    private static func fitting(_ mode: UIDatePicker.Mode, _ style: UIDatePickerStyle) -> CGSize {
+        let picker = UIDatePicker()
+        picker.datePickerMode = mode
+        picker.preferredDatePickerStyle = style
+        return picker.systemLayoutSizeFitting(UIView.layoutFittingCompressedSize)
+    }
+}
+
 /// The system's calendar, inline in a popover by a view, also on a phone, to pick a day between
 /// two. A tap on a day picks it and closes the popover.
 enum DayPicker {
@@ -190,6 +203,7 @@ enum DayPicker {
         controller.popoverPresentationController?.delegate = controller
         presenter.present(controller, animated: true)
     }
+
 }
 
 private final class DayPickerController: UIViewController, UIPopoverPresentationControllerDelegate {
@@ -215,7 +229,7 @@ private final class DayPickerController: UIViewController, UIPopoverPresentation
     override func viewDidLoad() {
         super.viewDidLoad()
         view.addSubview(picker)
-        let size = picker.systemLayoutSizeFitting(UIView.layoutFittingCompressedSize)
+        let size = SystemPickerSize.calendar
         picker.frame = CGRect(x: Self.padding, y: Self.padding, width: size.width, height: size.height)
         preferredContentSize = CGSize(width: size.width + 2 * Self.padding, height: size.height + 2 * Self.padding)
     }

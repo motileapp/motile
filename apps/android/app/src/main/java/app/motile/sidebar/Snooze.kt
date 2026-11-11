@@ -33,12 +33,13 @@ import app.motile.theme.Theme
 import app.motile.ui.ActionButton
 import app.motile.ui.ButtonVariant
 import app.motile.ui.DateField
-import app.motile.ui.InputField
+import app.motile.ui.TimeField
 import app.motile.ui.MenuBuilder
 import app.motile.ui.Text
 import app.motile.ui.beside
 import java.time.Instant
 import java.time.LocalDate
+import java.time.LocalTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
@@ -85,10 +86,10 @@ fun CustomSnoozeSheet(snooze: CustomSnooze) {
     val store = LocalStore.current
     val close = LocalCloseSheet.current
     var day by remember { mutableStateOf(LocalDate.now().plusDays(1)) }
-    var time by remember { mutableStateOf("9:00") }
+    var time by remember { mutableStateOf(LocalTime.of(9, 0)) }
     var error by remember { mutableStateOf<String?>(null) }
     fun submit() {
-        Snooze.until(day, time)
+        Snooze.until(day, time.toString())
             .onSuccess {
                 store.snooze(snooze.threadIDs, it, snooze.fromSidebar)
                 close()
@@ -109,13 +110,13 @@ fun CustomSnoozeSheet(snooze: CustomSnooze) {
                 },
                 modifier = Modifier.weight(1f), min = LocalDate.now(), size = ControlSize.Large,
             )
-            InputField(
-                "Time", time,
-                {
+            TimeField(
+                time,
+                onPick = {
                     time = it
                     error = null
                 },
-                Modifier.width(110.dp), size = ControlSize.Large, onSubmit = ::submit,
+                Modifier.width(130.dp), size = ControlSize.Large,
             )
         }
         error?.let { Text(it, size = TextSize.Xs, color = Theme.colors.destructive) }

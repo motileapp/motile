@@ -90,6 +90,9 @@ struct DateField: View {
             DatePicker("", selection: selection, in: bounds, displayedComponents: .date)
                 .datePickerStyle(.graphical)
                 .labelsHidden()
+                #if os(iOS)
+                .frame(width: SystemPickerSize.calendar.width, height: SystemPickerSize.calendar.height)
+                #endif
                 .padding(12)
                 .presentationCompactAdaptation(.popover)
         }

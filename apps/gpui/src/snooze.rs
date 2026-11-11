@@ -90,7 +90,7 @@ impl Render for CustomSnoozeSheet {
                             },
                         ),
                     ))
-                    .child(div().w(px(110.)).child(InputField::new(&self.time))),
+                    .child(div().w(px(130.)).child(InputField::new(&self.time))),
             )
             .children(
                 self.error.clone().map(|error| div().text_size(TextSize::Xs).text_color(c.destructive).child(error)),

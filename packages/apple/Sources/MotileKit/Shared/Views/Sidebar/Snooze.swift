@@ -86,8 +86,8 @@ struct CustomSnoozeSheet: View {
                     day = $0
                     error = nil
                 }
-                InputField("Time", text: $time)
-                    .frame(width: 110)
+                timeField
+                    .frame(width: 130)
                     .onChange(of: time) { error = nil }
             }
             if let error {
@@ -106,6 +106,14 @@ struct CustomSnoozeSheet: View {
         .frame(maxWidth: 400)
         #if os(iOS)
         .presentationDetents([.height(200)])
+        #endif
+    }
+
+    @ViewBuilder private var timeField: some View {
+        #if os(iOS)
+        TimeField(time: $time)
+        #else
+        InputField("Time", text: $time)
         #endif
     }
 
