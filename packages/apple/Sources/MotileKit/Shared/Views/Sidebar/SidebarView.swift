@@ -722,7 +722,7 @@ struct ListDivider: View {
     static let height = 1 + 2 * (4 + rowGap / 2)
 
     var body: some View {
-        ThemeDivider()
+        ThemeDivider(dashed: true)
             .padding(.horizontal, sidebarEdge)
             .padding(.vertical, 4 + rowGap / 2)
     }

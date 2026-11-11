@@ -19,7 +19,9 @@ use crate::store::{ListedDraft, Selection, stage_label};
 use crate::theme::{ControlSize, IconSize, Opacity, Radius, Surface, TextSize, colors};
 use crate::ui::logos::{self, PullRequestLabel};
 use crate::ui::menu::Menu;
-use crate::ui::{ActionButton, ActionMenu, Highlight, KeyCaps, Spinner, divider, icons, tabular_numbers, tooltip};
+use crate::ui::{
+    ActionButton, ActionMenu, Highlight, KeyCaps, Spinner, dashed_divider, icons, tabular_numbers, tooltip,
+};
 
 /// How tall the line under the drafts or an open section is, with the room around it.
 pub const LIST_DIVIDER: f32 = 1. + 2. * (4. + ROW_GAP / 2.);
@@ -727,5 +729,5 @@ pub fn quieted(element: AnyElement, quiet: bool, cx: &App) -> AnyElement {
 /// The line that sets a group of the list's rows off from the rows under it: the drafts, or an
 /// open section.
 pub fn list_divider(cx: &App) -> AnyElement {
-    div().mx(px(SIDEBAR_EDGE)).my(px(4. + ROW_GAP / 2.)).child(divider(cx)).into_any_element()
+    div().mx(px(SIDEBAR_EDGE)).my(px(4. + ROW_GAP / 2.)).child(dashed_divider(cx)).into_any_element()
 }
