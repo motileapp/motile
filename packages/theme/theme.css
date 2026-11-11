@@ -60,6 +60,12 @@
   --color-segment-accent: var(--segment-accent);
   --color-segment-selected: var(--segment-selected);
   --color-composer: var(--composer);
+  --color-composer-accent-weaker: var(--composer-accent-weaker);
+  --color-composer-accent: var(--composer-accent);
+  --color-composer-accent-stronger: var(--composer-accent-stronger);
+  --color-glass-accent-weaker: var(--glass-accent-weaker);
+  --color-glass-accent: var(--glass-accent);
+  --color-glass-accent-stronger: var(--glass-accent-stronger);
   --color-glass: var(--glass);
   --color-accent-with-opacity: var(--accent-with-opacity);
   --color-accent-tinted: var(--accent-tinted);
@@ -84,6 +90,12 @@
   --color-map-street: var(--map-street);
   --color-map-road: var(--map-road);
   --color-map-ferry: var(--map-ferry);
+  --color-markup-red: var(--markup-red);
+  --color-markup-yellow: var(--markup-yellow);
+  --color-markup-green: var(--markup-green);
+  --color-markup-blue: var(--markup-blue);
+  --color-markup-white: var(--markup-white);
+  --color-markup-ink: var(--markup-ink);
   --color-claude: var(--claude);
   --color-openai: var(--openai);
   --color-google-blue: var(--google-blue);

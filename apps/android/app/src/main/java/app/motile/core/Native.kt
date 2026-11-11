@@ -26,4 +26,7 @@ object Native {
 
     /** The times a snooze menu offers, or when a snooze the user wrote ends. Any thread. */
     @JvmStatic external fun snooze(input: String): String
+
+    /** Marks up an image (`markup::markup_json`). Any thread; `flatten` off the main thread. */
+    @JvmStatic external fun markup(input: String): String
 }

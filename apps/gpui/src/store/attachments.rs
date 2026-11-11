@@ -7,6 +7,7 @@ use gpui_kit::*;
 use motile_core::api::Command;
 
 use super::{MediaStorage, Store};
+use crate::media::markup::MarkupResult;
 use crate::models::*;
 
 impl Store {
@@ -92,6 +93,35 @@ impl Store {
             });
         })
         .detach();
+    }
+
+    /// Puts an image marked up in the viewer in the composer, in the place of the attachment it was
+    /// or after the others, and its pins' notes in the message, in the place of those it had.
+    pub fn attach_markup(&mut self, result: MarkupResult, replacing: Option<&str>) {
+        let Some(server_id) = self.composer_server().filter(|server| !server.removed).map(|server| server.id.clone())
+        else {
+            return;
+        };
+        let key = self.draft_key();
+        let mut attachment = Attachment::from_file(result.file, &server_id);
+        attachment.markup = Some(result.saved);
+        let attached = self.attachments();
+        let replaced = replacing.and_then(|id| attached.iter().position(|attachment| attachment.id == id));
+        let earlier = replaced.and_then(|index| attached[index].markup.as_ref()?.notes.clone());
+        let id = attachment.id.clone();
+        match (replaced, replacing) {
+            (Some(index), Some(replacing)) => {
+                self.remove_attachment(replacing);
+                let list = self.attachments_by_key.entry(key).or_default();
+                list.insert(index.min(list.len()), attachment);
+            }
+            _ => self.attachments_by_key.entry(key).or_default().push(attachment),
+        }
+        self.upload(&id);
+        let draft = motile_core::markup::place_notes(result.notes.as_deref(), earlier.as_deref(), &self.draft());
+        self.set_draft(draft);
+        self.draft_version += 1;
+        self.composer_focus += 1;
     }
 
     pub fn remove_attachment(&mut self, id: &str) {

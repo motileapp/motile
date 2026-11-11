@@ -19,6 +19,7 @@ pub mod limits;
 pub mod linear;
 pub mod link;
 pub mod log;
+pub mod markup;
 pub mod mcp_servers;
 pub mod media;
 pub mod model_search;

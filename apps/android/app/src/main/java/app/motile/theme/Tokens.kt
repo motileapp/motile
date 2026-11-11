@@ -52,6 +52,12 @@ class Palette(
     val segmentAccent: Color,
     val segmentSelected: Color,
     val composer: Color,
+    val composerAccentWeaker: Color,
+    val composerAccent: Color,
+    val composerAccentStronger: Color,
+    val glassAccentWeaker: Color,
+    val glassAccent: Color,
+    val glassAccentStronger: Color,
     val glass: Color,
     val accentWithOpacity: Color,
     val accentTinted: Color,
@@ -76,6 +82,12 @@ class Palette(
     val mapStreet: Color,
     val mapRoad: Color,
     val mapFerry: Color,
+    val markupRed: Color,
+    val markupYellow: Color,
+    val markupGreen: Color,
+    val markupBlue: Color,
+    val markupWhite: Color,
+    val markupInk: Color,
     val claude: Color,
     val openai: Color,
     val googleBlue: Color,
@@ -142,6 +154,12 @@ class Palette(
             segmentAccent = Color(0xFFDFE2E8),
             segmentSelected = Color(0xFFFFFFFF),
             composer = Color(0xFFFFFFFF),
+            composerAccentWeaker = Color(0xFFEDEDEE),
+            composerAccent = Color(0xFFDDDDDE),
+            composerAccentStronger = Color(0xFFD5D5D7),
+            glassAccentWeaker = Color(0xFFEDEDEE),
+            glassAccent = Color(0xFFDDDDDE),
+            glassAccentStronger = Color(0xFFD5D5D7),
             glass = Color(0xFFFFFFFF),
             accentWithOpacity = Color(0xFF22242B),
             accentTinted = Color(0xFF22242B),
@@ -166,6 +184,12 @@ class Palette(
             mapStreet = Color(0xFFCDD1D9),
             mapRoad = Color(0xFFB1B9C8),
             mapFerry = Color(0xFF89CFE9),
+            markupRed = Color(0xFFFF3B30),
+            markupYellow = Color(0xFFFFCC00),
+            markupGreen = Color(0xFF30D158),
+            markupBlue = Color(0xFF0A84FF),
+            markupWhite = Color(0xFFFFFFFF),
+            markupInk = Color(0xFF1C1D22),
             claude = Color(0xFFD97757),
             openai = Color(0xFF22242B),
             googleBlue = Color(0xFF4285F4),
@@ -232,6 +256,12 @@ class Palette(
             segmentAccent = Color(0xFF14151A),
             segmentSelected = Color(0xFF212329),
             composer = Color(0xFF111217),
+            composerAccentWeaker = Color(0xFF191A1F),
+            composerAccent = Color(0xFF202126),
+            composerAccentStronger = Color(0xFF27282E),
+            glassAccentWeaker = Color(0xFF212328),
+            glassAccent = Color(0xFF282A2F),
+            glassAccentStronger = Color(0xFF2F3137),
             glass = Color(0xFF0A0B0F),
             accentWithOpacity = Color(0xFFD0D2D9),
             accentTinted = Color(0xFFD0D2D9),
@@ -256,6 +286,12 @@ class Palette(
             mapStreet = Color(0xFF34363D),
             mapRoad = Color(0xFF4A4E57),
             mapFerry = Color(0xFF2B5566),
+            markupRed = Color(0xFFFF3B30),
+            markupYellow = Color(0xFFFFCC00),
+            markupGreen = Color(0xFF30D158),
+            markupBlue = Color(0xFF0A84FF),
+            markupWhite = Color(0xFFFFFFFF),
+            markupInk = Color(0xFF1C1D22),
             claude = Color(0xFFD97757),
             openai = Color(0xFFD0D2D9),
             googleBlue = Color(0xFF4285F4),
@@ -324,6 +360,12 @@ class Palette(
         "segment-accent" -> segmentAccent
         "segment-selected" -> segmentSelected
         "composer" -> composer
+        "composer-accent-weaker" -> composerAccentWeaker
+        "composer-accent" -> composerAccent
+        "composer-accent-stronger" -> composerAccentStronger
+        "glass-accent-weaker" -> glassAccentWeaker
+        "glass-accent" -> glassAccent
+        "glass-accent-stronger" -> glassAccentStronger
         "glass" -> glass
         "accent-with-opacity" -> accentWithOpacity
         "accent-tinted" -> accentTinted
@@ -348,6 +390,12 @@ class Palette(
         "map-street" -> mapStreet
         "map-road" -> mapRoad
         "map-ferry" -> mapFerry
+        "markup-red" -> markupRed
+        "markup-yellow" -> markupYellow
+        "markup-green" -> markupGreen
+        "markup-blue" -> markupBlue
+        "markup-white" -> markupWhite
+        "markup-ink" -> markupInk
         "claude" -> claude
         "openai" -> openai
         "google-blue" -> googleBlue
@@ -372,6 +420,7 @@ class Palette(
 /** How much of a colour shows: every opacity in the app is one of these. */
 enum class Opacity(val light: Float, val dark: Float) {
     Overlay(0.5f, 0.6f),
+    OverlayStronger(0.75f, 0.8f),
     OverlayPulled(0.4f, 0.4f),
     Disabled(0.45f, 0.45f),
     Lit(0.88f, 0.88f),

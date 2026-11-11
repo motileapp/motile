@@ -101,6 +101,7 @@ enum class Symbol(val character: String?) {
     Lock("\uE10B"),
     LockOpen("\uE10C"),
     LogOut("\uE10E"),
+    MapPin("\uE111"),
     Maximize2("\uE113"),
     Menu("\uE115"),
     MessageCircleQuestionMark("\uE568"),
@@ -109,6 +110,7 @@ enum class Symbol(val character: String?) {
     Minimize2("\uE11B"),
     Monitor("\uE11D"),
     MonitorSmartphone("\uE3A2"),
+    MoveUpRight("\uE493"),
     PanelLeft("\uE12A"),
     PanelRight("\uE431"),
     Paperclip("\uE12D"),
@@ -118,6 +120,7 @@ enum class Symbol(val character: String?) {
     Play("\uE13C"),
     Plug("\uE37F"),
     Plus("\uE13D"),
+    Redo2("\uE2A0"),
     RefreshCw("\uE145"),
     /** Ricrac's logo, which Lucide doesn't have. */
     Ricrac(null),

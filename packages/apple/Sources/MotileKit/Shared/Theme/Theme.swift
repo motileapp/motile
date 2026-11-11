@@ -61,6 +61,8 @@ enum Theme {
     static let warningTint = thinned(warning, .colorTint)
     /// The scrim at its opacity.
     static let scrim = thinned(overlay, .overlay)
+    /// The scrim behind small text over a picture.
+    static let scrimStronger = thinned(overlay, .overlayStronger)
     /// The glass's tint: its colour at its opacity.
     static let glassTint = thinned(glass, .glassTint)
     /// What is drawn on glass, which shows through it: the accent at its opacity.
@@ -310,7 +312,8 @@ enum ControlSize {
 /// What a view lies on: the page, a box on it, a card, a popover, the composer or glass. What is drawn
 /// on a surface takes the surface's accent.
 enum Surface {
-    case background, secondary, card, popover, composer, glass
+    /// `composerBox` and `glassBox` are a box on the composer and on glass, like an attachment's tile.
+    case background, secondary, card, popover, composer, composerBox, glass, glassBox
 
     /// What is drawn on a surface, each in the surface's own accent.
     enum Layer {
@@ -337,7 +340,9 @@ enum Surface {
         case .card: Theme.card
         case .popover: Theme.popover
         case .composer: Theme.composer
+        case .composerBox: Theme.composerAccentWeaker
         case .glass: Theme.glassTint
+        case .glassBox: Theme.glassAccentWeaker
         }
     }
 
@@ -350,6 +355,8 @@ enum Surface {
         case .card: .themeBorderCard
         case .popover: .themeBorderPopover
         case .composer, .glass: .themeBorderComposer
+        case .composerBox: Color(platform: Theme.composerAccent)
+        case .glassBox: Color(platform: Theme.glassAccent)
         }
     }
 
@@ -359,6 +366,8 @@ enum Surface {
         case .card: Theme.borderCard
         case .popover: Theme.borderPopover
         case .composer, .glass: Theme.borderComposer
+        case .composerBox: Theme.composerAccent
+        case .glassBox: Theme.glassAccent
         }
     }
 
@@ -381,11 +390,27 @@ enum Surface {
         case .card: Theme.cardAccent
         case .popover: Theme.popoverAccent
         case .composer: Theme.borderComposer
+        case .composerBox:
+            switch layer {
+            case .control, .row, .box, .chip: Theme.composerAccent
+            case .controlLit, .controlLitOnSelected, .rowSelected: Theme.composerAccentStronger
+            }
         case .glass: Theme.accentWithOpacityTint
+        case .glassBox:
+            switch layer {
+            case .control, .row, .box, .chip: Theme.glassAccent
+            case .controlLit, .controlLitOnSelected, .rowSelected: Theme.glassAccentStronger
+            }
         }
     }
 
     func color(_ layer: Layer) -> Color { Color(platform: platform(layer)) }
+
+    /// Whether a secondary button on it is edged, in its lit control's colour.
+    var edgesControls: Bool { self == .composerBox || self == .glassBox }
+
+    /// The surface of an attachment's tile on it.
+    var tile: Surface { self == .glass ? .glassBox : .composerBox }
 
     /// What lies in a box on it.
     var inBox: Surface {
@@ -450,5 +475,6 @@ extension Color {
     static let themeControlLitOverPicture = Color(platform: Theme.controlLitOverPicture)
     static let themeControlBorderOverPicture = Color(platform: Theme.controlBorderOverPicture)
     static let themeScrim = Color(platform: Theme.scrim)
+    static let themeScrimStronger = Color(platform: Theme.scrimStronger)
     static let themeGlassTint = Color(platform: Theme.glassTint)
 }

@@ -87,6 +87,7 @@ enum DemoDriver {
         case "new": store.startNewThread(in: store.composerProject ?? store.projects.first)
         case "continue": store.continueOnAnotherServer()
         case "type": store.draft = rest
+        case "attach": store.attach(rest.split(separator: " ").map { URL(fileURLWithPath: String($0)) })
         case "send": store.send()
         case "stop": store.stop()
         case "agent":
@@ -178,6 +179,7 @@ enum DemoDriver {
             store.answer(approval, allow: rest == "allow")
         case "done": store.toggleArchived()
         case "mcp": store.mcpStep = rest
+        case "markup": store.markupStep = rest
         case "gateway":
             let words = rest.split(separator: " ", maxSplits: 1).map(String.init)
             switch words.first {
@@ -229,6 +231,8 @@ enum DemoDriver {
             if let key = keys[rest] { store.skillTyping.key(key) }
         case "blur": Platform.endEditing()
         case "access": store.setAccess(Access(rawValue: rest) ?? .full)
+        case "view" where rest == "composer":
+            store.view(store.attachments.compactMap(\.viewed), at: 0)
         case "view":
             let shown = store.transcript.rows.compactMap { row -> ViewedMedia? in
                 guard case .media(let media) = row.kind else { return nil }

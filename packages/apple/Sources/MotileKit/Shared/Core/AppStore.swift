@@ -227,6 +227,9 @@ final class AppStore {
     var mcpStep: String?
     /// The thread whose sidebar row `do.sh` has slid aside on iOS, to show what its swipe offers.
     var swipeStep: String?
+    /// A step `do.sh` gave the viewer on iOS: "start", "tool <tool>", "ink <ink>", "inks", "draw <x> <y> …"
+    /// through points in fractions of the image, "note <text>", "keep", "done", "cancel".
+    var markupStep: String?
     /// The thread's settings are open over the client, where they aren't around the composer.
     /// The composer's picker on the Mac while it is open: the part of the composer it opened from.
     /// Closing it gives the keys back to the composer, which it opens from.
@@ -3011,6 +3014,26 @@ final class AppStore {
             attachmentsByKey[key, default: []].append(attachment)
             upload(attachment.id)
         }
+        composerFocus += 1
+    }
+
+    /// Puts an image marked up in the viewer in the composer, in the place of the attachment it was
+    /// or after the others, and its pins' notes in the message, in the place of those it had.
+    func attachMarkup(_ result: MarkupResult, replacing id: String?) {
+        guard let server = composerServer, !server.removed else { return }
+        let key = draftKey
+        var attachment = Attachment(file: result.file, serverID: server.id)
+        attachment.markup = result.saved
+        let replaced = id.flatMap { id in attachments.firstIndex { $0.id == id } }
+        let earlier = replaced.flatMap { attachments[$0].markup?.notes }
+        if let replaced, let id {
+            removeAttachment(id)
+            attachmentsByKey[key, default: []].insert(attachment, at: min(replaced, attachmentsByKey[key]?.count ?? 0))
+        } else {
+            attachmentsByKey[key, default: []].append(attachment)
+        }
+        upload(attachment.id)
+        draft = MarkupSession.placingNotes(result.notes, over: earlier, in: draft)
         composerFocus += 1
     }
 

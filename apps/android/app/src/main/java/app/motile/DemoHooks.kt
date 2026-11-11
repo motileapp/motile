@@ -17,4 +17,6 @@ object DemoHooks {
     var programFrames: MutableMap<String, app.motile.transcript.openui.UiFrames>? = null
     /** Touches the window as a finger does. */
     var touch: ((android.view.MotionEvent) -> Unit)? = null
+    /** Marks up the image the viewer shows, by the steps of `markup`. */
+    var markup: ((String) -> Unit)? = null
 }

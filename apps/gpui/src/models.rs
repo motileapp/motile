@@ -898,6 +898,17 @@ pub struct Attachment {
     pub path: Option<String>,
     pub media: Option<String>,
     pub poster: Option<String>,
+    /// What it was marked up from, to be marked up again.
+    pub markup: Option<SavedMarkup>,
+}
+
+/// What a marked-up attachment keeps to be marked up again: the image before the marks, and them.
+#[derive(Clone, PartialEq, Debug)]
+pub struct SavedMarkup {
+    pub original: PathBuf,
+    pub name: String,
+    pub marks: String,
+    pub notes: Option<String>,
 }
 
 pub fn is_video(path: &Path) -> bool {
@@ -928,6 +939,7 @@ impl Attachment {
             path: None,
             media: None,
             poster: None,
+            markup: None,
         }
     }
 
@@ -944,6 +956,7 @@ impl Attachment {
             path: Some(path.to_string()),
             media: shown.and_then(|shown| shown.media.clone()),
             poster: shown.and_then(|shown| shown.poster.clone()),
+            markup: None,
         }
     }
 
@@ -964,12 +977,14 @@ impl Attachment {
                 name: self.name.clone(),
                 video: self.video,
                 source: MediaSource::File(file.clone()),
+                attachment: Some(self.id.clone()),
             });
         }
         self.media.as_ref().map(|media| ViewedMedia {
             name: self.name.clone(),
             video: self.video,
             source: MediaSource::Media(media.clone()),
+            attachment: Some(self.id.clone()),
         })
     }
 }
@@ -986,6 +1001,8 @@ pub struct ViewedMedia {
     pub name: String,
     pub video: bool,
     pub source: MediaSource,
+    /// The composer's attachment it is, which marking it up replaces.
+    pub attachment: Option<String>,
 }
 
 /// What the viewer has open: the images and videos of one message or of the composer, and

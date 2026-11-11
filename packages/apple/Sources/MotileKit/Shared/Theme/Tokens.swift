@@ -48,6 +48,12 @@ extension Theme {
     static let segmentAccent = tone(0xdfe2e8, 0x14151a)
     static let segmentSelected = tone(0xffffff, 0x212329)
     static let composer = tone(0xffffff, 0x111217)
+    static let composerAccentWeaker = tone(0xededee, 0x191a1f)
+    static let composerAccent = tone(0xddddde, 0x202126)
+    static let composerAccentStronger = tone(0xd5d5d7, 0x27282e)
+    static let glassAccentWeaker = tone(0xededee, 0x212328)
+    static let glassAccent = tone(0xddddde, 0x282a2f)
+    static let glassAccentStronger = tone(0xd5d5d7, 0x2f3137)
     static let glass = tone(0xffffff, 0x0a0b0f)
     static let accentWithOpacity = tone(0x22242b, 0xd0d2d9)
     static let accentTinted = tone(0x22242b, 0xd0d2d9)
@@ -72,6 +78,12 @@ extension Theme {
     static let mapStreet = tone(0xcdd1d9, 0x34363d)
     static let mapRoad = tone(0xb1b9c8, 0x4a4e57)
     static let mapFerry = tone(0x89cfe9, 0x2b5566)
+    static let markupRed = tone(0xff3b30, 0xff3b30)
+    static let markupYellow = tone(0xffcc00, 0xffcc00)
+    static let markupGreen = tone(0x30d158, 0x30d158)
+    static let markupBlue = tone(0x0a84ff, 0x0a84ff)
+    static let markupWhite = tone(0xffffff, 0xffffff)
+    static let markupInk = tone(0x1c1d22, 0x1c1d22)
     static let claude = tone(0xd97757, 0xd97757)
     static let openai = tone(0x22242b, 0xd0d2d9)
     static let googleBlue = tone(0x4285f4, 0x4285f4)
@@ -141,6 +153,12 @@ extension Theme {
         case "segment-accent": segmentAccent
         case "segment-selected": segmentSelected
         case "composer": composer
+        case "composer-accent-weaker": composerAccentWeaker
+        case "composer-accent": composerAccent
+        case "composer-accent-stronger": composerAccentStronger
+        case "glass-accent-weaker": glassAccentWeaker
+        case "glass-accent": glassAccent
+        case "glass-accent-stronger": glassAccentStronger
         case "glass": glass
         case "accent-with-opacity": accentWithOpacity
         case "accent-tinted": accentTinted
@@ -165,6 +183,12 @@ extension Theme {
         case "map-street": mapStreet
         case "map-road": mapRoad
         case "map-ferry": mapFerry
+        case "markup-red": markupRed
+        case "markup-yellow": markupYellow
+        case "markup-green": markupGreen
+        case "markup-blue": markupBlue
+        case "markup-white": markupWhite
+        case "markup-ink": markupInk
         case "claude": claude
         case "openai": openai
         case "google-blue": googleBlue
@@ -234,6 +258,12 @@ extension Color {
     static let themeSegmentAccent = Color(platform: Theme.segmentAccent)
     static let themeSegmentSelected = Color(platform: Theme.segmentSelected)
     static let themeComposer = Color(platform: Theme.composer)
+    static let themeComposerAccentWeaker = Color(platform: Theme.composerAccentWeaker)
+    static let themeComposerAccent = Color(platform: Theme.composerAccent)
+    static let themeComposerAccentStronger = Color(platform: Theme.composerAccentStronger)
+    static let themeGlassAccentWeaker = Color(platform: Theme.glassAccentWeaker)
+    static let themeGlassAccent = Color(platform: Theme.glassAccent)
+    static let themeGlassAccentStronger = Color(platform: Theme.glassAccentStronger)
     static let themeGlass = Color(platform: Theme.glass)
     static let themeAccentWithOpacity = Color(platform: Theme.accentWithOpacity)
     static let themeAccentTinted = Color(platform: Theme.accentTinted)
@@ -258,6 +288,12 @@ extension Color {
     static let themeMapStreet = Color(platform: Theme.mapStreet)
     static let themeMapRoad = Color(platform: Theme.mapRoad)
     static let themeMapFerry = Color(platform: Theme.mapFerry)
+    static let themeMarkupRed = Color(platform: Theme.markupRed)
+    static let themeMarkupYellow = Color(platform: Theme.markupYellow)
+    static let themeMarkupGreen = Color(platform: Theme.markupGreen)
+    static let themeMarkupBlue = Color(platform: Theme.markupBlue)
+    static let themeMarkupWhite = Color(platform: Theme.markupWhite)
+    static let themeMarkupInk = Color(platform: Theme.markupInk)
     static let themeClaude = Color(platform: Theme.claude)
     static let themeOpenai = Color(platform: Theme.openai)
     static let themeGoogleBlue = Color(platform: Theme.googleBlue)
@@ -279,11 +315,12 @@ extension Color {
 
 /// How much of a colour shows: every opacity in the clients is one of these.
 enum Opacity {
-    case overlay, overlayPulled, disabled, lit, shadow, shadowStronger, shadowStrongest, colorTint, colorTintStronger, colorTintChart, colorTintChartStronger, colorTintChartStrongest, shimmerBandEdge, shimmerBandMiddle, glow, glowFaint, glowBright, glassTint, accentOpacity, accentTint
+    case overlay, overlayStronger, overlayPulled, disabled, lit, shadow, shadowStronger, shadowStrongest, colorTint, colorTintStronger, colorTintChart, colorTintChartStronger, colorTintChartStrongest, shimmerBandEdge, shimmerBandMiddle, glow, glowFaint, glowBright, glassTint, accentOpacity, accentTint
 
     var light: CGFloat {
         switch self {
         case .overlay: 0.5
+        case .overlayStronger: 0.75
         case .overlayPulled: 0.4
         case .disabled: 0.45
         case .lit: 0.88
@@ -309,6 +346,7 @@ enum Opacity {
     var dark: CGFloat {
         switch self {
         case .overlay: 0.6
+        case .overlayStronger: 0.8
         case .overlayPulled: 0.4
         case .disabled: 0.45
         case .lit: 0.88

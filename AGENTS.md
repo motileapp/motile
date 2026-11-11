@@ -379,6 +379,11 @@ for tests.
   is replaced, panics, and inputs that kept the core busy. Settings → General → Troubleshooting
   shows it in the Mac's Finder and the GPUI app's file manager, and shares it on iOS and Android.
 - `media.rs`: the images and videos the client has fetched, as files, with a size limit.
+- `markup.rs`: marking up an image in the viewer to show an agent what to change: pen strokes,
+  arrows, boxes and numbered pins that carry a note, in the image's pixels, with their undo history.
+  A client passes the pointer in (`motile_markup`, `Native.markup`) and paints the scene that comes
+  back over the picture; `flatten` writes the image with its marks (tiny-skia), and the pins' notes
+  go in the message after it, or in the place of those it had when it is marked up again.
 - `git.rs`: which git action a project's status calls for.
 - `pull_request.rs`: the pull request tabs: a pull request's statuses, the button its state calls
   for, its menu, its activity and conversations with the Markdown set, the list's rows, and the
@@ -503,6 +508,12 @@ to be AppKit on the Mac and UIKit on iOS has a twin in each, named alike (`KitMa
   `LimitsView.swift` is the Limits tab, what the agents' plans have used, and `SpendingView.swift`
   the Cost and Tokens tabs: a chart by agent and the models, projects and kinds of token under it.
   The Mac lays it out in `Mac/UsageRoute.swift`, iOS in `iOS/UsageSheet.swift`.
+- `Shared/Views/Markup`: marking up an image in the viewer (`Shared/Core/Markup.swift` is its
+  state): the bar of tools, colours and undo, which is the selected pin's note while one is
+  (`MarkupBar.swift`), and the marks painted over the picture (`MarkupCanvas.swift`), which the
+  viewer's zooming view gives the pointer: a drag on the Mac, one finger on iOS, where two move it.
+  A marked-up image goes in the composer in the place of the attachment it was, and keeps what it
+  was made from to be marked up again.
 - `Shared/Views/Panel`: the panel on the right of the thread: changes, files, agents
   (`AgentsView.swift`: the agents at work, the ones that ended folded under them, and the thread
   that started this one; an agent opens in the thread's place, in its own thread when it has one

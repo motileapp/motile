@@ -48,6 +48,12 @@
   --segment-accent: #dfe2e8;
   --segment-selected: #ffffff;
   --composer: #ffffff;
+  --composer-accent-weaker: #ededee;
+  --composer-accent: #ddddde;
+  --composer-accent-stronger: #d5d5d7;
+  --glass-accent-weaker: #ededee;
+  --glass-accent: #ddddde;
+  --glass-accent-stronger: #d5d5d7;
   --glass: #ffffff;
   --accent-with-opacity: #22242b;
   --accent-tinted: #22242b;
@@ -72,6 +78,12 @@
   --map-street: #cdd1d9;
   --map-road: #b1b9c8;
   --map-ferry: #89cfe9;
+  --markup-red: #ff3b30;
+  --markup-yellow: #ffcc00;
+  --markup-green: #30d158;
+  --markup-blue: #0a84ff;
+  --markup-white: #ffffff;
+  --markup-ink: #1c1d22;
   --claude: #d97757;
   --openai: #22242b;
   --google-blue: #4285f4;
@@ -91,6 +103,7 @@
   --syntax-tag: #116329;
 
   --opacity-overlay: 50%;
+  --opacity-overlay-stronger: 75%;
   --opacity-overlay-pulled: 40%;
   --opacity-disabled: 45%;
   --opacity-lit: 88%;
@@ -159,6 +172,12 @@
   --segment-accent: #14151a;
   --segment-selected: #212329;
   --composer: #111217;
+  --composer-accent-weaker: #191a1f;
+  --composer-accent: #202126;
+  --composer-accent-stronger: #27282e;
+  --glass-accent-weaker: #212328;
+  --glass-accent: #282a2f;
+  --glass-accent-stronger: #2f3137;
   --glass: #0a0b0f;
   --accent-with-opacity: #d0d2d9;
   --accent-tinted: #d0d2d9;
@@ -183,6 +202,12 @@
   --map-street: #34363d;
   --map-road: #4a4e57;
   --map-ferry: #2b5566;
+  --markup-red: #ff3b30;
+  --markup-yellow: #ffcc00;
+  --markup-green: #30d158;
+  --markup-blue: #0a84ff;
+  --markup-white: #ffffff;
+  --markup-ink: #1c1d22;
   --claude: #d97757;
   --openai: #d0d2d9;
   --google-blue: #4285f4;
@@ -202,6 +227,7 @@
   --syntax-tag: #7ee787;
 
   --opacity-overlay: 60%;
+  --opacity-overlay-stronger: 80%;
   --opacity-overlay-pulled: 40%;
   --opacity-disabled: 45%;
   --opacity-lit: 88%;
