@@ -221,17 +221,25 @@ extension PullRequestPage.Tone {
 }
 
 /// Text set by `Typesetter`, drawn in a text view of the transcript's, as tall as it needs.
-struct ProseText {
+struct ProseText: View {
+    let text: NSAttributedString
+
+    var body: some View {
+        ProseTextView(text: text).padding(.horizontal, -RowTextView.overhang)
+    }
+}
+
+private struct ProseTextView {
     let text: NSAttributedString
 
     fileprivate static func height(of view: RowTextView, proposal: ProposedViewSize) -> CGSize? {
-        guard let width = proposal.width, width.isFinite, width > 0 else { return nil }
-        return CGSize(width: width, height: view.height(forWidth: width))
+        guard let width = proposal.width, width.isFinite, width > 2 * RowTextView.overhang else { return nil }
+        return CGSize(width: width, height: view.height(forWidth: width - 2 * RowTextView.overhang))
     }
 }
 
 #if os(macOS)
-extension ProseText: NSViewRepresentable {
+extension ProseTextView: NSViewRepresentable {
     func makeNSView(context: Context) -> RowTextView {
         RowTextView.make()
     }
@@ -246,7 +254,7 @@ extension ProseText: NSViewRepresentable {
     }
 }
 #else
-extension ProseText: UIViewRepresentable {
+extension ProseTextView: UIViewRepresentable {
     func makeUIView(context: Context) -> RowTextView {
         RowTextView.make()
     }

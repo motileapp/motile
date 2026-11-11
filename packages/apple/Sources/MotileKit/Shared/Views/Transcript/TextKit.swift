@@ -44,7 +44,8 @@ final class CodeBox: NSObject {
             bottom = used.maxY
         }
         guard let top else { return .zero }
-        return CGRect(x: indent, y: top, width: container.size.width - indent, height: bottom + Self.paddingBottom - top)
+        let padding = container.lineFragmentPadding
+        return CGRect(x: padding + indent, y: top, width: container.size.width - 2 * padding - indent, height: bottom + Self.paddingBottom - top)
     }
 }
 
@@ -110,7 +111,7 @@ final class DecoratingLayoutManager: NSLayoutManager {
                 let top = (baseline - font.ascender).rounded()
                 let bottom = (baseline - font.descender).rounded()
                 self.enumerateEnclosingRects(forGlyphRange: onLine, withinSelectedGlyphRange: unselected, in: container) { rect, _ in
-                    let box = CGRect(x: rect.minX - 2, y: top, width: rect.width + 4, height: bottom - top)
+                    let box = CGRect(x: rect.minX - RowTextView.overhang, y: top, width: rect.width + 2 * RowTextView.overhang, height: bottom - top)
                     RoundedBox.fill(box.offsetBy(dx: origin.x, dy: origin.y), radius: Radius.xs)
                 }
             }
@@ -137,9 +138,9 @@ final class DecoratingLayoutManager: NSLayoutManager {
             guard let depth = (value as? NSNumber)?.intValue, depth > 0 else { return }
             let glyphs = glyphRange(forCharacterRange: range, actualCharacterRange: nil)
             Theme.border.setFill()
-            enumerateLineFragments(forGlyphRange: glyphs) { rect, _, _, _, _ in
+            enumerateLineFragments(forGlyphRange: glyphs) { rect, _, container, _, _ in
                 for level in 0..<depth {
-                    let bar = CGRect(x: rect.minX + CGFloat(level) * 14 + 1, y: rect.minY, width: 2, height: rect.height)
+                    let bar = CGRect(x: rect.minX + container.lineFragmentPadding + CGFloat(level) * 14 + 1, y: rect.minY, width: 2, height: rect.height)
                     bar.offsetBy(dx: origin.x, dy: origin.y).fillCurrent()
                 }
             }
@@ -149,8 +150,9 @@ final class DecoratingLayoutManager: NSLayoutManager {
             guard value != nil else { return }
             let glyphs = glyphRange(forCharacterRange: range, actualCharacterRange: nil)
             Theme.border.setFill()
-            enumerateLineFragments(forGlyphRange: glyphs) { rect, _, _, _, _ in
-                let line = CGRect(x: rect.minX, y: rect.midY, width: rect.width, height: 1)
+            enumerateLineFragments(forGlyphRange: glyphs) { rect, _, container, _, _ in
+                let padding = container.lineFragmentPadding
+                let line = CGRect(x: rect.minX + padding, y: rect.midY, width: rect.width - 2 * padding, height: 1)
                 line.offsetBy(dx: origin.x, dy: origin.y).fillCurrent()
             }
         }
@@ -203,7 +205,7 @@ final class TextSystem {
         layout.delegate = ShellWords.shared
         layout.allowsNonContiguousLayout = true
         storage.addLayoutManager(layout)
-        container.lineFragmentPadding = 0
+        container.lineFragmentPadding = RowTextView.overhang
         container.widthTracksTextView = false
         container.heightTracksTextView = false
         layout.addTextContainer(container)
@@ -213,6 +215,7 @@ final class TextSystem {
     /// a part that is drawn lays out the lines before it too, rather than guessing where it is.
     func unwrap() {
         container.size = CGSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+        container.lineFragmentPadding = 0
         layout.allowsNonContiguousLayout = false
     }
 
@@ -240,7 +243,7 @@ final class TextSystem {
     /// Where each of its first `count` lines starts, from its top, laid out `width` wide.
     func lineTops(_ count: Int, forWidth width: CGFloat) -> [CGFloat] {
         guard storage.length > 0 else { return [] }
-        let size = CGSize(width: width, height: CGFloat.greatestFiniteMagnitude)
+        let size = CGSize(width: width + 2 * container.lineFragmentPadding, height: CGFloat.greatestFiniteMagnitude)
         if container.size != size { container.size = size }
         var tops: [CGFloat] = []
         layout.enumerateLineFragments(forGlyphRange: NSRange(location: 0, length: layout.numberOfGlyphs)) { rect, _, _, _, stop in
@@ -273,7 +276,7 @@ final class TextSystem {
         guard storage.length > 0 else { return 0 }
         // A text view on iOS makes its container as tall as itself, which would cut off what a
         // reused view's new text has more.
-        let size = CGSize(width: width, height: CGFloat.greatestFiniteMagnitude)
+        let size = CGSize(width: width + 2 * container.lineFragmentPadding, height: CGFloat.greatestFiniteMagnitude)
         if container.size != size { container.size = size }
         layout.ensureLayout(for: container)
         var height = layout.usedRect(for: container).height
@@ -386,6 +389,15 @@ enum TextMeasure {
 }
 
 extension RowTextView {
+    /// How far inline code's box reaches past its text. The text's container is this much wider
+    /// than its text on each side, so that a box at the start or the end of a line isn't cut off.
+    static let overhang: CGFloat = 2
+
+    /// Places the view so that its text takes `frame`.
+    func place(_ frame: CGRect) {
+        self.frame = frame.insetBy(dx: -Self.overhang, dy: 0)
+    }
+
     /// Lays out a little of every kind of text once, at launch, so that the first reply doesn't
     /// pay for loading the fonts and the text system while it streams.
     static func warmUp() {
