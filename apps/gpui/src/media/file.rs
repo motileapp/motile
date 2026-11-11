@@ -497,6 +497,7 @@ fn file_card(
                         RowButton::new(SharedString::from(format!("reveal-{key}")), REVEAL_TITLE, REVEAL_TITLE)
                             .bordered()
                             .hover(c.background_secondary_accent)
+                            .rest(c.background)
                             .on_click(move |_, _, cx| cx.reveal_path(&revealed)),
                     ),
             )

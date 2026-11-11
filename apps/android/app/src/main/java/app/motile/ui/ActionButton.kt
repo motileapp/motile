@@ -157,8 +157,6 @@ data class ControlLook(
     val tint: Color? = null,
     /** A ghost button that, until it is lit, is as muted as the time beside it. */
     val quiet: Boolean = false,
-    /** An outline button that rests clear, on what is under it, as a row's button does. */
-    val clear: Boolean = false,
 ) {
     fun foreground(palette: Palette): Color {
         if (tint != null && (variant == ButtonVariant.Ghost || variant == ButtonVariant.Secondary || variant == ButtonVariant.Outline)) return tint
@@ -185,11 +183,7 @@ data class ControlLook(
         return when (variant) {
             ButtonVariant.Primary -> filled(palette.primary)
             ButtonVariant.Secondary -> surface.color(if (selected || lit) Surface.Layer.ControlLit else Surface.Layer.Control, palette)
-            ButtonVariant.Outline -> when {
-                selected || lit -> surface.color(Surface.Layer.Control, palette)
-                clear -> Color.Transparent
-                else -> palette.background
-            }
+            ButtonVariant.Outline -> if (selected || lit) surface.color(Surface.Layer.Control, palette) else palette.background
             ButtonVariant.Danger -> filled(palette.destructive)
             ButtonVariant.Success -> filled(palette.success)
             ButtonVariant.Warning -> filled(palette.warning)
@@ -652,7 +646,6 @@ fun ActionButton(
     joined: Set<HorizontalEdge> = emptySet(),
     tint: Color? = null,
     quiet: Boolean = false,
-    clear: Boolean = false,
     margin: PaddingValues = PaddingValues(0.dp),
     disabled: Boolean = false,
     inline: Boolean = false,
@@ -665,7 +658,7 @@ fun ActionButton(
     onClick: () -> Unit,
 ) {
     val words = title?.takeIf { it.isNotEmpty() }
-    val look = ControlLook(variant, size, selected = selected, round = round, joined = joined, tint = tint, quiet = quiet, clear = clear)
+    val look = ControlLook(variant, size, selected = selected, round = round, joined = joined, tint = tint, quiet = quiet)
     val label = @Composable {
         ControlLabel(
             words, ControlIcon.of(icon, picture, pictures), size, chevron = opens || expanded != null, pending = pending, pendingTitle = pendingTitle, fills = fills,

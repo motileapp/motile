@@ -96,23 +96,26 @@ final class RowButton: FlippedView {
     private let sidePadding: CGFloat
     private let insets: PlatformEdgeInsets
     private let hover: PlatformColor
+    private let rest: PlatformColor
     private static let titleHeight = scaled(16)
 
     /// The room between the words and the highlight's sides, without a border.
     static let padding: CGFloat = 8
 
-    /// `hover` lights the button, a step above the surface it sits on; unlit it is clear.
+    /// `hover` lights the button, a step above the surface it sits on, and `rest` fills it unlit.
     init(
         title: String,
         tooltip: String,
         radius: CGFloat,
         bordered: Bool = false,
         hover: PlatformColor = Theme.backgroundSecondary,
+        rest: PlatformColor = .clear,
         insets: PlatformEdgeInsets,
         action: @escaping () -> Void
     ) {
         self.insets = insets
         self.hover = hover
+        self.rest = rest
         self.bordered = bordered
         font = self.bordered ? .ui(Self.metrics.textSize, weight: .medium) : Theme.smallFont
         sidePadding = self.bordered ? Self.metrics.padding : Self.padding
@@ -151,7 +154,7 @@ final class RowButton: FlippedView {
     }
 
     private func light(_ lit: Bool) {
-        highlight.fill = lit ? hover : .clear
+        highlight.fill = lit ? hover : rest
         title.color = lit || bordered ? Theme.foreground : Theme.mutedForeground
     }
 }
