@@ -36,6 +36,7 @@ struct ActivityReport {
         let turns: Int
         let share: Double
         let lastSeen: Date?
+        let active: Bool
         let thisDevice: Bool
         let removed: Bool
 
@@ -121,7 +122,7 @@ struct ActivityReport {
                 detail: client.string("detail"), symbol: Self.symbol(client.string("symbol")), color: client.int("color"),
                 messages: client.int("messages"), turns: client.int("turns"), share: client.double("share"),
                 lastSeen: client.optionalDouble("last_seen").map(Date.init(timeIntervalSince1970:)),
-                thisDevice: client.bool("this_device"), removed: client.bool("removed"))
+                active: client.bool("active"), thisDevice: client.bool("this_device"), removed: client.bool("removed"))
         }
         hours = json.objects("hours").map { hour in
             Hour(

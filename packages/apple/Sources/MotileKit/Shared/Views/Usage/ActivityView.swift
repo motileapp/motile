@@ -545,6 +545,7 @@ private struct ActivityClientRow: View {
     }
 
     private var seen: String? {
+        guard !client.active else { return "Active now" }
         guard let lastSeen = client.lastSeen else { return nil }
         let ago = Time.ago(lastSeen.timeIntervalSince1970)
         return ago == "now" ? "Seen just now" : "Seen \(ago) ago"

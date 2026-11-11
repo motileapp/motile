@@ -1216,6 +1216,9 @@ pub struct ClientRecord {
     pub device: String,
     pub client: ClientInfo,
     pub seen_at: f64,
+    /// Connected to the server that reports it, as it reports it.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub connected: bool,
 }
 
 /// What started a turn.

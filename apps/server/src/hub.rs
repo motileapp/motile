@@ -174,6 +174,8 @@ pub struct Hub {
     limits: Mutex<Option<(Instant, Vec<AgentLimits>)>>,
     /// What was last seen of each watched thread's pull request, by thread.
     watched: std::sync::Mutex<HashMap<String, Seen>>,
+    /// How many connections each client device has open.
+    connected: std::sync::Mutex<HashMap<String, usize>>,
     /// Held while a folder is kept as it is, so a thread's snapshots follow one another.
     snapshotting: Mutex<()>,
     list_updates: broadcast::Sender<Message>,
@@ -449,6 +451,7 @@ impl Hub {
             ),
             limits: Mutex::default(),
             watched: std::sync::Mutex::default(),
+            connected: std::sync::Mutex::default(),
             worktrees: std::sync::Mutex::new(worktrees),
             snapshotting: Mutex::default(),
             threads: std::sync::Mutex::new(threads),
@@ -2570,6 +2573,11 @@ impl Hub {
         removed: &[String],
     ) -> anyhow::Result<Message> {
         let mut report = self.store.activity_of(None, since, until, bucket_secs, utc_offset_secs)?;
+        let connected = self.connected.lock().unwrap();
+        for record in &mut report.clients {
+            record.connected = connected.contains_key(&record.device);
+        }
+        drop(connected);
         let accounts = self.agent_accounts();
         for bucket in &mut report.turns {
             if let Some(account) = accounts.iter().find(|account| account.id == bucket.agent_account) {
@@ -2582,6 +2590,25 @@ impl Hub {
             copies.push(OriginActivity { origin: origin.clone(), report });
         }
         Ok(Message::ActivityReport { report, copies })
+    }
+
+    pub fn client_connected(&self, device: &str) {
+        *self.connected.lock().unwrap().entry(device.to_string()).or_default() += 1;
+    }
+
+    pub fn client_disconnected(&self, device: &str) {
+        {
+            let mut connected = self.connected.lock().unwrap();
+            let Some(count) = connected.get_mut(device) else { return };
+            *count -= 1;
+            if *count > 0 {
+                return;
+            }
+            connected.remove(device);
+        }
+        if let Err(error) = self.store.client_left(device, now()) {
+            tracing::warn!("couldn't keep when a client left: {error:#}");
+        }
     }
 
     /// What changed in a log after `after`: this server's own, or its copy of `origin`'s. The own
