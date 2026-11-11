@@ -45,13 +45,23 @@ fun CheckMenu(
     }
 }
 
-/** The same menu behind a symbol's glass button, as a sheet's bar has. */
+/** The same menu behind a symbol's glass button, as a sheet's bar has; `bare` beside others on one glass capsule. */
 @Composable
-fun GlassCheckMenu(symbol: Symbol, help: String, checks: List<Check>, modifier: Modifier = Modifier) {
+fun GlassCheckMenu(symbol: Symbol, help: String, checks: List<Check>, modifier: Modifier = Modifier, bare: Boolean = false) {
     var open by remember { mutableStateOf(false) }
     Box(modifier) {
-        GlassButton(symbol, help, onClick = { open = true })
+        GlassButton(symbol, help, onClick = { open = true }, bare = bare)
         CheckList(open, { open = false }, checks)
+    }
+}
+
+/** One of `choices` picked behind a symbol's glass button, which picking one closes. */
+@Composable
+fun GlassPickMenu(symbol: Symbol, help: String, choices: List<Check>, modifier: Modifier = Modifier, bare: Boolean = false) {
+    var open by remember { mutableStateOf(false) }
+    Box(modifier) {
+        GlassButton(symbol, help, onClick = { open = true }, bare = bare, state = choices.firstOrNull { it.checked }?.title)
+        CheckList(open, { open = false }, choices.map { it.copy(toggle = { open = false; it.toggle() }) })
     }
 }
 

@@ -2,8 +2,8 @@
 import SwiftUI
 
 /// What was done, what the agents spent and what is left of their plans, in a sheet: the tabs in
-/// the system's tab bar, the period at the top of each page, and the servers counted in the bar's
-/// menu once there are several. Pulling a page down reads it again.
+/// the system's tab bar, and the period and the servers counted, once there are several, in the
+/// bar's menus. Pulling a page down reads it again.
 struct UsageSheet: View {
     private static let margin: CGFloat = 16
 
@@ -35,7 +35,7 @@ struct UsageSheet: View {
 
     private func page(_ tab: UsageModel.Tab) -> some View {
         NavigationStack {
-            UsageContent(model: model, shown: tab, margin: Self.margin, top: 4, periodInPage: true)
+            UsageContent(model: model, shown: tab, margin: Self.margin, top: 4)
                 .refreshable { await model.refreshed() }
                 .dropdowns()
                 .background(Color.themeBackground.ignoresSafeArea())
@@ -44,11 +44,27 @@ struct UsageSheet: View {
                 .serversSubtitle(picksServers ? model.serversLabel(among: store.usageServers) : nil)
                 .toolbar {
                     GlassToolbarItem(placement: .topBarLeading) { SheetCloseButton() }
-                    if picksServers {
-                        GlassToolbarItem(placement: .topBarTrailing) { servers }
+                    if tab != .limits || picksServers {
+                        GlassToolbarItem(placement: .topBarTrailing) {
+                            if tab != .limits { period }
+                            if picksServers { servers }
+                        }
                     }
                 }
         }
+    }
+
+    private var period: some View {
+        Menu {
+            Picker("Period", selection: Bindable(model).period) {
+                ForEach(UsageModel.Period.allCases) { Text($0.label).tag($0) }
+            }
+        } label: {
+            Image(.calendar, size: .lg)
+        }
+        .glassSymbolFrame()
+        .accessibilityLabel("Period")
+        .accessibilityValue(model.period.label)
     }
 
     /// The servers counted, each checked or not.

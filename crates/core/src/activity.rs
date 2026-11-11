@@ -105,7 +105,7 @@ pub struct ClientRow {
     pub messages: u32,
     pub turns: u32,
     pub engaged_seconds: f64,
-    /// The user's time on it and its messages: "2h 10m · 31 messages".
+    /// The user's time on it with its share, and its messages: "2h 10m (57%) · 31 messages".
     pub summary: String,
     /// Its part of the user's time on the clients listed, or of their messages before that was
     /// counted, from 0 to 1.
@@ -733,7 +733,7 @@ fn client_rows(
         seen.entry(device.clone()).or_default().turns += bucket.turns;
     }
     let listed: u32 = seen.values().map(|seen| seen.messages).sum();
-    let mut rows: Vec<ClientRow> = seen
+    let rows: Vec<(ClientRow, Vec<String>)> = seen
         .into_iter()
         .map(|(device, seen)| {
             let record = clients.get(&device);
@@ -774,7 +774,7 @@ fn client_rows(
                 0.0 => f64::from(seen.messages) / f64::from(listed.max(1)),
                 total => seen.engaged / total,
             };
-            ClientRow {
+            let row = ClientRow {
                 name: account.map(|(name, _)| name.clone()).unwrap_or_else(|| from.label()),
                 client,
                 detail: detail.join(" · "),
@@ -783,14 +783,25 @@ fn client_rows(
                 messages: seen.messages,
                 turns: seen.turns,
                 engaged_seconds: seen.engaged,
-                summary: summary.join(" · "),
+                summary: String::new(),
                 share,
                 last_seen: record.map(|record| record.seen_at),
                 active: device == names.this_device || record.is_some_and(|record| record.connected),
                 this_device: device == names.this_device,
                 removed: account.is_none(),
                 device,
-            }
+            };
+            (row, summary)
+        })
+        .collect();
+    let percents = whole_percents(&rows.iter().map(|(row, _)| row.share).collect::<Vec<_>>());
+    let mut rows: Vec<ClientRow> = rows
+        .into_iter()
+        .zip(percents)
+        .map(|((mut row, mut summary), percent)| {
+            summary[0] = format!("{} ({percent}%)", summary[0]);
+            row.summary = summary.join(" · ");
+            row
         })
         .collect();
     rows.sort_by(|a, b| {
@@ -1044,6 +1055,24 @@ fn abbreviated(value: u64) -> String {
 
 fn plural(count: u32, one: &str, many: &str) -> String {
     format!("{} {}", number(count), if count == 1 { one } else { many })
+}
+
+/// Shares as whole percentages that add up to 100, the rounding left over going to the ones
+/// closest to the next.
+fn whole_percents(shares: &[f64]) -> Vec<u32> {
+    let total: f64 = shares.iter().sum();
+    if total <= 0.0 {
+        return vec![0; shares.len()];
+    }
+    let exact: Vec<f64> = shares.iter().map(|share| share / total * 100.0).collect();
+    let mut whole: Vec<u32> = exact.iter().map(|exact| exact.floor() as u32).collect();
+    let left = 100u32.saturating_sub(whole.iter().sum());
+    let mut nearest: Vec<usize> = (0..shares.len()).collect();
+    nearest.sort_by(|&a, &b| exact[b].fract().total_cmp(&exact[a].fract()));
+    for &index in nearest.iter().take(left as usize) {
+        whole[index] += 1;
+    }
+    whole
 }
 
 fn percent(part: f64, whole: f64) -> String {
@@ -1333,6 +1362,27 @@ mod tests {
     }
 
     #[test]
+    fn the_clients_percentages_add_up_to_a_hundred() {
+        let window = Window { since: 0.0, until: DAY, bucket_secs: 86_400, utc_offset_secs: 0 };
+        let report = ActivityReport {
+            actions: ["mac", "phone", "tablet"]
+                .into_iter()
+                .map(|device| action(0.0, Actor::User, Some(device), "message", "reply", 1))
+                .collect(),
+            clients: vec![
+                client("mac", ClientKind::Mac, "macos", ClientForm::Desktop),
+                client("phone", ClientKind::Ios, "ios", ClientForm::Phone),
+                client("tablet", ClientKind::Ios, "ios", ClientForm::Tablet),
+            ],
+            ..ActivityReport::default()
+        };
+        let view = view(&[Done { server_id: "studio".into(), report }], window, &names(), &[], true);
+        let mut summaries: Vec<_> = view.clients.iter().map(|row| row.summary.as_str()).collect();
+        summaries.sort();
+        assert_eq!(summaries, ["1 message (33%)", "1 message (33%)", "1 message (34%)"]);
+    }
+
+    #[test]
     fn your_time_counts_two_devices_at_once_once_and_is_compared_since_it_was_counted() {
         use motile_protocol::wire::EngagedSpans;
 
@@ -1375,7 +1425,7 @@ mod tests {
         let mac = shown.sources.iter().find(|source| source.label == "Mac").unwrap();
         assert_eq!(mac.engaged_points, [0.0, 4_200.0]);
         let clients: Vec<_> = shown.clients.iter().map(|row| (row.name.as_str(), row.summary.as_str())).collect();
-        assert_eq!(clients, [("Studio Mac", "1h 10m"), ("Pocket", "1h")]);
+        assert_eq!(clients, [("Studio Mac", "1h 10m (54%)"), ("Pocket", "1h (46%)")]);
         assert_eq!(shown.projects[0].detail, "You 2h · Agents 12h");
         assert_eq!(shown.busiest_time.as_deref(), Some("You're in Motile the most on Fridays around 10 am"));
         let friday = |hour: usize| shown.hours[4 * 24 + hour].time.as_str();

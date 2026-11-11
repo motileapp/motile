@@ -23,7 +23,6 @@ import app.motile.core.UsageModel
 import app.motile.theme.LocalPalette
 import app.motile.theme.TextSize
 import app.motile.ui.Check
-import app.motile.ui.Segmented
 import app.motile.ui.Spinner
 import app.motile.ui.Text
 import app.motile.ui.edgeFade
@@ -32,18 +31,15 @@ import app.motile.ui.edgeFade
 fun UsageModel.serverChecks(all: List<Server>): List<Check> =
     all.map { server -> Check(server.id, server.name, server.id in servers) { toggle(server, all) } }
 
-/** What the open tab shows, in a column that doesn't grow past a width; `periodInPage` puts the period over it, where no bar has it. The page fades under what is pinned over it. */
+/** What the open tab shows, in a column that doesn't grow past a width. The page fades under what is pinned over it. */
 @Composable
-fun UsageContent(model: UsageModel, modifier: Modifier = Modifier, margin: Dp = 24.dp, top: Dp = 20.dp, periodInPage: Boolean = false) {
+fun UsageContent(model: UsageModel, modifier: Modifier = Modifier, margin: Dp = 24.dp, top: Dp = 20.dp) {
     val scroll = rememberScrollState()
     Box(modifier.fillMaxWidth().edgeFade(above = { scroll.value.toFloat() }, below = { 0f }).verticalScroll(scroll), contentAlignment = Alignment.TopCenter) {
         Column(
             Modifier.widthIn(max = 880.dp).fillMaxWidth().padding(start = margin, end = margin, top = top, bottom = 80.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            if (periodInPage && model.tab != UsageModel.Tab.Limits) {
-                Segmented(UsageModel.Period.entries.map { it.label to it }, model.period, { model.period = it }, fills = true)
-            }
             when (model.tab) {
                 UsageModel.Tab.Limits -> {
                     WatchesGateway()

@@ -323,15 +323,10 @@ struct UsageContent: View {
     var shown: UsageModel.Tab?
     var margin: CGFloat = 24
     var top: CGFloat = 20
-    /// The period picks above what the tab shows, where it isn't in a bar.
-    var periodInPage = false
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                if periodInPage && tab != .limits {
-                    Segmented(UsageModel.Period.allCases.map { ($0.label, $0) }, selection: Bindable(model).period, size: Platform.pageSegments, fills: true)
-                }
                 page
             }
             .environment(\.usagePageHeight, pageHeight)

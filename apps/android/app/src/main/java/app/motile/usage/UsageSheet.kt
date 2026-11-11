@@ -1,8 +1,10 @@
 package app.motile.usage
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.NavigationBar
@@ -27,7 +29,10 @@ import app.motile.platform.Symbol
 import app.motile.theme.IconSize
 import app.motile.theme.LocalPalette
 import app.motile.theme.TextSize
+import app.motile.ui.Check
 import app.motile.ui.GlassCheckMenu
+import app.motile.ui.GlassPickMenu
+import app.motile.ui.glassButton
 import app.motile.ui.Icon
 import app.motile.ui.SheetBar
 import app.motile.ui.SheetCloseButton
@@ -37,8 +42,8 @@ private val margin = 16.dp
 
 /**
  * What was done, what the agents spent and what is left of their plans, in a sheet: the tabs
- * in the navigation bar under it, the period at the top of the page, and the servers counted in the bar's
- * menu once there are several. Pulling the page down reads it again.
+ * in the navigation bar under it, and the period and the servers counted, once there are several,
+ * in the bar's menus. Pulling the page down reads it again.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -49,6 +54,7 @@ fun UsageSheet() {
     val close = LocalCloseSheet.current
     val servers = store.usageServers
     val picksServers = servers.size > 1
+    val picksPeriod = model.tab != UsageModel.Tab.Limits
     var pulled by remember { mutableStateOf(false) }
     val refreshing = pulled && model.refreshing
     val pull = rememberPullToRefreshState()
@@ -58,8 +64,13 @@ fun UsageSheet() {
             "Usage",
             subtitle = if (picksServers) model.serversLabel(servers) else null,
             leading = { SheetCloseButton(onClose = close) },
-            trailing = if (picksServers) {
-                { GlassCheckMenu(Symbol.Server, "Servers counted", model.serverChecks(servers)) }
+            trailing = if (picksPeriod || picksServers) {
+                {
+                    Row(Modifier.glassButton(CircleShape), verticalAlignment = Alignment.CenterVertically) {
+                        if (picksPeriod) PeriodMenu(model)
+                        if (picksServers) GlassCheckMenu(Symbol.Server, "Servers counted", model.serverChecks(servers), bare = true)
+                    }
+                }
             } else {
                 null
             },
@@ -78,10 +89,18 @@ fun UsageSheet() {
                 )
             },
         ) {
-            UsageContent(model, margin = margin, top = 4.dp, periodInPage = true)
+            UsageContent(model, margin = margin, top = 4.dp)
         }
         UsageTabBar(model)
     }
+}
+
+@Composable
+private fun PeriodMenu(model: UsageModel) {
+    val choices = UsageModel.Period.entries.map { period ->
+        Check(period.name, period.label, period == model.period) { model.period = period }
+    }
+    GlassPickMenu(Symbol.Calendar, "Period", choices, bare = true)
 }
 
 /** The tabs in the system's navigation bar, under the page. */
