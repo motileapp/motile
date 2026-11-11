@@ -50,6 +50,8 @@ What the programs agree on.
 - `identity.rs`: the device key and request signing.
 - `media.rs`: names an image, a video or a file an agent sends by its contents.
 - `skills.rs`: how a message names the skills it starts, `$name` at the start of a word.
+- `activity.rs`: the features the Activity tab counts: which a client's request uses, which a motile
+  tool call of an agent does, and what each is called.
 - `gateway_wire.rs`: what servers and clients say to the account's gateway on `GATEWAY_ALPN`, a stream
   for each request.
 - `search.rs`: how a search through the messages matches, alike on the servers and the clients:
@@ -244,6 +246,14 @@ shadcn's own colours, opacities and radii are gone from the theme.
   agents spend, by model and by what it was spent on (a turn, or writing a title, a branch's
   name, a commit message or a pull request): Claude Code reports a session's total with each
   result and Codex what each answer took.
+- `activity.rs`: what the user and the agents did, for the usage view's Activity tab: the clients
+  that connected (each says which it is with `Hello`), every turn once it ends (what started it, the
+  client that sent its message, how long it worked and waited on the user, its tools, steers, agents,
+  reasoning and fast mode, how it ended), and every feature used, by a client or by an agent's motile
+  tool, with how the client was connected. All three go into the change log, as the usage does, and
+  stay when their thread is deleted. Once, on the first start that keeps them, the server reads the
+  turns and the user's messages from before out of its transcripts (`backfill_activity`); which
+  client sent a message, waiting, reasoning, fast mode and features start then.
 - `search.rs`: the sidebar's search through the messages, by an FTS5 trigram index of the user's
   and the agents' messages (`item_search`, `copied_item_search`, kept by triggers): the newest
   messages with every word of three letters or more, narrowed by the shorter words, then each
@@ -389,6 +399,9 @@ for tests.
   set off the words.
 - `usage.rs`: what the agents spent on every server, added up for the usage view: a series for
   each agent, and the models, projects and kinds of token.
+- `activity.rs`: the Activity tab of the usage view, from every server's activity: the headline
+  numbers, the work over time by the client it came from, the clients, the hours of the week, how
+  turns ended and what started them, and the features used, every label and number ready to draw.
 - `limits.rs`: the Limits tab of the usage view: a section for each account, shown once however
   many servers share it, and a row for each window with when it starts over and its pace. The
   gateway's accounts are sections too. It ranks a server's accounts for new threads with
@@ -486,6 +499,7 @@ to be AppKit on the Mac and UIKit on iOS has a twin in each, named alike (`KitMa
   or off on this device (`Shared/Core/Integration.swift`; Linear is on to start with, Ricrac off).
 - `Shared/Views/Usage`: the usage, a route of its own opened from the sidebar's footer, with the
   servers it counts picked in its title. `UsageView.swift` holds its tabs and what they read,
+  `ActivityView.swift` is the Activity tab, what the user and the agents did,
   `LimitsView.swift` is the Limits tab, what the agents' plans have used, and `SpendingView.swift`
   the Cost and Tokens tabs: a chart by agent and the models, projects and kinds of token under it.
   The Mac lays it out in `Mac/UsageRoute.swift`, iOS in `iOS/UsageSheet.swift`.

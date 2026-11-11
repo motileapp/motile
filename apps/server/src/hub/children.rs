@@ -899,6 +899,7 @@ impl Hub {
             held: false,
             sending: false,
             notice: Some(notice),
+            device: None,
             context: None,
             programs: Vec::new(),
         };

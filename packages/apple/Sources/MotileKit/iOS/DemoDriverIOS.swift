@@ -253,6 +253,17 @@ enum DemoDriver {
             guard let scroll = UIView.first(TranscriptScroller.self, in: window)?.subviews.first as? UIScrollView, let by = Double(rest) else { return }
             let most = max(0, scroll.contentSize.height - scroll.bounds.height)
             scroll.setContentOffset(CGPoint(x: 0, y: min(most, max(0, scroll.contentOffset.y + by))), animated: false)
+        case "scroll-sheet":
+            // The longest scroll view of what is presented: the sheet's page.
+            let window = UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.keyWindow }.first
+            var presented = window?.rootViewController
+            while let next = presented?.presentedViewController { presented = next }
+            func scrolls(in view: UIView) -> [UIScrollView] { ((view as? UIScrollView).map { [$0] } ?? []) + view.subviews.flatMap(scrolls) }
+            guard let view = presented?.view, let by = Double(rest),
+                let scroll = scrolls(in: view).max(by: { $0.contentSize.height < $1.contentSize.height })
+            else { return }
+            let most = max(0, scroll.contentSize.height - scroll.bounds.height + scroll.adjustedContentInset.bottom)
+            scroll.setContentOffset(CGPoint(x: 0, y: min(most, max(-scroll.adjustedContentInset.top, scroll.contentOffset.y + by))), animated: false)
         case "map":
             let words = rest.split(separator: " ", maxSplits: 1).map(String.init)
             guard words.count == 2 else { return }

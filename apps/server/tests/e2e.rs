@@ -18,11 +18,12 @@ use motile_protocol::gateway_wire::{AccountStatus, GatewayAccount, GatewayReply,
 use motile_protocol::identity::DeviceKey;
 use motile_protocol::wire::{
     Access as AgentAccess, Agent, AgentAccount, AgentLimits, Approval, Ask, CONTINUE_PROMPT, Change, CheckStatus,
-    CopiedThread, DiffScope, EventKind, FileKind, GitAction, GitHubState, GitStage, GitStatus, Interruption, Item,
-    ItemKind, LimitWindow, LineComment, MergeMethod, Mergeable, Message, NewThread, NewWorktree, Project,
-    PullRequestAction, PullRequestDetail, PullRequestEdit, PullRequestState, Queued, ReactionKind, Request,
-    RestartWhen, ReviewVerdict, ServerInfo, ServerUpdate, Side, Skill, SkillMention, SkillSource, Thread, ThreadChange,
-    Tokens, ToolCall, ToolStatus, TurnChanges, TurnSummary, UsageBucket, Variable,
+    ClientForm, ClientInfo, ClientKind, CopiedThread, DiffScope, EventKind, FileKind, GitAction, GitHubState, GitStage,
+    GitStatus, Interruption, Item, ItemKind, LimitWindow, LineComment, MergeMethod, Mergeable, Message, NewThread,
+    NewWorktree, Project, PullRequestAction, PullRequestDetail, PullRequestEdit, PullRequestState, Queued,
+    ReactionKind, Request, RestartWhen, ReviewVerdict, ServerInfo, ServerUpdate, Side, Skill, SkillMention,
+    SkillSource, Thread, ThreadChange, Tokens, ToolCall, ToolStatus, TurnChanges, TurnOutcome, TurnStarter,
+    TurnSummary, UsageBucket, Variable,
 };
 use motile_server::access::Access;
 use motile_server::agents::environment::Environment;
@@ -1145,6 +1146,57 @@ async fn stopping_a_turn_ends_it_and_says_so() {
     assert!(summary.stopped && !summary.is_error);
     assert!(transcript.errors().is_empty());
     assert!(transcript.tools().iter().all(|(_, status)| *status != ToolStatus::Running));
+}
+
+#[tokio::test]
+async fn the_activity_says_which_client_started_each_turn_and_what_it_used() {
+    let harness = Harness::start("fixtures/edit-and-run.jsonl", "0").await;
+    let connection = harness.connect().await;
+    let client = ClientInfo {
+        kind: ClientKind::Ios,
+        system: "ipados".into(),
+        form: ClientForm::Tablet,
+        version: "0.1.9".into(),
+    };
+    connection.request(&Request::Hello { client: client.clone() }).await.unwrap();
+    let new_thread = harness.new_thread(&connection, Agent::Claude).await;
+    let thread_id = send(&connection, None, new_thread, "Use an f-string in greet.py").await;
+    finished_transcript(&connection, &thread_id).await;
+    let archive = ThreadChange { archived: Some(true), ..ThreadChange::default() };
+    update(&connection, &thread_id, archive).await;
+
+    let request = Request::ActivityReport {
+        since: 0.0,
+        until: f64::MAX,
+        bucket_secs: 86400,
+        utc_offset_secs: 0,
+        removed: Vec::new(),
+    };
+    let Message::ActivityReport { report, .. } = connection.request(&request).await.unwrap() else {
+        panic!("no activity came")
+    };
+    let device = harness.app_key.public();
+    let [turn] = &report.turns[..] else { panic!("one turn: {:?}", report.turns) };
+    assert_eq!(
+        (turn.device.as_deref(), turn.starter, turn.outcome),
+        (Some(device.as_str()), TurnStarter::User, TurnOutcome::Done)
+    );
+    assert!(turn.tools >= 2, "its edit and its command are counted: {turn:?}");
+    let features: Vec<_> =
+        report.actions.iter().map(|bucket| (bucket.feature.as_str(), bucket.variant.as_str())).collect();
+    assert!(features.contains(&("message", "new")) && features.contains(&("thread.new", "local")), "{features:?}");
+    assert!(features.contains(&("thread.archive", "")), "{features:?}");
+    let message = report.actions.iter().find(|bucket| bucket.feature == "message").unwrap();
+    assert_eq!(
+        (message.device.as_deref(), message.direct + message.relay, message.timed),
+        (Some(device.as_str()), 1, 1)
+    );
+    assert_eq!(
+        report.clients.iter().map(|record| (&record.device, &record.client)).collect::<Vec<_>>(),
+        [(&device, &client)]
+    );
+    let hour: u32 = report.hours.iter().map(|hour| hour.messages).sum();
+    assert_eq!(hour, 1);
 }
 
 /// Where the user's messages and the turns' ends are in the transcript, in order.

@@ -44,6 +44,16 @@ enum Platform {
         #endif
     }
 
+    /// Which client this is and where it runs, as every server is told.
+    static var client: JSON {
+        #if os(macOS)
+        ["kind": "mac", "system": "macos", "form": "desktop"]
+        #else
+        let pad = UIDevice.current.userInterfaceIdiom == .pad
+        return ["kind": "ios", "system": pad ? "ipados" : "ios", "form": pad ? "tablet" : "phone"]
+        #endif
+    }
+
     /// The right panel is a screen of its own over the thread, as on a phone.
     static var panelCoversThread: Bool {
         #if os(macOS)

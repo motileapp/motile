@@ -41,11 +41,26 @@ fun CheckMenu(
     var open by remember { mutableStateOf(false) }
     Box(modifier) {
         ActionButton(title, icon, help = help, variant = variant, size = size, selected = open, opens = true, tint = tint, margin = margin) { open = true }
-        Dropdown(open, onDismiss = { open = false }) {
-            DropdownCard(Modifier.width(IntrinsicSize.Max).widthIn(min = 160.dp)) {
-                Column(Modifier.verticalScroll(rememberScrollState()).padding(DropdownList.padding)) {
-                    for (check in checks) CheckRow(check)
-                }
+        CheckList(open, { open = false }, checks)
+    }
+}
+
+/** The same menu behind a symbol's glass button, as a sheet's bar has. */
+@Composable
+fun GlassCheckMenu(symbol: Symbol, help: String, checks: List<Check>, modifier: Modifier = Modifier) {
+    var open by remember { mutableStateOf(false) }
+    Box(modifier) {
+        GlassButton(symbol, help, onClick = { open = true })
+        CheckList(open, { open = false }, checks)
+    }
+}
+
+@Composable
+private fun CheckList(open: Boolean, onDismiss: () -> Unit, checks: List<Check>) {
+    Dropdown(open, onDismiss = onDismiss) {
+        DropdownCard(Modifier.width(IntrinsicSize.Max).widthIn(min = 160.dp)) {
+            Column(Modifier.verticalScroll(rememberScrollState()).padding(DropdownList.padding)) {
+                for (check in checks) CheckRow(check)
             }
         }
     }

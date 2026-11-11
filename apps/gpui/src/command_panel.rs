@@ -925,7 +925,7 @@ impl CommandPanel {
             Item::new(
                 "usage",
                 "Usage",
-                "Limits, cost and tokens",
+                "Activity, cost, tokens and limits",
                 ItemIcon::Symbol("chart-column"),
                 |_, window, cx| window.dispatch_action(Box::new(crate::app_menu::Perform("usage.open")), cx),
             )

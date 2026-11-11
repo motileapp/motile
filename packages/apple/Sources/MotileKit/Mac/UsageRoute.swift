@@ -1,8 +1,8 @@
 #if os(macOS)
 import SwiftUI
 
-/// What the agents spent and what is left of their plans, in place of the thread: the title and
-/// the choices in the top bar over it, after the way back.
+/// What was done, what the agents spent and what is left of their plans, in place of the thread:
+/// the title and the choices in the top bar over it, after the way back.
 struct UsageRoute: View {
     @Environment(AppStore.self) private var store
     /// How far the title starts from the pane's left edge: past the window's buttons when the

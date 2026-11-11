@@ -35,6 +35,7 @@ pub(crate) const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/0023_snooze.sql"),
     include_str!("../migrations/0024_thread_started_by.sql"),
     include_str!("../migrations/0025_project_origins.sql"),
+    include_str!("../migrations/0026_activity.sql"),
 ];
 
 pub struct Store {
@@ -496,9 +497,9 @@ impl Store {
         Ok(())
     }
 
-    /// Keeps what the thread's agent spent and returns what it says that cost. With `total` it is
-    /// what `session_id` has spent since it began, and only what was added since it last said
-    /// is kept.
+    /// Keeps what the thread's agent spent and returns what it says that cost, and the output tokens
+    /// it added. With `total` it is what `session_id` has spent since it began, and only what was
+    /// added since it last said is kept.
     pub fn save_usage(
         &self,
         at: f64,
@@ -506,9 +507,9 @@ impl Store {
         session_id: &str,
         spent: &[ModelUsage],
         total: bool,
-    ) -> rusqlite::Result<Option<f64>> {
+    ) -> rusqlite::Result<(Option<f64>, u64)> {
         if spent.is_empty() {
-            return Ok(None);
+            return Ok((None, 0));
         }
         let mut connection = self.connection();
         let transaction = connection.transaction()?;
@@ -516,7 +517,7 @@ impl Store {
             .query_row("SELECT usage_known FROM threads WHERE id = ?1", [&thread.id], |row| row.get(0))
             .optional()?;
         let known = known.unwrap_or(true);
-        let mut cost = None;
+        let (mut cost, mut output) = (None, 0);
         for usage in spent {
             let (mut tokens, mut cost_usd) = (usage.tokens, usage.cost_usd);
             if total {
@@ -559,6 +560,7 @@ impl Store {
             if tokens == Tokens::default() {
                 continue;
             }
+            output += tokens.output;
             let usage = ModelUsage { model: usage.model.clone(), tokens, cost_usd };
             let spender = (thread.agent, thread.agent_account.as_str());
             insert_usage(&transaction, at, &thread.id, &thread.project_id, spender, Purpose::Turn, &usage)?;
@@ -570,7 +572,7 @@ impl Store {
             transaction.execute("UPDATE threads SET usage_known = 1 WHERE id = ?1", [&thread.id])?;
         }
         transaction.commit()?;
-        Ok(cost)
+        Ok((cost, output))
     }
 
     /// Keeps what writing something took. `thread_id` is missing for what was written outside

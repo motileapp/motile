@@ -199,7 +199,7 @@ private fun Legend(report: UsageReport, measure: Measure, period: UsageModel.Per
 }
 
 @Composable
-private fun Dot(color: Color) {
+fun Dot(color: Color) {
     Box(Modifier.size(8.dp).background(color, CircleShape))
 }
 

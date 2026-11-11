@@ -10,7 +10,7 @@ use std::time::{Duration, SystemTime};
 use futures_lite::StreamExt;
 use iroh::endpoint::PathEvent;
 use iroh::{Endpoint, TransportAddr};
-use motile_protocol::wire::{FileKind, GitStage, Item, Message, Request, RestartWhen};
+use motile_protocol::wire::{ClientInfo, FileKind, GitStage, Item, Message, Request, RestartWhen};
 use serde::Serialize;
 use tokio::sync::{Notify, mpsc};
 use tokio::task::AbortHandle;
@@ -90,6 +90,8 @@ pub struct Link {
     attached: Notify,
     /// Ends the connection there is, which stopped carrying requests, for `Inner::given_up`.
     give_up: Notify,
+    /// Which client this is, which the server is told on each connection.
+    client: Mutex<Option<ClientInfo>>,
 }
 
 #[derive(Default)]
@@ -132,10 +134,30 @@ impl Link {
             restart: Notify::new(),
             attached: Notify::new(),
             give_up: Notify::new(),
+            client: Mutex::new(None),
         });
         let dialer = tokio::spawn(link.clone().dial_forever(server));
         link.lock().dialer = Some(dialer.abort_handle());
         link
+    }
+
+    /// Says which client this is to the server, now if it is connected and on every connection after.
+    pub fn describe(&self, client: ClientInfo) {
+        *self.client.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(client);
+        if let Some(connection) = self.lock().connection.clone() {
+            self.hello(connection);
+        }
+    }
+
+    fn hello(&self, connection: Connection) {
+        let Some(client) = self.client.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).clone() else { return };
+        let server = self.server_id.clone();
+        tokio::spawn(async move {
+            // A server from before it kept its clients doesn't know the request.
+            if let Err(error) = connection.request(&Request::Hello { client }).await {
+                tracing::debug!(server, "the server wasn't told which client this is: {error:#}");
+            }
+        });
     }
 
     fn lock(&self) -> std::sync::MutexGuard<'_, Inner> {
@@ -339,6 +361,7 @@ impl Link {
     fn attach(self: &Arc<Self>, connection: &Connection) {
         let mut inner = self.lock();
         inner.connection = Some(connection.clone());
+        self.hello(connection.clone());
         inner.followers.push(tokio::spawn(self.clone().follow_list(connection.clone())).abort_handle());
         inner.followers.push(tokio::spawn(self.clone().watch_path(connection.clone())).abort_handle());
         let open: Vec<String> = inner.open.keys().cloned().collect();

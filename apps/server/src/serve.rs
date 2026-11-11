@@ -9,15 +9,17 @@ use std::time::{Duration, Instant};
 use anyhow::Context;
 use iroh::endpoint::{Connection, RecvStream, SendStream, presets};
 use iroh::{Endpoint, SecretKey};
+use motile_protocol::activity;
 use motile_protocol::frame::{read_frame, write_frame};
 use motile_protocol::identity::DeviceKey;
-use motile_protocol::wire::{Message, Request, RestartWhen, ServerUpdate};
-use motile_protocol::{ALPN, error_text};
+use motile_protocol::wire::{ClientRecord, ConnectionPath, Message, Request, RestartWhen, ServerUpdate};
+use motile_protocol::{ALPN, error_text, now};
 use tokio::io::AsyncReadExt;
 use tokio::sync::broadcast::error::RecvError;
 use tokio::sync::{Notify, watch};
 
 use crate::access::Access;
+use crate::activity::{self as kept, Sender};
 use crate::backup::Backup;
 use crate::hub::{GitRun, Hub, ListSubscription, NewMessage, ThreadSubscription};
 use crate::media::MediaStore;
@@ -51,6 +53,26 @@ pub async fn bind(key: &DeviceKey, options: &BindOptions) -> anyhow::Result<Endp
         builder = builder.bind_addr(format!("0.0.0.0:{port}"))?;
     }
     builder.bind().await.context("The network endpoint couldn't be opened.")
+}
+
+/// The client a stream came from: its device, and the connection, which says how it is reached.
+struct Caller {
+    device: String,
+    connection: Connection,
+}
+
+impl Caller {
+    fn sender(&self) -> Sender {
+        let paths = self.connection.paths();
+        let selected = paths.iter().find(|path| path.is_selected());
+        Sender {
+            device: self.device.clone(),
+            path: selected
+                .as_ref()
+                .map(|path| if path.is_relay() { ConnectionPath::Relay } else { ConnectionPath::Direct }),
+            rtt_ms: selected.map(|path| path.rtt().as_millis().min(u128::from(u32::MAX)) as u32),
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -96,6 +118,7 @@ impl Server {
             return;
         }
         tracing::info!(device, "client connected");
+        let caller = Arc::new(Caller { device: device.clone(), connection: connection.clone() });
         let mut recheck = tokio::time::interval(RECHECK_ACCESS_EVERY);
         let reason = loop {
             tokio::select! {
@@ -104,9 +127,9 @@ impl Server {
                         Ok(stream) => stream,
                         Err(error) => break error.to_string(),
                     };
-                    let server = self.clone();
+                    let (server, caller) = (self.clone(), caller.clone());
                     tokio::spawn(async move {
-                        if let Err(error) = server.handle_stream(send, recv).await {
+                        if let Err(error) = server.handle_stream(&caller, send, recv).await {
                             tracing::debug!("stream ended: {error:#}");
                         }
                     });
@@ -123,10 +146,18 @@ impl Server {
         tracing::info!(device, reason, "client disconnected");
     }
 
-    async fn handle_stream(self, mut send: SendStream, mut recv: RecvStream) -> anyhow::Result<()> {
+    async fn handle_stream(self, caller: &Caller, mut send: SendStream, mut recv: RecvStream) -> anyhow::Result<()> {
         let request: Request = read_frame(&mut recv).await?.context("The stream ended before a request.")?;
         let hub = &self.hub;
         let (kind, asked) = (kind_of(&request), Instant::now());
+        let mut uses = activity::uses(&request);
+        // A message is kept by the thread once it is sure it isn't one sent again; these end the stream.
+        if matches!(request, Request::Send { .. } | Request::GitRun { .. } | Request::UpdateServer { .. }) {
+            let started = std::mem::take(&mut uses);
+            if !matches!(request, Request::Send { .. }) {
+                kept::keep_uses(hub, &caller.sender(), started, None).await;
+            }
+        }
         let reply = match request {
             Request::Ping => Ok(Message::Pong),
             Request::Subscribe => {
@@ -158,7 +189,7 @@ impl Server {
                 Err(error) => Err(error),
             },
             Request::Send { thread_id, new_thread, text, attachments, now, context, message_id } => {
-                let message = NewMessage { text, attachments, now, context, message_id };
+                let message = NewMessage { text, attachments, now, context, message_id, sender: Some(caller.sender()) };
                 if let Some(thread_id) = &thread_id {
                     hub.wake(thread_id).await;
                 }
@@ -186,7 +217,9 @@ impl Server {
             Request::CancelQueued { thread_id, message_id } => {
                 hub.cancel_queued(&thread_id, &message_id).await.map(|_| Message::Ok)
             }
-            Request::Continue { thread_id } => hub.continue_thread(&thread_id).await.map(|_| Message::Ok),
+            Request::Continue { thread_id } => {
+                hub.continue_thread(&thread_id, Some(caller.sender())).await.map(|_| Message::Ok)
+            }
             Request::Stop { thread_id } => {
                 hub.stop(&thread_id).await;
                 Ok(Message::Ok)
@@ -223,6 +256,13 @@ impl Server {
             }
             Request::Usage { since, until, bucket_secs, utc_offset_secs, removed } => {
                 hub.usage(since, until, bucket_secs, utc_offset_secs, &removed)
+            }
+            Request::ActivityReport { since, until, bucket_secs, utc_offset_secs, removed } => {
+                hub.activity(since, until, bucket_secs, utc_offset_secs, &removed)
+            }
+            Request::Hello { client } => {
+                let record = ClientRecord { device: caller.device.clone(), client, seen_at: now() };
+                hub.store().save_client(&record).map(|_| Message::Ok).map_err(Into::into)
             }
             Request::Limits => Ok(hub.limits().await),
             Request::RefreshModels => {
@@ -388,6 +428,9 @@ impl Server {
                 saved.map(|path| Message::Uploaded { path })
             }
         };
+        if reply.is_ok() && !uses.is_empty() {
+            kept::keep_uses(hub, &caller.sender(), uses, None).await;
+        }
         let reply = reply.unwrap_or_else(|error| Message::Error { message: error_text(&error) });
         if asked.elapsed() > SLOW_REQUEST {
             tracing::warn!(kind, took_ms = asked.elapsed().as_millis() as u64, "answered a request slowly");

@@ -512,6 +512,7 @@ final class AppStore {
             "device_name": Platform.deviceName,
             "platform": Platform.name,
             "local_only": environment["MOTILE_LOCAL"] == "1",
+            "client": Platform.client,
         ]
         if let address = environment["MOTILE_SERVER_ADDR"] { config["direct_addr"] = address }
         // `key=address,…`: each server at an address of its own, where the dev stack runs two.
@@ -2200,6 +2201,19 @@ final class AppStore {
         ]
         if let servers { command["servers"] = Array(servers) }
         core.send("usage", command, read: UsageReport.init, reply: reply)
+    }
+
+    /// What was done on the connected `servers`, or all of them, in the last `buckets` spans of
+    /// `bucketSeconds`. `kept` answers at once with what was last read.
+    func loadActivity(
+        bucketSeconds: Int, buckets: Int, kept: Bool, servers: Set<String>?,
+        reply: @escaping (Result<ActivityReport, CoreBridge.CoreError>) -> Void
+    ) {
+        var command: JSON = [
+            "bucket_secs": bucketSeconds, "buckets": buckets, "utc_offset_secs": TimeZone.current.secondsFromGMT(), "kept": kept,
+        ]
+        if let servers { command["servers"] = Array(servers) }
+        core.send("activity", command, read: ActivityReport.init, reply: reply)
     }
 
     /// How much of their plans the agents' accounts on the connected `servers`, or all of them,
