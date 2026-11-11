@@ -249,6 +249,13 @@ private final class Demo {
             store.answer(asked, allow: true, answers: [question.text: "Blue"])
         }
         await expect("the agent goes on with the answer") { turnEnded }
+        await expect("the question keeps its answer in view past the turn's fold") {
+            store.transcript.rows.contains { row in
+                guard case .tool(let tool) = row.kind else { return false }
+                return tool.asked.first?.answer == "Blue"
+            }
+        }
+        await shoot("07-question-answered")
 
         // A plan the agent proposes is approved in place, and the agent carries it out.
         store.startNewThread()

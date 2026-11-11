@@ -263,6 +263,9 @@ struct ToolContent {
     let output: String?
     /// When it started, while it runs.
     let startedAt: Double?
+    /// The questions it asked the user, each with its answer: `nil` until there is one, or when
+    /// it was skipped.
+    let asked: [(question: String, answer: String?)]
 
     init(json: JSON) {
         name = json.string("name")
@@ -274,6 +277,7 @@ struct ToolContent {
         inputLanguage = json.string("input_language")
         output = json.optionalString("output")
         startedAt = json.optionalDouble("started_at")
+        asked = json.objects("asked").map { ($0.string("question"), $0.optionalString("answer")) }
     }
 
     var symbol: Symbol { Self.symbol(for: icon) }
@@ -293,10 +297,11 @@ struct ToolContent {
         }
     }
 
-    var hasDetail: Bool { !input.isEmpty || output != nil }
+    var hasDetail: Bool { !input.isEmpty || output != nil || !asked.isEmpty }
 
-    /// What opening the row shows: the input, then what came back.
+    /// What opening the row shows: the input, then what came back, or each question with its answer.
     func detail() -> NSAttributedString {
+        guard asked.isEmpty else { return answers() }
         let result = NSMutableAttributedString()
         if !input.isEmpty {
             result.append(inputLanguage == "diff" ? Typesetter.diff(input) : Typesetter.mono(input, color: Theme.foreground))
@@ -306,6 +311,29 @@ struct ToolContent {
             result.append(Typesetter.mono(Self.clipped(output), color: status == .failed ? Theme.destructive : Theme.mutedForeground))
         }
         return result
+    }
+
+    /// Each question over its answer, which stands in under it.
+    private func answers() -> NSAttributedString {
+        let result = NSMutableAttributedString()
+        for (index, pair) in asked.enumerated() {
+            let answer = pair.answer ?? (status == .failed ? "Skipped" : nil)
+            let question = (index > 0 ? "\n" : "") + pair.question
+            result.append(Self.answerLine(question, color: Theme.mutedForeground, indent: 0, after: answer == nil ? 10 : 2))
+            guard let answer else { continue }
+            let color = pair.answer == nil ? Theme.mutedStrongerForeground : Theme.foreground
+            result.append(Self.answerLine("\n" + answer, color: color, indent: 12, after: 10))
+        }
+        return result
+    }
+
+    private static func answerLine(_ text: String, color: PlatformColor, indent: CGFloat, after: CGFloat) -> NSAttributedString {
+        let style = NSMutableParagraphStyle()
+        style.lineSpacing = 3
+        style.paragraphSpacing = after
+        style.firstLineHeadIndent = indent
+        style.headIndent = indent
+        return NSAttributedString(string: text, attributes: [.font: PlatformFont.ui(.sm), .foregroundColor: color, .paragraphStyle: style])
     }
 
     /// The first lines of long output; the rest is in the transcript on the server.

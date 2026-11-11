@@ -22,9 +22,9 @@ use motile_protocol::wire::{
     AccountSkills, ActionRecord, Activity, Actor, Agent, AgentAccount, AgentLimits, AgentNotice, Approval, BackupState,
     BranchInstructions, CONTINUE_PROMPT, ChangedFile, ContinueSettings, CopiedThread, DiffScope, FileKind, GitAction,
     GitHubState, GitStage, GitStatus, HandoffEnd, Interruption, Item, ItemKind, Media, MergeMethod, Message, ModelInfo,
-    NewThread, NoticeEvent, OriginActivity, OriginUsage, Project, PullRequest, PullRequestAction, Queued, Request,
-    RunsOn, ServerInfo, ServerUpdate, SkillMention, Subagent, Thread, ThreadChange, ThreadParent, ToolCall, ToolStatus,
-    TurnChanges, TurnOutcome, TurnStarter, TurnSummary, Worktree,
+    NewThread, NoticeEvent, OriginActivity, OriginUsage, Project, PullRequest, PullRequestAction, QUESTION_TOOL,
+    Queued, Request, RunsOn, ServerInfo, ServerUpdate, SkillMention, Subagent, Thread, ThreadChange, ThreadParent,
+    ToolCall, ToolStatus, TurnChanges, TurnOutcome, TurnStarter, TurnSummary, Worktree,
 };
 use motile_protocol::{error_text, now};
 use serde_json::Value;
@@ -1700,6 +1700,9 @@ impl Hub {
         let line = agents::answer(thread.agent, &approval, allow, &answers, thread.access);
         if line.is_some_and(|line| !live.write(line)) {
             bail!("The agent is no longer running.");
+        }
+        if approval.tool_name == QUESTION_TOOL {
+            live.keep_answers(&self.store, &approval, allow, &answers)?;
         }
         // Codex presents its plan when the turn has ended: it carries the plan out in a new
         // turn, and has nothing left to do when the plan is refused.
@@ -4412,6 +4415,46 @@ impl Live {
         let tools = store.tool_count(&self.stored.thread.id)?;
         self.tools = Some(tools);
         Ok(tools)
+    }
+
+    /// Keeps the user's answers on the call that asked the questions, so that the transcript shows
+    /// them whatever the agent says back. Codex has no item for its questions; they get one here.
+    fn keep_answers(
+        &mut self,
+        store: &Store,
+        approval: &Approval,
+        allow: bool,
+        answers: &HashMap<String, String>,
+    ) -> anyhow::Result<()> {
+        let mut input: Value = serde_json::from_str(&approval.input).unwrap_or_default();
+        let waiting: Vec<&ToolCall> = self
+            .open
+            .values()
+            .filter_map(|item| match &item.kind {
+                ItemKind::Tool { call } if call.name == QUESTION_TOOL && call.status == ToolStatus::Running => {
+                    Some(call)
+                }
+                _ => None,
+            })
+            .collect();
+        let same = |call: &&&ToolCall| {
+            serde_json::from_str::<Value>(&call.input).is_ok_and(|asked| asked["questions"] == input["questions"])
+        };
+        let asked = waiting.iter().find(same).or(waiting.first()).map(|call| (*call).clone());
+        let status = if allow { ToolStatus::Succeeded } else { ToolStatus::Failed };
+        let mut call = asked.unwrap_or_else(|| ToolCall {
+            id: approval.id.clone(),
+            name: QUESTION_TOOL.to_string(),
+            input: String::new(),
+            output: None,
+            status,
+            agent: None,
+        });
+        if allow {
+            input["answers"] = serde_json::json!(answers);
+        }
+        call.input = input.to_string();
+        self.upsert(store, call.id.clone(), ItemKind::Tool { call })
     }
 
     fn tool_call(&self, id: &str) -> Option<ToolCall> {

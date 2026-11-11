@@ -1120,6 +1120,8 @@ struct ToolLine {
     symbol: Option<&'static str>,
     verb: String,
     target: String,
+    /// The verb is questions the agent asked the user and the target their answers, which stand out.
+    asks: bool,
     failed: bool,
     running: bool,
     started_at: Option<f64>,
@@ -1163,6 +1165,23 @@ fn tool_detail(tool: &Tool, c: &Colors) -> Vec<(String, Hsla)> {
     parts
 }
 
+/// What opening a question shows: each question over its answer, which stands in under it.
+fn answers(tool: &Tool, c: &Colors) -> Div {
+    let skipped = tool.status == ToolStatus::Failed;
+    div().flex().flex_col().gap(px(10.)).text_size(TextSize::Sm).line_height(px(19.)).children(tool.asked.iter().map(
+        |asked| {
+            let answer = asked.answer.clone().or_else(|| skipped.then(|| "Skipped".to_string()));
+            let color = if asked.answer.is_some() { c.foreground } else { c.muted_stronger_foreground };
+            div()
+                .flex()
+                .flex_col()
+                .gap(px(2.))
+                .child(div().text_color(c.muted_foreground).child(asked.question.clone()))
+                .when_some(answer, |pair, answer| pair.child(div().ml(px(12.)).text_color(color).child(answer)))
+        },
+    ))
+}
+
 /// The box under an open tool row, with its detail.
 fn detail_box(inset: f32, detail: impl IntoElement, cx: &App) -> Div {
     let c = colors(cx);
@@ -1200,7 +1219,10 @@ fn tool_row(model: &RowModel, ctx: &RowContext, cx: &App) -> AnyElement {
     let mut detail: Option<Div> = None;
     let line = match &model.row.kind {
         RowKind::Tool { tool } => {
-            if expanded_here {
+            let asks = !tool.asked.is_empty();
+            if expanded_here && asks {
+                detail = Some(detail_box(inset, answers(tool, c), cx));
+            } else if expanded_here {
                 let parts = tool_detail(tool, c);
                 detail = Some(detail_box(inset, tool_detail_text(&row_id, parts, row_key(&row_id)), cx));
             }
@@ -1208,10 +1230,11 @@ fn tool_row(model: &RowModel, ctx: &RowContext, cx: &App) -> AnyElement {
                 symbol: Some(icons::tool_symbol(tool.icon)),
                 verb: tool.verb.clone(),
                 target: tool.target.clone(),
+                asks,
                 failed: tool.status == ToolStatus::Failed,
                 running: tool.status == ToolStatus::Running,
                 started_at: tool.started_at,
-                opens: !tool.input.is_empty() || tool.output.is_some(),
+                opens: asks || !tool.input.is_empty() || tool.output.is_some(),
                 open: false,
             }
         }
@@ -1229,6 +1252,7 @@ fn tool_row(model: &RowModel, ctx: &RowContext, cx: &App) -> AnyElement {
                 symbol: Some("brain"),
                 verb: "Thought".into(),
                 target: String::new(),
+                asks: false,
                 failed: false,
                 running: false,
                 started_at: None,
@@ -1240,6 +1264,7 @@ fn tool_row(model: &RowModel, ctx: &RowContext, cx: &App) -> AnyElement {
             symbol: Some(icons::tool_symbol(icon)),
             verb: title.clone(),
             target: target.clone(),
+            asks: false,
             failed: *failed,
             running: *running,
             started_at: *started_at,
@@ -1250,6 +1275,7 @@ fn tool_row(model: &RowModel, ctx: &RowContext, cx: &App) -> AnyElement {
             symbol: None,
             verb: turn_label(*stopped, *duration_ms),
             target: String::new(),
+            asks: false,
             failed: false,
             running: false,
             started_at: None,
@@ -1266,9 +1292,14 @@ fn tool_row(model: &RowModel, ctx: &RowContext, cx: &App) -> AnyElement {
     let chevron_open = if toggles_in_core { line.open } else { expanded_here };
     let above = model.above();
 
-    let mut text = if line.target.is_empty() { line.verb.clone() } else { format!("{} ", line.verb) };
+    let gap = if line.asks { "  " } else { " " };
+    let mut text = if line.target.is_empty() { line.verb.clone() } else { format!("{}{gap}", line.verb) };
     let mut runs = vec![run(text.len(), font(theme::UI_FONT, FontWeight::NORMAL, false), c.muted_stronger_foreground)];
-    if !line.target.is_empty() {
+    if line.asks && !line.target.is_empty() {
+        let answer_color = if line.failed { c.muted_foreground } else { c.foreground };
+        runs.push(run(line.target.len(), font(theme::UI_FONT, FontWeight::NORMAL, false), answer_color));
+        text.push_str(&line.target);
+    } else if !line.target.is_empty() {
         let target_color = if line.failed {
             c.destructive
         } else if line.running {
