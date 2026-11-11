@@ -202,14 +202,6 @@ class FlippedView: NSView, CursorOwner {
         onHover?(nil)
     }
 
-    /// Says again where the pointer is, after what is inside changed under a pointer that didn't move.
-    func hoverAgain() {
-        guard let onHover, let window, window.isKeyWindow else { return }
-        let location = window.mouseLocationOutsideOfEventStream
-        let under = window.contentView?.hitTest(location)?.isDescendant(of: self) ?? false
-        onHover(under ? convert(location, from: nil) : nil)
-    }
-
     func cursor(at point: CGPoint) -> NSCursor {
         onPress != nil && pointer == .hand && takesPress(at: point) ? .pointingHand : .arrow
     }
@@ -522,6 +514,21 @@ extension NSView {
     /// Whether the view, and not something that lies over it, is under the pointer.
     func isUnderPointer(_ event: NSEvent) -> Bool {
         window?.contentView?.hitTest(event.locationInWindow)?.isDescendant(of: self) ?? false
+    }
+
+    /// Has every view inside that follows the pointer say again where it is, after what it shows
+    /// changed under a pointer that didn't move.
+    func hoverAgainInside() {
+        guard let window, window.isKeyWindow else { return }
+        let location = window.mouseLocationOutsideOfEventStream
+        hoverAgain(at: location, over: window.contentView?.hitTest(location))
+    }
+
+    private func hoverAgain(at location: CGPoint, over hit: NSView?) {
+        if let view = self as? FlippedView, let onHover = view.onHover {
+            onHover(hit?.isDescendant(of: view) == true ? view.convert(location, from: nil) : nil)
+        }
+        for view in subviews { view.hoverAgain(at: location, over: hit) }
     }
 }
 

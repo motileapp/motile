@@ -167,6 +167,7 @@ final class RicracListView: FlippedView {
             cell.show(entries[index], pending: pending, narrow: narrow)
             place(cell, at: index)
             shown[index] = cell
+            cell.hoverAgainInside()
         }
     }
 

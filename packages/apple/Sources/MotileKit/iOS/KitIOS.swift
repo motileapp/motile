@@ -18,6 +18,13 @@ extension UIView {
 
     func redraw() { setNeedsDisplay() }
 
+    /// Has every view inside that follows the pointer say again where it is, after what it shows
+    /// changed under a pointer that didn't move.
+    func hoverAgainInside() {
+        (self as? FlippedView)?.hoverAgain()
+        for view in subviews { view.hoverAgainInside() }
+    }
+
     /// What the Mac says about a view under the pointer. Nothing is said here.
     var tip: String? {
         get { nil }
@@ -240,8 +247,7 @@ class FlippedView: UIView, UIContextMenuInteractionDelegate, UIGestureRecognizer
         onHover?(nil)
     }
 
-    /// Says again where the pointer is, after what is inside changed under a pointer that didn't move.
-    func hoverAgain() {
+    fileprivate func hoverAgain() {
         guard let onHover, let hover, [.began, .changed].contains(hover.state) else { return }
         onHover(hover.location(in: self))
     }
