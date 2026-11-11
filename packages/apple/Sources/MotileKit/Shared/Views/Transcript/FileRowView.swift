@@ -292,6 +292,8 @@ final class FileCard: FlippedView {
             rest: Theme.background,
             insets: PlatformEdgeInsets(top: 0, left: 0, bottom: 0, right: 0)
         ) { [weak self] in self?.reveal() }
+        revealButton.takesFirstClick = true
+        takesFirstClick = true
         card.addSubview(revealButton)
         onHover = { [weak self] point in
             guard let self else { return }
