@@ -19,7 +19,7 @@ pub mod wire;
 pub const ALPN: &[u8] = b"motile/1";
 /// What servers and clients speak to the account's gateway.
 pub const GATEWAY_ALPN: &[u8] = b"motile-gateway/1";
-pub const PROTOCOL_VERSION: u32 = 40;
+pub const PROTOCOL_VERSION: u32 = 41;
 pub const DEFAULT_AUTH_URL: &str = "https://auth.motile.app";
 /// Where the auth server sends the browser once a sign-in is done; the client owns this scheme.
 pub const APP_REDIRECT: &str = "motile://auth";

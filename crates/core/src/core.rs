@@ -34,6 +34,7 @@ use crate::backup::{self, BACKUP_PROTOCOL};
 use crate::browse;
 use crate::cache::{Cache, Page};
 use crate::connection::{NOT_CONNECTED, ServerAddr, bind, leave_relays, offline};
+use crate::engaged::{self, Engagement};
 use crate::find::{self, Find};
 use crate::follow::{self, Followed};
 use crate::gateway::{self, GatewayEvent, GatewayLink};
@@ -102,6 +103,8 @@ const LIMITS_STALE: Duration = Duration::from_secs(5 * 60);
 const BUSY_AFTER: Duration = Duration::from_secs(1);
 /// How long a message that didn't reach its server waits before it is sent again.
 const OUTBOX_RETRY: Duration = Duration::from_secs(3);
+/// How often the user's time that didn't reach its server is sent again, in ticks.
+const ENGAGED_RETRY_TICKS: u64 = 30;
 /// An endpoint that reached no server for this long is replaced, in case the fault is its own.
 const WEDGED_AFTER: Duration = Duration::from_secs(60);
 /// How long after a server connects or the account changes the servers' threads are copied.
@@ -276,6 +279,12 @@ enum Input {
         reply_to: Option<u64>,
         result: Result<GatewayState, String>,
     },
+    /// Whether `server_id` kept the stretches that started at `started`.
+    EngagedSent {
+        server_id: String,
+        started: Vec<f64>,
+        kept: bool,
+    },
     /// What the server answered a message of the outbox with.
     Delivered {
         message_id: String,
@@ -393,6 +402,10 @@ struct Core {
     auth: AuthClient,
     cache: Cache,
     outbox: Outbox,
+    /// The user's time in the client, and the stretches of it on their way to the servers.
+    engagement: Engagement,
+    /// The servers being sent stretches now.
+    sending_engaged: HashSet<String>,
     key: Arc<DeviceKey>,
     endpoint: Option<Endpoint>,
     /// Whether the client was paused, asleep or suspended, or in the background, where Android
@@ -552,6 +565,8 @@ pub fn start(config: Config, sink: EventSink) -> anyhow::Result<Handle> {
         inputs: inputs.clone(),
         link_events,
         outbox: Outbox::load(&cache),
+        engagement: Engagement::load(&cache),
+        sending_engaged: HashSet::new(),
         cache,
         key: Arc::new(key),
         endpoint: None,
@@ -822,10 +837,23 @@ impl Core {
             }
             Input::Delivered { message_id, result } => self.delivered(&message_id, result),
             Input::SendOutbox => self.send_outbox(),
+            Input::EngagedSent { server_id, started, kept } => {
+                self.sending_engaged.remove(&server_id);
+                if kept {
+                    self.engagement.delivered(&self.cache, &started);
+                    self.send_engaged();
+                }
+            }
             Input::Render => self.render(),
             Input::Stop => {}
             Input::Tick => {
                 self.ticks += 1;
+                let ended = self.engagement.waiting().len();
+                self.engagement.tick(now());
+                if self.engagement.save_if_changed(&self.cache, ended) || self.ticks.is_multiple_of(ENGAGED_RETRY_TICKS)
+                {
+                    self.send_engaged();
+                }
                 self.replace_stale_endpoint();
                 self.replace_wedged_endpoint();
                 self.forget_unconfirmed_updates();
@@ -854,6 +882,8 @@ impl Core {
     }
 
     async fn stop(mut self) {
+        let ended = self.engagement.waiting().len();
+        self.engagement.save_if_changed(&self.cache, ended);
         for (thread_id, open) in &mut self.open {
             save_streamed(&self.cache, thread_id, open);
         }
@@ -2159,6 +2189,7 @@ impl Core {
                 self.emit_servers();
                 if connected {
                     self.send_outbox();
+                    self.send_engaged();
                 }
                 // The server may have been removed from the account, or this device.
                 if refused {
@@ -2822,6 +2853,66 @@ impl Core {
         });
     }
 
+    /// Sends each connected server the stretches of its projects, and one of them those on no
+    /// project, unless it is being sent some. Those of a server removed from the account are dropped.
+    fn send_engaged(&mut self) {
+        let removed: HashSet<String> = self
+            .servers
+            .iter()
+            .filter(|server| server.removed)
+            .map(|server| server.device.public_key.clone())
+            .collect();
+        self.engagement.forget(&self.cache, |server_id| !removed.contains(server_id));
+        let mut ready: Vec<(String, Arc<Link>)> = self
+            .servers
+            .iter()
+            .filter(|server| !server.removed && server.status.state == State::Connected)
+            .filter(|server| server.info.as_ref().is_some_and(|info| info.protocol >= engaged::ENGAGED_PROTOCOL))
+            .filter_map(|server| server.link.clone().map(|link| (server.device.public_key.clone(), link)))
+            .collect();
+        ready.sort_by(|a, b| a.0.cmp(&b.0));
+        let Some(home) = ready.first().map(|(server_id, _)| server_id.clone()) else { return };
+        let device = self.key.public();
+        for (server_id, link) in ready {
+            if self.sending_engaged.contains(&server_id) {
+                continue;
+            }
+            let stretches: Vec<_> = self
+                .engagement
+                .waiting()
+                .iter()
+                .filter(|stretch| match stretch.place.server_id.as_str() {
+                    "" => server_id == home,
+                    other => other == server_id,
+                })
+                .take(engaged::BATCH)
+                .cloned()
+                .collect();
+            if stretches.is_empty() {
+                continue;
+            }
+            self.sending_engaged.insert(server_id.clone());
+            let started: Vec<f64> = stretches.iter().map(|stretch| stretch.started_at).collect();
+            let request =
+                Request::Engaged { stretches: stretches.iter().map(|stretch| stretch.record(&device)).collect() };
+            let inputs = self.inputs.clone();
+            tokio::spawn(async move {
+                let kept = match link.request(&request).await {
+                    Ok(Message::Ok) => true,
+                    Ok(other) => {
+                        tracing::warn!("a server didn't keep the user's time: {other:?}");
+                        false
+                    }
+                    Err(error) => {
+                        tracing::warn!("a server didn't keep the user's time: {}", error_text(error));
+                        false
+                    }
+                };
+                let _ = inputs.send(Input::EngagedSent { server_id, started, kept });
+            });
+        }
+    }
+
     fn emit_outbox(&self) {
         self.emit(Event::Outbox { messages: self.outbox.messages().to_vec() });
     }
@@ -2993,6 +3084,27 @@ impl Core {
                     self.network_changed();
                 }
                 self.check_account();
+                self.reply(id, Ok(json!({})));
+            }
+            Command::Focus { focused, server_id, project_id } => {
+                let shown = server_id.zip(project_id).filter(|(server_id, _)| {
+                    self.servers.iter().any(|server| server.device.public_key == *server_id && !server.removed)
+                });
+                let place =
+                    shown.map(|(server_id, project_id)| engaged::Place { server_id, project_id }).unwrap_or_default();
+                let ended = self.engagement.waiting().len();
+                self.engagement.focus(now(), focused, place);
+                if self.engagement.save_if_changed(&self.cache, ended) {
+                    self.send_engaged();
+                }
+                self.reply(id, Ok(json!({})));
+            }
+            Command::Input { idle_secs } => {
+                let ended = self.engagement.waiting().len();
+                self.engagement.input(now(), idle_secs);
+                if self.engagement.save_if_changed(&self.cache, ended) {
+                    self.send_engaged();
+                }
                 self.reply(id, Ok(json!({})));
             }
             Command::NetworkChanged => {
@@ -3757,6 +3869,17 @@ impl Core {
                     };
                     return self.reply(id, Err(why.to_string()));
                 }
+                let every_server = servers.is_none();
+                let local: Vec<engaged::Stretch> = self
+                    .engagement
+                    .open(now())
+                    .into_iter()
+                    .chain(self.engagement.waiting().iter().cloned())
+                    .filter(|stretch| match &servers {
+                        None => true,
+                        Some(ids) => !stretch.place.project_id.is_empty() && ids.contains(&stretch.place.server_id),
+                    })
+                    .collect();
                 let mut asked = tokio::task::JoinSet::new();
                 let chosen = |server_id: &String| servers.as_ref().is_none_or(|ids| ids.contains(server_id));
                 for (server_id, link) in links {
@@ -3797,7 +3920,7 @@ impl Core {
                     }
                     let answer = match failure {
                         Some(failure) if done.is_empty() => Err(failure),
-                        _ => serde_json::to_value(activity::view(&done, window, &names))
+                        _ => serde_json::to_value(activity::view(&done, window, &names, &local, every_server))
                             .map_err(|error| error.to_string()),
                     };
                     if let Ok(view) = &answer {

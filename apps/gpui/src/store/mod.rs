@@ -4,6 +4,7 @@
 mod account;
 mod attachments;
 mod commands;
+pub mod engaged;
 pub mod find;
 pub mod gateway;
 mod git;
@@ -425,6 +426,7 @@ pub struct Store {
     pub usage: usage::Usage,
     pub gateway: gateway::Gateway,
     pub mcp_servers: mcp_servers::McpServers,
+    engaged: engaged::Engaged,
     /// The account's S3 bucket, once the core has said.
     pub backup: Option<BackupView>,
     _events: Option<Task<()>>,
@@ -432,6 +434,7 @@ pub struct Store {
     history: history::PageHistory,
     _page_watch: Subscription,
     _gateway_views: Subscription,
+    _focus_watch: Subscription,
 }
 
 impl Store {
@@ -550,11 +553,13 @@ impl Store {
             usage: usage::Usage::default(),
             gateway: gateway::Gateway::default(),
             mcp_servers: mcp_servers::McpServers::default(),
+            engaged: engaged::Engaged::default(),
             backup: None,
             _events: None,
             history: history::PageHistory::default(),
             _page_watch: Self::watch_page(cx),
             _gateway_views: cx.observe_self(|store, _| store.follow_gateway_views()),
+            _focus_watch: cx.observe_self(|store, cx| store.follow_focus(cx)),
         };
         store.load_preferences();
         store.show_sending_message(cx);
@@ -631,6 +636,7 @@ impl Store {
             return;
         }
         self.app_active = active;
+        self.follow_focus(cx);
         if !active {
             self.jump_hint_task = None;
             self.shows_jump_hints = false;

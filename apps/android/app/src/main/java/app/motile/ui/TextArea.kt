@@ -9,6 +9,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import app.motile.core.Engagement
 import app.motile.layout.KeyboardFocus
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.foundation.layout.Box
@@ -38,7 +39,10 @@ fun TextArea(
     val focus = focusRequester ?: remember { FocusRequester() }
     BasicTextField(
         value = text,
-        onValueChange = onTextChange,
+        onValueChange = {
+            Engagement.shared?.interacted()
+            onTextChange(it)
+        },
         modifier = modifier
             .then(if (fills) Modifier.fillMaxHeight() else Modifier)
             .fieldFrame(size)

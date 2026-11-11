@@ -12,8 +12,8 @@ use motile_protocol::wire::{
 use rusqlite::{Connection, OptionalExtension, Transaction, params, params_from_iter};
 
 use crate::activity::{
-    ACTION_COLUMNS, CLIENT_COLUMNS, TURN_COLUMNS, action_record, action_values, client_record, client_values,
-    placeholders, turn_record, turn_values,
+    ACTION_COLUMNS, CLIENT_COLUMNS, ENGAGED_COLUMNS, TURN_COLUMNS, action_record, action_values, client_record,
+    client_values, engaged_record, engaged_values, placeholders, turn_record, turn_values,
 };
 
 use crate::hub::file_name;
@@ -169,6 +169,7 @@ fn drop_copies(transaction: &Transaction, origin: &str) -> rusqlite::Result<()> 
         "copied_clients",
         "copied_turns",
         "copied_actions",
+        "copied_engaged",
         "copied_tombstones",
         "origins",
     ];
@@ -254,6 +255,9 @@ impl Store {
         let actions = read_rows(&connection, &own_rows("actions", ACTION_COLUMNS), params![at, limit], |row| {
             Ok(Some((action_record(row, 1)?, 200)))
         })?;
+        let engaged = read_rows(&connection, &own_rows("engaged", ENGAGED_COLUMNS), params![at, limit], |row| {
+            Ok(Some((engaged_record(row, 1)?, 120)))
+        })?;
         let lasts = [
             projects.last(),
             threads.last(),
@@ -263,6 +267,7 @@ impl Store {
             clients.last(),
             turns.last(),
             actions.last(),
+            engaged.last(),
         ];
         let (up_to, more) = cut(own.change, &lasts);
         let set = ChangeSet {
@@ -282,6 +287,7 @@ impl Store {
             clients: logged(clients.up_to(up_to)),
             turns: logged(turns.up_to(up_to)),
             actions: logged(actions.up_to(up_to)),
+            engaged: logged(engaged.up_to(up_to)),
         };
         Ok(LogPart { log_id: own.log_id, after, up_to, more, set })
     }
@@ -347,6 +353,12 @@ impl Store {
             params![origin, at, limit],
             |row| Ok(Some((action_record(row, 1)?, 200))),
         )?;
+        let engaged = read_rows(
+            &connection,
+            &copied_rows("copied_engaged", ENGAGED_COLUMNS),
+            params![origin, at, limit],
+            |row| Ok(Some((engaged_record(row, 1)?, 120))),
+        )?;
         let lasts = [
             projects.last(),
             threads.last(),
@@ -356,6 +368,7 @@ impl Store {
             clients.last(),
             turns.last(),
             actions.last(),
+            engaged.last(),
         ];
         let (up_to, more) = cut(copy.change, &lasts);
         let set = ChangeSet {
@@ -375,6 +388,7 @@ impl Store {
             clients: logged(clients.up_to(up_to)),
             turns: logged(turns.up_to(up_to)),
             actions: logged(actions.up_to(up_to)),
+            engaged: logged(engaged.up_to(up_to)),
         };
         Ok(LogPart { log_id: copy.log_id, after, up_to, more, set })
     }
@@ -514,6 +528,18 @@ impl Store {
                 &format!(
                     "INSERT OR IGNORE INTO copied_actions (origin, change, {ACTION_COLUMNS}) VALUES ({})",
                     placeholders(0, 11)
+                ),
+                params_from_iter(values),
+            )?;
+        }
+        for logged in set.engaged.iter().filter(|logged| fresh(logged.change)) {
+            let mut values: Vec<rusqlite::types::Value> =
+                vec![origin.to_string().into(), (logged.change as i64).into()];
+            values.extend(engaged_values(&logged.value));
+            transaction.execute(
+                &format!(
+                    "INSERT OR IGNORE INTO copied_engaged (origin, change, {ENGAGED_COLUMNS}) VALUES ({})",
+                    placeholders(0, 6)
                 ),
                 params_from_iter(values),
             )?;
@@ -823,7 +849,7 @@ mod tests {
     #[test]
     fn activity_is_copied_counted_by_its_origin_and_passed_on() {
         use motile_protocol::wire::{
-            ActionRecord, Actor, ClientForm, ClientInfo, ClientKind, ClientRecord, TurnRecord,
+            ActionRecord, Actor, ClientForm, ClientInfo, ClientKind, ClientRecord, EngagedRecord, TurnRecord,
         };
         let (_a, a) = store();
         let (_b, b) = store();
@@ -855,6 +881,8 @@ mod tests {
             rtt_ms: None,
         };
         a.save_action(&action).unwrap();
+        let stretch = EngagedRecord { device: String::new(), project_id: "p".into(), started_at: 20.0, ended_at: 50.0 };
+        a.save_engaged("ipad", &[stretch]).unwrap();
         carry(&a, "a", true, &b);
         carry(&b, "a", false, &c);
 
@@ -869,6 +897,8 @@ mod tests {
             assert_eq!(turns, [(1, 1, 4, 30)]);
             assert_eq!(copied.actions[0].feature, "thread.archive");
             assert_eq!(copied.clients[0].client.form, ClientForm::Tablet);
+            assert_eq!(copied.engaged[0].device, "ipad");
+            assert_eq!(copied.engaged[0].spans, [[20, 50]]);
         }
     }
 

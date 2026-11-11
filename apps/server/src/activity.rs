@@ -7,8 +7,8 @@ use std::collections::HashSet;
 use motile_protocol::activity::{self as features, Use};
 use motile_protocol::wire::{
     Access, ActionBucket, ActionRecord, ActivityReport, Actor, Agent, CONTINUE_PROMPT, ClientForm, ClientInfo,
-    ClientKind, ClientRecord, ConnectionPath, HourBucket, Item, ItemKind, Thread, TurnBucket, TurnOutcome, TurnRecord,
-    TurnStarter,
+    ClientKind, ClientRecord, ConnectionPath, EngagedRecord, EngagedSpans, HourBucket, Item, ItemKind, Thread,
+    TurnBucket, TurnOutcome, TurnRecord, TurnStarter,
 };
 use rusqlite::types::Value;
 use rusqlite::{Connection, OptionalExtension, Row, params, params_from_iter};
@@ -21,6 +21,10 @@ pub(crate) const TURN_COLUMNS: &str = "id, thread_id, project_id, agent, agent_a
     device, started_at, ended_at, outcome, waited_secs, asks, steers, tools, agents, subagents, output_tokens, \
     reasoning_tokens, fast";
 pub(crate) const ACTION_COLUMNS: &str = "at, actor, device, feature, variant, thread_id, project_id, path, rtt_ms";
+pub(crate) const ENGAGED_COLUMNS: &str = "device, project_id, started_at, ended_at";
+/// The longest stretch a client is believed, and how far ahead of this server's clock one may end.
+const LONGEST_STRETCH: f64 = 86_400.0;
+const CLOCK_SKEW: f64 = 300.0;
 
 /// Claude Code's tool that runs a subagent inside its own session, by its old name and its new.
 const SUBAGENT_TOOLS: [&str; 2] = ["Task", "Agent"];
@@ -312,6 +316,24 @@ pub(crate) fn action_record(row: &Row, first: usize) -> rusqlite::Result<ActionR
     })
 }
 
+pub(crate) fn engaged_values(stretch: &EngagedRecord) -> Vec<Value> {
+    vec![
+        stretch.device.clone().into(),
+        stretch.project_id.clone().into(),
+        stretch.started_at.into(),
+        stretch.ended_at.into(),
+    ]
+}
+
+pub(crate) fn engaged_record(row: &Row, first: usize) -> rusqlite::Result<EngagedRecord> {
+    Ok(EngagedRecord {
+        device: row.get(first)?,
+        project_id: row.get(first + 1)?,
+        started_at: row.get(first + 2)?,
+        ended_at: row.get(first + 3)?,
+    })
+}
+
 /// `?, ?, …` for `count` values after `skip` that came before.
 pub(crate) fn placeholders(skip: usize, count: usize) -> String {
     (skip + 1..=skip + count).map(|index| format!("?{index}")).collect::<Vec<_>>().join(", ")
@@ -363,6 +385,26 @@ impl Store {
             params_from_iter(action_values(action)),
         )?;
         Ok(())
+    }
+
+    /// Keeps the stretches a client spent as `device`'s, skipping those it has and those no client
+    /// could have spent: empty, longer than a day, or ending in the future.
+    pub fn save_engaged(&self, device: &str, stretches: &[EngagedRecord]) -> rusqlite::Result<()> {
+        let latest = motile_protocol::now() + CLOCK_SKEW;
+        let mut connection = self.connection();
+        let transaction = connection.transaction()?;
+        for stretch in stretches {
+            let length = stretch.ended_at - stretch.started_at;
+            if !(length > 0.0 && length <= LONGEST_STRETCH && stretch.ended_at <= latest) {
+                continue;
+            }
+            let stretch = EngagedRecord { device: device.to_string(), ..stretch.clone() };
+            transaction.execute(
+                &format!("INSERT OR IGNORE INTO engaged ({ENGAGED_COLUMNS}) VALUES ({})", placeholders(0, 4)),
+                params_from_iter(engaged_values(&stretch)),
+            )?;
+        }
+        transaction.commit()
     }
 
     /// What was done from `since` until `until`, in buckets of `bucket_secs` that start where a
@@ -486,7 +528,50 @@ impl Store {
             })?;
             rows.collect::<rusqlite::Result<Vec<_>>>()?
         };
-        Ok(ActivityReport { turns: turn_buckets, actions: action_buckets, hours, clients: known_clients(&connection)? })
+        let engaged_table = match origin.is_empty() {
+            true => "(SELECT *, ?3 AS origin FROM engaged)",
+            false => "(SELECT * FROM copied_engaged WHERE origin = ?3)",
+        };
+        let mut engaged: Vec<EngagedSpans> = Vec::new();
+        {
+            let mut statement = connection.prepare(&format!(
+                "SELECT device, project_id, started_at, ended_at FROM {engaged_table}
+                 WHERE started_at >= ?1 - {LONGEST_STRETCH} AND started_at < ?2 AND ended_at > ?1
+                 ORDER BY device, project_id, started_at"
+            ))?;
+            let rows = statement.query_map(params![since, until, origin], |row| engaged_record(row, 0))?;
+            for stretch in rows {
+                let stretch = stretch?;
+                let offset = |at: f64| (at.clamp(since, until) - since).round() as u32;
+                let span = [offset(stretch.started_at), offset(stretch.ended_at)];
+                if span[1] <= span[0] {
+                    continue;
+                }
+                match engaged.last_mut() {
+                    Some(last) if last.device == stretch.device && last.project_id == stretch.project_id => {
+                        last.spans.push(span)
+                    }
+                    _ => engaged.push(EngagedSpans {
+                        device: stretch.device,
+                        project_id: stretch.project_id,
+                        spans: vec![span],
+                    }),
+                }
+            }
+        }
+        let engaged_since: Option<f64> = connection.query_row(
+            &format!("SELECT MIN(started_at) FROM {engaged_table}"),
+            params![since, until, origin],
+            |row| row.get(0),
+        )?;
+        Ok(ActivityReport {
+            turns: turn_buckets,
+            actions: action_buckets,
+            hours,
+            clients: known_clients(&connection)?,
+            engaged,
+            engaged_since,
+        })
     }
 }
 
@@ -957,6 +1042,36 @@ mod tests {
         assert_eq!(store.backfill_activity().unwrap(), (1, 2));
         assert_eq!(store.backfill_activity().unwrap(), (0, 0));
         assert!(store.setting(BACKFILLED).is_some());
+    }
+
+    #[test]
+    fn a_clients_stretches_are_kept_as_its_own_once_and_reported_cut_to_the_time_asked() {
+        let (_folder, store) = store();
+        let stretch = |project: &str, started_at: f64, ended_at: f64| EngagedRecord {
+            device: "someone else".into(),
+            project_id: project.into(),
+            started_at,
+            ended_at,
+        };
+        let sent = [
+            stretch("p", 3_500.0, 3_700.0),
+            stretch("p", 3_800.0, 3_900.0),
+            stretch("", 4_000.0, 4_030.4),
+            stretch("p", 5_000.0, 5_000.0),
+            stretch("p", 6_000.0, 6_000.0 + 2.0 * 86_400.0),
+            stretch("p", motile_protocol::now() + 3_600.0, motile_protocol::now() + 3_700.0),
+        ];
+        store.save_engaged("mac", &sent).unwrap();
+        store.save_engaged("mac", &sent[..1]).unwrap();
+
+        let report = store.activity_of(None, 3_600.0, 7_200.0, 3600, 0).unwrap();
+        let spans: Vec<_> = report
+            .engaged
+            .iter()
+            .map(|spans| (spans.device.as_str(), spans.project_id.as_str(), &spans.spans[..]))
+            .collect();
+        assert_eq!(spans, [("mac", "", &[[400, 430]][..]), ("mac", "p", &[[0, 100], [200, 300]][..])]);
+        assert_eq!(report.engaged_since, Some(3_500.0));
     }
 
     #[test]

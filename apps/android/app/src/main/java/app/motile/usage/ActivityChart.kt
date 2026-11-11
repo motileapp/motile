@@ -38,6 +38,7 @@ private val labelGap = 6.dp
 fun ActivityChart(
     starts: List<Double>,
     series: List<Pair<Color, List<Double>>>,
+    lines: List<Double>?,
     period: UsageModel.Period,
     pointed: Int?,
     amount: (Double) -> String,
@@ -50,7 +51,7 @@ fun ActivityChart(
     val labelStyle = Theme.uiDigits(TextSize.Xs).copy(color = palette.mutedForeground)
     val count = starts.size
     val highest = (0 until count).maxOfOrNull { index -> series.sumOf { (_, points) -> points.getOrElse(index) { 0.0 } } } ?: 0.0
-    val ticks = remember(highest) { niceTicks(highest, 4) }
+    val ticks = remember(highest, lines) { lines?.takeIf { it.size > 1 } ?: niceTicks(highest, 4) }
     val yLabels = ticks.map { measurer.measure(amount(it), labelStyle) }
     val xIndices = remember(count) { timeTicks(count, 5) }
     val xLabels = xIndices.map { measurer.measure(axisTime(starts[it], period), labelStyle) }

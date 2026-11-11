@@ -26,6 +26,7 @@ thread_local! {
 pub fn install(store: &Entity<Store>, cx: &mut App) {
     let monitor = store.clone();
     cx.intercept_keystrokes(move |event, window, cx| {
+        crate::store::engaged::touched();
         if handle(&monitor, event, window, cx) {
             cx.stop_propagation();
         }

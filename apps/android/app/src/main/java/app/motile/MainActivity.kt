@@ -41,7 +41,30 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         SignInSession.resumed()
+        engagement.resumed(true)
     }
+
+    override fun onPause() {
+        super.onPause()
+        engagement.resumed(false)
+    }
+
+    override fun onTopResumedActivityChanged(isTopResumedActivity: Boolean) {
+        super.onTopResumedActivityChanged(isTopResumedActivity)
+        engagement.topResumed(isTopResumedActivity)
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        engagement.activityFocused(hasFocus)
+    }
+
+    override fun onUserInteraction() {
+        super.onUserInteraction()
+        engagement.interacted()
+    }
+
+    private val engagement get() = (application as MotileApplication).store.engagement
 
     /** A `motile://` address the browser was sent back to, after a sign-in, connecting Linear or Ricrac, or signing an MCP server in. */
     private fun opened(intent: Intent) {

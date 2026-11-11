@@ -483,6 +483,7 @@ final class AppStore {
     @ObservationIgnored let agentTranscript = TranscriptModel()
     @ObservationIgnored private var signInSession: SignInSession?
     @ObservationIgnored private let lifecycle = Lifecycle()
+    @ObservationIgnored private let engagement = Engagement()
     @ObservationIgnored private var undoTimer: Timer?
     @ObservationIgnored private var undoHeld = false
     @ObservationIgnored private var openThreadID: String?
@@ -536,6 +537,7 @@ final class AppStore {
         }
         if environment["MOTILE_DEMO"] != "1" { updater.start() }
         lifecycle.start(self)
+        engagement.start(self)
         NotificationCenter.default.addObserver(forName: Platform.becameActive, object: nil, queue: .main) { [weak self] _ in
             self?.markOpenThreadSeen()
             self?.core.send("reload_keybindings")

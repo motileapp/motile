@@ -459,6 +459,7 @@ class AppStore(private val context: Context) {
     val agentTranscript = TranscriptModel()
     private var signInSession: SignInSession? = null
     private val lifecycle = Lifecycle()
+    val engagement = Engagement()
     private val main = Handler(Looper.getMainLooper())
     private var undoTimer: Runnable? = null
     private var undoHeld = false
@@ -508,6 +509,7 @@ class AppStore(private val context: Context) {
         environment["MOTILE_RELEASES_URL"]?.let { updater.releases = it }
         if (environment["MOTILE_DEMO"] != "1") updater.start()
         lifecycle.start(context, this)
+        engagement.start(this)
     }
 
     /** The client is in front again. */

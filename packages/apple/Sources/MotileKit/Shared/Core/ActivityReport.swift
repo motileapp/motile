@@ -23,6 +23,9 @@ struct ActivityReport {
         let messagePoints: [Double]
         let turnPoints: [Double]
         let secondPoints: [Double]
+        /// The user's time on its devices.
+        let engagedSeconds: Double
+        let engagedPoints: [Double]
     }
 
     struct Client: Identifiable {
@@ -34,6 +37,9 @@ struct ActivityReport {
         let color: Int
         let messages: Int
         let turns: Int
+        let engagedSeconds: Double
+        /// The user's time on it and its messages: "2h 10m · 31 messages".
+        let summary: String
         let share: Double
         let lastSeen: Date?
         let active: Bool
@@ -48,6 +54,9 @@ struct ActivityReport {
         let hour: Int
         let messages: Int
         let turns: Int
+        let engagedSeconds: Double
+        /// The user's time in it, or empty: "42m".
+        let time: String
         let level: Int
 
         var id: Int { weekday * 24 + hour }
@@ -92,6 +101,9 @@ struct ActivityReport {
     let starts: [Date]
     let tiles: [Tile]
     let sources: [Source]
+    /// Where the chart of the user's time, and of the agents', draws its lines.
+    let engagedTicks: [Double]
+    let secondTicks: [Double]
     let clients: [Client]
     let hours: [Hour]
     let busiest: String?
@@ -113,20 +125,24 @@ struct ActivityReport {
                 id: source.string("id"), label: source.string("label"), symbol: Self.symbol(source.string("symbol")),
                 color: source.int("color"), messages: source.int("messages"), turns: source.int("turns"),
                 seconds: source.double("seconds"), messagePoints: points("message_points"), turnPoints: points("turn_points"),
-                secondPoints: points("second_points"))
+                secondPoints: points("second_points"), engagedSeconds: source.double("engaged_seconds"),
+                engagedPoints: points("engaged_points"))
         }
+        engagedTicks = (json["engaged_ticks"] as? [NSNumber] ?? []).map(\.doubleValue)
+        secondTicks = (json["second_ticks"] as? [NSNumber] ?? []).map(\.doubleValue)
         clients = json.objects("clients").map { client in
             Client(
                 device: client.string("device"), name: client.string("name"), client: client.string("client"),
                 detail: client.string("detail"), symbol: Self.symbol(client.string("symbol")), color: client.int("color"),
-                messages: client.int("messages"), turns: client.int("turns"), share: client.double("share"),
+                messages: client.int("messages"), turns: client.int("turns"),
+                engagedSeconds: client.double("engaged_seconds"), summary: client.string("summary"), share: client.double("share"),
                 lastSeen: client.optionalDouble("last_seen").map(Date.init(timeIntervalSince1970:)),
                 active: client.bool("active"), thisDevice: client.bool("this_device"), removed: client.bool("removed"))
         }
         hours = json.objects("hours").map { hour in
             Hour(
                 weekday: hour.int("weekday"), hour: hour.int("hour"), messages: hour.int("messages"), turns: hour.int("turns"),
-                level: hour.int("level"))
+                engagedSeconds: hour.double("engaged_seconds"), time: hour.string("time"), level: hour.int("level"))
         }
         busiest = json.optionalString("busiest")
         let lines = { (key: String) in

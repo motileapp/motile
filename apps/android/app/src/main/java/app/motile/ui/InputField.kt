@@ -28,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import app.motile.core.Engagement
 import app.motile.layout.KeyboardFocus
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
@@ -118,7 +119,9 @@ fun InputField(
             value = value,
             onValueChange = {
                 field = it
-                if (it.text != text) onTextChange(it.text)
+                if (it.text == text) return@BasicTextField
+                Engagement.shared?.interacted()
+                onTextChange(it.text)
             },
             modifier = Modifier
                 .weight(1f)

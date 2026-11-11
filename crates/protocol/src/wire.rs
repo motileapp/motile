@@ -978,6 +978,11 @@ pub enum Request {
     Hello {
         client: ClientInfo,
     },
+    /// Stretches of time the user spent in the client, which the server keeps as the connection's
+    /// device's. One the server has already is skipped. `Ok` answers.
+    Engaged {
+        stretches: Vec<EngagedRecord>,
+    },
     /// How much of their plans the agents' accounts have used, which the server reads again
     /// unless it just did. `Limits` answers.
     Limits,
@@ -1136,6 +1141,8 @@ pub struct ChangeSet {
     pub turns: Vec<Logged<TurnRecord>>,
     #[serde(default)]
     pub actions: Vec<Logged<ActionRecord>>,
+    #[serde(default)]
+    pub engaged: Vec<Logged<EngagedRecord>>,
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
@@ -1327,6 +1334,26 @@ pub struct ActionRecord {
     pub rtt_ms: Option<u32>,
 }
 
+/// A stretch of time the user spent in a client: focused on it, and using it within the last five
+/// minutes. `project_id` is the project of the server it is kept on that was on screen, or empty.
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct EngagedRecord {
+    pub device: String,
+    #[serde(default)]
+    pub project_id: String,
+    pub started_at: f64,
+    pub ended_at: f64,
+}
+
+/// A device's stretches on a project, as `[start, end]` in whole seconds from the start of the
+/// time asked about, cut to it.
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct EngagedSpans {
+    pub device: String,
+    pub project_id: String,
+    pub spans: Vec<[u32; 2]>,
+}
+
 /// The turns that ended in the time that starts at `start` and are alike in all but their numbers.
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct TurnBucket {
@@ -1389,6 +1416,11 @@ pub struct ActivityReport {
     pub hours: Vec<HourBucket>,
     /// The clients the server knows of, its copies' too.
     pub clients: Vec<ClientRecord>,
+    #[serde(default)]
+    pub engaged: Vec<EngagedSpans>,
+    /// When the first stretch it keeps started.
+    #[serde(default)]
+    pub engaged_since: Option<f64>,
 }
 
 /// What a server's copy of a removed server's activity says.
