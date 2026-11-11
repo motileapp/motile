@@ -288,12 +288,13 @@ final class PictureView: LayerView {
     static let radius = Radius.lg
 
     var picture: CGImage? { didSet { repaint() } }
+    var radius = PictureView.radius { didSet { repaint() } }
 
     override func paint(_ layer: CALayer) {
         layer.contents = picture
         layer.contentsGravity = .resizeAspect
         layer.backgroundColor = resolved(Theme.backgroundSecondary)
-        layer.cornerRadius = Self.radius
+        layer.cornerRadius = radius
         layer.cornerCurve = .continuous
         layer.masksToBounds = true
         layer.borderColor = resolved(Theme.border)

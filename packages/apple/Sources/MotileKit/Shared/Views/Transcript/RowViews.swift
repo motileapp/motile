@@ -739,6 +739,8 @@ final class ToolRowView: RowView {
     private let detailSurface = SurfaceView()
     private let detail = RowTextView.make()
     private var detailText: (() -> NSAttributedString)?
+    private var imageBoxes: [MediaBox] = []
+    private var shownImages: [MediaContent] = []
     private var hasDetail = false
     private var loadedDetail = false
     private var running = false
@@ -801,6 +803,7 @@ final class ToolRowView: RowView {
         startedAt = nil
         rule.isHidden = true
         folds = false
+        shownImages = []
         switch row.kind {
         case .tool(let tool):
             icon.show(tool.symbol, size: Self.iconSize)
@@ -813,6 +816,7 @@ final class ToolRowView: RowView {
             }
             hasDetail = tool.hasDetail
             detailText = { tool.detail() }
+            shownImages = tool.images
         case .thinking(let thought):
             icon.show(.brain, size: Self.iconSize)
             running = false
@@ -925,16 +929,45 @@ final class ToolRowView: RowView {
         guard expanded else { return Self.rowHeight + above + (rule.isHidden ? 0 : Self.ruleGap * 2 + 1) }
         if !loadedDetail {
             detail.content = detailText?() ?? NSAttributedString()
+            showImages()
             loadedDetail = true
         }
         let inner = width - 30 - 24
-        let detailHeight = detail.height(forWidth: inner)
+        let textHeight = detail.content.length > 0 ? detail.height(forWidth: inner) : 0
+        detail.place(CGRect(x: 12, y: 10, width: inner, height: textHeight))
+        var bottom = 10 + textHeight
+        for (box, image) in zip(imageBoxes, shownImages) {
+            let size = image.box(width: inner)
+            let top = bottom > 10 ? bottom + 10 : bottom
+            box.frame = CGRect(x: 12, y: top, width: size.width, height: size.height)
+            bottom = top + size.height
+        }
+        let detailHeight = bottom - 10
         detailSurface.frame = CGRect(x: inset + 30, y: Self.rowHeight + above + 3, width: width - 30, height: detailHeight + 20)
-        detail.place(CGRect(x: 12, y: 10, width: inner, height: detailHeight))
         return Self.rowHeight + above + detailHeight + 20 + 9
     }
 
     override func clearSelection() { detail.clearSelection() }
+
+    /// A box for each image its result showed the agent, under the text.
+    private func showImages() {
+        while imageBoxes.count > shownImages.count { imageBoxes.removeLast().removeFromSuperview() }
+        while imageBoxes.count < shownImages.count {
+            let box = MediaBox()
+            box.radius = Radius.sm
+            imageBoxes.append(box)
+            detailSurface.addSubview(box)
+        }
+        for (box, image) in zip(imageBoxes, shownImages) {
+            box.show(image, owner: owner)
+        }
+    }
+
+    /// What its line says, which the demo driver finds it by.
+    var words: String { title.attributed.string }
+
+    /// Opens or closes it, as a press on its line does.
+    func press() { header.onPress?(.zero) }
 
     /// The header ends as far past the last thing on it as it starts before the icon, and a point
     /// further past the chevron, whose 9 points are drawn in the middle of its frame.

@@ -143,9 +143,43 @@ extension MediaFiles {
 
 final class MediaRowView: RowView {
     private static let gap: CGFloat = 6
+
+    private let box = MediaBox()
+    private var content: MediaContent?
+
+    static func height(_ content: MediaContent, width: CGFloat) -> CGFloat {
+        content.box(width: width).height + gap * 2
+    }
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        addSubview(box)
+    }
+
+    required init?(coder: NSCoder) { fatalError("not used") }
+
+    override func configure(_ row: RowModel) {
+        super.configure(row)
+        guard case .media(let media) = row.kind else { return }
+        content = media
+        box.show(media, owner: owner)
+    }
+
+    override func layout(width: CGFloat) -> CGFloat {
+        guard let content else { return 0 }
+        let size = content.box(width: width)
+        box.frame = CGRect(x: 0, y: Self.gap, width: size.width, height: size.height)
+        return size.height + Self.gap * 2
+    }
+}
+
+/// The picture of an image or a video, as large as its frame: a reply's, or one a tool call
+/// showed its agent. It loads the file, says when it can't, and opens in the viewer.
+final class MediaBox: FlippedView {
     private static let stackGap: CGFloat = 10
     private static let lineHeight = scaled(16)
 
+    private weak var owner: RowOwner?
     private let picture = PictureView()
     private var playButton: OverlayButton!
     private let caption = TextLabel(font: Theme.smallFont, color: Theme.mutedForeground)
@@ -165,8 +199,10 @@ final class MediaRowView: RowView {
 
     private var state = State.shown { didSet { show(state) } }
 
-    static func height(_ content: MediaContent, width: CGFloat) -> CGFloat {
-        content.box(width: width).height + gap * 2
+    /// Its corners: a reply's are `PictureView.radius`, one inside a tool call's box less.
+    var radius: CGFloat {
+        get { picture.radius }
+        set { picture.radius = newValue }
     }
 
     override init(frame: CGRect) {
@@ -214,9 +250,9 @@ final class MediaRowView: RowView {
         if let progressWatch { NotificationCenter.default.removeObserver(progressWatch) }
     }
 
-    override func configure(_ row: RowModel) {
-        super.configure(row)
-        guard case .media(let media) = row.kind, media.id != content?.id else { return }
+    func show(_ media: MediaContent, owner: RowOwner?) {
+        self.owner = owner
+        guard media.id != content?.id else { return }
         content = media
         file = nil
         tip = media.alt.isEmpty ? nil : media.alt
@@ -296,16 +332,12 @@ final class MediaRowView: RowView {
         }
     }
 
-    override func layout(width: CGFloat) -> CGFloat {
-        guard let content else { return 0 }
-        let box = content.box(width: width)
-        let frame = CGRect(x: 0, y: Self.gap, width: box.width, height: box.height)
-        picture.frame = frame
+    override func layoutNow() {
+        picture.frame = bounds
         let side = playButton.size.height
-        playButton.frame = CGRect(x: (frame.midX - side / 2).rounded(), y: (frame.midY - side / 2).rounded(), width: side, height: side)
-        caption.frame = CGRect(x: 12, y: frame.maxY - 10 - scaled(16), width: max(0, frame.width - 24), height: scaled(16))
+        playButton.frame = CGRect(x: (bounds.midX - side / 2).rounded(), y: (bounds.midY - side / 2).rounded(), width: side, height: side)
+        caption.frame = CGRect(x: 12, y: bounds.maxY - 10 - scaled(16), width: max(0, bounds.width - 24), height: scaled(16))
         placeStates()
-        return box.height + Self.gap * 2
     }
 
     /// Centres the spinner with its percentage, or the message with its button, in the box.
@@ -327,7 +359,7 @@ final class MediaRowView: RowView {
     }
 
     override func takesPress(at point: CGPoint) -> Bool {
-        guard picture.frame.contains(point) else { return false }
+        guard bounds.contains(point) else { return false }
         let buttons = [retryButton!, playButton!].filter { !$0.isHidden }
         return !buttons.contains { $0.frame.contains(point) }
     }

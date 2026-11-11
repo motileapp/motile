@@ -23,6 +23,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.motile.LocalStore
 import app.motile.core.AppStore
@@ -44,9 +45,18 @@ private sealed interface MediaState {
     data class Failed(val why: String) : MediaState
 }
 
-/** An image or a video a reply shows, in a box of its size; a press opens it in the viewer, which plays a video. */
+/** An image or a video a reply shows, in a box of its size. */
 @Composable
 fun MediaRow(media: MediaContent) {
+    Box(Modifier.fillMaxWidth().padding(vertical = 6.dp)) { MediaBox(media) }
+}
+
+/**
+ * An image or a video in a box of its size in the column it is in; a press opens it in the viewer, which plays a video.
+ * Its corners are a reply's, or less inside a tool call's box.
+ */
+@Composable
+fun MediaBox(media: MediaContent, radius: Dp = PictureBox.radius) {
     val store = LocalStore.current
     val palette = LocalPalette.current
     val scope = rememberCoroutineScope()
@@ -74,42 +84,40 @@ fun MediaRow(media: MediaContent) {
     val open = {
         if (media.video || picture != null) store.view(listOf(mediaViewed(media)), 0)
     }
-    Box(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
-        ContextMenuArea(
-            items = { mediaActions(media.video, media.name) { done -> fetchThen(store, scope, media.id, done) } },
-            modifier = Modifier.boxed(media).semantics { contentDescription = media.alt.ifEmpty { media.name } },
-            onClick = open,
-        ) {
-            PictureBox(picture, Modifier.fillMaxSize()) {
-                if (media.video) OverlayButton(Symbol.Play, "Play", ControlSize.Large, Modifier.align(Alignment.Center), onClick = open)
-                if (media.video && media.poster == null) {
-                    Text(
-                        "${media.name} · ${byteCount(media.bytes)}",
-                        Modifier.align(Alignment.BottomStart).padding(start = 12.dp, end = 12.dp, bottom = 10.dp),
-                        style = Theme.smallFont, color = palette.mutedForeground, maxLines = 1, overflow = TextOverflow.MiddleEllipsis,
-                    )
-                }
-                when (val shown = state) {
-                    MediaState.Loading -> Column(
-                        Modifier.align(Alignment.Center),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        Spinner(ControlSize.Large.symbol, color = palette.mutedForeground)
-                        store.mediaProgress[media.id]?.let { fraction ->
-                            Text("${(fraction * 100).toInt()}%", style = Theme.uiDigits(TextSize.Xs), color = palette.mutedForeground)
-                        }
+    ContextMenuArea(
+        items = { mediaActions(media.video, media.name) { done -> fetchThen(store, scope, media.id, done) } },
+        modifier = Modifier.boxed(media).semantics { contentDescription = media.alt.ifEmpty { media.name } },
+        onClick = open,
+    ) {
+        PictureBox(picture, Modifier.fillMaxSize(), radius) {
+            if (media.video) OverlayButton(Symbol.Play, "Play", ControlSize.Large, Modifier.align(Alignment.Center), onClick = open)
+            if (media.video && media.poster == null) {
+                Text(
+                    "${media.name} · ${byteCount(media.bytes)}",
+                    Modifier.align(Alignment.BottomStart).padding(start = 12.dp, end = 12.dp, bottom = 10.dp),
+                    style = Theme.smallFont, color = palette.mutedForeground, maxLines = 1, overflow = TextOverflow.MiddleEllipsis,
+                )
+            }
+            when (val shown = state) {
+                MediaState.Loading -> Column(
+                    Modifier.align(Alignment.Center),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Spinner(ControlSize.Large.symbol, color = palette.mutedForeground)
+                    store.mediaProgress[media.id]?.let { fraction ->
+                        Text("${(fraction * 100).toInt()}%", style = Theme.uiDigits(TextSize.Xs), color = palette.mutedForeground)
                     }
-                    is MediaState.Failed -> Column(
-                        Modifier.align(Alignment.Center).padding(horizontal = 12.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        Text(shown.why, style = Theme.smallFont, color = palette.mutedForeground, align = TextAlign.Center, maxLines = 1)
-                        if (store.fetchesAgain) RowButton("Try again", "Load the image again", bordered = true) { attempt += 1 }
-                    }
-                    MediaState.Shown -> Unit
                 }
+                is MediaState.Failed -> Column(
+                    Modifier.align(Alignment.Center).padding(horizontal = 12.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Text(shown.why, style = Theme.smallFont, color = palette.mutedForeground, align = TextAlign.Center, maxLines = 1)
+                    if (store.fetchesAgain) RowButton("Try again", "Load the image again", bordered = true) { attempt += 1 }
+                }
+                MediaState.Shown -> Unit
             }
         }
     }

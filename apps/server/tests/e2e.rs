@@ -3529,7 +3529,8 @@ async fn an_image_the_agent_shows_is_kept_as_it_was_and_goes_with_its_thread() {
     // The image arrives with the block that shows it, while the reply is still streaming.
     let mut transcript = Transcript::default();
     let mut follow = open(&connection, &thread_id, 0).await;
-    while transcript.items.iter().all(|item| item.media.is_empty()) {
+    let showing = |item: &Item| matches!(item.kind, ItemKind::Assistant { .. }) && !item.media.is_empty();
+    while !transcript.items.iter().any(showing) {
         transcript.apply(next(&mut follow).await);
     }
     assert!(transcript.running);
@@ -3537,7 +3538,7 @@ async fn an_image_the_agent_shows_is_kept_as_it_was_and_goes_with_its_thread() {
 
     let screenshot = PathBuf::from(harness.folder("project")).join("screenshot.png");
     let shown = std::fs::read(&screenshot).unwrap();
-    let reply = transcript.items.iter().find(|item| !item.media.is_empty()).unwrap();
+    let reply = transcript.items.iter().find(|item| showing(item)).unwrap();
     assert!(matches!(&reply.kind, ItemKind::Assistant { text } if text.ends_with("The header is in place.")));
     let [media] = &reply.media[..] else { panic!("the reply shows one image: {:?}", reply.media) };
     // On a Mac the temporary folder is reached through a link, which the agent's paths have resolved.
@@ -3546,6 +3547,15 @@ async fn an_image_the_agent_shows_is_kept_as_it_was_and_goes_with_its_thread() {
         (std::fs::canonicalize(&screenshot).unwrap(), false)
     );
     assert_eq!((media.width, media.height, media.size), (Some(960), Some(600), shown.len() as u64));
+
+    // The image the agent read is kept with its Read too, by the file's name, and stored once.
+    let read =
+        transcript.items.iter().find(|item| matches!(&item.kind, ItemKind::Tool { call } if call.name == "Read"));
+    let [seen] = &read.unwrap().media[..] else { panic!("the Read shows one image: {read:?}") };
+    assert_eq!(
+        (seen.id.as_str(), std::fs::canonicalize(&seen.src).unwrap()),
+        (media.id.as_str(), std::fs::canonicalize(&screenshot).unwrap())
+    );
 
     // The agent's file changes; the thread still shows what it showed.
     std::fs::write(&screenshot, "something else").unwrap();

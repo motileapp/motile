@@ -156,6 +156,21 @@ impl MediaStore {
         copied
     }
 
+    /// Copies the image at `path`, which a tool call showed its agent.
+    pub fn capture_image(&self, path: &str, cwd: &str) -> Option<Media> {
+        self.capture(path, cwd, false).filter(|media| !media.video)
+    }
+
+    /// Keeps the `number`th image a tool call's result showed its agent, named `image-<number>`.
+    /// `None` when the bytes aren't one, or are too many.
+    pub fn keep_shown(&self, bytes: &[u8], number: usize) -> anyhow::Result<Option<Media>> {
+        if bytes.len() as u64 > MAX_SIZE {
+            return Ok(None);
+        }
+        let kept = self.keep_photo(bytes, "")?;
+        Ok(kept.map(|media| Media { src: format!("image-{number}.{}", extension(Path::new(&media.id))), ..media }))
+    }
+
     /// Keeps a photo that was downloaded from `src`. `None` when the bytes aren't one.
     pub fn keep_photo(&self, bytes: &[u8], src: &str) -> anyhow::Result<Option<Media>> {
         let extension = match imagesize::image_type(bytes) {
@@ -333,6 +348,22 @@ mod tests {
         assert_eq!((video.width, video.height), (Some(1280), Some(720)));
         assert_eq!(video.poster.as_ref(), Some(&shot.id), "the poster is the image's own copy");
         assert_eq!(shot.poster, None);
+    }
+
+    #[test]
+    fn an_image_a_tool_showed_is_kept_by_its_number_and_anything_else_is_not() {
+        let dir = tempfile::tempdir().unwrap();
+        let (store, cwd) = store(&dir);
+        std::fs::write(dir.path().join("project/notes.txt"), "notes").unwrap();
+        std::fs::write(dir.path().join("project/shot.png"), png(640, 400)).unwrap();
+
+        let kept = store.keep_shown(&png(320, 200), 2).unwrap().unwrap();
+        assert_eq!((kept.src.as_str(), kept.width, kept.height), ("image-2.png", Some(320), Some(200)));
+        assert!(store.has(&kept.id));
+        assert_eq!(store.keep_shown(b"not an image", 1).unwrap(), None);
+
+        assert_eq!(store.capture_image("shot.png", &cwd).map(|media| media.width), Some(Some(640)));
+        assert_eq!(store.capture_image("notes.txt", &cwd), None);
     }
 
     #[test]

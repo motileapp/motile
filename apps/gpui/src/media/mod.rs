@@ -339,14 +339,50 @@ pub fn media_row(model: &RowModel, ctx: &RowContext, window: &mut Window, cx: &m
     let RowKind::Media { media, video, width, height, size, alt, name, poster } = &model.row.kind else {
         return div().into_any_element();
     };
-    let (box_width, box_height) = boxed(*width, *height);
-    let video = *video;
+    let shown = Shown {
+        key: &model.row.id,
+        media,
+        video: *video,
+        width: *width,
+        height: *height,
+        size: *size,
+        alt,
+        name,
+        poster: poster.as_deref(),
+        radius: Radius::LG,
+    };
+    div().py(px(GAP)).child(picture_box(shown, ctx, window, cx)).into_any_element()
+}
+
+/// What a picture box shows: a reply's image or video, or an image a tool call showed its agent.
+pub struct Shown<'a> {
+    /// Sets its parts' ids apart from every other box's.
+    pub key: &'a str,
+    pub media: &'a str,
+    pub video: bool,
+    pub width: Option<u32>,
+    pub height: Option<u32>,
+    pub size: u64,
+    pub alt: &'a str,
+    pub name: &'a str,
+    pub poster: Option<&'a str>,
+    /// Its corners: a reply's are `Radius::LG`, one inside a tool call's box less.
+    pub radius: f32,
+}
+
+/// The box an image or a video is drawn in, as wide as its column allows up to its own size, and
+/// as tall as that makes it before the picture is there.
+pub fn picture_box(shown: Shown, ctx: &RowContext, window: &mut Window, cx: &mut App) -> AnyElement {
+    let Shown { key, media, video, width, height, size, alt, name, poster, radius } = shown;
+    let (media, alt, name) = (media.to_string(), alt.to_string(), name.to_string());
+    let poster = poster.map(str::to_string);
+    let (box_width, box_height) = boxed(width, height);
     let picture_id = if video { poster.clone() } else { Some(media.clone()) };
     let max_pixels = (box_width.max(box_height) * window.scale_factor()).ceil() as u32;
     let picture = picture_id.as_ref().map(|id| Pictures::load(&ctx.store, id, id, max_pixels, cx));
-    let fraction = (!video).then(|| ctx.store.read(cx).media_progress.get(media).copied()).flatten();
+    let fraction = (!video).then(|| ctx.store.read(cx).media_progress.get(&media).copied()).flatten();
     let c = colors(cx);
-    let row_id = model.row.id.clone();
+    let row_id = key.to_string();
     let shown = match &picture {
         Some(Picture::Ready(shown)) => Some(shown.image.clone()),
         _ => None,
@@ -356,7 +392,7 @@ pub fn media_row(model: &RowModel, ctx: &RowContext, window: &mut Window, cx: &m
         _ => None,
     };
     let loading = matches!(picture, Some(Picture::Loading));
-    let caption = (video && poster.is_none()).then(|| format!("{name} · {}", file_size(*size)));
+    let caption = (video && poster.is_none()).then(|| format!("{name} · {}", file_size(size)));
     let viewed =
         vec![ViewedMedia { name: name.clone(), video, source: MediaSource::Media(media.clone()), attachment: None }];
     let open = {
@@ -446,59 +482,55 @@ pub fn media_row(model: &RowModel, ctx: &RowContext, window: &mut Window, cx: &m
         });
 
     div()
-        .py(px(GAP))
-        .child(
-            div()
-                .id(SharedString::from(format!("media-{row_id}")))
-                .relative()
-                .w_full()
-                .max_w(px(box_width))
-                .aspect_ratio(box_width / box_height)
-                .rounded(px(Radius::LG))
-                .overflow_hidden()
-                .bg(c.background_secondary)
-                .border_1()
-                .border_color(c.border)
-                .when_some(shown, |frame, image| {
-                    frame.child(
-                        img(ImageSource::Render(image))
-                            .size_full()
-                            .aspect_ratio(box_width / box_height)
-                            .rounded(px(Radius::LG - 1.))
-                            .object_fit(ObjectFit::Contain),
-                    )
-                })
-                .child(states)
-                .when(video, |frame| {
-                    frame.child(
-                        div().absolute().inset_0().flex().items_center().justify_center().child(
-                            ActionButton::icon(SharedString::from(format!("play-{row_id}")), "play", "Play")
-                                .overlay()
-                                .large()
-                                .round(true)
-                                .on_click(move |_, _, cx| play(cx)),
-                        ),
-                    )
-                })
-                .when_some(caption, |frame, caption| {
-                    frame.child(
-                        div()
-                            .absolute()
-                            .left(px(11.))
-                            .right(px(11.))
-                            .bottom(px(9.))
-                            .h(px(LINE_HEIGHT))
-                            .text_size(TextSize::Xs)
-                            .text_color(c.muted_foreground)
-                            .child(crate::ui::middle_truncated(caption)),
-                    )
-                })
-                .when(!alt.is_empty(), |frame| frame.tooltip(crate::ui::tooltip(alt.clone())))
-                .on_click(move |_, _, cx| open(cx))
-                .on_mouse_down(MouseButton::Right, move |event, window, cx| {
-                    media_menu(&menu_store, &menu_media, video, &menu_name).show(event.position, window, cx);
-                }),
-        )
+        .id(SharedString::from(format!("media-{row_id}")))
+        .relative()
+        .w_full()
+        .max_w(px(box_width))
+        .aspect_ratio(box_width / box_height)
+        .rounded(px(radius))
+        .overflow_hidden()
+        .bg(c.background_secondary)
+        .border_1()
+        .border_color(c.border)
+        .when_some(shown, |frame, image| {
+            frame.child(
+                img(ImageSource::Render(image))
+                    .size_full()
+                    .aspect_ratio(box_width / box_height)
+                    .rounded(px(radius - 1.))
+                    .object_fit(ObjectFit::Contain),
+            )
+        })
+        .child(states)
+        .when(video, |frame| {
+            frame.child(
+                div().absolute().inset_0().flex().items_center().justify_center().child(
+                    ActionButton::icon(SharedString::from(format!("play-{row_id}")), "play", "Play")
+                        .overlay()
+                        .large()
+                        .round(true)
+                        .on_click(move |_, _, cx| play(cx)),
+                ),
+            )
+        })
+        .when_some(caption, |frame, caption| {
+            frame.child(
+                div()
+                    .absolute()
+                    .left(px(11.))
+                    .right(px(11.))
+                    .bottom(px(9.))
+                    .h(px(LINE_HEIGHT))
+                    .text_size(TextSize::Xs)
+                    .text_color(c.muted_foreground)
+                    .child(crate::ui::middle_truncated(caption)),
+            )
+        })
+        .when(!alt.is_empty(), |frame| frame.tooltip(crate::ui::tooltip(alt.clone())))
+        .on_click(move |_, _, cx| open(cx))
+        .on_mouse_down(MouseButton::Right, move |event, window, cx| {
+            media_menu(&menu_store, &menu_media, video, &menu_name).show(event.position, window, cx);
+        })
         .into_any_element()
 }
 

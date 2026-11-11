@@ -16,7 +16,7 @@ use motile_protocol::wire::{
 };
 use serde_json::{Value, json};
 
-use super::{AgentEvent, Background, ModelUsage, Turn};
+use super::{AgentEvent, Background, ModelUsage, Turn, content_images};
 
 /// Background tasks that watch a command: the Monitor tool's and shells left running.
 const WATCH_TASKS: [&str; 4] = ["local_bash", "shell", "monitor", "monitor_mcp"];
@@ -480,12 +480,16 @@ fn parse_user(message: &Value) -> Vec<AgentEvent> {
     blocks
         .iter()
         .filter(|block| block["type"] == "tool_result")
-        .filter_map(|block| {
-            Some(AgentEvent::ToolResult {
-                id: block["tool_use_id"].as_str()?.to_string(),
-                output: content_text(&block["content"]),
-                is_error: block["is_error"].as_bool().unwrap_or(false),
-            })
+        .flat_map(|block| {
+            let Some(id) = block["tool_use_id"].as_str() else { return vec![] };
+            let output = content_text(&block["content"]);
+            let is_error = block["is_error"].as_bool().unwrap_or(false);
+            let mut events = vec![AgentEvent::ToolResult { id: id.to_string(), output, is_error }];
+            let images = content_images(&block["content"]);
+            if !images.is_empty() {
+                events.push(AgentEvent::ToolImages { id: id.to_string(), images });
+            }
+            events
         })
         .collect()
 }
@@ -619,7 +623,6 @@ fn content_text(content: &Value) -> String {
         .iter()
         .filter_map(|block| match block["type"].as_str() {
             Some("text") => block["text"].as_str(),
-            Some("image") => Some("[image]"),
             _ => None,
         })
         .collect();
@@ -637,6 +640,7 @@ fn random_id() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::agents::ToolImage;
 
     #[test]
     fn a_result_says_what_the_session_has_spent_on_each_model() {
@@ -651,6 +655,22 @@ mod tests {
         let haiku = ModelUsage { model: "claude-haiku-4-5-20251001".to_string(), tokens, cost_usd: Some(0.0363325) };
         assert_eq!(spent, &vec![haiku]);
         assert_eq!(summary.cost_usd, None, "the session's cost isn't the turn's");
+    }
+
+    #[test]
+    fn the_images_a_tool_result_shows_come_after_its_text() {
+        use base64::Engine;
+        let png = b"\x89PNG\r\n\x1a\nimage".to_vec();
+        let data = base64::engine::general_purpose::STANDARD.encode(&png);
+        let line = json!({"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "toolu_1",
+            "content": [{"type": "text", "text": "Read it"},
+                {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": data}}]}]}});
+
+        let events = Parser::default().parse(&line.to_string());
+
+        let result = AgentEvent::ToolResult { id: "toolu_1".into(), output: "Read it".into(), is_error: false };
+        let images = AgentEvent::ToolImages { id: "toolu_1".into(), images: vec![ToolImage::Data(png)] };
+        assert_eq!(events, vec![result, images]);
     }
 
     #[test]

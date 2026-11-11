@@ -266,6 +266,8 @@ struct ToolContent {
     /// The questions it asked the user, each with its answer: `nil` until there is one, or when
     /// it was skipped.
     let asked: [(question: String, answer: String?)]
+    /// The images its result showed the agent, drawn as a reply's are.
+    let images: [MediaContent]
 
     init(json: JSON) {
         name = json.string("name")
@@ -278,6 +280,7 @@ struct ToolContent {
         output = json.optionalString("output")
         startedAt = json.optionalDouble("started_at")
         asked = json.objects("asked").map { ($0.string("question"), $0.optionalString("answer")) }
+        images = json.objects("images").map(MediaContent.init(json:))
     }
 
     var symbol: Symbol { Self.symbol(for: icon) }
@@ -297,7 +300,7 @@ struct ToolContent {
         }
     }
 
-    var hasDetail: Bool { !input.isEmpty || output != nil || !asked.isEmpty }
+    var hasDetail: Bool { !input.isEmpty || output != nil || !asked.isEmpty || !images.isEmpty }
 
     /// What opening the row shows: the input, then what came back, or each question with its answer.
     func detail() -> NSAttributedString {

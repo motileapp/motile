@@ -11,7 +11,7 @@ use std::collections::HashMap;
 use motile_protocol::wire::{Access, Approval, QUESTION_TOOL, Subagent, Tokens, ToolCall, ToolStatus, TurnSummary};
 use serde_json::{Value, json};
 
-use super::{AgentEvent, ModelUsage, PLAN_TOOL, Settings, Turn};
+use super::{AgentEvent, ModelUsage, PLAN_TOOL, Settings, ToolImage, Turn, content_images};
 
 const INITIALIZE: u64 = 1;
 const THREAD: u64 = 2;
@@ -118,6 +118,17 @@ pub fn answer(approval: &Approval, allow: bool, answers: &HashMap<String, String
 fn is_limit(info: &Value) -> bool {
     let name = info.as_str().or_else(|| info.as_object()?.keys().next().map(String::as_str));
     matches!(name, Some("usageLimitExceeded" | "rateLimitExceeded"))
+}
+
+/// An MCP tool's result as JSON, without the images it showed, which the row shows apart. `None`
+/// when nothing else is left.
+fn without_images(result: &Value) -> Option<String> {
+    let mut result = result.clone();
+    if let Some(blocks) = result["content"].as_array_mut() {
+        blocks.retain(|block| block["type"] != "image");
+    }
+    let empty = result["content"].as_array().is_some_and(Vec::is_empty) && result["structuredContent"].is_null();
+    (!empty).then(|| result.to_string())
 }
 
 /// Codex runs commands as `/bin/bash -lc '<command>'`; this is the command inside.
@@ -371,7 +382,13 @@ impl Parser {
             "item/started" | "item/completed" => {
                 let events = self.parse_item(&params["item"], method == "item/completed");
                 let shown = events.into_iter().filter(|event| {
-                    matches!(event, AgentEvent::Text { .. } | AgentEvent::ThinkingText { .. } | AgentEvent::Tool { .. })
+                    matches!(
+                        event,
+                        AgentEvent::Text { .. }
+                            | AgentEvent::ThinkingText { .. }
+                            | AgentEvent::Tool { .. }
+                            | AgentEvent::ToolImages { .. }
+                    )
                 });
                 let mut events = Vec::new();
                 for event in shown {
@@ -549,13 +566,26 @@ impl Parser {
                     item["server"].as_str().unwrap_or_default(),
                     item["tool"].as_str().unwrap_or_default()
                 );
+                let images = content_images(&item["result"]["content"]);
                 let output = match (item["error"]["message"].as_str(), &item["result"]) {
                     (Some(message), _) => Some(message.to_string()),
                     (None, Value::Null) => None,
-                    (None, result) => Some(result.to_string()),
+                    (None, result) => without_images(result),
                 };
                 let input = if item["arguments"].is_object() { item["arguments"].clone() } else { json!({}) };
-                tool(&name, input, output)
+                let mut events = tool(&name, input, output);
+                if !images.is_empty() {
+                    events.push(AgentEvent::ToolImages { id: id.clone(), images });
+                }
+                events
+            }
+            Some("imageView") => {
+                let path = item["path"].as_str().unwrap_or_default().to_string();
+                let mut events = tool("Read", json!({ "file_path": path }), None);
+                if completed && !path.is_empty() {
+                    events.push(AgentEvent::ToolImages { id: id.clone(), images: vec![ToolImage::File(path)] });
+                }
+                events
             }
             Some("webSearch") => tool("WebSearch", json!({ "query": item["query"] }), None),
             Some("subAgentActivity") if item["kind"] == "started" && !completed => {
@@ -769,6 +799,34 @@ mod tests {
 
         let stranger = r#"{"method":"turn/completed","params":{"threadId":"t9","turn":{"status":"completed"}}}"#;
         assert_eq!(parser.parse(stranger), vec![]);
+    }
+
+    #[test]
+    fn the_images_a_tool_showed_codex_are_kept_apart_from_its_output() {
+        use base64::Engine;
+        let mut parser = parser(turn(Access::Full));
+        parser.parse(r#"{"id":2,"result":{"thread":{"id":"t1"}}}"#);
+        let completed = |item: Value| json!({"method": "item/completed", "params": {"threadId": "t1", "item": item}});
+
+        let viewed =
+            parser.parse(&completed(json!({"type": "imageView", "id": "v1", "path": "/tmp/shot.png"})).to_string());
+        let [_, AgentEvent::Tool { call }, AgentEvent::ToolImages { id, images }] = &viewed[..] else {
+            panic!("{viewed:?}")
+        };
+        assert_eq!((call.name.as_str(), call.input.as_str()), ("Read", r#"{"file_path":"/tmp/shot.png"}"#));
+        assert_eq!((id.as_str(), images), ("v1", &vec![ToolImage::File("/tmp/shot.png".into())]));
+
+        let png = b"\x89PNG\r\n\x1a\nimage".to_vec();
+        let data = base64::engine::general_purpose::STANDARD.encode(&png);
+        let rendered = completed(json!({"type": "mcpToolCall", "id": "x1", "server": "cad", "tool": "render",
+            "status": "completed", "arguments": {}, "result": {"content": [{"type": "text", "text": "Rendered"},
+                {"type": "image", "data": data, "mimeType": "image/png"}]}}));
+        let events = parser.parse(&rendered.to_string());
+        let [_, AgentEvent::Tool { call }, AgentEvent::ToolImages { images, .. }] = &events[..] else {
+            panic!("{events:?}")
+        };
+        assert_eq!(call.output.as_deref(), Some(r#"{"content":[{"text":"Rendered","type":"text"}]}"#));
+        assert_eq!(images, &vec![ToolImage::Data(png)]);
     }
 
     #[test]
