@@ -77,6 +77,8 @@ pub struct Colors {
     pub accent_tint: Hsla,
     /// What lies over the window behind a modal or the media viewer.
     pub scrim: Hsla,
+    /// The scrim behind small text over a picture.
+    pub scrim_stronger: Hsla,
     /// The colours code is highlighted with, by the core's palette index.
     pub syntax: [Hsla; 16],
 }
@@ -109,6 +111,7 @@ impl Colors {
             warning_tint: thinned(t.warning, Opacity::ColorTint),
             accent_tint: thinned(t.accent_tinted, Opacity::AccentTint),
             scrim: thinned(t.overlay, Opacity::Overlay),
+            scrim_stronger: thinned(t.overlay, Opacity::OverlayStronger),
             syntax: [
                 t.foreground,
                 t.syntax_comment,
@@ -172,6 +175,8 @@ pub enum Surface {
     Card,
     Popover,
     Composer,
+    /// A box on the composer, like an attachment's tile.
+    ComposerBox,
 }
 
 /// What is drawn on a surface, each in the surface's own accent.
@@ -201,6 +206,7 @@ impl Surface {
             Surface::Card => c.card,
             Surface::Popover => c.popover,
             Surface::Composer => c.composer,
+            Surface::ComposerBox => c.composer_accent_weaker,
         }
     }
 
@@ -211,6 +217,7 @@ impl Surface {
             Surface::Card => c.border_card,
             Surface::Popover => c.border_popover,
             Surface::Composer => c.border_composer,
+            Surface::ComposerBox => c.composer_accent,
         }
     }
 
@@ -233,7 +240,16 @@ impl Surface {
             Surface::Card => c.card_accent,
             Surface::Popover => c.popover_accent,
             Surface::Composer => c.border_composer,
+            Surface::ComposerBox => match layer {
+                Layer::Control | Layer::Row | Layer::Box | Layer::Chip => c.composer_accent,
+                Layer::ControlLit | Layer::ControlLitOnSelected | Layer::RowSelected => c.composer_accent_stronger,
+            },
         }
+    }
+
+    /// Whether a secondary button on it is edged, in its lit control's colour.
+    pub fn edges_controls(self) -> bool {
+        self == Surface::ComposerBox
     }
 
     /// What lies in a box on it.
