@@ -180,10 +180,12 @@ impl Look {
         self.surface.layer(layer, c)
     }
 
-    /// The line around an outline button, or a button over a picture.
+    /// The line around an outline button, a secondary one on a surface that edges its controls, or
+    /// a button over a picture.
     pub fn border(&self, c: &Colors) -> Option<Hsla> {
         match self.variant {
             Variant::Outline => Some(self.surface.border(c)),
+            Variant::Secondary if self.surface.edges_controls() => Some(self.surface.layer(Layer::ControlLit, c)),
             Variant::Overlay => Some(c.control_border_over_picture),
             _ => None,
         }

@@ -87,6 +87,7 @@ enum DemoDriver {
         case "new": store.startNewThread(in: store.composerProject ?? store.projects.first)
         case "continue": store.continueOnAnotherServer()
         case "type": store.draft = rest
+        case "attach": store.attach(rest.split(separator: " ").map { URL(fileURLWithPath: String($0)) })
         case "send": store.send()
         case "stop": store.stop()
         case "agent":

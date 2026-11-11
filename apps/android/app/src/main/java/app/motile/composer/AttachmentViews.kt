@@ -44,13 +44,14 @@ import app.motile.theme.ControlSize
 import app.motile.theme.LocalForeground
 import app.motile.theme.LocalRow
 import app.motile.theme.LocalSurface
+import app.motile.theme.OnSurface
 import app.motile.theme.OverPicture
 import app.motile.theme.Radius
 import app.motile.theme.ShadowSize
 import app.motile.theme.Opacity
 import app.motile.theme.Surface
 import app.motile.theme.Theme
-import app.motile.theme.scrim
+import app.motile.theme.scrimStronger
 import app.motile.theme.shadow
 import app.motile.ui.ActionButton
 import app.motile.ui.ButtonVariant
@@ -90,7 +91,7 @@ fun AttachmentTile(attachment: Attachment, open: () -> Unit) {
         value = decoded
     }
     TileLook(attachment, open) {
-        Box(Modifier.fillMaxSize().background(palette.backgroundSecondary), contentAlignment = Alignment.Center) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             picture?.let { Image(it, null, Modifier.fillMaxSize(), contentScale = ContentScale.Fit) }
             if (attachment.state == Attachment.State.Preparing) {
                 Spinner(IconSize.Lg, color = palette.mutedForeground)
@@ -112,33 +113,32 @@ private val kindWidth get() = AttachmentTile.side - kindInset - 4.dp - ControlSi
 /** A file in the composer that isn't shown as a picture, as a tile beside the pictures: its kind, its name, and how far it is on its way to the server. */
 @Composable
 fun AttachmentFileTile(attachment: Attachment) {
-    val palette = Theme.colors
     TileLook(attachment, open = null) {
-        Box(Modifier.fillMaxSize().background(palette.backgroundSecondary)) {
+        Box(Modifier.fillMaxSize()) {
             Text(
                 attachment.name, Modifier.align(Alignment.BottomStart).padding(horizontal = 10.dp, vertical = 8.dp),
-                size = TextSize.Xxs, weight = FontWeight.Medium, color = palette.foreground, maxLines = 3,
+                size = TextSize.Xxs, weight = FontWeight.Medium, color = Theme.colors.foreground, maxLines = 3,
             )
-            attachment.kind?.let { Chip(it, Modifier.align(Alignment.TopStart).padding(kindInset).widthIn(max = kindWidth), muted = true, small = true) }
+            attachment.kind?.let { Chip(it, Modifier.align(Alignment.TopStart).padding(kindInset).widthIn(max = kindWidth), small = true) }
         }
     }
 }
 
-/** The square of an attachment: its edge, how far its upload is along its bottom, and the button that removes it. */
+/** The square of an attachment, a box on the composer: its edge, how far its upload is along its bottom, and the button that removes it. */
 @Composable
-private fun TileLook(attachment: Attachment, open: (() -> Unit)?, content: @Composable () -> Unit) {
+private fun TileLook(attachment: Attachment, open: (() -> Unit)?, content: @Composable () -> Unit) = OnSurface(Surface.ComposerBox) {
     val store = LocalStore.current
     val shape = RoundedCornerShape(Radius.xl)
     val summary = attachment.bytes?.let { "${attachment.name}, ${Formatter.formatShortFileSize(Platform.context, it)}" } ?: attachment.name
     Box(Modifier.semantics { contentDescription = summary }) {
-        val framed = Modifier.size(AttachmentTile.side).clip(shape).border(1.dp, Theme.colors.border, shape)
+        val framed = Modifier.size(AttachmentTile.side).clip(shape).background(Surface.ComposerBox.color).border(1.dp, Surface.ComposerBox.border, shape)
         val tile: @Composable () -> Unit = {
             content()
             Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth()) { AttachmentProgress(attachment) }
         }
         if (open != null) DimButton(open, framed) { tile() } else Box(framed) { tile() }
         ActionButton(
-            icon = Symbol.X, modifier = Modifier.align(Alignment.TopEnd).padding(removeInset), help = "Remove", variant = ButtonVariant.Overlay,
+            icon = Symbol.X, modifier = Modifier.align(Alignment.TopEnd).padding(removeInset), help = "Remove", variant = ButtonVariant.Secondary,
             size = ControlSize.Small, round = true,
         ) { store.removeAttachment(attachment.id) }
     }
@@ -179,7 +179,7 @@ private fun AttachmentProgress(attachment: Attachment) {
     when (val state = attachment.state) {
         Attachment.State.Ready, Attachment.State.Preparing -> Unit
         is Attachment.State.Uploading -> Text(
-            "${(state.fraction * 100).toInt()}%", Modifier.fillMaxWidth().background(palette.scrim).padding(vertical = 2.dp),
+            "${(state.fraction * 100).toInt()}%", Modifier.fillMaxWidth().background(palette.scrimStronger).padding(vertical = 2.dp),
             style = Theme.uiDigits(TextSize.Xxs, FontWeight.Medium), color = OverPicture.foreground, align = androidx.compose.ui.text.style.TextAlign.Center,
         )
         is Attachment.State.Failed -> {

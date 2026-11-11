@@ -48,6 +48,12 @@
   --segment-accent: #dfe2e8;
   --segment-selected: #ffffff;
   --composer: #ffffff;
+  --composer-accent-weaker: #ededee;
+  --composer-accent: #ddddde;
+  --composer-accent-stronger: #d5d5d7;
+  --glass-accent-weaker: #ededee;
+  --glass-accent: #ddddde;
+  --glass-accent-stronger: #d5d5d7;
   --glass: #ffffff;
   --accent-with-opacity: #22242b;
   --accent-tinted: #22242b;
@@ -97,6 +103,7 @@
   --syntax-tag: #116329;
 
   --opacity-overlay: 50%;
+  --opacity-overlay-stronger: 75%;
   --opacity-overlay-pulled: 40%;
   --opacity-disabled: 45%;
   --opacity-lit: 88%;
@@ -165,6 +172,12 @@
   --segment-accent: #14151a;
   --segment-selected: #212329;
   --composer: #111217;
+  --composer-accent-weaker: #191a1f;
+  --composer-accent: #202126;
+  --composer-accent-stronger: #27282e;
+  --glass-accent-weaker: #212328;
+  --glass-accent: #282a2f;
+  --glass-accent-stronger: #2f3137;
   --glass: #0a0b0f;
   --accent-with-opacity: #d0d2d9;
   --accent-tinted: #d0d2d9;
@@ -214,6 +227,7 @@
   --syntax-tag: #7ee787;
 
   --opacity-overlay: 60%;
+  --opacity-overlay-stronger: 80%;
   --opacity-overlay-pulled: 40%;
   --opacity-disabled: 45%;
   --opacity-lit: 88%;
