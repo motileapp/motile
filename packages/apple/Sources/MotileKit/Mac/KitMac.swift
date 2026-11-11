@@ -196,6 +196,14 @@ class FlippedView: NSView, CursorOwner {
         onHover?(nil)
     }
 
+    /// Says again where the pointer is, after what is inside changed under a pointer that didn't move.
+    func hoverAgain() {
+        guard let onHover, let window, window.isKeyWindow else { return }
+        let location = window.mouseLocationOutsideOfEventStream
+        let under = window.contentView?.hitTest(location)?.isDescendant(of: self) ?? false
+        onHover(under ? convert(location, from: nil) : nil)
+    }
+
     func cursor(at point: CGPoint) -> NSCursor {
         onPress != nil && pointer == .hand && takesPress(at: point) ? .pointingHand : .arrow
     }

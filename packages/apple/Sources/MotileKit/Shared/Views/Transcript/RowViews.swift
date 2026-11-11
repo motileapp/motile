@@ -1016,7 +1016,7 @@ final class ErrorRowView: RowView {
 final class ChangesRowView: RowView {
     fileprivate static let headHeight: CGFloat = scaled(40)
     #if os(macOS)
-    fileprivate static let entryHeight: CGFloat = 28
+    fileprivate static let entryHeight: CGFloat = 26
     #else
     fileprivate static let entryHeight: CGFloat = 36
     #endif
@@ -1087,6 +1087,7 @@ final class ChangesRowView: RowView {
             didSet {
                 hovered = nil
                 redraw()
+                hoverAgain()
             }
         }
         var onClick: ((ChangesContent.Entry) -> Void)?
