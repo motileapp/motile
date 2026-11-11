@@ -238,6 +238,12 @@ class FlippedView: UIView, UIContextMenuInteractionDelegate, UIGestureRecognizer
         onHover?(nil)
     }
 
+    /// Says again where the pointer is, after what is inside changed under a pointer that didn't move.
+    func hoverAgain() {
+        guard let onHover, let hover, [.began, .changed].contains(hover.state) else { return }
+        onHover(hover.location(in: self))
+    }
+
     @objc private func hovered(_ recognizer: UIHoverGestureRecognizer) {
         switch recognizer.state {
         case .began, .changed: onHover?(recognizer.location(in: self))
