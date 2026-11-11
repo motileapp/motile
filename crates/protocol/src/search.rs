@@ -230,7 +230,7 @@ pub fn link_text(text: &str) -> String {
 
 /// A letter as it is searched for: lowercase, without accents, a curly apostrophe straight. One
 /// that would fold to more than one letter stays as it is, so places in the text stay put.
-fn fold_char(character: char) -> char {
+pub fn fold_char(character: char) -> char {
     if character.is_ascii() {
         return character.to_ascii_lowercase();
     }

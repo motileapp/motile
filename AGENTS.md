@@ -306,8 +306,9 @@ shadcn's own colours, opacities and radii are gone from the theme.
 - `ui_tools.rs`: the tools a program's `Query` and `Mutation` call (`UiTool`), inside the thread's
   folder, with their JSON schemas for the agent's prompt. `run` runs a command the user confirmed,
   or any under full access, and only from a `Mutation`, which a click fires.
-- `ui_lookups.rs`: a program's photos from Wikipedia and Wikimedia Commons, kept as the thread's
-  media (`UiImages`), and street routes from OSRM (`UiRoute`), both kept in memory a while.
+- `ui_lookups.rs`: a program's photos from Bing's image search, the first whose page's title names
+  the query, else Wikipedia's and Wikimedia Commons' by the same rule, kept as the thread's media
+  (`UiImages`), and street routes from OSRM (`UiRoute`), both kept in memory a while.
 - `icons.rs`: finds a project's icon in its folder.
 - `access.rs`: asks the auth server which clients belong to the account, which servers it has and
   unlinked, which it deleted completely, and which device is its gateway.
