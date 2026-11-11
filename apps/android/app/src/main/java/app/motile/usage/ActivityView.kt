@@ -386,7 +386,7 @@ private fun Breakdown(report: ActivityReport, modifier: Modifier) {
         TurnBreakdown.Projects -> report.projects
     }
     Card(modifier) {
-        Box(Modifier.fillMaxWidth().heightIn(min = scaled(40f).dp).padding(horizontal = 8.dp), contentAlignment = Alignment.Center) {
+        Box(Modifier.fillMaxWidth().padding(8.dp), contentAlignment = Alignment.Center) {
             Segmented(offered.map { it.label to it }, current, {
                 breakdown = it
                 Preferences.set(BREAKDOWN_KEY, it.raw)

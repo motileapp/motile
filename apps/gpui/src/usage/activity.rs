@@ -677,7 +677,7 @@ impl ActivityView {
         let rows = separated(shown.iter().map(|line| line_row(line, None, cx)).collect(), cx);
         let picker = self.picker(BREAKDOWN_KEY, offered, current, Breakdown::label).fills(true);
         card_default(div().flex().flex_col(), cx)
-            .child(div().min_h(px(40.)).px(px(8.)).flex().items_center().child(picker))
+            .child(div().p(px(8.)).flex().items_center().child(picker))
             .child(divider_on(Surface::Card, cx))
             .child(FadingScroll::new("activity-breakdown", list_height(window)).fill(colors(cx).card).children(rows))
     }
