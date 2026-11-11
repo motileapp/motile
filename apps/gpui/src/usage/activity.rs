@@ -2,8 +2,6 @@
 //! the headline numbers, the work over time by where it came from, the clients it came from, the
 //! hours of the week, how the turns went and the features used.
 
-use std::collections::HashSet;
-
 use gpui_kit::prelude::*;
 use gpui_kit::*;
 use motile_core::activity::{duration, number};
@@ -20,8 +18,8 @@ use crate::theme::{Colors, ControlSize, IconSize, Layer, Opacity, Radius, Surfac
 use crate::ui::control::dotted;
 use crate::ui::menu::Anchor;
 use crate::ui::{
-    Chip, FadingScroll, Highlight, Segmented, card_default, divider_on, edges, icons, logos, middle_truncated,
-    tabular_numbers, tabular_text_width, text_width,
+    Chip, FadingScroll, Segmented, card_default, divider_on, icons, logos, middle_truncated, tabular_numbers,
+    tabular_text_width, text_width,
 };
 
 /// Narrower than this, the tiles go two to a row and the turns' cards under each other.
@@ -30,8 +28,6 @@ const BESIDE_WIDTH: f32 = 640.;
 const BAR_FILL: f32 = 0.7;
 const BADGE: f32 = 32.;
 const FEATURE_BAR_WIDTH: f32 = 56.;
-/// How many features a group shows until all are asked for.
-const FEATURES_SHOWN: usize = 5;
 const HEATMAP_PADDING: f32 = 16.;
 const HEATMAP_GAP: f32 = 3.;
 const DAY_LABELS: f32 = 30.;
@@ -161,8 +157,6 @@ pub struct ActivityView {
     plot: Anchor,
     /// The hour of the week the pointer is over.
     chosen: Option<usize>,
-    /// The feature groups that show all their features.
-    expanded: HashSet<SharedString>,
     /// How wide the content is, which lays it out.
     pub width: f32,
     period: UsagePeriod,
@@ -171,15 +165,7 @@ pub struct ActivityView {
 impl ActivityView {
     pub fn new(store: Entity<Store>, cx: &mut Context<Self>) -> Self {
         let period = store.read(cx).usage_period();
-        Self {
-            store,
-            pointed: None,
-            plot: Anchor::default(),
-            chosen: None,
-            expanded: HashSet::new(),
-            width: 0.,
-            period,
-        }
+        Self { store, pointed: None, plot: Anchor::default(), chosen: None, width: 0., period }
     }
 
     fn beside(&self) -> bool {
@@ -696,7 +682,7 @@ impl ActivityView {
             .child(FadingScroll::new("activity-breakdown", list_height(window)).fill(colors(cx).card).children(rows))
     }
 
-    fn features(&self, report: &ActivityReport, cx: &mut Context<Self>) -> AnyElement {
+    fn features(&self, report: &ActivityReport, window: &Window, cx: &App) -> AnyElement {
         let offered: Vec<Who> = [Who::You, Who::Agents]
             .into_iter()
             .filter(|who| match who {
@@ -715,15 +701,21 @@ impl ActivityView {
                     .features
                     .iter()
                     .map(|group| {
-                        let key = format!("you:{}", group.name).into();
-                        self.feature_card(key, &group.name, group.count, &group.features, cx)
+                        self.feature_card(
+                            &format!("you-{}", group.name),
+                            &group.name,
+                            group.count,
+                            &group.features,
+                            window,
+                            cx,
+                        )
                     })
                     .collect();
                 grid(cards, if self.beside() { 2 } else { 1 }, 12., false)
             }
             Who::Agents => {
                 let count = report.agent_features.iter().map(|feature| feature.count).sum();
-                self.feature_card("agents".into(), "Motile tools", count, &report.agent_features, cx)
+                self.feature_card("agents", "Motile tools", count, &report.agent_features, window, cx)
             }
         };
         div()
@@ -736,48 +728,18 @@ impl ActivityView {
     }
 
     /// The features of a group as a table under a header of its name and total, each with how
-    /// often it was used: the five used most, and the rest once asked for. `key` keeps which groups show them all.
+    /// often it was used, scrolling past half the window.
     fn feature_card(
         &self,
-        key: SharedString,
+        key: &str,
         title: &str,
         count: u32,
         features: &[FeatureLine],
-        cx: &mut Context<Self>,
+        window: &Window,
+        cx: &App,
     ) -> Div {
         let c = colors(cx);
-        let all = self.expanded.contains(&key);
-        let listed = if all { features } else { &features[..features.len().min(FEATURES_SHOWN)] };
-        let rows = separated(listed.iter().map(|feature| feature_row(feature, cx)).collect(), cx);
-        let more = (features.len() > FEATURES_SHOWN).then(|| {
-            let label = if all { "Show fewer".to_string() } else { format!("Show all {}", features.len()) };
-            let group = SharedString::from(format!("activity-more-{key}"));
-            let light = Highlight::new()
-                .radius(Radius::LG - 1.)
-                .inset(edges(0., 1., 1., 1.))
-                .surface(Surface::Card)
-                .render(group.clone(), cx)
-                .rounded_t(px(0.));
-            div()
-                .id(ElementId::from(group.clone()))
-                .group(group)
-                .relative()
-                .min_h(px(40.))
-                .flex()
-                .items_center()
-                .justify_center()
-                .text_size(ControlSize::Small.text_size())
-                .font_weight(FontWeight::MEDIUM)
-                .text_color(c.foreground)
-                .child(light)
-                .child(div().relative().child(label))
-                .on_click(cx.listener(move |this, _, _, cx| {
-                    if !this.expanded.remove(&key) {
-                        this.expanded.insert(key.clone());
-                    }
-                    cx.notify();
-                }))
-        });
+        let rows = separated(features.iter().map(|feature| feature_row(feature, cx)).collect(), cx);
         card_default(div().flex().flex_col(), cx)
             .child(
                 table_header(cx)
@@ -789,8 +751,11 @@ impl ActivityView {
                     .child(div().text_color(c.muted_foreground).font_features(tabular_numbers()).child(number(count))),
             )
             .child(divider_on(Surface::Card, cx))
-            .children(rows)
-            .when_some(more, |card, more| card.child(divider_on(Surface::Card, cx)).child(more))
+            .child(
+                FadingScroll::new(SharedString::from(format!("activity-features-{key}")), list_height(window))
+                    .fill(c.card)
+                    .children(rows),
+            )
     }
 }
 
@@ -830,7 +795,7 @@ impl Render for ActivityView {
                 sections.push(self.turns(&report, window, cx));
             }
             if !report.features.is_empty() || !report.agent_features.is_empty() {
-                sections.push(self.features(&report, cx));
+                sections.push(self.features(&report, window, cx));
             }
             sections
         };
