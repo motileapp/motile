@@ -27,6 +27,15 @@ final class UsageModel {
             case .limits: "Limits"
             }
         }
+
+        var symbol: Symbol {
+            switch self {
+            case .activity: .activity
+            case .cost: .circleDollarSign
+            case .tokens: .coins
+            case .limits: .gauge
+            }
+        }
     }
 
     enum Period: String, CaseIterable, Identifiable {
@@ -265,10 +274,9 @@ struct UsageTabsMenu: View {
 
 struct UsageTabs: View {
     @Bindable var model: UsageModel
-    var fills = false
 
     var body: some View {
-        Segmented(UsageModel.Tab.allCases.map { ($0.label, $0) }, selection: $model.tab, fills: fills)
+        Segmented(UsageModel.Tab.allCases.map { ($0.label, $0) }, selection: $model.tab)
     }
 }
 
@@ -302,6 +310,8 @@ struct UsageContent: View {
 
     @Environment(AppStore.self) private var store
     let model: UsageModel
+    /// The tab shown, where it isn't the one picked.
+    var shown: UsageModel.Tab?
     var margin: CGFloat = 24
     var top: CGFloat = 20
     /// The period picks above what the tab shows, where it isn't in a bar.
@@ -310,10 +320,10 @@ struct UsageContent: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                if periodInPage && model.tab != .limits {
+                if periodInPage && tab != .limits {
                     Segmented(UsageModel.Period.allCases.map { ($0.label, $0) }, selection: Bindable(model).period, size: .small, fills: true)
                 }
-                tab
+                page
             }
             .frame(maxWidth: Self.width, alignment: .leading)
             .padding(.horizontal, margin)
@@ -321,11 +331,16 @@ struct UsageContent: View {
             .padding(.bottom, 80)
             .frame(maxWidth: .infinity)
         }
-        .onAppear { model.start(store) }
+        .onAppear {
+            guard shown == nil else { return }
+            model.start(store)
+        }
     }
 
-    @ViewBuilder private var tab: some View {
-        switch model.tab {
+    private var tab: UsageModel.Tab { shown ?? model.tab }
+
+    @ViewBuilder private var page: some View {
+        switch tab {
         case .limits:
             // The gateway's accounts are among the limits while it is followed.
             VStack(alignment: .leading, spacing: 0) { limits }

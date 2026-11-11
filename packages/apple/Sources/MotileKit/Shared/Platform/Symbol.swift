@@ -3,6 +3,7 @@ import SwiftUI
 
 /// The icons the apps draw, from Lucide's font: each is the character it has there.
 enum Symbol: String {
+    case activity = "\u{e038}"
     case alarmClock = "\u{e03a}"
     case alarmClockOff = "\u{e23b}"
     case archive = "\u{e041}"
@@ -36,6 +37,7 @@ enum Symbol: String {
     case circleArrowDown = "\u{e078}"
     case circleCheck = "\u{e226}"
     case circleDashed = "\u{e4b0}"
+    case circleDollarSign = "\u{e47d}"
     case circleDot = "\u{e345}"
     case circleDotDashed = "\u{e4b1}"
     case circlePlay = "\u{e080}"
@@ -48,6 +50,7 @@ enum Symbol: String {
     case cloudDownload = "\u{e089}"
     case cloudUpload = "\u{e091}"
     case code = "\u{e093}"
+    case coins = "\u{e097}"
     case command = "\u{e09a}"
     case copy = "\u{e09e}"
     case cornerLeftUp = "\u{e0a4}"

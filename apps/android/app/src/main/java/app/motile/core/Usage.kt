@@ -3,6 +3,7 @@ package app.motile.core
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import app.motile.platform.Symbol
 
 /** What the usage route shows, kept while it is closed so that it opens with what was last read. */
 class UsageModel {
@@ -23,6 +24,14 @@ class UsageModel {
                 Cost -> "Cost"
                 Tokens -> "Tokens"
                 Limits -> "Limits"
+            }
+
+        val symbol: Symbol
+            get() = when (this) {
+                Activity -> Symbol.Activity
+                Cost -> Symbol.CircleDollarSign
+                Tokens -> Symbol.Coins
+                Limits -> Symbol.Gauge
             }
     }
 

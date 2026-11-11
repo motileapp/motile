@@ -204,8 +204,7 @@ struct ActivityView: View {
 
     private var pointedIndex: Int? {
         guard let pointed, !report.starts.isEmpty else { return nil }
-        let nearest = report.starts.enumerated().min { abs($0.element.timeIntervalSince(pointed)) < abs($1.element.timeIntervalSince(pointed)) }
-        return nearest?.offset
+        return report.starts.lastIndex { $0 <= pointed } ?? 0
     }
 
     // MARK: Clients

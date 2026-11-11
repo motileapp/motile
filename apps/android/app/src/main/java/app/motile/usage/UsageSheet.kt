@@ -1,9 +1,13 @@
 package app.motile.usage
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
@@ -18,17 +22,22 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import app.motile.LocalCloseSheet
 import app.motile.LocalStore
+import app.motile.core.UsageModel
 import app.motile.platform.Symbol
+import app.motile.theme.IconSize
 import app.motile.theme.LocalPalette
+import app.motile.theme.TextSize
 import app.motile.ui.GlassCheckMenu
+import app.motile.ui.Icon
 import app.motile.ui.SheetBar
 import app.motile.ui.SheetCloseButton
+import app.motile.ui.Text
 
 private val margin = 16.dp
 
 /**
  * What was done, what the agents spent and what is left of their plans, in a sheet: the tabs
- * pinned under its bar, the period at the top of the page, and the servers counted in the bar's
+ * in the navigation bar under it, the period at the top of the page, and the servers counted in the bar's
  * menu once there are several. Pulling the page down reads it again.
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -55,7 +64,6 @@ fun UsageSheet() {
                 null
             },
         )
-        UsageTabs(model, Modifier.padding(start = margin, end = margin, top = 4.dp, bottom = 8.dp), fills = true)
         PullToRefreshBox(
             refreshing,
             onRefresh = {
@@ -71,6 +79,32 @@ fun UsageSheet() {
             },
         ) {
             UsageContent(model, margin = margin, top = 4.dp, periodInPage = true)
+        }
+        UsageTabBar(model)
+    }
+}
+
+/** The tabs in the system's navigation bar, under the page. */
+@Composable
+private fun UsageTabBar(model: UsageModel) {
+    val palette = LocalPalette.current
+    val colors = NavigationBarItemDefaults.colors(
+        selectedIconColor = palette.foreground,
+        selectedTextColor = palette.foreground,
+        indicatorColor = palette.segmentSelected,
+        unselectedIconColor = palette.mutedForeground,
+        unselectedTextColor = palette.mutedForeground,
+    )
+    NavigationBar(containerColor = palette.background, windowInsets = WindowInsets(0.dp)) {
+        UsageModel.Tab.entries.forEach { tab ->
+            val selected = model.tab == tab
+            NavigationBarItem(
+                selected,
+                onClick = { model.tab = tab },
+                icon = { Icon(tab.symbol, IconSize.Lg, color = LocalContentColor.current) },
+                label = { Text(tab.label, size = TextSize.Xs, color = LocalContentColor.current) },
+                colors = colors,
+            )
         }
     }
 }

@@ -14,6 +14,7 @@ import app.motile.core.SettingsEntry
 import app.motile.core.SettingsSection
 import app.motile.core.SkillMenuKey
 import app.motile.core.skillKey
+import app.motile.core.UsageModel
 import app.motile.layout.LocalDrawerHolder
 import app.motile.panel.PanelTab
 import app.motile.platform.Platform
@@ -42,6 +43,7 @@ import java.util.concurrent.Executors
  *     sheet commands|projects|settings|usage|server|thread|close
  *     settings <section>|search <text>|pick <group>|close
  *     appearance light|dark|system
+ *     usage activity|cost|tokens|limits  picks a tab of the usage sheet
  *     answer <allow|refuse>             answers the first approval
  *     gateway sign-in claude|codex      starts signing an account in on the gateway
  *     gateway code <code>               finishes Claude's sign-in with the code
@@ -212,6 +214,7 @@ object DemoDriver {
                     else -> store.openSettings(SettingsSection.entries.firstOrNull { it.raw == action } ?: return)
                 }
             }
+            "usage" -> store.usage.tab = UsageModel.Tab.entries.firstOrNull { it.raw == rest } ?: return
             "appearance" -> Appearance.choose(Appearance.of(rest))
             "answer" -> {
                 val approval = store.activity.approvals.firstOrNull() ?: return

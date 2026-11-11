@@ -33,11 +33,6 @@ import app.motile.ui.edgeFade
 fun UsageModel.serverChecks(all: List<Server>): List<Check> =
     all.map { server -> Check(server.id, server.name, server.id in servers) { toggle(server, all) } }
 
-@Composable
-fun UsageTabs(model: UsageModel, modifier: Modifier = Modifier, fills: Boolean = false) {
-    Segmented(UsageModel.Tab.entries.map { it.label to it }, model.tab, { model.tab = it }, modifier, fills = fills)
-}
-
 /** What the open tab shows, in a column that doesn't grow past a width; `periodInPage` puts the period over it, where no bar has it. The page fades under what is pinned over it. */
 @Composable
 fun UsageContent(model: UsageModel, modifier: Modifier = Modifier, margin: Dp = 24.dp, top: Dp = 20.dp, periodInPage: Boolean = false) {
