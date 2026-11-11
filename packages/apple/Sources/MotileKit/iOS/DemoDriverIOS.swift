@@ -21,6 +21,7 @@ import UIKit
 ///     sheet commands|projects|settings|usage|server|thread|close
 ///     settings <section>|search <text>|pick <group>|close
 ///     appearance light|dark|system
+///     usage activity|cost|tokens|limits  picks a tab of the usage sheet
 ///     answer <allow|refuse>             answers the first approval
 ///     gateway sign-in claude|codex        starts signing an account in on the gateway
 ///     gateway code <code>                 finishes Claude's sign-in with the code
@@ -171,6 +172,9 @@ enum DemoDriver {
                 guard let section = SettingsSection(rawValue: verb) else { return }
                 store.openSettings(section)
             }
+        case "usage":
+            guard let tab = UsageModel.Tab(rawValue: rest) else { return }
+            store.usage.tab = tab
         case "appearance":
             UserDefaults.standard.set(rest, forKey: "appearance")
             (Appearance(rawValue: rest) ?? .system).apply()

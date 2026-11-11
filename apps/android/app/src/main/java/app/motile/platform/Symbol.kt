@@ -6,6 +6,7 @@ package app.motile.platform
  * lucide-static's `font/codepoints.json`. The few Lucide doesn't have are drawn by hand in `Icon.kt`.
  */
 enum class Symbol(val character: String?) {
+    Activity("\uE038"),
     AlarmClock("\uE03A"),
     AlarmClockOff("\uE23B"),
     Archive("\uE041"),
@@ -40,6 +41,7 @@ enum class Symbol(val character: String?) {
     CircleArrowDown("\uE078"),
     CircleCheck("\uE226"),
     CircleDashed("\uE4B0"),
+    CircleDollarSign("\uE47D"),
     CircleDot("\uE345"),
     CircleDotDashed("\uE4B1"),
     CirclePlay("\uE080"),
@@ -52,6 +54,7 @@ enum class Symbol(val character: String?) {
     CloudDownload("\uE089"),
     CloudUpload("\uE091"),
     Code("\uE093"),
+    Coins("\uE097"),
     Command("\uE09A"),
     Copy("\uE09E"),
     CornerLeftUp("\uE0A4"),

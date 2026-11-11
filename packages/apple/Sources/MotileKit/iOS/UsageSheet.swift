@@ -1,9 +1,9 @@
 #if os(iOS)
 import SwiftUI
 
-/// What was done, what the agents spent and what is left of their plans, in a sheet: the tabs
-/// pinned under its bar, which the page fades under, the period at the top of the page, and the
-/// servers counted in the bar's menu once there are several. Pulling the page down reads it again.
+/// What was done, what the agents spent and what is left of their plans, in a sheet: the tabs in
+/// the system's tab bar, the period at the top of each page, and the servers counted in the bar's
+/// menu once there are several. Pulling a page down reads it again.
 struct UsageSheet: View {
     private static let margin: CGFloat = 16
 
@@ -13,15 +13,30 @@ struct UsageSheet: View {
     private var picksServers: Bool { store.usageServers.count > 1 }
 
     var body: some View {
-        NavigationStack {
-            UsageContent(model: model, margin: Self.margin, top: 4, periodInPage: true)
-                .refreshable { await model.refreshed() }
-                .pinnedOnTop {
-                    UsageTabs(model: model, fills: true)
-                        .padding(.horizontal, Self.margin)
-                        .padding(.top, 4)
-                        .padding(.bottom, 8)
+        TabView(selection: Bindable(model).tab) {
+            ForEach(UsageModel.Tab.allCases) { tab in
+                Tab(value: tab) {
+                    page(tab)
+                } label: {
+                    Label {
+                        Text(tab.label)
+                    } icon: {
+                        Image(platform: .symbol(tab.symbol, size: .lg))
+                    }
                 }
+            }
+        }
+        .tint(Color.themeForeground)
+        .minimizesOnScroll()
+        .onAppear { model.start(store) }
+        .presentationSizing(.page)
+        .presentationDragIndicator(.visible)
+    }
+
+    private func page(_ tab: UsageModel.Tab) -> some View {
+        NavigationStack {
+            UsageContent(model: model, shown: tab, margin: Self.margin, top: 4, periodInPage: true)
+                .refreshable { await model.refreshed() }
                 .dropdowns()
                 .background(Color.themeBackground.ignoresSafeArea())
                 .navigationTitle("Usage")
@@ -34,8 +49,6 @@ struct UsageSheet: View {
                     }
                 }
         }
-        .presentationSizing(.page)
-        .presentationDragIndicator(.visible)
     }
 
     /// The servers counted, each checked or not.
@@ -46,20 +59,18 @@ struct UsageSheet: View {
             }
         } label: {
             Image(.server, size: .lg)
+                .glassSymbolFrame()
         }
         .accessibilityLabel("Servers counted")
     }
 }
 
 private extension View {
-    /// What stays over the top of the page while it scrolls: on the bar's glass edge where the
-    /// system has one, which the page fades under, else on the page's own background.
-    @ViewBuilder func pinnedOnTop(@ViewBuilder _ content: () -> some View) -> some View {
+    @ViewBuilder func minimizesOnScroll() -> some View {
         if #available(iOS 26, *) {
-            safeAreaBar(edge: .top, spacing: 0, content: content)
-                .scrollEdgeEffectStyle(.soft, for: .top)
+            tabBarMinimizeBehavior(.onScrollDown)
         } else {
-            safeAreaInset(edge: .top, spacing: 0) { content().background(Color.themeBackground) }
+            self
         }
     }
 
