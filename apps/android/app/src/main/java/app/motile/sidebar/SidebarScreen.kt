@@ -403,7 +403,12 @@ fun SidebarScreen(underThread: Boolean) {
                             }
                         }
                         SidebarItem.NewThread -> NewThreadRow(Modifier.fillMaxWidth().height(lineHeight))
-                        SidebarItem.Gap -> Spacer(Modifier.height(with(LocalDensity.current) { gap.toDp() }.coerceAtLeast(1.dp)))
+                        SidebarItem.Gap -> {
+                            val height = with(LocalDensity.current) { gap.toDp() }.coerceAtLeast(listDividerHeight)
+                            Box(Modifier.fillMaxWidth().height(height), contentAlignment = Alignment.BottomCenter) {
+                                if (height <= closestSections) ListDivider()
+                            }
+                        }
                         is SidebarItem.SectionEnd -> ListDivider()
                         is SidebarItem.Header -> SectionHeader(item.section, item.count, expanded(item.section)) {
                             setExpanded(item.section, !expanded(item.section))

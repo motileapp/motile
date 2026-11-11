@@ -28,8 +28,9 @@ struct RecycledList<Item: Identifiable, Row: View>: UIViewRepresentable {
     /// A pointer came to rest on a row, its rect in the view given, or left the rows.
     var pointed: (Item?, CGRect, UIView) -> Void = { _, _, _ in }
     /// The row that takes the room the others leave, so that the rows after it lie at the bottom
-    /// while they all fit. The list draws it itself, never lower than a point.
+    /// while they all fit, never lower than `stretchedLeast`.
     var stretched: Item.ID?
+    var stretchedLeast: CGFloat = 1
     @ViewBuilder let row: (Item) -> Row
     @Environment(AppStore.self) private var store
 
@@ -113,7 +114,7 @@ struct RecycledList<Item: Identifiable, Row: View>: UIViewRepresentable {
         private func stretch(in view: UICollectionView) -> Bool {
             guard let stretched = list?.stretched, let index = ids.firstIndex(of: stretched) else { return false }
             let room = view.bounds.height - view.adjustedContentInset.top - view.adjustedContentInset.bottom
-            let height = max(1, (room - (view.contentSize.height - stretchedHeight)).rounded())
+            let height = max(list?.stretchedLeast ?? 1, (room - (view.contentSize.height - stretchedHeight)).rounded())
             guard abs(height - stretchedHeight) >= 1 else { return false }
             stretchedHeight = height
             if let cell = view.cellForItem(at: IndexPath(item: index, section: 0)) as? RecycledCell {
@@ -219,14 +220,14 @@ struct RecycledList<Item: Identifiable, Row: View>: UIViewRepresentable {
         private func configure(_ cell: RecycledCell, at index: Int) {
             guard let list, let store, let item = list.items[safe: index] else { return }
             cell.generation = generation
+            let row = RecycledRow(row: list.row(item), store: store, surface: surface)
             if item.id == list.stretched {
                 let height = stretchedHeight
-                cell.contentConfiguration = UIHostingConfiguration { Color.clear.frame(height: height) }
+                cell.contentConfiguration = UIHostingConfiguration { row.frame(height: height) }
                     .margins(.all, 0)
                     .minSize(width: 0, height: 0)
                 return
             }
-            let row = RecycledRow(row: list.row(item), store: store, surface: surface)
             cell.contentConfiguration = UIHostingConfiguration { row }
                 .margins(.all, 0)
                 .minSize(width: 0, height: 0)

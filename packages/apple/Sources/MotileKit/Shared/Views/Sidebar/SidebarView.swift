@@ -163,8 +163,13 @@ struct SidebarView: View {
                     .padding(.vertical, 6 + rowGap / 2)
                 case .newThread:
                     NewThreadRow()
-                case .gap:
-                    Color.clear
+                case .gap(let height):
+                    if height <= ListDivider.closest {
+                        ListDivider()
+                            .frame(maxHeight: .infinity, alignment: .bottom)
+                    } else {
+                        Color.clear
+                    }
                 case .sectionEnd:
                     ListDivider()
                 case .header(let section, let count):
@@ -214,7 +219,7 @@ struct SidebarView: View {
         guard !shelved.isEmpty else { return items }
         let insets = 4 - rowGap / 2 + 4 - rowGap / 2 + 2
         let used = (items + shelved).reduce(insets) { $0 + height(of: $1, drafts: drafts.count) }
-        return items + [.gap(max(1, (listHeight - used).rounded()))] + shelved
+        return items + [.gap(max(ListDivider.height, (listHeight - used).rounded()))] + shelved
     }
 
     /// The shelf the thread the sidebar reveals is on.
@@ -718,8 +723,11 @@ struct DraftRows: View {
 
 /// The line that sets a group of the list's rows off from the rows under it: the drafts, or an
 /// open section.
+/// The line under the drafts or an open section, and over the sections while they come within
+/// `closest` of the rows above them.
 struct ListDivider: View {
     static let height = 1 + 2 * (4 + rowGap / 2)
+    static let closest: CGFloat = 80
 
     var body: some View {
         ThemeDivider(dashed: true)

@@ -353,6 +353,12 @@ fun DraftRows(
     }
 }
 
+/** How tall the list's divider is, with the room around it. */
+val listDividerHeight = 1.dp + (4.dp + rowGap / 2) * 2
+
+/** How close the sections may come under the rows above them before a divider sets them apart. */
+val closestSections = 80.dp
+
 /** The line that sets a group of the list's rows off from the rows under it: the drafts, or an open section. */
 @Composable
 fun ListDivider() {

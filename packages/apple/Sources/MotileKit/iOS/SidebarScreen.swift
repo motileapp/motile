@@ -67,7 +67,8 @@ struct SidebarScreen: View {
                     if case .result(let result) = item, let index = results.firstIndex(where: { $0.id == result.id }) { highlighted.point(index) }
                     ThreadPeek.shared.point(at: item?.thread, row: row, in: view, store: store)
                 },
-                stretched: "gap"
+                stretched: "gap",
+                stretchedLeast: ListDivider.height
             ) { item in
                 row(item, shown: shown)
             }
@@ -229,7 +230,12 @@ struct SidebarScreen: View {
             NewThreadRow()
                 .frame(height: 44)
         case .gap:
-            Color.clear
+            GeometryReader { geometry in
+                if geometry.size.height <= ListDivider.closest {
+                    ListDivider()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                }
+            }
         case .sectionEnd:
             ListDivider()
         case .header(let section, let count):

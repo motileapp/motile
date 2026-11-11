@@ -162,7 +162,13 @@ export function Sidebar({
             />
           ))}
         {!query && (working.length > 0 || snoozedThreads.length > 0 || archivedThreads.length > 0) && (
-          <div className="mt-auto pt-px pb-0.5">
+          <>
+          <div className="flex min-h-[11px] flex-1 flex-col justify-end [container-type:size]">
+            <div className="hidden [@container(max-height:80px)]:block">
+              <ListDivider />
+            </div>
+          </div>
+          <div className="pt-px pb-0.5">
           {!query && working.length > 0 && (
             <Section
               title="Working"
@@ -231,6 +237,7 @@ export function Sidebar({
             </Section>
           )}
           </div>
+          </>
         )}
       </div>
       <div className="border-t">
@@ -514,10 +521,14 @@ function Section({
         <Chevron open={open} />
       </button>
       {open && children}
-      {open && divided && (
-        <div className="mx-4 my-[5px] h-px bg-[repeating-linear-gradient(to_right,var(--color-border)_0_4px,transparent_4px_7px)]" />
-      )}
+      {open && divided && <ListDivider />}
     </>
+  )
+}
+
+function ListDivider() {
+  return (
+    <div className="mx-4 my-[5px] h-px bg-[repeating-linear-gradient(to_right,var(--color-border)_0_4px,transparent_4px_7px)]" />
   )
 }
 
