@@ -143,12 +143,15 @@ struct SettingsPage: View {
             SettingsRow {
                 SettingsLabel("Log", description: logDescription)
             } trailing: {
-                ActionButton("Show in Finder", variant: .outline, size: .large) {
-                    guard let file = store.logFile else { return }
-                    NSWorkspace.shared.activateFileViewerSelecting([file])
-                }
+                ActionButton("Show in Finder", variant: .outline, size: .large, action: revealLog)
+                    .takesFirstClick(revealLog)
             }
         }
+    }
+
+    private func revealLog() {
+        guard let file = store.logFile else { return }
+        MediaFiles.reveal(file)
     }
 
     @ViewBuilder private var servers: some View {

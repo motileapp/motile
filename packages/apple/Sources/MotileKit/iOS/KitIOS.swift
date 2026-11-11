@@ -93,6 +93,8 @@ class FlippedView: UIView, UIContextMenuInteractionDelegate, UIGestureRecognizer
             hover = recognizer
         }
     }
+    /// Only the Mac's windows wait to be brought forward before they take a click.
+    var takesFirstClick = false
     var menuActions: (() -> [MenuAction])? {
         didSet {
             guard menuActions != nil, !hasMenu else { return }

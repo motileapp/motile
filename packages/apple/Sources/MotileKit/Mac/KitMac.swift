@@ -89,6 +89,8 @@ class FlippedView: NSView, CursorOwner {
     var onDrag: ((DragPhase, CGPoint) -> Void)?
     /// Called with 1 or -1 when an assistive technology steps its value.
     var onAdjust: ((Int) -> Void)?
+    /// Takes the click that brings its window forward, for what is harmless to do by accident.
+    var takesFirstClick = false
     private var tracking: NSTrackingArea?
     private var dragging = false
 
@@ -141,6 +143,10 @@ class FlippedView: NSView, CursorOwner {
     /// Whether a click at the point is the view's.
     func takesPress(at point: CGPoint) -> Bool {
         bounds.contains(point)
+    }
+
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+        takesFirstClick || super.acceptsFirstMouse(for: event)
     }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
@@ -815,6 +821,25 @@ enum MediaFiles {
     static let revealTitle = "Show in Finder"
 
     static func reveal(_ file: URL, named name: String, from view: NSView) {
+        reveal(file)
+    }
+
+    /// Waits for the press to end: the click's release would otherwise keep this app in front.
+    static func reveal(_ file: URL) {
+        guard NSEvent.pressedMouseButtons & 1 != 0 else { return showInFinder(file) }
+        var release: Any?
+        release = NSEvent.addLocalMonitorForEvents(matching: .leftMouseUp) { event in
+            if let release { NSEvent.removeMonitor(release) }
+            release = nil
+            DispatchQueue.main.async { showInFinder(file) }
+            return event
+        }
+    }
+
+    /// Hands Finder the front first: a Finder slow to ask for it is refused after any newer event
+    /// of this app's, and reveals the file behind the window.
+    private static func showInFinder(_ file: URL) {
+        NSApp.yieldActivation(toApplicationWithBundleIdentifier: "com.apple.finder")
         NSWorkspace.shared.activateFileViewerSelecting([file])
     }
 
