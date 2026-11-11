@@ -20,7 +20,7 @@ use crate::theme::{ControlSize, IconSize, Opacity, Radius, Surface, TextSize, co
 use crate::ui::logos::{self, PullRequestLabel};
 use crate::ui::menu::Menu;
 use crate::ui::{
-    ActionButton, ActionMenu, Highlight, KeyCaps, Spinner, dashed_divider, icons, tabular_numbers, tooltip,
+    ActionButton, ActionMenu, Highlight, KeyCaps, Spinner, dashed_divider, icons, sharing, tabular_numbers, tooltip,
 };
 
 /// How tall the line under the drafts or an open section is, with the room around it.
@@ -185,16 +185,18 @@ impl Sidebar {
 
     /// What a thread's row offers under the pointer: a snooze, and archiving it once it has finished.
     fn row_buttons(&self, thread: &ThreadInfo, selected: bool, cx: &App) -> Div {
+        const GAP: f32 = 2.;
         let id = thread.id.clone();
-        let snooze = self.store.read(cx).snoozes(thread).then(|| {
+        let snoozes = self.store.read(cx).snoozes(thread);
+        let count = usize::from(snoozes) + usize::from(!thread.unfinished());
+        let snooze = snoozes.then(|| {
             let (store, thread_id) = (self.store.clone(), id.clone());
             let menu =
                 ActionMenu::icon(SharedString::from(format!("snooze-{id}")), "alarm-clock", "Snooze", move |_, _| {
                     snooze_menu(&store, &thread_id)
                 })
-                .button(|button| {
-                    button.small().symbol_size(ControlSize::Small.small_symbol()).row(row_layer(selected))
-                });
+                .button(|button| button.small().symbol_size(ControlSize::Small.small_symbol()).row(row_layer(selected)))
+                .margin(sharing(GAP, 0, count));
             stop_press(menu)
         });
         let archive = (!thread.unfinished()).then(|| {
@@ -205,6 +207,7 @@ impl Sidebar {
                 .ghost()
                 .small()
                 .row(row_layer(selected))
+                .margin(sharing(GAP, count - 1, count))
                 .on_click(move |_, _, cx| {
                     store.update(cx, |store, cx| {
                         store.set_archived(std::slice::from_ref(&thread_id), true, true, cx);
@@ -213,7 +216,7 @@ impl Sidebar {
                 });
             stop_press(button)
         });
-        div().flex().items_center().gap(px(2.)).children(snooze).children(archive)
+        div().flex().items_center().children(snooze).children(archive)
     }
 
     /// An active thread. `movable` rows are picked up by a press the list follows; the others

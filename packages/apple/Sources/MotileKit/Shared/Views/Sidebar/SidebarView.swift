@@ -495,16 +495,24 @@ private struct RowButtons: View {
     @Environment(AppStore.self) private var store
     let thread: ThreadInfo
 
+    private static let gap: CGFloat = 2
+
     var body: some View {
-        HStack(spacing: 2) {
-            if store.snoozes(thread) {
-                ActionMenu(icon: .alarmClock, help: "Snooze", size: .small, symbolSize: ControlSize.small.smallSymbol) {
+        let snoozes = store.snoozes(thread)
+        let count = (snoozes ? 1 : 0) + (thread.unfinished ? 0 : 1)
+        HStack(spacing: 0) {
+            if snoozes {
+                ActionMenu(
+                    icon: .alarmClock, help: "Snooze", size: .small, symbolSize: ControlSize.small.smallSymbol,
+                    margin: .sharing(Self.gap, at: 0, of: count)
+                ) {
                     SnoozeItems(store: store, threadIDs: [thread.id], fromSidebar: true)
                 }
             }
             if !thread.unfinished {
                 ActionButton(
-                    "Archive", icon: .check, variant: .ghost, size: .small, symbolSize: ControlSize.small.smallSymbol
+                    "Archive", icon: .check, variant: .ghost, size: .small, symbolSize: ControlSize.small.smallSymbol,
+                    margin: .sharing(Self.gap, at: count - 1, of: count)
                 ) { store.setArchived([thread.id], archived: true, fromSidebar: true) }
                     .fixedSize()
             }
