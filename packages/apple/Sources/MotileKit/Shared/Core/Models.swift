@@ -1438,6 +1438,8 @@ struct Question: Equatable, Identifiable {
     struct Choice: Equatable, Identifiable {
         let label: String
         let detail: String
+        /// The agent suggests it.
+        let recommended: Bool
 
         var id: String { label }
     }
@@ -1454,7 +1456,7 @@ struct Question: Equatable, Identifiable {
     init(json: JSON) {
         header = json.string("header")
         text = json.string("text")
-        options = json.objects("options").map { Choice(label: $0.string("label"), detail: $0.string("detail")) }
+        options = json.objects("options").map { Choice(label: $0.string("label"), detail: $0.string("detail"), recommended: $0.bool("recommended")) }
         multiple = json.bool("multiple")
     }
 }

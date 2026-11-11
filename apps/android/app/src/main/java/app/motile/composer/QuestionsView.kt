@@ -1,121 +1,69 @@
 package app.motile.composer
 
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateMapOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.motile.LocalStore
 import app.motile.core.Approval
 import app.motile.core.Question
+import app.motile.core.canGoOn
+import app.motile.core.choose
+import app.motile.core.goBack
+import app.motile.core.goOn
+import app.motile.core.isChosen
+import app.motile.core.isLastQuestion
+import app.motile.core.question
+import app.motile.core.questionIndex
+import app.motile.core.typedAnswer
 import app.motile.platform.Symbol
-import app.motile.theme.ControlSize
+import app.motile.theme.IconSize
 import app.motile.theme.LocalForeground
 import app.motile.theme.Radius
 import app.motile.theme.TextSize
 import app.motile.theme.Theme
+import app.motile.theme.at
+import app.motile.theme.wash
 import app.motile.ui.ActionButton
-import app.motile.ui.beside
 import app.motile.ui.ButtonVariant
+import app.motile.ui.Chip
 import app.motile.ui.Disabled
 import app.motile.ui.HighlightButton
-import app.motile.ui.HoverHighlight
-import app.motile.ui.InputField
-import app.motile.ui.InputVariant
+import app.motile.ui.Icon
 import app.motile.ui.PickMark
 import app.motile.ui.Text
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
+import app.motile.ui.beside
 
 /** How far past its text an option's light and the room to press it reach. */
 private val optionReach = 8.dp
+private val optionGap = 2.dp
 private val markGap = 10.dp
-/** The room between two options' lights, under each but the last: only drawn, so that their presses meet. */
-private val optionLight = PaddingValues(bottom = 2.dp)
 
 /**
  * The questions an agent asks with a tool call, one at a time. Each takes one of its options,
- * several of them when it allows that, or an answer typed in place of them.
+ * several of them when it allows that, or an answer written in the composer in place of them.
  */
 @Composable
 fun QuestionsView(approval: Approval, modifier: Modifier = Modifier) {
     val store = LocalStore.current
     val palette = Theme.colors
-    val scope = rememberCoroutineScope()
-    var index by remember { mutableIntStateOf(0) }
-    val chosen = remember { mutableStateMapOf<String, Set<String>>() }
-    val typed = remember { mutableStateMapOf<String, String>() }
-    var typing by remember { mutableStateOf(false) }
-    val typingFocus = remember { FocusRequester() }
-
     val questions = approval.questions
-    val question = questions[index.coerceAtMost(questions.size - 1)]
-    val isLast = index >= questions.size - 1
-
-    /** What was typed for a question, or else the options chosen for it, in their order. */
-    fun answers(): Map<String, String> = buildMap {
-        for (asked in questions) {
-            val written = (typed[asked.id] ?: "").trim()
-            val picked = asked.options.map { it.label }.filter { chosen[asked.id]?.contains(it) == true }
-            val answer = written.ifEmpty { picked.joinToString(", ") }
-            if (answer.isNotEmpty()) put(asked.text, answer)
-        }
-    }
-
-    fun canGoOn(): Boolean = if (isLast) answers().size == questions.size else answers()[question.text] != null
-
-    /** Answers the questions after the last, or else goes on to the next. */
-    fun goOn() {
-        if (!canGoOn()) return
-        if (!isLast) {
-            index += 1
-            return
-        }
-        store.answer(approval, allow = true, answers = answers())
-    }
-
-    /** What is typed counts in place of the options, so none shows as chosen beside it. */
-    fun isChosen(option: Question.Choice): Boolean {
-        if ((typed[question.id] ?: "").isNotEmpty()) return false
-        return chosen[question.id]?.contains(option.label) == true
-    }
-
-    fun choose(option: Question.Choice) {
-        typed.remove(question.id)
-        typing = false
-        if (!question.multiple) {
-            chosen[question.id] = setOf(option.label)
-            if (isLast) return
-            val asked = index
-            scope.launch {
-                delay(200)
-                if (index == asked) index += 1
-            }
-            return
-        }
-        val picked = chosen[question.id] ?: emptySet()
-        chosen[question.id] = if (option.label in picked) picked - option.label else picked + option.label
-    }
+    val question = store.question(approval)
+    val index = store.questionIndex(approval)
 
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -128,53 +76,76 @@ fun QuestionsView(approval: Approval, modifier: Modifier = Modifier) {
             Text(question.text, size = TextSize.Sm, weight = FontWeight.Medium, style = Theme.ui(TextSize.Sm, FontWeight.Medium).copy(lineHeight = Theme.ui(TextSize.Sm).fontSize * 1.35f))
             if (question.multiple) Text("Choose any that apply", size = TextSize.Xs, color = palette.mutedForeground)
         }
-        Column(Modifier.overhang(horizontal = optionReach)) {
-            for (option in question.options) {
-                val picked = isChosen(option)
-                HighlightButton(
-                    { choose(option) }, Modifier.fillMaxWidth(), radius = Radius.md, lit = picked, inset = optionLight, fill = palette.borderComposer,
-                ) {
-                    Row(
-                        Modifier.padding(optionLight).padding(horizontal = optionReach, vertical = 8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(markGap),
-                    ) {
-                        PickMark(picked, question.multiple, Modifier.padding(top = 2.dp))
-                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                            Text(option.label, size = TextSize.Sm, weight = FontWeight.Medium, color = palette.foreground)
-                            if (option.detail.isNotEmpty()) Text(option.detail, size = TextSize.Xs, color = palette.mutedForeground)
-                        }
-                    }
-                }
-            }
-            val written = (typed[question.id] ?: "").isNotEmpty()
-            HoverHighlight(
-                Modifier.fillMaxWidth().clickable(interactionSource = null, indication = null) { runCatching { typingFocus.requestFocus() } },
-                radius = Radius.md, lit = written || typing, fill = palette.borderComposer,
-            ) {
-                Row(
-                    Modifier.padding(horizontal = optionReach, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(markGap),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    PickMark(written, question.multiple)
-                    InputField(
-                        "Something else", typed[question.id] ?: "", { typed[question.id] = it },
-                        Modifier.weight(1f).height(ControlSize.Large.height).offset(x = -(ControlSize.Large.padding - 2.dp)),
-                        variant = InputVariant.Bare, size = ControlSize.Large, focusRequester = typingFocus,
-                        onFocusChange = { typing = it }, onSubmit = ::goOn,
-                    )
-                }
-            }
+        Column(Modifier.overhang(horizontal = optionReach), verticalArrangement = Arrangement.spacedBy(optionGap)) {
+            for (option in question.options) OptionRow(approval, option, question.multiple)
+            OwnAnswerRow(approval, question.multiple)
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            if (index > 0) ActionButton("Back", Symbol.ChevronLeft, variant = ButtonVariant.Ghost, size = ControlSize.Small) { index -= 1 }
+            if (index > 0) ActionButton("Back", Symbol.ChevronLeft, variant = ButtonVariant.Ghost) { store.goBack(approval) }
             Spacer(Modifier.weight(1f))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                ActionButton(approval.refuseLabel, size = ControlSize.Small, margin = beside(end = 8.dp)) { store.answer(approval, allow = false) }
-                Disabled(!canGoOn()) {
-                    ActionButton(if (isLast) approval.allowLabel else "Next", variant = ButtonVariant.Primary, size = ControlSize.Small, onClick = ::goOn)
+                ActionButton(approval.refuseLabel, variant = ButtonVariant.Ghost, margin = beside(end = 8.dp)) { store.answer(approval, allow = false) }
+                Disabled(!store.canGoOn(approval)) {
+                    ActionButton(if (store.isLastQuestion(approval)) approval.allowLabel else "Next", variant = ButtonVariant.Primary) { store.goOn(approval) }
                 }
             }
         }
     }
+}
+
+@Composable
+private fun OptionRow(approval: Approval, option: Question.Choice, multiple: Boolean) {
+    val store = LocalStore.current
+    val palette = Theme.colors
+    val picked = store.isChosen(option, approval)
+    HighlightButton({ store.choose(option, approval) }, Modifier.fillMaxWidth(), radius = Radius.md, fill = palette.borderComposer) {
+        Row(Modifier.fillMaxWidth().picked(picked, pickedLook()).padding(horizontal = optionReach, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(markGap)) {
+            PickMark(picked, multiple, Modifier.padding(top = 2.dp))
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(option.label, Modifier.weight(1f, fill = false).alignByBaseline(), size = TextSize.Sm, weight = FontWeight.Medium, color = palette.foreground)
+                    if (option.recommended) Chip("Recommended", Modifier.alignByBaseline(), tone = palette.success, compact = true)
+                }
+                if (option.detail.isNotEmpty()) Text(option.detail, size = TextSize.Xs, color = palette.mutedForeground)
+            }
+        }
+    }
+}
+
+/** The last row, which shows the answer written in the composer, or says to write one there. */
+@Composable
+private fun OwnAnswerRow(approval: Approval, multiple: Boolean) {
+    val store = LocalStore.current
+    val palette = Theme.colors
+    val written = store.typedAnswer(approval).trim()
+    HighlightButton({ store.focusComposer() }, Modifier.fillMaxWidth(), radius = Radius.md, fill = palette.borderComposer) {
+        Row(Modifier.fillMaxWidth().picked(written.isNotEmpty(), pickedLook()).padding(horizontal = optionReach, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(markGap)) {
+            if (written.isEmpty()) {
+                Box(Modifier.width(PickMark.size).padding(top = 2.dp), contentAlignment = Alignment.Center) {
+                    Icon(Symbol.PencilLine, IconSize.Sm, color = palette.mutedForeground)
+                }
+            } else {
+                PickMark(true, multiple, Modifier.padding(top = 2.dp))
+            }
+            Text(
+                written.ifEmpty { if (multiple) "Add your own answer below" else "Or type your own answer below" }, Modifier.weight(1f), size = TextSize.Sm, weight = FontWeight.Medium,
+                color = if (written.isEmpty()) palette.mutedForeground else palette.foreground, maxLines = 3,
+            )
+        }
+    }
+}
+
+/** The option's look once it is the answer: the primary colour's wash inside a line of its stronger wash, apart from the plain light of a press. */
+@Composable
+private fun pickedLook(): PickedLook {
+    val palette = Theme.colors
+    return PickedLook(palette.primary.wash(), palette.primary.wash(lit = true))
+}
+
+private data class PickedLook(val wash: Color, val line: Color)
+
+private fun Modifier.picked(picked: Boolean, look: PickedLook): Modifier {
+    if (!picked) return this
+    val shape = RoundedCornerShape(Radius.md)
+    return background(look.wash, shape).border(1.dp, look.line, shape)
 }

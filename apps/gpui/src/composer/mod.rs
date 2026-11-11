@@ -12,7 +12,6 @@ mod strips;
 mod unlinked;
 
 use std::cell::Cell;
-use std::collections::HashMap;
 use std::rc::Rc;
 use std::time::Duration;
 
@@ -25,7 +24,6 @@ use motile_core::link::State;
 use motile_protocol::wire::{Access, Interruption};
 
 use self::picker::ComposerPicker;
-use self::questions::Questions;
 use self::strips::{BranchPicker, agents_strip, context_strip, interruption_strip, monitoring_strip, waiting_strip};
 use crate::models::{ComposerPickerPart, ThreadInfo, access_label, section_label};
 use crate::store::Store;
@@ -104,15 +102,14 @@ struct RowWidths {
 pub struct Composer {
     store: Entity<Store>,
     text: Entity<TextareaState>,
-    /// What the text was loaded from: the draft or thread it belongs to, and the counts that
-    /// say it changed outside the composer or should take the keyboard.
-    loaded: (String, u64, u64, u64),
+    /// What the text was loaded from: the draft or thread it belongs to, the counts that say it
+    /// changed outside the composer or should take the keyboard, and the question it answers.
+    loaded: (String, u64, u64, u64, Option<(String, usize)>),
     branch_anchor: Anchor,
     branch_picker: Option<Entity<BranchPicker>>,
     /// The settings button's background, which the picker opens over.
     settings_anchor: Anchor,
     picker: Option<Entity<ComposerPicker>>,
-    questions: HashMap<String, Entity<Questions>>,
     placeholder_shown: String,
     /// Redraws the strips' times: every second while the agent monitors, every 30 seconds while
     /// an interruption says when the thread goes on.
@@ -153,12 +150,11 @@ impl Composer {
         let mut composer = Self {
             store,
             text,
-            loaded: (String::new(), u64::MAX, u64::MAX, u64::MAX),
+            loaded: (String::new(), u64::MAX, u64::MAX, u64::MAX, None),
             branch_anchor: Anchor::default(),
             branch_picker: None,
             settings_anchor: Anchor::default(),
             picker: None,
-            questions: HashMap::new(),
             placeholder_shown: String::new(),
             ticker: None,
             row: Rc::default(),
@@ -175,14 +171,14 @@ impl Composer {
     }
 
     /// Keeps what is written in the store. Only whether there is anything to send is shown
-    /// outside the composer, so only that change is told.
+    /// outside the composer, and an answer to a question, so only those changes are told.
     fn write(&self, value: String, cx: &mut Context<Self>) {
         self.store.update(cx, |store, cx| {
             let before = store.draft();
             if before == value {
                 return;
             }
-            let told = before.trim().is_empty() != value.trim().is_empty();
+            let told = store.asking().is_some() || before.trim().is_empty() != value.trim().is_empty();
             store.set_draft(value);
             if told {
                 cx.notify();
@@ -230,7 +226,8 @@ impl Composer {
     /// Shows the text of the draft or thread that is open, and takes the keyboard when it opens.
     fn follow_store(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let store = self.store.read(cx);
-        let key = (store.draft_key(), store.draft_version, store.composer_focus, store.blur_composer);
+        let asked = store.asking().map(|approval| (approval.id.clone(), store.question_index(approval)));
+        let key = (store.draft_key(), store.draft_version, store.composer_focus, store.blur_composer, asked);
         let placeholder = self.placeholder(cx);
         let wants_picker = store.shows_branches;
         let wants_settings = store.composer_picker.is_some();
@@ -277,7 +274,6 @@ impl Composer {
             self.picker = None;
         }
         crate::ui::popover_shown("composer-picker", wants_settings, cx);
-        self.follow_approvals(window, cx);
         self.tick(tick, cx);
         self.follow_worktree_start(cx);
         self.follow_skills_key(cx);
@@ -308,28 +304,6 @@ impl Composer {
             return;
         }
         self.store.update(cx, |store, _| store.read_worktree_start(fetch));
-    }
-
-    /// Keeps a view for the questions of each tool call that asks some.
-    fn follow_approvals(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let approvals: Vec<_> = self
-            .store
-            .read(cx)
-            .activity
-            .approvals
-            .iter()
-            .filter(|approval| !approval.questions.is_empty())
-            .cloned()
-            .collect();
-        self.questions.retain(|id, _| approvals.iter().any(|approval| &approval.id == id));
-        for approval in approvals {
-            if self.questions.contains_key(&approval.id) {
-                continue;
-            }
-            let store = self.store.clone();
-            let id = approval.id.clone();
-            self.questions.insert(id, cx.new(|cx| Questions::new(store, approval, window, cx)));
-        }
     }
 
     /// How often a strip's time changes, in seconds, while one shows a time.
@@ -375,6 +349,9 @@ impl Composer {
         }
         if server.models.is_empty() && server.known {
             return "Install Claude Code or Codex".into();
+        }
+        if store.asking().is_some() {
+            return "Type your own answer".into();
         }
         if store.activity.running {
             return "Send a follow-up".into();
@@ -919,8 +896,7 @@ impl Render for Composer {
         let top_strip: Option<Div> = if unlinked.is_some() {
             None
         } else if let Some(approval) = &approval {
-            let questions = self.questions.get(&approval.id).cloned();
-            Some(waiting_strip(&self.store, approval, count, questions, cx))
+            Some(waiting_strip(&self.store, approval, count, cx))
         } else if let Some((text, first, count)) = waiting_children {
             Some(children::children_strip(&self.store, text, &first, count, cx))
         } else if let Some(interruption) = interrupted {

@@ -23,6 +23,8 @@ reply made up on the spot instead:
   before each of the two and waits for the answer on stdin. Its reply ends with what it was told
   while it worked.
 - "which color": a turn that asks the user a question and goes on with the answer.
+- "ask a few questions": a turn that asks three questions at once, one with a recommended option and
+  one that takes several, and says what it was told.
 - "plan the hello": a turn that presents a plan and, once that is approved, carries it out.
 - "show the screenshot": a turn that writes `screenshot.png` in its folder and shows it in the reply.
 - "send the report": a turn that writes `signups.csv` in its folder and sends it in the reply.
@@ -1082,6 +1084,38 @@ def which_color():
     turn.done()
 
 
+def ask_a_few_questions():
+    turn = Turn("00000000-0000-4000-8000-0000000c0103")
+    questions = [
+        {"question": "The slot becomes 14.2 mm wide, so the rear corner stops would close off the whole rear end, "
+                     "which could block the SSD's USB-C port. What should the rear end be?",
+         "header": "Rear end", "multiSelect": False,
+         "options": [{"label": "Open rear, side walls only (Recommended)",
+                      "description": "No cross legs at the rear, so the port end is fully open."},
+                     {"label": "Closed rear", "description": "Rear end fully walled like the front."},
+                     {"label": "Small rear lips",
+                      "description": "Short 3 mm cross legs at each rear corner, leaving the middle open for the port."}]},
+        {"question": "Which finishes should the print get?", "header": "Finish", "multiSelect": True,
+         "options": [{"label": "Chamfered edges", "description": "0.4 mm on every outer edge"},
+                     {"label": "Fuzzy skin", "description": "On the side walls only"},
+                     {"label": "Ironed top", "description": "A smooth top face"}]},
+        {"question": "Which printer should it be sliced for?", "header": "Printer", "multiSelect": False,
+         "options": [{"label": "X1 Carbon", "description": ""}, {"label": "A1 mini", "description": ""}]},
+    ]
+    told = {}
+
+    def answered(answer):
+        told.update(answer["updatedInput"]["answers"])
+        return "Your questions have been answered."
+
+    if turn.tool("AskUserQuestion", {"questions": questions}, answered, ask=True):
+        lines = [f"- {question['header']}: {told.get(question['question'], 'no answer')}" for question in questions]
+        turn.text("Going with:\n\n" + "\n".join(lines))
+    else:
+        turn.text("I'll leave the design as it is.")
+    turn.done()
+
+
 def limit_resets():
     return int(time.time() + float(os.environ.get("FAKE_AGENT_RESET", "3600")))
 
@@ -1636,6 +1670,7 @@ SCRIPTED = {
     "look over greet.py slowly": look_over_slowly,
     "look over": look_over,
     "ask which color": which_color,
+    "ask a few questions": ask_a_few_questions,
     "change the settings": change_the_settings,
     "show the screenshot": show_screenshot,
     "send the report": send_the_report,

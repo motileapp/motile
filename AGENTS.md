@@ -829,6 +829,7 @@ clients. It replays the recorded output in `fixtures/` or makes up a turn, depen
 | "wait for more" | Sent now while it writes, waits for the next message sent now, which stops it before its answer, so it is never repeated (Claude Code) |
 | "too late" | Sent while it works, is refused once the turn ends, as a steer that comes as the turn ends is (Codex) |
 | "which color" | Asks the user a question |
+| "ask a few questions" | Asks three questions at once, one with a recommended option and one that takes several (Claude Code) |
 | "plan the hello" | Presents a plan to approve |
 | "hit the limit" | Is stopped by the usage limit, which resets `FAKE_AGENT_RESET` seconds later |
 | "agents hit the limit" | Is stopped by the usage limit while two agents it started work, which it stops after the turn (Claude Code) |

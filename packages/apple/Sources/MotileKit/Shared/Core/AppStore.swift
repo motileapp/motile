@@ -304,6 +304,13 @@ final class AppStore {
     @ObservationIgnored private var awaitedFolder: (serverID: String, path: String)?
     /// Counts up when the composer should take the keyboard back.
     private(set) var composerFocus = 0
+
+    /// Counts up when something asks the composer to take the keyboard, as a press in it does.
+    private(set) var composerPress = 0
+
+    func focusComposer() {
+        composerPress += 1
+    }
     /// The skills that fit the word being typed in the composer, and the one lit.
     var skillMenu: SkillMenu?
     let skillHighlight = Highlight()
@@ -391,6 +398,8 @@ final class AppStore {
     private(set) var selectedThread: ThreadInfo?
     private(set) var parentThread: ThreadInfo?
     private(set) var activity = Activity()
+    /// How far the questions of each tool call that asks some are answered, by its id.
+    var questionAnswers: [String: QuestionAnswers] = [:]
     private(set) var transcriptIsEmpty = true
     /// The agents the open thread's agent has started, in the order it started them.
     private(set) var agents: [AgentInfo] = []
@@ -1341,9 +1350,17 @@ final class AppStore {
         }
     }
 
+    /// What the composer says: the draft, or while the agent asks questions, the answer written to
+    /// the one that shows.
     var draft: String {
-        get { drafts[draftKey] ?? "" }
-        set { setText(newValue, for: draftKey) }
+        get {
+            guard let asking else { return drafts[draftKey] ?? "" }
+            return typedAnswer(asking)
+        }
+        set {
+            guard let asking else { return setText(newValue, for: draftKey) }
+            writeAnswer(newValue, to: asking)
+        }
     }
 
     var attachments: [Attachment] { attachmentsByKey[draftKey] ?? [] }
@@ -2478,6 +2495,7 @@ final class AppStore {
     }
 
     var canSend: Bool {
+        if let asking { return composerServer?.state == .connected && canGoOn(asking) }
         guard sendingDrafts[draftKey] == nil, let server = composerServer, server.state == .connected else { return false }
         if selectedThread == nil && project(selectedDraft?.projectID) == nil { return false }
         guard attachments.allSatisfy({ $0.state == .ready && $0.serverID == server.id }) else { return false }
@@ -2505,6 +2523,7 @@ final class AppStore {
     /// Sends what is written. While the agent works, an `alternate` message steers when the
     /// setting queues, and queues when it steers.
     func send(alternate: Bool = false) {
+        if let asking { return goOn(asking) }
         guard canSend else { return }
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         let attached = attachments
@@ -2727,6 +2746,7 @@ final class AppStore {
         guard let thread = selectedThread, !onRemovedServer(thread) else { return }
         let answer: JSON = ["type": "answer", "thread_id": thread.id, "approval_id": approval.id, "allow": allow, "answers": answers]
         request(thread.serverID, answer)
+        questionAnswers[approval.id] = nil
     }
 
     /// Tells the core what the user did to a node of a program in the thread's transcript.

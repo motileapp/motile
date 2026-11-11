@@ -12,7 +12,7 @@ use motile_core::api::Children;
 use motile_core::render::rows::Waiting;
 use motile_protocol::wire::{Branch, Interruption};
 
-use crate::composer::questions::Questions;
+use crate::composer::questions::questions;
 use crate::composer::{RADIUS, composer_divider};
 use crate::models::{
     Project, Server, ThreadInfo, elapsed, interruption_detail, interruption_label, interruption_title, now,
@@ -340,16 +340,11 @@ const TARGET_HEIGHT: f32 = theme::CODE_LINE_HEIGHT * 8. + TARGET_INSET * 2.;
 
 /// The tool call the agent waits with, above the composer: it is allowed or refused, and one
 /// that asks questions is answered. The calls behind it wait their turn.
-pub fn waiting_strip(
-    store: &Entity<Store>,
-    approval: &Waiting,
-    count: usize,
-    questions: Option<Entity<Questions>>,
-    cx: &App,
-) -> Div {
-    let content = match questions {
-        Some(questions) => div().p(px(PADDING)).child(questions).into_any_element(),
-        None => waiting_call(store, approval, count, cx).into_any_element(),
+pub fn waiting_strip(store: &Entity<Store>, approval: &Waiting, count: usize, cx: &App) -> Div {
+    let content = if approval.questions.is_empty() {
+        waiting_call(store, approval, count, cx)
+    } else {
+        div().p(px(PADDING)).child(questions(store, approval, cx))
     };
     strip(true, None, cx).child(div().w_full().min_w_0().text_size(TextSize::Xs).child(content))
 }

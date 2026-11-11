@@ -1,25 +1,19 @@
 import SwiftUI
 
 /// The questions an agent asks with a tool call, one at a time. Each takes one of its options,
-/// several of them when it allows that, or an answer typed in place of them.
+/// several of them when it allows that, or an answer written in the composer in place of them.
 struct QuestionsView: View {
     @Environment(AppStore.self) private var store
     let approval: Approval
-    @State private var index = 0
-    @State private var chosen: [String: Set<String>] = [:]
-    @State private var typed: [String: String] = [:]
-    @FocusState private var typing: Bool
 
     /// How far past its text an option's light and the room to press it reach.
     private static let optionReach: CGFloat = 8
-    /// The room between two options' lights: only drawn, so that their presses meet.
-    private static let optionLight = EdgeInsets(top: 1, leading: 0, bottom: 1, trailing: 0)
+    private static let optionGap: CGFloat = 2
     private static let markGap: CGFloat = 10
 
-    private var question: Question { approval.questions[min(index, approval.questions.count - 1)] }
-    private var isLast: Bool { index >= approval.questions.count - 1 }
-
     var body: some View {
+        let question = store.question(approval)
+        let index = store.questionIndex(approval)
         VStack(alignment: .leading, spacing: 12) {
             VStack(alignment: .leading, spacing: 6) {
                 WaitingTitle(
@@ -36,38 +30,47 @@ struct QuestionsView: View {
                         .foregroundStyle(Color.themeMutedForeground)
                 }
             }
-            VStack(spacing: 0) {
+            VStack(spacing: Self.optionGap) {
                 ForEach(question.options) { option in
-                    row(option)
+                    row(option, multiple: question.multiple)
                 }
-                somethingElse
+                ownAnswer(multiple: question.multiple)
             }
             .padding(.horizontal, -Self.optionReach)
-            .padding(.vertical, -Self.optionLight.top)
             HStack(spacing: 0) {
                 if index > 0 {
-                    ActionButton("Back", icon: .chevronLeft, variant: .ghost, size: .small, margin: .beside(trailing: 8)) { index -= 1 }
+                    ActionButton("Back", icon: .chevronLeft, variant: .ghost, margin: .beside(trailing: 8)) { store.goBack(approval) }
                 }
                 Spacer()
-                ActionButton(approval.refuseLabel, size: .small, margin: .beside(leading: 8, trailing: 4)) { store.answer(approval, allow: false) }
-                ActionButton(isLast ? approval.allowLabel : "Next", variant: .primary, size: .small, margin: .beside(leading: 4), action: goOn)
-                    .disabled(!canGoOn)
+                ActionButton(approval.refuseLabel, variant: .ghost, margin: .beside(leading: 8, trailing: 4)) {
+                    store.answer(approval, allow: false)
+                }
+                ActionButton(store.isLastQuestion(approval) ? approval.allowLabel : "Next", variant: .primary, margin: .beside(leading: 4)) {
+                    store.goOn(approval)
+                }
+                .disabled(!store.canGoOn(approval))
             }
         }
     }
 
-    private func row(_ option: Question.Choice) -> some View {
-        let picked = isChosen(option)
+    private func row(_ option: Question.Choice, multiple: Bool) -> some View {
+        let picked = store.isChosen(option, in: approval)
         return Button {
-            choose(option)
+            store.choose(option, in: approval)
         } label: {
             HStack(alignment: .firstTextBaseline, spacing: Self.markGap) {
-                PickMark(picked: picked, multiple: question.multiple)
+                PickMark(picked: picked, multiple: multiple)
                     .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 4.5 }
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(option.label)
-                        .font(.ui(.sm, weight: .medium))
-                        .foregroundStyle(Color.themeForeground)
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Text(option.label)
+                            .font(.ui(.sm, weight: .medium))
+                            .foregroundStyle(Color.themeForeground)
+                        if option.recommended {
+                            Chip("Recommended", tone: .themeSuccess, compact: true)
+                                .fixedSize()
+                        }
+                    }
                     if !option.detail.isEmpty {
                         Text(option.detail)
                             .font(.ui(.xs))
@@ -81,86 +84,55 @@ struct QuestionsView: View {
             .multilineTextAlignment(.leading)
             .padding(.vertical, 8)
             .padding(.horizontal, Self.optionReach)
-            .padding(Self.optionLight)
+            .picked(picked)
         }
-        .buttonStyle(.highlight(radius: Radius.md, lit: picked, inset: Self.optionLight))
+        .buttonStyle(.highlight(radius: Radius.md))
     }
 
-    /// The last row, which takes an answer typed in place of the options.
-    private var somethingElse: some View {
-        let written = !(typed[question.id] ?? "").isEmpty
-        return HStack(spacing: Self.markGap) {
-            PickMark(picked: written, multiple: question.multiple)
-            InputField("Something else", text: typedAnswer, variant: .bare, size: .large, focus: $typing)
-                .padding(.leading, -(ControlSize.large.padding - 2))
-                .fixedSize(horizontal: false, vertical: true)
-                .onReturn(goOn)
+    /// The last row, which shows the answer written in the composer, or says to write one there.
+    private func ownAnswer(multiple: Bool) -> some View {
+        let written = store.typedAnswer(approval).trimmingCharacters(in: .whitespacesAndNewlines)
+        return Button {
+            store.focusComposer()
+        } label: {
+            HStack(alignment: .firstTextBaseline, spacing: Self.markGap) {
+                Group {
+                    if written.isEmpty {
+                        Image(.pencilLine, size: .sm)
+                            .foregroundStyle(Color.themeMutedForeground)
+                            .frame(width: PickMark.size)
+                    } else {
+                        PickMark(picked: true, multiple: multiple)
+                    }
+                }
+                .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 4.5 }
+                Text(written.isEmpty ? (multiple ? "Add your own answer below" : "Or type your own answer below") : written)
+                    .font(.ui(.sm, weight: .medium))
+                    .foregroundStyle(written.isEmpty ? Color.themeMutedForeground : Color.themeForeground)
+                    .lineLimit(3)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 0)
+            }
+            .multilineTextAlignment(.leading)
+            .padding(.vertical, 8)
+            .padding(.horizontal, Self.optionReach)
+            .picked(!written.isEmpty)
         }
-        .padding(.vertical, 8)
-        .padding(.horizontal, Self.optionReach)
-        .padding(Self.optionLight)
-        .contentShape(Rectangle())
-        .onTapGesture { typing = true }
-        .hoverHighlight(radius: Radius.md, lit: written || typing, inset: Self.optionLight)
+        .buttonStyle(.highlight(radius: Radius.md))
     }
+}
 
-    private var canGoOn: Bool {
-        isLast ? answers.count == approval.questions.count : answers[question.text] != nil
-    }
-
-    /// Answers the questions after the last, or else goes on to the next.
-    private func goOn() {
-        guard canGoOn else { return }
-        guard isLast else {
-            index += 1
-            return
+private extension View {
+    /// The option's look once it is the answer: the primary colour's wash inside a line of its
+    /// stronger wash, apart from the plain light of the pointer.
+    func picked(_ picked: Bool) -> some View {
+        let shape = RoundedRectangle(cornerRadius: Radius.md, style: .continuous)
+        return background {
+            if picked {
+                shape
+                    .fill(Color.themePrimary.wash())
+                    .overlay { shape.strokeBorder(Color.themePrimary.wash(lit: true), lineWidth: 1) }
+            }
         }
-        store.answer(approval, allow: true, answers: answers)
-    }
-
-    /// What was typed for a question, or else the options chosen for it, in their order.
-    private var answers: [String: String] {
-        var answers: [String: String] = [:]
-        for question in approval.questions {
-            let written = (typed[question.id] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-            let picked = question.options.map(\.label).filter { chosen[question.id]?.contains($0) == true }
-            let answer = written.isEmpty ? picked.joined(separator: ", ") : written
-            if !answer.isEmpty { answers[question.text] = answer }
-        }
-        return answers
-    }
-
-    /// What is typed counts in place of the options, so none shows as chosen beside it.
-    private func isChosen(_ option: Question.Choice) -> Bool {
-        guard (typed[question.id] ?? "").isEmpty else { return false }
-        return chosen[question.id]?.contains(option.label) == true
-    }
-
-    private func choose(_ option: Question.Choice) {
-        typed[question.id] = nil
-        typing = false
-        guard question.multiple else {
-            chosen[question.id] = [option.label]
-            showNext(after: index)
-            return
-        }
-        var picked = chosen[question.id] ?? []
-        if !picked.insert(option.label).inserted { picked.remove(option.label) }
-        chosen[question.id] = picked
-    }
-
-    /// Goes on to the next question once the choice has been seen.
-    private func showNext(after asked: Int) {
-        guard !isLast else { return }
-        Task {
-            try? await Task.sleep(for: .milliseconds(200))
-            guard index == asked else { return }
-            index += 1
-        }
-    }
-
-    private var typedAnswer: Binding<String> {
-        let id = question.id
-        return Binding(get: { typed[id] ?? "" }, set: { typed[id] = $0 })
     }
 }
