@@ -334,9 +334,13 @@ class ToolContent(json: JSON) {
     val output = json.optionalString("output")
     /** When it started, while it runs. */
     val startedAt = json.optionalDouble("started_at")
+    /** The questions it asked the user, each with its answer: null until there is one, or when it was skipped. */
+    val asked = json.objects("asked").map { Asked(it.string("question"), it.optionalString("answer")) }
+
+    class Asked(val question: String, val answer: String?)
 
     val symbol: Symbol get() = symbol(icon)
-    val hasDetail: Boolean get() = input.isNotEmpty() || output != null
+    val hasDetail: Boolean get() = input.isNotEmpty() || output != null || asked.isNotEmpty()
 
     /** What opening the row shows: the input, then what came back. */
     val detail = Typeset { palette -> Typesetter.toolDetail(this, palette) }

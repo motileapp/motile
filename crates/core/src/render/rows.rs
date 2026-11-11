@@ -414,6 +414,18 @@ pub struct Tool {
     /// When it started, while it runs.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub started_at: Option<f64>,
+    /// The questions it asked the user, each with its answer. Its verb is then the questions and
+    /// its target the answers, or "Skipped".
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub asked: Vec<Answered>,
+}
+
+/// A question the agent asked the user, with their answer: `None` until they give one, or when
+/// they skipped it.
+#[derive(Serialize, Clone, PartialEq, Debug)]
+pub struct Answered {
+    pub question: String,
+    pub answer: Option<String>,
 }
 
 /// A tool call the turn waits with until the user has answered it.
@@ -944,8 +956,11 @@ fn present_turn<'a>(
         let open = opened.contains(&id);
         let kind = RowKind::Fold { duration_ms, stopped, open, at: items[0].created_at };
         shown.push(Cow::Owned(Row { id, item: items[work_start].id.clone(), nested: false, kind, after: None }));
-        // The agents it started stay in view, which the user goes on to.
+        // What the user answered stays in view, and so do the agents it started, which the user
+        // goes on to.
         if !open {
+            let asked = (work_start..shown_from).filter(|&at| asks_user(&items[at]));
+            shown.extend(asked.flat_map(|at| &rendered[at]).map(Cow::Borrowed));
             let started: Vec<usize> = (work_start..shown_from).filter(|&at| starts_agent(&items[at])).collect();
             present_agents(&started, rendered, opened, shown);
             index = shown_from;
@@ -1078,6 +1093,10 @@ fn shared_folder(files: &[&ChangedFile]) -> String {
     shared
 }
 
+fn asks_user(item: &Item) -> bool {
+    matches!(&item.kind, ItemKind::Tool { call } if call.name == QUESTION_TOOL)
+}
+
 fn starts_agent(item: &Item) -> bool {
     matches!(&item.kind, ItemKind::Tool { call } if agents::starts_agent(call))
 }
@@ -1157,7 +1176,9 @@ fn agents_row(agents: &[&AgentRow], open: bool) -> RowKind {
 
 fn is_work(item: &Item) -> bool {
     match &item.kind {
-        ItemKind::Tool { call } => call.name != PLAN_TOOL && !agents::starts_agent(call),
+        ItemKind::Tool { call } => {
+            ![PLAN_TOOL, QUESTION_TOOL].contains(&call.name.as_str()) && !agents::starts_agent(call)
+        }
         ItemKind::Thinking { .. } => true,
         _ => false,
     }
@@ -1473,6 +1494,7 @@ fn describe(call: &ToolCall, cwd: &str, at: f64) -> Tool {
     let workflow = call.agent.as_ref().and_then(|agent| agent.workflow.as_ref());
     let verb = |doing: &str, did: &str| if running { doing.to_string() } else { did.to_string() };
     let path = short_path(&text("file_path"), cwd);
+    let asked = if call.name == QUESTION_TOOL { answered(&input, call.output.as_deref()) } else { Vec::new() };
 
     let (icon, verb, target, shown_input, input_language) = match call.name.as_str() {
         "Bash" => {
@@ -1538,8 +1560,14 @@ fn describe(call: &ToolCall, cwd: &str, at: f64) -> Tool {
         }
         PLAN_TOOL => ("todo", verb("Proposing", "Proposed"), "a plan".to_string(), String::new(), String::new()),
         QUESTION_TOOL => {
-            let asked = input["questions"][0]["question"].as_str().unwrap_or_default().to_string();
-            ("question", verb("Asking", "Asked"), asked, String::new(), String::new())
+            let questions = asked.iter().map(|asked| asked.question.as_str()).collect::<Vec<_>>().join(" · ");
+            let answers: Vec<&str> = asked.iter().filter_map(|asked| asked.answer.as_deref()).collect();
+            let answer = match (answers.is_empty(), status) {
+                (false, _) => answers.join(" · "),
+                (true, ToolStatus::Failed) => "Skipped".to_string(),
+                (true, _) => String::new(),
+            };
+            ("question", questions, answer, String::new(), String::new())
         }
         "Monitor" => {
             let watched = Some(text("description")).filter(|description| !description.is_empty());
@@ -1580,9 +1608,30 @@ fn describe(call: &ToolCall, cwd: &str, at: f64) -> Tool {
         status,
         input: cap(&shown_input),
         input_language,
-        output: call.output.as_deref().filter(|output| !output.trim().is_empty()).map(cap),
+        output: call.output.as_deref().filter(|output| !output.trim().is_empty() && asked.is_empty()).map(cap),
         started_at: running.then_some(at),
+        asked,
     }
+}
+
+/// The questions a call asked, each with the answer its server kept, or for a call from before it
+/// kept them, the one Claude Code's result names: `"<question>"="<answer>"`.
+fn answered(input: &Value, output: Option<&str>) -> Vec<Answered> {
+    let asked = input["questions"].as_array().map(Vec::as_slice).unwrap_or_default();
+    asked
+        .iter()
+        .filter_map(|question| question["question"].as_str())
+        .map(|question| {
+            let kept = input["answers"][question].as_str().map(str::to_string);
+            let named = || {
+                let after = output?.split_once(&format!("\"{question}\"=\""))?.1;
+                let end = after.find("\", \"").or_else(|| after.rfind("\"."))?;
+                Some(after[..end].to_string())
+            };
+            let answer = kept.or_else(named).filter(|answer| !answer.trim().is_empty());
+            Answered { question: question.split_whitespace().collect::<Vec<_>>().join(" "), answer }
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -2206,6 +2255,60 @@ mod tests {
             item("e", 4, ItemKind::TurnEnd { summary: Default::default() }),
         ]);
         assert_eq!(outline(&transcript), ["user", "fold", "(Review: Working)", "It works on it.", "end folded"]);
+    }
+
+    #[test]
+    fn questions_the_user_answered_stay_in_view_past_the_fold_and_apart_from_other_calls() {
+        let done = ToolStatus::Succeeded;
+        let asked = serde_json::json!({
+            "questions": [{"question": "Which color?"}, {"question": "Rounded?"}],
+            "answers": {"Which color?": "Blue", "Rounded?": "Yes"},
+        });
+        let mut transcript = Transcript::new("");
+        transcript.load(vec![
+            item("u", 0, said("Go")),
+            call("t0", 1, "Read", serde_json::json!({"file_path": "a.rs"}), done),
+            call("t1", 2, QUESTION_TOOL, asked, done),
+            call("t2", 3, "Read", serde_json::json!({"file_path": "b.rs"}), done),
+            call("t3", 4, "Read", serde_json::json!({"file_path": "c.rs"}), done),
+        ]);
+        assert_eq!(outline(&transcript)[1..], ["Read a.rs", "Which color? · Rounded? Blue · Yes", "[Read c.rs]"]);
+
+        transcript.upsert(assistant("a", 5, "Blue it is."), true);
+        transcript.upsert(item("e", 6, ItemKind::TurnEnd { summary: Default::default() }), true);
+        assert_eq!(
+            outline(&transcript),
+            ["user", "fold", "Which color? · Rounded? Blue · Yes", "Blue it is.", "end folded"]
+        );
+    }
+
+    #[test]
+    fn a_question_says_each_answer_or_that_it_was_skipped() {
+        let input = serde_json::json!({"questions": [{"question": "Which  color?"}, {"question": "Rounded?"}]});
+        let mut call = ToolCall {
+            id: "t".into(),
+            name: QUESTION_TOOL.into(),
+            input: input.to_string(),
+            output: None,
+            status: ToolStatus::Running,
+            agent: None,
+        };
+        let waiting = describe(&call, "", 0.0);
+        assert_eq!((waiting.verb.as_str(), waiting.target.as_str()), ("Which color? · Rounded?", ""));
+        assert_eq!(waiting.asked[0], Answered { question: "Which color?".into(), answer: None });
+
+        // Claude Code names the answers in its result, which is all a call from before the server kept them has.
+        call.output = Some(r#"User has answered your questions: "Which  color?"="Blue, Green", "Rounded?"="Yes". You can now continue with the user's answers in mind."#.into());
+        call.status = ToolStatus::Succeeded;
+        let answered = describe(&call, "", 0.0);
+        assert_eq!(answered.target, "Blue, Green · Yes");
+        assert_eq!(answered.output, None);
+
+        call.output = Some("The user doesn't want to proceed with this tool use.".into());
+        call.status = ToolStatus::Failed;
+        let skipped = describe(&call, "", 0.0);
+        assert_eq!(skipped.target, "Skipped");
+        assert!(skipped.asked.iter().all(|asked| asked.answer.is_none()));
     }
 
     #[test]

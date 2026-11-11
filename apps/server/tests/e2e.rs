@@ -1029,6 +1029,17 @@ async fn a_question_the_agent_asks_is_answered_by_the_user(agent: Agent) {
 
     transcript.follow_until_idle(&mut follow).await;
     assert_eq!(transcript.texts(), vec!["The button will be blue."]);
+    // The question keeps its answer in the transcript, Codex's too, which has no item of its own for it.
+    let questions: Vec<serde_json::Value> = transcript
+        .items
+        .iter()
+        .filter_map(|item| match &item.kind {
+            ItemKind::Tool { call } if call.name == "AskUserQuestion" => serde_json::from_str(&call.input).ok(),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(questions.len(), 1);
+    assert_eq!(questions[0]["answers"], json!({"Which color should the button be?": "Blue"}));
 }
 
 #[tokio::test]

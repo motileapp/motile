@@ -806,7 +806,11 @@ final class ToolRowView: RowView {
             icon.show(tool.symbol, size: Self.iconSize)
             running = tool.status == .running
             startedAt = tool.startedAt
-            setTitle(tool.verb, target: tool.target, failed: tool.status == .failed)
+            if tool.asked.isEmpty {
+                setTitle(tool.verb, target: tool.target, failed: tool.status == .failed)
+            } else {
+                setTitle(questions: tool.verb, answer: tool.target, skipped: tool.status == .failed)
+            }
             hasDetail = tool.hasDetail
             detailText = { tool.detail() }
         case .thinking(let thought):
@@ -867,6 +871,21 @@ final class ToolRowView: RowView {
         )
         let targetColor = failed ? Theme.destructive : running ? Theme.mutedStrongerForeground : Theme.mutedForeground
         text.append(NSAttributedString(string: target, attributes: [.font: Theme.inlineCodeFont, .foregroundColor: targetColor]))
+        show(text)
+    }
+
+    /// The questions muted and their answers in the text's own colour, which stand out.
+    private func setTitle(questions: String, answer: String, skipped: Bool) {
+        let text = NSMutableAttributedString(
+            string: answer.isEmpty ? questions : questions + "  ",
+            attributes: [.font: Self.titleFont, .foregroundColor: Theme.mutedStrongerForeground]
+        )
+        let answerColor = skipped ? Theme.mutedForeground : Theme.foreground
+        text.append(NSAttributedString(string: answer, attributes: [.font: Self.titleFont, .foregroundColor: answerColor]))
+        show(text)
+    }
+
+    private func show(_ text: NSMutableAttributedString) {
         // Without this a title too long for the row wraps, and loses its last words unseen.
         let cut = NSMutableParagraphStyle()
         cut.lineBreakMode = .byTruncatingTail

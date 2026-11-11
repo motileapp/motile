@@ -429,7 +429,7 @@ private fun ToolRow(row: RowModel) {
             fold != null -> fold.label to ""
             else -> "Thought" to ""
         }
-        toolTitle(words, target, failed, running, palette)
+        if (tool?.asked.isNullOrEmpty()) toolTitle(words, target, failed, running, palette) else questionsTitle(words, target, failed, palette)
     }
     val inset = if (row.nested) 24.dp else 0.dp
     val line = ToolRow.height - 2.dp
@@ -470,7 +470,9 @@ private fun ToolRow(row: RowModel) {
         if (fold != null) {
             Box(Modifier.padding(vertical = ToolRow.ruleGap).fillMaxWidth().height(1.dp).background(palette.border))
         }
-        if (expanded) {
+        if (expanded && tool != null && tool.asked.isNotEmpty()) {
+            Answers(tool, Modifier.padding(start = inset + 30.dp, top = 3.dp, bottom = 9.dp))
+        } else if (expanded) {
             val detail = remember(row, palette) { tool?.detail?.get(palette) ?: AnnotatedString(thought.orEmpty(), SpanStyle(color = palette.mutedForeground)) }
             val shape = RoundedCornerShape(Radius.md)
             Box(
@@ -492,6 +494,33 @@ object ToolRow {
     val height = 36.dp
     /** The room between a fold's line and the rule under it, and between the rule and the row after. */
     val ruleGap = 4.dp
+}
+
+/** The questions muted and their answers in the text's own colour, which stand out. */
+private fun questionsTitle(questions: String, answer: String, skipped: Boolean, palette: Palette): AnnotatedString = buildAnnotatedString {
+    append(if (answer.isEmpty()) questions else "$questions  ")
+    withStyle(SpanStyle(color = if (skipped) palette.mutedForeground else palette.foreground)) { append(answer) }
+}
+
+/** What opening a question shows: each question over its answer, which stands in under it. */
+@Composable
+private fun Answers(tool: ToolContent, modifier: Modifier) {
+    val palette = LocalPalette.current
+    val shape = RoundedCornerShape(Radius.md)
+    val skipped = tool.status == ToolContent.Status.Failed
+    Column(
+        modifier.fillMaxWidth().clip(shape).background(palette.backgroundSecondary, shape).padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        tool.asked.forEach { asked ->
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(asked.question, size = TextSize.Sm, color = palette.mutedForeground)
+                val answer = asked.answer ?: if (skipped) "Skipped" else null
+                val color = if (asked.answer != null) palette.foreground else palette.mutedStrongerForeground
+                if (answer != null) Text(answer, Modifier.padding(start = 12.dp), size = TextSize.Sm, color = color)
+            }
+        }
+    }
 }
 
 /** A running call's title is all muted, so the band shows on every part of it. */
