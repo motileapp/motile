@@ -7,8 +7,8 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.gestures.snapping.SnapPosition
 import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.foundation.layout.Arrangement
@@ -509,20 +509,20 @@ private fun jumpPlaces(threads: List<ThreadInfo>): Map<String, Int> = buildMap {
 /** Scrolls the row into view, or to the top of the list, with `anchor` there in its place when both fit: its section's line. */
 private suspend fun reveal(list: LazyListState, index: Int, toTop: Boolean, anchor: Int? = null) {
     if (toTop && anchor != null) {
-        list.animateScrollToItem(anchor)
+        list.scrollToItem(anchor)
         val info = list.layoutInfo
         val row = info.visibleItemsInfo.firstOrNull { it.index == index }
-        if (row == null || row.offset + row.size > info.viewportEndOffset) list.animateScrollToItem(index)
+        if (row == null || row.offset + row.size > info.viewportEndOffset) list.scrollToItem(index)
         return
     }
-    if (toTop) return list.animateScrollToItem(index)
+    if (toTop) return list.scrollToItem(index)
     val info = list.layoutInfo
-    val visible = info.visibleItemsInfo.firstOrNull { it.index == index } ?: return list.animateScrollToItem(index)
+    val visible = info.visibleItemsInfo.firstOrNull { it.index == index } ?: return list.scrollToItem(index)
     val below = visible.offset + visible.size - info.viewportEndOffset
     val above = info.viewportStartOffset - visible.offset
     when {
-        below > 0 -> list.animateScrollBy(below.toFloat())
-        above > 0 -> list.animateScrollBy(-above.toFloat())
+        below > 0 -> list.scrollBy(below.toFloat())
+        above > 0 -> list.scrollBy(-above.toFloat())
     }
 }
 

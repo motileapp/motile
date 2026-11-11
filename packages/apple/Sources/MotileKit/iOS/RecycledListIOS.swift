@@ -85,10 +85,8 @@ struct RecycledList<Item: Identifiable, Row: View>: UIViewRepresentable {
         /// The row a pointer is on.
         private var pointedRow: Item.ID?
         /// The target the list keeps at the top while the rows take their heights and the keyboard
-        /// leaves, until a finger scrolls, the rows change or another target comes; and whether
-        /// the list still slides there.
+        /// leaves, until a finger scrolls, the rows change or another target comes.
         private var held: Item.ID?
-        private var sliding = false
 
         func attach(_ view: UICollectionView) {
             let registration = UICollectionView.CellRegistration<RecycledCell, Item.ID> { [weak self] cell, indexPath, _ in
@@ -150,7 +148,6 @@ struct RecycledList<Item: Identifiable, Row: View>: UIViewRepresentable {
 
         func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
             held = nil
-            sliding = false
             list?.scrolled()
             point(at: nil, in: scrollView)
         }
@@ -175,11 +172,10 @@ struct RecycledList<Item: Identifiable, Row: View>: UIViewRepresentable {
 
         /// Brings the target's row into sight once it is in the list. A row is only as tall as it
         /// is once it has been laid out, so the list is put where the target seems to be until it
-        /// stays there, then slides there from where it was.
+        /// stays there.
         func scroll(_ view: UICollectionView, to target: Item.ID?) {
             guard target != scrollTarget else { return }
             held = nil
-            sliding = false
             guard let target else {
                 scrollTarget = nil
                 return
@@ -189,32 +185,19 @@ struct RecycledList<Item: Identifiable, Row: View>: UIViewRepresentable {
             view.layoutIfNeeded()
             guard list?.scrollsTargetToTop == true else {
                 guard let frame = view.layoutAttributesForItem(at: IndexPath(item: index, section: 0))?.frame else { return }
-                view.scrollRectToVisible(frame, animated: true)
+                view.scrollRectToVisible(frame, animated: false)
                 return
             }
-            let start = view.contentOffset
-            var offset = start
             for _ in 0..<5 {
-                guard let next = topOffset(for: index, in: view), abs(next.y - offset.y) >= 1 else { break }
-                offset = next
+                guard let next = topOffset(for: index, in: view), abs(next.y - view.contentOffset.y) >= 1 else { break }
                 view.contentOffset = next
                 view.layoutIfNeeded()
             }
-            view.contentOffset = start
             held = target
-            guard offset != start else { return }
-            sliding = true
-            view.setContentOffset(offset, animated: true)
-        }
-
-        func scrollViewDidEndScrollingAnimation(_ scrollView: UIScrollView) {
-            guard let view = scrollView as? UICollectionView, sliding else { return }
-            sliding = false
-            keepHeld(in: view)
         }
 
         private func keepHeld(in view: UICollectionView) {
-            guard !sliding, let held, let index = ids.firstIndex(of: held),
+            guard let held, let index = ids.firstIndex(of: held),
                   let offset = topOffset(for: index, in: view), abs(offset.y - view.contentOffset.y) >= 1
             else { return }
             view.contentOffset = offset
