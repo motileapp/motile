@@ -1015,10 +1015,13 @@ final class ErrorRowView: RowView {
 /// a file opens what the turn changed in it in a tab of the panel.
 final class ChangesRowView: RowView {
     fileprivate static let headHeight: CGFloat = scaled(40)
+    /// An entry's light is 2pt shorter than the entry, with this size's corners.
     #if os(macOS)
-    fileprivate static let entryHeight: CGFloat = 26
+    fileprivate static let highlight = ControlSize.small
+    fileprivate static let entryHeight = highlight.height + 2
     #else
-    fileprivate static let entryHeight: CGFloat = 36
+    fileprivate static let highlight = ControlSize.regular
+    fileprivate static let entryHeight = highlight.height
     #endif
     private static let topMargin: CGFloat = 12
     private static let bottomPadding: CGFloat = 6
@@ -1094,7 +1097,7 @@ final class ChangesRowView: RowView {
         private var hovered: Int?
         private let headHeight = ChangesRowView.headHeight
         private let entryHeight = ChangesRowView.entryHeight
-        private let highlightHeight = ControlSize.small.height
+        private let highlight = ChangesRowView.highlight
 
         override init(frame: CGRect) {
             super.init(frame: frame)
@@ -1120,9 +1123,9 @@ final class ChangesRowView: RowView {
                 var x = 12 + CGFloat(entry.depth) * 16
                 if hovered == index {
                     let start = (entry.folder ? x : x + 16) - 6
-                    let highlight = CGRect(x: start, y: row.midY - highlightHeight / 2, width: row.maxX - 6 - start, height: highlightHeight)
+                    let light = CGRect(x: start, y: row.minY + 1, width: row.maxX - 6 - start, height: entryHeight - 2)
                     Theme.backgroundSecondaryAccent.setFill()
-                    RoundedBox.fill(highlight, radius: Radius.sm)
+                    RoundedBox.fill(light, radius: highlight.radius)
                 }
                 if entry.folder {
                     let chevron = CGRect(x: x, y: row.minY, width: 12, height: row.height)

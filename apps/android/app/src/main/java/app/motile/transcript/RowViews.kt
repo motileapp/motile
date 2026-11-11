@@ -712,13 +712,12 @@ private fun ChangeEntryRow(row: RowModel, entry: ChangesContent.Entry) {
     val actions = LocalTranscript.current
     val x = 12 + entry.depth * 16
     val light = ((if (entry.folder) x else x + 16) - 6).dp
-    val vertical = (ChangesRow.entryHeight - ControlSize.Small.height) / 2
     HighlightButton(
         onClick = { if (entry.folder) actions.toggleFolder(entry.id, row.id) else actions.openDiff(row.itemID, entry.path) },
         modifier = Modifier.fillMaxWidth().height(ChangesRow.entryHeight),
-        radius = Radius.sm,
+        radius = ControlSize.Regular.radius,
         small = true,
-        inset = PaddingValues(start = light, end = 6.dp, top = vertical, bottom = vertical),
+        inset = PaddingValues(start = light, end = 6.dp, top = 1.dp, bottom = 1.dp),
         contentAlignment = Alignment.CenterStart,
     ) {
         Row(Modifier.padding(start = x.dp, end = 14.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -739,7 +738,7 @@ private fun ChangeEntryRow(row: RowModel, entry: ChangesContent.Entry) {
 }
 
 object ChangesRow {
-    val entryHeight = 36.dp
+    val entryHeight = ControlSize.Regular.height
 }
 
 /** Closes a turn: a way to copy the reply and when it ended. */

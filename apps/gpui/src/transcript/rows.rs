@@ -1743,7 +1743,7 @@ fn changes_row(
 }
 
 const CHANGES_HEAD: f32 = 40.;
-const CHANGES_ENTRY: f32 = 26.;
+const CHANGES_ENTRY: f32 = ControlSize::Small.height() + 2.;
 const CHANGES_BOTTOM: f32 = 6.;
 
 /// One file a turn changed, or a folder of them, lit under the pointer from where it stands in.
