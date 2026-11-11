@@ -60,6 +60,12 @@
   --color-segment-accent: var(--segment-accent);
   --color-segment-selected: var(--segment-selected);
   --color-composer: var(--composer);
+  --color-composer-accent-weaker: var(--composer-accent-weaker);
+  --color-composer-accent: var(--composer-accent);
+  --color-composer-accent-stronger: var(--composer-accent-stronger);
+  --color-glass-accent-weaker: var(--glass-accent-weaker);
+  --color-glass-accent: var(--glass-accent);
+  --color-glass-accent-stronger: var(--glass-accent-stronger);
   --color-glass: var(--glass);
   --color-accent-with-opacity: var(--accent-with-opacity);
   --color-accent-tinted: var(--accent-tinted);

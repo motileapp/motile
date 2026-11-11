@@ -9,7 +9,7 @@ use crate::media::pictures::{Picture, Pictures};
 use crate::models::{Attachment, UploadState};
 use crate::store::Store;
 use crate::theme::{ControlSize, IconSize, Layer, Opacity, Radius, ShadowSize, Surface, TextSize, colors};
-use crate::ui::{ActionButton, Chip, icons};
+use crate::ui::{ActionButton, Chip, Variant, icons};
 
 pub const TILE: f32 = 96.;
 const NAME_INSET_X: f32 = 10.;
@@ -112,12 +112,12 @@ fn file_tile(attachment: &Attachment, store: Entity<Store>, cx: &mut App) -> Sta
                 .absolute()
                 .top(px(KIND_INSET))
                 .left(px(KIND_INSET))
-                .child(Chip::new(kind).muted(true).small(true).max_width(KIND_WIDTH))
+                .child(Chip::new(kind).surface(Surface::ComposerBox).small(true).max_width(KIND_WIDTH))
         }));
     finish(tile, attachment, store, cx)
 }
 
-/// The square every attachment lies in.
+/// The square every attachment lies in, a box on the composer.
 fn frame(attachment: &Attachment, cx: &App) -> Stateful<Div> {
     let c = colors(cx);
     div()
@@ -128,9 +128,9 @@ fn frame(attachment: &Attachment, cx: &App) -> Stateful<Div> {
         .cursor_default()
         .rounded(px(Radius::XL))
         .overflow_hidden()
-        .bg(c.background_secondary)
+        .bg(Surface::ComposerBox.color(c))
         .border_1()
-        .border_color(c.border)
+        .border_color(Surface::ComposerBox.border(c))
 }
 
 /// How far the upload is along the tile's bottom, the button that removes it, and its name and
@@ -148,7 +148,8 @@ fn finish(tile: Stateful<Div>, attachment: &Attachment, store: Entity<Store>, cx
                 ActionButton::icon(SharedString::from(format!("remove-{}", attachment.id)), "x", "Remove")
                     .small()
                     .round(true)
-                    .overlay()
+                    .variant(Variant::Secondary)
+                    .surface(Surface::ComposerBox)
                     .on_click(move |_, _, cx| {
                         remove.update(cx, |store, cx| {
                             store.remove_attachment(&id);
@@ -210,7 +211,7 @@ fn progress(attachment: &Attachment, store: &Entity<Store>, cx: &App) -> AnyElem
         UploadState::Uploading(fraction) => div()
             .w_full()
             .py(px(2.))
-            .bg(c.scrim)
+            .bg(c.scrim_stronger)
             .flex()
             .justify_center()
             .text_size(TextSize::Xxs)

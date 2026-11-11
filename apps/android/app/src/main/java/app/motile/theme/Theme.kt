@@ -153,6 +153,9 @@ fun Color.wash(lit: Boolean = false): Color = at(if (lit) Opacity.ColorTintStron
 /** The scrim at its opacity. */
 val Palette.scrim: Color @Composable @ReadOnlyComposable get() = overlay.at(Opacity.Overlay)
 
+/** The scrim behind small text over a picture. */
+val Palette.scrimStronger: Color @Composable @ReadOnlyComposable get() = overlay.at(Opacity.OverlayStronger)
+
 /** What marks something quietly, like a default or the keys that pick a row. */
 val Palette.accentTint: Color @Composable @ReadOnlyComposable get() = accentTinted.at(Opacity.AccentTint)
 
@@ -307,9 +310,9 @@ enum class ControlSize {
 /** The side of an icon's square, given as on the Mac and enlarged. */
 fun symbolSide(size: IconSize): Dp = (size.side * Platform.scale).roundToInt().dp
 
-/** What a view lies on: the page, a box on it, a card or a popover. What is drawn on a surface takes the surface's accent. */
+/** What a view lies on: the page, a box on it, a card, a popover or a box on the composer, like an attachment's tile. What is drawn on a surface takes the surface's accent. */
 enum class Surface {
-    Background, Secondary, Card, Popover;
+    Background, Secondary, Card, Popover, ComposerBox;
 
     /** What is drawn on a surface, each in the surface's own accent. */
     enum class Layer {
@@ -334,6 +337,7 @@ enum class Surface {
         Secondary -> palette.backgroundSecondary
         Card -> palette.card
         Popover -> palette.popover
+        ComposerBox -> palette.composerAccentWeaker
     }
 
     /** The surface's edge, which the lines across it share. */
@@ -341,6 +345,7 @@ enum class Surface {
         Background, Secondary -> palette.border
         Card -> palette.borderCard
         Popover -> palette.borderPopover
+        ComposerBox -> palette.composerAccent
     }
 
     fun color(layer: Layer, palette: Palette): Color = when (this) {
@@ -358,7 +363,14 @@ enum class Surface {
         }
         Card -> palette.cardAccent
         Popover -> palette.popoverAccent
+        ComposerBox -> when (layer) {
+            Layer.Control, Layer.Row, Layer.Box, Layer.Chip -> palette.composerAccent
+            Layer.ControlLit, Layer.ControlLitOnSelected, Layer.RowSelected -> palette.composerAccentStronger
+        }
     }
+
+    /** Whether a secondary button on it is edged, in its lit control's colour. */
+    val edgesControls: Boolean get() = this == ComposerBox
 
     /** What lies in a box on it. */
     val inBox: Surface get() = if (this == Background) Secondary else this

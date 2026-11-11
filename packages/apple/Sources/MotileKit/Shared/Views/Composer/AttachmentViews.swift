@@ -12,7 +12,6 @@ struct AttachmentTile: View {
 
     var body: some View {
         ZStack {
-            Color.themeBackgroundSecondary
             if let picture {
                 Image(decorative: picture, scale: 1)
                     .resizable()
@@ -67,12 +66,11 @@ struct AttachmentFileTile: View {
             .frame(width: AttachmentTile.side, height: AttachmentTile.side, alignment: .bottomLeading)
             .overlay(alignment: .topLeading) {
                 if let kind = attachment.kind {
-                    Chip(kind, muted: true, small: true)
+                    Chip(kind, small: true)
                         .frame(maxWidth: kindWidth, alignment: .leading)
                         .padding(kindInset)
                 }
             }
-            .background(Color.themeBackgroundSecondary)
             .modifier(TileLook(attachment: attachment, open: nil))
     }
 }
@@ -83,20 +81,23 @@ private let removeInset = kindInset - (ControlSize.small.height - Chip.compactHe
 /// A file's kind is cut short before the remove button.
 private let kindWidth = AttachmentTile.side - kindInset - 4 - ControlSize.small.height - removeInset
 
-/// The square of an attachment: its edge, how far its upload is along its bottom, and the button
-/// that removes it.
+/// The square of an attachment, a box on the composer: its edge, how far its upload is along its
+/// bottom, and the button that removes it.
 private struct TileLook: ViewModifier {
     @Environment(AppStore.self) private var store
+    @Environment(\.surface) private var composer
     let attachment: Attachment
     let open: (() -> Void)?
 
     func body(content: Content) -> some View {
         let shape = RoundedRectangle(cornerRadius: Radius.xl, style: .continuous)
+        let box = composer.tile
         let tile = content
             .frame(width: AttachmentTile.side, height: AttachmentTile.side)
+            .background(box.color)
             .overlay(alignment: .bottom) { AttachmentProgress(attachment: attachment) }
             .clipShape(shape)
-            .overlay(shape.stroke(Color.themeBorder, lineWidth: 1))
+            .overlay(shape.strokeBorder(box.border, lineWidth: 1))
         Group {
             if let open {
                 tile.button(DimButtonStyle(), action: open)
@@ -105,13 +106,14 @@ private struct TileLook: ViewModifier {
             }
         }
         .overlay(alignment: .topTrailing) {
-            ActionButton(icon: .x, help: "Remove", variant: .overlay, size: .small, round: true) {
+            ActionButton(icon: .x, help: "Remove", variant: .secondary, size: .small, round: true) {
                 store.removeAttachment(attachment.id)
             }
             .padding(removeInset)
         }
         .help(attachment.summary)
         .accessibilityLabel(attachment.summary)
+        .environment(\.surface, box)
     }
 }
 
@@ -165,7 +167,7 @@ private struct AttachmentProgress: View {
                 .foregroundStyle(Color.themeForegroundOverPicture)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 2)
-                .background(Color.themeScrim)
+                .background(Color.themeScrimStronger)
         case .failed(let reason):
             Label("Retry", symbol: .rotateCw, size: .xs)
                 .font(.ui(.xxs, weight: .medium))

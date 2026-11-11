@@ -308,6 +308,7 @@ fun Modifier.controlBackground(look: ControlLook, under: Color? = null, revealed
     }
     val border = when (look.variant) {
         ButtonVariant.Outline -> look.surface.border(palette)
+        ButtonVariant.Secondary -> if (look.surface.edgesControls) look.surface.color(Surface.Layer.ControlLit, palette) else return filled
         ButtonVariant.Overlay -> OverPicture.controlBorder
         else -> return filled
     }
