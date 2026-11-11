@@ -1129,6 +1129,7 @@ impl Store {
             name: crate::models::last_component(path),
             video: media.video,
             source: crate::models::MediaSource::File(file.clone()),
+            attachment: None,
         };
         self.view(vec![viewed], 0);
     }

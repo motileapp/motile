@@ -121,6 +121,15 @@ pub extern "C" fn motile_snooze(input_json: *const c_char) -> *mut c_char {
     CString::new(answer).unwrap_or_default().into_raw()
 }
 
+/// Marks up an image (`markup::markup_json`): JSON in, JSON out, on any thread; `flatten` reads
+/// and writes the image, so it is asked off the main thread. The answer is the caller's to free with
+/// `motile_free_string`.
+#[unsafe(no_mangle)]
+pub extern "C" fn motile_markup(input_json: *const c_char) -> *mut c_char {
+    let answer = crate::markup::markup_json(&text(input_json).unwrap_or_default());
+    CString::new(answer).unwrap_or_default().into_raw()
+}
+
 /// Frees a string the core gave the client.
 ///
 /// # Safety

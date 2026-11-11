@@ -47,7 +47,9 @@ import java.util.concurrent.Executors
  *     gateway code <code>               finishes Claude's sign-in with the code
  *     mcp add [search]|activity|call    has the MCP Gateway page add an MCP server, open its activity or its latest call
  *     mcp unfold|try|rename|key|remove <name>   has it do that to the MCP server with that name
- *     view                              opens the thread's images in the viewer
+ *     view [composer]                   opens the thread's images, or the composer's, in the viewer
+ *     markup start|tool <tool>|ink <ink>|draw <x y x y…>|note <text>|keep|done|cancel
+ *                                       marks up the image the viewer shows; draw goes through shares of it
  *     branches                          opens the branch picker in the thread's settings
  *     top                               scrolls the transcript to its start
  *     focus | blur                      gives the composer the keyboard, or takes it away
@@ -253,9 +255,10 @@ object DemoDriver {
             "blur" -> Platform.endEditing()
             "access" -> store.setAccess(Access.of(rest) ?: Access.Full)
             "view" -> {
-                val shown = store.transcript.rows.mapNotNull { it.mediaShown }
+                val shown = if (rest == "composer") store.attachments.mapNotNull { it.viewed } else store.transcript.rows.mapNotNull { it.mediaShown }
                 store.view(shown, 0)
             }
+            "markup" -> DemoHooks.markup?.invoke(rest)
             "branches" -> {
                 val project = store.composerProject ?: return
                 store.showsThreadSettings = true
