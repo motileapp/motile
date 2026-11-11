@@ -70,7 +70,6 @@ import app.motile.theme.wash
 import app.motile.ui.Card
 import app.motile.ui.Chip
 import app.motile.ui.FadingScroll
-import app.motile.ui.HighlightButton
 import app.motile.ui.Icon
 import app.motile.ui.Segmented
 import app.motile.ui.Text
@@ -447,32 +446,26 @@ private fun Features(report: ActivityReport, beside: Boolean) {
     }
 }
 
-private const val FEATURES_SHOWN = 5
-
 /** The header row of a card that is a table, filled as a table's header is. */
 @Composable
 private fun Modifier.tableHeader(): Modifier = fillMaxWidth().background(LocalPalette.current.cardAccent).heightIn(min = scaled(40f).dp)
 
-/** The features of a group as a table under a header of its name and total, each with how often it was used: the five used most, and the rest once asked for. */
+/** The features of a group as a table under a header of its name and total, each with how often it was used, scrolling past half the screen. */
 @Composable
 private fun FeatureCard(title: String, count: Int, features: List<ActivityReport.Feature>, modifier: Modifier) {
     val palette = LocalPalette.current
-    var all by remember { mutableStateOf(false) }
-    val listed = if (all) features else features.take(FEATURES_SHOWN)
     Card(modifier) {
         Row(Modifier.tableHeader().padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(title, Modifier.weight(1f).padding(end = 8.dp), size = TextSize.Sm, weight = FontWeight.Medium, color = palette.foreground)
             Text(count.grouped, style = Theme.uiDigits(TextSize.Sm, FontWeight.Medium), color = palette.mutedForeground)
         }
         ThemeDivider()
-        listed.forEachIndexed { index, feature ->
-            if (index > 0) ThemeDivider()
-            FeatureRow(feature)
-        }
-        if (features.size > FEATURES_SHOWN) {
-            ThemeDivider()
-            HighlightButton({ all = !all }, Modifier.fillMaxWidth().heightIn(min = scaled(40f).dp), radius = 0.dp, contentAlignment = Alignment.Center) {
-                Text(if (all) "Show fewer" else "Show all ${features.size}", size = TextSize.Xs, weight = FontWeight.Medium, color = palette.foreground)
+        FadingScroll(listHeight()) {
+            Column {
+                features.forEachIndexed { index, feature ->
+                    if (index > 0) ThemeDivider()
+                    FeatureRow(feature)
+                }
             }
         }
     }

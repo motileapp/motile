@@ -362,11 +362,11 @@ struct ActivityView: View {
                 let columns = Array(repeating: GridItem(.flexible(), spacing: 12, alignment: .top), count: beside ? 2 : 1)
                 LazyVGrid(columns: columns, alignment: .leading, spacing: 12) {
                     ForEach(report.features) { group in
-                        ActivityFeatureCard(title: group.name, count: group.count, features: group.features)
+                        ActivityFeatureCard(title: group.name, count: group.count, features: group.features, maxHeight: listHeight)
                     }
                 }
             case .agents:
-                ActivityFeatureCard(title: "Motile tools", count: report.agentFeatures.reduce(0) { $0 + $1.count }, features: report.agentFeatures)
+                ActivityFeatureCard(title: "Motile tools", count: report.agentFeatures.reduce(0) { $0 + $1.count }, features: report.agentFeatures, maxHeight: listHeight)
             }
         }
     }
@@ -626,17 +626,14 @@ private struct ActivityLineRow: View {
 }
 
 /// The features of a group as a table under a header of its name and total, each with how often
-/// it was used: the five used most, and the rest once asked for.
+/// it was used, scrolling past `maxHeight`.
 private struct ActivityFeatureCard: View {
-    private static let shown = 5
-
     let title: String
     let count: Int
     let features: [ActivityReport.Feature]
-    @State private var all = false
+    let maxHeight: CGFloat
 
     var body: some View {
-        let listed = all ? features : Array(features.prefix(Self.shown))
         VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Text(title)
@@ -650,33 +647,19 @@ private struct ActivityFeatureCard: View {
             .padding(.horizontal, 14)
             .activityTableHeader()
             ThemeDivider()
-            ForEach(listed) { feature in
-                row(feature)
-                if feature.id != listed.last?.id {
-                    ThemeDivider()
+            FadingScroll(maxHeight: maxHeight) {
+                VStack(spacing: 0) {
+                    ForEach(features) { feature in
+                        row(feature)
+                        if feature.id != features.last?.id {
+                            ThemeDivider()
+                        }
+                    }
                 }
-            }
-            if features.count > Self.shown {
-                ThemeDivider()
-                more
             }
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .card()
-    }
-
-    /// The card's last row, which shows the rest of the features or only the first again, at once.
-    private var more: some View {
-        Text(all ? "Show fewer" : "Show all \(features.count)")
-            .font(.ui(.xs, weight: .medium))
-            .foregroundStyle(Color.themeForeground)
-            .frame(maxWidth: .infinity, minHeight: scaled(40))
-            .button(.highlight(radius: 0)) {
-                var instant = Transaction(animation: nil)
-                instant.disablesAnimations = true
-                withTransaction(instant) { all.toggle() }
-            }
-            .clipShape(UnevenRoundedRectangle(bottomLeadingRadius: Radius.lg, bottomTrailingRadius: Radius.lg, style: .continuous))
     }
 
     private func row(_ feature: ActivityReport.Feature) -> some View {
