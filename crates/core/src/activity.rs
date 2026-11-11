@@ -1,6 +1,6 @@
 //! What the user and the agents did on the account's servers, for the usage view's Activity tab:
 //! the headline numbers, the work over time by where it came from, the clients, the hours of the
-//! week, how turns ended and what started them, and the features used, all ready to draw.
+//! week, how turns ended, and the features used, all ready to draw.
 
 use std::collections::HashMap;
 
@@ -39,8 +39,8 @@ pub struct View {
     pub empty: bool,
     pub starts: Vec<f64>,
     pub tiles: Vec<Tile>,
-    /// Where the work came from, each with a point for each of `starts`: the user's clients by
-    /// kind, then the agents and the servers going on by themselves.
+    /// Each with a point for each of `starts`: the user's messages by the kind of client they came
+    /// from, then the turns of the agents and of the subagents, the agents that agents started.
     pub sources: Vec<Source>,
     pub clients: Vec<ClientRow>,
     /// The 168 hours of the week, Monday's first.
@@ -51,7 +51,6 @@ pub struct View {
     pub agents: Vec<Line>,
     pub models: Vec<Line>,
     pub projects: Vec<Line>,
-    pub starters: Vec<Line>,
     pub facts: Vec<Fact>,
     /// The features the user used, by group.
     pub features: Vec<FeatureGroup>,
@@ -95,7 +94,7 @@ pub struct ClientRow {
     pub color: u8,
     pub messages: u32,
     pub turns: u32,
-    /// Its part of the messages, from 0 to 1.
+    /// Its part of the messages the clients listed sent, from 0 to 1.
     pub share: f64,
     pub last_seen: Option<f64>,
     pub this_device: bool,
@@ -113,7 +112,7 @@ pub struct HourCell {
     pub level: u8,
 }
 
-/// An agent, a model, a project, an outcome or a starter of turns and its part of them.
+/// An agent, a model, a project or an outcome of turns and its part of them.
 #[derive(Serialize, Debug, PartialEq)]
 pub struct Line {
     pub name: String,
@@ -168,80 +167,75 @@ impl Sums {
     }
 }
 
-/// Where a turn or a message came from, as the chart groups them.
+/// Where a message came from or whose turn it was, as the chart groups them.
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 enum From {
     Client(ClientKind, ClientForm, String),
-    Unknown,
+    UnknownClient,
     Agents,
-    Servers,
+    Subagents,
 }
 
 impl From {
     fn of_device(device: Option<&str>, clients: &HashMap<String, ClientRecord>) -> Self {
         match device.and_then(|device| clients.get(device)) {
             Some(record) => From::Client(record.client.kind, record.client.form, system_of(record)),
-            None => From::Unknown,
+            None => From::UnknownClient,
         }
     }
 
-    fn of_turn(bucket: &TurnBucket, clients: &HashMap<String, ClientRecord>) -> Self {
-        match bucket.starter {
-            TurnStarter::User => Self::of_device(bucket.device.as_deref(), clients),
-            TurnStarter::Agent | TurnStarter::Notice => From::Agents,
-            TurnStarter::Server | TurnStarter::Other => From::Servers,
-        }
+    fn of_turn(bucket: &TurnBucket) -> Self {
+        if bucket.agent_thread { From::Subagents } else { From::Agents }
     }
 
     fn id(&self) -> String {
         match self {
             From::Client(kind, form, system) => format!("{kind:?}-{form:?}-{system}").to_lowercase(),
-            From::Unknown => "unknown".into(),
+            From::UnknownClient => "unknown".into(),
             From::Agents => "agents".into(),
-            From::Servers => "servers".into(),
+            From::Subagents => "subagents".into(),
         }
     }
 
     fn label(&self) -> String {
         match self {
             From::Client(kind, form, system) => device_label(*kind, *form, system).to_string(),
-            From::Unknown => "Older clients".into(),
+            From::UnknownClient => "Unknown client".into(),
             From::Agents => "Agents".into(),
-            From::Servers => "Your servers".into(),
+            From::Subagents => "Subagents".into(),
         }
     }
 
     fn symbol(&self) -> &'static str {
         match self {
             From::Client(_, form, system) => form_symbol(*form, system),
-            From::Unknown => "monitorSmartphone",
-            From::Agents => "bot",
-            From::Servers => "server",
+            From::UnknownClient => "monitorSmartphone",
+            From::Agents => "sparkles",
+            From::Subagents => "bot",
         }
     }
 
-    /// The chart colour of the kind of device, the same in every period: desktops blue, or pink off a
-    /// Mac, phones green, tablets sky, the agents purple and the servers orange.
+    /// The chart colour, the same in every period: desktops blue, or pink off a Mac, phones green,
+    /// tablets sky; the agents purple and the subagents orange.
     fn color(&self) -> u8 {
         match self {
             From::Client(ClientKind::Mac, _, _) => 1,
             From::Client(_, ClientForm::Phone, _) => 2,
             From::Client(_, ClientForm::Tablet, _) => 5,
             From::Client(ClientKind::Gpui, _, system) if system == "macos" => 1,
-            From::Client(ClientKind::Other, _, _) | From::Unknown => 0,
+            From::Client(ClientKind::Other, _, _) | From::UnknownClient => 0,
             From::Client(..) => 6,
             From::Agents => 4,
-            From::Servers => 3,
+            From::Subagents => 3,
         }
     }
 
-    /// The user's own sources come first.
     fn rank(&self) -> u8 {
         match self {
             From::Client(..) => 0,
-            From::Unknown => 1,
+            From::UnknownClient => 1,
             From::Agents => 2,
-            From::Servers => 3,
+            From::Subagents => 3,
         }
     }
 }
@@ -332,7 +326,7 @@ pub fn view(done: &[Done], window: Window, names: &Names) -> View {
         }
     }
     for (_, bucket) in &turns {
-        let index = source_of(&mut sources, From::of_turn(bucket, &clients), starts.len());
+        let index = source_of(&mut sources, From::of_turn(bucket), starts.len());
         let entry = &mut sources[index].1;
         entry.turns += bucket.turns;
         entry.seconds += bucket.seconds;
@@ -382,7 +376,7 @@ pub fn view(done: &[Done], window: Window, names: &Names) -> View {
         },
     ];
 
-    let client_rows = client_rows(&messages, &turns, &clients, names, message_count);
+    let client_rows = client_rows(&messages, &turns, &clients, names);
     let (hours, busiest) = hours(done);
 
     let lines = |key: &LineKey<'_>| {
@@ -426,7 +420,6 @@ pub fn view(done: &[Done], window: Window, names: &Names) -> View {
         let server = several_servers.then(|| server_name(server_id));
         (project.cloned().unwrap_or_else(|| "Removed project".into()), None, server)
     });
-    let starters = lines(&|_, bucket| (starter_label(bucket.starter).into(), None, None));
 
     View {
         empty: false,
@@ -440,7 +433,6 @@ pub fn view(done: &[Done], window: Window, names: &Names) -> View {
         agents,
         models,
         projects,
-        starters,
         facts: facts(&turns, &messages, turn_count),
         features: feature_groups(&actions),
         agent_features: feature_lines(actions.iter().copied().filter(|bucket| bucket.actor == Actor::Agent)),
@@ -473,7 +465,6 @@ fn client_rows(
     turns: &[(&str, &TurnBucket)],
     clients: &HashMap<String, ClientRecord>,
     names: &Names,
-    message_count: u32,
 ) -> Vec<ClientRow> {
     #[derive(Default)]
     struct Seen {
@@ -498,6 +489,7 @@ fn client_rows(
         let Some(device) = &bucket.device else { continue };
         seen.entry(device.clone()).or_default().turns += bucket.turns;
     }
+    let listed: u32 = seen.values().map(|seen| seen.messages).sum();
     let mut rows: Vec<ClientRow> = seen
         .into_iter()
         .map(|(device, seen)| {
@@ -535,7 +527,7 @@ fn client_rows(
                 color: from.color(),
                 messages: seen.messages,
                 turns: seen.turns,
-                share: f64::from(seen.messages) / f64::from(message_count.max(1)),
+                share: f64::from(seen.messages) / f64::from(listed.max(1)),
                 last_seen: record.map(|record| record.seen_at),
                 this_device: device == names.this_device,
                 removed: account.is_none(),
@@ -604,19 +596,13 @@ fn facts(turns: &[(&str, &TurnBucket)], messages: &[&&ActionBucket], turn_count:
         value: number(steers as u32),
         detail: "Messages taken mid-turn".into(),
     });
-    if agents > 0 {
-        facts.push(Fact {
-            label: "Agents started".into(),
-            value: number(agents as u32),
-            detail: "Threads of their own".into(),
-        });
-    }
-    if subagents > 0 {
-        facts.push(Fact {
-            label: "Subagents".into(),
-            value: number(subagents as u32),
-            detail: "Inside an agent's session".into(),
-        });
+    if agents + subagents > 0 {
+        let detail = match (agents, subagents) {
+            (0, _) => "Inside an agent's session".to_string(),
+            (_, 0) => "In threads of their own".to_string(),
+            _ => format!("{} in threads · {} inside a session", number(agents as u32), number(subagents as u32)),
+        };
+        facts.push(Fact { label: "Subagents".into(), value: number((agents + subagents) as u32), detail });
     }
     if fast > 0 {
         facts.push(Fact {
@@ -742,16 +728,6 @@ fn outcome_label(outcome: TurnOutcome) -> &'static str {
     }
 }
 
-fn starter_label(starter: TurnStarter) -> &'static str {
-    match starter {
-        TurnStarter::User => "Your messages",
-        TurnStarter::Agent => "Other agents",
-        TurnStarter::Notice => "Agents they started",
-        TurnStarter::Server => "Your servers, on their own",
-        TurnStarter::Other => "Other",
-    }
-}
-
 /// A whole number with its thousands set apart.
 pub fn number(value: u32) -> String {
     let digits = value.to_string();
@@ -850,6 +826,7 @@ mod tests {
             subagents: 0,
             output_tokens: 0,
             reasoning_tokens: 0,
+            agent_thread: false,
         }
     }
 
@@ -894,7 +871,7 @@ mod tests {
             turns: vec![
                 turn(0.0, TurnStarter::User, Some("mac"), TurnOutcome::Done, 3, 600.0),
                 turn(DAY, TurnStarter::User, Some("phone"), TurnOutcome::Stopped, 1, 60.0),
-                turn(DAY, TurnStarter::Agent, None, TurnOutcome::Done, 2, 120.0),
+                turn(DAY, TurnStarter::Server, None, TurnOutcome::Done, 2, 120.0),
             ],
             actions: vec![
                 action(0.0, Actor::User, Some("mac"), "message", "reply", 3),
@@ -924,14 +901,22 @@ mod tests {
         let sources: Vec<_> = view
             .sources
             .iter()
-            .map(|source| (source.label.as_str(), source.symbol, source.color, &source.turn_points[..]))
+            .map(|source| {
+                (
+                    source.label.as_str(),
+                    source.symbol,
+                    source.color,
+                    &source.message_points[..],
+                    &source.turn_points[..],
+                )
+            })
             .collect();
         assert_eq!(
             sources,
             [
-                ("Mac", "laptop", 1, &[3, 0][..]),
-                ("iPhone", "smartphone", 2, &[0, 1][..]),
-                ("Agents", "bot", 4, &[0, 2][..]),
+                ("Mac", "laptop", 1, &[3, 0][..], &[0, 0][..]),
+                ("iPhone", "smartphone", 2, &[0, 1][..], &[0, 0][..]),
+                ("Agents", "sparkles", 4, &[0, 0][..], &[3, 3][..]),
             ]
         );
         let clients: Vec<_> = view
@@ -970,9 +955,54 @@ mod tests {
             colors.sort();
             colors
         };
-        let expected = [("Mac".to_string(), 1), ("Older clients".to_string(), 0), ("iPhone".to_string(), 2)];
+        let expected = [("Mac".to_string(), 1), ("Unknown client".to_string(), 0), ("iPhone".to_string(), 2)];
         assert_eq!(colors(report(9, 1)), expected);
         assert_eq!(colors(report(1, 9)), expected);
+    }
+
+    #[test]
+    fn a_thread_an_agent_started_is_a_subagent_s_work() {
+        let window = Window { since: 0.0, until: DAY, bucket_secs: 86_400, utc_offset_secs: 0 };
+        let in_agent_thread = |starter, device, seconds| TurnBucket {
+            agent_thread: true,
+            ..turn(0.0, starter, device, TurnOutcome::Done, 1, seconds)
+        };
+        let report = ActivityReport {
+            turns: vec![
+                in_agent_thread(TurnStarter::Agent, None, 60.0),
+                in_agent_thread(TurnStarter::Server, None, 120.0),
+                in_agent_thread(TurnStarter::User, None, 240.0),
+                in_agent_thread(TurnStarter::User, Some("mac"), 30.0),
+                turn(0.0, TurnStarter::User, None, TurnOutcome::Done, 1, 10.0),
+                turn(0.0, TurnStarter::Notice, None, TurnOutcome::Done, 1, 5.0),
+            ],
+            clients: vec![client("mac", ClientKind::Mac, "macos", ClientForm::Desktop)],
+            ..ActivityReport::default()
+        };
+        let view = view(&[Done { server_id: "studio".into(), report }], window, &names());
+        let sources: Vec<_> =
+            view.sources.iter().map(|source| (source.label.as_str(), source.turns, source.seconds)).collect();
+        assert_eq!(sources, [("Agents", 2, 15.0), ("Subagents", 4, 450.0)]);
+    }
+
+    #[test]
+    fn a_clients_share_is_of_the_messages_the_clients_listed_sent() {
+        let window = Window { since: 0.0, until: DAY, bucket_secs: 86_400, utc_offset_secs: 0 };
+        let report = ActivityReport {
+            actions: vec![
+                action(0.0, Actor::User, Some("mac"), "message", "reply", 3),
+                action(0.0, Actor::User, Some("phone"), "message", "reply", 1),
+                action(0.0, Actor::User, None, "message", "reply", 1000),
+            ],
+            clients: vec![
+                client("mac", ClientKind::Mac, "macos", ClientForm::Desktop),
+                client("phone", ClientKind::Ios, "ios", ClientForm::Phone),
+            ],
+            ..ActivityReport::default()
+        };
+        let view = view(&[Done { server_id: "studio".into(), report }], window, &names());
+        let shares: Vec<_> = view.clients.iter().map(|row| (row.name.as_str(), row.share)).collect();
+        assert_eq!(shares, [("Studio Mac", 0.75), ("Pocket", 0.25)]);
     }
 
     #[test]

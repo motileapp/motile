@@ -2,8 +2,8 @@ import Charts
 import SwiftUI
 
 /// What the user and the agents did on the servers counted, the Activity tab of the usage route:
-/// the headline numbers, the work over time by where it came from, the clients it came from, the
-/// hours of the week, how the turns went and the features used.
+/// the headline numbers, the work over time, the hours of the week, the clients the messages came
+/// from, how the turns went and the features used.
 struct ActivityView: View {
     enum Measure: String, CaseIterable, Identifiable {
         case messages, turns, time
@@ -20,7 +20,7 @@ struct ActivityView: View {
     }
 
     private enum Breakdown: String, CaseIterable, Identifiable {
-        case agents, models, projects, starters
+        case agents, models, projects
 
         var id: Self { self }
 
@@ -29,7 +29,6 @@ struct ActivityView: View {
             case .agents: "Agents"
             case .models: "Models"
             case .projects: "Projects"
-            case .starters: "Started by"
             }
         }
     }
@@ -65,12 +64,12 @@ struct ActivityView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 36) {
             if report.empty {
-                UsageNote(text: "Nothing was done in this time. Your servers keep what is done from the version that shows this on.")
+                UsageNote(text: "Nothing was done in this time. Servers keep what is done from the version that shows this on.")
             } else {
                 tiles
                 overTime
-                if !report.clients.isEmpty { clients }
                 hours
+                if !report.clients.isEmpty { clients }
                 if !report.outcomes.isEmpty { turns }
                 if !report.features.isEmpty || !report.agentFeatures.isEmpty { features }
             }
@@ -80,6 +79,8 @@ struct ActivityView: View {
                     .foregroundStyle(Color.themeMutedForeground)
             }
         }
+        // The width given, not the content's, which would keep a wide layout wide once the page narrows.
+        .frame(minWidth: 0, maxWidth: .infinity, alignment: .topLeading)
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
         .onChange(of: period) { pointed = nil }
     }
@@ -98,11 +99,12 @@ struct ActivityView: View {
         report.sources.filter { total(of: $0) > 0 }
     }
 
+    /// Agent time is charted in hours, so that its axis falls on whole hours.
     private func points(of source: ActivityReport.Source) -> [Double] {
         switch measure {
         case .messages: source.messagePoints
         case .turns: source.turnPoints
-        case .time: source.secondPoints
+        case .time: source.secondPoints.map { $0 / 3600 }
         }
     }
 
@@ -110,14 +112,14 @@ struct ActivityView: View {
         switch measure {
         case .messages: Double(source.messages)
         case .turns: Double(source.turns)
-        case .time: source.seconds
+        case .time: source.seconds / 3600
         }
     }
 
     private func amount(_ value: Double) -> String {
         switch measure {
         case .messages, .turns: Int(value.rounded()).formatted()
-        case .time: Self.duration(value)
+        case .time: Self.duration(value * 3600)
         }
     }
 
@@ -183,7 +185,7 @@ struct ActivityView: View {
         }
         .chartForegroundStyleScale(domain: sources.map(\.label), range: sources.map { Self.color($0.color) })
         .chartLegend(.hidden)
-        .chartXSelection(value: $pointed)
+        .chartPointing($pointed, period: period)
         .chartXAxis {
             AxisMarks(preset: .aligned, values: .automatic(desiredCount: 5)) { _ in
                 AxisValueLabel(format: period == .day ? .dateTime.hour() : .dateTime.month(.abbreviated).day())
@@ -289,7 +291,6 @@ struct ActivityView: View {
             case .agents: report.agents
             case .models: report.models
             case .projects: report.projects
-            case .starters: report.starters
             }
         return VStack(alignment: .leading, spacing: 0) {
             Segmented(offered.map { ($0.label, $0) }, selection: Binding { current } set: { breakdown = $0 }, size: .small, fills: true)
@@ -741,7 +742,7 @@ private struct ActivityHeatmap: View {
                 }
                 .padding(.top, 2)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
             caption
         }

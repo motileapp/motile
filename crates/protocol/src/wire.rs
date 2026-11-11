@@ -1228,8 +1228,8 @@ pub enum TurnStarter {
     Agent,
     /// The server telling the agent of a thread it started.
     Notice,
-    /// The server going on by itself: after a usage limit reset or a restart, or to have a program
-    /// fixed.
+    /// The agent going on by itself: woken by its own background work, or after a usage limit
+    /// reset or a restart.
     Server,
     #[serde(other)]
     Other,
@@ -1346,6 +1346,9 @@ pub struct TurnBucket {
     pub subagents: u32,
     pub output_tokens: u64,
     pub reasoning_tokens: u64,
+    /// The turns were in a thread an agent started: a subagent's.
+    #[serde(default)]
+    pub agent_thread: bool,
 }
 
 /// The times a feature was used in the time that starts at `start`, by one actor and client.

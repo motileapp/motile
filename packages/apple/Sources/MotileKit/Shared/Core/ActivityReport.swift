@@ -98,7 +98,6 @@ struct ActivityReport {
     let agents: [Line]
     let models: [Line]
     let projects: [Line]
-    let starters: [Line]
     let facts: [Fact]
     let features: [FeatureGroup]
     let agentFeatures: [Feature]
@@ -141,7 +140,6 @@ struct ActivityReport {
         agents = lines("agents")
         models = lines("models")
         projects = lines("projects")
-        starters = lines("starters")
         facts = json.objects("facts").map { Fact(label: $0.string("label"), value: $0.string("value"), detail: $0.string("detail")) }
         let feature = { (line: JSON) in
             Feature(
@@ -162,7 +160,7 @@ struct ActivityReport {
         case "tablet": .tablet
         case "monitor": .monitor
         case "bot": .bot
-        case "server": .server
+        case "sparkles": .sparkles
         default: .monitorSmartphone
         }
     }

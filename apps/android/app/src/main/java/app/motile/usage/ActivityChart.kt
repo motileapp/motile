@@ -1,8 +1,7 @@
 package app.motile.usage
 
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.Composable
@@ -31,8 +30,9 @@ private val labelGap = 6.dp
 
 /**
  * A bar for each bucket, stacked from each source's part, the first at the bottom, over four grid
- * lines with their amounts at their end and five times under them. A finger on it points at the
- * nearest bucket, which the legend then reads, and dims the others.
+ * lines with their amounts at their end and five times under them. A tap on it points at the
+ * nearest bucket, which the legend then reads, and dims the others; a tap on it again lets go, and
+ * a drag across it scrolls the page.
  */
 @Composable
 fun ActivityChart(
@@ -61,20 +61,14 @@ fun ActivityChart(
         Modifier
             .fillMaxWidth()
             .height(chartHeight)
-            .pointerInput(count, labelWidth) {
+            .pointerInput(count, labelWidth, pointed) {
                 fun nearest(x: Float): Int? {
                     if (count == 0) return null
                     return (x / slotOf(size.width.toFloat())).toInt().coerceIn(0, count - 1)
                 }
-                awaitEachGesture {
-                    val down = awaitFirstDown(requireUnconsumed = false)
-                    point(nearest(down.position.x))
-                    while (true) {
-                        val change = awaitPointerEvent().changes.firstOrNull() ?: break
-                        if (!change.pressed) break
-                        point(nearest(change.position.x))
-                    }
-                    point(null)
+                detectTapGestures { at ->
+                    val tapped = nearest(at.x)
+                    point(if (tapped == pointed) null else tapped)
                 }
             },
     ) {

@@ -412,7 +412,7 @@ impl Render for SpendingView {
             .collect();
         let body: Vec<AnyElement> = if report.tokens == 0 {
             vec![super::note(
-                "Nothing was spent in this time. Your servers keep what their agents spend from the version that shows this on.",
+                "Nothing was spent in this time. Servers keep what their agents spend from the version that shows this on.",
                 cx,
             )]
         } else {

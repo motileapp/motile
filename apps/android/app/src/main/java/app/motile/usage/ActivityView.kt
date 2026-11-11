@@ -81,23 +81,24 @@ import java.text.NumberFormat
 private enum class ActivityMeasure(val raw: String, val label: String) {
     Messages("messages", "Messages"), Turns("turns", "Turns"), Time("time", "Agent time");
 
+    /** Agent time is charted in hours, so that its axis falls on whole hours. */
     fun points(source: ActivityReport.Source): List<Double> = when (this) {
         Messages -> source.messagePoints
         Turns -> source.turnPoints
-        Time -> source.secondPoints
+        Time -> source.secondPoints.map { it / 3600 }
     }
 
     fun total(source: ActivityReport.Source): Double = when (this) {
         Messages -> source.messages.toDouble()
         Turns -> source.turns.toDouble()
-        Time -> source.seconds
+        Time -> source.seconds / 3600
     }
 
-    fun amount(value: Double): String = if (this == Time) activityDuration(value) else Math.round(value).toInt().grouped
+    fun amount(value: Double): String = if (this == Time) activityDuration(value * 3600) else Math.round(value).toInt().grouped
 }
 
 private enum class TurnBreakdown(val raw: String, val label: String) {
-    Agents("agents", "Agents"), Models("models", "Models"), Projects("projects", "Projects"), Starters("starters", "Started by"),
+    Agents("agents", "Agents"), Models("models", "Models"), Projects("projects", "Projects")
 }
 
 private enum class Who(val raw: String, val label: String) { You("you", "You"), Agents("agents", "Agents") }
@@ -128,14 +129,14 @@ fun ActivityView(report: ActivityReport, period: UsageModel.Period) {
         val beside = maxWidth >= besideWidth
         Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(36.dp)) {
             if (report.empty) {
-                UsageNote("Nothing was done in this time. Your servers keep what is done from the version that shows this on.")
+                UsageNote("Nothing was done in this time. Servers keep what is done from the version that shows this on.")
             } else {
                 StatGrid(report.tiles.map { Stat(it.label, it.value, it.detail) }, if (beside) 4 else 2, TextSize.Xl)
                 OverTime(report, period, beside, pointed) { pointed = it }
-                if (report.clients.isNotEmpty()) Clients(report, beside)
                 Section("When you work", report.busiest) {
                     Card(Modifier.fillMaxWidth()) { Heatmap(report.hours, Modifier.padding(16.dp)) }
                 }
+                if (report.clients.isNotEmpty()) Clients(report, beside)
                 if (report.outcomes.isNotEmpty()) Turns(report, beside)
                 if (report.features.isNotEmpty() || report.agentFeatures.isNotEmpty()) Features(report, beside)
             }
@@ -346,7 +347,7 @@ private fun Outcomes(report: ActivityReport, modifier: Modifier) {
     }
 }
 
-/** The turns by agent, model, project or who started them, picked by the segments over them. Projects are offered once there is more than one. */
+/** The turns by agent, model or project, picked by the segments over them. Projects are offered once there is more than one. */
 @Composable
 private fun Breakdown(report: ActivityReport, modifier: Modifier) {
     var breakdown by remember { mutableStateOf(TurnBreakdown.entries.firstOrNull { it.raw == Preferences.string(BREAKDOWN_KEY) } ?: TurnBreakdown.Agents) }
@@ -356,7 +357,6 @@ private fun Breakdown(report: ActivityReport, modifier: Modifier) {
         TurnBreakdown.Agents -> report.agents
         TurnBreakdown.Models -> report.models
         TurnBreakdown.Projects -> report.projects
-        TurnBreakdown.Starters -> report.starters
     }
     Card(modifier) {
         Box(Modifier.fillMaxWidth().heightIn(min = scaled(40f).dp).padding(horizontal = 8.dp), contentAlignment = Alignment.Center) {

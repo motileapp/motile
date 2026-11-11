@@ -45,7 +45,7 @@ struct SpendingView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
             if report.tokens == 0 {
-                UsageNote(text: "Nothing was spent in this time. Your servers keep what their agents spend from the version that shows this on.")
+                UsageNote(text: "Nothing was spent in this time. Servers keep what their agents spend from the version that shows this on.")
             } else {
                 if width >= Self.besideWidth {
                     HStack(alignment: .top, spacing: 28) {
@@ -65,6 +65,8 @@ struct SpendingView: View {
                     .foregroundStyle(Color.themeMutedForeground)
             }
         }
+        // The width given, not the content's, which would keep a wide layout wide once the page narrows.
+        .frame(minWidth: 0, maxWidth: .infinity, alignment: .topLeading)
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
         .onChange(of: period) { pointed = nil }
     }
@@ -201,7 +203,7 @@ struct SpendingView: View {
                 domain: report.agents.map(\.agent.name), range: report.agents.map { $0.agent.color }
             )
             .chartLegend(.hidden)
-            .chartXSelection(value: $pointed)
+            .chartPointing($pointed, period: period)
             .chartXScale(range: .plotDimension(startPadding: 16, endPadding: 16))
             .chartXAxis {
                 AxisMarks(preset: .aligned, values: .automatic(desiredCount: 5)) { _ in

@@ -105,7 +105,6 @@ pub struct ActivityReport {
     pub agents: Vec<ActivityLine>,
     pub models: Vec<ActivityLine>,
     pub projects: Vec<ActivityLine>,
-    pub starters: Vec<ActivityLine>,
     pub facts: Vec<ActivityFact>,
     pub features: Vec<FeatureGroup>,
     pub agent_features: Vec<FeatureLine>,
