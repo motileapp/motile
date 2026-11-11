@@ -652,13 +652,25 @@ private struct ActivityFeatureCard: View {
             }
             if features.count > Self.shown {
                 ThemeDivider()
-                ActionButton(all ? "Show fewer" : "Show all \(features.count)", variant: .ghost, size: .small) { all.toggle() }
-                    .frame(maxWidth: .infinity)
-                    .padding(6)
+                more
             }
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .card()
+    }
+
+    /// The card's last row, which shows the rest of the features or only the first again, at once.
+    private var more: some View {
+        Text(all ? "Show fewer" : "Show all \(features.count)")
+            .font(.ui(.xs, weight: .medium))
+            .foregroundStyle(Color.themeForeground)
+            .frame(maxWidth: .infinity, minHeight: scaled(40))
+            .button(.highlight(radius: 0)) {
+                var instant = Transaction(animation: nil)
+                instant.disablesAnimations = true
+                withTransaction(instant) { all.toggle() }
+            }
+            .clipShape(UnevenRoundedRectangle(bottomLeadingRadius: Radius.lg, bottomTrailingRadius: Radius.lg, style: .continuous))
     }
 
     private func row(_ feature: ActivityReport.Feature) -> some View {
