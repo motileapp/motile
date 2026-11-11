@@ -42,16 +42,27 @@ struct ActivityView: View {
         var label: String { self == .you ? "You" : "Agents" }
     }
 
+    /// What the hours of the week are coloured by.
+    enum HourMeasure: String, CaseIterable, Identifiable {
+        case time, messages
+
+        var id: Self { self }
+
+        var label: String { self == .time ? "Time spent" : "Messages sent" }
+    }
+
     /// Narrower than this, the tiles go two to a row and the turns' cards under each other.
     static let besideWidth: CGFloat = 640
 
     @Environment(AppStore.self) private var store
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.usagePageHeight) private var pageHeight
     let report: ActivityReport
     let period: UsageModel.Period
     @AppStorage("activity.measure") private var measure = Measure.messages
     @AppStorage("activity.breakdown") private var breakdown = Breakdown.agents
     @AppStorage("activity.who") private var who = Who.you
+    @AppStorage("activity.hours") private var hourMeasure = HourMeasure.time
     @State private var pointed: Date?
     @State private var width: CGFloat = 0
 
@@ -61,6 +72,9 @@ struct ActivityView: View {
     }
 
     private var beside: Bool { width >= Self.besideWidth }
+
+    /// The most a long list shows before it scrolls: half of what the page shows.
+    private var listHeight: CGFloat { max(240, pageHeight / 2) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 36) {
@@ -136,8 +150,8 @@ struct ActivityView: View {
 
     private var overTime: some View {
         VStack(alignment: .leading, spacing: 12) {
-            ActivityHeading(title: "Over time", stacked: !beside) {
-                Segmented(Measure.allCases.map { ($0.label, $0) }, selection: $measure, size: .small, fills: !beside)
+            ActivityHeading(title: "Over time", stacked: true) {
+                Segmented(Measure.allCases.map { ($0.label, $0) }, selection: $measure, size: Platform.pageSegments, fills: !beside)
             }
             legend
             chart
@@ -152,7 +166,7 @@ struct ActivityView: View {
                 ForEach(shownSources) { source in
                     HStack(spacing: 6) {
                         Circle()
-                            .fill(Self.color(source.color))
+                            .fill(Self.color(source.color, in: scheme))
                             .frame(width: 8, height: 8)
                         Image(source.symbol, size: .xs)
                             .foregroundStyle(Color.themeMutedForeground)
@@ -194,7 +208,7 @@ struct ActivityView: View {
                 }
             }
         }
-        .chartForegroundStyleScale(domain: sources.map(\.label), range: sources.map { Self.color($0.color) })
+        .chartForegroundStyleScale(domain: sources.map(\.label), range: sources.map { Self.color($0.color, in: scheme) })
         .chartLegend(.hidden)
         .chartPointing($pointed, period: period)
         .chartXAxis {
@@ -232,11 +246,13 @@ struct ActivityView: View {
     private var clients: some View {
         VStack(alignment: .leading, spacing: 12) {
             ActivityHeading(title: "Clients", detail: "Where you worked from")
-            VStack(spacing: 0) {
-                ForEach(report.clients) { client in
-                    ActivityClientRow(client: client, beside: beside)
-                    if client.id != report.clients.last?.id {
-                        ThemeDivider()
+            FadingScroll(maxHeight: listHeight) {
+                VStack(spacing: 0) {
+                    ForEach(report.clients) { client in
+                        ActivityClientRow(client: client, beside: beside)
+                        if client.id != report.clients.last?.id {
+                            ThemeDivider()
+                        }
                     }
                 }
             }
@@ -248,8 +264,10 @@ struct ActivityView: View {
 
     private var hours: some View {
         VStack(alignment: .leading, spacing: 12) {
-            ActivityHeading(title: "When you work", detail: report.busiest)
-            ActivityHeatmap(hours: report.hours)
+            ActivityHeading(title: "When you work", detail: hourMeasure == .time ? report.busiestTime : report.busiestMessages, stacked: true) {
+                Segmented(HourMeasure.allCases.map { ($0.label, $0) }, selection: $hourMeasure, size: Platform.pageSegments, fills: !beside)
+            }
+            ActivityHeatmap(hours: report.hours, measure: hourMeasure)
                 .padding(16)
                 .card()
         }
@@ -310,14 +328,18 @@ struct ActivityView: View {
             case .projects: report.projects
             }
         return VStack(alignment: .leading, spacing: 0) {
-            Segmented(offered.map { ($0.label, $0) }, selection: Binding { current } set: { breakdown = $0 }, size: .small, fills: true)
+            Segmented(offered.map { ($0.label, $0) }, selection: Binding { current } set: { breakdown = $0 }, size: Platform.pageSegments, fills: true)
                 .padding(.horizontal, 8)
                 .frame(minHeight: scaled(40))
             ThemeDivider()
-            ForEach(shown) { line in
-                ActivityLineRow(line: line, tint: nil)
-                if line.id != shown.last?.id {
-                    ThemeDivider()
+            FadingScroll(maxHeight: listHeight) {
+                VStack(spacing: 0) {
+                    ForEach(shown) { line in
+                        ActivityLineRow(line: line, tint: nil)
+                        if line.id != shown.last?.id {
+                            ThemeDivider()
+                        }
+                    }
                 }
             }
         }
@@ -332,7 +354,7 @@ struct ActivityView: View {
         return VStack(alignment: .leading, spacing: 12) {
             ActivityHeading(title: "Features", stacked: !beside && offered.count > 1) {
                 if offered.count > 1 {
-                    Segmented(offered.map { ($0.label, $0) }, selection: Binding { current } set: { who = $0 }, size: .small, fills: !beside)
+                    Segmented(offered.map { ($0.label, $0) }, selection: Binding { current } set: { who = $0 }, size: Platform.pageSegments, fills: !beside)
                 }
             }
             switch current {
@@ -351,9 +373,9 @@ struct ActivityView: View {
 
     // MARK: Colours and words
 
-    /// A source's colour: one of the six chart colours, or muted for clients that didn't say which
-    /// they are.
-    static func color(_ index: Int) -> Color {
+    /// A source's colour: one of the six chart colours, the agents' colour or its tint, or muted for
+    /// clients that didn't say which they are.
+    static func color(_ index: Int, in scheme: ColorScheme) -> Color {
         switch index {
         case 1: .themeChart1
         case 2: .themeChart2
@@ -361,6 +383,8 @@ struct ActivityView: View {
         case 4: .themeChart4
         case 5: .themeChart5
         case 6: .themeChart6
+        case 7: .themePending
+        case 8: .themePending.opacity(Opacity.colorTintChartStronger.value(for: scheme))
         default: .themeMutedForeground
         }
     }
@@ -482,6 +506,7 @@ extension ActivityHeading where Trailing == EmptyView {
 /// A client: its device, what it is, how it reaches the servers, and its part of your time and messages.
 private struct ActivityClientRow: View {
     @Environment(\.surface) private var surface
+    @Environment(\.colorScheme) private var scheme
     let client: ActivityReport.Client
     let beside: Bool
 
@@ -518,42 +543,23 @@ private struct ActivityClientRow: View {
                 .foregroundStyle(Color.themeMutedForeground)
                 .layoutPriority(1)
                 Spacer(minLength: 8)
-                if beside {
-                    ActivityBar(share: client.share, color: ActivityView.color(client.color))
-                        .frame(width: 96)
-                    VStack(alignment: .trailing, spacing: 3) {
-                        Text(verbatim: client.summary)
-                            .font(.ui(.xs))
-                            .foregroundStyle(Color.themeForeground)
-                        if let seen {
-                            Text(seen)
-                                .font(.ui(.xxs))
-                                .foregroundStyle(Color.themeMutedStrongerForeground)
-                        }
-                    }
-                    .monospacedDigit()
-                    .lineLimit(1)
-                    .fixedSize()
-                }
             }
-            if !beside {
-                VStack(alignment: .leading, spacing: 6) {
-                    ActivityBar(share: client.share, color: ActivityView.color(client.color))
-                    HStack {
-                        Text(verbatim: client.summary)
-                            .foregroundStyle(Color.themeForeground)
-                        Spacer(minLength: 8)
-                        if let seen {
-                            Text(seen)
-                                .foregroundStyle(Color.themeMutedStrongerForeground)
-                        }
+            VStack(alignment: .leading, spacing: 6) {
+                ActivityBar(share: client.share, color: ActivityView.color(client.color, in: scheme))
+                HStack {
+                    Text(verbatim: client.summary)
+                        .foregroundStyle(Color.themeForeground)
+                    Spacer(minLength: 8)
+                    if let seen {
+                        Text(seen)
+                            .foregroundStyle(Color.themeMutedStrongerForeground)
                     }
-                    .font(.ui(.xxs))
-                    .monospacedDigit()
-                    .lineLimit(1)
                 }
-                .padding(.leading, scaled(32) + 12)
+                .font(.ui(.xxs))
+                .monospacedDigit()
+                .lineLimit(1)
             }
+            .padding(.leading, scaled(32) + 12)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
@@ -567,7 +573,7 @@ private struct ActivityClientRow: View {
     }
 
     private var badge: some View {
-        let color = ActivityView.color(client.color)
+        let color = ActivityView.color(client.color, in: scheme)
         return Image(client.symbol, size: .md)
             .foregroundStyle(color)
             .frame(width: scaled(32), height: scaled(32))
@@ -731,6 +737,7 @@ private struct ActivityHeatmap: View {
     @Environment(\.colorScheme) private var scheme
     @Environment(\.surface) private var surface
     let hours: [ActivityReport.Hour]
+    let measure: ActivityView.HourMeasure
     @State private var chosen: ActivityReport.Hour?
     @State private var width: CGFloat = 0
 
@@ -776,7 +783,7 @@ private struct ActivityHeatmap: View {
     private func cell(_ hour: ActivityReport.Hour?) -> some View {
         let isChosen = hour != nil && hour?.id == chosen?.id
         return RoundedRectangle(cornerRadius: corner, style: .continuous)
-            .fill(fill(hour?.level ?? 0))
+            .fill(fill(hour.map { measure == .time ? $0.timeLevel : $0.messageLevel } ?? 0))
             .frame(width: side, height: min(side, scaled(18)))
             .overlay {
                 if isChosen {

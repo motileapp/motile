@@ -20,7 +20,6 @@ import app.motile.LocalStore
 import app.motile.core.Loaded
 import app.motile.core.Server
 import app.motile.core.UsageModel
-import app.motile.theme.ControlSize
 import app.motile.theme.LocalPalette
 import app.motile.theme.TextSize
 import app.motile.ui.Check
@@ -43,7 +42,7 @@ fun UsageContent(model: UsageModel, modifier: Modifier = Modifier, margin: Dp = 
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             if (periodInPage && model.tab != UsageModel.Tab.Limits) {
-                Segmented(UsageModel.Period.entries.map { it.label to it }, model.period, { model.period = it }, size = ControlSize.Small, fills = true)
+                Segmented(UsageModel.Period.entries.map { it.label to it }, model.period, { model.period = it }, fills = true)
             }
             when (model.tab) {
                 UsageModel.Tab.Limits -> {

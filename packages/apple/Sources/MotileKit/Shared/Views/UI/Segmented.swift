@@ -93,8 +93,9 @@ private struct Segment: View {
 
     var body: some View {
         Button(action: action) {
+            // Choices that share the width stretch anyway, so their words keep less room to their sides.
             words
-                .padding(.horizontal, size.padding)
+                .padding(.horizontal, fills ? size.padding / 2 : size.padding)
                 .frame(maxWidth: fills ? .infinity : nil)
                 .frame(height: size.height)
                 .padding(margin)

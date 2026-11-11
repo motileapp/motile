@@ -57,7 +57,10 @@ struct ActivityReport {
         let engagedSeconds: Double
         /// The user's time in it, or empty: "42m".
         let time: String
-        let level: Int
+        /// From 0, nothing, to 4, by the user's time in it next to the hour with the most.
+        let timeLevel: Int
+        /// From 0 to 4, by its messages next to the hour with the most.
+        let messageLevel: Int
 
         var id: Int { weekday * 24 + hour }
     }
@@ -106,7 +109,8 @@ struct ActivityReport {
     let secondTicks: [Double]
     let clients: [Client]
     let hours: [Hour]
-    let busiest: String?
+    let busiestTime: String?
+    let busiestMessages: String?
     let outcomes: [Line]
     let agents: [Line]
     let models: [Line]
@@ -142,9 +146,11 @@ struct ActivityReport {
         hours = json.objects("hours").map { hour in
             Hour(
                 weekday: hour.int("weekday"), hour: hour.int("hour"), messages: hour.int("messages"), turns: hour.int("turns"),
-                engagedSeconds: hour.double("engaged_seconds"), time: hour.string("time"), level: hour.int("level"))
+                engagedSeconds: hour.double("engaged_seconds"), time: hour.string("time"),
+                timeLevel: hour.int("time_level"), messageLevel: hour.int("message_level"))
         }
-        busiest = json.optionalString("busiest")
+        busiestTime = json.optionalString("busiest_time")
+        busiestMessages = json.optionalString("busiest_messages")
         let lines = { (key: String) in
             json.objects(key).map { line in
                 Line(
@@ -177,7 +183,6 @@ struct ActivityReport {
         case "tablet": .tablet
         case "monitor": .monitor
         case "bot": .bot
-        case "sparkles": .sparkles
         default: .monitorSmartphone
         }
     }

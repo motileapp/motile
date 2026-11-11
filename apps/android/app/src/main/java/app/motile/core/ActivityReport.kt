@@ -14,7 +14,8 @@ data class ActivityReport(
     val secondTicks: List<Double>,
     val clients: List<Client>,
     val hours: List<Hour>,
-    val busiest: String?,
+    val busiestTime: String?,
+    val busiestMessages: String?,
     val outcomes: List<Line>,
     val agents: List<Line>,
     val models: List<Line>,
@@ -63,7 +64,7 @@ data class ActivityReport(
     )
 
     /** `time` is the user's time in it, or empty: "42m". */
-    data class Hour(val weekday: Int, val hour: Int, val messages: Int, val turns: Int, val engagedSeconds: Double, val time: String, val level: Int) {
+    data class Hour(val weekday: Int, val hour: Int, val messages: Int, val turns: Int, val engagedSeconds: Double, val time: String, val timeLevel: Int, val messageLevel: Int) {
         val id: Int get() = weekday * 24 + hour
     }
 
@@ -109,9 +110,10 @@ data class ActivityReport(
                     )
                 },
                 hours = json.objects("hours").map {
-                    Hour(it.int("weekday"), it.int("hour"), it.int("messages"), it.int("turns"), it.double("engaged_seconds"), it.string("time"), it.int("level"))
+                    Hour(it.int("weekday"), it.int("hour"), it.int("messages"), it.int("turns"), it.double("engaged_seconds"), it.string("time"), it.int("time_level"), it.int("message_level"))
                 },
-                busiest = json.optionalString("busiest"),
+                busiestTime = json.optionalString("busiest_time"),
+                busiestMessages = json.optionalString("busiest_messages"),
                 outcomes = lines("outcomes"),
                 agents = lines("agents"),
                 models = lines("models"),
@@ -131,7 +133,6 @@ data class ActivityReport(
             "tablet" -> Symbol.Tablet
             "monitor" -> Symbol.Monitor
             "bot" -> Symbol.Bot
-            "sparkles" -> Symbol.Sparkles
             else -> Symbol.MonitorSmartphone
         }
     }

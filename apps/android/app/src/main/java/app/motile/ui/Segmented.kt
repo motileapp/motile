@@ -71,7 +71,7 @@ fun <T> Segmented(
                     end = if (index == options.lastIndex) edge else half,
                     bottom = edge,
                 )
-                Segment(title, value == selection, size, margin, if (fills) Modifier.weight(1f) else Modifier) { onSelect(value) }
+                Segment(title, value == selection, size, margin, fills, if (fills) Modifier.weight(1f) else Modifier) { onSelect(value) }
             }
         }
     }
@@ -83,7 +83,7 @@ fun <T> Segmented(
  * then, and muted else.
  */
 @Composable
-private fun Segment(title: String, selected: Boolean, size: ControlSize, margin: PaddingValues, modifier: Modifier, onClick: () -> Unit) {
+private fun Segment(title: String, selected: Boolean, size: ControlSize, margin: PaddingValues, fills: Boolean, modifier: Modifier, onClick: () -> Unit) {
     val palette = LocalPalette.current
     val enabled = LocalEnabled.current
     val interaction = remember { MutableInteractionSource() }
@@ -104,7 +104,8 @@ private fun Segment(title: String, selected: Boolean, size: ControlSize, margin:
             selected -> Box(Modifier.matchParentSize().padding(margin).shadow(ShadowSize.Sm, shape).background(palette.segmentSelected, shape))
             up -> Box(Modifier.matchParentSize().padding(margin).background(palette.segmentAccent, shape))
         }
-        Box(Modifier.padding(margin).height(size.height).padding(horizontal = size.padding), contentAlignment = Alignment.Center) {
+        // Choices that share the width stretch anyway, so their words keep less room to their sides.
+        Box(Modifier.padding(margin).height(size.height).padding(horizontal = if (fills) size.padding / 2 else size.padding), contentAlignment = Alignment.Center) {
             Text(title, style = size.font, color = color, maxLines = 1)
         }
     }

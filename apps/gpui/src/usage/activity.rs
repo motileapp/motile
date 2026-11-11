@@ -20,8 +20,8 @@ use crate::theme::{Colors, ControlSize, IconSize, Layer, Opacity, Radius, Surfac
 use crate::ui::control::dotted;
 use crate::ui::menu::Anchor;
 use crate::ui::{
-    Chip, Highlight, Segmented, card_default, divider_on, edges, icons, logos, middle_truncated, tabular_numbers,
-    tabular_text_width, text_width,
+    Chip, FadingScroll, Highlight, Segmented, card_default, divider_on, edges, icons, logos, middle_truncated,
+    tabular_numbers, tabular_text_width, text_width,
 };
 
 /// Narrower than this, the tiles go two to a row and the turns' cards under each other.
@@ -29,7 +29,6 @@ const BESIDE_WIDTH: f32 = 640.;
 /// How much of its bucket's width a bar takes.
 const BAR_FILL: f32 = 0.7;
 const BADGE: f32 = 32.;
-const CLIENT_BAR_WIDTH: f32 = 96.;
 const FEATURE_BAR_WIDTH: f32 = 56.;
 /// How many features a group shows until all are asked for.
 const FEATURES_SHOWN: usize = 5;
@@ -41,6 +40,7 @@ const WEEKDAYS: [&str; 7] = ["Monday", "Tuesday", "Wednesday", "Thursday", "Frid
 const MEASURE_KEY: &str = "activity.measure";
 const BREAKDOWN_KEY: &str = "activity.breakdown";
 const WHO_KEY: &str = "activity.who";
+const HOURS_KEY: &str = "activity.hours";
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -126,6 +126,31 @@ impl Who {
             Who::Agents => "Agents",
         }
     }
+}
+
+/// What the hours of the week are coloured by.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum HourMeasure {
+    #[default]
+    Time,
+    Messages,
+}
+
+impl HourMeasure {
+    const ALL: [HourMeasure; 2] = [HourMeasure::Time, HourMeasure::Messages];
+
+    fn label(self) -> &'static str {
+        match self {
+            HourMeasure::Time => "Time spent",
+            HourMeasure::Messages => "Messages sent",
+        }
+    }
+}
+
+/// The most a long list shows before it scrolls: half the window.
+fn list_height(window: &Window) -> f32 {
+    (f32::from(window.viewport_size().height) / 2.).max(240.)
 }
 
 pub struct ActivityView {
@@ -218,7 +243,7 @@ impl ActivityView {
             .flex()
             .flex_col()
             .gap(px(12.))
-            .child(heading("Over time", None, Some(picker.into_any_element()), !self.beside(), cx))
+            .child(heading("Over time", None, Some(picker.into_any_element()), true, cx))
             .child(self.legend(report, measure, cx))
             .child(self.chart(report, measure, cx))
             .into_any_element()
@@ -363,18 +388,20 @@ impl ActivityView {
             .into_any_element()
     }
 
-    fn clients(&self, report: &ActivityReport, cx: &App) -> AnyElement {
+    fn clients(&self, report: &ActivityReport, window: &Window, cx: &App) -> AnyElement {
         let rows = separated(report.clients.iter().map(|client| self.client_row(client, cx)).collect(), cx);
+        let list = FadingScroll::new("activity-clients", list_height(window)).fill(colors(cx).card).children(rows);
         div()
             .flex()
             .flex_col()
             .gap(px(12.))
             .child(heading("Clients", Some("Where you worked from".into()), None, false, cx))
-            .child(card_default(div().flex().flex_col(), cx).children(rows))
+            .child(card_default(div().flex().flex_col(), cx).child(list))
             .into_any_element()
     }
 
-    /// A client: its device, what it is, how it reaches the servers, and its part of the messages.
+    /// A client: its device, what it is, how it reaches the servers, and under them its part of your
+    /// time or of the messages, as wide as every client's so that the bars line up.
     fn client_row(&self, client: &ActivityClient, cx: &App) -> AnyElement {
         let c = colors(cx);
         let beside = self.beside();
@@ -438,68 +465,65 @@ impl ActivityView {
             })
         };
         let main = div().flex().items_center().gap(px(12.)).child(badge).child(about);
-        if !beside {
-            let numbers = div()
-                .flex()
-                .justify_between()
-                .gap(px(8.))
-                .text_size(TextSize::Xxs)
-                .whitespace_nowrap()
-                .font_features(tabular_numbers())
-                .child(div().text_color(c.foreground).child(summary))
-                .when_some(seen, |numbers, seen| {
-                    numbers.child(div().text_color(c.muted_stronger_foreground).child(seen))
-                });
-            return div()
-                .px(px(14.))
-                .py(px(12.))
-                .flex()
-                .flex_col()
-                .gap(px(10.))
-                .child(main)
-                .child(
-                    div()
-                        .pl(px(BADGE + 12.))
-                        .flex()
-                        .flex_col()
-                        .gap(px(6.))
-                        .child(share_bar(client.share, color, c))
-                        .child(numbers),
-                )
-                .into_any_element();
-        }
         let numbers = div()
-            .flex_shrink_0()
             .flex()
-            .flex_col()
-            .items_end()
-            .gap(px(3.))
+            .justify_between()
+            .gap(px(8.))
+            .text_size(TextSize::Xxs)
             .whitespace_nowrap()
             .font_features(tabular_numbers())
-            .child(div().text_size(TextSize::Xs).text_color(c.foreground).child(summary))
-            .when_some(seen, |numbers, seen| {
-                numbers.child(div().text_size(TextSize::Xxs).text_color(c.muted_stronger_foreground).child(seen))
-            });
+            .child(div().text_color(c.foreground).child(summary))
+            .when_some(seen, |numbers, seen| numbers.child(div().text_color(c.muted_stronger_foreground).child(seen)));
         div()
             .px(px(14.))
             .py(px(12.))
-            .child(main.child(share_bar(client.share, color, c).w(px(CLIENT_BAR_WIDTH)).flex_shrink_0()).child(numbers))
+            .flex()
+            .flex_col()
+            .gap(px(10.))
+            .child(main)
+            .child(
+                div()
+                    .pl(px(BADGE + 12.))
+                    .flex()
+                    .flex_col()
+                    .gap(px(6.))
+                    .child(share_bar(client.share, color, c))
+                    .child(numbers),
+            )
             .into_any_element()
     }
 
     fn hours(&self, report: &ActivityReport, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+        let measure: HourMeasure = self.pref(HOURS_KEY, cx);
+        let picker =
+            self.picker(HOURS_KEY, HourMeasure::ALL.to_vec(), measure, HourMeasure::label).fills(!self.beside());
+        let busiest = match measure {
+            HourMeasure::Time => report.busiest_time.clone(),
+            HourMeasure::Messages => report.busiest_messages.clone(),
+        };
         div()
             .flex()
             .flex_col()
             .gap(px(12.))
-            .child(heading("When you work", report.busiest.clone(), None, false, cx))
-            .child(card_default(div().p(px(HEATMAP_PADDING)), cx).child(self.heatmap(&report.hours, window, cx)))
+            .child(heading("When you work", busiest, Some(picker.into_any_element()), true, cx))
+            .child(card_default(div().p(px(HEATMAP_PADDING)), cx).child(self.heatmap(
+                &report.hours,
+                measure,
+                window,
+                cx,
+            )))
             .into_any_element()
     }
 
     /// The hours of the week, a row a day, each as busy as its colour is strong. The hour the
     /// pointer is over says what was done in it.
-    fn heatmap(&self, hours: &[ActivityHour], window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+    fn heatmap(
+        &self,
+        hours: &[ActivityHour],
+        measure: HourMeasure,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
         let c = colors(cx);
         let inner = self.width - 2. * HEATMAP_PADDING - 2.;
         let side = ((inner - DAY_LABELS - HEATMAP_GAP * 24.) / 24.).max(4.);
@@ -520,7 +544,10 @@ impl ActivityView {
                 )
                 .children((0..24).map(|hour| {
                     let index = day * 24 + hour;
-                    let level = hours.get(index).map_or(0, |hour| hour.level);
+                    let level = hours.get(index).map_or(0, |hour| match measure {
+                        HourMeasure::Time => hour.time_level,
+                        HourMeasure::Messages => hour.message_level,
+                    });
                     div()
                         .id(("activity-hour", index))
                         .flex_shrink_0()
@@ -610,9 +637,9 @@ impl ActivityView {
         caption.items_center().gap(px(8.)).child(said).child(div().flex_1().min_w(px(8.))).child(key)
     }
 
-    fn turns(&self, report: &ActivityReport, cx: &App) -> AnyElement {
+    fn turns(&self, report: &ActivityReport, window: &Window, cx: &App) -> AnyElement {
         let outcomes = self.outcomes(report, cx);
-        let breakdown = self.breakdown(report, cx);
+        let breakdown = self.breakdown(report, window, cx);
         let cards = if self.beside() {
             div().flex().gap(px(12.)).child(outcomes.flex_1().min_w_0()).child(breakdown.flex_1().min_w_0())
         } else {
@@ -649,7 +676,7 @@ impl ActivityView {
             .children(rows)
     }
 
-    fn breakdown(&self, report: &ActivityReport, cx: &App) -> Div {
+    fn breakdown(&self, report: &ActivityReport, window: &Window, cx: &App) -> Div {
         let offered: Vec<Breakdown> = Breakdown::ALL
             .into_iter()
             .filter(|breakdown| *breakdown != Breakdown::Projects || report.projects.len() > 1)
@@ -666,7 +693,7 @@ impl ActivityView {
         card_default(div().flex().flex_col(), cx)
             .child(div().min_h(px(40.)).px(px(8.)).flex().items_center().child(picker))
             .child(divider_on(Surface::Card, cx))
-            .children(rows)
+            .child(FadingScroll::new("activity-breakdown", list_height(window)).fill(colors(cx).card).children(rows))
     }
 
     fn features(&self, report: &ActivityReport, cx: &mut Context<Self>) -> AnyElement {
@@ -797,10 +824,10 @@ impl Render for ActivityView {
             let mut sections = vec![self.tiles(&report, cx), self.over_time(&report, cx)];
             sections.push(self.hours(&report, window, cx));
             if !report.clients.is_empty() {
-                sections.push(self.clients(&report, cx));
+                sections.push(self.clients(&report, window, cx));
             }
             if !report.outcomes.is_empty() {
-                sections.push(self.turns(&report, cx));
+                sections.push(self.turns(&report, window, cx));
             }
             if !report.features.is_empty() || !report.agent_features.is_empty() {
                 sections.push(self.features(&report, cx));
@@ -1048,6 +1075,8 @@ fn chart_color(index: u8, c: &Colors) -> Hsla {
         4 => c.chart_4,
         5 => c.chart_5,
         6 => c.chart_6,
+        7 => c.pending,
+        8 => c.at(c.pending, Opacity::ColorTintChartStronger),
         _ => c.muted_foreground,
     }
 }
@@ -1079,7 +1108,6 @@ fn symbol_name(name: &str) -> &'static str {
         "tablet" => "tablet",
         "monitor" => "monitor",
         "bot" => "bot",
-        "sparkles" => "sparkles",
         _ => "monitor-smartphone",
     }
 }

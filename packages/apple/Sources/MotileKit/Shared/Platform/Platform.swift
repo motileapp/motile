@@ -28,11 +28,14 @@ enum Platform {
     static let hoverReveals = true
     /// The least a control is tall and wide for a finger to press it.
     static let minimumPress: CGFloat = 0
+    /// The size of the segments that pick what a page shows, small beside the pointer, larger for a finger.
+    static let pageSegments: ControlSize = .small
     #else
     static let name = "ios"
     static let scale: CGFloat = 1.14
     static let hoverReveals = false
     static let minimumPress: CGFloat = 44
+    static let pageSegments: ControlSize = .regular
     #endif
 
     /// What the device is called in what the user reads.

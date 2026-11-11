@@ -50,8 +50,10 @@ pub struct View {
     pub clients: Vec<ClientRow>,
     /// The 168 hours of the week, Monday's first.
     pub hours: Vec<HourCell>,
-    /// When the user is in the client the most, or sends the most messages, as a sentence.
-    pub busiest: Option<String>,
+    /// When the user is in the clients the most, as a sentence.
+    pub busiest_time: Option<String>,
+    /// When the user sends the most messages, as a sentence.
+    pub busiest_messages: Option<String>,
     pub outcomes: Vec<Line>,
     pub agents: Vec<Line>,
     pub models: Vec<Line>,
@@ -77,7 +79,7 @@ pub struct Source {
     /// One of the clients' symbols, by its name in `Symbol.swift`.
     pub symbol: &'static str,
     /// Which of the six chart colours, from 1, always the same for a kind of device; 0 is the muted
-    /// colour of clients that didn't say which they are.
+    /// colour of clients that didn't say which they are, 7 the agents' colour and 8 its tint.
     pub color: u8,
     pub messages: u32,
     pub turns: u32,
@@ -125,8 +127,10 @@ pub struct HourCell {
     pub engaged_seconds: f64,
     /// The user's time in it, or empty: "42m".
     pub time: String,
-    /// How busy it was next to the busiest hour, from 0, nothing, to 4.
-    pub level: u8,
+    /// The user's time in it next to the hour they spent the most time in, from 0, nothing, to 4.
+    pub time_level: u8,
+    /// Its messages next to the hour with the most, from 0 to 4.
+    pub message_level: u8,
 }
 
 /// An agent, a model, a project or an outcome of turns and its part of them.
@@ -227,13 +231,14 @@ impl From {
         match self {
             From::Client(_, form, system) => form_symbol(*form, system),
             From::UnknownClient => "monitorSmartphone",
-            From::Agents => "sparkles",
+            From::Agents => "bot",
             From::Subagents => "bot",
         }
     }
 
     /// The chart colour, the same in every period: desktops blue, or pink off a Mac, phones green,
-    /// tablets sky; the agents purple and the subagents orange.
+    /// tablets sky; the agents in the agents' colour, as the sidebar counts them, and the subagents
+    /// in its tint.
     fn color(&self) -> u8 {
         match self {
             From::Client(ClientKind::Mac, _, _) => 1,
@@ -242,8 +247,8 @@ impl From {
             From::Client(ClientKind::Gpui, _, system) if system == "macos" => 1,
             From::Client(ClientKind::Other, _, _) | From::UnknownClient => 0,
             From::Client(..) => 6,
-            From::Agents => 4,
-            From::Subagents => 3,
+            From::Agents => 7,
+            From::Subagents => 8,
         }
     }
 
@@ -425,7 +430,7 @@ pub fn view(done: &[Done], window: Window, names: &Names, local: &[Stretch], eve
     ];
 
     let client_rows = client_rows(&messages, &turns, &spans, &clients, names);
-    let (hours, busiest) = hours(done, &together, window.utc_offset_secs);
+    let (hours, busiest_time, busiest_messages) = hours(done, &together, window.utc_offset_secs);
 
     let lines = |key: &LineKey<'_>| {
         let mut found: Vec<(String, Option<Agent>, Option<String>, Sums)> = Vec::new();
@@ -471,7 +476,8 @@ pub fn view(done: &[Done], window: Window, names: &Names, local: &[Stretch], eve
         second_ticks,
         clients: client_rows,
         hours,
-        busiest,
+        busiest_time,
+        busiest_messages,
         outcomes,
         agents,
         models,
@@ -756,8 +762,9 @@ fn client_rows(
             if seen.timed > 0 {
                 detail.push(format!("{} ms", seen.rtt_ms / u64::from(seen.timed)));
             }
+            // The bar is the time once time is counted, so the time comes first.
             let mut summary = Vec::new();
-            if seen.engaged >= 60.0 {
+            if engaged_total > 0.0 {
                 summary.push(duration(seen.engaged));
             }
             if seen.messages > 0 || summary.is_empty() {
@@ -795,9 +802,13 @@ fn client_rows(
     rows
 }
 
-/// The hours of the week on the asking clock, by the user's time in them, or before that was
-/// counted by their messages, or else by the agents' turns.
-fn hours(done: &[Done], together: &[(f64, f64)], utc_offset_secs: i32) -> (Vec<HourCell>, Option<String>) {
+/// The hours of the week on the asking clock, each as busy by the user's time in it and by their
+/// messages, and when each of the two is the most, as a sentence.
+fn hours(
+    done: &[Done],
+    together: &[(f64, f64)],
+    utc_offset_secs: i32,
+) -> (Vec<HourCell>, Option<String>, Option<String>) {
     let mut cells: Vec<HourCell> = (0..168)
         .map(|index| HourCell {
             weekday: (index / 24) as u8,
@@ -806,7 +817,8 @@ fn hours(done: &[Done], together: &[(f64, f64)], utc_offset_secs: i32) -> (Vec<H
             turns: 0,
             engaged_seconds: 0.0,
             time: String::new(),
-            level: 0,
+            time_level: 0,
+            message_level: 0,
         })
         .collect();
     for hour in done.iter().flat_map(|done| &done.report.hours) {
@@ -824,35 +836,36 @@ fn hours(done: &[Done], together: &[(f64, f64)], utc_offset_secs: i32) -> (Vec<H
     for cell in cells.iter_mut().filter(|cell| cell.engaged_seconds >= 60.0) {
         cell.time = duration(cell.engaged_seconds);
     }
-    let by_time = cells.iter().any(|cell| cell.engaged_seconds >= 60.0);
-    let by_messages = cells.iter().any(|cell| cell.messages > 0);
-    let weight = |cell: &HourCell| match (by_time, by_messages) {
-        (true, _) => cell.engaged_seconds.round(),
-        (false, true) => f64::from(cell.messages),
-        (false, false) => f64::from(cell.turns),
-    };
-    let most = cells.iter().map(weight).fold(0.0, f64::max);
-    for cell in &mut cells {
-        let value = weight(cell);
-        cell.level = match most {
-            0.0 => 0,
-            _ if value == 0.0 => 0,
-            _ => (value / most * 4.0).ceil().clamp(1.0, 4.0) as u8,
-        };
+    let time = |cell: &HourCell| if cell.engaged_seconds >= 60.0 { cell.engaged_seconds.round() } else { 0.0 };
+    let messages = |cell: &HourCell| f64::from(cell.messages);
+    let levels: Vec<(u8, u8)> =
+        cells.iter().map(|cell| (level(&cells, time, cell), level(&cells, messages, cell))).collect();
+    for (cell, (time_level, message_level)) in cells.iter_mut().zip(levels) {
+        cell.time_level = time_level;
+        cell.message_level = message_level;
     }
-    let busiest = cells.iter().filter(|cell| weight(cell) > 0.0).fold(None::<&HourCell>, |best, cell| match best {
+    let busiest_time = busiest(&cells, time, "You're in Motile the most");
+    let busiest_messages = busiest(&cells, messages, "You send the most messages");
+    (cells, busiest_time, busiest_messages)
+}
+
+/// How busy a cell is by `weight` next to the busiest, from 0, nothing, to 4.
+fn level(cells: &[HourCell], weight: impl Fn(&HourCell) -> f64, cell: &HourCell) -> u8 {
+    let most = cells.iter().map(&weight).fold(0.0, f64::max);
+    let value = weight(cell);
+    if most == 0.0 || value == 0.0 {
+        return 0;
+    }
+    (value / most * 4.0).ceil().clamp(1.0, 4.0) as u8
+}
+
+/// "<what> on Wednesdays around 5 pm", of the busiest cell by `weight`, the earliest of a tie.
+fn busiest(cells: &[HourCell], weight: impl Fn(&HourCell) -> f64, what: &str) -> Option<String> {
+    let cell = cells.iter().filter(|cell| weight(cell) > 0.0).fold(None::<&HourCell>, |best, cell| match best {
         Some(best) if weight(best) >= weight(cell) => Some(best),
         _ => Some(cell),
-    });
-    let sentence = busiest.map(|cell| {
-        let what = match (by_time, by_messages) {
-            (true, _) => "You're in Motile the most",
-            (false, true) => "You send the most messages",
-            (false, false) => "Your agents work the most",
-        };
-        format!("{what} on {} around {}", WEEKDAYS[usize::from(cell.weekday)], clock(cell.hour))
-    });
-    (cells, sentence)
+    })?;
+    Some(format!("{what} on {} around {}", WEEKDAYS[usize::from(cell.weekday)], clock(cell.hour)))
 }
 
 fn facts(turns: &[(&str, &TurnBucket)], messages: &[&&ActionBucket], turn_count: u32) -> Vec<Fact> {
@@ -1197,7 +1210,7 @@ mod tests {
             [
                 ("Mac", "laptop", 1, &[3, 0][..], &[0, 0][..]),
                 ("iPhone", "smartphone", 2, &[0, 1][..], &[0, 0][..]),
-                ("Agents", "sparkles", 4, &[0, 0][..], &[3, 3][..]),
+                ("Agents", "bot", 7, &[0, 0][..], &[3, 3][..]),
             ]
         );
         let clients: Vec<_> = view
@@ -1207,8 +1220,10 @@ mod tests {
             .collect();
         assert_eq!(clients, [("Studio Mac", "Mac app · macOS", 3, true), ("Pocket", "iOS app · iOS", 1, false)]);
         assert_eq!(view.clients[0].detail, "Version 0.1.9 · Direct · 20 ms");
-        assert_eq!(view.busiest.as_deref(), Some("You send the most messages on Tuesdays around 3 pm"));
-        assert_eq!(view.hours.iter().filter(|cell| cell.level == 4).count(), 1);
+        assert_eq!(view.busiest_messages.as_deref(), Some("You send the most messages on Tuesdays around 3 pm"));
+        assert_eq!(view.busiest_time, None);
+        assert_eq!(view.hours.iter().filter(|cell| cell.message_level == 4).count(), 1);
+        assert!(view.hours.iter().all(|cell| cell.time_level == 0));
         assert_eq!(view.projects[0].name, "Motile");
         assert_eq!(view.features[0].features[0].label, "Messages sent");
         assert_eq!(view.features[0].features[0].detail, "3 replies · 1 new threads");
@@ -1362,7 +1377,7 @@ mod tests {
         let clients: Vec<_> = shown.clients.iter().map(|row| (row.name.as_str(), row.summary.as_str())).collect();
         assert_eq!(clients, [("Studio Mac", "1h 10m"), ("Pocket", "1h")]);
         assert_eq!(shown.projects[0].detail, "You 2h · Agents 12h");
-        assert_eq!(shown.busiest.as_deref(), Some("You're in Motile the most on Fridays around 10 am"));
+        assert_eq!(shown.busiest_time.as_deref(), Some("You're in Motile the most on Fridays around 10 am"));
         let friday = |hour: usize| shown.hours[4 * 24 + hour].time.as_str();
         assert_eq!((friday(10), friday(11)), ("1h", "40m"));
 

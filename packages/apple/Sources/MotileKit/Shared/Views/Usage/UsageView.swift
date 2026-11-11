@@ -308,10 +308,16 @@ struct UsageRefreshButton: View {
 }
 
 /// What the open tab shows, in a column that doesn't grow past a width.
+extension EnvironmentValues {
+    /// How tall the usage page shows, which a long list in it is kept to a part of.
+    @Entry var usagePageHeight: CGFloat = 800
+}
+
 struct UsageContent: View {
     private static let width: CGFloat = 880
 
     @Environment(AppStore.self) private var store
+    @State private var pageHeight: CGFloat = 800
     let model: UsageModel
     /// The tab shown, where it isn't the one picked.
     var shown: UsageModel.Tab?
@@ -324,16 +330,18 @@ struct UsageContent: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 if periodInPage && tab != .limits {
-                    Segmented(UsageModel.Period.allCases.map { ($0.label, $0) }, selection: Bindable(model).period, size: .small, fills: true)
+                    Segmented(UsageModel.Period.allCases.map { ($0.label, $0) }, selection: Bindable(model).period, size: Platform.pageSegments, fills: true)
                 }
                 page
             }
+            .environment(\.usagePageHeight, pageHeight)
             .frame(maxWidth: Self.width, alignment: .leading)
             .padding(.horizontal, margin)
             .padding(.top, top)
             .padding(.bottom, 80)
             .frame(maxWidth: .infinity)
         }
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { pageHeight = $0 }
         .onAppear {
             guard shown == nil else { return }
             model.start(store)

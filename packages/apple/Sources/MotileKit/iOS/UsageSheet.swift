@@ -59,8 +59,8 @@ struct UsageSheet: View {
             }
         } label: {
             Image(.server, size: .lg)
-                .glassSymbolFrame()
         }
+        .glassSymbolFrame()
         .accessibilityLabel("Servers counted")
     }
 }

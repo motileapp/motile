@@ -103,7 +103,8 @@ pub struct ActivityReport {
     pub second_ticks: Vec<f64>,
     pub clients: Vec<ActivityClient>,
     pub hours: Vec<ActivityHour>,
-    pub busiest: Option<String>,
+    pub busiest_time: Option<String>,
+    pub busiest_messages: Option<String>,
     pub outcomes: Vec<ActivityLine>,
     pub agents: Vec<ActivityLine>,
     pub models: Vec<ActivityLine>,
@@ -166,8 +167,10 @@ pub struct ActivityHour {
     pub turns: u32,
     /// The user's time in it, or empty: "42m".
     pub time: String,
-    /// From 0, nothing, to 4, as busy as the busiest hour.
-    pub level: u8,
+    /// From 0, nothing, to 4, by the user's time in it next to the hour with the most.
+    pub time_level: u8,
+    /// From 0 to 4, by its messages next to the hour with the most.
+    pub message_level: u8,
 }
 
 /// An outcome, an agent, a model, a project or a starter of turns and its part of them.
@@ -634,9 +637,10 @@ mod tests {
                 turns: 1,
                 engaged_seconds: 2520.,
                 time: "42m".into(),
-                level: 4,
+                time_level: 4,
+                message_level: 2,
             }],
-            busiest: Some("Tuesdays".into()),
+            busiest_time: Some("Tuesdays".into()),
             outcomes: vec![Line {
                 name: "Finished".into(),
                 agent: Some(Agent::Codex),
@@ -654,7 +658,7 @@ mod tests {
             ("monitor", 2, Some(5.), true)
         );
         assert_eq!(client.summary, "2h 10m · 3 messages");
-        assert_eq!((report.hours[0].weekday, report.hours[0].level, report.hours[0].time.as_str()), (1, 4, "42m"));
+        assert_eq!((report.hours[0].weekday, report.hours[0].time_level, report.hours[0].time.as_str()), (1, 4, "42m"));
         assert_eq!(report.outcomes[0].agent, Some(Agent::Codex));
     }
 
