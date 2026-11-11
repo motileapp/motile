@@ -118,6 +118,7 @@ impl Server {
             return;
         }
         tracing::info!(device, "client connected");
+        self.hub.client_connected(&device);
         let caller = Arc::new(Caller { device: device.clone(), connection: connection.clone() });
         let mut recheck = tokio::time::interval(RECHECK_ACCESS_EVERY);
         let reason = loop {
@@ -144,6 +145,7 @@ impl Server {
             }
         };
         tracing::info!(device, reason, "client disconnected");
+        self.hub.client_disconnected(&device);
     }
 
     async fn handle_stream(self, caller: &Caller, mut send: SendStream, mut recv: RecvStream) -> anyhow::Result<()> {
@@ -261,7 +263,7 @@ impl Server {
                 hub.activity(since, until, bucket_secs, utc_offset_secs, &removed)
             }
             Request::Hello { client } => {
-                let record = ClientRecord { device: caller.device.clone(), client, seen_at: now() };
+                let record = ClientRecord { device: caller.device.clone(), client, seen_at: now(), connected: false };
                 hub.store().save_client(&record).map(|_| Message::Ok).map_err(Into::into)
             }
             Request::Limits => Ok(hub.limits().await),

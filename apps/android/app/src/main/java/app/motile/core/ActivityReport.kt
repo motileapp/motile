@@ -49,6 +49,7 @@ data class ActivityReport(
         val share: Double,
         /** In seconds since 1970. */
         val lastSeen: Double?,
+        val active: Boolean,
         val thisDevice: Boolean,
         val removed: Boolean,
     )
@@ -91,7 +92,8 @@ data class ActivityReport(
                     Client(
                         client.string("device"), client.string("name"), client.string("client"), client.string("detail"),
                         symbol(client.string("symbol")), client.int("color"), client.int("messages"), client.int("turns"),
-                        client.double("share"), client.optionalDouble("last_seen"), client.bool("this_device"), client.bool("removed"),
+                        client.double("share"), client.optionalDouble("last_seen"), client.bool("active"),
+                        client.bool("this_device"), client.bool("removed"),
                     )
                 },
                 hours = json.objects("hours").map { Hour(it.int("weekday"), it.int("hour"), it.int("messages"), it.int("turns"), it.int("level")) },

@@ -147,6 +147,7 @@ pub struct ActivityClient {
     pub messages: u32,
     pub share: f64,
     pub last_seen: Option<f64>,
+    pub active: bool,
     pub this_device: bool,
     pub removed: bool,
 }
@@ -612,6 +613,7 @@ mod tests {
                 turns: 1,
                 share: 1.,
                 last_seen: Some(5.),
+                active: true,
                 this_device: true,
                 removed: false,
             }],

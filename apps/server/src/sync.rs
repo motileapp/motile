@@ -834,7 +834,7 @@ mod tests {
             form: ClientForm::Tablet,
             version: "1".into(),
         };
-        a.save_client(&ClientRecord { device: "ipad".into(), client: ipad, seen_at: 5.0 }).unwrap();
+        a.save_client(&ClientRecord { device: "ipad".into(), client: ipad, seen_at: 5.0, connected: false }).unwrap();
         let turn: TurnRecord = serde_json::from_value(serde_json::json!({
             "id": "end", "thread_id": "t", "project_id": "p", "agent": "codex", "agent_account": "", "model": "gpt-6",
             "effort": "", "access": "full", "starter": "user", "device": "ipad", "started_at": 10.0, "ended_at": 40.0,

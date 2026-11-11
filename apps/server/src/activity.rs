@@ -225,6 +225,7 @@ pub(crate) fn client_record(row: &Row, first: usize) -> rusqlite::Result<ClientR
             version: row.get(first + 4)?,
         },
         seen_at: row.get(first + 5)?,
+        connected: false,
     })
 }
 
@@ -338,6 +339,13 @@ impl Store {
             ),
             params_from_iter(client_values(record)),
         )?;
+        Ok(())
+    }
+
+    /// Keeps when the device left, unless it was seen in the last minute.
+    pub fn client_left(&self, device: &str, at: f64) -> rusqlite::Result<()> {
+        self.connection()
+            .execute("UPDATE clients SET seen_at = ?2 WHERE device = ?1 AND seen_at < ?2 - 60", params![device, at])?;
         Ok(())
     }
 
@@ -907,6 +915,7 @@ mod tests {
                 version: version.into(),
             },
             seen_at,
+            connected: false,
         };
         let change = || store.watermark().unwrap().change;
         store.save_client(&client("0.1.1", 10.0)).unwrap();
@@ -918,5 +927,12 @@ mod tests {
 
         let report = store.activity_of(None, 0.0, 1.0, 3600, 0).unwrap();
         assert_eq!(report.clients, [client("0.1.2", 30.0)]);
+
+        store.client_left("mac", 60.0).unwrap();
+        let report = store.activity_of(None, 0.0, 1.0, 3600, 0).unwrap();
+        assert_eq!(report.clients, [client("0.1.2", 30.0)]);
+        store.client_left("mac", 200.0).unwrap();
+        let report = store.activity_of(None, 0.0, 1.0, 3600, 0).unwrap();
+        assert_eq!(report.clients, [client("0.1.2", 200.0)]);
     }
 }

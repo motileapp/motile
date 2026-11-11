@@ -423,10 +423,14 @@ impl ActivityView {
         } else {
             format!("{} messages", number(client.messages))
         };
-        let seen = client.last_seen.map(|seen| {
-            let ago = ago(seen);
-            if ago == "now" { "Seen just now".to_string() } else { format!("Seen {ago} ago") }
-        });
+        let seen = if client.active {
+            Some("Active now".to_string())
+        } else {
+            client.last_seen.map(|seen| {
+                let ago = ago(seen);
+                if ago == "now" { "Seen just now".to_string() } else { format!("Seen {ago} ago") }
+            })
+        };
         let main = div().flex().items_center().gap(px(12.)).child(badge).child(about);
         if !beside {
             let numbers = div()

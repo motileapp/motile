@@ -268,7 +268,7 @@ private val badgeSide = scaled(32f).dp
 private fun ClientRow(client: ActivityReport.Client, beside: Boolean) {
     val palette = LocalPalette.current
     val color = palette.chart(client.color)
-    val seen = client.lastSeen?.let { Time.ago(it) }?.let { if (it == "now") "Seen just now" else "Seen $it ago" }
+    val seen = if (client.active) "Active now" else client.lastSeen?.let { Time.ago(it) }?.let { if (it == "now") "Seen just now" else "Seen $it ago" }
     Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(badgeSide).background(color.wash(), RoundedCornerShape(Radius.md)), contentAlignment = Alignment.Center) {

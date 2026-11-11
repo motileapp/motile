@@ -98,6 +98,8 @@ pub struct ClientRow {
     /// Its part of the messages, from 0 to 1.
     pub share: f64,
     pub last_seen: Option<f64>,
+    /// This device, or connected to a server now.
+    pub active: bool,
     pub this_device: bool,
     /// The device is no longer the account's.
     pub removed: bool,
@@ -303,9 +305,13 @@ pub fn view(done: &[Done], window: Window, names: &Names) -> View {
     };
     let mut clients: HashMap<String, ClientRecord> = HashMap::new();
     for record in done.iter().flat_map(|done| &done.report.clients) {
-        let newer = clients.get(&record.device).is_none_or(|known| known.seen_at < record.seen_at);
-        if newer {
+        let known = clients.get(&record.device);
+        let connected = record.connected || known.is_some_and(|known| known.connected);
+        if known.is_none_or(|known| known.seen_at < record.seen_at) {
             clients.insert(record.device.clone(), record.clone());
+        }
+        if let Some(kept) = clients.get_mut(&record.device) {
+            kept.connected = connected;
         }
     }
 
@@ -537,6 +543,7 @@ fn client_rows(
                 turns: seen.turns,
                 share: f64::from(seen.messages) / f64::from(message_count.max(1)),
                 last_seen: record.map(|record| record.seen_at),
+                active: device == names.this_device || record.is_some_and(|record| record.connected),
                 this_device: device == names.this_device,
                 removed: account.is_none(),
                 device,
@@ -819,6 +826,7 @@ mod tests {
             device: device.into(),
             client: ClientInfo { kind, system: system.into(), form, version: "0.1.9".into() },
             seen_at: 50.0,
+            connected: false,
         }
     }
 
@@ -947,6 +955,36 @@ mod tests {
         assert_eq!(view.features[0].features[0].label, "Messages sent");
         assert_eq!(view.features[0].features[0].detail, "3 replies · 1 new threads");
         assert_eq!(view.agent_features[0].label, "Agents started");
+    }
+
+    #[test]
+    fn a_client_is_active_on_this_device_or_while_a_server_has_it_connected() {
+        let window = Window { since: 0.0, until: DAY, bucket_secs: 86_400, utc_offset_secs: 0 };
+        let report = |phone: ClientRecord| ActivityReport {
+            turns: vec![],
+            actions: vec![
+                action(0.0, Actor::User, Some("mac"), "message", "reply", 1),
+                action(0.0, Actor::User, Some("phone"), "message", "reply", 1),
+                action(0.0, Actor::User, Some("tablet"), "message", "reply", 1),
+            ],
+            hours: vec![],
+            clients: vec![
+                client("mac", ClientKind::Mac, "macos", ClientForm::Desktop),
+                phone,
+                client("tablet", ClientKind::Ios, "ipados", ClientForm::Tablet),
+            ],
+        };
+        let phone = client("phone", ClientKind::Ios, "ios", ClientForm::Phone);
+        let done = [
+            Done { server_id: "studio".into(), report: report(ClientRecord { connected: true, ..phone.clone() }) },
+            Done { server_id: "attic".into(), report: report(ClientRecord { seen_at: 90.0, ..phone }) },
+        ];
+        let view = view(&done, window, &names());
+
+        let mut active: Vec<_> =
+            view.clients.iter().map(|row| (row.device.as_str(), row.active, row.last_seen)).collect();
+        active.sort_by(|a, b| a.0.cmp(b.0));
+        assert_eq!(active, [("mac", true, Some(50.0)), ("phone", true, Some(90.0)), ("tablet", false, Some(50.0))]);
     }
 
     #[test]
