@@ -625,8 +625,8 @@ final class ProgramMarkdownView: ProgramNodeView {
             text.isHidden = index >= prose.count
             guard index < prose.count, let content = prose[index].prose else { continue }
             text.content = content
-            text.frame = prose[index].frame
-            placeHeaders(in: text, index: index)
+            text.place(prose[index].frame)
+            placeHeaders(in: text, width: prose[index].frame.width, index: index)
             #if os(iOS)
             tables[index] = TableView.place(text.tableBoxes(), in: text, reusing: tables[index])
             #endif
@@ -639,8 +639,8 @@ final class ProgramMarkdownView: ProgramNodeView {
         }
     }
 
-    private func placeHeaders(in text: RowTextView, index: Int) {
-        _ = text.height(forWidth: text.frame.width)
+    private func placeHeaders(in text: RowTextView, width: CGFloat, index: Int) {
+        _ = text.height(forWidth: width)
         let boxes = text.codeBoxes()
         while headers[index].count < boxes.count {
             let header = CodeHeader()
@@ -684,7 +684,7 @@ final class ProgramCodeBox: FlippedView {
         surface.frame = bounds
         header.place(CGRect(x: 0, y: 0, width: bounds.width, height: CodeHeader.height))
         let width = max(1, bounds.width - 2 * ProgramCode.inset)
-        text.frame = CGRect(x: ProgramCode.inset, y: CodeHeader.height, width: width, height: text.height(forWidth: width))
+        text.place(CGRect(x: ProgramCode.inset, y: CodeHeader.height, width: width, height: text.height(forWidth: width)))
     }
 }
 

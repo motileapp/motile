@@ -591,7 +591,8 @@ final class RowTextView: UITextView, UITextViewDelegate {
             guard let table = value as? TableContent else { return }
             let glyph = system.layout.glyphIndexForCharacter(at: range.location)
             let line = system.layout.lineFragmentRect(forGlyphAt: glyph, effectiveRange: nil)
-            boxes.append((CGRect(x: 0, y: line.minY, width: bounds.width, height: table.size.height), table))
+            let padding = system.container.lineFragmentPadding
+            boxes.append((CGRect(x: padding, y: line.minY, width: bounds.width - 2 * padding, height: table.size.height), table))
         }
         return boxes
     }

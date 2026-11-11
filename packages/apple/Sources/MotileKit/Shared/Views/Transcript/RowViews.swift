@@ -330,8 +330,8 @@ final class UserRowView: RowView {
         bubble.frame = CGRect(x: width - bubbleSize.width, y: Self.margin, width: bubbleSize.width, height: bubbleSize.height)
         attachments.frame = CGRect(x: padding, y: fit.top, width: fit.innerWidth, height: fit.files.height)
         attachments.layout(width: fit.innerWidth)
-        clip.frame = CGRect(x: padding, y: fit.top + fit.files.height + fit.between, width: fit.innerWidth, height: shown.textHeight)
-        text.frame = CGRect(x: 0, y: 0, width: fit.innerWidth, height: textHeight)
+        clip.frame = CGRect(x: padding - RowTextView.overhang, y: fit.top + fit.files.height + fit.between, width: fit.innerWidth + 2 * RowTextView.overhang, height: shown.textHeight)
+        text.place(CGRect(x: RowTextView.overhang, y: 0, width: fit.innerWidth, height: textHeight))
         layoutMore(shown, open: open)
         meta.frame = CGRect(x: 0, y: bubble.frame.maxY + Self.metaGap, width: width, height: MessageMeta.height)
         return Self.height(fit, shown: shown)
@@ -467,7 +467,7 @@ final class QueuedRowView: RowView {
         bubble.frame = CGRect(x: width - bubbleSize.width, y: 14, width: bubbleSize.width, height: bubbleSize.height)
         attachments.frame = CGRect(x: padding, y: top, width: innerWidth, height: files.height)
         attachments.layout(width: innerWidth)
-        text.frame = CGRect(x: padding, y: top + files.height + between, width: innerWidth, height: textHeight)
+        text.place(CGRect(x: padding, y: top + files.height + between, width: innerWidth, height: textHeight))
 
         let buttonsY = footY + Self.buttonGap - Self.buttonReach
         let buttonsHeight = Self.footHeight - Self.buttonGap + Self.buttonReach
@@ -528,9 +528,9 @@ final class ProseRowView: RowView {
     }
 
     override func layout(width: CGFloat) -> CGFloat {
-        let before = text.frame.size
+        let before = CGSize(width: text.frame.width - 2 * RowTextView.overhang, height: text.frame.height)
         let height = text.height(forWidth: width)
-        text.frame = CGRect(x: 0, y: 3 + above, width: width, height: height)
+        text.place(CGRect(x: 0, y: 3 + above, width: width, height: height))
         placeHeaders()
         #if os(iOS)
         tables = TableView.place(text.tableBoxes(), in: text, reusing: tables)
@@ -911,7 +911,7 @@ final class ToolRowView: RowView {
         let inner = width - 30 - 24
         let detailHeight = detail.height(forWidth: inner)
         detailSurface.frame = CGRect(x: inset + 30, y: Self.rowHeight + above + 3, width: width - 30, height: detailHeight + 20)
-        detail.frame = CGRect(x: 12, y: 10, width: inner, height: detailHeight)
+        detail.place(CGRect(x: 12, y: 10, width: inner, height: detailHeight))
         return Self.rowHeight + above + detailHeight + 20 + 9
     }
 
@@ -965,7 +965,7 @@ final class ErrorBox {
         let height = text.height(forWidth: inner)
         surface.frame = CGRect(x: 0, y: y, width: width, height: height + Self.padding)
         icon.frame = CGRect(x: 12, y: 10, width: PlatformImage.symbolSide(.md), height: 18)
-        text.frame = CGRect(x: 36, y: 10, width: inner, height: height)
+        text.place(CGRect(x: 36, y: 10, width: inner, height: height))
         return height + Self.padding
     }
 }
