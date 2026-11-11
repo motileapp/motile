@@ -691,7 +691,10 @@ private fun ZoomableImage(image: ImageBitmap, markup: MarkupSession?, controls: 
                 var zooming = false
                 do {
                     val event = awaitPointerEvent()
-                    zooming = zooming || (!drawing && event.changes.count { it.pressed } >= 2)
+                    if (!zooming && event.changes.count { it.pressed } >= 2) {
+                        if (drawing) markup.cancel()
+                        zooming = true
+                    }
                     if (zooming) {
                         pinched(event)
                         continue

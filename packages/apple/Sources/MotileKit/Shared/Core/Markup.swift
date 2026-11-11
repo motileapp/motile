@@ -137,6 +137,11 @@ final class MarkupSession {
         send(["op": "up", "x": point.x, "y": point.y])
     }
 
+    /// Drops the mark the pointer started, as a pinch does.
+    func cancel() {
+        send(["op": "cancel"])
+    }
+
     /// Keeps the selected pin's note and puts the pin down.
     func deselect() {
         commitNote()

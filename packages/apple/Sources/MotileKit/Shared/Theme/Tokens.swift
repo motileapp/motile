@@ -15,6 +15,7 @@ extension Theme {
     static let cardAccent = tone(0xe6e8ec, 0x1e1f26)
     static let popover = tone(0xffffff, 0x191a1f)
     static let popoverAccent = tone(0xeaecf0, 0x212329)
+    static let popoverAccentStronger = tone(0xdfe2e8, 0x2b2c32)
     static let foreground = tone(0x22242b, 0xd0d2d9)
     static let emphasizedForeground = tone(0x000000, 0xffffff)
     static let mutedForeground = tone(0x606470, 0x9a9eab)
@@ -120,6 +121,7 @@ extension Theme {
         case "card-accent": cardAccent
         case "popover": popover
         case "popover-accent": popoverAccent
+        case "popover-accent-stronger": popoverAccentStronger
         case "foreground": foreground
         case "emphasized-foreground": emphasizedForeground
         case "muted-foreground": mutedForeground
@@ -225,6 +227,7 @@ extension Color {
     static let themeCardAccent = Color(platform: Theme.cardAccent)
     static let themePopover = Color(platform: Theme.popover)
     static let themePopoverAccent = Color(platform: Theme.popoverAccent)
+    static let themePopoverAccentStronger = Color(platform: Theme.popoverAccentStronger)
     static let themeForeground = Color(platform: Theme.foreground)
     static let themeEmphasizedForeground = Color(platform: Theme.emphasizedForeground)
     static let themeMutedForeground = Color(platform: Theme.mutedForeground)

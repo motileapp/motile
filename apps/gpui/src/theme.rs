@@ -238,7 +238,10 @@ impl Surface {
                 }
             },
             Surface::Card => c.card_accent,
-            Surface::Popover => c.popover_accent,
+            Surface::Popover => match layer {
+                Layer::Control | Layer::Row | Layer::Box | Layer::Chip => c.popover_accent,
+                Layer::ControlLit | Layer::ControlLitOnSelected | Layer::RowSelected => c.popover_accent_stronger,
+            },
             Surface::Composer => c.border_composer,
             Surface::ComposerBox => match layer {
                 Layer::Control | Layer::Row | Layer::Box | Layer::Chip => c.composer_accent,

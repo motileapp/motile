@@ -657,13 +657,32 @@ final class ZoomingScrollView: UIScrollView, UIScrollViewDelegate, UIGestureReco
         recognizer === drawing && other === pinchGestureRecognizer
     }
 
+    /// Where the finger landed, until it moves far enough to draw: a second finger before then
+    /// only zooms.
+    private var landed: CGPoint?
+    private static let drawingSlop: CGFloat = 8
+
     @objc private func drew(_ recognizer: OneFinger) {
         guard let canvas else { return }
-        let point = canvas.pixel(recognizer.location(in: canvas))
+        let at = recognizer.location(in: canvas)
+        let session = canvas.session
         switch recognizer.state {
-        case .began: canvas.session.down(at: point, slop: canvas.pixels(12, zoom: zoomScale))
-        case .changed: canvas.session.drag(to: point)
-        case .ended, .cancelled: canvas.session.up(at: point)
+        case .began:
+            landed = at
+        case .changed:
+            if let start = landed {
+                guard hypot(at.x - start.x, at.y - start.y) * zoomScale > Self.drawingSlop else { return }
+                landed = nil
+                session.down(at: canvas.pixel(start), slop: canvas.pixels(12, zoom: zoomScale))
+            }
+            session.drag(to: canvas.pixel(at))
+        case .ended:
+            if let start = landed { session.down(at: canvas.pixel(start), slop: canvas.pixels(12, zoom: zoomScale)) }
+            landed = nil
+            session.up(at: canvas.pixel(at))
+        case .cancelled:
+            if landed == nil { session.cancel() }
+            landed = nil
         default: break
         }
     }

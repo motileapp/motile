@@ -1019,8 +1019,12 @@ impl RenderOnce for ActionButton {
             (Some((_, from, _)), Some(revealed)) => from + (opacity - from) * revealed,
             _ => opacity,
         };
-        // Only a round face clips the growing circle to itself; another changes colour at once.
-        let reveal = revealed.filter(|_| look.round).zip(motion.grown_over.map(|(old, _, _)| old));
+        // Only a round face clips the growing circle to itself; another changes colour at once. A
+        // face with no colour at rest fades the old one out.
+        let reveal = revealed
+            .filter(|_| look.round)
+            .zip(motion.grown_over.map(|(old, _, _)| old))
+            .map(|(revealed, old)| (revealed, if fill.a == 0. { old.opacity(1. - revealed) } else { old }));
         if revealed.is_some() || motion.rings.is_some() {
             window.request_animation_frame();
         }

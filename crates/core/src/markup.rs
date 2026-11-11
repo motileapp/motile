@@ -237,6 +237,21 @@ impl Markup {
         }
     }
 
+    /// A second finger came down to zoom: the mark the gesture started is dropped, and a pin it
+    /// picked up goes back where it was.
+    pub fn cancel(&mut self) {
+        self.selected = None;
+        match self.gesture.take() {
+            Some(Gesture::Moving { before: Some(before), .. }) => self.marks = before,
+            Some(_) => {
+                if let Some(before) = self.undo.pop() {
+                    self.marks = before;
+                }
+            }
+            None => {}
+        }
+    }
+
     pub fn select(&mut self, mark: Option<usize>) {
         self.selected = mark.filter(|mark| matches!(self.marks.get(*mark), Some(Mark::Pin { .. })));
     }
@@ -618,6 +633,9 @@ enum Ask {
         x: f64,
         y: f64,
     },
+    Cancel {
+        id: u64,
+    },
     Select {
         id: u64,
         mark: Option<usize>,
@@ -719,6 +737,7 @@ fn answer(ask: Ask) -> Value {
         Ask::Down { id, .. }
         | Ask::Move { id, .. }
         | Ask::Up { id, .. }
+        | Ask::Cancel { id }
         | Ask::Select { id, .. }
         | Ask::Note { id, .. }
         | Ask::Remove { id, .. }
@@ -732,6 +751,7 @@ fn answer(ask: Ask) -> Value {
         Ask::Down { tool, ink, x, y, slop, .. } => markup.down(tool, ink, [x, y], slop),
         Ask::Move { x, y, .. } => markup.drag([x, y]),
         Ask::Up { x, y, .. } => markup.up([x, y]),
+        Ask::Cancel { .. } => markup.cancel(),
         Ask::Select { mark, .. } => markup.select(mark),
         Ask::Note { mark, text, .. } => markup.set_note(mark, &text),
         Ask::Remove { mark, .. } => markup.remove(mark),
@@ -805,6 +825,27 @@ mod tests {
             markup[&id].notes("shot.png").as_deref(),
             Some("Notes on shot.png:\n1. Make this bolder\n2. Align with the title")
         );
+    }
+
+    #[test]
+    fn a_pinch_drops_the_mark_it_started_and_puts_a_moved_pin_back() {
+        let id = open(1000, 800);
+        stroke(id, "pin", [100.0, 100.0], [100.0, 100.0]);
+
+        ask(json!({ "op": "down", "id": id, "tool": "pin", "ink": "red", "x": 500, "y": 500, "slop": 4 }));
+        let state = ask(json!({ "op": "cancel", "id": id }));
+        assert_eq!((state["pins"].as_array().unwrap().len(), &state["selected"]), (1, &Value::Null));
+
+        ask(json!({ "op": "down", "id": id, "tool": "pen", "ink": "red", "x": 100, "y": 100, "slop": 4 }));
+        ask(json!({ "op": "move", "id": id, "x": 300, "y": 300 }));
+        let state = ask(json!({ "op": "cancel", "id": id }));
+        assert_eq!((state["pins"][0]["x"].as_f64(), state["selected"].clone()), (Some(100.0), Value::Null));
+
+        ask(json!({ "op": "down", "id": id, "tool": "pen", "ink": "red", "x": 400, "y": 400, "slop": 4 }));
+        ask(json!({ "op": "move", "id": id, "x": 500, "y": 450 }));
+        let state = ask(json!({ "op": "cancel", "id": id }));
+        assert_eq!((state["pins"].as_array().unwrap().len(), state["can_undo"].as_bool()), (1, Some(true)));
+        assert_eq!(ask(json!({ "op": "undo", "id": id }))["marked"], false);
     }
 
     #[test]

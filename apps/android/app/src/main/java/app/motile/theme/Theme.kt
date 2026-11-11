@@ -362,7 +362,10 @@ enum class Surface {
             Layer.ControlLit, Layer.ControlLitOnSelected, Layer.RowSelected -> palette.backgroundSecondaryAccentStronger
         }
         Card -> palette.cardAccent
-        Popover -> palette.popoverAccent
+        Popover -> when (layer) {
+            Layer.Control, Layer.Row, Layer.Box, Layer.Chip -> palette.popoverAccent
+            Layer.ControlLit, Layer.ControlLitOnSelected, Layer.RowSelected -> palette.popoverAccentStronger
+        }
         ComposerBox -> when (layer) {
             Layer.Control, Layer.Row, Layer.Box, Layer.Chip -> palette.composerAccent
             Layer.ControlLit, Layer.ControlLitOnSelected, Layer.RowSelected -> palette.composerAccentStronger
