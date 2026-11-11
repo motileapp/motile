@@ -1,19 +1,16 @@
 //! A list that only draws the rows on screen, each as tall as its kind is, so that it goes
 //! through thousands of rows as fast as through ten. It fades out at an edge with more rows behind
-//! it, shows the scroller while it scrolls, and eases to the row it is asked to show:
+//! it, shows the scroller while it scrolls, and jumps to the row it is asked to show:
 //! `RecycledListMac.swift`.
 
 use std::ops::Range;
-use std::time::{Duration, Instant};
 
 use gpui_kit::component::scroll::Scrollbar;
 use gpui_kit::prelude::*;
 use gpui_kit::*;
 
-use crate::ui::ease_out;
 use crate::ui::parts::{EDGE_FADE, edge_fade};
 
-const SCROLL_FOR: Duration = Duration::from_millis(150);
 /// How far past the edges rows are drawn, so that a row sliding in during a drag is there.
 const OVERDRAW: f32 = 80.;
 
@@ -61,12 +58,11 @@ pub struct RecycledList {
     pub scroll: ScrollHandle,
     ids: Vec<String>,
     target: Option<String>,
-    animation: Option<(f32, f32, Instant)>,
 }
 
 impl RecycledList {
     pub fn new() -> Self {
-        Self { scroll: ScrollHandle::new(), ids: Vec::new(), target: None, animation: None }
+        Self { scroll: ScrollHandle::new(), ids: Vec::new(), target: None }
     }
 
     /// Takes the rows' ids. Whether they are others than last time, which puts away whatever
@@ -147,31 +143,11 @@ impl RecycledList {
         if goal == current {
             return;
         }
-        self.animation = Some((current, goal, Instant::now()));
-        window.request_animation_frame();
-    }
-
-    /// The user scrolled: the list stays where they put it.
-    pub fn stop_scrolling(&mut self) {
-        self.animation = None;
-    }
-
-    /// Moves the scroll on toward its goal, for this frame.
-    fn step(&mut self, window: &mut Window) {
-        let Some((from, to, started)) = self.animation else { return };
-        let progress = (started.elapsed().as_secs_f32() / SCROLL_FOR.as_secs_f32()).min(1.);
-        let at = from + (to - from) * ease_out(progress);
-        self.scroll.set_offset(point(px(0.), px(-at)));
-        if progress < 1. {
-            window.request_animation_frame();
-        } else {
-            self.animation = None;
-        }
+        self.scroll.set_offset(point(px(0.), px(-goal)));
     }
 
     /// The rows on screen, or on the screen the list would fill before it was laid out.
-    pub fn visible(&mut self, layout: &Layout, window: &mut Window) -> Range<usize> {
-        self.step(window);
+    pub fn visible(&self, layout: &Layout, window: &mut Window) -> Range<usize> {
         let viewport = if self.viewport() > 0. {
             self.viewport()
         } else {

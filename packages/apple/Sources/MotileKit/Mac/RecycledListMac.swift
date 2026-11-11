@@ -207,11 +207,8 @@ struct RecycledList<Item: Identifiable, Row: View>: NSViewRepresentable {
             }
             let origin = clip.constrainBoundsRect(bounds).origin
             guard origin != clip.bounds.origin else { return }
-            NSAnimationContext.runAnimationGroup { context in
-                context.duration = 0.15
-                context.timingFunction = CAMediaTimingFunction(name: .easeOut)
-                clip.animator().setBoundsOrigin(origin)
-            }
+            clip.setBoundsOrigin(origin)
+            scroll.reflectScrolledClipView(clip)
         }
 
         // MARK: Moving a row
