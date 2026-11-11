@@ -12,7 +12,9 @@ pub mod skills;
 
 use std::collections::HashMap;
 
+use base64::Engine;
 use motile_protocol::wire::{Access, Agent, Approval, SkillMention, Subagent, Tokens, ToolCall, TurnSummary};
+use serde_json::Value;
 
 use crate::handoff::Handoff;
 use crate::mcp::McpAccess;
@@ -84,6 +86,26 @@ const STARTING_AGENTS: &str = "\n\nYou can start agents on the other accounts of
 
 pub use motile_protocol::wire::PLAN_TOOL;
 
+/// An image a tool call showed the agent: its bytes, or the file it looked at.
+#[derive(Debug, Clone, PartialEq)]
+pub enum ToolImage {
+    Data(Vec<u8>),
+    File(String),
+}
+
+/// The images of a tool result's content blocks, Claude Code's (`source`) and MCP's (`data`).
+pub fn content_images(content: &Value) -> Vec<ToolImage> {
+    let blocks = content.as_array().map(Vec::as_slice).unwrap_or_default();
+    blocks
+        .iter()
+        .filter(|block| block["type"] == "image")
+        .filter_map(|block| {
+            let data = block["source"]["data"].as_str().or_else(|| block["data"].as_str())?;
+            base64::engine::general_purpose::STANDARD.decode(data).ok().map(ToolImage::Data)
+        })
+        .collect()
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum AgentEvent {
     /// The agent's own session, and the model it runs.
@@ -135,6 +157,11 @@ pub enum AgentEvent {
     /// A tool call reported whole, as Codex does.
     Tool {
         call: ToolCall,
+    },
+    /// The images a tool call's result showed the agent, after the result.
+    ToolImages {
+        id: String,
+        images: Vec<ToolImage>,
     },
     Completed {
         summary: TurnSummary,

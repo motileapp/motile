@@ -418,6 +418,33 @@ pub struct Tool {
     /// its target the answers, or "Skipped".
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub asked: Vec<Answered>,
+    /// The images its result showed the agent, shown when the row is opened.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub images: Vec<ToolImage>,
+}
+
+/// An image a tool call showed its agent, drawn as a reply's image is. The client asks the core
+/// for the file `media` names.
+#[derive(Serialize, Clone, PartialEq, Debug)]
+pub struct ToolImage {
+    pub media: String,
+    pub name: String,
+    /// In pixels: the row has its size before the file is there.
+    pub width: Option<u32>,
+    pub height: Option<u32>,
+    pub size: u64,
+}
+
+impl ToolImage {
+    fn new(media: &Media) -> Self {
+        Self {
+            media: media.id.clone(),
+            name: file_name(&media.src).to_string(),
+            width: media.width,
+            height: media.height,
+            size: media.size,
+        }
+    }
 }
 
 /// A question the agent asked the user, with their answer: `None` until they give one, or when
@@ -1323,7 +1350,12 @@ fn render(item: &Item, cwd: &str, started: &Started, streaming: Option<&mut Hash
         }
         ItemKind::Tool { call } => match agents::starting(item, call, &started.threads) {
             Some(view) => vec![row(0, RowKind::Agent { agent: AgentRow::new(view, None) })],
-            None => vec![row(0, RowKind::Tool { tool: describe(call, cwd, item.created_at) })],
+            None => {
+                let images =
+                    item.media.iter().filter(|media| !media.video && !media.file).map(ToolImage::new).collect();
+                let tool = Tool { images, ..describe(call, cwd, item.created_at) };
+                vec![row(0, RowKind::Tool { tool })]
+            }
         },
         ItemKind::Error { message } => vec![row(0, RowKind::Error { message: message.clone() })],
         ItemKind::TurnEnd { summary } => vec![row(
@@ -1626,6 +1658,7 @@ fn describe(call: &ToolCall, cwd: &str, at: f64) -> Tool {
         output: call.output.as_deref().filter(|output| !output.trim().is_empty() && asked.is_empty()).map(cap),
         started_at: running.then_some(at),
         asked,
+        images: Vec::new(),
     }
 }
 
@@ -1778,6 +1811,44 @@ mod tests {
             matches!(&rows[2].kind, RowKind::Prose { prose, .. } if prose.text == "Gone" && prose.links.len() == 1)
         );
         assert_eq!(serde_json::to_value(&rows[1]).unwrap()["kind"], "media");
+    }
+
+    #[test]
+    fn the_images_a_tool_call_showed_its_agent_come_with_its_row() {
+        use motile_protocol::wire::Media;
+        let input = serde_json::json!({ "file_path": "/tmp/shot.png" }).to_string();
+        let call = ToolCall {
+            id: "t".into(),
+            name: "Read".into(),
+            input,
+            output: None,
+            status: ToolStatus::Succeeded,
+            agent: None,
+        };
+        let mut read = item("t", 0, ItemKind::Tool { call });
+        read.media = vec![Media {
+            id: "abc.png".into(),
+            src: "image-1.png".into(),
+            video: false,
+            file: false,
+            size: 2048,
+            width: Some(640),
+            height: Some(400),
+            poster: None,
+        }];
+        let mut transcript = Transcript::new("/srv/api");
+        transcript.load(vec![read]);
+
+        let rows = transcript.rows();
+        let [Row { kind: RowKind::Tool { tool }, .. }] = rows else { panic!("{rows:?}") };
+        let shown = ToolImage {
+            media: "abc.png".into(),
+            name: "image-1.png".into(),
+            width: Some(640),
+            height: Some(400),
+            size: 2048,
+        };
+        assert_eq!(tool.images, vec![shown]);
     }
 
     #[test]

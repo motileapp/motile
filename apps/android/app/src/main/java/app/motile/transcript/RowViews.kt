@@ -475,16 +475,19 @@ private fun ToolRow(row: RowModel) {
         } else if (expanded) {
             val detail = remember(row, palette) { tool?.detail?.get(palette) ?: AnnotatedString(thought.orEmpty(), SpanStyle(color = palette.mutedForeground)) }
             val shape = RoundedCornerShape(Radius.md)
-            Box(
+            val images = tool?.images.orEmpty()
+            Column(
                 Modifier
                     .padding(start = inset + 30.dp, top = 3.dp, bottom = 9.dp)
                     .fillMaxWidth()
                     .clip(shape)
                     .background(palette.backgroundSecondary, shape)
                     .padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 val style = if (tool != null) Theme.smallMono.copy(lineHeight = Theme.codeLineHeight) else Theme.ui(TextSize.Sm).copy(lineHeight = (13f * Platform.scale * 1.2f + 5).sp)
-                SelectionContainer { Text(detail, style = style) }
+                if (detail.isNotEmpty()) SelectionContainer { Text(detail, style = style) }
+                images.forEach { MediaBox(it, Radius.sm) }
             }
         }
     }

@@ -26,7 +26,7 @@ reply made up on the spot instead:
 - "ask a few questions": a turn that asks three questions at once, one with a recommended option and
   one that takes several, and says what it was told.
 - "plan the hello": a turn that presents a plan and, once that is approved, carries it out.
-- "show the screenshot": a turn that writes `screenshot.png` in its folder and shows it in the reply.
+- "show the screenshot": a turn that writes `screenshot.png` in its folder, reads it, and shows it in the reply.
 - "send the report": a turn that writes `signups.csv` in its folder and sends it in the reply.
 - "show the recording": a turn that writes `recording.mp4`, which isn't really a video, and its
   preview `recording.png` in its folder and shows the video with the preview in the reply.
@@ -107,6 +107,7 @@ refused; any other signs in as the folder's name at motile.app (`~/.claude-work`
 work@motile.app), which `initialize` then says, kept in `CLAUDE_CONFIG_DIR`. Without that folder,
 the CLI's usual one, it signs in as demo@motile.app and keeps nothing.
 """
+import base64
 import json
 import os
 import queue
@@ -1191,10 +1192,13 @@ def png(width, height):
 def show_screenshot():
     turn = Turn("00000000-0000-4000-8000-0000000005c7")
     path = os.path.join(os.getcwd(), "screenshot.png")
+    shot = png(960, 600)
     with open(path, "wb") as f:
-        f.write(png(960, 600))
+        f.write(shot)
     command = "npx playwright screenshot http://localhost:3000 screenshot.png"
     turn.tool("Bash", {"command": command, "description": "Take a screenshot"}, "Saved screenshot.png", seconds=0.1)
+    image = {"type": "base64", "media_type": "image/png", "data": base64.b64encode(shot).decode()}
+    turn.tool("Read", {"file_path": path}, [{"type": "image", "source": image}], seconds=0.1)
     turn.text(f"Here is http://localhost:3000 as it looks now:\n\n![The landing page]({path})\n\nThe header is in place.")
     turn.done()
 

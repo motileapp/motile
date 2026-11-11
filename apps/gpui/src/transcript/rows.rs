@@ -1211,7 +1211,7 @@ fn tool_detail_text(row_id: &str, parts: Vec<(String, Hsla)>, key: u64) -> Div {
 
 /// A tool call or the agent's thinking: one line, which opens to show the detail. A running
 /// call's title is all muted, so the band of light shows on every part of it.
-fn tool_row(model: &RowModel, ctx: &RowContext, cx: &App) -> AnyElement {
+fn tool_row(model: &RowModel, ctx: &RowContext, window: &mut Window, cx: &mut App) -> AnyElement {
     let c = colors(cx);
     let row_id = model.row.id.clone();
     let expanded_here = ctx.expanded.contains(&row_id);
@@ -1224,7 +1224,29 @@ fn tool_row(model: &RowModel, ctx: &RowContext, cx: &App) -> AnyElement {
                 detail = Some(detail_box(inset, answers(tool, c), cx));
             } else if expanded_here {
                 let parts = tool_detail(tool, c);
-                detail = Some(detail_box(inset, tool_detail_text(&row_id, parts, row_key(&row_id)), cx));
+                let text = (!parts.is_empty()).then(|| tool_detail_text(&row_id, parts, row_key(&row_id)));
+                let images: Vec<AnyElement> = tool
+                    .images
+                    .iter()
+                    .enumerate()
+                    .map(|(index, image)| {
+                        let shown = crate::media::Shown {
+                            key: &format!("{row_id}-{index}"),
+                            media: &image.media,
+                            video: false,
+                            width: image.width,
+                            height: image.height,
+                            size: image.size,
+                            alt: "",
+                            name: &image.name,
+                            poster: None,
+                            radius: Radius::SM,
+                        };
+                        crate::media::picture_box(shown, ctx, window, cx)
+                    })
+                    .collect();
+                let shown = div().flex().flex_col().gap(px(10.)).children(text).children(images);
+                detail = Some(detail_box(inset, shown, cx));
             }
             ToolLine {
                 symbol: Some(icons::tool_symbol(tool.icon)),
@@ -1234,7 +1256,7 @@ fn tool_row(model: &RowModel, ctx: &RowContext, cx: &App) -> AnyElement {
                 failed: tool.status == ToolStatus::Failed,
                 running: tool.status == ToolStatus::Running,
                 started_at: tool.started_at,
-                opens: asks || !tool.input.is_empty() || tool.output.is_some(),
+                opens: asks || !tool.input.is_empty() || tool.output.is_some() || !tool.images.is_empty(),
                 open: false,
             }
         }
@@ -2089,7 +2111,7 @@ pub fn render_row(model: &RowModel, ctx: &RowContext, window: &mut Window, cx: &
         RowKind::Code { language, code, .. } => code_row(model, language, code, ctx, cx),
         RowKind::Ui { .. } => super::openui::ui_row(model, ctx, window, cx),
         RowKind::Tool { .. } | RowKind::Thinking { .. } | RowKind::Group { .. } | RowKind::Fold { .. } => {
-            tool_row(model, ctx, cx)
+            tool_row(model, ctx, window, cx)
         }
         RowKind::Agent { agent } => agent_row(model, agent, ctx, cx),
         RowKind::Agents { .. } => agents_row(model, ctx, cx),

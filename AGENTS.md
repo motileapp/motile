@@ -811,7 +811,7 @@ clients. It replays the recorded output in `fixtures/` or makes up a turn, depen
 | --- | --- |
 | "watch the deploy" | Stays after its turn, as Claude Code does while it monitors, and starts agents meanwhile when asked "ask agents in the background" |
 | "run greet.py" | Under supervised access, asks before each tool call |
-| "show the screenshot" | Makes an image and shows it |
+| "show the screenshot" | Makes an image, reads it (the Read row shows it when opened) and shows it |
 | "show the recording" | Shows a video with its preview image |
 | "send the report" | Sends a file to download |
 | "greet by name" | Really changes files in its folder |

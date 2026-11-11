@@ -103,6 +103,8 @@ enum DemoDriver {
                   let row = store.transcript.rows.first(where: { if case .agents = $0.kind { true } else { false } })
             else { return }
             store.core.send("toggle_row", ["thread_id": threadID, "row_id": row.id])
+        case "open":
+            views(ToolRowView.self).last { $0.words.contains(rest) }?.press()
         case "parent":
             if store.shownAgent != nil { return store.rightPanel.showAgents() }
             guard let parent = store.parentThread else { return }

@@ -336,13 +336,15 @@ class ToolContent(json: JSON) {
     val startedAt = json.optionalDouble("started_at")
     /** The questions it asked the user, each with its answer: null until there is one, or when it was skipped. */
     val asked = json.objects("asked").map { Asked(it.string("question"), it.optionalString("answer")) }
+    /** The images its result showed the agent. */
+    val images = json.objects("images").map(::MediaContent)
 
     class Asked(val question: String, val answer: String?)
 
     val symbol: Symbol get() = symbol(icon)
-    val hasDetail: Boolean get() = input.isNotEmpty() || output != null || asked.isNotEmpty()
+    val hasDetail: Boolean get() = input.isNotEmpty() || output != null || asked.isNotEmpty() || images.isNotEmpty()
 
-    /** What opening the row shows: the input, then what came back. */
+    /** What opening the row shows: the input, then what came back. The images go under it. */
     val detail = Typeset { palette -> Typesetter.toolDetail(this, palette) }
 
     companion object {

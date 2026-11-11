@@ -35,7 +35,9 @@ use tokio::task::AbortHandle;
 
 use crate::activity::{self, Sender, Tally};
 use crate::agents::environment::Environment;
-use crate::agents::{self, AgentEvent, Background, Parser, Settings, Turn, claude, executable_name, models, skills};
+use crate::agents::{
+    self, AgentEvent, Background, Parser, Settings, ToolImage, Turn, claude, executable_name, models, skills,
+};
 use crate::files::FileBytes;
 use crate::generate::{self, Writer};
 use crate::handoff::{self, Range};
@@ -3928,6 +3930,7 @@ impl Hub {
                 live.tool_input(store, id, name, input)?
             }
             AgentEvent::ToolResult { id, output, is_error } => live.tool_result(store, id, output, is_error)?,
+            AgentEvent::ToolImages { id, images } => live.tool_images(store, id, images)?,
             AgentEvent::Tool { mut call } => {
                 live.set_thinking(false);
                 self.note_tool(live, &call.id, &call.name);
@@ -4622,6 +4625,34 @@ impl Live {
         self.upsert(store, id, ItemKind::Tool { call })
     }
 
+    /// Keeps the images a tool call's result showed the agent, which its row shows.
+    fn tool_images(&mut self, store: &Store, id: String, images: Vec<ToolImage>) -> anyhow::Result<()> {
+        let Some(call) = self.tool_call(&id) else { return Ok(()) };
+        let input: Value = serde_json::from_str(&call.input).unwrap_or_default();
+        let read = input["file_path"].as_str().filter(|_| images.len() == 1);
+        let mut kept: Vec<Media> = Vec::new();
+        for image in &images {
+            let media = match image {
+                ToolImage::Data(bytes) => self
+                    .media
+                    .keep_shown(bytes, kept.len() + 1)?
+                    .map(|media| Media { src: read.map_or(media.src, String::from), ..media }),
+                ToolImage::File(path) => self.media.capture_image(path, &self.stored.thread.cwd),
+            };
+            kept.extend(media);
+        }
+        let Some(item) = self.open.get_mut(&id) else { return Ok(()) };
+        kept.retain(|media| !item.media.iter().any(|known| known.id == media.id));
+        if kept.is_empty() {
+            return Ok(());
+        }
+        for media in &kept {
+            store.save_media(&self.stored.thread.id, &media.id)?;
+        }
+        item.media.extend(kept);
+        self.upsert(store, id, ItemKind::Tool { call })
+    }
+
     /// Adds what an agent the thread's agent started said or did to that agent's transcript.
     fn add_from_subagent(&mut self, store: &Store, event: AgentEvent) -> anyhow::Result<()> {
         match event {
@@ -4629,6 +4660,7 @@ impl Live {
             AgentEvent::ThinkingText { id, text } => self.upsert(store, id, ItemKind::Thinking { text }),
             AgentEvent::ToolInput { id, name, input } => self.tool_input(store, id, name, input),
             AgentEvent::ToolResult { id, output, is_error } => self.tool_result(store, id, output, is_error),
+            AgentEvent::ToolImages { id, images } => self.tool_images(store, id, images),
             AgentEvent::Tool { call } => self.upsert(store, call.id.clone(), ItemKind::Tool { call }),
             _ => Ok(()),
         }

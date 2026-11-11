@@ -108,9 +108,9 @@ fun OverlayButton(symbol: Symbol, help: String, size: ControlSize, modifier: Mod
 
 /** The box an image or a video is shown in: empty until the picture is there. */
 @Composable
-fun PictureBox(picture: ImageBitmap?, modifier: Modifier = Modifier, content: @Composable BoxScope.() -> Unit = {}) {
+fun PictureBox(picture: ImageBitmap?, modifier: Modifier = Modifier, radius: Dp = PictureBox.radius, content: @Composable BoxScope.() -> Unit = {}) {
     val palette = LocalPalette.current
-    val shape = RoundedCornerShape(PictureBox.radius)
+    val shape = RoundedCornerShape(radius)
     Box(modifier.clip(shape).background(palette.backgroundSecondary, shape).border(1.dp, palette.border, shape)) {
         if (picture != null) Image(picture, null, Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
         content()
