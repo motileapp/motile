@@ -1,13 +1,12 @@
 import SwiftUI
 
 /// Content as tall as it is up to `maxHeight`, past which it scrolls, fading out at an edge
-/// with more behind it. `padding` insets the content inside the scrolling edges.
+/// with more behind it. `padding` insets the content inside the scrolling edges. A mouse wheel
+/// over it scrolls it alone, never what it lies in, even at its ends.
 struct FadingScroll<Content: View>: View {
     let maxHeight: CGFloat
     var anchor: UnitPoint = .top
     var padding: CGFloat = 0
-    /// A wheel over it scrolls it alone, never what it lies in, even at its ends.
-    var holdsWheel = false
     @ViewBuilder let content: Content
 
     var body: some View {
@@ -17,7 +16,7 @@ struct FadingScroll<Content: View>: View {
                 ScrollView {
                     content
                     #if os(macOS)
-                        .background { if holdsWheel { WheelHold() } }
+                        .background { WheelHold() }
                     #endif
                 }
                     .contentMargins(padding, for: .scrollContent)

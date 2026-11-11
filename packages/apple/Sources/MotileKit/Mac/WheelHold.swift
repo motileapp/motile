@@ -2,8 +2,8 @@
 import AppKit
 import SwiftUI
 
-/// Keeps a wheel gesture that starts over the scroll view this lies in out of the scroll view
-/// around it. AppKit hands a gesture that starts at an end, pushing past it, to the one around.
+/// Keeps a mouse wheel's tick over the scroll view this lies in, pushing past its end, out of the
+/// scroll view around it. A trackpad's gesture still goes on to it, as AppKit hands it over.
 struct WheelHold: NSViewRepresentable {
     func makeNSView(context: Context) -> WheelHoldView { WheelHoldView() }
     func updateNSView(_ view: WheelHoldView, context: Context) {}
@@ -11,8 +11,6 @@ struct WheelHold: NSViewRepresentable {
 
 final class WheelHoldView: NSView {
     private var monitor: Any?
-    /// The gesture under way started over the scroll view, pushing past its end, and goes nowhere.
-    private var holding = false
 
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
@@ -27,13 +25,10 @@ final class WheelHoldView: NSView {
         }
     }
 
-    /// A gesture starts with the fingers moving on the trackpad; a mouse wheel's every tick is one.
+    /// A mouse wheel's tick has no phase; a trackpad's gesture and its momentum do.
     private func holds(_ event: NSEvent) -> Bool {
-        guard !event.phase.contains(.mayBegin) else { return false }
-        let tick = event.phase.isEmpty && event.momentumPhase.isEmpty
-        guard tick || event.phase.contains(.began) else { return holding }
-        holding = isOver(event) && pushesPastEnd(event)
-        return holding
+        guard event.phase.isEmpty, event.momentumPhase.isEmpty else { return false }
+        return isOver(event) && pushesPastEnd(event)
     }
 
     private func isOver(_ event: NSEvent) -> Bool {

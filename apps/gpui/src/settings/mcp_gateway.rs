@@ -566,8 +566,7 @@ impl McpGatewayPage {
             list.push(divider_on(Surface::Card, cx).into_any_element());
             list.push(self.more_rows(loading, cx));
         }
-        let scroll =
-            FadingScroll::new("mcp-server-calls", ACTIVITY_HEIGHT).holds_wheel(true).fill(c.card).children(list);
+        let scroll = FadingScroll::new("mcp-server-calls", ACTIVITY_HEIGHT).fill(c.card).children(list);
         let content = div()
             .flex()
             .flex_col()
