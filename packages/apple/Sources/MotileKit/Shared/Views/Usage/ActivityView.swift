@@ -151,7 +151,7 @@ struct ActivityView: View {
     private var overTime: some View {
         VStack(alignment: .leading, spacing: 12) {
             ActivityHeading(title: "Over time", stacked: true) {
-                Segmented(Measure.allCases.map { ($0.label, $0) }, selection: $measure, size: Platform.pageSegments, fills: !beside)
+                Segmented(Measure.allCases.map { ($0.label, $0) }, selection: $measure, fills: !beside)
             }
             legend
             chart
@@ -265,7 +265,7 @@ struct ActivityView: View {
     private var hours: some View {
         VStack(alignment: .leading, spacing: 12) {
             ActivityHeading(title: "When you work", detail: hourMeasure == .time ? report.busiestTime : report.busiestMessages, stacked: true) {
-                Segmented(HourMeasure.allCases.map { ($0.label, $0) }, selection: $hourMeasure, size: Platform.pageSegments, fills: !beside)
+                Segmented(HourMeasure.allCases.map { ($0.label, $0) }, selection: $hourMeasure, fills: !beside)
             }
             ActivityHeatmap(hours: report.hours, measure: hourMeasure)
                 .padding(16)
@@ -306,7 +306,7 @@ struct ActivityView: View {
                 .font(.ui(.sm, weight: .medium))
                 .foregroundStyle(Color.themeForeground)
                 .padding(.horizontal, 14)
-                .activityTableHeader()
+                .activityTableHeader(minHeight: Self.breakdownHeaderHeight)
             ThemeDivider()
             ForEach(report.outcomes) { line in
                 ActivityLineRow(line: line, tint: Self.outcomeColor(line.name))
@@ -316,6 +316,12 @@ struct ActivityView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
+    }
+
+    private static let breakdownPadding: CGFloat = 4
+    /// The breakdown's picker with its padding, which the outcomes' header beside it matches.
+    private static var breakdownHeaderHeight: CGFloat {
+        ControlSize.regular.height + 2 * (Segmented<Breakdown>.inset + Segmented<Breakdown>.border + breakdownPadding)
     }
 
     private var breakdownCard: some View {
@@ -328,8 +334,8 @@ struct ActivityView: View {
             case .projects: report.projects
             }
         return VStack(alignment: .leading, spacing: 0) {
-            Segmented(offered.map { ($0.label, $0) }, selection: Binding { current } set: { breakdown = $0 }, size: Platform.pageSegments, fills: true)
-                .padding(8)
+            Segmented(offered.map { ($0.label, $0) }, selection: Binding { current } set: { breakdown = $0 }, fills: true)
+                .padding(Self.breakdownPadding)
             ThemeDivider()
             FadingScroll(maxHeight: listHeight) {
                 VStack(spacing: 0) {
@@ -353,7 +359,7 @@ struct ActivityView: View {
         return VStack(alignment: .leading, spacing: 12) {
             ActivityHeading(title: "Features", stacked: !beside && offered.count > 1) {
                 if offered.count > 1 {
-                    Segmented(offered.map { ($0.label, $0) }, selection: Binding { current } set: { who = $0 }, size: Platform.pageSegments, fills: !beside)
+                    Segmented(offered.map { ($0.label, $0) }, selection: Binding { current } set: { who = $0 }, fills: !beside)
                 }
             }
             switch current {
@@ -465,6 +471,9 @@ private struct ActivityHeading<Trailing: View>: View {
     var stacked = false
     @ViewBuilder var trailing: Trailing
 
+    /// How far a picker beside the title reaches past the heading, which stays as tall as a small one would make it.
+    private static var trailingOverhang: CGFloat { (ControlSize.regular.height - ControlSize.small.height) / 2 }
+
     var body: some View {
         if stacked {
             VStack(alignment: .leading, spacing: 10) {
@@ -475,7 +484,7 @@ private struct ActivityHeading<Trailing: View>: View {
             HStack(alignment: .center, spacing: 12) {
                 words
                 Spacer(minLength: 0)
-                trailing
+                trailing.padding(.vertical, -Self.trailingOverhang)
             }
             .padding(.horizontal, 4)
         }
@@ -854,8 +863,8 @@ private struct ActivityHeatmap: View {
 
 private extension View {
     /// The header row of a card that is a table, filled as a table's header is.
-    func activityTableHeader() -> some View {
-        frame(maxWidth: .infinity, minHeight: scaled(40), alignment: .leading)
+    func activityTableHeader(minHeight: CGFloat = scaled(40)) -> some View {
+        frame(maxWidth: .infinity, minHeight: minHeight, alignment: .leading)
             .background(
                 Color.themeCardAccent,
                 in: UnevenRoundedRectangle(topLeadingRadius: Radius.lg, topTrailingRadius: Radius.lg, style: .continuous))
