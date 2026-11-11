@@ -559,7 +559,7 @@ pub enum Request {
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         confirmed: bool,
     },
-    /// Photos of what `query` names, from Wikipedia and Wikimedia Commons, kept as the thread's
+    /// Photos of what `query` names, from Bing's image search or Wikimedia, kept as the thread's
     /// media. `UiImages` answers.
     UiImages {
         thread_id: String,

@@ -96,7 +96,7 @@ On the server, `motile status` shows its account, agents and service, `motile lo
 
 When a picture or a control says more than prose, an agent answers with a small program, which the client draws in the reply: charts, tables, forms, sliders, maps with pins and routes, flashcards, formulas, drawings and videos. It works the same on every client. A program reacts at once; a button can send your choices back to the agent, and a later reply can change the program. Where you leave its controls is kept with the thread.
 
-A program can read from your own server, inside the thread's folder: its files, git status, history and diffs, pull requests, usage, and Linear or Ricrac issues. It runs a command there only when you press its button, and the client first shows you the exact command and asks, unless the thread has full access. Your server looks up a program's photos (on Wikipedia and Wikimedia Commons) and street routes (OSRM); the client fetches map tiles from OpenFreeMap.
+A program can read from your own server, inside the thread's folder: its files, git status, history and diffs, pull requests, usage, and Linear or Ricrac issues. It runs a command there only when you press its button, and the client first shows you the exact command and asks, unless the thread has full access. Your server looks up a program's photos (on Bing's image search, then Wikipedia and Wikimedia Commons) and street routes (OSRM); the client fetches map tiles from OpenFreeMap.
 
 ## How it works
 
