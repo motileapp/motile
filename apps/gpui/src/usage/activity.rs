@@ -623,11 +623,8 @@ impl ActivityView {
         );
         card_default(div().flex().flex_col(), cx)
             .child(
-                div()
-                    .min_h(px(40.))
+                table_header(cx)
                     .px(px(14.))
-                    .flex()
-                    .items_center()
                     .text_size(TextSize::Sm)
                     .font_weight(FontWeight::MEDIUM)
                     .text_color(c.foreground)
@@ -697,8 +694,8 @@ impl ActivityView {
             .into_any_element()
     }
 
-    /// The features of a group, each with how often it was used: the five used most, and the
-    /// rest once asked for. `key` keeps which groups show them all.
+    /// The features of a group as a table under a header of its name and total, each with how
+    /// often it was used: the five used most, and the rest once asked for. `key` keeps which groups show them all.
     fn feature_card(
         &self,
         key: SharedString,
@@ -726,32 +723,23 @@ impl ActivityView {
         });
         card_default(div().flex().flex_col(), cx)
             .child(
-                div()
-                    .min_h(px(40.))
+                table_header(cx)
                     .px(px(14.))
-                    .flex()
-                    .items_center()
                     .gap(px(8.))
-                    .child(
-                        div()
-                            .flex_1()
-                            .text_size(TextSize::Sm)
-                            .font_weight(FontWeight::MEDIUM)
-                            .text_color(c.foreground)
-                            .child(title.to_string()),
-                    )
-                    .child(
-                        div()
-                            .text_size(TextSize::Xs)
-                            .text_color(c.muted_foreground)
-                            .font_features(tabular_numbers())
-                            .child(number(count)),
-                    ),
+                    .text_size(TextSize::Sm)
+                    .font_weight(FontWeight::MEDIUM)
+                    .child(div().flex_1().text_color(c.foreground).child(title.to_string()))
+                    .child(div().text_color(c.muted_foreground).font_features(tabular_numbers()).child(number(count))),
             )
             .child(divider_on(Surface::Card, cx))
             .children(rows)
             .when_some(more, |card, more| card.child(divider_on(Surface::Card, cx)).child(more))
     }
+}
+
+/// The header row of a card that is a table, filled as a table's header is.
+fn table_header(cx: &App) -> Div {
+    div().min_h(px(40.)).flex().items_center().rounded_t(px(Radius::LG)).bg(colors(cx).card_accent)
 }
 
 impl Render for ActivityView {
