@@ -97,6 +97,7 @@ enum Symbol: String {
     case lock = "\u{e10b}"
     case lockOpen = "\u{e10c}"
     case logOut = "\u{e10e}"
+    case mapPin = "\u{e111}"
     case maximize2 = "\u{e113}"
     case menu = "\u{e115}"
     case messageCircleQuestionMark = "\u{e568}"
@@ -104,6 +105,7 @@ enum Symbol: String {
     case messageSquareText = "\u{e575}"
     case minimize2 = "\u{e11b}"
     case minus = "\u{e11c}"
+    case moveUpRight = "\u{e493}"
     case panelLeft = "\u{e12a}"
     case panelRight = "\u{e431}"
     case paperclip = "\u{e12d}"
@@ -113,6 +115,7 @@ enum Symbol: String {
     case play = "\u{e13c}"
     case plug = "\u{e37f}"
     case plus = "\u{e13d}"
+    case redo2 = "\u{e2a0}"
     case refreshCw = "\u{e145}"
     /// Ricrac's logo, which Lucide doesn't have.
     case ricrac = "ricrac"

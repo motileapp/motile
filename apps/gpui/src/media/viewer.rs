@@ -1,21 +1,24 @@
 //! The images and videos of a message or of the composer, one at a time over the whole window.
 //! ← and → go through them, and Esc or a click beside the picture closes it. An image zooms as
 //! a `ZoomableImage` does. ⌘C copies what is shown and ⌘S saves it, as a right click on it offers.
-//! Its buttons sit in the window's top bar.
+//! Its buttons sit in the window's top bar. An image can be marked up, to put in the composer.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
+use gpui_kit::component::input::{InputEvent, InputState};
 use gpui_kit::prelude::*;
 use gpui_kit::*;
 
+use super::markup::{self, MarkupSession, MarkupTool, ink_color, ink_contrast};
 use super::zoom::ZoomableImage;
 use super::{MediaFiles, SAVE_TITLE};
-use crate::models::{MediaSource, ViewedMedia};
+use crate::models::{MediaSource, SavedMarkup, ViewedMedia};
 use crate::store::Store;
-use crate::theme::{ControlSize, Radius, TextSize, colors};
+use crate::theme::{ControlSize, Opacity, Radius, ShadowSize, Surface, TextSize, colors};
 use crate::ui::menu::Menu;
+use crate::ui::modal::{Answer, Confirmation, confirmation, presented};
 use crate::ui::parts::CopyButton;
-use crate::ui::{ActionButton, Spinner, Variant, beside};
+use crate::ui::{ActionButton, InputField, InputVariant, Spinner, Swatch, Variant, beside, tabular_numbers};
 
 /// The room the picture leaves around it when it fits the window.
 pub const MARGIN: (f32, f32) = (64., 52.);
@@ -25,6 +28,15 @@ const CORNER_GAP: f32 = 8.;
 const CORNER_INSET: f32 = 16.;
 /// A small image is enlarged to fit the window, up to twice its size.
 const LARGEST_FIT: f32 = 2.;
+/// The room on each side of the name beside Cancel and Add to Message.
+const MARKUP_NAME_INSET: f32 = 300.;
+/// The room around the markup bar's controls, inside its capsule.
+const BAR_INSET: f32 = 6.;
+const BAR_SIZE: ControlSize = ControlSize::Large;
+const NOTE_WIDTH: f32 = 340.;
+/// The room around a picture being marked up, which keeps it clear of the bar under it: the
+/// bar's place, its height with its inset and border, and a gap.
+const MARKUP_MARGIN: (f32, f32) = (MARGIN.0, CORNER_INSET + 8. + BAR_SIZE.height() + 2. * (BAR_INSET + 1.) + 12.);
 
 pub struct MediaViewer {
     store: Entity<Store>,
@@ -41,7 +53,17 @@ pub struct MediaViewer {
     copies: usize,
     /// A press fell on the darkness around what is shown, which closes it once let go.
     pressed_beside: bool,
-    _subscription: Subscription,
+    /// The image being marked up.
+    markup: Option<Entity<MarkupSession>>,
+    /// The marks a composer's attachment was given, to go on with once the image before them shows.
+    resuming: Option<SavedMarkup>,
+    /// The selected pin's note, and the pin it is of.
+    note: Entity<InputState>,
+    noted: Option<usize>,
+    /// Asks whether to throw the marks away.
+    discarding: bool,
+    _markup_changes: Option<Subscription>,
+    _subscriptions: [Subscription; 2],
 }
 
 impl MediaViewer {
@@ -49,6 +71,18 @@ impl MediaViewer {
         let focus = cx.focus_handle();
         focus.focus(window, cx);
         let subscription = cx.observe(&store, |this, _, cx| this.follow_store(cx));
+        let note = cx.new(|cx| InputState::new(window, cx).placeholder("Note for the agent"));
+        let writing = cx.subscribe_in(&note, window, |this, note, event: &InputEvent, _, cx| {
+            let Some(markup) = this.markup.clone() else { return };
+            match event {
+                InputEvent::Change => {
+                    let text = note.read(cx).value().to_string();
+                    markup.update(cx, |markup, _| markup.note = text);
+                }
+                InputEvent::PressEnter { .. } => this.change_markup(cx, MarkupSession::deselect),
+                _ => {}
+            }
+        });
         let mut viewer = Self {
             store,
             focus,
@@ -60,7 +94,13 @@ impl MediaViewer {
             image: None,
             copies: 0,
             pressed_beside: false,
-            _subscription: subscription,
+            markup: None,
+            resuming: None,
+            note,
+            noted: None,
+            discarding: false,
+            _markup_changes: None,
+            _subscriptions: [subscription, writing],
         };
         viewer.follow_store(cx);
         viewer
@@ -72,6 +112,7 @@ impl MediaViewer {
             return;
         }
         self.pause(cx);
+        self.end_markup(cx);
         self.shown = item.clone();
         self.file = None;
         self.failed = false;
@@ -104,18 +145,7 @@ impl MediaViewer {
         };
         self.file = Some(file.clone());
         if !item.video {
-            let (viewer, menu) = (cx.entity().downgrade(), cx.entity().downgrade());
-            let image = ZoomableImage::new(&file, size(MARGIN.0, MARGIN.1), Radius::MD)
-                .largest_fit(LARGEST_FIT)
-                .over_picture()
-                .on_clicked_beside(move |_, cx| {
-                    let _ = viewer.update(cx, |viewer, cx| viewer.close(cx));
-                })
-                .on_right_click(move |position, window, cx| {
-                    let Ok(menu) = menu.update(cx, |viewer, cx| viewer.menu(cx)) else { return };
-                    menu.show(position, window, cx);
-                });
-            self.image = Some(cx.new(|_| image));
+            self.image = Some(self.zoomable(&file, cx));
             return cx.notify();
         }
         // A video the system's player can't play opens in the app the system has for it.
@@ -130,6 +160,214 @@ impl MediaViewer {
         #[cfg(not(target_os = "macos"))]
         cx.open_with_system(&file);
         cx.notify();
+    }
+
+    fn zoomable(&self, file: &Path, cx: &mut Context<Self>) -> Entity<ZoomableImage> {
+        let (viewer, menu) = (cx.entity().downgrade(), cx.entity().downgrade());
+        let image = ZoomableImage::new(file, size(MARGIN.0, MARGIN.1), Radius::MD)
+            .largest_fit(LARGEST_FIT)
+            .over_picture()
+            .on_clicked_beside(move |_, cx| {
+                let _ = viewer.update(cx, |viewer, cx| {
+                    if viewer.markup.is_none() {
+                        viewer.close(cx);
+                    }
+                });
+            })
+            .on_right_click(move |position, window, cx| {
+                let Ok(menu) = menu.update(cx, |viewer, cx| viewer.menu(cx)) else { return };
+                menu.show(position, window, cx);
+            });
+        cx.new(|_| image)
+    }
+
+    /// An image that is here can be marked up.
+    fn markable(&self, cx: &mut App) -> bool {
+        let Some(image) = &self.image else { return false };
+        self.file.is_some() && ZoomableImage::picture_size(image, cx).is_some()
+    }
+
+    /// Marks up the image shown, or goes on with the marks it was given in the composer, over the
+    /// image before them.
+    fn start_markup(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if !self.markable(cx) {
+            return;
+        }
+        let (Some(item), Some(file), Some(image)) = (self.shown.clone(), self.file.clone(), self.image.clone()) else {
+            return;
+        };
+        let saved = item.attachment.as_ref().and_then(|id| {
+            self.store.read(cx).attachments().into_iter().find(|attachment| &attachment.id == id)?.markup
+        });
+        let Some(saved) = saved else {
+            let Some(pixels) = ZoomableImage::picture_size(&image, cx) else { return };
+            let opened = MarkupSession::open(file, item.name, item.attachment, pixels, None);
+            return self.begin_markup(opened, window, cx);
+        };
+        self.image = Some(self.zoomable(&saved.original, cx));
+        self.resuming = Some(saved);
+        self.resume_markup(window, cx);
+    }
+
+    /// Goes on with the marks of a composer's attachment once the image before them shows.
+    fn resume_markup(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let (Some(saved), Some(image), Some(item)) = (self.resuming.clone(), self.image.clone(), self.shown.clone())
+        else {
+            return;
+        };
+        let Some(pixels) = ZoomableImage::picture_size(&image, cx) else { return };
+        self.resuming = None;
+        let opened =
+            MarkupSession::open(saved.original.clone(), saved.name.clone(), item.attachment, pixels, Some(&saved));
+        self.begin_markup(opened, window, cx);
+    }
+
+    fn begin_markup(&mut self, opened: Option<MarkupSession>, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(opened) = opened else { return };
+        let markup = cx.new(|_| opened);
+        self._markup_changes = Some(cx.observe_in(&markup, window, |this, _, window, cx| this.follow_note(window, cx)));
+        if let Some(image) = &self.image {
+            image.update(cx, |image, cx| {
+                image.set_markup(Some(markup.clone()), cx);
+                image.set_margin(size(MARKUP_MARGIN.0, MARKUP_MARGIN.1), cx);
+            });
+        }
+        self.markup = Some(markup);
+        cx.notify();
+    }
+
+    /// Writes the selected pin's note in the field and gives it the keys, or gives them back.
+    fn follow_note(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        cx.notify();
+        let Some(markup) = self.markup.clone() else { return };
+        let selected = markup.read(cx).selected;
+        if selected == self.noted {
+            return;
+        }
+        self.noted = selected;
+        if selected.is_none() {
+            return self.focus.focus(window, cx);
+        }
+        let note = markup.read(cx).note.clone();
+        self.note.update(cx, |field, cx| {
+            field.set_value(note, window, cx);
+            field.focus_handle(cx).focus(window, cx);
+        });
+    }
+
+    fn change_markup(&mut self, cx: &mut Context<Self>, change: impl FnOnce(&mut MarkupSession)) {
+        let Some(markup) = &self.markup else { return };
+        markup.update(cx, |markup, cx| {
+            change(markup);
+            cx.notify();
+        });
+    }
+
+    fn end_markup(&mut self, cx: &mut Context<Self>) {
+        let Some(markup) = self.markup.take() else {
+            self.resuming = None;
+            return;
+        };
+        let reload = Some(&markup.read(cx).source) != self.file.as_ref();
+        (self.resuming, self.noted, self.discarding, self._markup_changes) = (None, None, false, None);
+        match (reload, self.file.clone()) {
+            (true, Some(file)) => self.image = Some(self.zoomable(&file, cx)),
+            _ => {
+                if let Some(image) = &self.image {
+                    image.update(cx, |image, cx| {
+                        image.set_markup(None, cx);
+                        image.set_margin(size(MARGIN.0, MARGIN.1), cx);
+                    });
+                }
+            }
+        }
+        cx.notify();
+    }
+
+    fn cancel_markup(&mut self, cx: &mut Context<Self>) {
+        let Some(markup) = &self.markup else { return };
+        if markup.read(cx).changed {
+            self.discarding = true;
+            return cx.notify();
+        }
+        self.end_markup(cx);
+    }
+
+    fn finish_markup(&mut self, cx: &mut Context<Self>) {
+        let Some(markup) = self.markup.clone() else { return };
+        let session = markup.read(cx);
+        if session.finishing || !(session.changed || session.attachment.is_none()) {
+            return;
+        }
+        let writing = markup.update(cx, |markup, cx| {
+            cx.notify();
+            markup.finish(markup::folder())
+        });
+        let written = cx.background_spawn(async move { writing() });
+        cx.spawn(async move |this, cx| {
+            let result = written.await;
+            let _ = this.update(cx, |viewer, cx| {
+                if viewer.markup.as_ref() != Some(&markup) {
+                    return;
+                }
+                let replacing = markup.update(cx, |markup, cx| {
+                    markup.finishing = false;
+                    markup.failed = result.is_none();
+                    cx.notify();
+                    markup.attachment.clone()
+                });
+                let Some(result) = result else { return };
+                viewer.end_markup(cx);
+                viewer.store.update(cx, |store, cx| {
+                    store.attach_markup(result, replacing.as_deref());
+                    cx.notify();
+                });
+                viewer.close(cx);
+            });
+        })
+        .detach();
+    }
+
+    /// While an image is marked up, the keys pick its tools and colours. The note's field keeps
+    /// the keys it takes while a pin is selected.
+    fn markup_key(&mut self, markup: Entity<MarkupSession>, keystroke: &Keystroke, cx: &mut Context<Self>) {
+        if self.discarding {
+            return;
+        }
+        let selected = markup.read(cx).selected.is_some();
+        let key = keystroke.key.as_str();
+        if key == "escape" {
+            match selected {
+                true => self.change_markup(cx, MarkupSession::deselect),
+                false => self.cancel_markup(cx),
+            }
+            return cx.stop_propagation();
+        }
+        if selected {
+            return;
+        }
+        if keystroke.modifiers.secondary() {
+            match key {
+                "z" if keystroke.modifiers.shift => self.change_markup(cx, MarkupSession::redo),
+                "z" => self.change_markup(cx, MarkupSession::undo),
+                _ => {
+                    let Some(image) = self.image.clone() else { return };
+                    if !image.update(cx, |image, cx| image.zoom_key(keystroke, cx)) {
+                        return;
+                    }
+                }
+            }
+            return cx.stop_propagation();
+        }
+        let inks = markup.read(cx).inks.clone();
+        if key == "enter" {
+            self.finish_markup(cx);
+        } else if let Some(tool) = MarkupTool::ALL.into_iter().find(|tool| tool.key().eq_ignore_ascii_case(key)) {
+            self.change_markup(cx, |markup| markup.set_tool(tool));
+        } else if let Some(ink) = key.parse::<usize>().ok().and_then(|digit| inks.get(digit.checked_sub(1)?)) {
+            self.change_markup(cx, |markup| markup.set_ink(ink));
+        }
+        cx.stop_propagation();
     }
 
     fn pause(&mut self, cx: &mut Context<Self>) {
@@ -216,6 +454,13 @@ impl MediaViewer {
             }
             return cx.stop_propagation();
         }
+        if let Some(markup) = self.markup.clone() {
+            return self.markup_key(markup, keystroke, cx);
+        }
+        if keystroke.key == "m" && !keystroke.modifiers.modified() && self.markable(cx) {
+            self.start_markup(window, cx);
+            return cx.stop_propagation();
+        }
         match keystroke.key.as_str() {
             "c" if command && self.file.is_some() => self.copy_checked(cx),
             "s" if command && self.file.is_some() => self.save(cx),
@@ -289,6 +534,10 @@ impl Render for MediaViewer {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let viewport = crate::window_frame::content_size(window);
         let Some(viewing) = self.store.read(cx).viewing.clone() else { return div().into_any_element() };
+        self.resume_markup(window, cx);
+        let markup = self.markup.clone();
+        let marking = markup.is_some();
+        let markable = self.markable(cx);
         let item = viewing.item().clone();
         let progress = match &item.source {
             MediaSource::Media(id) => self.store.read(cx).media_progress.get(id).copied(),
@@ -330,15 +579,28 @@ impl Render for MediaViewer {
         let shortcuts = &self.store.read(cx).shortcuts;
         let (copy_keys, save_keys) = (shortcuts.keys_label("mod+c"), shortcuts.keys_label("mod+s"));
         let trailing = CORNER_INSET + crate::window_frame::trailing_room(window, cx);
-        let buttons = 3. * ControlSize::Large.height() + 2. * CORNER_GAP;
-        let name_inset = (trailing + buttons).max(crate::window_frame::leading_room(window, cx)) + CORNER_INSET;
+        let buttons = 4. * ControlSize::Large.height() + 3. * CORNER_GAP;
+        let name_inset = match marking {
+            true => MARKUP_NAME_INSET,
+            false => (trailing + buttons).max(crate::window_frame::leading_room(window, cx)) + CORNER_INSET,
+        };
         let corner = div()
             .absolute()
             .top_0()
             .right(px(trailing))
             .flex()
             .items_center()
-            .when(self.file.is_some(), |corner| {
+            .children(markup.as_ref().map(|markup| self.markup_buttons(markup, cx)))
+            .when(!marking && markable, |corner| {
+                corner.child(Self::round_button(
+                    "mark-up",
+                    "pencil.line",
+                    "Mark Up (M)",
+                    beside(0., CORNER_GAP / 2.),
+                    cx.listener(|this, _, window, cx| this.start_markup(window, cx)),
+                ))
+            })
+            .when(!marking && self.file.is_some(), |corner| {
                 let copy = cx.entity().downgrade();
                 corner
                     .child(
@@ -355,7 +617,7 @@ impl Render for MediaViewer {
                             .symbol_size(ControlSize::Large.small_symbol())
                             .round(true)
                             .copies(self.copies)
-                            .margin(beside(0., CORNER_GAP / 2.)),
+                            .margin(beside(if markable { CORNER_GAP / 2. } else { 0. }, CORNER_GAP / 2.)),
                         ),
                     )
                     .child(Self::round_button(
@@ -366,13 +628,17 @@ impl Render for MediaViewer {
                         cx.listener(|this, _, _, cx| this.save(cx)),
                     ))
             })
-            .child(Self::round_button(
-                "close-viewer",
-                "x",
-                "Close (Esc)",
-                beside(if self.file.is_some() { CORNER_GAP / 2. } else { 0. }, 0.),
-                cx.listener(|this, _, _, cx| this.close(cx)),
-            ));
+            .when(!marking, |corner| {
+                corner.child(Self::round_button(
+                    "close-viewer",
+                    "x",
+                    "Close (Esc)",
+                    beside(if self.file.is_some() { CORNER_GAP / 2. } else { 0. }, 0.),
+                    cx.listener(|this, _, _, cx| this.close(cx)),
+                ))
+            });
+        let bar = markup.as_ref().map(|markup| self.markup_bar(markup, cx));
+        let discarding = self.discard_alert(window, cx);
 
         deferred(
             anchored().position(crate::window_frame::content_origin(window)).child(
@@ -402,7 +668,7 @@ impl Render for MediaViewer {
                         }),
                     )
                     .child(content)
-                    .when(many && !full_screen, |viewer| {
+                    .when(many && !full_screen && !marking, |viewer| {
                         viewer.child(
                             div()
                                 .absolute()
@@ -431,7 +697,7 @@ impl Render for MediaViewer {
                     })
                     // One row in the top bar places the name and the buttons, so they share a
                     // middle. The name is centered on the window, as far from both ends as all
-                    // three buttons need, so it keeps clear of them however many show.
+                    // four buttons need, so it keeps clear of them however many show.
                     .when(!full_screen, |viewer| {
                         viewer.child(
                             div()
@@ -447,7 +713,9 @@ impl Render for MediaViewer {
                                 .child(title)
                                 .child(corner),
                         )
-                    }),
+                    })
+                    .children(bar)
+                    .children(discarding),
             ),
         )
         .with_priority(2)
@@ -506,6 +774,202 @@ impl MediaViewer {
     fn video(&self, _: bool, _: &mut Context<Self>) -> Option<AnyElement> {
         None
     }
+}
+
+impl MediaViewer {
+    /// Cancel, and Add to Message, or Done for an image that is already in the composer.
+    fn markup_buttons(&self, markup: &Entity<MarkupSession>, cx: &mut Context<Self>) -> Div {
+        let markup = markup.read(cx);
+        let title = if markup.attachment.is_none() { "Add to Message" } else { "Done" };
+        div()
+            .flex()
+            .items_center()
+            .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+            .child(
+                ActionButton::new("cancel-markup", "Cancel")
+                    .help("Cancel (Esc)")
+                    .overlay()
+                    .large()
+                    .round(true)
+                    .margin(beside(0., CORNER_GAP / 2.))
+                    .on_click(cx.listener(|this, _, _, cx| this.cancel_markup(cx))),
+            )
+            .child(
+                ActionButton::new("finish-markup", title)
+                    .help("Return")
+                    .primary()
+                    .large()
+                    .round(true)
+                    .pending(markup.finishing)
+                    .disabled(!markup.changed && markup.attachment.is_some())
+                    .margin(beside(CORNER_GAP / 2., 0.))
+                    .on_click(cx.listener(|this, _, _, cx| this.finish_markup(cx))),
+            )
+    }
+
+    /// The bar under an image being marked up: the tools, the colours, undo and redo, and what
+    /// went wrong over it. While a pin is selected it is the pin's note instead, which Return keeps.
+    fn markup_bar(&self, markup: &Entity<MarkupSession>, cx: &mut Context<Self>) -> Div {
+        let c = colors(cx);
+        let session = markup.read(cx);
+        let failed = session.failed;
+        let controls = match session.selected_pin().cloned() {
+            Some(pin) => self.note_bar(&pin, cx),
+            None => self.tool_bar(markup, cx),
+        };
+        let bar = div()
+            .flex()
+            .items_center()
+            .p(px(BAR_INSET))
+            .rounded_full()
+            .bg(c.popover)
+            .border_1()
+            .border_color(c.border_popover)
+            .shadow(c.shadow(ShadowSize::Lg, Opacity::Shadow))
+            .occlude()
+            .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+            .child(controls);
+        div()
+            .absolute()
+            .left_0()
+            .right_0()
+            .bottom(px(CORNER_INSET + 8.))
+            .flex()
+            .flex_col()
+            .items_center()
+            .gap(px(10.))
+            .when(failed, |column| {
+                column.child(
+                    div()
+                        .h(px(24.))
+                        .px(px(10.))
+                        .flex()
+                        .items_center()
+                        .rounded_full()
+                        .bg(c.scrim)
+                        .text_size(TextSize::Sm)
+                        .text_color(c.foreground_over_picture)
+                        .child("This image couldn't be marked up."),
+                )
+            })
+            .child(bar)
+    }
+
+    fn tool_bar(&self, markup: &Entity<MarkupSession>, cx: &mut Context<Self>) -> Div {
+        let session = markup.read(cx);
+        let c = colors(cx);
+        let shortcuts = &self.store.read(cx).shortcuts;
+        let (undo_keys, redo_keys) = (shortcuts.keys_label("mod+z"), shortcuts.keys_label("mod+shift+z"));
+        let tools = MarkupTool::ALL.into_iter().enumerate().map(|(index, tool)| {
+            ActionButton::icon(("markup-tool", index), tool.symbol(), format!("{} ({})", tool.title(), tool.key()))
+                .size(BAR_SIZE)
+                .round(true)
+                .surface(Surface::Popover)
+                .selected(session.tool == tool)
+                .on_click(cx.listener(move |this, _, _, cx| this.change_markup(cx, |markup| markup.set_tool(tool))))
+        });
+        let inks = session.inks.iter().enumerate().map(|(index, ink)| {
+            let picked = ink.clone();
+            Swatch::new(("markup-ink", index), ink_color(ink, c), format!("{} ({})", capitalized(ink), index + 1))
+                .size(BAR_SIZE)
+                .selected(session.ink == *ink)
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    let picked = picked.clone();
+                    this.change_markup(cx, move |markup| markup.set_ink(&picked))
+                }))
+        });
+        div()
+            .flex()
+            .items_center()
+            .gap(px(2.))
+            .children(tools)
+            .child(bar_divider(cx))
+            .children(inks)
+            .child(bar_divider(cx))
+            .child(
+                ActionButton::icon("markup-undo", "undo-2", format!("Undo ({undo_keys})"))
+                    .size(BAR_SIZE)
+                    .round(true)
+                    .surface(Surface::Popover)
+                    .disabled(!session.can_undo)
+                    .on_click(cx.listener(|this, _, _, cx| this.change_markup(cx, MarkupSession::undo))),
+            )
+            .child(
+                ActionButton::icon("markup-redo", "redo-2", format!("Redo ({redo_keys})"))
+                    .size(BAR_SIZE)
+                    .round(true)
+                    .surface(Surface::Popover)
+                    .disabled(!session.can_redo)
+                    .on_click(cx.listener(|this, _, _, cx| this.change_markup(cx, MarkupSession::redo))),
+            )
+    }
+
+    fn note_bar(&self, pin: &markup::Pin, cx: &mut Context<Self>) -> Div {
+        let c = colors(cx);
+        let side = px(BAR_SIZE.height());
+        let badge = div()
+            .flex_none()
+            .size(side)
+            .rounded_full()
+            .flex()
+            .items_center()
+            .justify_center()
+            .bg(ink_color(&pin.ink, c))
+            .text_color(ink_contrast(&pin.ink, c))
+            .text_size(TextSize::Sm)
+            .font_weight(FontWeight::SEMIBOLD)
+            .font_features(tabular_numbers())
+            .child(pin.number.to_string());
+        div()
+            .flex()
+            .items_center()
+            .gap(px(6.))
+            .child(badge)
+            .child(div().w(px(NOTE_WIDTH)).h(side).child(
+                InputField::new(&self.note).variant(InputVariant::Bare).size(BAR_SIZE).surface(Surface::Popover),
+            ))
+            .child(
+                ActionButton::icon("remove-pin", "trash-2", "Remove Pin")
+                    .size(BAR_SIZE)
+                    .round(true)
+                    .surface(Surface::Popover)
+                    .on_click(cx.listener(|this, _, _, cx| this.change_markup(cx, MarkupSession::remove_selected))),
+            )
+            .child(
+                ActionButton::icon("keep-note", "check", "Keep Note (Return)")
+                    .primary()
+                    .size(BAR_SIZE)
+                    .round(true)
+                    .on_click(cx.listener(|this, _, _, cx| this.change_markup(cx, MarkupSession::deselect))),
+            )
+    }
+
+    fn discard_alert(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let (_, leaving) = presented("discard-marks", self.discarding.then_some(()), window, cx)?;
+        let (keep, discard) = (cx.entity().downgrade(), cx.entity().downgrade());
+        let asked = Confirmation::new("Discard your marks?").message("The image stays as it was.").answer(
+            Answer::new("Discard", move |_, cx| {
+                let _ = discard.update(cx, |viewer, cx| viewer.end_markup(cx));
+            })
+            .danger(),
+        );
+        let close = move |_: &mut Window, cx: &mut App| {
+            let _ = keep.update(cx, |viewer, cx| {
+                viewer.discarding = false;
+                cx.notify();
+            });
+        };
+        Some(confirmation("discard-marks", asked, close, cx).leaving(leaving).into_any_element())
+    }
+}
+
+fn bar_divider(cx: &App) -> Div {
+    div().flex_none().mx(px(4.)).w(px(1.)).h(px(BAR_SIZE.height() * 0.6)).bg(colors(cx).border_popover)
+}
+
+fn capitalized(word: &str) -> String {
+    let mut letters = word.chars();
+    letters.next().map(|first| first.to_uppercase().chain(letters).collect()).unwrap_or_default()
 }
 
 fn copy_title(video: bool) -> &'static str {

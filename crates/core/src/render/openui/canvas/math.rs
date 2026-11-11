@@ -13,7 +13,7 @@ use ratex_types::math_style::MathStyle;
 use ratex_types::path_command::PathCommand;
 use ttf_parser::{Face, OutlineBuilder};
 
-use super::scene::{Anchor, Color, Font, Item, Paint, PathBuilder, Scene, Stroke, Text, round};
+use super::scene::{Anchor, Color, Font, Item, Paint, Path, PathBuilder, Scene, Stroke, Text, round};
 
 /// A formula is this much larger than the text around it.
 const SCALE: f64 = 1.12;
@@ -54,6 +54,25 @@ const FONTS: [(&str, &[u8]); 20] = fonts![
 fn faces() -> &'static HashMap<&'static str, Face<'static>> {
     static FACES: OnceLock<HashMap<&'static str, Face<'static>>> = OnceLock::new();
     FACES.get_or_init(|| FONTS.iter().filter_map(|(name, data)| Some((*name, Face::parse(data, 0).ok()?))).collect())
+}
+
+/// `text` in KaTeX's sans serif bold, its ink `height` tall and centred on (`cx`, `cy`), as one path.
+pub fn label_outline(text: &str, height: f64, cx: f64, cy: f64) -> Option<Path> {
+    let face = faces().get("SansSerif-Bold")?;
+    let glyphs: Vec<_> = text.chars().filter_map(|c| face.glyph_index(c)).collect();
+    let bounds: Vec<_> = glyphs.iter().filter_map(|glyph| face.glyph_bounding_box(*glyph)).collect();
+    let top = bounds.iter().map(|b| b.y_max).max()? as f64;
+    let bottom = bounds.iter().map(|b| b.y_min).min()? as f64;
+    let scale = height / (top - bottom).max(1.0);
+    let advance: f64 = glyphs.iter().map(|glyph| face.glyph_hor_advance(*glyph).unwrap_or(0) as f64).sum();
+    let mut x = cx / scale - advance / 2.0;
+    let mut path = PathBuilder::new(Affine::IDENTITY);
+    for glyph in glyphs {
+        let transform = Affine::new([scale, 0.0, 0.0, -scale, x * scale, cy + (top + bottom) / 2.0 * scale]);
+        face.outline_glyph(glyph, &mut Outline { path: &mut path, transform });
+        x += face.glyph_hor_advance(glyph).unwrap_or(0) as f64;
+    }
+    path.finish()
 }
 
 /// The scene of `tex` set in text `text_size` points tall: a block (display style) or `inline`.

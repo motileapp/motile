@@ -72,6 +72,12 @@ extension Theme {
     static let mapStreet = tone(0xcdd1d9, 0x34363d)
     static let mapRoad = tone(0xb1b9c8, 0x4a4e57)
     static let mapFerry = tone(0x89cfe9, 0x2b5566)
+    static let markupRed = tone(0xff3b30, 0xff3b30)
+    static let markupYellow = tone(0xffcc00, 0xffcc00)
+    static let markupGreen = tone(0x30d158, 0x30d158)
+    static let markupBlue = tone(0x0a84ff, 0x0a84ff)
+    static let markupWhite = tone(0xffffff, 0xffffff)
+    static let markupInk = tone(0x1c1d22, 0x1c1d22)
     static let claude = tone(0xd97757, 0xd97757)
     static let openai = tone(0x22242b, 0xd0d2d9)
     static let googleBlue = tone(0x4285f4, 0x4285f4)
@@ -165,6 +171,12 @@ extension Theme {
         case "map-street": mapStreet
         case "map-road": mapRoad
         case "map-ferry": mapFerry
+        case "markup-red": markupRed
+        case "markup-yellow": markupYellow
+        case "markup-green": markupGreen
+        case "markup-blue": markupBlue
+        case "markup-white": markupWhite
+        case "markup-ink": markupInk
         case "claude": claude
         case "openai": openai
         case "google-blue": googleBlue
@@ -258,6 +270,12 @@ extension Color {
     static let themeMapStreet = Color(platform: Theme.mapStreet)
     static let themeMapRoad = Color(platform: Theme.mapRoad)
     static let themeMapFerry = Color(platform: Theme.mapFerry)
+    static let themeMarkupRed = Color(platform: Theme.markupRed)
+    static let themeMarkupYellow = Color(platform: Theme.markupYellow)
+    static let themeMarkupGreen = Color(platform: Theme.markupGreen)
+    static let themeMarkupBlue = Color(platform: Theme.markupBlue)
+    static let themeMarkupWhite = Color(platform: Theme.markupWhite)
+    static let themeMarkupInk = Color(platform: Theme.markupInk)
     static let themeClaude = Color(platform: Theme.claude)
     static let themeOpenai = Color(platform: Theme.openai)
     static let themeGoogleBlue = Color(platform: Theme.googleBlue)

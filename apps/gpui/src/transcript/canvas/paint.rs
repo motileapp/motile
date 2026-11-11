@@ -111,6 +111,30 @@ pub fn paint_scene(
     }
 }
 
+/// Paints the scene's shapes stretched over `bounds`, as an image's marks lie over it however
+/// it is zoomed. Its labels and gradients aren't painted.
+pub fn paint_stretched(prepared: &Prepared, bounds: Bounds<Pixels>, palette: &Palette, window: &mut Window) {
+    let scene = &prepared.scene;
+    if scene.width <= 0. || scene.height <= 0. {
+        return;
+    }
+    let scale = (f32::from(bounds.size.width) / scene.width, f32::from(bounds.size.height) / scene.height);
+    for mark in prepared.items.iter().flatten() {
+        let Mark::Shape(path, Ink::Color(color, opacity)) = mark else { continue };
+        window.paint_path(stretched(path, bounds.origin, scale), solid_background(palette.resolve(color, *opacity)));
+    }
+}
+
+fn stretched(path: &Path<Pixels>, origin: Point<Pixels>, (x, y): (f32, f32)) -> Path<Pixels> {
+    let at = |p: Point<Pixels>| point(origin.x + p.x * x, origin.y + p.y * y);
+    let mut path = path.clone();
+    for vertex in &mut path.vertices {
+        vertex.xy_position = at(vertex.xy_position);
+    }
+    path.bounds = Bounds::from_corners(at(path.bounds.origin), at(path.bounds.bottom_right()));
+    path
+}
+
 fn paint_marks(marks: &[Mark], origin: Point<Pixels>, palette: &Palette, window: &mut Window, cx: &mut App) {
     for mark in marks {
         match mark {

@@ -1266,6 +1266,8 @@ data class Attachment(
     val path: String? = null,
     val media: String? = null,
     val poster: String? = null,
+    /** What it was marked up from, to be marked up again. */
+    val markup: SavedMarkup? = null,
 ) {
     sealed interface State {
         /** Picked, and on its way to a file the client can read, as the photo picker gives it. */
@@ -1279,8 +1281,8 @@ data class Attachment(
 
     val viewed: ViewedMedia?
         get() {
-            if (file != null) return ViewedMedia(name, video, ViewedMedia.Source.LocalFile(file))
-            return media?.let { ViewedMedia(name, video, ViewedMedia.Source.Media(it)) }
+            if (file != null) return ViewedMedia(name, video, ViewedMedia.Source.LocalFile(file), attachment = id)
+            return media?.let { ViewedMedia(name, video, ViewedMedia.Source.Media(it), attachment = id) }
         }
 
     /** Its extension, as "PDF", when it has one. */
@@ -1332,7 +1334,13 @@ data class Attachment(
 }
 
 /** An image or a video the viewer shows: a file on this device, or one the core has or fetches. */
-data class ViewedMedia(val name: String, val video: Boolean, val source: Source) {
+data class ViewedMedia(
+    val name: String,
+    val video: Boolean,
+    val source: Source,
+    /** The composer's attachment it is, which marking it up replaces. */
+    val attachment: String? = null,
+) {
     sealed interface Source {
         data class LocalFile(val file: File) : Source
         data class Media(val id: String) : Source

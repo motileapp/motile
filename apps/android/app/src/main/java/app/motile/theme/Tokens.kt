@@ -76,6 +76,12 @@ class Palette(
     val mapStreet: Color,
     val mapRoad: Color,
     val mapFerry: Color,
+    val markupRed: Color,
+    val markupYellow: Color,
+    val markupGreen: Color,
+    val markupBlue: Color,
+    val markupWhite: Color,
+    val markupInk: Color,
     val claude: Color,
     val openai: Color,
     val googleBlue: Color,
@@ -166,6 +172,12 @@ class Palette(
             mapStreet = Color(0xFFCDD1D9),
             mapRoad = Color(0xFFB1B9C8),
             mapFerry = Color(0xFF89CFE9),
+            markupRed = Color(0xFFFF3B30),
+            markupYellow = Color(0xFFFFCC00),
+            markupGreen = Color(0xFF30D158),
+            markupBlue = Color(0xFF0A84FF),
+            markupWhite = Color(0xFFFFFFFF),
+            markupInk = Color(0xFF1C1D22),
             claude = Color(0xFFD97757),
             openai = Color(0xFF22242B),
             googleBlue = Color(0xFF4285F4),
@@ -256,6 +268,12 @@ class Palette(
             mapStreet = Color(0xFF34363D),
             mapRoad = Color(0xFF4A4E57),
             mapFerry = Color(0xFF2B5566),
+            markupRed = Color(0xFFFF3B30),
+            markupYellow = Color(0xFFFFCC00),
+            markupGreen = Color(0xFF30D158),
+            markupBlue = Color(0xFF0A84FF),
+            markupWhite = Color(0xFFFFFFFF),
+            markupInk = Color(0xFF1C1D22),
             claude = Color(0xFFD97757),
             openai = Color(0xFFD0D2D9),
             googleBlue = Color(0xFF4285F4),
@@ -348,6 +366,12 @@ class Palette(
         "map-street" -> mapStreet
         "map-road" -> mapRoad
         "map-ferry" -> mapFerry
+        "markup-red" -> markupRed
+        "markup-yellow" -> markupYellow
+        "markup-green" -> markupGreen
+        "markup-blue" -> markupBlue
+        "markup-white" -> markupWhite
+        "markup-ink" -> markupInk
         "claude" -> claude
         "openai" -> openai
         "google-blue" -> googleBlue

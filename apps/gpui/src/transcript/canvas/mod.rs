@@ -25,7 +25,7 @@ pub use motion::{ConfettiOverlay, Turn, squashed, turned};
 use motion::{confetti_frames, flip_scale};
 #[cfg(test)]
 use paint::paint_scene;
-pub use paint::{Palette, Prepared};
+pub use paint::{Palette, Prepared, paint_stretched};
 pub use view::SceneView;
 
 /// The scene of `{"kind", "props", "width", "text_size"}` as core lays it out; an empty one when

@@ -1,7 +1,8 @@
 //! An image that fits its room until it is zoomed, as the Mac's `ZoomableImage` does: a double
 //! click, a pinch, ⌘ and a mouse wheel, or ⌘+, ⌘−, ⌘0 for its real size and ⌘9 to fit again.
 //! A double click and the keys zoom smoothly. Zoomed, it is moved by scrolling or by dragging
-//! anywhere. The viewer shows its images with it, and the right panel an image file.
+//! anywhere, or only by scrolling while it is marked up, when dragging draws. The viewer shows
+//! its images with it, and the right panel an image file.
 
 use std::cell::Cell;
 use std::path::{Path, PathBuf};
@@ -11,8 +12,10 @@ use std::time::{Duration, Instant};
 use gpui_kit::prelude::*;
 use gpui_kit::*;
 
+use super::markup::MarkupSession;
 use super::pictures::{Picture, Pictures};
-use crate::theme::{ControlSize, TextSize, colors};
+use crate::theme::{ControlSize, DARK, Surface, TextSize, colors};
+use crate::transcript::canvas::{Palette, paint_stretched};
 use crate::ui::Spinner;
 
 const MAX_ZOOM: f32 = 8.;
@@ -24,6 +27,8 @@ const MAX_PIXELS: u32 = 8192;
 const WHEEL_ZOOM: f32 = 1.12;
 /// How long a zoom by a double click or a key takes, as AppKit's animations do.
 const ZOOM_FOR: Duration = Duration::from_millis(250);
+/// How far from a pin, in points on the screen, a press still takes it.
+const PIN_SLOP: f64 = 6.;
 
 type ClickedBeside = Rc<dyn Fn(&mut Window, &mut App)>;
 type RightClicked = Rc<dyn Fn(Point<Pixels>, &mut Window, &mut App)>;
@@ -54,6 +59,11 @@ pub struct ZoomableImage {
     bounds: Rc<Cell<Bounds<Pixels>>>,
     /// Where the picture was drawn.
     picture_bounds: Rc<Cell<Bounds<Pixels>>>,
+    /// Takes the pointer to draw marks while it is set.
+    markup: Option<Entity<MarkupSession>>,
+    /// A press draws a mark.
+    marking: bool,
+    _markup_changes: Option<Subscription>,
 }
 
 /// The image whose keys ⌘+, ⌘−, ⌘0 and ⌘9 are, when one has them.
@@ -81,6 +91,9 @@ impl ZoomableImage {
             pressed: false,
             bounds: Rc::default(),
             picture_bounds: Rc::default(),
+            markup: None,
+            marking: false,
+            _markup_changes: None,
         }
     }
 
@@ -102,6 +115,64 @@ impl ZoomableImage {
     pub fn on_right_click(mut self, run: impl Fn(Point<Pixels>, &mut Window, &mut App) + 'static) -> Self {
         self.right_clicked = Some(Rc::new(run));
         self
+    }
+
+    /// The picture's pixels as it was decoded, once it is.
+    pub fn picture_size(image: &Entity<Self>, cx: &mut App) -> Option<(u32, u32)> {
+        let file = image.read(cx).file.clone();
+        let Picture::Ready(shown) = Pictures::load_file(&format!("view:{}", file.display()), &file, MAX_PIXELS, cx)
+        else {
+            return None;
+        };
+        Some((shown.width, shown.height))
+    }
+
+    pub fn set_markup(&mut self, markup: Option<Entity<MarkupSession>>, cx: &mut Context<Self>) {
+        self._markup_changes = markup.as_ref().map(|markup| cx.observe(markup, |_, _, cx| cx.notify()));
+        self.markup = markup;
+        self.marking = false;
+        cx.notify();
+    }
+
+    /// The room it leaves around it when it fits. Fitted, it zooms to fit the new room; zoomed,
+    /// it stays.
+    pub fn set_margin(&mut self, margin: Size<f32>, cx: &mut Context<Self>) {
+        if margin == self.margin {
+            return;
+        }
+        let (picture, points) = self.picture(cx);
+        let fit = self.fit(points);
+        let fitted = self.scale.is_none_or(|scale| (scale - fit).abs() < 0.001);
+        let (scale, offset) = self.shown_zoom(points);
+        self.margin = margin;
+        cx.notify();
+        if !fitted || !matches!(picture, Picture::Ready(_)) {
+            return;
+        }
+        self.scale = None;
+        self.offset = Point::default();
+        self.zooming = Some((scale, offset, Instant::now()));
+    }
+
+    /// Where `position` is on the picture, in the image's pixels, and how far from a pin a press
+    /// there may land and still take it.
+    fn marking_at(&self, position: Point<Pixels>, cx: &App) -> Option<(Entity<MarkupSession>, [f64; 2], f64)> {
+        let markup = self.markup.clone()?;
+        let picture = self.picture_bounds.get();
+        let across = markup.read(cx).pixels_across(f32::from(picture.size.width));
+        let at = position - picture.origin;
+        Some((markup, [f32::from(at.x) as f64 * across, f32::from(at.y) as f64 * across], PIN_SLOP * across))
+    }
+
+    fn end_marking(&mut self, position: Point<Pixels>, cx: &mut Context<Self>) {
+        if !std::mem::take(&mut self.marking) {
+            return;
+        }
+        let Some((markup, at, _)) = self.marking_at(position, cx) else { return };
+        markup.update(cx, |markup, cx| {
+            markup.up(at);
+            cx.notify();
+        });
     }
 
     /// Makes ⌘+, ⌘−, ⌘0 and ⌘9 this image's, or with `None` no image's.
@@ -239,7 +310,7 @@ impl Render for ZoomableImage {
             move |bounds, window, _| {
                 if measured.get() != bounds {
                     measured.set(bounds);
-                    window.refresh();
+                    window.request_animation_frame();
                 }
             },
             |_, _, _, _| {},
@@ -260,6 +331,12 @@ impl Render for ZoomableImage {
                 let top = (room.size.height - px(height)) / 2. + offset.y;
                 self.picture_bounds.set(Bounds::new(room.origin + point(left, top), size(px(width), px(height))));
                 let radius = px(self.radius);
+                let marks = self.markup.as_ref().and_then(|markup| markup.read(cx).scene.clone()).map(|scene| {
+                    let palette = Palette::new(&DARK, Surface::Background);
+                    canvas(|_, _, _| {}, move |bounds, _, window, _| paint_stretched(&scene, bounds, &palette, window))
+                        .absolute()
+                        .inset_0()
+                });
                 div()
                     .id("zoomed-image")
                     .absolute()
@@ -272,6 +349,7 @@ impl Render for ZoomableImage {
                     .child(
                         img(ImageSource::Render(shown.image)).size_full().rounded(radius).object_fit(ObjectFit::Fill),
                     )
+                    .children(marks)
                     .into_any_element()
             }
             Picture::Failed(_) => div()
@@ -299,12 +377,20 @@ impl Render for ZoomableImage {
             .size_full()
             .relative()
             .overflow_hidden()
+            .when(self.markup.is_some(), |zoomable| zoomable.cursor(CursorStyle::Crosshair))
             .child(tracked)
-            // A press anywhere drags the picture; a double click on it zooms, and a click beside it
-            // that didn't drag says so.
+            // A press anywhere drags the picture, or draws while it is marked up; a double click on
+            // it zooms, and a click beside it that didn't drag says so.
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(|this, event: &MouseDownEvent, _, cx| {
+                    if let Some((markup, at, slop)) = this.marking_at(event.position, cx) {
+                        this.marking = true;
+                        return markup.update(cx, |markup, cx| {
+                            markup.down(at, slop);
+                            cx.notify();
+                        });
+                    }
                     this.dragging = Some(event.position);
                     this.dragged = false;
                     this.pressed = true;
@@ -329,6 +415,13 @@ impl Render for ZoomableImage {
                 }),
             )
             .on_mouse_move(cx.listener(|this, event: &MouseMoveEvent, _, cx| {
+                if this.marking && event.pressed_button == Some(MouseButton::Left) {
+                    let Some((markup, at, _)) = this.marking_at(event.position, cx) else { return };
+                    return markup.update(cx, |markup, cx| {
+                        markup.drag(at);
+                        cx.notify();
+                    });
+                }
                 let Some(from) = this.dragging else { return };
                 if event.pressed_button != Some(MouseButton::Left) {
                     this.dragging = None;
@@ -348,6 +441,9 @@ impl Render for ZoomableImage {
             .on_mouse_up(
                 MouseButton::Left,
                 cx.listener(|this, event: &MouseUpEvent, window, cx| {
+                    if this.marking {
+                        return this.end_marking(event.position, cx);
+                    }
                     let beside = this.pressed && !this.dragged && !this.on_picture(event.position);
                     this.dragging = None;
                     this.pressed = false;
@@ -356,6 +452,10 @@ impl Render for ZoomableImage {
                         clicked(window, cx);
                     }
                 }),
+            )
+            .on_mouse_up_out(
+                MouseButton::Left,
+                cx.listener(|this, event: &MouseUpEvent, _, cx| this.end_marking(event.position, cx)),
             )
             .on_scroll_wheel(cx.listener(|this, event: &ScrollWheelEvent, _, cx| {
                 let (Picture::Ready(_), points) = this.picture(cx) else { return };

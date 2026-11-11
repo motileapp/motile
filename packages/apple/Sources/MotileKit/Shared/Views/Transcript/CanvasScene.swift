@@ -262,6 +262,15 @@ extension CanvasColor: Decodable {
     }
 }
 
+/// A scene inside other JSON the core answers with.
+struct DecodedScene: Decodable {
+    let scene: CanvasScene
+
+    init(from decoder: Decoder) throws {
+        scene = try RawScene(from: decoder).scene
+    }
+}
+
 private struct RawScene: Decodable {
     let width: CGFloat
     let height: CGFloat

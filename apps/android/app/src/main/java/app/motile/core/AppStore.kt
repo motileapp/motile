@@ -2863,6 +2863,26 @@ class AppStore(private val context: Context) {
         composerFocus += 1
     }
 
+    /**
+     * Puts an image marked up in the viewer in the composer, in the place of the attachment it was
+     * or after the others, and its pins' notes in the message, in the place of those it had.
+     */
+    fun attachMarkup(result: MarkupResult, replacing: String?) {
+        val server = composerServer ?: return
+        if (server.removed) return
+        val key = draftKey
+        val attachment = Attachment.of(result.file, server.id).copy(markup = result.saved)
+        val replaced = replacing?.let { id -> attachments.indexOfFirst { it.id == id }.takeIf { it >= 0 } }
+        val earlier = replaced?.let { attachments[it].markup?.notes }
+        if (replaced != null) removeAttachment(attachments[replaced].id)
+        val attached = attachmentsByKey[key].orEmpty().toMutableList()
+        attached.add(replaced?.coerceAtMost(attached.size) ?: attached.size, attachment)
+        attachmentsByKey = attachmentsByKey + (key to attached)
+        upload(attachment.id)
+        draft = MarkupSession.placingNotes(result.notes, earlier, draft)
+        composerFocus += 1
+    }
+
     /** Shows a picked photo or video at once, before its file is copied. */
     fun prepareAttachment(video: Boolean): String? {
         val server = composerServer ?: return null

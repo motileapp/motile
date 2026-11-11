@@ -84,6 +84,12 @@
   --color-map-street: var(--map-street);
   --color-map-road: var(--map-road);
   --color-map-ferry: var(--map-ferry);
+  --color-markup-red: var(--markup-red);
+  --color-markup-yellow: var(--markup-yellow);
+  --color-markup-green: var(--markup-green);
+  --color-markup-blue: var(--markup-blue);
+  --color-markup-white: var(--markup-white);
+  --color-markup-ink: var(--markup-ink);
   --color-claude: var(--claude);
   --color-openai: var(--openai);
   --color-google-blue: var(--google-blue);
