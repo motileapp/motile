@@ -181,6 +181,12 @@ enum DemoDriver {
         case "answer":
             guard let approval = store.activity.approvals.first else { return }
             store.answer(approval, allow: rest == "allow")
+        case "pick":
+            guard let asking = store.asking, let option = store.question(asking).options.first(where: { $0.label == rest }) else { return }
+            store.choose(option, in: asking)
+        case "question":
+            guard let asking = store.asking else { return }
+            if rest == "back" { store.goBack(asking) } else { store.goOn(asking) }
         case "done": store.toggleArchived()
         case "mcp": store.mcpStep = rest
         case "markup": store.markupStep = rest

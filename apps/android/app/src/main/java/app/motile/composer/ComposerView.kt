@@ -40,6 +40,7 @@ import app.motile.core.ThreadChildren
 import app.motile.core.ThreadInfo
 import app.motile.core.ThreadSection
 import app.motile.core.Time
+import app.motile.core.asking
 import app.motile.core.closeSkillMenu
 import app.motile.layout.KeyboardFocus
 import app.motile.panel.PanelTab
@@ -93,6 +94,7 @@ fun ComposerView(modifier: Modifier = Modifier) {
     LaunchedEffect(store.draftWorktreeKey) { store.readWorktreeStart(fetch = true) }
     OnChange(store.draftKey) { store.closeSkillMenu() }
     OnChange(store.composerProject?.git) { store.readWorktreeStart(fetch = false) }
+    OnChange(store.composerPress) { press() }
     ComposerDemoHooks(model, focus)
     DisposableEffect(Unit) { onDispose { KeyboardFocus.composer = false } }
     LaunchedEffect(model.focused) { KeyboardFocus.composer = model.focused }
@@ -173,6 +175,7 @@ private fun placeholder(store: AppStore): String {
     if (store.selectedThread?.section == ThreadSection.Snoozed) return "Message to wake it"
     if (server.state != Server.State.Connected) return "Waiting for ${server.name}"
     if (server.models.isEmpty() && server.known) return "Install Claude Code or Codex"
+    if (store.asking != null) return "Type your own answer"
     if (store.activity.running) return "Send a follow-up"
     return "Ask anything"
 }

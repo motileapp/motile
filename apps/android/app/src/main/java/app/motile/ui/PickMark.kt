@@ -24,10 +24,14 @@ import app.motile.theme.Radius
  * Whether a row of a list is picked: a radio's ring where one of the list is picked, a box where any
  * are, filled in the primary colour once it is.
  */
+object PickMark {
+    val size = scaled(16f).dp
+}
+
 @Composable
 fun PickMark(picked: Boolean, multiple: Boolean, modifier: Modifier = Modifier) {
     val palette = LocalPalette.current
-    val side = scaled(16f).dp
+    val side = PickMark.size
     val shape = if (multiple) RoundedCornerShape(Radius.xs) else CircleShape
     val fill by animateColorAsState(if (picked) palette.primary else Color.Transparent, tween(120), label = "fill")
     val edge by animateColorAsState(if (picked) palette.primary else palette.mutedStrongestForeground, tween(120), label = "edge")

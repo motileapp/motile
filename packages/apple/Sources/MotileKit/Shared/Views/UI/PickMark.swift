@@ -6,7 +6,7 @@ struct PickMark: View {
     let picked: Bool
     let multiple: Bool
 
-    private static let size = scaled(16)
+    static let size = scaled(16)
 
     var body: some View {
         ZStack {

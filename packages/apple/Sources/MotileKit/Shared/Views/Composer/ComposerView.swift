@@ -80,7 +80,7 @@ struct ComposerView: View {
             text: $store.draft,
             height: $textHeight,
             placeholder: placeholder,
-            focusKey: "\(store.draftKey)#\(store.composerFocus)#\(pressed)",
+            focusKey: "\(store.draftKey)#\(store.composerFocus)#\(pressed + store.composerPress)",
             onSubmit: { store.send() },
             onFiles: { store.attach($0) },
             onFileDrag: { store.composerDropTargeted = $0 },
@@ -108,7 +108,7 @@ struct ComposerView: View {
             ComposerRows(collapsed: collapsed) {
                 text
                     .reporting(focus: $focused)
-                    .focusing(on: pressed)
+                    .focusing(on: pressed + store.composerPress)
                     .frame(height: textHeight)
                 ComposerTouchControls(collapsed: collapsed)
             }
@@ -225,6 +225,7 @@ struct ComposerView: View {
         if store.selectedThread?.section == .snoozed { return "Message to wake it" }
         if server.state != .connected { return "Waiting for \(server.name)" }
         if server.models.isEmpty && server.known { return "Install Claude Code or Codex" }
+        if store.asking != nil { return "Type your own answer" }
         if store.activity.running { return "Send a follow-up" }
         return "Ask anything"
     }

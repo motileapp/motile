@@ -461,7 +461,22 @@ pub struct Question {
 pub struct Choice {
     pub label: String,
     pub detail: String,
+    /// The agent suggests it, which it says with "(Recommended)" after its label.
+    pub recommended: bool,
 }
+
+impl Choice {
+    fn new(label: &str, detail: &str) -> Self {
+        let trimmed = label.trim_end();
+        let stripped = trimmed.len() >= RECOMMENDED.len()
+            && trimmed.is_char_boundary(trimmed.len() - RECOMMENDED.len())
+            && trimmed[trimmed.len() - RECOMMENDED.len()..].eq_ignore_ascii_case(RECOMMENDED);
+        let label = if stripped { trimmed[..trimmed.len() - RECOMMENDED.len()].trim_end() } else { label };
+        Self { label: label.to_string(), detail: detail.to_string(), recommended: stripped }
+    }
+}
+
+const RECOMMENDED: &str = "(recommended)";
 
 pub struct Splice {
     pub start: usize,
@@ -1193,7 +1208,7 @@ fn questions(input: &Value) -> Vec<Question> {
             let options = question["options"].as_array().map(Vec::as_slice).unwrap_or_default();
             let options = options
                 .iter()
-                .map(|option| Choice { label: text(&option["label"]), detail: text(&option["description"]) })
+                .map(|option| Choice::new(&text(&option["label"]), &text(&option["description"])))
                 .collect();
             Question {
                 header: text(&question["header"]),
@@ -2684,15 +2699,18 @@ mod tests {
         assert_eq!(waiting.target, "cd /srv/api\ncargo test");
         assert!(!waiting.spans.is_empty());
 
-        let options =
-            serde_json::json!([{"label": "Red", "description": "Warm"}, {"label": "Blue", "description": "Calm"}]);
+        let options = serde_json::json!([
+            {"label": "Red", "description": "Warm"},
+            {"label": "Blue (Recommended)", "description": "Calm"}
+        ]);
         let input =
             serde_json::json!({"questions": [{"question": "Which color?", "options": options, "multiSelect": true}]});
         let approval = Approval { id: "r2".into(), tool_name: "AskUserQuestion".into(), input: input.to_string() };
         let waiting = transcript.waiting(&approval);
         let question = &waiting.questions[0];
         assert_eq!((waiting.allow, question.text.as_str(), question.multiple), ("Answer", "Which color?", true));
-        assert_eq!(question.options[1], Choice { label: "Blue".into(), detail: "Calm".into() });
+        assert_eq!(question.options[0], Choice { label: "Red".into(), detail: "Warm".into(), recommended: false });
+        assert_eq!(question.options[1], Choice { label: "Blue".into(), detail: "Calm".into(), recommended: true });
 
         let approval = Approval { id: "r3".into(), tool_name: "ExitPlanMode".into(), input: "{}".into() };
         let waiting = transcript.waiting(&approval);

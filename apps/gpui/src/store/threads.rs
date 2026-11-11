@@ -276,6 +276,9 @@ impl Store {
     }
 
     pub fn can_send(&self) -> bool {
+        if let Some(asking) = self.asking() {
+            return self.composer_server().is_some_and(|server| server.connected()) && self.can_go_on(asking);
+        }
         if self.is_sending(&self.draft_key()) {
             return false;
         }
@@ -315,6 +318,9 @@ impl Store {
     /// Sends what is written. While the agent works, `alternate` sends it the other way than the
     /// settings say: queued instead of steering, or the other way round.
     pub fn send_message(&mut self, alternate: bool, cx: &mut Context<Self>) {
+        if self.asking().is_some() {
+            return self.go_on();
+        }
         if !self.can_send() {
             return;
         }
@@ -627,6 +633,7 @@ impl Store {
         let Some(thread) = self.changeable_thread() else { return };
         let (server_id, thread_id) = (thread.server_id.clone(), thread.id.clone());
         self.request(&server_id, Request::Answer { thread_id, approval_id: approval_id.to_string(), allow, answers });
+        self.question_answers.remove(approval_id);
     }
 
     /// Gives the agent a queued message now, in the turn that runs.

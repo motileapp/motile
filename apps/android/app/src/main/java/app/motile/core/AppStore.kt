@@ -259,6 +259,13 @@ class AppStore(private val context: Context) {
     /** Counts up when the composer should take the keyboard back. */
     var composerFocus by mutableIntStateOf(0)
         private set
+    /** Counts up when the composer should take the keyboard and show the screen's, as a press on it does. */
+    var composerPress by mutableIntStateOf(0)
+        private set
+
+    fun focusComposer() {
+        composerPress += 1
+    }
     /** The skills that fit the word being typed in the composer, and the one lit. */
     var skillMenu by mutableStateOf<SkillMenu?>(null)
     var skillHighlight by mutableIntStateOf(0)
@@ -342,6 +349,8 @@ class AppStore(private val context: Context) {
         }
     var activity by mutableStateOf(Activity())
         private set
+    /** How far the questions of each tool call that asks some are answered, by its id. */
+    var questionAnswers by mutableStateOf<Map<String, QuestionAnswers>>(emptyMap())
     var transcriptIsEmpty by mutableStateOf(true)
         private set
     /** The agents the open thread's agent has started, in the order it started them. */
@@ -1315,9 +1324,16 @@ class AppStore(private val context: Context) {
     /** What the composer's text and attachments are kept under: the open draft or thread. */
     val draftKey: String get() = selection.id
 
+    /** What the composer says: the draft, or while the agent asks questions, the answer written to the one that shows. */
     var draft: String
-        get() = drafts[draftKey] ?: ""
-        set(value) = setText(value, draftKey)
+        get() {
+            val asking = asking ?: return drafts[draftKey] ?: ""
+            return typedAnswer(asking)
+        }
+        set(value) {
+            val asking = asking ?: return setText(value, draftKey)
+            writeAnswer(value, asking)
+        }
 
     val attachments: List<Attachment> get() = attachmentsByKey[draftKey] ?: emptyList()
 
@@ -2384,6 +2400,7 @@ class AppStore(private val context: Context) {
 
     val canSend: Boolean
         get() {
+            asking?.let { return composerServer?.state == Server.State.Connected && canGoOn(it) }
             if (sendingDrafts[draftKey] != null) return false
             val server = composerServer ?: return false
             if (server.state != Server.State.Connected) return false
@@ -2405,6 +2422,7 @@ class AppStore(private val context: Context) {
 
     /** Sends what is written. While the agent works, an `alternate` message steers when the setting queues, and queues when it steers. */
     fun send(alternate: Boolean = false) {
+        asking?.let { return goOn(it) }
         if (!canSend) return
         val text = draft.trim()
         val attached = attachments
@@ -2636,6 +2654,7 @@ class AppStore(private val context: Context) {
         val thread = selectedThread ?: return
         if (onRemovedServer(thread)) return
         request(thread.serverID, mapOf("type" to "answer", "thread_id" to thread.id, "approval_id" to approval.id, "allow" to allow, "answers" to answers))
+        questionAnswers = questionAnswers - approval.id
     }
 
     /** Gives the agent a queued message now, in the turn that runs. */

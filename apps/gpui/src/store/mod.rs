@@ -14,6 +14,7 @@ pub mod linear;
 pub mod mcp_servers;
 mod projects;
 pub mod pull_requests;
+mod questions;
 pub mod ricrac;
 pub mod settings;
 pub mod shortcuts;
@@ -348,6 +349,8 @@ pub struct Store {
     /// Always a draft or a thread; `load_preferences` opens the first draft.
     pub selection: Selection,
     pub activity: Activity,
+    /// How far the questions of each tool call that asks some are answered, by its id.
+    question_answers: HashMap<String, questions::QuestionAnswers>,
     pub transcript_is_empty: bool,
     /// The agents the open thread's agent has started, in the order it started them.
     pub agents: Vec<AgentView>,
@@ -505,6 +508,7 @@ impl Store {
             custom_snooze: None,
             selection: Selection::Draft(String::new()),
             activity: Activity::default(),
+            question_answers: HashMap::new(),
             transcript_is_empty: true,
             agents: Vec::new(),
             sending_drafts: HashMap::new(),
@@ -1394,12 +1398,20 @@ impl Store {
         }
     }
 
+    /// What the composer says: the draft, or while the agent asks questions, the answer written to
+    /// the one that shows.
     pub fn draft(&self) -> String {
+        if let Some(asking) = self.asking() {
+            return self.typed_answer(asking);
+        }
         self.drafts.get(&self.draft_key()).cloned().unwrap_or_default()
     }
 
     /// What the composer says as it is typed in.
     pub fn set_draft(&mut self, text: String) {
+        if self.asking().is_some() {
+            return self.write_answer(text);
+        }
         let key = self.draft_key();
         self.set_text(text, &key);
     }

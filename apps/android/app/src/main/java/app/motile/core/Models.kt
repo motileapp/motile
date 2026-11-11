@@ -1410,7 +1410,12 @@ data class Question(
     /** More than one option can be chosen. */
     val multiple: Boolean,
 ) {
-    data class Choice(val label: String, val detail: String) {
+    data class Choice(
+        val label: String,
+        val detail: String,
+        /** The agent suggests it. */
+        val recommended: Boolean,
+    ) {
         val id: String get() = label
     }
 
@@ -1419,7 +1424,7 @@ data class Question(
     constructor(json: JSON) : this(
         header = json.string("header"),
         text = json.string("text"),
-        options = json.objects("options").map { Choice(it.string("label"), it.string("detail")) },
+        options = json.objects("options").map { Choice(it.string("label"), it.string("detail"), it.bool("recommended")) },
         multiple = json.bool("multiple"),
     )
 }
