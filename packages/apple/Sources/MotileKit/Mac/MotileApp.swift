@@ -207,7 +207,9 @@ struct RootView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.themeBackground.ignoresSafeArea())
+        // Over a background that takes clicks across the whole window, SwiftUI lets the top bar's
+        // buttons drag the window too.
+        .background(Color.themeBackground.ignoresSafeArea().allowsHitTesting(false))
         .background(WindowReveal(shown: store.ready || store.errorMessage != nil))
         .toolbarBackground(.hidden, for: .windowToolbar)
         .modifier(HiddenWindowTitle())
@@ -216,6 +218,8 @@ struct RootView: View {
                 SettingsRoute(section: section)
             }
         }
+        // The viewer's top bar lets clicks through, to move the window.
+        .allowsHitTesting(store.viewing == nil)
         .overlay { EscapeKey() }
         .dropdowns()
         .toolbar {
@@ -338,9 +342,14 @@ struct MainView: View {
                         }
                         .background {
                             if panelOpen && !fits && !maximized {
-                                Color.themeBackground
-                                    .ignoresSafeArea()
-                                    .shadow(.lg, .shadowStronger)
+                                ZStack {
+                                    Color.themeBackground
+                                        .ignoresSafeArea()
+                                        .shadow(.lg, .shadowStronger)
+                                        .allowsHitTesting(false)
+                                    // Takes the thread's clicks under the panel, but not the top bar's, which moves the window.
+                                    Color.clear.contentShape(Rectangle())
+                                }
                             }
                         }
                         .environment(\.panelInView, panelOpen)

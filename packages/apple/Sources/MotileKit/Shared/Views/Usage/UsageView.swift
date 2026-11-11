@@ -213,10 +213,13 @@ struct UsageTitle: View {
 
     var body: some View {
         HStack(spacing: Self.size.padding) {
-            Text("Usage")
-                .foregroundStyle(Color.themeMutedForeground)
-            Text("/")
-                .foregroundStyle(Color.themeMutedStrongerForeground)
+            HStack(spacing: Self.size.padding) {
+                Text("Usage")
+                    .foregroundStyle(Color.themeMutedForeground)
+                Text("/")
+                    .foregroundStyle(Color.themeMutedStrongerForeground)
+            }
+            .allowsHitTesting(false)
             CheckMenu(
                 model.serversLabel(among: store.usageServers), help: "The servers counted", size: Self.size, tint: .themeForeground,
                 checks: model.serverChecks(among: store.usageServers)

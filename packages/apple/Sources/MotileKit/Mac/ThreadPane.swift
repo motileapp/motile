@@ -75,12 +75,8 @@ struct ThreadPane: View {
                     title
                 }
                 Spacer(minLength: 0)
-                if let project = store.gitProject, let control = project.gitControl {
-                    GitButton(project: project, control: control)
-                } else if let project = store.gitProject, store.canInitializeGit(of: project) {
-                    InitializeGitButton(project: project)
-                } else if let base = store.draftBaseToPull {
-                    PullBaseButton(base: base)
+                if !store.rightPanel.isOpen || besidePanel {
+                    gitControl
                 }
             }
             .padding(.leading, titleInset)
@@ -89,6 +85,18 @@ struct ThreadPane: View {
             .frame(maxWidth: .infinity)
             .frame(height: proxy.safeAreaInsets.top)
             .offset(y: -proxy.safeAreaInsets.top)
+        }
+    }
+
+    /// The git button, or what stands in for it. It is left out while the right panel lies over it,
+    /// so that a click on the panel's top bar never reaches it.
+    @ViewBuilder private var gitControl: some View {
+        if let project = store.gitProject, let control = project.gitControl {
+            GitButton(project: project, control: control)
+        } else if let project = store.gitProject, store.canInitializeGit(of: project) {
+            InitializeGitButton(project: project)
+        } else if let base = store.draftBaseToPull {
+            PullBaseButton(base: base)
         }
     }
 

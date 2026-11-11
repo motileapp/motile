@@ -29,7 +29,8 @@ use crate::transcript::kit::dashed_outline;
 use crate::ui::agent_avatar::{AgentAvatar, state_color};
 use crate::ui::menu::Menu;
 use crate::ui::{
-    ActionButton, ActionMenu, GatewayMark, Highlight, KeyCaps, Spinner, TOOLBAR_WIDTH, Variant, beside, edges, icons,
+    ActionButton, ActionMenu, GatewayMark, Highlight, KeyCaps, Spinner, TOOLBAR_WIDTH, TakesPress, Variant, beside,
+    edges, icons,
 };
 
 /// How far the tabs keep from the strip's ends, as far as from the top bar's top and bottom.
@@ -337,6 +338,7 @@ impl RightPanelView {
                 }
                 cx.notify();
             }))
+            .takes_press()
             .on_click(act(&self.store, move |store, _| store.activate_tab(activate_tab.clone())))
             .on_mouse_down(MouseButton::Right, move |event, window, cx| {
                 let (close_tab, other_tab) = (menu_tab.clone(), menu_tab.clone());

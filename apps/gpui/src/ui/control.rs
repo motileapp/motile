@@ -12,7 +12,7 @@ use gpui_kit::*;
 
 use crate::theme::{Colors, ControlSize, IconSize, Layer, Opacity, Radius, ShadowSize, Surface, TextSize, colors};
 use crate::ui::menu::{Anchor, Menu, Opened};
-use crate::ui::{OnClick, tooltip};
+use crate::ui::{OnClick, TakesPress, tooltip};
 use crate::ui::{icons, motion};
 
 /// What a button is for, which is how it looks.
@@ -1097,7 +1097,7 @@ impl RenderOnce for ActionButton {
             .on_hover(crate::ui::track_hover(&hovered))
             .when_some(self.help, |button, help| button.tooltip(tooltip(help)))
             .when_some(self.on_click.filter(|_| active), |button, on_click| {
-                button.on_click(move |event, window, cx| {
+                button.takes_press().on_click(move |event, window, cx| {
                     cx.stop_propagation();
                     on_click(event, window, cx)
                 })
@@ -1626,7 +1626,7 @@ impl RenderOnce for Switch {
                 ),
             )
             .when_some(self.on_change.filter(|_| !disabled), |switch, on_change| {
-                switch.on_click(move |_, window, cx| {
+                switch.takes_press().on_click(move |_, window, cx| {
                     cx.stop_propagation();
                     on_change(!on, window, cx)
                 })
@@ -1837,7 +1837,7 @@ impl RenderOnce for Segmented {
                             .child(words),
                     )
                     .when_some(on_select, |segment, on_select| {
-                        segment.on_click(move |_, window, cx| {
+                        segment.takes_press().on_click(move |_, window, cx| {
                             cx.stop_propagation();
                             on_select(index, window, cx)
                         })

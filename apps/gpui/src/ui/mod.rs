@@ -571,9 +571,23 @@ pub fn spinner(size: IconSize, cx: &App) -> impl IntoElement {
     Spinner::new(size).render(cx)
 }
 
+thread_local! {
+    static PRESS_TAKEN: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Something pressed with the mouse, which keeps the window's top bar under it from moving the
+/// window.
+pub trait TakesPress: InteractiveElement + Sized {
+    fn takes_press(self) -> Self {
+        self.on_mouse_down(MouseButton::Left, |_, _, _| PRESS_TAKEN.set(true))
+    }
+}
+
+impl<E: InteractiveElement> TakesPress for E {}
+
 /// The window's top bar, which moves the window when it is dragged and zooms it when it is
 /// double-clicked, as the Mac's does, and shows the window's menu on a right click on Linux.
-/// What lies on it takes its own clicks.
+/// What lies on it takes its own clicks, and a press on a control never moves the window.
 pub fn window_drag_strip(id: impl Into<ElementId>, height: f32, armed: &Rc<std::cell::Cell<bool>>) -> Stateful<Div> {
     let armed = armed.clone();
     let pressed = armed.clone();
@@ -584,7 +598,11 @@ pub fn window_drag_strip(id: impl Into<ElementId>, height: f32, armed: &Rc<std::
         .left_0()
         .right_0()
         .h(px(height))
+        .capture_any_mouse_down(|_, _, _| PRESS_TAKEN.set(false))
         .on_mouse_down(MouseButton::Left, move |event, window, _| {
+            if PRESS_TAKEN.get() {
+                return;
+            }
             if event.click_count == 2 {
                 pressed.set(false);
                 if cfg!(target_os = "macos") {

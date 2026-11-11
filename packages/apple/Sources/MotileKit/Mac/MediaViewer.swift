@@ -45,6 +45,10 @@ struct MediaViewer: View {
         return ZStack {
             Color.themeScrim
                 .ignoresSafeArea()
+                .allowsHitTesting(false)
+            // Under the top bar only, so that the top bar moves the window and its buttons don't.
+            Color.clear
+                .contentShape(Rectangle())
                 .onTapGesture { if markup == nil { store.closeViewer() } }
             content(item)
             if viewing.items.count > 1, markup == nil {
@@ -74,6 +78,7 @@ struct MediaViewer: View {
                 .padding(.horizontal, 10)
                 .frame(height: 24)
                 .background(Color.themeScrim, in: Capsule())
+                .allowsHitTesting(false)
                 .padding(.horizontal, markup == nil ? Self.nameInset : Self.markupNameInset)
                 if let markup {
                     markupButtons(markup)
