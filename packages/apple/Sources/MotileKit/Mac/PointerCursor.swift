@@ -31,6 +31,7 @@ enum PointerCursor {
     private static weak var dragged: NSView?
     private static var setting = false
     private static var refreshing = false
+    private static var found: (location: CGPoint, windows: [Int], number: Int)?
 
     /// Has every cursor set go through `allows` first.
     static func install() {
@@ -40,7 +41,10 @@ enum PointerCursor {
         method_exchangeImplementations(set, gated)
         let center = NotificationCenter.default
         for name in [NSApplication.didBecomeActiveNotification, NSWindow.didBecomeKeyNotification] {
-            center.addObserver(forName: name, object: nil, queue: .main) { _ in update(again: true) }
+            center.addObserver(forName: name, object: nil, queue: .main) { _ in
+                found = nil
+                update(again: true)
+            }
         }
     }
 
@@ -54,6 +58,7 @@ enum PointerCursor {
     }
 
     static func update(after event: NSEvent) {
+        found = nil
         guard events.contains(event.type) else { return }
         if event.type == .leftMouseDown { dragged = hit()?.view }
         update()
@@ -91,11 +96,19 @@ enum PointerCursor {
     }
 
     /// The window the pointer's events go to: the one on top under it that takes them, if it is ours.
+    /// Asking the window server waits on it, and AppKit sets the cursor many times a frame while
+    /// views change, so the answer stands until an event comes, the pointer moves or our windows change.
     private static func windowUnderPointer() -> NSWindow? {
-        var number = NSWindow.windowNumber(at: NSEvent.mouseLocation, belowWindowWithWindowNumber: 0)
-        while let window = NSApp.window(withWindowNumber: number), window.ignoresMouseEvents {
-            number = NSWindow.windowNumber(at: NSEvent.mouseLocation, belowWindowWithWindowNumber: number)
+        let location = NSEvent.mouseLocation
+        let windows = NSApp.windows.filter(\.isVisible).map(\.windowNumber)
+        if let found, found.location == location, found.windows == windows {
+            return NSApp.window(withWindowNumber: found.number)
         }
+        var number = NSWindow.windowNumber(at: location, belowWindowWithWindowNumber: 0)
+        while let window = NSApp.window(withWindowNumber: number), window.ignoresMouseEvents {
+            number = NSWindow.windowNumber(at: location, belowWindowWithWindowNumber: number)
+        }
+        found = (location, windows, number)
         return NSApp.window(withWindowNumber: number)
     }
 
