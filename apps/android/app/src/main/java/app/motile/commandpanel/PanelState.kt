@@ -514,7 +514,7 @@ internal class PanelState(start: PanelPage, private val store: AppStore, private
             val settings = PanelItem("settings", "Settings", "Appearance, servers and projects", PanelIcon.Glyph(Symbol.Settings)) {
                 store.openSettings()
             }.keyed("settings.open")
-            val usage = PanelItem("usage", "Usage", "Limits, cost and tokens", PanelIcon.Glyph(Symbol.ChartColumn)) {
+            val usage = PanelItem("usage", "Usage", "Activity, cost, tokens and limits", PanelIcon.Glyph(Symbol.ChartColumn)) {
                 store.openUsage()
             }.keyed("usage.open")
             val thread = store.selectedThread

@@ -41,6 +41,10 @@ object Platform {
     val device: String
         get() = if (isTablet) "tablet" else "phone"
 
+    /** Which client this is and where it runs, as every server is told. */
+    val client: Map<String, String>
+        get() = mapOf("kind" to "android", "system" to "android", "form" to device)
+
     /** The right panel is a screen of its own over the thread, as on a phone. */
     val panelCoversThread: Boolean
         get() = !isTablet

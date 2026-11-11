@@ -6,12 +6,22 @@ import SwiftUI
 @Observable
 final class UsageModel {
     enum Tab: String, CaseIterable, Identifiable {
-        case cost, tokens, limits
+        case activity, cost, tokens, limits
 
         var id: Self { self }
 
+        /// What the tab asks the servers for; the cost and the tokens are read together.
+        var reads: Int {
+            switch self {
+            case .activity: 0
+            case .cost, .tokens: 1
+            case .limits: 2
+            }
+        }
+
         var label: String {
             switch self {
+            case .activity: "Activity"
             case .cost: "Cost"
             case .tokens: "Tokens"
             case .limits: "Limits"
@@ -49,10 +59,10 @@ final class UsageModel {
     private static let periodKey = "usage.period"
     private static let serversKey = "usage.servers"
 
-    var tab = Tab(rawValue: UserDefaults.standard.string(forKey: tabKey) ?? "") ?? .limits {
+    var tab = Tab(rawValue: UserDefaults.standard.string(forKey: tabKey) ?? "") ?? .activity {
         didSet {
             UserDefaults.standard.set(tab.rawValue, forKey: Self.tabKey)
-            guard (oldValue == .limits) != (tab == .limits) else { return }
+            guard oldValue.reads != tab.reads else { return }
             load()
         }
     }
@@ -74,7 +84,16 @@ final class UsageModel {
 
     private(set) var limits: Loaded<LimitsReport> = .loading
     private(set) var spending: Loaded<UsageReport> = .loading
-    private(set) var refreshing = false
+    private(set) var activity: Loaded<ActivityReport> = .loading
+    private(set) var refreshing = false {
+        didSet {
+            guard !refreshing else { return }
+            waiting.forEach { $0.resume() }
+            waiting = []
+        }
+    }
+    /// What waits for the reading that runs to end.
+    @ObservationIgnored private var waiting: [CheckedContinuation<Void, Never>] = []
     @ObservationIgnored private weak var store: AppStore?
     /// Counts what was asked, so that only the last answer is shown.
     @ObservationIgnored private var asked = 0
@@ -87,6 +106,13 @@ final class UsageModel {
     /// Asks the servers again for what the tab shows.
     func refresh() {
         load()
+    }
+
+    /// Asks the servers again, and returns once they answered.
+    @MainActor func refreshed() async {
+        load()
+        guard refreshing else { return }
+        await withCheckedContinuation { waiting.append($0) }
     }
 
     /// The servers counted among these, or nil for all of them.
@@ -132,6 +158,17 @@ final class UsageModel {
                     guard let self, number == asked else { return }
                     refreshing = false
                     limits = Self.loaded(result, over: limits)
+                }
+            }
+        } else if tab == .activity {
+            let (seconds, buckets) = (period.bucketSeconds, period.buckets)
+            store.loadActivity(bucketSeconds: seconds, buckets: buckets, kept: true, servers: counted) { [weak self] kept in
+                guard let self, number == asked else { return }
+                if case .success(let report) = kept { activity = .ready(report) }
+                store.loadActivity(bucketSeconds: seconds, buckets: buckets, kept: false, servers: counted) { [weak self] result in
+                    guard let self, number == asked else { return }
+                    refreshing = false
+                    activity = Self.loaded(result, over: activity)
                 }
             }
         } else {
@@ -182,21 +219,8 @@ struct UsageTitle: View {
     }
 }
 
-/// The servers counted, as a menu that picks them.
-struct UsageServersMenu: View {
-    @Environment(AppStore.self) private var store
-    let model: UsageModel
-    var margin = EdgeInsets()
-
-    var body: some View {
-        CheckMenu(
-            model.serversLabel(among: store.usageServers), icon: .server, help: "The servers counted", variant: .secondary, margin: margin,
-            checks: model.serverChecks(among: store.usageServers)
-        )
-    }
-}
-
-/// The tabs, the period of the cost and the tokens, and the way to read it all again, in a row.
+/// The tabs, the period of the activity, the cost and the tokens, and the way to read it all again,
+/// in a row: the period as a menu where they don't fit, and the tabs too where even that doesn't.
 struct UsageControls: View {
     @Bindable var model: UsageModel
 
@@ -215,6 +239,26 @@ struct UsageControls: View {
                     UsageRefreshButton(model: model, margin: .beside(leading: 4))
                 }
             }
+            HStack(spacing: 0) {
+                UsageTabsMenu(model: model, margin: .beside(trailing: 4))
+                UsagePeriodMenu(model: model, margin: .beside(leading: 4, trailing: 4))
+                UsageRefreshButton(model: model, margin: .beside(leading: 4))
+            }
+        }
+    }
+}
+
+/// The tabs as a menu, where a narrow window has no room for them side by side.
+struct UsageTabsMenu: View {
+    @Bindable var model: UsageModel
+    var margin = EdgeInsets()
+
+    var body: some View {
+        ActionMenu(model.tab.label, variant: .outline, margin: margin) {
+            Picker("Tab", selection: $model.tab) {
+                ForEach(UsageModel.Tab.allCases) { Text($0.label).tag($0) }
+            }
+            .pickerStyle(.inline)
         }
     }
 }
@@ -233,7 +277,7 @@ struct UsagePeriodMenu: View {
     var margin = EdgeInsets()
 
     var body: some View {
-        ActionMenu(model.period.label, variant: .secondary, margin: margin) {
+        ActionMenu(model.period.label, variant: .outline, margin: margin) {
             Picker("Period", selection: $model.period) {
                 ForEach(UsageModel.Period.allCases) { Text($0.label).tag($0) }
             }
@@ -260,19 +304,16 @@ struct UsageContent: View {
     let model: UsageModel
     var margin: CGFloat = 24
     var top: CGFloat = 20
+    /// The period picks above what the tab shows, where it isn't in a bar.
+    var periodInPage = false
 
     var body: some View {
         ScrollView {
-            Group {
-                switch model.tab {
-                case .limits:
-                    // The gateway's accounts are among the limits while it is followed.
-                    VStack(alignment: .leading, spacing: 0) { limits }
-                        .onAppear { store.watchGateway(true) }
-                        .onDisappear { store.watchGateway(false) }
-                case .cost: spending(.cost)
-                case .tokens: spending(.tokens)
+            VStack(alignment: .leading, spacing: 16) {
+                if periodInPage && model.tab != .limits {
+                    Segmented(UsageModel.Period.allCases.map { ($0.label, $0) }, selection: Bindable(model).period, size: .small, fills: true)
                 }
+                tab
             }
             .frame(maxWidth: Self.width, alignment: .leading)
             .padding(.horizontal, margin)
@@ -283,11 +324,32 @@ struct UsageContent: View {
         .onAppear { model.start(store) }
     }
 
+    @ViewBuilder private var tab: some View {
+        switch model.tab {
+        case .limits:
+            // The gateway's accounts are among the limits while it is followed.
+            VStack(alignment: .leading, spacing: 0) { limits }
+                .onAppear { store.watchGateway(true) }
+                .onDisappear { store.watchGateway(false) }
+        case .activity: activity
+        case .cost: spending(.cost)
+        case .tokens: spending(.tokens)
+        }
+    }
+
     @ViewBuilder private var limits: some View {
         switch model.limits {
         case .loading: loading
         case .failed(let message): UsageNote(text: message)
         case .ready(let report): LimitsView(report: report)
+        }
+    }
+
+    @ViewBuilder private var activity: some View {
+        switch model.activity {
+        case .loading: loading
+        case .failed(let message): UsageNote(text: message)
+        case .ready(let report): ActivityView(report: report, period: model.period)
         }
     }
 

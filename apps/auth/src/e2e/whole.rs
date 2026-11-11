@@ -73,6 +73,7 @@ impl Client {
             direct_addr,
             direct_addrs,
             media_limit: None,
+            client: None,
         };
         let (sender, events) = mpsc::unbounded_channel();
         let sink = Arc::new(move |event: Event| {

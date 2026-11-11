@@ -961,6 +961,23 @@ pub enum Request {
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         removed: Vec<String>,
     },
+    /// What was done between `since` and `until`, in buckets as `Usage` makes them: the turns,
+    /// the features used and the hours worked, with the clients that did it. `ActivityReport`
+    /// answers.
+    ActivityReport {
+        since: f64,
+        until: f64,
+        bucket_secs: u32,
+        utc_offset_secs: i32,
+        /// Removed servers whose copied activity to answer with too, each on its own.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        removed: Vec<String>,
+    },
+    /// Which client the connection's device is, which the client says once it connects. `Ok`
+    /// answers.
+    Hello {
+        client: ClientInfo,
+    },
     /// How much of their plans the agents' accounts have used, which the server reads again
     /// unless it just did. `Limits` answers.
     Limits,
@@ -1113,6 +1130,12 @@ pub struct ChangeSet {
     pub items: Vec<LoggedItem>,
     pub usage: Vec<Logged<UsageRecord>>,
     pub tombstones: Vec<Tombstone>,
+    #[serde(default)]
+    pub clients: Vec<Logged<ClientRecord>>,
+    #[serde(default)]
+    pub turns: Vec<Logged<TurnRecord>>,
+    #[serde(default)]
+    pub actions: Vec<Logged<ActionRecord>>,
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
@@ -1154,6 +1177,219 @@ pub struct Tombstone {
 pub enum TombstoneKind {
     Project,
     Thread,
+}
+
+/// Which client a device is.
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct ClientInfo {
+    pub kind: ClientKind,
+    /// The system it runs on: `macos`, `ios`, `ipados`, `android`, `linux` or `windows`.
+    pub system: String,
+    pub form: ClientForm,
+    pub version: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Hash, Debug)]
+#[serde(rename_all = "snake_case")]
+pub enum ClientKind {
+    Mac,
+    Ios,
+    Android,
+    Gpui,
+    #[serde(other)]
+    Other,
+}
+
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Hash, Debug)]
+#[serde(rename_all = "snake_case")]
+pub enum ClientForm {
+    Desktop,
+    Phone,
+    Tablet,
+    #[serde(other)]
+    Other,
+}
+
+/// A client that connected to a server, by its device key, as it last said it was.
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct ClientRecord {
+    pub device: String,
+    pub client: ClientInfo,
+    pub seen_at: f64,
+}
+
+/// What started a turn.
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Hash, Debug)]
+#[serde(rename_all = "snake_case")]
+pub enum TurnStarter {
+    /// A message the user sent, from the client of the turn's `device`.
+    User,
+    /// A message from the agent of another thread, which started this one or writes to it.
+    Agent,
+    /// The server telling the agent of a thread it started.
+    Notice,
+    /// The server going on by itself: after a usage limit reset or a restart, or to have a program
+    /// fixed.
+    Server,
+    #[serde(other)]
+    Other,
+}
+
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Hash, Debug)]
+#[serde(rename_all = "snake_case")]
+pub enum TurnOutcome {
+    Done,
+    Failed,
+    Stopped,
+    /// The agent reached its usage limit.
+    Limit,
+    /// The server restarted while the agent worked.
+    Restart,
+    #[serde(other)]
+    Other,
+}
+
+/// One turn of a thread's agent, kept once it ends.
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct TurnRecord {
+    /// The id of the item that ended it.
+    pub id: String,
+    pub thread_id: String,
+    pub project_id: String,
+    pub agent: Agent,
+    pub agent_account: String,
+    pub model: String,
+    pub effort: String,
+    pub access: Access,
+    pub starter: TurnStarter,
+    /// The client that sent the message that started it.
+    pub device: Option<String>,
+    pub started_at: f64,
+    pub ended_at: f64,
+    pub outcome: TurnOutcome,
+    /// How long it waited for the user to allow a tool call, answer a question or approve a plan.
+    pub waited_secs: f64,
+    /// How many times it asked that.
+    pub asks: u32,
+    /// Messages the user sent while it worked that it took at once.
+    pub steers: u32,
+    pub tools: u32,
+    /// Threads its agent started with `start_agent` or `create_thread`.
+    pub agents: u32,
+    /// Subagents the agent ran inside its own session, as Claude Code's Task tool does.
+    pub subagents: u32,
+    pub output_tokens: u64,
+    /// The part of the output that went into reasoning, where the agent says.
+    pub reasoning_tokens: u64,
+    /// Whether it ran in fast mode, where the agent says.
+    pub fast: Option<bool>,
+}
+
+/// Who used a feature.
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Hash, Debug)]
+#[serde(rename_all = "snake_case")]
+pub enum Actor {
+    User,
+    Agent,
+    #[serde(other)]
+    Other,
+}
+
+/// How a client reached the server.
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Hash, Debug)]
+#[serde(rename_all = "snake_case")]
+pub enum ConnectionPath {
+    Direct,
+    Relay,
+    #[serde(other)]
+    Other,
+}
+
+/// A feature used once: by the user from a client, or by an agent through the motile tools.
+/// `feature` is one of `crate::activity::FEATURES`.
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct ActionRecord {
+    pub at: f64,
+    pub actor: Actor,
+    pub device: Option<String>,
+    pub feature: String,
+    #[serde(default)]
+    pub variant: String,
+    #[serde(default)]
+    pub thread_id: String,
+    #[serde(default)]
+    pub project_id: String,
+    /// How the client was connected, and the connection's round-trip time.
+    pub path: Option<ConnectionPath>,
+    pub rtt_ms: Option<u32>,
+}
+
+/// The turns that ended in the time that starts at `start` and are alike in all but their numbers.
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct TurnBucket {
+    pub start: f64,
+    pub device: Option<String>,
+    pub starter: TurnStarter,
+    pub agent: Agent,
+    pub agent_account: String,
+    pub model: String,
+    pub project_id: String,
+    pub outcome: TurnOutcome,
+    pub fast: bool,
+    pub turns: u32,
+    pub seconds: f64,
+    pub waited_secs: f64,
+    pub asks: u32,
+    pub steers: u32,
+    pub tools: u32,
+    pub agents: u32,
+    pub subagents: u32,
+    pub output_tokens: u64,
+    pub reasoning_tokens: u64,
+}
+
+/// The times a feature was used in the time that starts at `start`, by one actor and client.
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct ActionBucket {
+    pub start: f64,
+    pub actor: Actor,
+    pub device: Option<String>,
+    pub feature: String,
+    pub variant: String,
+    pub count: u32,
+    pub direct: u32,
+    pub relay: u32,
+    /// The round-trip times added up, of the `timed` uses that knew theirs.
+    pub rtt_ms: u64,
+    pub timed: u32,
+}
+
+/// What happened in an hour of the week on the asking clock, over the whole time asked about.
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct HourBucket {
+    /// From 0, Monday, to 6, Sunday.
+    pub weekday: u8,
+    pub hour: u8,
+    pub messages: u32,
+    pub turns: u32,
+    /// How long the turns that started in it worked.
+    pub seconds: f64,
+}
+
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug, Default)]
+pub struct ActivityReport {
+    pub turns: Vec<TurnBucket>,
+    pub actions: Vec<ActionBucket>,
+    pub hours: Vec<HourBucket>,
+    /// The clients the server knows of, its copies' too.
+    pub clients: Vec<ClientRecord>,
+}
+
+/// What a server's copy of a removed server's activity says.
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct OriginActivity {
+    pub origin: String,
+    pub report: ActivityReport,
 }
 
 /// What a server's copy of a removed server's usage says, in the buckets that were asked for.
@@ -2314,6 +2550,9 @@ pub struct Queued {
     /// Set when the server tells the agent of a thread it started, which the queue doesn't show.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub notice: Option<AgentNotice>,
+    /// The client that sent it. None when an agent or the server did.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub device: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context: Option<Value>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -2516,6 +2755,11 @@ pub enum Message {
         buckets: Vec<UsageBucket>,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         copies: Vec<OriginUsage>,
+    },
+    ActivityReport {
+        report: ActivityReport,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        copies: Vec<OriginActivity>,
     },
     Limits {
         agents: Vec<AgentLimits>,

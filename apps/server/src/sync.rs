@@ -9,7 +9,12 @@ use motile_protocol::wire::{
     Agent, ChangeBatch, ChangeSet, Item, Logged, LoggedItem, OriginWatermark, Project, Thread, Tombstone,
     TombstoneKind, UsageRecord, Watermark,
 };
-use rusqlite::{Connection, OptionalExtension, Transaction, params};
+use rusqlite::{Connection, OptionalExtension, Transaction, params, params_from_iter};
+
+use crate::activity::{
+    ACTION_COLUMNS, CLIENT_COLUMNS, TURN_COLUMNS, action_record, action_values, client_record, client_values,
+    placeholders, turn_record, turn_values,
+};
 
 use crate::hub::file_name;
 use crate::store::{Store, as_text, from_text, threads_where, tokens_at};
@@ -156,7 +161,18 @@ fn origin_watermark(connection: &Connection, origin: &str) -> rusqlite::Result<O
 }
 
 fn drop_copies(transaction: &Transaction, origin: &str) -> rusqlite::Result<()> {
-    for table in ["copied_projects", "copied_threads", "copied_items", "copied_usage", "copied_tombstones", "origins"] {
+    let tables = [
+        "copied_projects",
+        "copied_threads",
+        "copied_items",
+        "copied_usage",
+        "copied_clients",
+        "copied_turns",
+        "copied_actions",
+        "copied_tombstones",
+        "origins",
+    ];
+    for table in tables {
         let column = if table == "origins" { "id" } else { "origin" };
         transaction.execute(&format!("DELETE FROM {table} WHERE {column} = ?1"), [origin])?;
     }
@@ -226,7 +242,28 @@ impl Store {
             params![at, limit],
             |row| Ok(Some(((kind_of(&row.get::<_, String>(1)?), row.get::<_, String>(2)?), 100))),
         )?;
-        let lasts = [projects.last(), threads.last(), items.last(), usage.last(), tombstones.last()];
+        let own_rows = |table: &str, columns: &str| {
+            format!("SELECT change, {columns} FROM {table} WHERE change > ?1 ORDER BY change LIMIT ?2")
+        };
+        let clients = read_rows(&connection, &own_rows("clients", CLIENT_COLUMNS), params![at, limit], |row| {
+            Ok(Some((client_record(row, 1)?, 150)))
+        })?;
+        let turns = read_rows(&connection, &own_rows("turns", TURN_COLUMNS), params![at, limit], |row| {
+            Ok(Some((turn_record(row, 1)?, 400)))
+        })?;
+        let actions = read_rows(&connection, &own_rows("actions", ACTION_COLUMNS), params![at, limit], |row| {
+            Ok(Some((action_record(row, 1)?, 200)))
+        })?;
+        let lasts = [
+            projects.last(),
+            threads.last(),
+            items.last(),
+            usage.last(),
+            tombstones.last(),
+            clients.last(),
+            turns.last(),
+            actions.last(),
+        ];
         let (up_to, more) = cut(own.change, &lasts);
         let set = ChangeSet {
             projects: projects.up_to(up_to).into_iter().map(|(change, value)| Logged { change, value }).collect(),
@@ -242,6 +279,9 @@ impl Store {
                 .into_iter()
                 .map(|(change, (kind, id))| Tombstone { kind, id, change })
                 .collect(),
+            clients: logged(clients.up_to(up_to)),
+            turns: logged(turns.up_to(up_to)),
+            actions: logged(actions.up_to(up_to)),
         };
         Ok(LogPart { log_id: own.log_id, after, up_to, more, set })
     }
@@ -288,7 +328,35 @@ impl Store {
             params![origin, at, limit],
             |row| Ok(Some(((kind_of(&row.get::<_, String>(1)?), row.get::<_, String>(2)?), 100))),
         )?;
-        let lasts = [projects.last(), threads.last(), items.last(), usage.last(), tombstones.last()];
+        let copied_rows = |table: &str, columns: &str| {
+            format!("SELECT change, {columns} FROM {table} WHERE origin = ?1 AND change > ?2 ORDER BY change LIMIT ?3")
+        };
+        let clients = read_rows(
+            &connection,
+            &copied_rows("copied_clients", CLIENT_COLUMNS),
+            params![origin, at, limit],
+            |row| Ok(Some((client_record(row, 1)?, 150))),
+        )?;
+        let turns =
+            read_rows(&connection, &copied_rows("copied_turns", TURN_COLUMNS), params![origin, at, limit], |row| {
+                Ok(Some((turn_record(row, 1)?, 400)))
+            })?;
+        let actions = read_rows(
+            &connection,
+            &copied_rows("copied_actions", ACTION_COLUMNS),
+            params![origin, at, limit],
+            |row| Ok(Some((action_record(row, 1)?, 200))),
+        )?;
+        let lasts = [
+            projects.last(),
+            threads.last(),
+            items.last(),
+            usage.last(),
+            tombstones.last(),
+            clients.last(),
+            turns.last(),
+            actions.last(),
+        ];
         let (up_to, more) = cut(copy.change, &lasts);
         let set = ChangeSet {
             projects: projects.up_to(up_to).into_iter().map(|(change, value)| Logged { change, value }).collect(),
@@ -304,6 +372,9 @@ impl Store {
                 .into_iter()
                 .map(|(change, (kind, id))| Tombstone { kind, id, change })
                 .collect(),
+            clients: logged(clients.up_to(up_to)),
+            turns: logged(turns.up_to(up_to)),
+            actions: logged(actions.up_to(up_to)),
         };
         Ok(LogPart { log_id: copy.log_id, after, up_to, more, set })
     }
@@ -407,6 +478,46 @@ impl Store {
                 ],
             )?;
         }
+        for logged in set.clients.iter().filter(|logged| fresh(logged.change)) {
+            let mut values: Vec<rusqlite::types::Value> =
+                vec![origin.to_string().into(), (logged.change as i64).into()];
+            values.extend(client_values(&logged.value));
+            transaction.execute(
+                &format!(
+                    "INSERT INTO copied_clients (origin, change, {CLIENT_COLUMNS}) VALUES ({})
+                     ON CONFLICT (origin, device) DO UPDATE SET change = excluded.change, kind = excluded.kind,
+                         system = excluded.system, form = excluded.form, version = excluded.version,
+                         seen_at = excluded.seen_at
+                     WHERE excluded.change > copied_clients.change",
+                    placeholders(0, 8)
+                ),
+                params_from_iter(values),
+            )?;
+        }
+        for logged in set.turns.iter().filter(|logged| fresh(logged.change)) {
+            let mut values: Vec<rusqlite::types::Value> =
+                vec![origin.to_string().into(), (logged.change as i64).into()];
+            values.extend(turn_values(&logged.value));
+            transaction.execute(
+                &format!(
+                    "INSERT OR IGNORE INTO copied_turns (origin, change, {TURN_COLUMNS}) VALUES ({})",
+                    placeholders(0, 24)
+                ),
+                params_from_iter(values),
+            )?;
+        }
+        for logged in set.actions.iter().filter(|logged| fresh(logged.change)) {
+            let mut values: Vec<rusqlite::types::Value> =
+                vec![origin.to_string().into(), (logged.change as i64).into()];
+            values.extend(action_values(&logged.value));
+            transaction.execute(
+                &format!(
+                    "INSERT OR IGNORE INTO copied_actions (origin, change, {ACTION_COLUMNS}) VALUES ({})",
+                    placeholders(0, 11)
+                ),
+                params_from_iter(values),
+            )?;
+        }
         for tombstone in set.tombstones.iter().filter(|tombstone| fresh(tombstone.change)) {
             match tombstone.kind {
                 TombstoneKind::Project => {
@@ -496,6 +607,10 @@ impl Store {
             .optional()?;
         Ok(payload.and_then(|payload| serde_json::from_str(&payload).ok()))
     }
+}
+
+fn logged<T>(rows: Vec<(u64, T)>) -> Vec<Logged<T>> {
+    rows.into_iter().map(|(change, value)| Logged { change, value }).collect()
 }
 
 fn usage_record(row: &rusqlite::Row, first: usize) -> rusqlite::Result<UsageRecord> {
@@ -703,6 +818,58 @@ mod tests {
         let copied = b.usage_of(Some("a"), 0.0, 100.0, 3600, 0).unwrap();
         assert_eq!((copied[0].tokens.input, copied[0].tokens.output), (5, 7));
         assert!(b.usage_of(Some("other"), 0.0, 100.0, 3600, 0).unwrap().is_empty());
+    }
+
+    #[test]
+    fn activity_is_copied_counted_by_its_origin_and_passed_on() {
+        use motile_protocol::wire::{
+            ActionRecord, Actor, ClientForm, ClientInfo, ClientKind, ClientRecord, TurnRecord,
+        };
+        let (_a, a) = store();
+        let (_b, b) = store();
+        let (_c, c) = store();
+        let ipad = ClientInfo {
+            kind: ClientKind::Ios,
+            system: "ipados".into(),
+            form: ClientForm::Tablet,
+            version: "1".into(),
+        };
+        a.save_client(&ClientRecord { device: "ipad".into(), client: ipad, seen_at: 5.0 }).unwrap();
+        let turn: TurnRecord = serde_json::from_value(serde_json::json!({
+            "id": "end", "thread_id": "t", "project_id": "p", "agent": "codex", "agent_account": "", "model": "gpt-6",
+            "effort": "", "access": "full", "starter": "user", "device": "ipad", "started_at": 10.0, "ended_at": 40.0,
+            "outcome": "done", "waited_secs": 0.0, "asks": 0, "steers": 1, "tools": 4, "agents": 0, "subagents": 0,
+            "output_tokens": 90, "reasoning_tokens": 30, "fast": null
+        }))
+        .unwrap();
+        a.save_turn(&turn).unwrap();
+        let action = ActionRecord {
+            at: 12.0,
+            actor: Actor::User,
+            device: Some("ipad".into()),
+            feature: "thread.archive".into(),
+            variant: String::new(),
+            thread_id: "t".into(),
+            project_id: "p".into(),
+            path: None,
+            rtt_ms: None,
+        };
+        a.save_action(&action).unwrap();
+        carry(&a, "a", true, &b);
+        carry(&b, "a", false, &c);
+
+        for copy in [&b, &c] {
+            assert!(copy.activity_of(None, 0.0, 100.0, 3600, 0).unwrap().turns.is_empty());
+            let copied = copy.activity_of(Some("a"), 0.0, 100.0, 3600, 0).unwrap();
+            let turns: Vec<_> = copied
+                .turns
+                .iter()
+                .map(|bucket| (bucket.turns, bucket.steers, bucket.tools, bucket.reasoning_tokens))
+                .collect();
+            assert_eq!(turns, [(1, 1, 4, 30)]);
+            assert_eq!(copied.actions[0].feature, "thread.archive");
+            assert_eq!(copied.clients[0].client.form, ClientForm::Tablet);
+        }
     }
 
     #[test]

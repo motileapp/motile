@@ -2457,6 +2457,7 @@ mod tests {
             held,
             sending: false,
             notice: None,
+            device: None,
             context: None,
             programs: Vec::new(),
         };
@@ -2500,6 +2501,7 @@ mod tests {
             held: false,
             sending: false,
             notice: None,
+            device: None,
             context: None,
             programs: Vec::new(),
         };

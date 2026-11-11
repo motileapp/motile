@@ -175,6 +175,8 @@ pub struct Parser {
     reports: HashMap<String, String>,
     /// What each thread, its own and its agents', had spent in all when it last said.
     spent: HashMap<String, [u64; 4]>,
+    /// The output tokens that went into reasoning, as its own thread's total last said.
+    reasoned: Option<u64>,
     /// The usage limit stopped the turn that runs.
     limited: bool,
     /// When the usage limits that ran out reset, as Codex last said.
@@ -233,6 +235,7 @@ impl Parser {
             agents: HashMap::new(),
             reports: HashMap::new(),
             spent: HashMap::new(),
+            reasoned: None,
             limited: false,
             resets_at: None,
         }
@@ -416,7 +419,20 @@ impl Parser {
             context_window,
             context_used,
         });
-        spent.into_iter().chain(grown).collect()
+        let reasoned = own.then(|| self.reasoned(usage)).flatten();
+        spent.into_iter().chain(reasoned).chain(grown).collect()
+    }
+
+    /// The reasoning tokens added since the own thread's total last said, or its last answer's
+    /// when the total didn't grow from what was known.
+    fn reasoned(&mut self, usage: &Value) -> Option<AgentEvent> {
+        let reasoning = |counts: &Value| counts["reasoningOutputTokens"].as_u64().unwrap_or_default();
+        let (total, last) = (reasoning(&usage["total"]), reasoning(&usage["last"]));
+        let added = match self.reasoned.replace(total) {
+            Some(known) if total >= known => total - known,
+            _ => last,
+        };
+        (added > 0).then_some(AgentEvent::Reasoning(added))
     }
 
     /// Keeps how large the conversation of an agent it started is, and shows it while it works.
@@ -753,6 +769,29 @@ mod tests {
 
         let stranger = r#"{"method":"turn/completed","params":{"threadId":"t9","turn":{"status":"completed"}}}"#;
         assert_eq!(parser.parse(stranger), vec![]);
+    }
+
+    #[test]
+    fn reasoning_is_how_far_the_own_threads_total_grew() {
+        let said = |thread: &str, total: u64, last: u64| {
+            let usage = json!({"total": {"outputTokens": 90, "reasoningOutputTokens": total},
+                               "last": {"outputTokens": 30, "reasoningOutputTokens": last}});
+            json!({"method": "thread/tokenUsage/updated", "params": {"threadId": thread, "tokenUsage": usage}})
+                .to_string()
+        };
+        let reasoned = |events: Vec<AgentEvent>| {
+            events.into_iter().find_map(|event| match event {
+                AgentEvent::Reasoning(tokens) => Some(tokens),
+                _ => None,
+            })
+        };
+        let mut parser = parser(turn(Access::Full));
+        parser.parse(r#"{"id":2,"result":{"thread":{"id":"t1"},"model":"gpt-6"}}"#);
+
+        assert_eq!(reasoned(parser.parse(&said("t1", 50, 50))), Some(50));
+        assert_eq!(reasoned(parser.parse(&said("t1", 80, 30))), Some(30));
+        assert_eq!(reasoned(parser.parse(&said("t1", 80, 30))), None);
+        assert_eq!(reasoned(parser.parse(&said("t2", 400, 40))), None);
     }
 
     #[test]

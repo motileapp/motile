@@ -250,7 +250,8 @@ impl Parser {
                 let limited = self.limit(&object);
                 let result = parse_result(&object, self.api_error.take());
                 let taken = consumed(&object, &result);
-                usage.into_iter().chain(limited).chain(taken).chain([result]).collect()
+                let fast = object["fast_mode_state"].as_str().map(|state| AgentEvent::Fast(state == "on"));
+                usage.into_iter().chain(limited).chain(taken).chain(fast).chain([result]).collect()
             }
             _ => vec![],
         }
@@ -650,6 +651,23 @@ mod tests {
         let haiku = ModelUsage { model: "claude-haiku-4-5-20251001".to_string(), tokens, cost_usd: Some(0.0363325) };
         assert_eq!(spent, &vec![haiku]);
         assert_eq!(summary.cost_usd, None, "the session's cost isn't the turn's");
+    }
+
+    #[test]
+    fn a_result_says_whether_the_turn_ran_in_fast_mode() {
+        let result = |state: &str| {
+            format!(r#"{{"type":"result","subtype":"success","is_error":false,"fast_mode_state":"{state}"}}"#)
+        };
+        let fast = |events: Vec<AgentEvent>| {
+            events.iter().find_map(|event| match event {
+                AgentEvent::Fast(fast) => Some(*fast),
+                _ => None,
+            })
+        };
+        assert_eq!(fast(Parser::default().parse(&result("on"))), Some(true));
+        assert_eq!(fast(Parser::default().parse(&result("cooldown"))), Some(false));
+        let without = r#"{"type":"result","subtype":"success","is_error":false}"#;
+        assert_eq!(fast(Parser::default().parse(without)), None);
     }
 
     #[test]
