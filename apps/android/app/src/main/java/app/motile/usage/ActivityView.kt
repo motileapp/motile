@@ -335,7 +335,7 @@ private fun Turns(report: ActivityReport, beside: Boolean) {
 private fun Outcomes(report: ActivityReport, modifier: Modifier) {
     val palette = LocalPalette.current
     Card(modifier) {
-        Box(Modifier.fillMaxWidth().heightIn(min = scaled(40f).dp).padding(horizontal = 14.dp), contentAlignment = Alignment.CenterStart) {
+        Box(Modifier.tableHeader().padding(horizontal = 14.dp), contentAlignment = Alignment.CenterStart) {
             Text("How they ended", size = TextSize.Sm, weight = FontWeight.Medium, color = palette.foreground)
         }
         ThemeDivider()
@@ -417,16 +417,20 @@ private fun Features(report: ActivityReport, beside: Boolean) {
 
 private const val FEATURES_SHOWN = 5
 
-/** The features of a group, each with how often it was used: the five used most, and the rest once asked for. */
+/** The header row of a card that is a table, filled as a table's header is. */
+@Composable
+private fun Modifier.tableHeader(): Modifier = fillMaxWidth().background(LocalPalette.current.cardAccent).heightIn(min = scaled(40f).dp)
+
+/** The features of a group as a table under a header of its name and total, each with how often it was used: the five used most, and the rest once asked for. */
 @Composable
 private fun FeatureCard(title: String, count: Int, features: List<ActivityReport.Feature>, modifier: Modifier) {
     val palette = LocalPalette.current
     var all by remember { mutableStateOf(false) }
     val listed = if (all) features else features.take(FEATURES_SHOWN)
     Card(modifier) {
-        Row(Modifier.fillMaxWidth().heightIn(min = scaled(40f).dp).padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.tableHeader().padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(title, Modifier.weight(1f).padding(end = 8.dp), size = TextSize.Sm, weight = FontWeight.Medium, color = palette.foreground)
-            Text(count.grouped, style = Theme.uiDigits(TextSize.Xs), color = palette.mutedForeground)
+            Text(count.grouped, style = Theme.uiDigits(TextSize.Sm, FontWeight.Medium), color = palette.mutedForeground)
         }
         ThemeDivider()
         listed.forEachIndexed { index, feature ->

@@ -268,7 +268,7 @@ struct ActivityView: View {
                 .font(.ui(.sm, weight: .medium))
                 .foregroundStyle(Color.themeForeground)
                 .padding(.horizontal, 14)
-                .frame(minHeight: scaled(40), alignment: .leading)
+                .activityTableHeader()
             ThemeDivider()
             ForEach(report.outcomes) { line in
                 ActivityLineRow(line: line, tint: Self.outcomeColor(line.name))
@@ -603,8 +603,8 @@ private struct ActivityLineRow: View {
     }
 }
 
-/// The features of a group, each with how often it was used: the five used most, and the rest
-/// once asked for.
+/// The features of a group as a table under a header of its name and total, each with how often
+/// it was used: the five used most, and the rest once asked for.
 private struct ActivityFeatureCard: View {
     private static let shown = 5
 
@@ -618,16 +618,15 @@ private struct ActivityFeatureCard: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Text(title)
-                    .font(.ui(.sm, weight: .medium))
                     .foregroundStyle(Color.themeForeground)
                 Spacer(minLength: 8)
                 Text(count.formatted())
-                    .font(.ui(.xs))
                     .foregroundStyle(Color.themeMutedForeground)
                     .monospacedDigit()
             }
+            .font(.ui(.sm, weight: .medium))
             .padding(.horizontal, 14)
-            .frame(minHeight: scaled(40))
+            .activityTableHeader()
             ThemeDivider()
             ForEach(listed) { feature in
                 row(feature)
@@ -832,6 +831,16 @@ private struct ActivityHeatmap: View {
         case 1..<12: "\(hour) am"
         default: "\(hour - 12) pm"
         }
+    }
+}
+
+private extension View {
+    /// The header row of a card that is a table, filled as a table's header is.
+    func activityTableHeader() -> some View {
+        frame(maxWidth: .infinity, minHeight: scaled(40), alignment: .leading)
+            .background(
+                Color.themeCardAccent,
+                in: UnevenRoundedRectangle(topLeadingRadius: Radius.lg, topTrailingRadius: Radius.lg, style: .continuous))
     }
 }
 
