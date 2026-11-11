@@ -62,11 +62,12 @@ impl Measure {
         }
     }
 
+    /// Agent time is charted in hours, so that its axis falls on whole hours.
     fn total(self, source: &ActivitySource) -> f64 {
         match self {
             Measure::Messages => f64::from(source.messages),
             Measure::Turns => f64::from(source.turns),
-            Measure::Time => source.seconds,
+            Measure::Time => source.seconds / 3600.,
         }
     }
 
@@ -74,14 +75,14 @@ impl Measure {
         match self {
             Measure::Messages => source.message_points.get(index).map_or(0., |value| f64::from(*value)),
             Measure::Turns => source.turn_points.get(index).map_or(0., |value| f64::from(*value)),
-            Measure::Time => source.second_points.get(index).copied().unwrap_or(0.),
+            Measure::Time => source.second_points.get(index).map_or(0., |seconds| seconds / 3600.),
         }
     }
 
     fn amount(self, value: f64) -> String {
         match self {
             Measure::Messages | Measure::Turns => number(value.max(0.).round() as u32),
-            Measure::Time => duration(value),
+            Measure::Time => duration(value * 3600.),
         }
     }
 }
@@ -93,18 +94,16 @@ enum Breakdown {
     Agents,
     Models,
     Projects,
-    Starters,
 }
 
 impl Breakdown {
-    const ALL: [Breakdown; 4] = [Breakdown::Agents, Breakdown::Models, Breakdown::Projects, Breakdown::Starters];
+    const ALL: [Breakdown; 3] = [Breakdown::Agents, Breakdown::Models, Breakdown::Projects];
 
     fn label(self) -> &'static str {
         match self {
             Breakdown::Agents => "Agents",
             Breakdown::Models => "Models",
             Breakdown::Projects => "Projects",
-            Breakdown::Starters => "Started by",
         }
     }
 }
@@ -649,7 +648,6 @@ impl ActivityView {
             Breakdown::Agents => &report.agents,
             Breakdown::Models => &report.models,
             Breakdown::Projects => &report.projects,
-            Breakdown::Starters => &report.starters,
         };
         let rows = separated(shown.iter().map(|line| line_row(line, None, cx)).collect(), cx);
         let picker = self.picker(BREAKDOWN_KEY, offered, current, Breakdown::label).fills(true);
@@ -764,15 +762,15 @@ impl Render for ActivityView {
             .collect();
         let body: Vec<AnyElement> = if report.empty {
             vec![super::note(
-                "Nothing was done in this time. Your servers keep what is done from the version that shows this on.",
+                "Nothing was done in this time. Servers keep what is done from the version that shows this on.",
                 cx,
             )]
         } else {
             let mut sections = vec![self.tiles(&report, cx), self.over_time(&report, cx)];
+            sections.push(self.hours(&report, window, cx));
             if !report.clients.is_empty() {
                 sections.push(self.clients(&report, cx));
             }
-            sections.push(self.hours(&report, window, cx));
             if !report.outcomes.is_empty() {
                 sections.push(self.turns(&report, cx));
             }
@@ -1053,7 +1051,7 @@ fn symbol_name(name: &str) -> &'static str {
         "tablet" => "tablet",
         "monitor" => "monitor",
         "bot" => "bot",
-        "server" => "server",
+        "sparkles" => "sparkles",
         _ => "monitor-smartphone",
     }
 }

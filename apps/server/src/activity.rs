@@ -377,12 +377,23 @@ impl Store {
         utc_offset_secs: i32,
     ) -> rusqlite::Result<ActivityReport> {
         let connection = self.reader();
-        let (turns, actions) = match origin {
-            Some(_) => {
-                ("(SELECT * FROM copied_turns WHERE origin = ?5)", "(SELECT * FROM copied_actions WHERE origin = ?5)")
-            }
-            None => ("(SELECT *, ?5 AS origin FROM turns)", "(SELECT *, ?5 AS origin FROM actions)"),
+        let (turns, actions, agent_threads) = match origin {
+            Some(_) => (
+                "SELECT * FROM copied_turns WHERE origin = ?5",
+                "SELECT * FROM copied_actions WHERE origin = ?5",
+                "SELECT id FROM copied_threads WHERE origin = ?5 AND json_extract(payload, '$.parent') IS NOT NULL",
+            ),
+            None => (
+                "SELECT *, ?5 AS origin FROM turns",
+                "SELECT *, ?5 AS origin FROM actions",
+                "SELECT id FROM threads WHERE parent_thread IS NOT NULL OR started_by IS NOT NULL",
+            ),
         };
+        let turns = format!("(SELECT *, thread_id IN ({agent_threads}) AS agent_thread FROM ({turns}))");
+        // A message without a client in a thread an agent started was read from its transcript, and the agent sent it.
+        let actions = format!(
+            "(SELECT * FROM ({actions}) WHERE NOT (actor = 'user' AND device IS NULL AND thread_id IN ({agent_threads})))"
+        );
         let (size, offset) = (f64::from(bucket_secs.max(60)), f64::from(utc_offset_secs));
         let origin = origin.unwrap_or_default();
         let start = |bucket: i64| bucket as f64 * size - offset;
@@ -391,9 +402,10 @@ impl Store {
                 "SELECT CAST((ended_at + ?3) / ?4 AS INTEGER) AS bucket, device, starter, agent, agent_account, model,
                         project_id, outcome, COALESCE(fast, 0) AS fast, COUNT(*), SUM(ended_at - started_at),
                         SUM(waited_secs), SUM(asks), SUM(steers), SUM(tools), SUM(agents), SUM(subagents),
-                        SUM(output_tokens), SUM(reasoning_tokens)
+                        SUM(output_tokens), SUM(reasoning_tokens), agent_thread
                  FROM {turns} WHERE ended_at >= ?1 AND ended_at < ?2
-                 GROUP BY bucket, device, starter, agent, agent_account, model, project_id, outcome, fast
+                 GROUP BY bucket, device, starter, agent, agent_account, model, project_id, outcome, fast,
+                          agent_thread
                  ORDER BY bucket"
             ))?;
             let rows = statement.query_map(params![since, until, offset, size, origin], |row| {
@@ -418,6 +430,7 @@ impl Store {
                     subagents: row.get(16)?,
                     output_tokens: row.get::<_, i64>(17)? as u64,
                     reasoning_tokens: row.get::<_, i64>(18)? as u64,
+                    agent_thread: row.get(19)?,
                 })
             })?;
             rows.collect::<rusqlite::Result<Vec<_>>>()?
@@ -511,6 +524,7 @@ pub fn from_transcript(stored: &StoredThread, items: &[Item]) -> (Vec<TurnRecord
     let (mut turns, mut messages) = (Vec::new(), Vec::new());
     let mut open: Option<Derived> = None;
     let mut first_message = true;
+    let agent_thread = stored.started_by.is_some() || thread.parent.is_some();
     let action = |item: &Item, feature: &str, variant: &str| ActionRecord {
         at: item.created_at,
         actor: Actor::User,
@@ -525,7 +539,7 @@ pub fn from_transcript(stored: &StoredThread, items: &[Item]) -> (Vec<TurnRecord
     for item in own {
         match &item.kind {
             ItemKind::User { text, context, .. } => {
-                let from_agent = first_message && stored.started_by.is_some();
+                let from_agent = agent_thread;
                 let continued = text == CONTINUE_PROMPT;
                 match &mut open {
                     Some(turn) => turn.steers += 1,
@@ -875,11 +889,53 @@ mod tests {
     }
 
     #[test]
-    fn an_agents_thread_starts_with_the_agents_message_not_the_users() {
-        let items = [user(0, 100.0, "Look over greet.py"), turn_end(1, 130.0, false)];
+    fn the_messages_in_an_agents_thread_are_the_agents_not_the_users() {
+        let items = [
+            user(0, 100.0, "Look over greet.py"),
+            turn_end(1, 130.0, false),
+            user(2, 200.0, "Now the tests"),
+            turn_end(3, 230.0, false),
+        ];
         let (turns, messages) = from_transcript(&stored(Some("parent")), &items);
-        assert_eq!(turns[0].starter, TurnStarter::Agent);
+        let starters: Vec<_> = turns.iter().map(|turn| turn.starter).collect();
+        assert_eq!(starters, [TurnStarter::Agent, TurnStarter::Agent]);
         assert!(messages.is_empty());
+    }
+
+    #[test]
+    fn a_report_tells_a_subagents_turns_apart_and_leaves_out_what_its_agent_sent_it() {
+        let (_folder, store) = store();
+        let connection = store.connection();
+        connection
+            .execute_batch(
+                "INSERT INTO threads (id, title, title_source, project_id, cwd, agent, access, created_at, updated_at)
+                 VALUES ('t', 'T', 'user', 'p', '/tmp', 'claude', 'full', 0, 1);
+                 INSERT INTO threads (id, title, title_source, project_id, cwd, agent, access, created_at, updated_at,
+                                      started_by)
+                 VALUES ('child', 'C', 'user', 'p', '/tmp', 'claude', 'full', 0, 1, 't');",
+            )
+            .unwrap();
+        drop(connection);
+        let in_thread = |id: &str| Thread { id: id.into(), ..thread() };
+        for (id, thread_id) in [("a", "t"), ("b", "child")] {
+            let tally = Tally::new(TurnStarter::User, None, 100.0);
+            store.save_turn(&tally.record(id.into(), &in_thread(thread_id), "opus", TurnOutcome::Done, 160.0)).unwrap();
+        }
+        for (thread_id, device) in [("t", None), ("child", None), ("child", Some("mac"))] {
+            let action = ActionRecord {
+                actor: Actor::User,
+                thread_id: thread_id.into(),
+                ..action(100.0, "message", device, None, None)
+            };
+            store.save_action(&action).unwrap();
+        }
+
+        let report = store.activity_of(None, 0.0, 3600.0, 3600, 0).unwrap();
+
+        let turns: Vec<_> = report.turns.iter().map(|bucket| (bucket.agent_thread, bucket.turns)).collect();
+        assert_eq!(turns, [(false, 1), (true, 1)]);
+        let messages: u32 = report.actions.iter().map(|bucket| bucket.count).sum();
+        assert_eq!(messages, 2);
     }
 
     #[test]

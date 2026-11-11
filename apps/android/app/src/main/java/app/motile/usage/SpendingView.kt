@@ -99,7 +99,7 @@ fun SpendingView(report: UsageReport, measure: Measure, period: UsageModel.Perio
         val width = maxWidth
         Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(24.dp)) {
             if (report.tokens == 0L) {
-                UsageNote("Nothing was spent in this time. Your servers keep what their agents spend from the version that shows this on.")
+                UsageNote("Nothing was spent in this time. Servers keep what their agents spend from the version that shows this on.")
             } else {
                 val chart = @Composable { modifier: Modifier ->
                     Column(modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {

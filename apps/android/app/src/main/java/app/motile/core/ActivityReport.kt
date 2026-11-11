@@ -16,7 +16,6 @@ data class ActivityReport(
     val agents: List<Line>,
     val models: List<Line>,
     val projects: List<Line>,
-    val starters: List<Line>,
     val facts: List<Fact>,
     val features: List<FeatureGroup>,
     val agentFeatures: List<Feature>,
@@ -102,7 +101,6 @@ data class ActivityReport(
                 agents = lines("agents"),
                 models = lines("models"),
                 projects = lines("projects"),
-                starters = lines("starters"),
                 facts = json.objects("facts").map { Fact(it.string("label"), it.string("value"), it.string("detail")) },
                 features = json.objects("features").map { group ->
                     FeatureGroup(group.string("name"), group.int("count"), group.objects("features").map(::feature))
@@ -118,7 +116,7 @@ data class ActivityReport(
             "tablet" -> Symbol.Tablet
             "monitor" -> Symbol.Monitor
             "bot" -> Symbol.Bot
-            "server" -> Symbol.Server
+            "sparkles" -> Symbol.Sparkles
             else -> Symbol.MonitorSmartphone
         }
     }

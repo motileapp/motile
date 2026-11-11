@@ -45,6 +45,8 @@ struct LimitsView: View {
                     .foregroundStyle(Color.themeMutedForeground)
             }
         }
+        // The width given, not the content's, which would keep a wide layout wide once the page narrows.
+        .frame(minWidth: 0, maxWidth: .infinity, alignment: .topLeading)
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
     }
 
