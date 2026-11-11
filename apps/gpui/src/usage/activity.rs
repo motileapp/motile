@@ -48,26 +48,28 @@ enum Measure {
     #[default]
     Messages,
     Turns,
+    Engaged,
     Time,
 }
 
 impl Measure {
-    const ALL: [Measure; 3] = [Measure::Messages, Measure::Turns, Measure::Time];
+    const ALL: [Measure; 4] = [Measure::Messages, Measure::Turns, Measure::Engaged, Measure::Time];
 
     fn label(self) -> &'static str {
         match self {
             Measure::Messages => "Messages",
             Measure::Turns => "Turns",
+            Measure::Engaged => "Your time",
             Measure::Time => "Agent time",
         }
     }
 
-    /// Agent time is charted in hours, so that its axis falls on whole hours.
     fn total(self, source: &ActivitySource) -> f64 {
         match self {
             Measure::Messages => f64::from(source.messages),
             Measure::Turns => f64::from(source.turns),
-            Measure::Time => source.seconds / 3600.,
+            Measure::Engaged => source.engaged_seconds,
+            Measure::Time => source.seconds,
         }
     }
 
@@ -75,14 +77,15 @@ impl Measure {
         match self {
             Measure::Messages => source.message_points.get(index).map_or(0., |value| f64::from(*value)),
             Measure::Turns => source.turn_points.get(index).map_or(0., |value| f64::from(*value)),
-            Measure::Time => source.second_points.get(index).map_or(0., |seconds| seconds / 3600.),
+            Measure::Engaged => source.engaged_points.get(index).copied().unwrap_or(0.),
+            Measure::Time => source.second_points.get(index).copied().unwrap_or(0.),
         }
     }
 
     fn amount(self, value: f64) -> String {
         match self {
             Measure::Messages | Measure::Turns => number(value.max(0.).round() as u32),
-            Measure::Time => duration(value * 3600.),
+            Measure::Engaged | Measure::Time => duration(value),
         }
     }
 }
@@ -271,7 +274,15 @@ impl ActivityView {
             .collect();
         let max =
             (0..count).map(|index| series.iter().map(|(_, values)| values[index]).sum::<f64>()).fold(0., f64::max);
-        let (step, top) = ticks(max);
+        let durations = match measure {
+            Measure::Messages | Measure::Turns => None,
+            Measure::Engaged => Some(&report.engaged_ticks),
+            Measure::Time => Some(&report.second_ticks),
+        };
+        let (step, top) = match durations.filter(|ticks| ticks.len() > 1) {
+            Some(lines) => (lines[1], lines[lines.len() - 1]),
+            None => ticks(max),
+        };
         let tick_count = (top / step).round() as usize;
         let labelled = axis_ticks(&report.starts, self.period);
         let center = move |index: usize| relative((index as f32 + 0.5) / count.max(1) as f32);
@@ -358,7 +369,7 @@ impl ActivityView {
             .flex()
             .flex_col()
             .gap(px(12.))
-            .child(heading("Clients", Some("Where your messages came from".into()), None, false, cx))
+            .child(heading("Clients", Some("Where you worked from".into()), None, false, cx))
             .child(card_default(div().flex().flex_col(), cx).children(rows))
             .into_any_element()
     }
@@ -417,11 +428,7 @@ impl ActivityView {
                     .child(client.client.clone())
                     .when(!client.detail.is_empty(), |about| about.child(div().child(client.detail.clone())))
             });
-        let messages = if client.messages == 1 {
-            "1 message".to_string()
-        } else {
-            format!("{} messages", number(client.messages))
-        };
+        let summary = client.summary.clone();
         let seen = if client.active {
             Some("Active now".to_string())
         } else {
@@ -439,7 +446,7 @@ impl ActivityView {
                 .text_size(TextSize::Xxs)
                 .whitespace_nowrap()
                 .font_features(tabular_numbers())
-                .child(div().text_color(c.foreground).child(messages))
+                .child(div().text_color(c.foreground).child(summary))
                 .when_some(seen, |numbers, seen| {
                     numbers.child(div().text_color(c.muted_stronger_foreground).child(seen))
                 });
@@ -469,7 +476,7 @@ impl ActivityView {
             .gap(px(3.))
             .whitespace_nowrap()
             .font_features(tabular_numbers())
-            .child(div().text_size(TextSize::Xs).text_color(c.foreground).child(messages))
+            .child(div().text_size(TextSize::Xs).text_color(c.foreground).child(summary))
             .when_some(seen, |numbers, seen| {
                 numbers.child(div().text_size(TextSize::Xxs).text_color(c.muted_stronger_foreground).child(seen))
             });
@@ -573,7 +580,12 @@ impl ActivityView {
                     hour_label(hour.hour),
                     hour_label((hour.hour + 1) % 24)
                 );
-                (format!("{when} · {messages} · {turns}"), c.muted_foreground)
+                let said = if hour.time.is_empty() {
+                    format!("{when} · {messages} · {turns}")
+                } else {
+                    format!("{when} · {} · {messages} · {turns}", hour.time)
+                };
+                (said, c.muted_foreground)
             }
             None => ("Point at an hour to see what was done in it".to_string(), c.muted_stronger_foreground),
         };

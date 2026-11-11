@@ -31,6 +31,7 @@ import androidx.compose.ui.window.DialogProperties
 import app.motile.commandpanel.CommandPanel
 import app.motile.core.AppStore
 import app.motile.core.Appearance
+import app.motile.core.EngagedWindow
 import app.motile.core.CustomSnooze
 import app.motile.core.PanelPage
 import app.motile.core.Project
@@ -160,7 +161,7 @@ fun Root(store: AppStore) {
                 onDismissRequest = { store.closeViewer() },
                 properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
             ) {
-                MediaViewer(viewing)
+                EngagedWindow { MediaViewer(viewing) }
             }
         }
         store.errorMessage?.let {
@@ -198,14 +199,16 @@ private fun Sheets(store: AppStore) {
         dragHandle = { BottomSheetDefaults.DragHandle(color = Theme.colors.mutedStrongestForeground) },
     ) {
         CompositionLocalProvider(LocalSurface provides Surface.Background, LocalCloseSheet provides { store.closeSheet() }) {
-            when (sheet) {
-                is RootSheet.Commit -> CommitSheet(sheet.project)
-                RootSheet.AddServer -> ConnectServerView(isFirst = false)
-                is RootSheet.Panel -> CommandPanel(sheet.page)
-                RootSheet.Settings -> SettingsSheet()
-                RootSheet.Usage -> UsageSheet()
-                RootSheet.ThreadSettings -> ThreadSettingsSheet()
-                is RootSheet.Snooze -> CustomSnoozeSheet(sheet.snooze)
+            EngagedWindow {
+                when (sheet) {
+                    is RootSheet.Commit -> CommitSheet(sheet.project)
+                    RootSheet.AddServer -> ConnectServerView(isFirst = false)
+                    is RootSheet.Panel -> CommandPanel(sheet.page)
+                    RootSheet.Settings -> SettingsSheet()
+                    RootSheet.Usage -> UsageSheet()
+                    RootSheet.ThreadSettings -> ThreadSettingsSheet()
+                    is RootSheet.Snooze -> CustomSnoozeSheet(sheet.snooze)
+                }
             }
         }
     }

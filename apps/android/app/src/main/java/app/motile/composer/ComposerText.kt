@@ -137,6 +137,7 @@ class ComposerTextModel(private val store: AppStore) {
         if (key == store.draftKey && text != synced) {
             synced = text
             store.draft = text
+            store.engagement.interacted()
         }
         val wasPasted = pasted
         pasted = false

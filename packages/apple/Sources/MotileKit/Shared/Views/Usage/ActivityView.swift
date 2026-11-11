@@ -2,11 +2,11 @@ import Charts
 import SwiftUI
 
 /// What the user and the agents did on the servers counted, the Activity tab of the usage route:
-/// the headline numbers, the work over time, the hours of the week, the clients the messages came
+/// the headline numbers, the work over time, the hours of the week, the clients the user worked
 /// from, how the turns went and the features used.
 struct ActivityView: View {
     enum Measure: String, CaseIterable, Identifiable {
-        case messages, turns, time
+        case messages, turns, engaged, time
 
         var id: Self { self }
 
@@ -14,6 +14,7 @@ struct ActivityView: View {
             switch self {
             case .messages: "Messages"
             case .turns: "Turns"
+            case .engaged: "Your time"
             case .time: "Agent time"
             }
         }
@@ -99,12 +100,12 @@ struct ActivityView: View {
         report.sources.filter { total(of: $0) > 0 }
     }
 
-    /// Agent time is charted in hours, so that its axis falls on whole hours.
     private func points(of source: ActivityReport.Source) -> [Double] {
         switch measure {
         case .messages: source.messagePoints
         case .turns: source.turnPoints
-        case .time: source.secondPoints.map { $0 / 3600 }
+        case .engaged: source.engagedPoints
+        case .time: source.secondPoints
         }
     }
 
@@ -112,14 +113,24 @@ struct ActivityView: View {
         switch measure {
         case .messages: Double(source.messages)
         case .turns: Double(source.turns)
-        case .time: source.seconds / 3600
+        case .engaged: source.engagedSeconds
+        case .time: source.seconds
+        }
+    }
+
+    /// The lines of a chart of durations, where people count time; nil leaves a count's to the chart.
+    private var durationTicks: [Double]? {
+        switch measure {
+        case .messages, .turns: nil
+        case .engaged: report.engagedTicks
+        case .time: report.secondTicks
         }
     }
 
     private func amount(_ value: Double) -> String {
         switch measure {
         case .messages, .turns: Int(value.rounded()).formatted()
-        case .time: Self.duration(value * 3600)
+        case .engaged, .time: Self.duration(value)
         }
     }
 
@@ -192,16 +203,23 @@ struct ActivityView: View {
                     .foregroundStyle(Color.themeMutedForeground)
             }
         }
+        .modifier(DurationScale(ticks: durationTicks))
         .chartYAxis {
-            AxisMarks(values: .automatic(desiredCount: 4)) { mark in
-                AxisGridLine().foregroundStyle(Color.themeBorder)
-                AxisValueLabel {
-                    if let value = mark.as(Double.self) { Text(amount(value)) }
-                }
-                .foregroundStyle(Color.themeMutedForeground)
+            if let ticks = durationTicks {
+                AxisMarks(values: ticks) { mark in yMark(mark) }
+            } else {
+                AxisMarks(values: .automatic(desiredCount: 4)) { mark in yMark(mark) }
             }
         }
         .frame(height: 190)
+    }
+
+    @AxisMarkBuilder private func yMark(_ mark: AxisValue) -> some AxisMark {
+        AxisGridLine().foregroundStyle(Color.themeBorder)
+        AxisValueLabel {
+            if let value = mark.as(Double.self) { Text(amount(value)) }
+        }
+        .foregroundStyle(Color.themeMutedForeground)
     }
 
     private var pointedIndex: Int? {
@@ -213,7 +231,7 @@ struct ActivityView: View {
 
     private var clients: some View {
         VStack(alignment: .leading, spacing: 12) {
-            ActivityHeading(title: "Clients", detail: "Where your messages came from")
+            ActivityHeading(title: "Clients", detail: "Where you worked from")
             VStack(spacing: 0) {
                 ForEach(report.clients) { client in
                     ActivityClientRow(client: client, beside: beside)
@@ -461,7 +479,7 @@ extension ActivityHeading where Trailing == EmptyView {
     }
 }
 
-/// A client: its device, what it is, how it reaches the servers, and its part of the messages.
+/// A client: its device, what it is, how it reaches the servers, and its part of your time and messages.
 private struct ActivityClientRow: View {
     @Environment(\.surface) private var surface
     let client: ActivityReport.Client
@@ -504,7 +522,7 @@ private struct ActivityClientRow: View {
                     ActivityBar(share: client.share, color: ActivityView.color(client.color))
                         .frame(width: 96)
                     VStack(alignment: .trailing, spacing: 3) {
-                        Text(messages)
+                        Text(verbatim: client.summary)
                             .font(.ui(.xs))
                             .foregroundStyle(Color.themeForeground)
                         if let seen {
@@ -522,7 +540,7 @@ private struct ActivityClientRow: View {
                 VStack(alignment: .leading, spacing: 6) {
                     ActivityBar(share: client.share, color: ActivityView.color(client.color))
                     HStack {
-                        Text(messages)
+                        Text(verbatim: client.summary)
                             .foregroundStyle(Color.themeForeground)
                         Spacer(minLength: 8)
                         if let seen {
@@ -539,10 +557,6 @@ private struct ActivityClientRow: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
-    }
-
-    private var messages: String {
-        client.messages == 1 ? "1 message" : "\(client.messages.formatted()) messages"
     }
 
     private var seen: String? {
@@ -795,8 +809,9 @@ private struct ActivityHeatmap: View {
 
     @ViewBuilder private var said: some View {
         if let chosen {
-            Text(dotted: [
-                Text("\(Self.weekdays[chosen.weekday]), \(Self.hourLabel(chosen.hour))–\(Self.hourLabel((chosen.hour + 1) % 24))"),
+            let hour = Text("\(Self.weekdays[chosen.weekday]), \(Self.hourLabel(chosen.hour))–\(Self.hourLabel((chosen.hour + 1) % 24))")
+            let time = chosen.time.isEmpty ? [] : [Text(verbatim: chosen.time)]
+            Text(dotted: [hour] + time + [
                 Text(chosen.messages == 1 ? "1 message" : "\(chosen.messages.formatted()) messages"),
                 Text(chosen.turns == 1 ? "1 turn" : "\(chosen.turns.formatted()) turns"),
             ])
@@ -849,5 +864,18 @@ private extension View {
 private extension Array {
     subscript(safe index: Int) -> Element? {
         indices.contains(index) ? self[index] : nil
+    }
+}
+
+/// A chart of durations ends at its last line, so that its lines fall where people count time.
+private struct DurationScale: ViewModifier {
+    let ticks: [Double]?
+
+    func body(content: Content) -> some View {
+        if let top = ticks?.last, top > 0 {
+            content.chartYScale(domain: 0...top)
+        } else {
+            content
+        }
     }
 }

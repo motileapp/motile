@@ -56,6 +56,7 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import app.motile.core.EngagedWindow
 import app.motile.core.UiKind
 import app.motile.core.UiRouteKind
 import app.motile.platform.Platform
@@ -158,20 +159,22 @@ fun UiMapView(
             onDismissRequest = { expand(false) },
             properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
         ) {
-            val cover = rememberLiveMap(engine, style, director, attached = true, onPin = select)
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    .background(palette.mapWater)
-                    .onSizeChanged { with(density) { director.resize(it.width.toDp().value, it.height.toDp().value) } }
-                    .semantics { contentDescription = "Map" },
-            ) {
-                if (cover != null) {
-                    key(cover) { AndroidView({ cover.view }, Modifier.fillMaxSize()) }
-                    PinButtons(cover.spots, select)
-                }
-                Box(Modifier.fillMaxSize().safeDrawingPadding()) {
-                    MapChrome(node, director, expanded = true, tilesFailed = cover?.tilesFailed == true, onExpand = { expand(false) }, onFilter = onFilter)
+            EngagedWindow {
+                val cover = rememberLiveMap(engine, style, director, attached = true, onPin = select)
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .background(palette.mapWater)
+                        .onSizeChanged { with(density) { director.resize(it.width.toDp().value, it.height.toDp().value) } }
+                        .semantics { contentDescription = "Map" },
+                ) {
+                    if (cover != null) {
+                        key(cover) { AndroidView({ cover.view }, Modifier.fillMaxSize()) }
+                        PinButtons(cover.spots, select)
+                    }
+                    Box(Modifier.fillMaxSize().safeDrawingPadding()) {
+                        MapChrome(node, director, expanded = true, tilesFailed = cover?.tilesFailed == true, onExpand = { expand(false) }, onFilter = onFilter)
+                    }
                 }
             }
         }

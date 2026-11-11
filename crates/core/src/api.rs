@@ -119,6 +119,22 @@ pub enum Command {
     /// The client is in front again: what waits to dial again dials now, and if the system had
     /// the client paused, or it was in the background for a while, every server is dialed again.
     Foreground,
+    /// Whether the client is focused: the app in front with a window of it the user can see, the
+    /// screen awake and unlocked. With the project on screen, of `server_id`, when one is: a thread
+    /// of it, or a new thread's draft for it. Sent whenever any of it changes.
+    Focus {
+        focused: bool,
+        #[serde(default)]
+        server_id: Option<String>,
+        #[serde(default)]
+        project_id: Option<String>,
+    },
+    /// The user used the client, `idle_secs` ago: a key, a click, a scroll, the pointer or a touch.
+    /// Sent at most every few seconds while focused, and only when they did.
+    Input {
+        #[serde(default)]
+        idle_secs: f64,
+    },
     /// The device changed networks: what waits to dial again dials now.
     NetworkChanged,
     /// Asks the auth server about the account every couple of seconds, while waiting for a server.

@@ -98,6 +98,9 @@ pub struct ActivityReport {
     pub starts: Vec<f64>,
     pub tiles: Vec<ActivityFact>,
     pub sources: Vec<ActivitySource>,
+    /// Where the chart of the user's time, and of the agents', draws its lines.
+    pub engaged_ticks: Vec<f64>,
+    pub second_ticks: Vec<f64>,
     pub clients: Vec<ActivityClient>,
     pub hours: Vec<ActivityHour>,
     pub busiest: Option<String>,
@@ -133,6 +136,9 @@ pub struct ActivitySource {
     pub message_points: Vec<u32>,
     pub turn_points: Vec<u32>,
     pub second_points: Vec<f64>,
+    /// The user's time on its devices.
+    pub engaged_seconds: f64,
+    pub engaged_points: Vec<f64>,
 }
 
 #[derive(Clone, PartialEq, Debug, Deserialize)]
@@ -143,7 +149,8 @@ pub struct ActivityClient {
     pub detail: String,
     pub symbol: String,
     pub color: u8,
-    pub messages: u32,
+    /// The user's time on it and its messages: "2h 10m · 31 messages".
+    pub summary: String,
     pub share: f64,
     pub last_seen: Option<f64>,
     pub active: bool,
@@ -157,6 +164,8 @@ pub struct ActivityHour {
     pub hour: u8,
     pub messages: u32,
     pub turns: u32,
+    /// The user's time in it, or empty: "42m".
+    pub time: String,
     /// From 0, nothing, to 4, as busy as the busiest hour.
     pub level: u8,
 }
@@ -610,13 +619,23 @@ mod tests {
                 color: 2,
                 messages: 3,
                 turns: 1,
+                engaged_seconds: 7800.,
+                summary: "2h 10m · 3 messages".into(),
                 share: 1.,
                 last_seen: Some(5.),
                 active: true,
                 this_device: true,
                 removed: false,
             }],
-            hours: vec![HourCell { weekday: 1, hour: 15, messages: 3, turns: 1, level: 4 }],
+            hours: vec![HourCell {
+                weekday: 1,
+                hour: 15,
+                messages: 3,
+                turns: 1,
+                engaged_seconds: 2520.,
+                time: "42m".into(),
+                level: 4,
+            }],
             busiest: Some("Tuesdays".into()),
             outcomes: vec![Line {
                 name: "Finished".into(),
@@ -634,7 +653,8 @@ mod tests {
             (client.symbol.as_str(), client.color, client.last_seen, client.this_device),
             ("monitor", 2, Some(5.), true)
         );
-        assert_eq!((report.hours[0].weekday, report.hours[0].level), (1, 4));
+        assert_eq!(client.summary, "2h 10m · 3 messages");
+        assert_eq!((report.hours[0].weekday, report.hours[0].level, report.hours[0].time.as_str()), (1, 4, "42m"));
         assert_eq!(report.outcomes[0].agent, Some(Agent::Codex));
     }
 

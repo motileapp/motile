@@ -266,6 +266,9 @@ impl Server {
                 let record = ClientRecord { device: caller.device.clone(), client, seen_at: now(), connected: false };
                 hub.store().save_client(&record).map(|_| Message::Ok).map_err(Into::into)
             }
+            Request::Engaged { stretches } => {
+                hub.store().save_engaged(&caller.device, &stretches).map(|_| Message::Ok).map_err(Into::into)
+            }
             Request::Limits => Ok(hub.limits().await),
             Request::RefreshModels => {
                 hub.refresh_models_soon();

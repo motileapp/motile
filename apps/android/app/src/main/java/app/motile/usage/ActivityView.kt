@@ -79,22 +79,33 @@ import app.motile.ui.dotted
 import java.text.NumberFormat
 
 private enum class ActivityMeasure(val raw: String, val label: String) {
-    Messages("messages", "Messages"), Turns("turns", "Turns"), Time("time", "Agent time");
+    Messages("messages", "Messages"), Turns("turns", "Turns"), Yours("engaged", "Your time"), Time("time", "Agent time");
 
-    /** Agent time is charted in hours, so that its axis falls on whole hours. */
     fun points(source: ActivityReport.Source): List<Double> = when (this) {
         Messages -> source.messagePoints
         Turns -> source.turnPoints
-        Time -> source.secondPoints.map { it / 3600 }
+        Yours -> source.engagedPoints
+        Time -> source.secondPoints
     }
 
     fun total(source: ActivityReport.Source): Double = when (this) {
         Messages -> source.messages.toDouble()
         Turns -> source.turns.toDouble()
-        Time -> source.seconds / 3600
+        Yours -> source.engagedSeconds
+        Time -> source.seconds
     }
 
-    fun amount(value: Double): String = if (this == Time) activityDuration(value * 3600) else Math.round(value).toInt().grouped
+    /** The lines of a chart of durations, where people count time; null leaves a count's to the chart. */
+    fun ticks(report: ActivityReport): List<Double>? = when (this) {
+        Yours -> report.engagedTicks
+        Time -> report.secondTicks
+        Messages, Turns -> null
+    }
+
+    fun amount(value: Double): String = when (this) {
+        Yours, Time -> activityDuration(value)
+        Messages, Turns -> Math.round(value).toInt().grouped
+    }
 }
 
 private enum class TurnBreakdown(val raw: String, val label: String) {
@@ -242,14 +253,14 @@ private fun OverTime(report: ActivityReport, period: UsageModel.Period, beside: 
                 }
                 if (index != null) Text(pointedTime(report.starts[index], period), size = TextSize.Xs, color = palette.mutedForeground, maxLines = 1)
             }
-            ActivityChart(report.starts, shown.map { palette.chart(it.color) to measure.points(it) }, period, index, measure::amount, point)
+            ActivityChart(report.starts, shown.map { palette.chart(it.color) to measure.points(it) }, measure.ticks(report), period, index, measure::amount, point)
         }
     }
 }
 
 @Composable
 private fun Clients(report: ActivityReport, beside: Boolean) {
-    Section("Clients", "Where your messages came from") {
+    Section("Clients", "Where you worked from") {
         Card(Modifier.fillMaxWidth()) {
             report.clients.forEachIndexed { index, client ->
                 if (index > 0) ThemeDivider()
@@ -262,8 +273,8 @@ private fun Clients(report: ActivityReport, beside: Boolean) {
 private val badgeSide = scaled(32f).dp
 
 /**
- * A client: its device, what it is, how it reaches the servers, and its part of the messages: in
- * one row when `beside`, else with its part under its words, which get the whole width.
+ * A client: its device, what it is, how it reaches the servers, and its part of your time or of the
+ * messages: in one row when `beside`, else with its part under its words, which get the whole width.
  */
 @Composable
 private fun ClientRow(client: ActivityReport.Client, beside: Boolean) {
@@ -297,7 +308,7 @@ private fun ClientRow(client: ActivityReport.Client, beside: Boolean) {
             if (beside) {
                 ActivityBar(client.share, color, Modifier.width(96.dp))
                 Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    Text(messages(client.messages), style = Theme.uiDigits(TextSize.Xs), color = palette.foreground, maxLines = 1)
+                    Text(client.summary, style = Theme.uiDigits(TextSize.Xs), color = palette.foreground, maxLines = 1)
                     seen?.let { Text(it, style = Theme.uiDigits(TextSize.Xxs), color = palette.mutedStrongerForeground, maxLines = 1) }
                 }
             }
@@ -306,7 +317,7 @@ private fun ClientRow(client: ActivityReport.Client, beside: Boolean) {
             Column(Modifier.fillMaxWidth().padding(start = badgeSide + 12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 ActivityBar(client.share, color, Modifier.fillMaxWidth())
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(messages(client.messages), Modifier.weight(1f), style = Theme.uiDigits(TextSize.Xxs), color = palette.foreground, maxLines = 1)
+                    Text(client.summary, Modifier.weight(1f), style = Theme.uiDigits(TextSize.Xxs), color = palette.foreground, maxLines = 1)
                     seen?.let { Text(it, style = Theme.uiDigits(TextSize.Xxs), color = palette.mutedStrongerForeground, maxLines = 1) }
                 }
             }
@@ -558,7 +569,8 @@ private fun Heatmap(hours: List<ActivityReport.Hour>, modifier: Modifier) {
             val shown = chosen
             val said = Modifier.padding(end = 8.dp).align(Alignment.CenterVertically)
             if (shown != null) {
-                val text = "${weekdays[shown.weekday]}, ${hourLabel(shown.hour)}–${hourLabel((shown.hour + 1) % 24)} · ${messages(shown.messages)} · ${turns(shown.turns)}"
+                val hour = "${weekdays[shown.weekday]}, ${hourLabel(shown.hour)}–${hourLabel((shown.hour + 1) % 24)}"
+                val text = listOf(hour, shown.time, messages(shown.messages), turns(shown.turns)).filter { it.isNotEmpty() }.joinToString(" · ")
                 Text(dotted(text, palette.mutedStrongerForeground), said, style = Theme.uiDigits(TextSize.Xxs), color = palette.mutedForeground)
             } else {
                 Text("Tap an hour to see what was done in it", said, size = TextSize.Xxs, color = palette.mutedStrongerForeground)

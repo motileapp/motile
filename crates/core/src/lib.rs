@@ -9,6 +9,7 @@ pub mod browse;
 pub mod cache;
 pub mod connection;
 pub mod core;
+pub mod engaged;
 pub mod ffi;
 pub mod find;
 pub mod follow;

@@ -18,10 +18,10 @@ use motile_protocol::gateway_wire::{AccountStatus, GatewayAccount, GatewayReply,
 use motile_protocol::identity::DeviceKey;
 use motile_protocol::wire::{
     Access as AgentAccess, Agent, AgentAccount, AgentLimits, Approval, Ask, CONTINUE_PROMPT, Change, CheckStatus,
-    ClientForm, ClientInfo, ClientKind, CopiedThread, DiffScope, EventKind, FileKind, GitAction, GitHubState, GitStage,
-    GitStatus, Interruption, Item, ItemKind, LimitWindow, LineComment, MergeMethod, Mergeable, Message, NewThread,
-    NewWorktree, Project, PullRequestAction, PullRequestDetail, PullRequestEdit, PullRequestState, Queued,
-    ReactionKind, Request, RestartWhen, ReviewVerdict, ServerInfo, ServerUpdate, Side, Skill, SkillMention,
+    ClientForm, ClientInfo, ClientKind, CopiedThread, DiffScope, EngagedRecord, EventKind, FileKind, GitAction,
+    GitHubState, GitStage, GitStatus, Interruption, Item, ItemKind, LimitWindow, LineComment, MergeMethod, Mergeable,
+    Message, NewThread, NewWorktree, Project, PullRequestAction, PullRequestDetail, PullRequestEdit, PullRequestState,
+    Queued, ReactionKind, Request, RestartWhen, ReviewVerdict, ServerInfo, ServerUpdate, Side, Skill, SkillMention,
     SkillSource, Thread, ThreadChange, Tokens, ToolCall, ToolStatus, TurnChanges, TurnOutcome, TurnStarter,
     TurnSummary, UsageBucket, Variable,
 };
@@ -1164,6 +1164,15 @@ async fn the_activity_says_which_client_started_each_turn_and_what_it_used() {
     finished_transcript(&connection, &thread_id).await;
     let archive = ThreadChange { archived: Some(true), ..ThreadChange::default() };
     update(&connection, &thread_id, archive).await;
+    let started_at = motile_protocol::now() - 600.0;
+    let stretch = EngagedRecord {
+        device: "another device".into(),
+        project_id: String::new(),
+        started_at,
+        ended_at: started_at + 90.0,
+    };
+    let stretches = vec![stretch.clone(), stretch];
+    connection.request(&Request::Engaged { stretches }).await.unwrap();
 
     let request = Request::ActivityReport {
         since: 0.0,
@@ -1197,6 +1206,9 @@ async fn the_activity_says_which_client_started_each_turn_and_what_it_used() {
     );
     let hour: u32 = report.hours.iter().map(|hour| hour.messages).sum();
     assert_eq!(hour, 1);
+    let [engaged] = &report.engaged[..] else { panic!("one device's time: {:?}", report.engaged) };
+    let [[start, end]] = engaged.spans[..] else { panic!("one stretch: {:?}", engaged.spans) };
+    assert_eq!((engaged.device.as_str(), end - start), (device.as_str(), 90));
 }
 
 /// Where the user's messages and the turns' ends are in the transcript, in order.

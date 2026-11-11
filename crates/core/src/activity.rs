@@ -1,6 +1,7 @@
 //! What the user and the agents did on the account's servers, for the usage view's Activity tab:
 //! the headline numbers, the work over time by where it came from, the clients, the hours of the
-//! week, how turns ended, and the features used, all ready to draw.
+//! week, how turns ended, and the features used, all ready to draw. The user's time is counted
+//! once however many devices they used at once.
 
 use std::collections::HashMap;
 
@@ -11,6 +12,7 @@ use motile_protocol::wire::{
 };
 use serde::Serialize;
 
+use crate::engaged::Stretch;
 use crate::usage::{Window, agent_name};
 
 const WEEKDAYS: [&str; 7] = ["Mondays", "Tuesdays", "Wednesdays", "Thursdays", "Fridays", "Saturdays", "Sundays"];
@@ -42,10 +44,13 @@ pub struct View {
     /// Each with a point for each of `starts`: the user's messages by the kind of client they came
     /// from, then the turns of the agents and of the subagents, the agents that agents started.
     pub sources: Vec<Source>,
+    /// Where the chart of the user's time, and of the agents', draws its lines, from 0.
+    pub engaged_ticks: Vec<f64>,
+    pub second_ticks: Vec<f64>,
     pub clients: Vec<ClientRow>,
     /// The 168 hours of the week, Monday's first.
     pub hours: Vec<HourCell>,
-    /// When the user sends the most messages, as a sentence.
+    /// When the user is in the client the most, or sends the most messages, as a sentence.
     pub busiest: Option<String>,
     pub outcomes: Vec<Line>,
     pub agents: Vec<Line>,
@@ -80,6 +85,9 @@ pub struct Source {
     pub message_points: Vec<u32>,
     pub turn_points: Vec<u32>,
     pub second_points: Vec<f64>,
+    /// The user's time on its devices.
+    pub engaged_seconds: f64,
+    pub engaged_points: Vec<f64>,
 }
 
 #[derive(Serialize, Debug, PartialEq)]
@@ -94,7 +102,11 @@ pub struct ClientRow {
     pub color: u8,
     pub messages: u32,
     pub turns: u32,
-    /// Its part of the messages the clients listed sent, from 0 to 1.
+    pub engaged_seconds: f64,
+    /// The user's time on it and its messages: "2h 10m · 31 messages".
+    pub summary: String,
+    /// Its part of the user's time on the clients listed, or of their messages before that was
+    /// counted, from 0 to 1.
     pub share: f64,
     pub last_seen: Option<f64>,
     /// This device, or connected to a server now.
@@ -110,6 +122,9 @@ pub struct HourCell {
     pub hour: u8,
     pub messages: u32,
     pub turns: u32,
+    pub engaged_seconds: f64,
+    /// The user's time in it, or empty: "42m".
+    pub time: String,
     /// How busy it was next to the busiest hour, from 0, nothing, to 4.
     pub level: u8,
 }
@@ -291,7 +306,18 @@ fn form_symbol(form: ClientForm, system: &str) -> &'static str {
     }
 }
 
-pub fn view(done: &[Done], window: Window, names: &Names) -> View {
+/// A stretch of the user's time, on a project of a server or on none (both empty).
+struct Span {
+    device: String,
+    server_id: String,
+    project_id: String,
+    start: f64,
+    end: f64,
+}
+
+/// What was done in `window`. `local` is this client's own time that its servers may not have yet,
+/// and time on no project only counts with `every_server`.
+pub fn view(done: &[Done], window: Window, names: &Names, local: &[Stretch], every_server: bool) -> View {
     let starts = window.starts();
     let point = |start: f64| {
         let index = ((start - window.since) / f64::from(window.bucket_secs)).round();
@@ -318,7 +344,8 @@ pub fn view(done: &[Done], window: Window, names: &Names) -> View {
         actions.iter().filter(|bucket| bucket.actor == Actor::User && bucket.feature == features::MESSAGE).collect();
     let message_count: u32 = messages.iter().map(|bucket| bucket.count).sum();
     let turn_count: u32 = turns.iter().map(|(_, bucket)| bucket.turns).sum();
-    if message_count == 0 && turn_count == 0 && actions.is_empty() {
+    let spans = spans(done, &window, names, local, every_server);
+    if message_count == 0 && turn_count == 0 && actions.is_empty() && spans.is_empty() {
         return View { empty: true, starts, ..View::default() };
     }
 
@@ -341,6 +368,23 @@ pub fn view(done: &[Done], window: Window, names: &Names) -> View {
             entry.second_points[point] += bucket.seconds;
         }
     }
+    for span in &spans {
+        let index = source_of(&mut sources, From::of_device(Some(&span.device), &clients), starts.len());
+        let entry = &mut sources[index].1;
+        entry.engaged_seconds += span.end - span.start;
+        split(span.start, span.end, window.since, f64::from(window.bucket_secs), |point, seconds| {
+            if let Some(point) = usize::try_from(point).ok().and_then(|point| entry.engaged_points.get_mut(point)) {
+                *point += seconds;
+            }
+        });
+    }
+    let highest = |points: fn(&Source) -> &[f64]| {
+        (0..starts.len())
+            .map(|index| sources.iter().map(|(_, source)| points(source)[index]).sum::<f64>())
+            .fold(0.0, f64::max)
+    };
+    let engaged_ticks = duration_ticks(highest(|source| &source.engaged_points));
+    let second_ticks = duration_ticks(highest(|source| &source.second_points));
     sources.sort_by(|(a, x), (b, y)| {
         a.rank().cmp(&b.rank()).then((y.messages + y.turns).cmp(&(x.messages + x.turns))).then(x.label.cmp(&y.label))
     });
@@ -348,18 +392,16 @@ pub fn view(done: &[Done], window: Window, names: &Names) -> View {
     let seconds: f64 = turns.iter().map(|(_, bucket)| bucket.seconds).sum();
     let waited: f64 = turns.iter().map(|(_, bucket)| bucket.waited_secs).sum();
     let asks: u32 = turns.iter().map(|(_, bucket)| bucket.asks).sum();
-    let count_of = |outcome: TurnOutcome| -> u32 {
-        turns.iter().filter(|(_, bucket)| bucket.outcome == outcome).map(|(_, bucket)| bucket.turns).sum()
-    };
-    let (finished, stopped, failed) =
-        (count_of(TurnOutcome::Done), count_of(TurnOutcome::Stopped), count_of(TurnOutcome::Failed));
+    let together = together(&spans);
+    let yours: f64 = together.iter().map(|(start, end)| end - start).sum();
     let threads: u32 = actions.iter().filter(|bucket| bucket.feature == "thread.new").map(|bucket| bucket.count).sum();
+    let measured_since = done
+        .iter()
+        .filter_map(|done| done.report.engaged_since)
+        .chain(local.iter().map(|stretch| stretch.started_at))
+        .min_by(f64::total_cmp);
     let tiles = vec![
-        Tile {
-            label: "Messages".into(),
-            value: number(message_count),
-            detail: plural(threads, "thread started", "threads started"),
-        },
+        your_time(yours, measured_since, &turns, &window),
         Tile {
             label: "Agent time".into(),
             value: duration(seconds),
@@ -376,14 +418,14 @@ pub fn view(done: &[Done], window: Window, names: &Names) -> View {
             detail: plural(asks, "approval or question", "approvals and questions"),
         },
         Tile {
-            label: "Finished".into(),
-            value: percent(f64::from(finished), f64::from(turn_count)),
-            detail: format!("{} stopped · {} failed", number(stopped), number(failed)),
+            label: "Messages".into(),
+            value: number(message_count),
+            detail: plural(threads, "thread started", "threads started"),
         },
     ];
 
-    let client_rows = client_rows(&messages, &turns, &clients, names);
-    let (hours, busiest) = hours(done);
+    let client_rows = client_rows(&messages, &turns, &spans, &clients, names);
+    let (hours, busiest) = hours(done, &together, window.utc_offset_secs);
 
     let lines = |key: &LineKey<'_>| {
         let mut found: Vec<(String, Option<Agent>, Option<String>, Sums)> = Vec::new();
@@ -412,26 +454,21 @@ pub fn view(done: &[Done], window: Window, names: &Names) -> View {
         lines.sort_by(|a, b| b.turns.cmp(&a.turns).then(a.name.cmp(&b.name)));
         lines
     };
-    let several_servers = turns.iter().any(|(server, _)| *server != turns[0].0);
-    let server_name =
-        |server_id: &str| names.servers.get(server_id).cloned().unwrap_or_else(|| "Unknown server".into());
     let outcomes = lines(&|_, bucket| (outcome_label(bucket.outcome).into(), None, None));
     let agents = lines(&|_, bucket| (agent_name(bucket.agent).into(), Some(bucket.agent), None));
     let models = lines(&|_, bucket| {
         let model = if bucket.model.is_empty() { "Default model" } else { &bucket.model };
         (model.to_string(), Some(bucket.agent), None)
     });
-    let projects = lines(&|server_id, bucket| {
-        let project = names.projects.get(&(server_id.to_string(), bucket.project_id.clone()));
-        let server = several_servers.then(|| server_name(server_id));
-        (project.cloned().unwrap_or_else(|| "Removed project".into()), None, server)
-    });
+    let projects = projects(&turns, &spans, names, turn_count);
 
     View {
         empty: false,
         starts,
         tiles,
         sources: sources.into_iter().map(|(_, source)| source).collect(),
+        engaged_ticks,
+        second_ticks,
         clients: client_rows,
         hours,
         busiest,
@@ -443,6 +480,192 @@ pub fn view(done: &[Done], window: Window, names: &Names) -> View {
         features: feature_groups(&actions),
         agent_features: feature_lines(actions.iter().copied().filter(|bucket| bucket.actor == Actor::Agent)),
     }
+}
+
+/// The user's stretches in `window` that the servers reported and this client has that they may
+/// not yet, each once.
+fn spans(done: &[Done], window: &Window, names: &Names, local: &[Stretch], every_server: bool) -> Vec<Span> {
+    let mut spans = Vec::new();
+    for done in done {
+        for group in done.report.engaged.iter().filter(|group| every_server || !group.project_id.is_empty()) {
+            spans.extend(group.spans.iter().map(|[start, end]| Span {
+                device: group.device.clone(),
+                server_id: done.server_id.clone(),
+                project_id: group.project_id.clone(),
+                start: window.since + f64::from(*start),
+                end: window.since + f64::from(*end),
+            }));
+        }
+    }
+    for stretch in local {
+        let (start, end) = (stretch.started_at.max(window.since), stretch.ended_at.min(window.until));
+        let reported = spans.iter().any(|span| span.device == names.this_device && (span.start - start).abs() < 1.0);
+        if end <= start || reported {
+            continue;
+        }
+        spans.push(Span {
+            device: names.this_device.clone(),
+            server_id: stretch.place.server_id.clone(),
+            project_id: stretch.place.project_id.clone(),
+            start,
+            end,
+        });
+    }
+    spans
+}
+
+/// The time covered by any of the spans, as stretches that don't overlap: two devices at once
+/// count once.
+fn together(spans: &[Span]) -> Vec<(f64, f64)> {
+    let mut all: Vec<(f64, f64)> = spans.iter().map(|span| (span.start, span.end)).collect();
+    all.sort_by(|a, b| a.0.total_cmp(&b.0));
+    let mut merged: Vec<(f64, f64)> = Vec::new();
+    for (start, end) in all {
+        match merged.last_mut() {
+            Some(last) if start <= last.1 => last.1 = last.1.max(end),
+            _ => merged.push((start, end)),
+        }
+    }
+    merged
+}
+
+/// Hands `add` the part of `start..end` in each slot of `size` seconds from `origin`, by the
+/// slot's number.
+fn split(start: f64, end: f64, origin: f64, size: f64, mut add: impl FnMut(i64, f64)) {
+    let mut at = start;
+    while at < end {
+        let slot = ((at - origin) / size).floor();
+        let next = (origin + (slot + 1.0) * size).min(end);
+        if next <= at {
+            break;
+        }
+        add(slot as i64, next - at);
+        at = next;
+    }
+}
+
+/// The user's time next to the agents', which is only compared over the time it was counted.
+fn your_time(yours: f64, measured_since: Option<f64>, turns: &[(&str, &TurnBucket)], window: &Window) -> Tile {
+    let label = "Your time".to_string();
+    let Some(since) = measured_since else {
+        return Tile { label, value: "0m".into(), detail: "Counted from now on".into() };
+    };
+    let size = f64::from(window.bucket_secs);
+    let agents: f64 =
+        turns.iter().filter(|(_, bucket)| bucket.start + size > since).map(|(_, bucket)| bucket.seconds).sum();
+    let mut parts = Vec::new();
+    if since > window.since {
+        parts.push(format!("Since {}", day(since, window.utc_offset_secs)));
+    }
+    if yours >= 60.0 && agents > 0.0 {
+        let times = agents / yours;
+        parts.push(match times {
+            10.0.. => format!("agents {times:.0}× as long"),
+            0.95.. => format!("agents {}× as long", format!("{times:.1}").trim_end_matches(".0")),
+            0.01.. => format!("agents {}% as long", (times * 100.0).round()),
+            _ => "agents under 1% as long".to_string(),
+        });
+    }
+    let mut detail = parts.join(" · ");
+    if let Some(first) = detail.get(..1) {
+        detail = first.to_uppercase() + &detail[1..];
+    }
+    Tile { label, value: if yours < 60.0 { "0m".into() } else { duration(yours) }, detail }
+}
+
+/// Lines for a chart of durations up to `highest` seconds, at most four steps of a length people
+/// count time in.
+fn duration_ticks(highest: f64) -> Vec<f64> {
+    const STEPS: [f64; 22] = [
+        1.0,
+        2.0,
+        5.0,
+        10.0,
+        15.0,
+        30.0,
+        60.0,
+        120.0,
+        300.0,
+        600.0,
+        900.0,
+        1_800.0,
+        3_600.0,
+        7_200.0,
+        10_800.0,
+        21_600.0,
+        43_200.0,
+        86_400.0,
+        172_800.0,
+        432_000.0,
+        864_000.0,
+        1_728_000.0,
+    ];
+    let highest = highest.max(1.0);
+    let step = STEPS
+        .into_iter()
+        .find(|step| highest / step <= 4.0)
+        .unwrap_or_else(|| (highest / 4.0 / 86_400.0).ceil() * 86_400.0);
+    let steps = (highest / step).ceil() as usize;
+    (0..=steps).map(|index| index as f64 * step).collect()
+}
+
+/// "Nov 12" on the clock `utc_offset_secs` ahead of UTC.
+fn day(at: f64, utc_offset_secs: i32) -> String {
+    let offset = chrono::FixedOffset::east_opt(utc_offset_secs).unwrap_or(chrono::FixedOffset::east_opt(0).unwrap());
+    chrono::DateTime::from_timestamp(at as i64, 0)
+        .map(|at| at.with_timezone(&offset).format("%b %-d").to_string())
+        .unwrap_or_default()
+}
+
+/// The projects, each with the user's time on it and how long the agents worked on it.
+fn projects(turns: &[(&str, &TurnBucket)], spans: &[Span], names: &Names, turn_count: u32) -> Vec<Line> {
+    fn entry<'a>(
+        found: &'a mut Vec<((String, String), Sums, f64)>,
+        server_id: &str,
+        project_id: &str,
+    ) -> &'a mut ((String, String), Sums, f64) {
+        let key = (server_id.to_string(), project_id.to_string());
+        let index = found.iter().position(|(known, _, _)| *known == key).unwrap_or_else(|| {
+            found.push((key, Sums::default(), 0.0));
+            found.len() - 1
+        });
+        &mut found[index]
+    }
+    let mut found = Vec::new();
+    for (server_id, bucket) in turns {
+        entry(&mut found, server_id, &bucket.project_id).1.add(bucket);
+    }
+    for span in spans.iter().filter(|span| !span.project_id.is_empty()) {
+        entry(&mut found, &span.server_id, &span.project_id).2 += span.end - span.start;
+    }
+    let several_servers = found.iter().any(|((server, _), _, _)| *server != found[0].0.0);
+    let mut lines: Vec<(f64, Line)> = found
+        .into_iter()
+        .map(|((server_id, project_id), sums, yours)| {
+            let name = names.projects.get(&(server_id.clone(), project_id)).cloned();
+            let server = several_servers
+                .then(|| names.servers.get(&server_id).cloned().unwrap_or_else(|| "Unknown server".into()));
+            let mut detail = Vec::new();
+            if yours >= 60.0 {
+                detail.push(format!("You {}", duration(yours)));
+            }
+            if sums.turns > 0 {
+                detail.push(format!("Agents {}", duration(sums.seconds)));
+            }
+            let line = Line {
+                name: name.unwrap_or_else(|| "Removed project".into()),
+                agent: None,
+                server,
+                turns: sums.turns,
+                detail: detail.join(" · "),
+                share: f64::from(sums.turns) / f64::from(turn_count.max(1)),
+            };
+            (yours, line)
+        })
+        .filter(|(yours, line)| line.turns > 0 || *yours >= 60.0)
+        .collect();
+    lines.sort_by(|(x, a), (y, b)| b.turns.cmp(&a.turns).then(y.total_cmp(x)).then(a.name.cmp(&b.name)));
+    lines.into_iter().map(|(_, line)| line).collect()
 }
 
 /// The index of the source `from` among `sources`, which it joins with `points` empty points if new.
@@ -461,6 +684,8 @@ fn source_of(sources: &mut Vec<(From, Source)>, from: From, points: usize) -> us
         message_points: vec![0; points],
         turn_points: vec![0; points],
         second_points: vec![0.0; points],
+        engaged_seconds: 0.0,
+        engaged_points: vec![0.0; points],
     };
     sources.push((from, source));
     sources.len() - 1
@@ -469,6 +694,7 @@ fn source_of(sources: &mut Vec<(From, Source)>, from: From, points: usize) -> us
 fn client_rows(
     messages: &[&&ActionBucket],
     turns: &[(&str, &TurnBucket)],
+    spans: &[Span],
     clients: &HashMap<String, ClientRecord>,
     names: &Names,
 ) -> Vec<ClientRow> {
@@ -480,8 +706,13 @@ fn client_rows(
         relay: u32,
         rtt_ms: u64,
         timed: u32,
+        engaged: f64,
     }
     let mut seen: HashMap<String, Seen> = HashMap::new();
+    for span in spans {
+        seen.entry(span.device.clone()).or_default().engaged += span.end - span.start;
+    }
+    let engaged_total: f64 = seen.values().map(|seen| seen.engaged).sum();
     for bucket in messages {
         let Some(device) = &bucket.device else { continue };
         let entry = seen.entry(device.clone()).or_default();
@@ -525,6 +756,17 @@ fn client_rows(
             if seen.timed > 0 {
                 detail.push(format!("{} ms", seen.rtt_ms / u64::from(seen.timed)));
             }
+            let mut summary = Vec::new();
+            if seen.engaged >= 60.0 {
+                summary.push(duration(seen.engaged));
+            }
+            if seen.messages > 0 || summary.is_empty() {
+                summary.push(plural(seen.messages, "message", "messages"));
+            }
+            let share = match engaged_total {
+                0.0 => f64::from(seen.messages) / f64::from(listed.max(1)),
+                total => seen.engaged / total,
+            };
             ClientRow {
                 name: account.map(|(name, _)| name.clone()).unwrap_or_else(|| from.label()),
                 client,
@@ -533,7 +775,9 @@ fn client_rows(
                 color: from.color(),
                 messages: seen.messages,
                 turns: seen.turns,
-                share: f64::from(seen.messages) / f64::from(listed.max(1)),
+                engaged_seconds: seen.engaged,
+                summary: summary.join(" · "),
+                share,
                 last_seen: record.map(|record| record.seen_at),
                 active: device == names.this_device || record.is_some_and(|record| record.connected),
                 this_device: device == names.this_device,
@@ -542,17 +786,26 @@ fn client_rows(
             }
         })
         .collect();
-    rows.sort_by(|a, b| b.messages.cmp(&a.messages).then(b.turns.cmp(&a.turns)).then(a.name.cmp(&b.name)));
+    rows.sort_by(|a, b| {
+        (b.engaged_seconds.total_cmp(&a.engaged_seconds))
+            .then(b.messages.cmp(&a.messages))
+            .then(b.turns.cmp(&a.turns))
+            .then(a.name.cmp(&b.name))
+    });
     rows
 }
 
-fn hours(done: &[Done]) -> (Vec<HourCell>, Option<String>) {
+/// The hours of the week on the asking clock, by the user's time in them, or before that was
+/// counted by their messages, or else by the agents' turns.
+fn hours(done: &[Done], together: &[(f64, f64)], utc_offset_secs: i32) -> (Vec<HourCell>, Option<String>) {
     let mut cells: Vec<HourCell> = (0..168)
         .map(|index| HourCell {
             weekday: (index / 24) as u8,
             hour: (index % 24) as u8,
             messages: 0,
             turns: 0,
+            engaged_seconds: 0.0,
+            time: String::new(),
             level: 0,
         })
         .collect();
@@ -561,23 +814,42 @@ fn hours(done: &[Done]) -> (Vec<HourCell>, Option<String>) {
         cell.messages += hour.messages;
         cell.turns += hour.turns;
     }
+    for (start, end) in together {
+        split(*start, *end, -f64::from(utc_offset_secs), 3600.0, |hour, seconds| {
+            // The first of January 1970 was a Thursday.
+            let weekday = (hour.div_euclid(24) + 3).rem_euclid(7);
+            cells[(weekday * 24 + hour.rem_euclid(24)) as usize].engaged_seconds += seconds;
+        });
+    }
+    for cell in cells.iter_mut().filter(|cell| cell.engaged_seconds >= 60.0) {
+        cell.time = duration(cell.engaged_seconds);
+    }
+    let by_time = cells.iter().any(|cell| cell.engaged_seconds >= 60.0);
     let by_messages = cells.iter().any(|cell| cell.messages > 0);
-    let weight = |cell: &HourCell| if by_messages { cell.messages } else { cell.turns };
-    let most = cells.iter().map(weight).max().unwrap_or(0);
+    let weight = |cell: &HourCell| match (by_time, by_messages) {
+        (true, _) => cell.engaged_seconds.round(),
+        (false, true) => f64::from(cell.messages),
+        (false, false) => f64::from(cell.turns),
+    };
+    let most = cells.iter().map(weight).fold(0.0, f64::max);
     for cell in &mut cells {
         let value = weight(cell);
         cell.level = match most {
-            0 => 0,
-            _ if value == 0 => 0,
-            _ => (f64::from(value) / f64::from(most) * 4.0).ceil().clamp(1.0, 4.0) as u8,
+            0.0 => 0,
+            _ if value == 0.0 => 0,
+            _ => (value / most * 4.0).ceil().clamp(1.0, 4.0) as u8,
         };
     }
-    let busiest = cells
-        .iter()
-        .filter(|cell| weight(cell) > 0)
-        .max_by_key(|cell| (weight(cell), std::cmp::Reverse(cell.weekday * 24 + cell.hour)));
+    let busiest = cells.iter().filter(|cell| weight(cell) > 0.0).fold(None::<&HourCell>, |best, cell| match best {
+        Some(best) if weight(best) >= weight(cell) => Some(best),
+        _ => Some(cell),
+    });
     let sentence = busiest.map(|cell| {
-        let what = if by_messages { "You send the most messages" } else { "Your agents work the most" };
+        let what = match (by_time, by_messages) {
+            (true, _) => "You're in Motile the most",
+            (false, true) => "You send the most messages",
+            (false, false) => "Your agents work the most",
+        };
         format!("{what} on {} around {}", WEEKDAYS[usize::from(cell.weekday)], clock(cell.hour))
     });
     (cells, sentence)
@@ -892,18 +1164,19 @@ mod tests {
                 client("mac", ClientKind::Mac, "macos", ClientForm::Desktop),
                 client("phone", ClientKind::Ios, "ios", ClientForm::Phone),
             ],
+            ..ActivityReport::default()
         };
-        let view = view(&[Done { server_id: "studio".into(), report }], window, &names());
+        let view = view(&[Done { server_id: "studio".into(), report }], window, &names(), &[], true);
 
         let tiles: Vec<_> =
             view.tiles.iter().map(|tile| (tile.label.as_str(), tile.value.as_str(), tile.detail.as_str())).collect();
         assert_eq!(
             tiles,
             [
-                ("Messages", "4", "1 thread started"),
+                ("Your time", "0m", "Counted from now on"),
                 ("Agent time", "13m", "6 turns · 2m on average"),
                 ("Waiting on you", "1m", "3 approvals and questions"),
-                ("Finished", "83%", "1 stopped · 0 failed"),
+                ("Messages", "4", "1 thread started"),
             ]
         );
         let sources: Vec<_> = view
@@ -958,13 +1231,14 @@ mod tests {
                 phone,
                 client("tablet", ClientKind::Ios, "ipados", ClientForm::Tablet),
             ],
+            ..ActivityReport::default()
         };
         let phone = client("phone", ClientKind::Ios, "ios", ClientForm::Phone);
         let done = [
             Done { server_id: "studio".into(), report: report(ClientRecord { connected: true, ..phone.clone() }) },
             Done { server_id: "attic".into(), report: report(ClientRecord { seen_at: 90.0, ..phone }) },
         ];
-        let view = view(&done, window, &names());
+        let view = view(&done, window, &names(), &[], true);
 
         let mut active: Vec<_> =
             view.clients.iter().map(|row| (row.device.as_str(), row.active, row.last_seen)).collect();
@@ -988,7 +1262,7 @@ mod tests {
             ..ActivityReport::default()
         };
         let colors = |report: ActivityReport| -> Vec<(String, u8)> {
-            let view = view(&[Done { server_id: "studio".into(), report }], window, &names());
+            let view = view(&[Done { server_id: "studio".into(), report }], window, &names(), &[], true);
             let mut colors: Vec<_> = view.sources.into_iter().map(|source| (source.label, source.color)).collect();
             colors.sort();
             colors
@@ -1017,7 +1291,7 @@ mod tests {
             clients: vec![client("mac", ClientKind::Mac, "macos", ClientForm::Desktop)],
             ..ActivityReport::default()
         };
-        let view = view(&[Done { server_id: "studio".into(), report }], window, &names());
+        let view = view(&[Done { server_id: "studio".into(), report }], window, &names(), &[], true);
         let sources: Vec<_> =
             view.sources.iter().map(|source| (source.label.as_str(), source.turns, source.seconds)).collect();
         assert_eq!(sources, [("Agents", 2, 15.0), ("Subagents", 4, 450.0)]);
@@ -1038,17 +1312,79 @@ mod tests {
             ],
             ..ActivityReport::default()
         };
-        let view = view(&[Done { server_id: "studio".into(), report }], window, &names());
+        let view = view(&[Done { server_id: "studio".into(), report }], window, &names(), &[], true);
         let shares: Vec<_> = view.clients.iter().map(|row| (row.name.as_str(), row.share)).collect();
         assert_eq!(shares, [("Studio Mac", 0.75), ("Pocket", 0.25)]);
     }
 
     #[test]
+    fn your_time_counts_two_devices_at_once_once_and_is_compared_since_it_was_counted() {
+        use motile_protocol::wire::EngagedSpans;
+
+        use crate::engaged::{Place, Stretch};
+
+        let window = Window { since: 0.0, until: 2.0 * DAY, bucket_secs: 86_400, utc_offset_secs: 0 };
+        let spans = |device: &str, project: &str, spans: Vec<[u32; 2]>| EngagedSpans {
+            device: device.into(),
+            project_id: project.into(),
+            spans,
+        };
+        let report = ActivityReport {
+            turns: vec![
+                turn(0.0, TurnStarter::User, Some("mac"), TurnOutcome::Done, 1, 7_200.0),
+                turn(DAY, TurnStarter::User, Some("mac"), TurnOutcome::Done, 4, 36_000.0),
+            ],
+            engaged: vec![
+                spans("mac", "p", vec![[DAY as u32 + 36_000, DAY as u32 + 39_600]]),
+                spans("mac", "", vec![[DAY as u32 + 41_400, DAY as u32 + 42_000]]),
+                spans("phone", "p", vec![[DAY as u32 + 37_800, DAY as u32 + 41_400]]),
+            ],
+            engaged_since: Some(DAY + 36_000.0),
+            clients: vec![
+                client("mac", ClientKind::Mac, "macos", ClientForm::Desktop),
+                client("phone", ClientKind::Ios, "ios", ClientForm::Phone),
+            ],
+            ..ActivityReport::default()
+        };
+        let local = [Stretch {
+            place: Place { server_id: "studio".into(), project_id: "p".into() },
+            started_at: DAY + 36_000.0,
+            ended_at: DAY + 39_600.0,
+        }];
+        let done = [Done { server_id: "studio".into(), report }];
+
+        let shown = view(&done, window, &names(), &local, true);
+        assert_eq!(shown.tiles[0].value, "1h 40m");
+        assert_eq!(shown.tiles[0].detail, "Since Jan 2 · agents 6× as long");
+        assert_eq!(shown.engaged_ticks, [0.0, 3_600.0, 7_200.0, 10_800.0]);
+        let mac = shown.sources.iter().find(|source| source.label == "Mac").unwrap();
+        assert_eq!(mac.engaged_points, [0.0, 4_200.0]);
+        let clients: Vec<_> = shown.clients.iter().map(|row| (row.name.as_str(), row.summary.as_str())).collect();
+        assert_eq!(clients, [("Studio Mac", "1h 10m"), ("Pocket", "1h")]);
+        assert_eq!(shown.projects[0].detail, "You 2h · Agents 12h");
+        assert_eq!(shown.busiest.as_deref(), Some("You're in Motile the most on Fridays around 10 am"));
+        let friday = |hour: usize| shown.hours[4 * 24 + hour].time.as_str();
+        assert_eq!((friday(10), friday(11)), ("1h", "40m"));
+
+        let one_server = view(&done, window, &names(), &[], false);
+        assert_eq!(one_server.tiles[0].value, "1h 30m");
+    }
+
+    #[test]
     fn nothing_done_is_an_empty_view() {
         let window = Window { since: 0.0, until: DAY, bucket_secs: 3600, utc_offset_secs: 0 };
-        let view = view(&[Done { server_id: "studio".into(), report: ActivityReport::default() }], window, &names());
+        let done = [Done { server_id: "studio".into(), report: ActivityReport::default() }];
+        let view = view(&done, window, &names(), &[], true);
         assert!(view.empty);
         assert_eq!(view.starts.len(), 24);
+    }
+
+    #[test]
+    fn a_chart_of_durations_has_its_lines_where_people_count_time() {
+        assert_eq!(duration_ticks(0.0), [0.0, 1.0]);
+        assert_eq!(duration_ticks(170.0), [0.0, 60.0, 120.0, 180.0]);
+        assert_eq!(duration_ticks(4_000.0), [0.0, 1_800.0, 3_600.0, 5_400.0]);
+        assert_eq!(duration_ticks(30.0 * 3_600.0), [0.0, 43_200.0, 86_400.0, 129_600.0]);
     }
 
     #[test]

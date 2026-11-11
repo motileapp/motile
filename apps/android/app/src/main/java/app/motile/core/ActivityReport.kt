@@ -9,6 +9,9 @@ data class ActivityReport(
     val starts: List<Double>,
     val tiles: List<Tile>,
     val sources: List<Source>,
+    /** Where the chart of the user's time, and of the agents', draws its lines. */
+    val engagedTicks: List<Double>,
+    val secondTicks: List<Double>,
     val clients: List<Client>,
     val hours: List<Hour>,
     val busiest: String?,
@@ -34,6 +37,9 @@ data class ActivityReport(
         val messagePoints: List<Double>,
         val turnPoints: List<Double>,
         val secondPoints: List<Double>,
+        /** The user's time on its devices. */
+        val engagedSeconds: Double,
+        val engagedPoints: List<Double>,
     )
 
     data class Client(
@@ -45,6 +51,9 @@ data class ActivityReport(
         val color: Int,
         val messages: Int,
         val turns: Int,
+        val engagedSeconds: Double,
+        /** The user's time on it and its messages: "2h 10m · 31 messages". */
+        val summary: String,
         val share: Double,
         /** In seconds since 1970. */
         val lastSeen: Double?,
@@ -53,7 +62,8 @@ data class ActivityReport(
         val removed: Boolean,
     )
 
-    data class Hour(val weekday: Int, val hour: Int, val messages: Int, val turns: Int, val level: Int) {
+    /** `time` is the user's time in it, or empty: "42m". */
+    data class Hour(val weekday: Int, val hour: Int, val messages: Int, val turns: Int, val engagedSeconds: Double, val time: String, val level: Int) {
         val id: Int get() = weekday * 24 + hour
     }
 
@@ -84,18 +94,23 @@ data class ActivityReport(
                     Source(
                         source.string("id"), source.string("label"), symbol(source.string("symbol")), source.int("color"),
                         source.int("messages"), source.int("turns"), source.double("seconds"), source.numbers("message_points"),
-                        source.numbers("turn_points"), source.numbers("second_points"),
+                        source.numbers("turn_points"), source.numbers("second_points"), source.double("engaged_seconds"),
+                        source.numbers("engaged_points"),
                     )
                 },
+                engagedTicks = json.numbers("engaged_ticks"),
+                secondTicks = json.numbers("second_ticks"),
                 clients = json.objects("clients").map { client ->
                     Client(
                         client.string("device"), client.string("name"), client.string("client"), client.string("detail"),
                         symbol(client.string("symbol")), client.int("color"), client.int("messages"), client.int("turns"),
-                        client.double("share"), client.optionalDouble("last_seen"), client.bool("active"),
-                        client.bool("this_device"), client.bool("removed"),
+                        client.double("engaged_seconds"), client.string("summary"), client.double("share"),
+                        client.optionalDouble("last_seen"), client.bool("active"), client.bool("this_device"), client.bool("removed"),
                     )
                 },
-                hours = json.objects("hours").map { Hour(it.int("weekday"), it.int("hour"), it.int("messages"), it.int("turns"), it.int("level")) },
+                hours = json.objects("hours").map {
+                    Hour(it.int("weekday"), it.int("hour"), it.int("messages"), it.int("turns"), it.double("engaged_seconds"), it.string("time"), it.int("level"))
+                },
                 busiest = json.optionalString("busiest"),
                 outcomes = lines("outcomes"),
                 agents = lines("agents"),

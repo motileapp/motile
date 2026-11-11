@@ -36,6 +36,7 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import app.motile.core.EngagedWindow
 import app.motile.theme.LocalForeground
 import app.motile.theme.LocalPalette
 import app.motile.theme.LocalRow
@@ -112,7 +113,7 @@ private fun Sheet(onDismiss: () -> Unit, content: @Composable () -> Unit) {
         tonalElevation = 0.dp,
         dragHandle = { Grabber() },
     ) {
-        CompositionLocalProvider(LocalModalHeld provides held) { SheetSurface(close, content) }
+        CompositionLocalProvider(LocalModalHeld provides held) { EngagedWindow { SheetSurface(close, content) } }
     }
 }
 

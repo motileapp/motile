@@ -249,9 +249,11 @@ shadcn's own colours, opacities and radii are gone from the theme.
 - `activity.rs`: what the user and the agents did, for the usage view's Activity tab: the clients
   that connected (each says which it is with `Hello`), every turn once it ends (what started it, the
   client that sent its message, how long it worked and waited on the user, its tools, steers, agents,
-  reasoning and fast mode, how it ended), and every feature used, by a client or by an agent's motile
-  tool, with how the client was connected. All three go into the change log, as the usage does, and
-  stay when their thread is deleted. Once, on the first start that keeps them, the server reads the
+  reasoning and fast mode, how it ended), every feature used, by a client or by an agent's motile
+  tool, with how the client was connected, and the user's time in the clients (`engaged`: a
+  stretch for each device and project, on the server of the project, which a client sends with
+  `Engaged` and the server keeps as the connection's device's). All of it goes into the change log,
+  as the usage does, and stays when its thread is deleted. Once, on the first start that keeps them, the server reads the
   turns and the user's messages from before out of its transcripts (`backfill_activity`); which
   client sent a message, waiting, reasoning, fast mode and features start then.
 - `search.rs`: the sidebar's search through the messages, by an FTS5 trigram index of the user's
@@ -372,6 +374,10 @@ for tests.
   server has them, each with the id the server knows it by, so that a lost connection or a restart
   sends it again and never twice. The clients show what waits, and put back in its composer a
   message its server refused.
+- `engaged.rs`: the user's time in the client, as analytics apps count it: while the client is
+  focused (`Focus`, which also says the project on screen) and they used it (`Input`) in the last
+  five minutes. A longer pause ends the stretch at their last input; leaving ends it at once. Each
+  stretch waits in the cache until the server of its project, or any for none, has it.
 - `follow.rs`: keeps the cached copy of an active thread that isn't open current.
 - `cache.rs`: the client's SQLite copy of its servers' threads, read a page of whole turns at a
   time.
@@ -408,6 +414,8 @@ for tests.
 - `activity.rs`: the Activity tab of the usage view, from every server's activity: the headline
   numbers, the work over time by the client it came from, the clients, the hours of the week, how
   turns ended and what started them, and the features used, every label and number ready to draw.
+  The user's time comes as the stretches themselves, with this client's own that its servers don't
+  have yet, so that time on two devices at once counts once.
 - `limits.rs`: the Limits tab of the usage view: a section for each account, shown once however
   many servers share it, and a row for each window with when it starts over and its pace. The
   gateway's accounts are sections too. It ranks a server's accounts for new threads with

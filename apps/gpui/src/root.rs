@@ -221,6 +221,8 @@ impl Render for Root {
             .font_family(theme::UI_FONT)
             .text_size(TextSize::Sm)
             .line_height(relative(theme::LINE_HEIGHT))
+            // First, so that no press, move or scroll is stopped before it counts as the user's.
+            .child(canvas(|_, _, _| {}, |_, _, window, _| watch_input(window)).absolute().size_0())
             .when(!own_top_bar, |root| {
                 root.child(crate::ui::window_drag_strip("page-top-bar", theme::TOP_BAR, &self.moving))
             })
@@ -342,4 +344,23 @@ impl Render for Root {
                 .size_0(),
             )
     }
+}
+
+/// Every press, move and scroll in the window, for the user's time.
+fn watch_input(window: &mut Window) {
+    window.on_mouse_event(|_: &MouseDownEvent, phase, _, _| {
+        if phase == DispatchPhase::Capture {
+            crate::store::engaged::touched();
+        }
+    });
+    window.on_mouse_event(|_: &MouseMoveEvent, phase, _, _| {
+        if phase == DispatchPhase::Capture {
+            crate::store::engaged::touched();
+        }
+    });
+    window.on_mouse_event(|_: &ScrollWheelEvent, phase, _, _| {
+        if phase == DispatchPhase::Capture {
+            crate::store::engaged::touched();
+        }
+    });
 }
