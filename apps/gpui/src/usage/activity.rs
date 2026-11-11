@@ -20,7 +20,7 @@ use crate::theme::{Colors, ControlSize, IconSize, Layer, Opacity, Radius, Surfac
 use crate::ui::control::dotted;
 use crate::ui::menu::Anchor;
 use crate::ui::{
-    ActionButton, Chip, Segmented, card_default, divider_on, icons, logos, middle_truncated, tabular_numbers,
+    Chip, Highlight, Segmented, card_default, divider_on, edges, icons, logos, middle_truncated, tabular_numbers,
     tabular_text_width, text_width,
 };
 
@@ -724,16 +724,32 @@ impl ActivityView {
         let rows = separated(listed.iter().map(|feature| feature_row(feature, cx)).collect(), cx);
         let more = (features.len() > FEATURES_SHOWN).then(|| {
             let label = if all { "Show fewer".to_string() } else { format!("Show all {}", features.len()) };
-            let id = ElementId::from(SharedString::from(format!("activity-more-{key}")));
-            let button = ActionButton::new(id, label).ghost().small().surface(Surface::Card).on_click(cx.listener(
-                move |this, _, _, cx| {
+            let group = SharedString::from(format!("activity-more-{key}"));
+            let light = Highlight::new()
+                .radius(Radius::LG - 1.)
+                .inset(edges(0., 1., 1., 1.))
+                .surface(Surface::Card)
+                .render(group.clone(), cx)
+                .rounded_t(px(0.));
+            div()
+                .id(ElementId::from(group.clone()))
+                .group(group)
+                .relative()
+                .min_h(px(40.))
+                .flex()
+                .items_center()
+                .justify_center()
+                .text_size(ControlSize::Small.text_size())
+                .font_weight(FontWeight::MEDIUM)
+                .text_color(c.foreground)
+                .child(light)
+                .child(div().relative().child(label))
+                .on_click(cx.listener(move |this, _, _, cx| {
                     if !this.expanded.remove(&key) {
                         this.expanded.insert(key.clone());
                     }
                     cx.notify();
-                },
-            ));
-            div().p(px(6.)).flex().justify_center().child(button)
+                }))
         });
         card_default(div().flex().flex_col(), cx)
             .child(

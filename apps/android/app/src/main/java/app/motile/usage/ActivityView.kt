@@ -66,10 +66,9 @@ import app.motile.theme.TextSize
 import app.motile.theme.Theme
 import app.motile.theme.at
 import app.motile.theme.wash
-import app.motile.ui.ActionButton
-import app.motile.ui.ButtonVariant
 import app.motile.ui.Card
 import app.motile.ui.Chip
+import app.motile.ui.HighlightButton
 import app.motile.ui.Icon
 import app.motile.ui.Segmented
 import app.motile.ui.Text
@@ -450,8 +449,8 @@ private fun FeatureCard(title: String, count: Int, features: List<ActivityReport
         }
         if (features.size > FEATURES_SHOWN) {
             ThemeDivider()
-            Box(Modifier.fillMaxWidth().padding(6.dp), contentAlignment = Alignment.Center) {
-                ActionButton(if (all) "Show fewer" else "Show all ${features.size}", variant = ButtonVariant.Ghost, size = ControlSize.Small) { all = !all }
+            HighlightButton({ all = !all }, Modifier.fillMaxWidth().heightIn(min = scaled(40f).dp), radius = 0.dp, contentAlignment = Alignment.Center) {
+                Text(if (all) "Show fewer" else "Show all ${features.size}", size = TextSize.Xs, weight = FontWeight.Medium, color = palette.foreground)
             }
         }
     }
