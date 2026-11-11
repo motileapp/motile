@@ -403,7 +403,7 @@ struct ActivityView: View {
         if seconds < 60 { return "\(seconds)s" }
         if seconds < 3600 { return "\(seconds / 60)m" }
         let (hours, minutes) = (seconds / 3600, seconds % 3600 / 60)
-        return minutes == 0 || hours >= 100 ? "\(hours)h" : "\(hours)h \(minutes)m"
+        return minutes == 0 || hours >= 100 ? "\(hours.formatted())h" : "\(hours)h \(minutes)m"
     }
 }
 

@@ -647,5 +647,5 @@ private fun activityDuration(value: Double): String {
     if (seconds < 3600) return "${seconds / 60}m"
     val hours = seconds / 3600
     val minutes = seconds % 3600 / 60
-    return if (minutes == 0 || hours >= 100) "${hours}h" else "${hours}h ${minutes}m"
+    return if (minutes == 0 || hours >= 100) "${hours.grouped}h" else "${hours}h ${minutes}m"
 }
