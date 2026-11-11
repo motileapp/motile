@@ -760,10 +760,7 @@ impl Sidebar {
             .flex_1()
             .min_h_0()
             .child(self.refit())
-            .on_scroll_wheel(cx.listener(|this, _, _, cx| {
-                this.list.stop_scrolling();
-                this.forget_pointer(cx);
-            }))
+            .on_scroll_wheel(cx.listener(|this, _, _, cx| this.forget_pointer(cx)))
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(|this, _, _, cx| {
