@@ -178,6 +178,9 @@ data class ControlLook(
     }
 
     /** A button filled with a colour of its own lights by that colour at opacity lit. */
+    /** Whether it has a colour before the pointer is over it. */
+    val fillsAtRest: Boolean get() = !(variant == ButtonVariant.Ghost && !selected) && variant != ButtonVariant.Link
+
     fun fill(palette: Palette, dark: Boolean): Color {
         fun filled(color: Color) = if (lit) color.at(Opacity.Lit, dark) else color
         return when (variant) {
@@ -292,7 +295,7 @@ private val SIGNAL_LINE = 3.dp
 
 /**
  * The look's fill and, for an outline or over a picture, its border. With an `under` fill, the look's grows from the
- * centre over it, `revealed` of the way.
+ * centre over it, `revealed` of the way, or, when the look has no fill at rest, the under one fades out.
  */
 @Composable
 fun Modifier.controlBackground(look: ControlLook, under: Color? = null, revealed: () -> Float = { 1f }): Modifier {
@@ -301,7 +304,7 @@ fun Modifier.controlBackground(look: ControlLook, under: Color? = null, revealed
     val fill = look.fill(palette, LocalDark.current)
     val filled = if (under == null) background(fill, shape) else drawBehind {
         clipPath(Path().apply { addOutline(shape.createOutline(size, layoutDirection, this@drawBehind)) }) {
-            drawRect(under)
+            drawRect(under, alpha = if (look.fillsAtRest) 1f else 1f - revealed())
             val reach = sqrt(size.width * size.width + size.height * size.height) / 2
             drawCircle(fill, radius = reach * RevealEasing.transform(revealed()))
         }

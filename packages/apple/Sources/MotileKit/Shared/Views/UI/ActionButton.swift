@@ -151,6 +151,10 @@ extension ControlLook {
         return look
     }
 
+    /// Whether it has a colour before the pointer is over it. A button that has none fades the
+    /// old one out, where another grows its own over it.
+    var fillsAtRest: Bool { !(variant == .ghost && !selected) && variant != .link }
+
     /// Whether a tint colours its words and symbol.
     var takesTint: Bool { variant == .ghost || variant == .secondary || variant == .outline }
 
@@ -456,14 +460,15 @@ private struct ControlBody<Label: View>: View {
                 ZStack {
                     if let rings { SignalRings(look: rings.look, stopped: rings.stopped) }
                     let changing = settled != nil && settled != look.variant
-                    if let old = changing ? settled : grownOver {
-                        look.as(old).background
-                            .appearing(.identity)
-                    }
-                    if changing || revealedAt != nil {
+                    let old = changing ? settled : grownOver
+                    if old != nil || revealedAt != nil {
                         TimelineView(.animation) { context in
                             let since = revealedAt.map { context.date.timeIntervalSince($0) } ?? 0
-                            look.background.mask { Reveal(revealed: changing ? 0 : min(1, since / ControlLook.recolor)) }
+                            let revealed = changing ? 0 : min(1, since / ControlLook.recolor)
+                            ZStack {
+                                if let old { look.as(old).background.opacity(look.fillsAtRest ? 1 : 1 - revealed) }
+                                look.background.mask { Reveal(revealed: revealed) }
+                            }
                         }
                         .transaction { $0.animation = nil }
                         .appearing(.identity)

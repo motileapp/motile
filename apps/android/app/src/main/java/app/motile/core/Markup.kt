@@ -92,6 +92,9 @@ class MarkupSession private constructor(
 
     fun up(x: Float, y: Float) = send("op" to "up", "x" to x, "y" to y)
 
+    /** Drops the mark the pointer started, as a pinch does. */
+    fun cancel() = send("op" to "cancel")
+
     /** Keeps the selected pin's note and puts the pin down. */
     fun deselect() {
         commitNote()

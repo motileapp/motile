@@ -388,7 +388,11 @@ enum Surface {
             case .controlLit, .controlLitOnSelected, .rowSelected: Theme.backgroundSecondaryAccentStronger
             }
         case .card: Theme.cardAccent
-        case .popover: Theme.popoverAccent
+        case .popover:
+            switch layer {
+            case .control, .row, .box, .chip: Theme.popoverAccent
+            case .controlLit, .controlLitOnSelected, .rowSelected: Theme.popoverAccentStronger
+            }
         case .composer: Theme.borderComposer
         case .composerBox:
             switch layer {

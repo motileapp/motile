@@ -15,6 +15,7 @@
   --card-accent: #e6e8ec;
   --popover: #ffffff;
   --popover-accent: #eaecf0;
+  --popover-accent-stronger: #dfe2e8;
   --foreground: #22242b;
   --emphasized-foreground: #000000;
   --muted-foreground: #606470;
@@ -139,6 +140,7 @@
   --card-accent: #1e1f26;
   --popover: #191a1f;
   --popover-accent: #212329;
+  --popover-accent-stronger: #2b2c32;
   --foreground: #d0d2d9;
   --emphasized-foreground: #ffffff;
   --muted-foreground: #9a9eab;

@@ -19,6 +19,7 @@ class Palette(
     val cardAccent: Color,
     val popover: Color,
     val popoverAccent: Color,
+    val popoverAccentStronger: Color,
     val foreground: Color,
     val emphasizedForeground: Color,
     val mutedForeground: Color,
@@ -121,6 +122,7 @@ class Palette(
             cardAccent = Color(0xFFE6E8EC),
             popover = Color(0xFFFFFFFF),
             popoverAccent = Color(0xFFEAECF0),
+            popoverAccentStronger = Color(0xFFDFE2E8),
             foreground = Color(0xFF22242B),
             emphasizedForeground = Color(0xFF000000),
             mutedForeground = Color(0xFF606470),
@@ -223,6 +225,7 @@ class Palette(
             cardAccent = Color(0xFF1E1F26),
             popover = Color(0xFF191A1F),
             popoverAccent = Color(0xFF212329),
+            popoverAccentStronger = Color(0xFF2B2C32),
             foreground = Color(0xFFD0D2D9),
             emphasizedForeground = Color(0xFFFFFFFF),
             mutedForeground = Color(0xFF9A9EAB),
@@ -327,6 +330,7 @@ class Palette(
         "card-accent" -> cardAccent
         "popover" -> popover
         "popover-accent" -> popoverAccent
+        "popover-accent-stronger" -> popoverAccentStronger
         "foreground" -> foreground
         "emphasized-foreground" -> emphasizedForeground
         "muted-foreground" -> mutedForeground

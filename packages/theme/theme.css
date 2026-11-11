@@ -27,6 +27,7 @@
   --color-card-accent: var(--card-accent);
   --color-popover: var(--popover);
   --color-popover-accent: var(--popover-accent);
+  --color-popover-accent-stronger: var(--popover-accent-stronger);
   --color-foreground: var(--foreground);
   --color-emphasized-foreground: var(--emphasized-foreground);
   --color-muted-foreground: var(--muted-foreground);
