@@ -782,6 +782,7 @@ final class TranscriptView: FlippedView, RowOwner {
         let firstLowered = workingIndex
         let workingRoom = showsWorking ? Self.workingHeight : 0
 
+        var laidOut = Set<String>()
         // Measuring changes heights, which moves the viewport, which changes what is visible.
         // It settles in a pass or two.
         for _ in 0..<4 {
@@ -799,6 +800,7 @@ final class TranscriptView: FlippedView, RowOwner {
                 if !measured[index] || stale.contains(row.id) {
                     let height = view.layout(width: width)
                     stale.remove(row.id)
+                    laidOut.insert(row.id)
                     measured[index] = true
                     if abs(height - heights[index]) > 0.5 {
                         heights[index] = height
@@ -831,6 +833,8 @@ final class TranscriptView: FlippedView, RowOwner {
         updateJumpButton()
         updateMetaRow()
         for view in views.values { view.viewportMoved() }
+        // A row laid out again starts unlit, though the pointer may still be over it.
+        for id in laidOut { views[id]?.hoverAgainInside() }
         if !pendingHighlight.isEmpty {
             let ids = pendingHighlight
             pendingHighlight.removeAll()

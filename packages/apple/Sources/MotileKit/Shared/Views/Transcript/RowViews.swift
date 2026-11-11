@@ -1142,7 +1142,6 @@ final class ChangesRowView: RowView {
             didSet {
                 hovered = nil
                 redraw()
-                hoverAgain()
             }
         }
         var onClick: ((ChangesContent.Entry) -> Void)?
