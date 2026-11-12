@@ -53,7 +53,7 @@ struct ActivityReport {
     /// days of weeks a row a weekday, split into four hours for up to thirty days.
     struct Heatmap {
         struct Cell {
-            /// When it is: "Wed, Nov 11, 5–6 PM", "Wed, Nov 11, 4–8 PM" or "Wed, Nov 11".
+            /// When it is: "Wed, Nov 11, 17:00–18:00", "Wed, Nov 11, 16:00–20:00" or "Wed, Nov 11".
             let label: String
             let messages: Int
             let turns: Int

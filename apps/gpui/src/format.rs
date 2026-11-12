@@ -20,7 +20,7 @@ pub fn stamp(seconds: f64) -> String {
     let Some(time) = Local.timestamp_opt(seconds as i64, 0).single() else { return String::new() };
     let today = time.date_naive() == Local::now().date_naive();
     system::stamp(seconds, !today)
-        .unwrap_or_else(|| time.format(if today { "%-I:%M %p" } else { "%b %-d, %Y at %-I:%M %p" }).to_string())
+        .unwrap_or_else(|| time.format(if today { "%H:%M" } else { "%b %-d, %Y at %H:%M" }).to_string())
 }
 
 /// Dollars and cents; less than a cent is said so.
@@ -260,7 +260,7 @@ mod tests {
         assert!(!usd(1234.5).is_empty());
         assert!(usd(0.004).starts_with('<'));
         assert!(!percent(0.42).is_empty());
-        assert!(!date(1_760_000_000., "EEEj", "%a %-I %p").is_empty());
+        assert!(!date(1_760_000_000., "EEEj", "%a %H:00").is_empty());
         assert!((1..=7).contains(&first_weekday()));
     }
 }

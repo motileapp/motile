@@ -76,7 +76,7 @@ data class ActivityReport(
         /** What a cell is: "an hour", "four hours" or "a day". */
         val unit: String,
     ) {
-        /** `label` says when it is: "Wed, Nov 11, 5–6 PM", "Wed, Nov 11, 4–8 PM" or "Wed, Nov 11"; `time` is the user's time in it, or empty: "42m". */
+        /** `label` says when it is: "Wed, Nov 11, 17:00–18:00", "Wed, Nov 11, 16:00–20:00" or "Wed, Nov 11"; `time` is the user's time in it, or empty: "42m". */
         data class Cell(val label: String, val messages: Int, val turns: Int, val time: String, val timeLevel: Int, val messageLevel: Int)
 
         data class AxisLabel(val column: Int, val label: String)

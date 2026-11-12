@@ -188,7 +188,7 @@ pub struct ActivityAxisLabel {
 
 #[derive(Clone, PartialEq, Debug, Deserialize)]
 pub struct ActivityCell {
-    /// When it is: "Wed, Nov 11, 5–6 PM", "Wed, Nov 11, 4–8 PM" or "Wed, Nov 11".
+    /// When it is: "Wed, Nov 11, 17:00–18:00", "Wed, Nov 11, 16:00–20:00" or "Wed, Nov 11".
     pub label: String,
     pub messages: u32,
     pub turns: u32,
@@ -663,10 +663,10 @@ mod tests {
             heatmap: Heatmap {
                 rows: Vec::new(),
                 columns: 2,
-                axis: vec![AxisLabel { column: 0, label: "12 AM".into() }],
+                axis: vec![AxisLabel { column: 0, label: "00:00".into() }],
                 cells: vec![
                     Some(HeatCell {
-                        label: "Wed, Nov 11, 3–4 PM".into(),
+                        label: "Wed, Nov 11, 15:00–16:00".into(),
                         messages: 3,
                         turns: 1,
                         engaged_seconds: 2520.,
@@ -699,7 +699,7 @@ mod tests {
         let heatmap = &report.heatmap;
         assert_eq!((heatmap.row_count(), heatmap.axis[0].column, heatmap.unit.as_str()), (1, 0, "an hour"));
         let cell = heatmap.cells[0].as_ref().unwrap();
-        assert_eq!((cell.label.as_str(), cell.time_level, cell.time.as_str()), ("Wed, Nov 11, 3–4 PM", 4, "42m"));
+        assert_eq!((cell.label.as_str(), cell.time_level, cell.time.as_str()), ("Wed, Nov 11, 15:00–16:00", 4, "42m"));
         assert_eq!(heatmap.cells[1], None);
         assert_eq!(report.outcomes[0].agent, Some(Agent::Codex));
     }

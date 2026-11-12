@@ -606,12 +606,12 @@ fn monotone_tangents(points: &[Point<Pixels>]) -> Vec<f32> {
 }
 
 pub(super) fn axis_label(start: f64, period: UsagePeriod) -> String {
-    if period == UsagePeriod::Day { format::date(start, "j", "%-I %p") } else { format::date(start, "MMMd", "%b %-d") }
+    if period == UsagePeriod::Day { format::date(start, "j", "%H:00") } else { format::date(start, "MMMd", "%b %-d") }
 }
 
 fn pointed_label(start: f64, period: UsagePeriod) -> String {
     if period == UsagePeriod::Day {
-        format::date(start, "EEEj", "%a %-I %p")
+        format::date(start, "EEEj", "%a %H:00")
     } else {
         format::date(start, "EEEMMMd", "%a, %b %-d")
     }
