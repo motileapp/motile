@@ -200,6 +200,37 @@ final class GestureTests: XCTestCase {
         return false
     }
 
+    /// A finger slid sideways across the usage chart points at the day under it, which the legend
+    /// then names, and leaves the page where it is. One slid up the chart scrolls the page. One slid
+    /// across the cells of when the user works picks the cell it ends on.
+    func testAFingerSlidAcrossTheUsageChartsPointsAtWhatIsUnderItAndOneSlidUpScrollsThePage() {
+        app.swipeRight()
+        XCTAssertTrue(shown(newThread))
+        app.buttons["Account"].tap()
+        app.buttons["Usage"].tap()
+        let heading = app.staticTexts["Over time"]
+        let below = app.staticTexts["When you work"]
+        XCTAssertTrue(shown(heading))
+        XCTAssertTrue(below.waitForExistence(timeout: 10))
+        let pointedDay = app.staticTexts.matching(NSPredicate(format: "label MATCHES %@", "^(Mon|Tue|Wed|Thu|Fri|Sat|Sun)[a-z]*[ ,].+")).firstMatch
+        XCTAssertFalse(pointedDay.exists)
+        let top = settled(heading)
+        let middle = (app.buttons["Turns"].frame.maxY + below.frame.minY) / 2
+        let chart = app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: app.frame.width * 0.2, dy: middle))
+        chart.press(forDuration: 0.05, thenDragTo: chart.withOffset(CGVector(dx: app.frame.width * 0.5, dy: 0)), withVelocity: .slow, thenHoldForDuration: 0)
+        XCTAssertTrue(pointedDay.waitForExistence(timeout: 3))
+        XCTAssertEqual(heading.frame.minY, top, accuracy: 1)
+        chart.press(forDuration: 0.05, thenDragTo: chart.withOffset(CGVector(dx: 0, dy: -200)), withVelocity: .slow, thenHoldForDuration: 0)
+        XCTAssertLessThan(heading.frame.minY, top - 50)
+        let hint = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Tap ")).firstMatch
+        let row = app.staticTexts["Wed"]
+        XCTAssertTrue(shown(hint))
+        XCTAssertTrue(shown(row))
+        let cells = app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: row.frame.maxX + 30, dy: row.frame.midY))
+        cells.press(forDuration: 0.05, thenDragTo: cells.withOffset(CGVector(dx: app.frame.width * 0.5, dy: 0)), withVelocity: .slow, thenHoldForDuration: 0)
+        XCTAssertTrue(hint.waitForNonExistence(timeout: 3))
+    }
+
     func testSettingsOpenInASheetWhoseSectionsPushAndCloseTakesThemAway() {
         app.swipeRight()
         XCTAssertTrue(shown(newThread))

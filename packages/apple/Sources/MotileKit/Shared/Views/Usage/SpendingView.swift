@@ -203,7 +203,7 @@ struct SpendingView: View {
                 domain: report.agents.map(\.agent.name), range: report.agents.map { $0.agent.color }
             )
             .chartLegend(.hidden)
-            .chartPointing($pointed, period: period)
+            .chartPointing($pointed, starts: report.starts, marks: .points)
             .chartXScale(range: .plotDimension(startPadding: 16, endPadding: 16))
             .chartXAxis {
                 AxisMarks(preset: .aligned, values: .automatic(desiredCount: 5)) { _ in
@@ -225,9 +225,7 @@ struct SpendingView: View {
     }
 
     private var pointedIndex: Int? {
-        guard let pointed, !report.starts.isEmpty else { return nil }
-        let nearest = report.starts.enumerated().min { abs($0.element.timeIntervalSince(pointed)) < abs($1.element.timeIntervalSince(pointed)) }
-        return nearest?.offset
+        pointed.flatMap { ChartMarks.points.index(at: $0, in: report.starts) }
     }
 
     private var lines: some View {
