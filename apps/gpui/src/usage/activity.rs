@@ -1,6 +1,6 @@
 //! What the user and the agents did on the servers counted, the Activity tab of the usage route:
 //! the headline numbers, the work over time by where it came from, the clients it came from, the
-//! hours of the week, how the turns went and the features used.
+//! times it was done at, how the turns went and the features used.
 
 use gpui_kit::prelude::*;
 use gpui_kit::*;
@@ -12,7 +12,8 @@ use crate::format;
 use crate::models::ago;
 use crate::store::Store;
 use crate::store::usage::{
-    ActivityClient, ActivityFact, ActivityHour, ActivityLine, ActivityReport, ActivitySource, FeatureLine, UsagePeriod,
+    ActivityClient, ActivityFact, ActivityHeatmap, ActivityLine, ActivityReport, ActivitySource, FeatureLine,
+    UsagePeriod,
 };
 use crate::theme::{Colors, ControlSize, IconSize, Layer, Opacity, Radius, Surface, TextSize, colors};
 use crate::ui::control::dotted;
@@ -30,9 +31,7 @@ const BADGE: f32 = 32.;
 const FEATURE_BAR_WIDTH: f32 = 56.;
 const HEATMAP_PADDING: f32 = 16.;
 const HEATMAP_GAP: f32 = 3.;
-const DAY_LABELS: f32 = 30.;
-const DAYS: [&str; 7] = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-const WEEKDAYS: [&str; 7] = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+const HEATMAP_CELL_HEIGHT: f32 = 18.;
 const MEASURE_KEY: &str = "activity.measure";
 const BREAKDOWN_KEY: &str = "activity.breakdown";
 const WHO_KEY: &str = "activity.who";
@@ -155,7 +154,7 @@ pub struct ActivityView {
     pointed: Option<usize>,
     /// Where the plot was drawn, to tell which bucket the pointer is over.
     plot: Anchor,
-    /// The hour of the week the pointer is over.
+    /// The heatmap's cell the pointer is over, or the last one clicked.
     chosen: Option<usize>,
     /// How wide the content is, which lays it out.
     pub width: f32,
@@ -492,7 +491,7 @@ impl ActivityView {
             .gap(px(12.))
             .child(heading("When you work", busiest, Some(picker.into_any_element()), true, cx))
             .child(card_default(div().p(px(HEATMAP_PADDING)), cx).child(self.heatmap(
-                &report.hours,
+                &report.heatmap,
                 measure,
                 window,
                 cx,
@@ -500,106 +499,117 @@ impl ActivityView {
             .into_any_element()
     }
 
-    /// The hours of the week, a row a day, each as busy as its colour is strong. The hour the
-    /// pointer is over says what was done in it.
+    /// When the work was done, each slice as busy as its colour is strong. The slice the pointer is
+    /// over, or the last one clicked, says what was done in it. The gaps between the slices are only
+    /// drawn: each one's hit area is an even share of its cell's.
     fn heatmap(
         &self,
-        hours: &[ActivityHour],
+        heatmap: &ActivityHeatmap,
         measure: HourMeasure,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let c = colors(cx);
         let inner = self.width - 2. * HEATMAP_PADDING - 2.;
-        let side = ((inner - DAY_LABELS - HEATMAP_GAP * 24.) / 24.).max(4.);
-        let tall = side.min(18.);
-        let corner = Radius::XS.min(side / 4.);
-        let rows = (0..7).map(|day| {
-            div()
-                .flex()
-                .items_center()
-                .gap(px(HEATMAP_GAP))
-                .child(
-                    div()
-                        .flex_shrink_0()
-                        .w(px(DAY_LABELS))
-                        .text_size(TextSize::Xxs)
-                        .text_color(c.muted_foreground)
-                        .child(DAYS[day]),
-                )
-                .children((0..24).map(|hour| {
-                    let index = day * 24 + hour;
-                    let level = hours.get(index).map_or(0, |hour| match measure {
-                        HourMeasure::Time => hour.time_level,
-                        HourMeasure::Messages => hour.message_level,
-                    });
-                    div()
-                        .id(("activity-hour", index))
-                        .flex_shrink_0()
-                        .w(px(side))
-                        .h(px(tall))
-                        .rounded(px(corner))
-                        .bg(level_fill(level, c))
-                        .when(self.chosen == Some(index), |cell| cell.border_1().border_color(c.foreground))
-                        .on_hover(cx.listener(move |this, inside: &bool, _, cx| {
-                            let chosen = match (*inside, this.chosen) {
-                                (true, _) => Some(index),
-                                (false, Some(shown)) if shown == index => None,
-                                (false, shown) => shown,
-                            };
-                            if this.chosen != chosen {
-                                this.chosen = chosen;
-                                cx.notify();
-                            }
-                        }))
-                }))
+        let labels = heatmap
+            .rows
+            .iter()
+            .map(|row| text_width(row, TextSize::Xxs, FontWeight::NORMAL, window))
+            .fold(0., f32::max)
+            .ceil();
+        let beside_labels = if heatmap.rows.is_empty() { 0. } else { labels + 8. };
+        let width = (inner - beside_labels).max(0.);
+        let pitch = (width + HEATMAP_GAP) / heatmap.columns.max(1) as f32;
+        let cell_width = (pitch - HEATMAP_GAP).max(1.);
+        let height = cell_width.clamp(4., HEATMAP_CELL_HEIGHT);
+        let corner = Radius::XS.min(cell_width.min(height) / 4.);
+        let label = |text: &str| {
+            div().text_size(TextSize::Xxs).text_color(c.muted_foreground).whitespace_nowrap().child(text.to_string())
+        };
+        let row_labels = div()
+            .flex_shrink_0()
+            .w(px(labels))
+            .flex()
+            .flex_col()
+            .gap(px(HEATMAP_GAP))
+            .children(heatmap.rows.iter().map(|row| label(row).h(px(height)).flex().items_center()));
+        let rows = (0..heatmap.row_count()).map(|row| {
+            div().flex().children((0..heatmap.columns).map(|column| {
+                let index = row * heatmap.columns + column;
+                let slot = div().flex_shrink_0().w(px(pitch)).h(px(height + HEATMAP_GAP));
+                let Some(cell) = heatmap.cells.get(index).and_then(Option::as_ref) else {
+                    return slot.into_any_element();
+                };
+                let level = match measure {
+                    HourMeasure::Time => cell.time_level,
+                    HourMeasure::Messages => cell.message_level,
+                };
+                let shape = div()
+                    .absolute()
+                    .top(px(HEATMAP_GAP / 2.))
+                    .left(px(HEATMAP_GAP / 2.))
+                    .w(px(cell_width))
+                    .h(px(height))
+                    .rounded(px(corner))
+                    .bg(level_fill(level, c))
+                    .when(self.chosen == Some(index), |shape| shape.border_1().border_color(c.foreground));
+                slot.relative()
+                    .id(("activity-cell", index))
+                    .child(shape)
+                    .on_hover(cx.listener(move |this, inside: &bool, _, cx| {
+                        let chosen = match (*inside, this.chosen) {
+                            (true, _) => Some(index),
+                            (false, Some(shown)) if shown == index => None,
+                            (false, shown) => shown,
+                        };
+                        if this.chosen != chosen {
+                            this.chosen = chosen;
+                            cx.notify();
+                        }
+                    }))
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        this.chosen = if this.chosen == Some(index) { None } else { Some(index) };
+                        cx.notify();
+                    }))
+                    .into_any_element()
+            }))
         });
-        let hour_labels =
-            div().pt(px(2.)).flex().gap(px(HEATMAP_GAP)).child(div().flex_shrink_0().w(px(DAY_LABELS))).children(
-                [0, 6, 12, 18].map(|hour| {
-                    div()
-                        .flex_shrink_0()
-                        .w(px(side * 6. + HEATMAP_GAP * 5.))
-                        .text_size(TextSize::Xxs)
-                        .text_color(c.muted_foreground)
-                        .whitespace_nowrap()
-                        .overflow_hidden()
-                        .text_ellipsis()
-                        .child(hour_label(hour))
-                }),
-            );
+        let cells = div().w(px(width + HEATMAP_GAP)).m(px(-HEATMAP_GAP / 2.)).flex().flex_col().children(rows);
+        let axis = div().relative().w(px(width)).child(label(" ").invisible()).children(
+            heatmap.axis.iter().map(|axis| label(&axis.label).absolute().top_0().left(px(axis.column as f32 * pitch))),
+        );
+        let grid = div()
+            .flex()
+            .items_start()
+            .gap(px(8.))
+            .when(!heatmap.rows.is_empty(), |grid| grid.child(row_labels))
+            .child(div().flex_shrink_0().w(px(width)).flex().flex_col().gap(px(6.)).child(cells).child(axis));
         div()
             .flex()
             .flex_col()
             .gap(px(12.))
-            .child(div().flex().flex_col().gap(px(HEATMAP_GAP)).children(rows).child(hour_labels))
-            .child(self.heatmap_caption(hours, inner, window, c))
+            .child(grid)
+            .child(self.heatmap_caption(heatmap, inner, window, c))
             .into_any_element()
     }
 
-    /// What the chosen hour holds, or how to choose one, and the key to the colours: beside each
+    /// What the chosen cell holds, or how to choose one, and the key to the colours: beside each
     /// other, or the key under it where they don't fit.
-    fn heatmap_caption(&self, hours: &[ActivityHour], room: f32, window: &mut Window, c: &Colors) -> Div {
-        let chosen = self.chosen.and_then(|index| hours.get(index));
+    fn heatmap_caption(&self, heatmap: &ActivityHeatmap, room: f32, window: &mut Window, c: &Colors) -> Div {
+        let chosen = self.chosen.and_then(|index| heatmap.cells.get(index)).and_then(Option::as_ref);
         let (said, color) = match chosen {
-            Some(hour) => {
+            Some(cell) => {
                 let messages =
-                    if hour.messages == 1 { "1 message".into() } else { format!("{} messages", number(hour.messages)) };
-                let turns = if hour.turns == 1 { "1 turn".into() } else { format!("{} turns", number(hour.turns)) };
-                let when = format!(
-                    "{}, {}–{}",
-                    WEEKDAYS[usize::from(hour.weekday).min(6)],
-                    hour_label(hour.hour),
-                    hour_label((hour.hour + 1) % 24)
-                );
-                let said = if hour.time.is_empty() {
-                    format!("{when} · {messages} · {turns}")
+                    if cell.messages == 1 { "1 message".into() } else { format!("{} messages", number(cell.messages)) };
+                let turns = if cell.turns == 1 { "1 turn".into() } else { format!("{} turns", number(cell.turns)) };
+                let said = if cell.time.is_empty() {
+                    format!("{} · {messages} · {turns}", cell.label)
                 } else {
-                    format!("{when} · {} · {messages} · {turns}", hour.time)
+                    format!("{} · {} · {messages} · {turns}", cell.label, cell.time)
                 };
                 (said, c.muted_foreground)
             }
-            None => ("Point at an hour to see what was done in it".to_string(), c.muted_stronger_foreground),
+            None => (format!("Point at {} to see what was done in it", heatmap.unit), c.muted_stronger_foreground),
         };
         let words = |text: &str, window: &mut Window| text_width(text, TextSize::Xxs, FontWeight::NORMAL, window);
         let key_width = words("Less", window) + words("More", window) + 2. * 3. + 5. * 10. + 6. * HEATMAP_GAP;
@@ -697,10 +707,8 @@ impl ActivityView {
             .then(|| self.picker(WHO_KEY, offered, current, Who::label).fills(!self.beside()).into_any_element());
         let shown = match current {
             Who::You => {
-                let cards = report
-                    .features
-                    .iter()
-                    .map(|group| {
+                let column = |groups: Vec<&crate::store::usage::FeatureGroup>| {
+                    div().flex_1().min_w_0().flex().flex_col().gap(px(12.)).children(groups.into_iter().map(|group| {
                         self.feature_card(
                             &format!("you-{}", group.name),
                             &group.name,
@@ -709,13 +717,23 @@ impl ActivityView {
                             window,
                             cx,
                         )
-                    })
-                    .collect();
-                grid(cards, if self.beside() { 2 } else { 1 }, 12., false)
+                    }))
+                };
+                match self.beside() {
+                    true => div()
+                        .flex()
+                        .items_start()
+                        .gap(px(12.))
+                        .child(column(report.features.iter().filter(|group| group.column == 0).collect()))
+                        .child(column(report.features.iter().filter(|group| group.column == 1).collect()))
+                        .into_any_element(),
+                    false => column(report.features.iter().collect()).into_any_element(),
+                }
             }
             Who::Agents => {
                 let count = report.agent_features.iter().map(|feature| feature.count).sum();
                 self.feature_card("agents", "Motile tools", count, &report.agent_features, window, cx)
+                    .into_any_element()
             }
         };
         div()
@@ -1091,30 +1109,10 @@ fn symbol_name(name: &str) -> &'static str {
     }
 }
 
-fn hour_label(hour: u8) -> String {
-    match hour {
-        0 => "12 am".into(),
-        12 => "12 pm".into(),
-        1..12 => format!("{hour} am"),
-        _ => format!("{} pm", hour - 12),
-    }
-}
-
 fn pointed_label(start: f64, period: UsagePeriod) -> String {
     if period == UsagePeriod::Day {
         format::date(start, "EEEj", "%a %-I %p")
     } else {
         format::date(start, "EEEMMMd", "%a, %b %-d")
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::hour_label;
-
-    #[test]
-    fn hours_read_as_on_a_twelve_hour_clock() {
-        let labels: Vec<String> = [0, 6, 11, 12, 18, 23].into_iter().map(hour_label).collect();
-        assert_eq!(labels, ["12 am", "6 am", "11 am", "12 pm", "6 pm", "11 pm"]);
     }
 }

@@ -49,20 +49,52 @@ struct ActivityReport {
         var id: String { device }
     }
 
-    struct Hour: Identifiable {
-        let weekday: Int
-        let hour: Int
-        let messages: Int
-        let turns: Int
-        let engagedSeconds: Double
-        /// The user's time in it, or empty: "42m".
-        let time: String
-        /// From 0, nothing, to 4, by the user's time in it next to the hour with the most.
-        let timeLevel: Int
-        /// From 0 to 4, by its messages next to the hour with the most.
-        let messageLevel: Int
+    /// When the work was done: the hours of a day in a row, the hours of a week a row a day, or the
+    /// days of weeks a row a weekday, split into four hours for up to thirty days.
+    struct Heatmap {
+        struct Cell {
+            /// When it is: "Wed, Nov 11, 5–6 PM", "Wed, Nov 11, 4–8 PM" or "Wed, Nov 11".
+            let label: String
+            let messages: Int
+            let turns: Int
+            /// The user's time in it, or empty: "42m".
+            let time: String
+            /// From 0, nothing, to 4, by the user's time in it next to the cell with the most.
+            let timeLevel: Int
+            /// From 0 to 4, by its messages next to the cell with the most.
+            let messageLevel: Int
+        }
 
-        var id: Int { weekday * 24 + hour }
+        struct AxisLabel: Identifiable {
+            let column: Int
+            let label: String
+
+            var id: Int { column }
+        }
+
+        /// The rows' names, or none for a single row.
+        let rows: [String]
+        let columns: Int
+        let axis: [AxisLabel]
+        /// Row by row; one yet to come is nil.
+        let cells: [Cell?]
+        /// What a cell is: "an hour", "four hours" or "a day".
+        let unit: String
+
+        var rowCount: Int { columns == 0 ? 0 : cells.count / columns }
+
+        init(json: JSON) {
+            rows = json.strings("rows")
+            columns = json.int("columns")
+            axis = json.objects("axis").map { AxisLabel(column: $0.int("column"), label: $0.string("label")) }
+            cells = (json["cells"] as? [Any] ?? []).map { cell in
+                guard let cell = cell as? JSON else { return nil }
+                return Cell(
+                    label: cell.string("label"), messages: cell.int("messages"), turns: cell.int("turns"),
+                    time: cell.string("time"), timeLevel: cell.int("time_level"), messageLevel: cell.int("message_level"))
+            }
+            unit = json.string("unit")
+        }
     }
 
     struct Line: Identifiable {
@@ -96,6 +128,8 @@ struct ActivityReport {
         let name: String
         let count: Int
         let features: [Feature]
+        /// Which of two columns side by side it goes in, 0 or 1.
+        let column: Int
 
         var id: String { name }
     }
@@ -108,7 +142,7 @@ struct ActivityReport {
     let engagedTicks: [Double]
     let secondTicks: [Double]
     let clients: [Client]
-    let hours: [Hour]
+    let heatmap: Heatmap
     let busiestTime: String?
     let busiestMessages: String?
     let outcomes: [Line]
@@ -143,12 +177,7 @@ struct ActivityReport {
                 lastSeen: client.optionalDouble("last_seen").map(Date.init(timeIntervalSince1970:)),
                 active: client.bool("active"), thisDevice: client.bool("this_device"), removed: client.bool("removed"))
         }
-        hours = json.objects("hours").map { hour in
-            Hour(
-                weekday: hour.int("weekday"), hour: hour.int("hour"), messages: hour.int("messages"), turns: hour.int("turns"),
-                engagedSeconds: hour.double("engaged_seconds"), time: hour.string("time"),
-                timeLevel: hour.int("time_level"), messageLevel: hour.int("message_level"))
-        }
+        heatmap = Heatmap(json: json.object("heatmap") ?? [:])
         busiestTime = json.optionalString("busiest_time")
         busiestMessages = json.optionalString("busiest_messages")
         let lines = { (key: String) in
@@ -170,7 +199,9 @@ struct ActivityReport {
                 detail: line.string("detail"))
         }
         features = json.objects("features").map { group in
-            FeatureGroup(name: group.string("name"), count: group.int("count"), features: group.objects("features").map(feature))
+            FeatureGroup(
+                name: group.string("name"), count: group.int("count"), features: group.objects("features").map(feature),
+                column: group.int("column"))
         }
         agentFeatures = json.objects("agent_features").map(feature)
     }

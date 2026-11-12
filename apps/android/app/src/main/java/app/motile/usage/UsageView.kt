@@ -22,6 +22,7 @@ import app.motile.core.Server
 import app.motile.core.UsageModel
 import app.motile.theme.LocalPalette
 import app.motile.theme.TextSize
+import app.motile.theme.Theme
 import app.motile.ui.Check
 import app.motile.ui.Spinner
 import app.motile.ui.Text
@@ -37,7 +38,7 @@ fun UsageContent(model: UsageModel, modifier: Modifier = Modifier, margin: Dp = 
     val scroll = rememberScrollState()
     Box(modifier.fillMaxWidth().edgeFade(above = { scroll.value.toFloat() }, below = { 0f }).verticalScroll(scroll), contentAlignment = Alignment.TopCenter) {
         Column(
-            Modifier.widthIn(max = 880.dp).fillMaxWidth().padding(start = margin, end = margin, top = top, bottom = 80.dp),
+            Modifier.widthIn(max = Theme.contentWidth).fillMaxWidth().padding(start = margin, end = margin, top = top, bottom = 80.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             when (model.tab) {

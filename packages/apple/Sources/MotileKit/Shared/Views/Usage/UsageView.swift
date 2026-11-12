@@ -314,7 +314,6 @@ extension EnvironmentValues {
 }
 
 struct UsageContent: View {
-    private static let width: CGFloat = 880
 
     @Environment(AppStore.self) private var store
     @State private var pageHeight: CGFloat = 800
@@ -330,7 +329,7 @@ struct UsageContent: View {
                 page
             }
             .environment(\.usagePageHeight, pageHeight)
-            .frame(maxWidth: Self.width, alignment: .leading)
+            .frame(maxWidth: Theme.contentWidth, alignment: .leading)
             .padding(.horizontal, margin)
             .padding(.top, top)
             .padding(.bottom, 80)

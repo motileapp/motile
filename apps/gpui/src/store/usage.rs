@@ -102,7 +102,7 @@ pub struct ActivityReport {
     pub engaged_ticks: Vec<f64>,
     pub second_ticks: Vec<f64>,
     pub clients: Vec<ActivityClient>,
-    pub hours: Vec<ActivityHour>,
+    pub heatmap: ActivityHeatmap,
     pub busiest_time: Option<String>,
     pub busiest_messages: Option<String>,
     pub outcomes: Vec<ActivityLine>,
@@ -159,17 +159,44 @@ pub struct ActivityClient {
     pub removed: bool,
 }
 
+/// When the work was done: the hours of a day in a row, the hours of a week a row a day, or the
+/// days of weeks a row a weekday, split into four hours for up to thirty days.
+#[derive(Clone, PartialEq, Debug, Deserialize, Default)]
+pub struct ActivityHeatmap {
+    /// The rows' names, or none for a single row.
+    pub rows: Vec<String>,
+    pub columns: usize,
+    pub axis: Vec<ActivityAxisLabel>,
+    /// Row by row; one yet to come is `None`.
+    pub cells: Vec<Option<ActivityCell>>,
+    /// What a cell is: "an hour", "four hours" or "a day".
+    pub unit: String,
+}
+
+impl ActivityHeatmap {
+    pub fn row_count(&self) -> usize {
+        self.cells.len().checked_div(self.columns).unwrap_or(0)
+    }
+}
+
+/// A name under the heatmap, drawn from its column's left edge on.
 #[derive(Clone, PartialEq, Debug, Deserialize)]
-pub struct ActivityHour {
-    pub weekday: u8,
-    pub hour: u8,
+pub struct ActivityAxisLabel {
+    pub column: usize,
+    pub label: String,
+}
+
+#[derive(Clone, PartialEq, Debug, Deserialize)]
+pub struct ActivityCell {
+    /// When it is: "Wed, Nov 11, 5–6 PM", "Wed, Nov 11, 4–8 PM" or "Wed, Nov 11".
+    pub label: String,
     pub messages: u32,
     pub turns: u32,
     /// The user's time in it, or empty: "42m".
     pub time: String,
-    /// From 0, nothing, to 4, by the user's time in it next to the hour with the most.
+    /// From 0, nothing, to 4, by the user's time in it next to the slice with the most.
     pub time_level: u8,
-    /// From 0 to 4, by its messages next to the hour with the most.
+    /// From 0 to 4, by its messages next to the slice with the most.
     pub message_level: u8,
 }
 
@@ -189,6 +216,9 @@ pub struct FeatureGroup {
     pub name: String,
     pub count: u32,
     pub features: Vec<FeatureLine>,
+    /// Which of two columns side by side it goes in, 0 or 1.
+    #[serde(default)]
+    pub column: u8,
 }
 
 #[derive(Clone, PartialEq, Debug, Deserialize)]
@@ -610,7 +640,7 @@ mod tests {
 
     #[test]
     fn activity_is_read_from_the_core() {
-        use motile_core::activity::{ClientRow, HourCell, Line, View};
+        use motile_core::activity::{AxisLabel, ClientRow, HeatCell, Heatmap, Line, View};
         let view = View {
             starts: vec![0., 3600.],
             clients: vec![ClientRow {
@@ -630,16 +660,24 @@ mod tests {
                 this_device: true,
                 removed: false,
             }],
-            hours: vec![HourCell {
-                weekday: 1,
-                hour: 15,
-                messages: 3,
-                turns: 1,
-                engaged_seconds: 2520.,
-                time: "42m".into(),
-                time_level: 4,
-                message_level: 2,
-            }],
+            heatmap: Heatmap {
+                rows: Vec::new(),
+                columns: 2,
+                axis: vec![AxisLabel { column: 0, label: "12 AM".into() }],
+                cells: vec![
+                    Some(HeatCell {
+                        label: "Wed, Nov 11, 3–4 PM".into(),
+                        messages: 3,
+                        turns: 1,
+                        engaged_seconds: 2520.,
+                        time: "42m".into(),
+                        time_level: 4,
+                        message_level: 2,
+                    }),
+                    None,
+                ],
+                unit: "an hour".into(),
+            },
             busiest_time: Some("Tuesdays".into()),
             outcomes: vec![Line {
                 name: "Finished".into(),
@@ -658,7 +696,11 @@ mod tests {
             ("monitor", 2, Some(5.), true)
         );
         assert_eq!(client.summary, "2h 10m · 3 messages");
-        assert_eq!((report.hours[0].weekday, report.hours[0].time_level, report.hours[0].time.as_str()), (1, 4, "42m"));
+        let heatmap = &report.heatmap;
+        assert_eq!((heatmap.row_count(), heatmap.axis[0].column, heatmap.unit.as_str()), (1, 0, "an hour"));
+        let cell = heatmap.cells[0].as_ref().unwrap();
+        assert_eq!((cell.label.as_str(), cell.time_level, cell.time.as_str()), ("Wed, Nov 11, 3–4 PM", 4, "42m"));
+        assert_eq!(heatmap.cells[1], None);
         assert_eq!(report.outcomes[0].agent, Some(Agent::Codex));
     }
 

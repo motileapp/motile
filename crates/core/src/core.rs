@@ -3816,6 +3816,7 @@ impl Core {
                     return self.reply(id, last.ok_or_else(|| "Nothing was kept.".to_string()));
                 }
                 let window = usage::Window::ending(now(), bucket_secs, buckets, utc_offset_secs);
+                let grid = activity::Grid::of(&window, now());
                 let mut names = activity::Names {
                     this_device: self.key.public(),
                     devices: self
@@ -3885,7 +3886,7 @@ impl Core {
                 for (server_id, link) in links {
                     let own = chosen(&server_id);
                     let request = Request::ActivityReport {
-                        since: window.since,
+                        since: window.since.min(grid.since),
                         until: window.until,
                         bucket_secs: window.bucket_secs,
                         utc_offset_secs: window.utc_offset_secs,
@@ -3920,7 +3921,7 @@ impl Core {
                     }
                     let answer = match failure {
                         Some(failure) if done.is_empty() => Err(failure),
-                        _ => serde_json::to_value(activity::view(&done, window, &names, &local, every_server))
+                        _ => serde_json::to_value(activity::view(&done, window, grid, &names, &local, every_server))
                             .map_err(|error| error.to_string()),
                     };
                     if let Ok(view) = &answer {

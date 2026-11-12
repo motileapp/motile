@@ -1,6 +1,8 @@
 package app.motile.core
 
 import app.motile.platform.Symbol
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
 
 /** What the user and the agents did on the servers counted, as the core lays it out for the Activity tab of the usage view. */
 data class ActivityReport(
@@ -13,7 +15,7 @@ data class ActivityReport(
     val engagedTicks: List<Double>,
     val secondTicks: List<Double>,
     val clients: List<Client>,
-    val hours: List<Hour>,
+    val heatmap: Heatmap,
     val busiestTime: String?,
     val busiestMessages: String?,
     val outcomes: List<Line>,
@@ -63,9 +65,37 @@ data class ActivityReport(
         val removed: Boolean,
     )
 
-    /** `time` is the user's time in it, or empty: "42m". */
-    data class Hour(val weekday: Int, val hour: Int, val messages: Int, val turns: Int, val engagedSeconds: Double, val time: String, val timeLevel: Int, val messageLevel: Int) {
-        val id: Int get() = weekday * 24 + hour
+    /** When the work was done: the hours of a day in a row, the hours of a week a row a day, or the days of weeks a row a weekday, split into four hours for up to thirty days. */
+    data class Heatmap(
+        /** The rows' names, or none for a single row. */
+        val rows: List<String>,
+        val columns: Int,
+        val axis: List<AxisLabel>,
+        /** Row by row; one yet to come is null. */
+        val cells: List<Cell?>,
+        /** What a cell is: "an hour", "four hours" or "a day". */
+        val unit: String,
+    ) {
+        /** `label` says when it is: "Wed, Nov 11, 5–6 PM", "Wed, Nov 11, 4–8 PM" or "Wed, Nov 11"; `time` is the user's time in it, or empty: "42m". */
+        data class Cell(val label: String, val messages: Int, val turns: Int, val time: String, val timeLevel: Int, val messageLevel: Int)
+
+        data class AxisLabel(val column: Int, val label: String)
+
+        val rowCount: Int get() = if (columns == 0) 0 else cells.size / columns
+
+        companion object {
+            operator fun invoke(json: JSON) = Heatmap(
+                rows = json.strings("rows"),
+                columns = json.int("columns"),
+                axis = json.objects("axis").map { AxisLabel(it.int("column"), it.string("label")) },
+                cells = (json["cells"] as? JsonArray)?.map { cell ->
+                    (cell as? JsonObject)?.let {
+                        Cell(it.string("label"), it.int("messages"), it.int("turns"), it.string("time"), it.int("time_level"), it.int("message_level"))
+                    }
+                } ?: emptyList(),
+                unit = json.string("unit"),
+            )
+        }
     }
 
     data class Line(val name: String, val agent: Agent?, val server: String?, val turns: Int, val detail: String, val share: Double) {
@@ -76,7 +106,8 @@ data class ActivityReport(
 
     data class Feature(val id: String, val label: String, val count: Int, val share: Double, val detail: String)
 
-    data class FeatureGroup(val name: String, val count: Int, val features: List<Feature>)
+    /** A group of features, and which of two columns side by side it goes in, 0 or 1. */
+    data class FeatureGroup(val name: String, val count: Int, val features: List<Feature>, val column: Int)
 
     companion object {
         operator fun invoke(json: JSON): ActivityReport {
@@ -109,9 +140,7 @@ data class ActivityReport(
                         client.optionalDouble("last_seen"), client.bool("active"), client.bool("this_device"), client.bool("removed"),
                     )
                 },
-                hours = json.objects("hours").map {
-                    Hour(it.int("weekday"), it.int("hour"), it.int("messages"), it.int("turns"), it.double("engaged_seconds"), it.string("time"), it.int("time_level"), it.int("message_level"))
-                },
+                heatmap = Heatmap(json.obj("heatmap") ?: JsonObject(emptyMap())),
                 busiestTime = json.optionalString("busiest_time"),
                 busiestMessages = json.optionalString("busiest_messages"),
                 outcomes = lines("outcomes"),
@@ -120,7 +149,7 @@ data class ActivityReport(
                 projects = lines("projects"),
                 facts = json.objects("facts").map { Fact(it.string("label"), it.string("value"), it.string("detail")) },
                 features = json.objects("features").map { group ->
-                    FeatureGroup(group.string("name"), group.int("count"), group.objects("features").map(::feature))
+                    FeatureGroup(group.string("name"), group.int("count"), group.objects("features").map(::feature), group.int("column"))
                 },
                 agentFeatures = json.objects("agent_features").map(::feature),
             )

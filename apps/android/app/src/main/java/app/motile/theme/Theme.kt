@@ -127,7 +127,7 @@ object Theme {
     }
 
     // Layout
-    /** The widest the transcript gets. */
+    /** The widest a page's content gets: the transcript's, the settings' and the usage's. */
     val contentWidth: Dp = 768.dp
     val contentPadding: Dp = 16.dp
     /** How far the composer reaches past the transcript on each side. */
