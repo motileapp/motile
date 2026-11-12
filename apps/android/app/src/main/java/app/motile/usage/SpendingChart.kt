@@ -2,7 +2,6 @@ package app.motile.usage
 
 import android.text.format.DateFormat
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.Composable
@@ -13,7 +12,6 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
@@ -45,9 +43,8 @@ private val labelGap = 6.dp
 
 /**
  * A line for each agent over time, with the area under it tinted, unstacked as Swift Charts draws
- * them, over four grid lines with their amounts at their end and five times under them. A tap on
- * it points at the nearest time, which the legend then reads; a tap on it again lets go, and a drag
- * across it scrolls the page.
+ * them, over four grid lines with their amounts at their end and five times under them. A finger
+ * sliding sideways across it, or a tap, points at the nearest time, which the legend then reads.
  */
 @Composable
 fun SpendingChart(report: UsageReport, measure: Measure, period: UsageModel.Period, pointed: Int?, point: (Int?) -> Unit) {
@@ -75,16 +72,9 @@ fun SpendingChart(report: UsageReport, measure: Measure, period: UsageModel.Peri
         Modifier
             .fillMaxWidth()
             .height(chartHeight)
-            .pointerInput(count, labelWidth, pointed) {
-                fun nearest(x: Float): Int? {
-                    if (count == 0) return null
-                    val width = size.width.toFloat()
-                    return (0 until count).minByOrNull { abs(xOf(it, width) - x) }
-                }
-                detectTapGestures { at ->
-                    val tapped = nearest(at.x)
-                    point(if (tapped == pointed) null else tapped)
-                }
+            .chartPointing(pointed, point) { at, size ->
+                val width = size.width.toFloat()
+                (0 until count).minByOrNull { abs(xOf(it, width) - at.x) }
             },
     ) {
         val xLabelHeight = xLabels.maxOfOrNull { it.size.height } ?: 0

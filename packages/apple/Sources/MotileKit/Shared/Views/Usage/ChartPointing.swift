@@ -1,19 +1,46 @@
 import Charts
 import SwiftUI
 
+/// How a usage chart marks its buckets: bars that each span theirs, or points at their starts.
+enum ChartMarks {
+    case bars, points
+
+    func index(at time: Date, in starts: [Date]) -> Int? {
+        guard !starts.isEmpty else { return nil }
+        switch self {
+        case .bars:
+            return starts.lastIndex { $0 <= time } ?? 0
+        case .points:
+            return starts.indices.min { abs(starts[$0].timeIntervalSince(time)) < abs(starts[$1].timeIntervalSince(time)) }
+        }
+    }
+}
+
 extension View {
-    /// The time a usage chart points at: where the pointer is on the Mac, and on iOS the bar last
-    /// tapped, which a tap on it again lets go, so that a drag across the chart scrolls the page.
-    func chartPointing(_ pointed: Binding<Date?>, period: UsageModel.Period) -> some View {
+    /// The bucket a usage chart points at: where the pointer is on the Mac. On iOS where a finger
+    /// slides sideways across it, or the one tapped, which a tap on it again lets go.
+    func chartPointing(_ pointed: Binding<Date?>, starts: [Date], marks: ChartMarks) -> some View {
         #if os(iOS)
-        chartXSelection(value: pointed)
-            .chartGesture { proxy in
-                SpatialTapGesture().onEnded { tap in
-                    guard let tapped: Date = proxy.value(atX: tap.location.x) else { return }
-                    let same = pointed.wrappedValue.map { abs($0.timeIntervalSince(tapped)) < Double(period.bucketSeconds) / 2 } ?? false
-                    pointed.wrappedValue = same ? nil : tapped
+        chartOverlay { proxy in
+            GeometryReader { geometry in
+                let plotX = proxy.plotFrame.map { geometry[$0].minX } ?? 0
+                let bucket = { (x: CGFloat) -> Date? in
+                    guard let time: Date = proxy.value(atX: x - plotX) else { return nil }
+                    return marks.index(at: time, in: starts).map { starts[$0] }
                 }
+                Color.clear
+                    .contentShape(Rectangle())
+                    .onTapGesture(coordinateSpace: .local) { location in
+                        guard let tapped = bucket(location.x) else { return }
+                        pointed.wrappedValue = pointed.wrappedValue == tapped ? nil : tapped
+                    }
+                    .gesture(ScrubPan { location in
+                        guard let slid = bucket(location.x) else { return }
+                        pointed.wrappedValue = slid
+                    })
             }
+        }
+        .sensoryFeedback(.selection, trigger: pointed.wrappedValue) { _, new in new != nil }
         #else
         chartXSelection(value: pointed)
         #endif

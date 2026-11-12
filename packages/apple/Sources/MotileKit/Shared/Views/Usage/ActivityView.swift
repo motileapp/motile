@@ -210,7 +210,7 @@ struct ActivityView: View {
         }
         .chartForegroundStyleScale(domain: sources.map(\.label), range: sources.map { Self.color($0.color, in: scheme) })
         .chartLegend(.hidden)
-        .chartPointing($pointed, period: period)
+        .chartPointing($pointed, starts: report.starts, marks: .bars)
         .chartXAxis {
             AxisMarks(preset: .aligned, values: .automatic(desiredCount: 5)) { _ in
                 AxisValueLabel(format: period == .day ? .dateTime.hour() : .dateTime.month(.abbreviated).day())
@@ -237,8 +237,7 @@ struct ActivityView: View {
     }
 
     private var pointedIndex: Int? {
-        guard let pointed, !report.starts.isEmpty else { return nil }
-        return report.starts.lastIndex { $0 <= pointed } ?? 0
+        pointed.flatMap { ChartMarks.bars.index(at: $0, in: report.starts) }
     }
 
     // MARK: Clients
@@ -730,8 +729,8 @@ private struct ActivityBar: View {
 }
 
 /// When the work was done, each cell as busy as its colour is strong. The cell the pointer is over,
-/// or the last one tapped, says what was done in it. The gaps between the cells are only drawn:
-/// each cell's hit area reaches halfway into them.
+/// the one a finger slides onto or the last one tapped says what was done in it. The gaps between
+/// the cells are only drawn: each cell's hit area reaches halfway into them.
 private struct ActivityHeatmap: View {
     private static let gap: CGFloat = 3
 
@@ -743,7 +742,9 @@ private struct ActivityHeatmap: View {
 
     /// A cell and the gap after it.
     private var pitch: CGFloat { (width + Self.gap) / CGFloat(max(heatmap.columns, 1)) }
-    private var cellHeight: CGFloat { min(max(pitch - Self.gap, 4), scaled(18)) }
+    /// As tall as wide up to a limit, and never shorter than its row's name.
+    private var cellHeight: CGFloat { max(min(max(pitch - Self.gap, 4), scaled(18)), Self.labelLine) }
+    private static let labelLine = PlatformFont.ui(.xxs).textLineHeight.rounded(.up)
     /// Small cells round less, so that they stay squares and don't turn into dots.
     private var corner: CGFloat { min(Radius.xs, min(pitch - Self.gap, cellHeight) / 4) }
 
@@ -784,7 +785,21 @@ private struct ActivityHeatmap: View {
             }
         }
         .frame(width: width + Self.gap)
+        #if os(iOS)
+        .gesture(ScrubPan { slid(to: $0) })
+        .sensoryFeedback(.selection, trigger: chosen) { _, new in new != nil }
+        #endif
         .padding(-Self.gap / 2)
+    }
+
+    private func slid(to location: CGPoint) {
+        guard location.x >= 0, location.y >= 0 else { return }
+        let column = Int(location.x / pitch)
+        let row = Int(location.y / (cellHeight + Self.gap))
+        guard column < heatmap.columns, row < heatmap.rowCount else { return }
+        let index = row * heatmap.columns + column
+        guard (heatmap.cells[safe: index] ?? nil) != nil else { return }
+        chosen = index
     }
 
     @ViewBuilder private func cell(_ index: Int) -> some View {

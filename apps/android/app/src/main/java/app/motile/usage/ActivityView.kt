@@ -2,7 +2,6 @@ package app.motile.usage
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -35,7 +34,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.drawText
@@ -527,8 +525,8 @@ private val cellGap = 3.dp
 private val keySide = 10.dp
 
 /**
- * When the work was done, each cell as busy as its colour is strong. The cell last tapped says what
- * was done in it. The gaps are only drawn: each cell's tap area reaches halfway into them.
+ * When the work was done, each cell as busy as its colour is strong. The cell a finger slides onto
+ * or the last one tapped says what was done in it. The gaps are only drawn: each cell's tap area reaches halfway into them.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -556,7 +554,8 @@ private fun Heatmap(heatmap: ActivityReport.Heatmap, measure: HourMeasure, modif
         BoxWithConstraints(Modifier.fillMaxWidth()) {
             val pitch = (maxWidth - leading + cellGap) / maxOf(heatmap.columns, 1)
             val cellWidth = max(pitch - cellGap, 1.dp)
-            val cellHeight = min(max(cellWidth, 4.dp), scaled(18f).dp)
+            val labelLine = with(density) { rowLabels.maxOfOrNull { it.size.height }?.toDp() ?: 0.dp }
+            val cellHeight = max(min(max(cellWidth, 4.dp), scaled(18f).dp), labelLine)
             // Small cells round less, so that they don't turn into dots.
             val corner = min(Radius.xs, min(cellWidth, cellHeight) / 4)
             val gridHeight = (cellHeight + cellGap) * heatmap.rowCount - cellGap
@@ -565,16 +564,14 @@ private fun Heatmap(heatmap: ActivityReport.Heatmap, measure: HourMeasure, modif
                     .fillMaxWidth()
                     .height(max(gridHeight, 0.dp) + 6.dp + axisHeight)
                     .reaching(reach, reach, reach, reach)
-                    .pointerInput(heatmap, pitch, cellHeight, leading) {
-                        detectTapGestures { at ->
+                    .chartPointing(chosen, { chosen = it }) { at, _ ->
+                        with(density) {
                             val (x, y) = at.x - leading.toPx() to at.y
-                            if (x < 0 || y < 0) return@detectTapGestures
+                            if (x < 0 || y < 0) return@chartPointing null
                             val column = (x / pitch.toPx()).toInt()
                             val row = (y / (cellHeight + cellGap).toPx()).toInt()
-                            if (column >= heatmap.columns || row >= heatmap.rowCount) return@detectTapGestures
-                            val index = row * heatmap.columns + column
-                            if (heatmap.cells.getOrNull(index) == null) return@detectTapGestures
-                            chosen = if (chosen == index) null else index
+                            if (column >= heatmap.columns || row >= heatmap.rowCount) return@chartPointing null
+                            (row * heatmap.columns + column).takeIf { heatmap.cells.getOrNull(it) != null }
                         }
                     },
             ) {

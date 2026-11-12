@@ -521,7 +521,8 @@ impl ActivityView {
         let width = (inner - beside_labels).max(0.);
         let pitch = (width + HEATMAP_GAP) / heatmap.columns.max(1) as f32;
         let cell_width = (pitch - HEATMAP_GAP).max(1.);
-        let height = cell_width.clamp(4., HEATMAP_CELL_HEIGHT);
+        let label_line = (TextSize::Xxs.points() * crate::theme::LINE_HEIGHT).ceil();
+        let height = cell_width.clamp(4., HEATMAP_CELL_HEIGHT).max(label_line);
         let corner = Radius::XS.min(cell_width.min(height) / 4.);
         let label = |text: &str| {
             div().text_size(TextSize::Xxs).text_color(c.muted_foreground).whitespace_nowrap().child(text.to_string())

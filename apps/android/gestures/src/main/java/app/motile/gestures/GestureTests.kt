@@ -21,6 +21,7 @@ import org.junit.rules.TestWatcher
 import org.junit.runner.Description
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.util.regex.Pattern
 
 /**
  * What fingers do, against the dev account (scripts/ui-test.sh starts it): the swipes that show
@@ -224,6 +225,36 @@ class GestureTests {
             Thread.sleep(1_000)
         }
         return false
+    }
+
+    /**
+     * A finger slid sideways across the usage chart points at the day under it, which the legend
+     * then names, and leaves the page where it is. One slid up the chart scrolls the page. One slid
+     * across the cells of when the user works picks the cell it ends on.
+     */
+    @Test
+    fun aFingerSlidAcrossTheUsageChartsPointsAtWhatIsUnderItAndOneSlidUpScrollsThePage() {
+        openSidebar()
+        device.findObject(By.desc("Account")).click()
+        device.wait(Until.findObject(By.text("Usage")), 3_000).click()
+        val heading = device.wait(Until.findObject(By.text("Over time")), 10_000) ?: return fail("no chart")
+        val below = device.wait(Until.findObject(By.text("When you work")), 10_000) ?: return fail("no heatmap")
+        val pointedDay = By.text(Pattern.compile("^(Mon|Tue|Wed|Thu|Fri|Sat|Sun)[a-z]*[ ,].+"))
+        assertFalse(shown(pointedDay, 1_000))
+        val top = settled(heading)
+        val turns = device.findObject(By.text("Turns")) ?: return fail("no measures")
+        val y = (turns.visibleBounds.bottom + below.visibleBounds.top) / 2
+        val width = device.displayWidth
+        device.swipe(width / 5, y, width * 7 / 10, y, 40)
+        assertTrue(shown(pointedDay))
+        assertEquals(top, settled(heading))
+        device.swipe(width / 5, y, width / 5, y - device.displayHeight / 4, 40)
+        assertTrue(settled(heading) < top - device.displayHeight / 20)
+        val hint = By.textStartsWith("Tap ")
+        val above = device.wait(Until.findObject(By.text("Messages sent")), 3_000) ?: return fail("no hour measures")
+        val cellsY = (above.visibleBounds.bottom + (device.findObject(hint) ?: return fail("no hint")).visibleBounds.top) / 2
+        device.swipe(width * 2 / 5, cellsY, width * 4 / 5, cellsY, 40)
+        assertTrue(gone(hint))
     }
 
     @Test

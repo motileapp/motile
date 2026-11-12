@@ -1,7 +1,6 @@
 package app.motile.usage
 
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.Composable
@@ -11,7 +10,6 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
@@ -30,9 +28,9 @@ private val labelGap = 6.dp
 
 /**
  * A bar for each bucket, stacked from each source's part, the first at the bottom, over four grid
- * lines with their amounts at their end and five times under them. A tap on it points at the
- * nearest bucket, which the legend then reads, and dims the others; a tap on it again lets go, and
- * a drag across it scrolls the page.
+ * lines with their amounts at their end and five times under them. A finger sliding sideways
+ * across it, or a tap, points at the bucket under it, which the legend then reads, and dims the
+ * others.
  */
 @Composable
 fun ActivityChart(
@@ -62,15 +60,9 @@ fun ActivityChart(
         Modifier
             .fillMaxWidth()
             .height(chartHeight)
-            .pointerInput(count, labelWidth, pointed) {
-                fun nearest(x: Float): Int? {
-                    if (count == 0) return null
-                    return (x / slotOf(size.width.toFloat())).toInt().coerceIn(0, count - 1)
-                }
-                detectTapGestures { at ->
-                    val tapped = nearest(at.x)
-                    point(if (tapped == pointed) null else tapped)
-                }
+            .chartPointing(pointed, point) { at, size ->
+                if (count == 0) return@chartPointing null
+                (at.x / slotOf(size.width.toFloat())).toInt().coerceIn(0, count - 1)
             },
     ) {
         val xLabelHeight = xLabels.maxOfOrNull { it.size.height } ?: 0
