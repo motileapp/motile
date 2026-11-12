@@ -728,9 +728,9 @@ private struct ActivityBar: View {
     }
 }
 
-/// When the work was done, each cell as busy as its colour is strong. The cell the pointer is over,
-/// the one a finger slides onto or the last one tapped says what was done in it. The gaps between
-/// the cells are only drawn: each cell's hit area reaches halfway into them.
+/// When the work was done, each cell as busy as its colour is strong. The cell the pointer was over,
+/// a finger slid onto or was tapped last says what was done in it, the cell of now to start with.
+/// The gaps between the cells are only drawn: each cell's hit area reaches halfway into them.
 private struct ActivityHeatmap: View {
     private static let gap: CGFloat = 3
 
@@ -739,6 +739,8 @@ private struct ActivityHeatmap: View {
     let measure: ActivityView.HourMeasure
     @State private var chosen: Int?
     @State private var width: CGFloat = 0
+
+    private var shown: Int { chosen ?? heatmap.latest }
 
     /// A cell and the gap after it.
     private var pitch: CGFloat { (width + Self.gap) / CGFloat(max(heatmap.columns, 1)) }
@@ -772,6 +774,7 @@ private struct ActivityHeatmap: View {
             }
             caption
         }
+        .onChange(of: [heatmap.columns, heatmap.cells.count, heatmap.latest]) { chosen = nil }
     }
 
     private var cells: some View {
@@ -805,7 +808,7 @@ private struct ActivityHeatmap: View {
     @ViewBuilder private func cell(_ index: Int) -> some View {
         let slot = CGSize(width: pitch, height: cellHeight + Self.gap)
         if let cell = heatmap.cells[safe: index] ?? nil {
-            let isChosen = chosen == index
+            let isChosen = shown == index
             RoundedRectangle(cornerRadius: corner, style: .continuous)
                 .fill(fill(measure == .time ? cell.timeLevel : cell.messageLevel))
                 .overlay {
@@ -818,9 +821,9 @@ private struct ActivityHeatmap: View {
                 .frame(width: slot.width, height: slot.height)
                 .contentShape(Rectangle())
                 .onHover { inside in
-                    if inside { chosen = index } else if chosen == index { chosen = nil }
+                    if inside { chosen = index }
                 }
-                .onTapGesture { chosen = isChosen ? nil : index }
+                .onTapGesture { chosen = index }
         } else {
             Color.clear.frame(width: slot.width, height: slot.height)
         }
@@ -852,8 +855,8 @@ private struct ActivityHeatmap: View {
         }
     }
 
-    /// What the chosen cell holds, or how to choose one, and the key to the colours: beside each
-    /// other, or the key under it where they don't fit.
+    /// What the chosen cell holds and the key to the colours: beside each other, or the key under it
+    /// where they don't fit.
     private var caption: some View {
         ViewThatFits(in: .horizontal) {
             HStack(spacing: 8) {
@@ -871,7 +874,7 @@ private struct ActivityHeatmap: View {
     }
 
     @ViewBuilder private var said: some View {
-        if let chosen, let cell = heatmap.cells[safe: chosen] ?? nil {
+        if let cell = heatmap.cells[safe: shown] ?? nil {
             let time = cell.time.isEmpty ? [] : [Text(verbatim: cell.time)]
             Text(dotted: [Text(verbatim: cell.label)] + time + [
                 Text(cell.messages == 1 ? "1 message" : "\(cell.messages.formatted()) messages"),
@@ -879,10 +882,6 @@ private struct ActivityHeatmap: View {
             ])
             .foregroundStyle(Color.themeMutedForeground)
             .fixedSize()
-        } else {
-            Text(verbatim: "\(Platform.hoverReveals ? "Point at" : "Tap") \(heatmap.unit) to see what was done in it")
-                .foregroundStyle(Color.themeMutedStrongerForeground)
-                .fixedSize()
         }
     }
 

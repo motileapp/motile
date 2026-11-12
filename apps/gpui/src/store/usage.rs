@@ -169,13 +169,22 @@ pub struct ActivityHeatmap {
     pub axis: Vec<ActivityAxisLabel>,
     /// Row by row; one yet to come is `None`.
     pub cells: Vec<Option<ActivityCell>>,
+    /// The cell of now, which the heatmap starts on.
+    pub latest: usize,
     /// What a cell is: "an hour", "four hours" or "a day".
     pub unit: String,
 }
 
+/// What a chosen cell stays chosen for: its columns, its cells and the cell of now.
+pub type HeatmapShape = (usize, usize, usize);
+
 impl ActivityHeatmap {
     pub fn row_count(&self) -> usize {
         self.cells.len().checked_div(self.columns).unwrap_or(0)
+    }
+
+    pub fn shape(&self) -> HeatmapShape {
+        (self.columns, self.cells.len(), self.latest)
     }
 }
 
@@ -676,6 +685,7 @@ mod tests {
                     }),
                     None,
                 ],
+                latest: 0,
                 unit: "an hour".into(),
             },
             busiest_time: Some("Tuesdays".into()),

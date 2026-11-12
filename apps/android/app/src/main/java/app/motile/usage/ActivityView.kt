@@ -525,8 +525,8 @@ private val cellGap = 3.dp
 private val keySide = 10.dp
 
 /**
- * When the work was done, each cell as busy as its colour is strong. The cell a finger slides onto
- * or the last one tapped says what was done in it. The gaps are only drawn: each cell's tap area reaches halfway into them.
+ * When the work was done, each cell as busy as its colour is strong. The cell a finger slid onto or
+ * tapped last says what was done in it, the cell of now to start with. The gaps are only drawn: each cell's tap area reaches halfway into them.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -534,7 +534,8 @@ private fun Heatmap(heatmap: ActivityReport.Heatmap, measure: HourMeasure, modif
     val palette = LocalPalette.current
     val density = LocalDensity.current
     val surface = LocalSurface.current
-    var chosen by remember(heatmap) { mutableStateOf<Int?>(null) }
+    var picked by remember(heatmap.columns, heatmap.cells.size, heatmap.latest) { mutableStateOf<Int?>(null) }
+    val chosen = picked ?: heatmap.latest
     val fills = listOf(
         surface.color(Surface.Layer.Control),
         palette.chart1.at(Opacity.ColorTintChart),
@@ -564,7 +565,7 @@ private fun Heatmap(heatmap: ActivityReport.Heatmap, measure: HourMeasure, modif
                     .fillMaxWidth()
                     .height(max(gridHeight, 0.dp) + 6.dp + axisHeight)
                     .reaching(reach, reach, reach, reach)
-                    .chartPointing(chosen, { chosen = it }) { at, _ ->
+                    .chartPointing(chosen, { picked = it ?: chosen }) { at, _ ->
                         with(density) {
                             val (x, y) = at.x - leading.toPx() to at.y
                             if (x < 0 || y < 0) return@chartPointing null
@@ -604,13 +605,14 @@ private fun Heatmap(heatmap: ActivityReport.Heatmap, measure: HourMeasure, modif
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            val shown = chosen?.let { heatmap.cells.getOrNull(it) }
-            val said = Modifier.padding(end = 8.dp).align(Alignment.CenterVertically)
-            if (shown != null) {
+            heatmap.cells.getOrNull(chosen)?.let { shown ->
                 val text = listOf(shown.label, shown.time, messages(shown.messages), turns(shown.turns)).filter { it.isNotEmpty() }.joinToString(" · ")
-                Text(dotted(text, palette.mutedStrongerForeground), said, style = Theme.uiDigits(TextSize.Xxs), color = palette.mutedForeground)
-            } else {
-                Text("Tap ${heatmap.unit} to see what was done in it", said, size = TextSize.Xxs, color = palette.mutedStrongerForeground)
+                Text(
+                    dotted(text, palette.mutedStrongerForeground),
+                    Modifier.padding(end = 8.dp).align(Alignment.CenterVertically),
+                    style = Theme.uiDigits(TextSize.Xxs),
+                    color = palette.mutedForeground,
+                )
             }
             Row(Modifier.align(Alignment.CenterVertically), horizontalArrangement = Arrangement.spacedBy(cellGap), verticalAlignment = Alignment.CenterVertically) {
                 Text("Less", Modifier.padding(end = 3.dp), size = TextSize.Xxs, color = palette.mutedForeground, maxLines = 1)

@@ -239,7 +239,7 @@ class GestureTests {
         device.wait(Until.findObject(By.text("Usage")), 3_000).click()
         val heading = device.wait(Until.findObject(By.text("Over time")), 10_000) ?: return fail("no chart")
         val below = device.wait(Until.findObject(By.text("When you work")), 10_000) ?: return fail("no heatmap")
-        val pointedDay = By.text(Pattern.compile("^(Mon|Tue|Wed|Thu|Fri|Sat|Sun)[a-z]*[ ,].+"))
+        val pointedDay = By.text(Pattern.compile("^(Mon|Tue|Wed|Thu|Fri|Sat|Sun)[a-z]*[ ,][^·]+$"))
         assertFalse(shown(pointedDay, 1_000))
         val top = settled(heading)
         val turns = device.findObject(By.text("Turns")) ?: return fail("no measures")
@@ -250,11 +250,13 @@ class GestureTests {
         assertEquals(top, settled(heading))
         device.swipe(width / 5, y, width / 5, y - device.displayHeight / 4, 40)
         assertTrue(settled(heading) < top - device.displayHeight / 20)
-        val hint = By.textStartsWith("Tap ")
+        val cellSaid = By.text(Pattern.compile("^(Mon|Tue|Wed|Thu|Fri|Sat|Sun)[a-z]*,.*· .* turns?$"))
         val above = device.wait(Until.findObject(By.text("Messages sent")), 3_000) ?: return fail("no hour measures")
-        val cellsY = (above.visibleBounds.bottom + (device.findObject(hint) ?: return fail("no hint")).visibleBounds.top) / 2
-        device.swipe(width * 2 / 5, cellsY, width * 4 / 5, cellsY, 40)
-        assertTrue(gone(hint))
+        val said = device.wait(Until.findObject(cellSaid), 3_000) ?: return fail("no cell said")
+        val latest = said.text
+        val cellsY = (above.visibleBounds.bottom + said.visibleBounds.top) / 2
+        device.swipe(width / 5, cellsY, width * 3 / 5, cellsY, 40)
+        assertTrue(shown(By.text(Pattern.compile("^(?!" + Pattern.quote(latest) + "$).*· .* turns?$"))))
     }
 
     @Test

@@ -73,6 +73,8 @@ data class ActivityReport(
         val axis: List<AxisLabel>,
         /** Row by row; one yet to come is null. */
         val cells: List<Cell?>,
+        /** The cell of now, which the heatmap starts on. */
+        val latest: Int,
         /** What a cell is: "an hour", "four hours" or "a day". */
         val unit: String,
     ) {
@@ -93,6 +95,7 @@ data class ActivityReport(
                         Cell(it.string("label"), it.int("messages"), it.int("turns"), it.string("time"), it.int("time_level"), it.int("message_level"))
                     }
                 } ?: emptyList(),
+                latest = json.int("latest"),
                 unit = json.string("unit"),
             )
         }
