@@ -1111,7 +1111,7 @@ fn symbol_name(name: &str) -> &'static str {
 
 fn pointed_label(start: f64, period: UsagePeriod) -> String {
     if period == UsagePeriod::Day {
-        format::date(start, "EEEj", "%a %-I %p")
+        format::date(start, "EEEj", "%a %H:00")
     } else {
         format::date(start, "EEEMMMd", "%a, %b %-d")
     }

@@ -951,9 +951,9 @@ pub fn snooze_presets() -> Vec<(String, f64)> {
                 .map(|time| time.with_timezone(&chrono::Local).date_naive());
             let soon = day.is_some_and(|day| (day - today).num_days() <= 1);
             let when = if soon {
-                crate::format::date(preset.until, "jmm", "%-I:%M %p")
+                crate::format::date(preset.until, "jmm", "%H:%M")
             } else {
-                crate::format::date(preset.until, "EEEjmm", "%a %-I:%M %p")
+                crate::format::date(preset.until, "EEEjmm", "%a %H:%M")
             };
             (format!("{} ({when})", preset.label), preset.until)
         })

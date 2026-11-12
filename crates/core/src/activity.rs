@@ -144,7 +144,7 @@ pub struct AxisLabel {
 
 #[derive(Serialize, Debug, PartialEq)]
 pub struct HeatCell {
-    /// When it is: "Wed, Nov 11, 5–6 PM", "Wed, Nov 11, 4–8 PM" or "Wed, Nov 11".
+    /// When it is: "Wed, Nov 11, 17:00–18:00", "Wed, Nov 11, 16:00–20:00" or "Wed, Nov 11".
     pub label: String,
     pub messages: u32,
     pub turns: u32,
@@ -254,7 +254,7 @@ impl Grid {
             .collect()
     }
 
-    /// "Wed, Nov 11, 5–6 PM", "Wed, Nov 11, 4–8 PM" or "Wed, Nov 11".
+    /// "Wed, Nov 11, 17:00–18:00", "Wed, Nov 11, 16:00–20:00" or "Wed, Nov 11".
     fn label(&self, slice: usize) -> String {
         let start = self.start(slice);
         if self.slice_secs >= DAY {
@@ -713,17 +713,13 @@ fn your_time(yours: f64, measured_since: Option<f64>, turns: &[(&str, &TurnBucke
     if yours >= 60.0 && agents > 0.0 {
         let times = agents / yours;
         parts.push(match times {
-            10.0.. => format!("agents {times:.0}× as long"),
-            0.95.. => format!("agents {}× as long", format!("{times:.1}").trim_end_matches(".0")),
-            0.01.. => format!("agents {}% as long", (times * 100.0).round()),
-            _ => "agents under 1% as long".to_string(),
+            10.0.. => format!("Agents: {times:.0}×"),
+            0.95.. => format!("Agents: {}×", format!("{times:.1}").trim_end_matches(".0")),
+            0.01.. => format!("Agents: {}%", (times * 100.0).round()),
+            _ => "Agents: under 1%".to_string(),
         });
     }
-    let mut detail = parts.join(" · ");
-    if let Some(first) = detail.get(..1) {
-        detail = first.to_uppercase() + &detail[1..];
-    }
-    Tile { label, value: if yours < 60.0 { "0m".into() } else { duration(yours) }, detail }
+    Tile { label, value: if yours < 60.0 { "0m".into() } else { duration(yours) }, detail: parts.join(" · ") }
 }
 
 /// Lines for a chart of durations up to `highest` seconds, at most four steps of a length people
@@ -1033,13 +1029,15 @@ fn heatmap(hours: &[&HourBucket], together: &[(f64, f64)], grid: &Grid) -> (Heat
             .enumerate()
             .map(|(slice, tally)| {
                 let start = grid.start(slice);
-                (format!("on {} around {}", grid.format(start, "%A"), clock(grid.hour(start))), *tally)
+                (format!("on {} around {}", grid.format(start, "%A"), hour_label(grid.hour(start))), *tally)
             })
             .collect(),
         true => week
             .iter()
             .enumerate()
-            .map(|(index, tally)| (format!("on {} around {}", WEEKDAYS[index / 24], clock((index % 24) as u8)), *tally))
+            .map(|(index, tally)| {
+                (format!("on {} around {}", WEEKDAYS[index / 24], hour_label((index % 24) as u8)), *tally)
+            })
             .collect(),
     };
     let busiest_time = busiest(&when, Tally::time, "You're in Motile the most");
@@ -1055,7 +1053,7 @@ fn level(value: f64, most: f64) -> u8 {
     (value / most * 4.0).ceil().clamp(1.0, 4.0) as u8
 }
 
-/// "<what> on Wednesdays around 5 PM", of the busiest by `weight`, the earliest of a tie.
+/// "<what> on Wednesdays around 17:00", of the busiest by `weight`, the earliest of a tie.
 fn busiest(when: &[(String, Tally)], weight: fn(&Tally) -> f64, what: &str) -> Option<String> {
     let (phrase, _) = when.iter().filter(|(_, tally)| weight(tally) > 0.0).fold(
         None::<&(String, Tally)>,
@@ -1288,36 +1286,14 @@ pub fn duration(seconds: f64) -> String {
     }
 }
 
-/// "12 AM", "6 AM", "12 PM", "6 PM".
+/// "00:00", "06:00", "12:00", "18:00".
 fn hour_label(hour: u8) -> String {
-    let (number, half) = twelve_hour(hour);
-    format!("{number} {half}")
+    format!("{hour:02}:00")
 }
 
-/// "5–6 PM" for `hours` from `hour`, or "8 AM–12 PM" across noon or midnight.
+/// "17:00–18:00" for `hours` from `hour`.
 fn hour_range(hour: u8, hours: u8) -> String {
-    let end = (hour + hours) % 24;
-    let (from, to) = (twelve_hour(hour), twelve_hour(end));
-    match from.1 == to.1 {
-        true => format!("{}–{} {}", from.0, to.0, to.1),
-        false => format!("{}–{}", hour_label(hour), hour_label(end)),
-    }
-}
-
-fn twelve_hour(hour: u8) -> (u8, &'static str) {
-    let half = if hour < 12 { "AM" } else { "PM" };
-    match hour % 12 {
-        0 => (12, half),
-        number => (number, half),
-    }
-}
-
-fn clock(hour: u8) -> String {
-    match hour {
-        0 => "midnight".into(),
-        12 => "noon".into(),
-        _ => hour_label(hour),
-    }
+    format!("{}–{}", hour_label(hour), hour_label((hour + hours) % 24))
 }
 
 #[cfg(test)]
@@ -1476,10 +1452,10 @@ mod tests {
             .collect();
         assert_eq!(clients, [("Studio Mac", "Mac app · macOS", 3, true), ("Pocket", "iOS app · iOS", 1, false)]);
         assert_eq!(view.clients[0].detail, "Version 0.1.9 · Direct · 20 ms");
-        assert_eq!(view.busiest_messages.as_deref(), Some("You send the most messages on Friday around 3 PM"));
+        assert_eq!(view.busiest_messages.as_deref(), Some("You send the most messages on Friday around 15:00"));
         assert_eq!(view.busiest_time, None);
         let busy = view.heatmap.cells[24 + 15].as_ref().unwrap();
-        assert_eq!((busy.label.as_str(), busy.messages, busy.message_level), ("Fri, Jan 2, 3–4 PM", 4, 4));
+        assert_eq!((busy.label.as_str(), busy.messages, busy.message_level), ("Fri, Jan 2, 15:00–16:00", 4, 4));
         assert!(view.heatmap.cells.iter().flatten().all(|cell| cell.time_level == 0));
         assert_eq!(view.projects[0].name, "Motile");
         assert_eq!(view.features[0].features[0].label, "Messages sent");
@@ -1648,14 +1624,14 @@ mod tests {
 
         let shown = view(&done, window, grid(&window), &names(), &local, true);
         assert_eq!(shown.tiles[0].value, "1h 40m");
-        assert_eq!(shown.tiles[0].detail, "Since Jan 2 · agents 6× as long");
+        assert_eq!(shown.tiles[0].detail, "Since Jan 2 · Agents: 6×");
         assert_eq!(shown.engaged_ticks, [0.0, 3_600.0, 7_200.0, 10_800.0]);
         let mac = shown.sources.iter().find(|source| source.label == "Mac").unwrap();
         assert_eq!(mac.engaged_points, [0.0, 4_200.0]);
         let clients: Vec<_> = shown.clients.iter().map(|row| (row.name.as_str(), row.summary.as_str())).collect();
         assert_eq!(clients, [("Studio Mac", "1h 10m (54%)"), ("Pocket", "1h (46%)")]);
         assert_eq!(shown.projects[0].detail, "You 2h · Agents 12h");
-        assert_eq!(shown.busiest_time.as_deref(), Some("You're in Motile the most on Friday around 10 AM"));
+        assert_eq!(shown.busiest_time.as_deref(), Some("You're in Motile the most on Friday around 10:00"));
         let friday = |hour: usize| shown.heatmap.cells[24 + hour].as_ref().unwrap().time.as_str();
         assert_eq!((friday(10), friday(11)), ("1h", "40m"));
 
@@ -1693,14 +1669,14 @@ mod tests {
 
         let day = shape(3600, 24);
         assert_eq!((day.rows.len(), day.columns, day.cells.len(), day.unit.as_str()), (0, 24, 24, "an hour"));
-        assert_eq!(axis(&day), [(2, "6 AM".into()), (8, "12 PM".into()), (14, "6 PM".into()), (20, "12 AM".into())]);
+        assert_eq!(axis(&day), [(2, "06:00".into()), (8, "12:00".into()), (14, "18:00".into()), (20, "00:00".into())]);
         assert_eq!(day.cells[23].as_ref().unwrap().messages, 2);
 
         let week = shape(86_400, 7);
         assert_eq!(week.rows, ["Fri 6", "Sat 7", "Sun 8", "Mon 9", "Tue 10", "Wed 11", "Thu 12"]);
         assert_eq!((week.columns, week.unit.as_str()), (24, "an hour"));
-        assert_eq!(axis(&week), [(0, "12 AM".into()), (6, "6 AM".into()), (12, "12 PM".into()), (18, "6 PM".into())]);
-        assert_eq!(label(&week, 6 * 24 + 3), Some("Thu, Nov 12, 3–4 AM".into()));
+        assert_eq!(axis(&week), [(0, "00:00".into()), (6, "06:00".into()), (12, "12:00".into()), (18, "18:00".into())]);
+        assert_eq!(label(&week, 6 * 24 + 3), Some("Thu, Nov 12, 03:00–04:00".into()));
         assert_eq!(week.cells[6 * 24 + 3].as_ref().unwrap().messages, 2);
         assert_eq!(label(&week, 6 * 24 + 4), None);
 
@@ -1712,10 +1688,10 @@ mod tests {
             mondays.iter().enumerate().map(|(week, day)| (week * 6, day.to_string())).collect();
         assert_eq!(axis(&month), expected);
         let thursday = |heatmap: &Heatmap, column: usize| 3 * heatmap.columns + column;
-        assert_eq!(label(&month, thursday(&month, 24)), Some("Thu, Nov 12, 12–4 AM".into()));
+        assert_eq!(label(&month, thursday(&month, 24)), Some("Thu, Nov 12, 00:00–04:00".into()));
         assert_eq!(month.cells[thursday(&month, 24)].as_ref().unwrap().messages, 2);
         assert_eq!(label(&month, thursday(&month, 25)), None);
-        assert_eq!(label(&month, thursday(&month, 23)), Some("Thu, Nov 5, 8 PM–12 AM".into()));
+        assert_eq!(label(&month, thursday(&month, 23)), Some("Thu, Nov 5, 20:00–00:00".into()));
 
         let quarter = shape(86_400, 90);
         assert_eq!((quarter.columns, quarter.unit.as_str()), (13, "a day"));
@@ -1768,8 +1744,8 @@ mod tests {
         );
         assert_eq!(number(1_234_567), "1,234,567");
         assert_eq!(
-            [clock(15), clock(0), hour_range(11, 1), hour_range(0, 4), hour_range(20, 4)],
-            ["3 PM", "midnight", "11 AM–12 PM", "12–4 AM", "8 PM–12 AM"]
+            [hour_label(15), hour_label(0), hour_range(11, 1), hour_range(20, 4)],
+            ["15:00", "00:00", "11:00–12:00", "20:00–00:00"]
         );
     }
 }
