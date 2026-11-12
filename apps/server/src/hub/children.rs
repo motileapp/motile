@@ -988,15 +988,17 @@ fn cut_input(input: &str) -> String {
 
 /// The tool call of the thread's turn that started an agent with `prompt`, and hasn't been
 /// given that agent yet.
+pub(super) fn starts_agent(call: &ToolCall) -> bool {
+    call.name.ends_with(START_TOOL)
+}
+
 fn start_call(live: &Live, prompt: &str) -> Option<String> {
     let mut calls: Vec<_> = live
         .open
         .values()
         .filter(|item| item.parent.is_none())
         .filter_map(|item| match &item.kind {
-            ItemKind::Tool { call } if call.name.ends_with(START_TOOL) && call.agent.is_none() => {
-                Some((item.seq, call))
-            }
+            ItemKind::Tool { call } if starts_agent(call) && call.agent.is_none() => Some((item.seq, call)),
             _ => None,
         })
         .filter(|(_, call)| {

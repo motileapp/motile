@@ -1272,18 +1272,24 @@ class AppStore(private val context: Context) {
         }
 
     /** Whether the thread's model runs through the gateway. */
-    fun modelProxied(thread: ThreadInfo): Boolean = server(thread.serverID)?.runsThroughGateway(thread.agentAccount, thread.agent) ?: false
+    fun modelProxied(thread: ThreadInfo): Boolean = modelProxied(thread.agentAccount, thread.agent, thread.serverID)
+
+    fun modelProxied(account: String, agent: Agent, serverID: String): Boolean = server(serverID)?.runsThroughGateway(account, agent) ?: false
 
     /** Whether the thread's model is pinned to one of the gateway's accounts. */
-    fun modelPinned(thread: ThreadInfo): Boolean = server(thread.serverID)?.runsPinned(thread.agentAccount, thread.agent) ?: false
+    fun modelPinned(thread: ThreadInfo): Boolean = modelPinned(thread.agentAccount, thread.agent, thread.serverID)
+
+    fun modelPinned(account: String, agent: Agent, serverID: String): Boolean = server(serverID)?.runsPinned(account, agent) ?: false
 
     /** The thread's model as the composer shows it, with the account when its agent has more than one. */
-    fun modelLabel(thread: ThreadInfo): String {
-        val server = server(thread.serverID)
-        val offered = server?.models?.filter { it.agent == thread.agent } ?: emptyList()
-        val model = Server.model(thread.model, thread.agentAccount, offered)
-        if (server == null || model == null) return thread.model ?: thread.agent.title
-        return server.label(model, thread.agentAccount)
+    fun modelLabel(thread: ThreadInfo): String = modelLabel(thread.model, thread.agentAccount, thread.agent, thread.serverID)
+
+    fun modelLabel(model: String?, account: String, agent: Agent, serverID: String): String {
+        val server = server(serverID)
+        val offered = server?.models?.filter { it.agent == agent } ?: emptyList()
+        val offer = Server.model(model, account, offered)
+        if (server == null || offer == null) return model ?: agent.title
+        return server.label(offer, account)
     }
 
     /** One account with its agent's models, as the composer's model menu lists them. */

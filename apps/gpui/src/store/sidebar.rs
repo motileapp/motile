@@ -211,24 +211,28 @@ impl Store {
     /// The thread's model as the composer shows it, with the account when its agent has more
     /// than one.
     pub fn model_label(&self, thread: &ThreadInfo) -> String {
-        let account = Some(thread.agent_account.as_str()).filter(|account| !account.is_empty());
-        let Some(server) = self.server(Some(&thread.server_id)) else { return self.bare_model(thread) };
-        let offered: Vec<_> = server.models.iter().filter(|model| model.agent == thread.agent).cloned().collect();
-        let Some(model) = Server::model(thread.model.as_deref(), account, &offered) else {
-            return self.bare_model(thread);
-        };
-        server.label(model, account)
+        self.label_of_model(thread.model.as_deref(), &thread.agent_account, thread.agent, &thread.server_id)
+    }
+
+    /// The model as the composer names it, run by the account of the agent on the server.
+    pub fn label_of_model(&self, model: Option<&str>, account: &str, agent: Agent, server_id: &str) -> String {
+        let account = Some(account).filter(|account| !account.is_empty());
+        let bare = || model.map(str::to_string).unwrap_or_else(|| crate::models::agent_name(agent).to_string());
+        let Some(server) = self.server(Some(server_id)) else { return bare() };
+        let offered: Vec<_> = server.models.iter().filter(|offer| offer.agent == agent).cloned().collect();
+        let Some(offer) = Server::model(model, account, &offered) else { return bare() };
+        server.label(offer, account)
     }
 
     /// The gateway's mark after the thread's model: it runs through the gateway, pinned or not.
     pub fn model_gateway_mark(&self, thread: &ThreadInfo) -> GatewayMark {
-        let account = Some(thread.agent_account.as_str()).filter(|account| !account.is_empty());
-        let Some(server) = self.server(Some(&thread.server_id)) else { return GatewayMark::Hidden };
-        GatewayMark::of(server.runs_through_gateway(account, thread.agent), server.runs_pinned(account, thread.agent))
+        self.gateway_mark_of(&thread.agent_account, thread.agent, &thread.server_id)
     }
 
-    fn bare_model(&self, thread: &ThreadInfo) -> String {
-        thread.model.clone().unwrap_or_else(|| crate::models::agent_name(thread.agent).to_string())
+    pub fn gateway_mark_of(&self, account: &str, agent: Agent, server_id: &str) -> GatewayMark {
+        let account = Some(account).filter(|account| !account.is_empty());
+        let Some(server) = self.server(Some(server_id)) else { return GatewayMark::Hidden };
+        GatewayMark::of(server.runs_through_gateway(account, agent), server.runs_pinned(account, agent))
     }
 
     /// Whether the user can move the thread among the active ones.

@@ -56,7 +56,7 @@ class RowModel(
         /** `collapsible` when it is long enough to be shown cut, with a button that shows the rest. */
         class User(
             val text: MessageText, val attachments: List<AttachedFile>, val at: Double, val collapsible: Boolean,
-            val avatar: MessageAvatar = MessageAvatar.None,
+            val avatar: MessageAvatar = MessageAvatar.None, val sender: MessageSender = MessageSender(),
         ) : Kind
         class Prose(val content: ProseContent) : Kind
         class Code(val content: CodeContent) : Kind
@@ -126,6 +126,7 @@ class RowModel(
                 "user" -> Kind.User(
                     MessageText(json, muted = false), json.objects("attachments").map(::AttachedFile), json.double("at"),
                     json.bool("collapsible"), MessageAvatar.of(json.optionalString("avatar")),
+                    MessageSender(json.obj("sender")),
                 )
                 "prose" -> Kind.Prose(ProseContent(json))
                 "code" -> Kind.Code(CodeContent(json.string("language"), json.string("code"), json.optionalInts("spans")))
@@ -164,6 +165,18 @@ enum class MessageAvatar(val raw: String?, val agent: Agent?) {
     companion object {
         fun of(raw: String?): MessageAvatar = entries.firstOrNull { it.raw == raw } ?: None
     }
+}
+
+/** Who sent a message the user didn't write, as the card its avatar opens says: the thread whose agent sent it, with the account and model it ran on then, or nothing for the server. */
+class MessageSender(
+    val threadID: String = "", val account: String = "", val model: String? = null, val note: String = "",
+    /** The message tells the agent that the thread's pull request changed. */
+    val pullRequest: Boolean = false,
+) {
+    constructor(json: JSON?) : this(
+        json?.string("thread_id") ?: "", json?.string("account") ?: "", json?.optionalString("model"),
+        json?.string("note") ?: "", json?.bool("pull_request") ?: false,
+    )
 }
 
 /** Text typeset for one palette, and again for another when the appearance changes. */

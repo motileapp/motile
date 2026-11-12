@@ -1296,8 +1296,9 @@ async fn a_thread_whose_agents_the_usage_limit_stopped_after_its_turn_rests_and_
     next(&mut list).await;
     let thread_id = send(&connection, None, new_thread, "Agents hit the limit").await;
 
-    let rested = thread_where(&mut list, |thread| !thread.running && thread.interruption.is_some()).await;
-    assert_eq!(rested.agents, 0);
+    let limited = thread_where(&mut list, |thread| !thread.running && thread.interruption.is_some()).await;
+    assert_eq!(limited.agents, 2, "the turn ends while its agents work");
+    thread_where(&mut list, |thread| !thread.running && thread.agents == 0).await;
     thread_where(&mut list, |thread| thread.running && thread.interruption.is_none()).await;
 
     let transcript = finished_transcript(&connection, &thread_id).await;
@@ -1651,6 +1652,53 @@ async fn stopping_a_turn_keeps_its_queued_messages_until_they_are_sent(agent: Ag
     );
     assert!(transcript.queued.is_empty());
     assert_eq!(harness.recorded_turns().len(), 2);
+}
+
+#[tokio::test]
+async fn a_turn_ends_while_its_background_agent_works_and_the_agent_wakes_once_it_reports() {
+    let harness = Harness::start_with("fixtures/read-and-bash.jsonl", "0", &[("FAKE_AGENT_CHILD_STEP", "0.3")]).await;
+    let connection = harness.connect().await;
+    let new_thread = harness.new_thread(&connection, Agent::Claude).await;
+    let mut list = connection.follow(&Request::Subscribe).await.unwrap();
+    next(&mut list).await;
+    let thread_id = send(&connection, None, new_thread, "Ask a background agent").await;
+
+    let resting = thread_where(&mut list, |thread| !thread.running && thread.agents == 1).await;
+    assert!(!resting.monitoring && resting.turn_ended_at.is_some());
+    let done = ThreadChange { archived: Some(true), ..Default::default() };
+    let refused = update(&connection, &thread_id, done).await;
+    assert!(matches!(refused, Message::Error { message } if message.contains("agents are still working")));
+
+    let woken = thread_where(&mut list, |thread| thread.running).await;
+    assert_eq!(woken.agents, 0);
+    thread_where(&mut list, |thread| !thread.running).await;
+
+    let transcript = finished_transcript(&connection, &thread_id).await;
+    let own: Vec<&str> = transcript
+        .items
+        .iter()
+        .filter(|item| item.parent.is_none())
+        .filter_map(|item| match &item.kind {
+            ItemKind::Assistant { text } => Some(text.as_str()),
+            ItemKind::TurnEnd { .. } => Some("(turn end)"),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        own,
+        [
+            "An agent is reading greet.py in the background. I'll tell you what it finds.",
+            "(turn end)",
+            "The agent finished: `greet.py` defines `greet(name)`, which returns a greeting.",
+            "(turn end)",
+        ]
+    );
+    let read = transcript
+        .items
+        .iter()
+        .any(|item| item.parent.is_some() && matches!(&item.kind, ItemKind::Tool { call } if call.name == "Read"));
+    assert!(read, "the agent's tool call after the turn ended is kept under its call");
+    assert_eq!(harness.recorded_turns().len(), 1, "the same process wakes");
 }
 
 #[tokio::test]
@@ -4386,8 +4434,13 @@ async fn an_agent_stopped_at_its_usage_limit_stays_stopped_once_the_limit_resets
             _ => None,
         })
         .collect();
-    let account = harness.hub.thread(&parent).await.unwrap().agent_account;
-    let lead = Actor::Agent { thread_id: parent, agent: Agent::Codex, account };
+    let thread = harness.hub.thread(&parent).await.unwrap();
+    let lead = Actor::Agent {
+        thread_id: parent,
+        agent: Agent::Codex,
+        account: thread.agent_account,
+        model: thread.model.unwrap_or_default(),
+    };
     assert_eq!(stoppers, [&lead], "the agent that stopped it is kept");
 }
 
@@ -4416,8 +4469,13 @@ async fn an_agent_answers_the_question_an_agent_it_started_asks() {
         finished_text.is_some_and(|text| text.ends_with("Its reply:\n\nThe button will be blue.")),
         "{finished_text:?}"
     );
-    let account = harness.hub.thread(&parent).await.unwrap().agent_account;
-    let lead = Actor::Agent { thread_id: parent.clone(), agent: Agent::Claude, account };
+    let thread = harness.hub.thread(&parent).await.unwrap();
+    let lead = Actor::Agent {
+        thread_id: parent.clone(),
+        agent: Agent::Claude,
+        account: thread.agent_account,
+        model: thread.model.unwrap_or_default(),
+    };
     let child = started_agents(&told).into_keys().next().unwrap();
     let child = finished_transcript(&connection, &child).await;
     let actors: Vec<&Actor> = child

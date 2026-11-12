@@ -1582,7 +1582,7 @@ mod tests {
             ],
             actions: ["mac", "phone", "tablet"]
                 .into_iter()
-                .map(|device| action(0.0, Actor::User, Some(device), "message", "reply", 1))
+                .map(|device| action(0.0, ActorKind::User, Some(device), "message", "reply", 1))
                 .collect(),
             clients: vec![
                 client("mac", ClientKind::Mac, "macos", ClientForm::Desktop),

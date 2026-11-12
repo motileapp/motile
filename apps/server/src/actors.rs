@@ -104,6 +104,7 @@ impl Store {
                     thread_id: stored.thread.id.clone(),
                     agent: continuation.agent,
                     account: account.clone(),
+                    model: session.model.clone().unwrap_or_default(),
                 },
                 None => Actor::Unknown,
             },
@@ -427,7 +428,12 @@ mod tests {
     #[test]
     fn the_actions_from_before_are_labelled_where_the_transcripts_and_activity_tell_for_certain() {
         let (_folder, store) = store();
-        let lead = Actor::Agent { thread_id: "lead".into(), agent: Agent::Claude, account: "lead-account".into() };
+        let lead = Actor::Agent {
+            thread_id: "lead".into(),
+            agent: Agent::Claude,
+            account: "lead-account".into(),
+            model: String::new(),
+        };
         add_thread(&store, "lead", None);
         add_thread(&store, "work", None);
         add_thread(&store, "child", Some("lead"));

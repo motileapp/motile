@@ -26,13 +26,17 @@ struct SenderCard: View {
         let sending = store.anyThread(sender.threadID)
         title(sending?.title ?? agent.name)
         VStack(alignment: .leading, spacing: 10) {
-            let server = store.anyThread(threadID).flatMap { store.server($0.serverID) }
+            let serverID = store.anyThread(threadID)?.serverID ?? ""
+            let server = store.server(serverID)
             let proxied = server?.runsThroughGateway(sender.account, of: agent) ?? false
             let pinned = server?.runsPinned(sender.account, of: agent) ?? false
-            CardLine(text: accountLabel(agent, server: server), proxied: proxied, pinned: pinned, wraps: true) {
+            let label = store.modelLabel(sender.model, account: sender.account, of: agent, on: serverID)
+            CardLine(text: label, proxied: proxied, pinned: pinned, wraps: true) {
                 AgentIcon(agent: agent, size: ThreadCard.iconSize)
             }
-            CardLine(text: sender.note, wraps: true) { Image(.messageSquareText, size: ThreadCard.iconSize) }
+            if !sender.note.isEmpty {
+                CardLine(text: sender.note, wraps: true) { Image(.messageSquareText, size: ThreadCard.iconSize) }
+            }
             if let sending {
                 let project = store.project(sending.projectID)?.seen(from: sending)
                 CardLine(text: project?.name ?? URL(fileURLWithPath: sending.cwd).lastPathComponent, wraps: true) {
@@ -74,15 +78,6 @@ struct SenderCard: View {
         Text(text)
             .font(.ui(.sm, weight: .medium))
             .foregroundStyle(Color.themeForeground)
-    }
-
-    /// The agent, with the account it ran on when its agent has more than one, as the composer
-    /// names it. The Gateway account that places its threads has no name of its own to show.
-    private func accountLabel(_ agent: Agent, server: Server?) -> String {
-        guard let server, server.accounts(of: agent).count > 1, let account = server.account(sender.account, of: agent),
-            !account.gateway || account.pin != nil
-        else { return agent.name }
-        return "\(agent.name) · \(account.name)"
     }
 }
 

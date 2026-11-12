@@ -686,7 +686,8 @@ impl Hub {
     /// The agent of a thread, as it acts in another one.
     pub(crate) async fn agent_actor(&self, thread_id: &str) -> Actor {
         let Some(thread) = self.thread(thread_id).await else { return Actor::Unknown };
-        Actor::Agent { thread_id: thread.id, agent: thread.agent, account: thread.agent_account }
+        let model = thread.model.unwrap_or_default();
+        Actor::Agent { thread_id: thread.id, agent: thread.agent, account: thread.agent_account, model }
     }
 
     /// The projects' names, by id.
@@ -1929,6 +1930,9 @@ impl Hub {
             }
             Some(true) if thread.monitoring => {
                 bail!("The agent is still monitoring. Archive the thread when it has stopped.")
+            }
+            Some(true) if thread.agents > 0 => {
+                bail!("Its agents are still working. Archive the thread when they have finished.")
             }
             Some(true) => {
                 thread.archived_at = thread.archived_at.or_else(|| Some(now()));
@@ -3732,17 +3736,19 @@ impl Hub {
             run.input = None;
             return Ok(());
         }
-        if run.background.agents > 0 {
+        let monitoring = run.background.watches > 0;
+        let thread = &mut live.stored.thread;
+        if !thread.running && thread.monitoring == monitoring && run.resting.is_some() == rests {
             return Ok(());
         }
         let resting = rests.then(Instant::now);
         run.resting = resting;
-        let thread = &mut live.stored.thread;
-        thread.running = false;
-        thread.monitoring = !rests;
+        if std::mem::replace(&mut thread.running, false) {
+            thread.turn_ended_at = Some(now());
+        }
+        thread.monitoring = monitoring;
         thread.updated_at = now();
-        thread.turn_ended_at = Some(now());
-        live.activity = Activity { monitoring: !rests, ..Activity::default() };
+        live.activity = Activity { monitoring, agents: thread.agents, ..Activity::default() };
         live.flush(&self.store)?;
         self.store.save_thread(&live.stored)?;
         live.send_activity();
@@ -3862,13 +3868,10 @@ impl Hub {
         let Some(mut live) = self.live(thread_id).await else { return };
         let live = &mut *live;
         let was_running = live.stored.thread.running;
-        // A turn that ended while its agents worked settles once they are done, which they can
-        // be without waking the agent, when the usage limit stopped them all.
-        let settles = events.iter().any(|event| match event {
-            AgentEvent::Completed { .. } => true,
-            AgentEvent::Background(_) => was_running,
-            _ => false,
-        });
+        // What works in the background after the turn can end without waking the agent, when the
+        // usage limit stopped it all.
+        let settles =
+            events.iter().any(|event| matches!(event, AgentEvent::Completed { .. } | AgentEvent::Background(_)));
         for event in events {
             if let Err(error) = self.apply_event(live, event) {
                 tracing::error!(thread_id, "couldn't save a thread update: {error:#}");
@@ -4166,9 +4169,13 @@ impl Hub {
         Ok(())
     }
 
-    /// Tells the clients how many of the agents the thread's agent started still work.
+    /// Tells the clients how many of the agents the thread's agent started in its own session
+    /// still work. Those started through the server work in threads of their own.
     fn count_agents(&self, live: &mut Live) {
-        let working = |item: &&Item| matches!(&item.kind, ItemKind::Tool { call } if call.agent.as_ref().is_some_and(|agent| agent.status == ToolStatus::Running));
+        let working = |item: &&Item| {
+            matches!(&item.kind, ItemKind::Tool { call } if !children::starts_agent(call)
+                && call.agent.as_ref().is_some_and(|agent| agent.status == ToolStatus::Running))
+        };
         let agents = live.open.values().filter(working).count() as u32;
         if live.stored.thread.agents == agents {
             return;

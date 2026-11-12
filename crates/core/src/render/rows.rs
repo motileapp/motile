@@ -92,10 +92,14 @@ impl MessageAvatar {
 /// What the card an avatar opens says of who sent the message.
 #[derive(Serialize, Clone, PartialEq, Debug, Default)]
 pub struct MessageSender {
-    /// The thread whose agent sent it, and the account the agent ran on then. Empty for the server.
+    /// The thread whose agent sent it, and the account and model the agent ran on then. Empty for
+    /// the server; the model also for the agent's default.
     pub thread_id: String,
     pub account: String,
-    /// What it did: "Started this thread", or a sentence for the server: "The server told the agent to continue."
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub model: String,
+    /// What it did: "Started this thread", a sentence for the server ("The server told the agent to
+    /// continue."), or empty for an agent's later message.
     pub note: String,
     /// The message tells the agent that the thread's pull request changed.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
@@ -105,10 +109,11 @@ pub struct MessageSender {
 impl MessageSender {
     pub fn of(by: &Actor, text: &str, first: bool) -> Self {
         match by {
-            Actor::Agent { thread_id, account, .. } => Self {
+            Actor::Agent { thread_id, account, model, .. } => Self {
                 thread_id: thread_id.clone(),
                 account: account.clone(),
-                note: if first { "Started this thread" } else { "Messaged this thread" }.to_string(),
+                model: model.clone(),
+                note: if first { "Started this thread".to_string() } else { String::new() },
                 pull_request: false,
             },
             Actor::Server { reason } => {
@@ -127,7 +132,7 @@ impl MessageSender {
     }
 
     fn is_empty(&self) -> bool {
-        self.note.is_empty()
+        self.note.is_empty() && self.thread_id.is_empty()
     }
 }
 
@@ -1818,7 +1823,7 @@ mod tests {
             }
             message
         };
-        let agent = |agent| Actor::Agent { thread_id: "lead".into(), agent, account: "a".into() };
+        let agent = |agent| Actor::Agent { thread_id: "lead".into(), agent, account: "a".into(), model: "opus".into() };
         let mut transcript = Transcript::new("/srv/api");
         transcript.load(vec![
             sent("a", 0, agent(Agent::Codex)),
@@ -1845,8 +1850,8 @@ mod tests {
         assert_eq!(
             senders,
             [
-                serde_json::json!({"thread_id": "lead", "account": "a", "note": "Started this thread"}),
-                serde_json::json!({"thread_id": "lead", "account": "a", "note": "Messaged this thread"}),
+                serde_json::json!({"thread_id": "lead", "account": "a", "model": "opus", "note": "Started this thread"}),
+                serde_json::json!({"thread_id": "lead", "account": "a", "model": "opus", "note": ""}),
                 serde_json::json!({"thread_id": "", "account": "", "note": "The server told the agent to continue once the limit reset."}),
                 Value::Null,
                 Value::Null,

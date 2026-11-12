@@ -60,6 +60,8 @@ enum MessageAvatar: String {
 struct MessageSender {
     let threadID: String
     let account: String
+    /// Nil for the agent's default.
+    let model: String?
     let note: String
     /// The message tells the agent that the thread's pull request changed.
     let pullRequest: Bool
@@ -67,6 +69,7 @@ struct MessageSender {
     init(json: JSON) {
         threadID = json.string("thread_id")
         account = json.string("account")
+        model = json.optionalString("model")
         note = json.string("note")
         pullRequest = json.bool("pull_request")
     }

@@ -12,8 +12,8 @@ use super::{ROW_INSET, Sidebar, row_margin};
 use crate::models::{ThreadInfo, last_component, shortened};
 use crate::theme::{IconSize, Surface, TextSize, colors};
 use crate::ui::control::dotted;
-use crate::ui::logos::{self, pull_request_color, pull_request_symbol};
-use crate::ui::{GatewayMark, divider_on, dropdown_card, icons, proxied_dotted, tabular_numbers};
+use crate::ui::logos;
+use crate::ui::{GatewayMark, divider_on, dropdown_card, icons, proxied_dotted};
 
 const MAX_WIDTH: f32 = 320.;
 /// Every line's icon, beside its 12-point text.
@@ -181,34 +181,12 @@ impl Sidebar {
                     }),
             )
             .when_some(pull_request, |card, pull_request| {
-                card.child(div().py(px(10.)).child(divider_on(Surface::Popover, cx))).child(
-                    div()
-                        .min_w_0()
-                        .flex()
-                        .items_center()
-                        .gap(px(8.))
-                        .child(
-                            icons::symbol(pull_request_symbol(&pull_request), ICON)
-                                .text_color(pull_request_color(&pull_request, c)),
-                        )
-                        .child(
-                            div()
-                                .flex_shrink_0()
-                                .text_size(TextSize::Xs)
-                                .font_weight(FontWeight::MEDIUM)
-                                .font_features(tabular_numbers())
-                                .text_color(c.muted_stronger_foreground)
-                                .child(format!("#{}", pull_request.number)),
-                        )
-                        .child(
-                            div()
-                                .min_w_0()
-                                .text_size(TextSize::Xs)
-                                .text_color(c.muted_foreground)
-                                .truncate()
-                                .child(pull_request.title.clone()),
-                        ),
-                )
+                card.child(div().py(px(10.)).child(divider_on(Surface::Popover, cx))).child(logos::pull_request_line(
+                    &pull_request,
+                    ICON,
+                    false,
+                    cx,
+                ))
             })
     }
 }

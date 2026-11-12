@@ -2667,7 +2667,12 @@ impl Core {
         let Some(open) = self.open.get(thread_id) else { return Actor::Unknown };
         let server = self.servers.iter().find(|server| server.device.public_key == open.server_id);
         let Some(thread) = server.and_then(|server| server.threads.get(thread_id)) else { return Actor::Unknown };
-        Actor::Agent { thread_id: thread.id.clone(), agent: thread.agent, account: thread.agent_account.clone() }
+        Actor::Agent {
+            thread_id: thread.id.clone(),
+            agent: thread.agent,
+            account: thread.agent_account.clone(),
+            model: thread.model.clone().unwrap_or_default(),
+        }
     }
 
     /// Tells the thread's programs what its server can do and how much the thread may.
@@ -4539,8 +4544,10 @@ fn save_icon(folder: &std::path::Path, project_id: &str, name: &str, bytes: &[u8
     Ok(())
 }
 
-/// How the agents the thread's agent started are doing, theirs too. `None` when it started none.
+/// How the agents the thread's agent started are doing, theirs too: those that work in threads of
+/// their own and those that work in its session. `None` when it started none.
 fn children_of(threads: &HashMap<String, Thread>, thread_id: &str) -> Option<Children> {
+    let own = threads.get(thread_id).filter(|thread| thread.agents > 0);
     let mut descendants = Vec::new();
     let mut parents = vec![thread_id.to_string()];
     while let Some(parent) = parents.pop() {
@@ -4554,12 +4561,13 @@ fn children_of(threads: &HashMap<String, Thread>, thread_id: &str) -> Option<Chi
             descendants.push(child);
         }
     }
-    if descendants.is_empty() {
+    if descendants.is_empty() && own.is_none() {
         return None;
     }
     let mut working: Vec<&&Thread> = descendants.iter().filter(|thread| thread.running || thread.monitoring).collect();
     working.sort_by(|one, other| one.created_at.total_cmp(&other.created_at));
-    let running = working.len() as u32;
+    let in_session = own.map(|thread| vec![thread.agent; thread.agents as usize]).unwrap_or_default();
+    let running = (in_session.len() + working.len()) as u32;
     let running_count = match running {
         0 => None,
         1 => Some("1 agent".to_string()),
@@ -4590,7 +4598,8 @@ fn children_of(threads: &HashMap<String, Thread>, thread_id: &str) -> Option<Chi
         }),
         several => Some(format!("{} agents need you", several.len())),
     };
-    let working = working.iter().take(agents::avatars_shown(working.len())).map(|thread| thread.agent).collect();
+    let working: Vec<Agent> = in_session.into_iter().chain(working.iter().map(|thread| thread.agent)).collect();
+    let working = working[..agents::avatars_shown(working.len())].to_vec();
     Some(Children { running, working, waiting, waiting_text, running_count, running_text, stop_question })
 }
 
@@ -4710,7 +4719,7 @@ fn stopped(thread: Thread) -> Thread {
 
 fn view_of(server_id: &str, thread: &Thread, seen_at: Option<f64>, children: Option<Children>) -> ThreadView {
     ThreadView {
-        unread: is_unread(thread, seen_at),
+        unread: is_unread(thread, seen_at, children.as_ref()),
         woke: thread.woke_at.is_some() && (seen_at.is_none() || after_seen(thread.woke_at, seen_at)),
         section: section_of(thread, children.as_ref()),
         thread: thread.clone(),
@@ -4719,9 +4728,11 @@ fn view_of(server_id: &str, thread: &Thread, seen_at: Option<f64>, children: Opt
     }
 }
 
-/// A turn ended after the user last looked. A thread never opened here doesn't nag.
-fn is_unread(thread: &Thread, seen_at: Option<f64>) -> bool {
-    after_seen(thread.turn_ended_at, seen_at) && !thread.running && !thread.monitoring
+/// A turn ended after the user last looked, and nothing works on. A thread never opened here
+/// doesn't nag.
+fn is_unread(thread: &Thread, seen_at: Option<f64>, children: Option<&Children>) -> bool {
+    let agents_work = children.is_some_and(|children| children.running > 0);
+    after_seen(thread.turn_ended_at, seen_at) && !thread.running && !thread.monitoring && !agents_work
 }
 
 fn after_seen(at: Option<f64>, seen_at: Option<f64>) -> bool {
@@ -4893,6 +4904,33 @@ mod tests {
             parent: None,
             rev: 3,
         }
+    }
+
+    #[test]
+    fn the_agents_strip_counts_the_agents_of_its_session_and_those_with_threads_of_their_own() {
+        use motile_protocol::wire::{Agent, ThreadParent};
+        let lead = Thread { id: "lead".into(), agents: 2, ..thread(false, false, false) };
+        let child = |id: &str, running: bool| Thread {
+            id: id.into(),
+            agent: Agent::Codex,
+            parent: Some(ThreadParent { thread_id: "lead".into(), tool_id: None }),
+            ..thread(running, false, false)
+        };
+        let threads: HashMap<String, Thread> = [lead.clone(), child("a", true), child("b", false)]
+            .into_iter()
+            .map(|thread| (thread.id.clone(), thread))
+            .collect();
+
+        let children = children_of(&threads, "lead").unwrap();
+        assert_eq!(
+            (children.running, children.working, children.running_text.as_deref()),
+            (3, vec![Agent::Claude, Agent::Claude, Agent::Codex], Some("3 agents working"))
+        );
+
+        let alone: HashMap<String, Thread> = [("lead".to_string(), lead)].into_iter().collect();
+        assert_eq!(children_of(&alone, "lead").unwrap().running_text.as_deref(), Some("2 agents working"));
+        let rested = Thread { agents: 0, ..thread(false, false, false) };
+        assert_eq!(children_of(&[("t".to_string(), rested)].into_iter().collect(), "t"), None);
     }
 
     fn approval() -> motile_protocol::wire::Approval {
