@@ -81,7 +81,7 @@ struct ActivityRow: View {
                 }
                 .buttonStyle(.highlight(radius: Radius.sm))
                 .disabled(commit.sha.isEmpty)
-                .help("Show what this commit changed")
+                .tooltip("Show what this commit changed")
             }
         }
         .padding(.leading, -6)

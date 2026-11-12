@@ -19,7 +19,7 @@ struct ServerSyncLine: View {
                     .truncationMode(.tail)
             }
         }
-        .help(sync.error ?? "")
+        .tooltip(sync.error ?? "")
     }
 
     @ViewBuilder private var symbol: some View {

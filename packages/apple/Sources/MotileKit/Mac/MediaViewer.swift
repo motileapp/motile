@@ -43,6 +43,8 @@ struct MediaViewer: View {
         let item = viewing.item
         let count = file == nil ? 1 : markable ? 4 : 3
         return ZStack {
+            ViewerCoverView()
+                .ignoresSafeArea()
             Color.themeScrim
                 .ignoresSafeArea()
                 .allowsHitTesting(false)
@@ -53,9 +55,9 @@ struct MediaViewer: View {
             content(item)
             if viewing.items.count > 1, markup == nil {
                 HStack {
-                    roundButton(.chevronLeft, help: "Previous (←)") { store.viewNext(-1) }
+                    roundButton(.chevronLeft, help: help("Previous", "viewer.previous")) { store.viewNext(-1) }
                     Spacer()
-                    roundButton(.chevronRight, help: "Next (→)") { store.viewNext(1) }
+                    roundButton(.chevronRight, help: help("Next", "viewer.next")) { store.viewNext(1) }
                 }
                 .padding(.horizontal, 14)
             }
@@ -88,19 +90,19 @@ struct MediaViewer: View {
                     HStack(spacing: 0) {
                         if let file {
                             if markable {
-                                roundButton(.pencilLine, help: "Mark Up (M)", margin: .sharing(Self.buttonGap, at: 0, of: count)) { startMarkup() }
+                                roundButton(.pencilLine, help: help("Mark Up", "viewer.markUp"), margin: .sharing(Self.buttonGap, at: 0, of: count)) { startMarkup() }
                             }
                             let first = markable ? 1 : 0
                             CopyButton(
-                                help: "\(Self.copyTitle(item)) (⌘C)", variant: .overlay, size: .large,
+                                help: help(Self.copyTitle(item), "viewer.copy"), variant: .overlay, size: .large,
                                 symbolSize: ControlSize.large.smallSymbol, round: true, copies: copies,
                                 margin: .sharing(Self.buttonGap, at: first, of: count)
                             ) { MediaFiles.copy(file, video: item.video, named: item.name) }
-                            roundButton(.download, help: "Save As (⌘S)", margin: .sharing(Self.buttonGap, at: first + 1, of: count)) {
+                            roundButton(.download, help: help("Save As", "viewer.save"), margin: .sharing(Self.buttonGap, at: first + 1, of: count)) {
                                 MediaFiles.save(file, named: item.name)
                             }
                         }
-                        roundButton(.x, help: "Close (Esc)", margin: .sharing(Self.buttonGap, at: count - 1, of: count)) { store.closeViewer() }
+                        roundButton(.x, help: help("Close", "viewer.close"), margin: .sharing(Self.buttonGap, at: count - 1, of: count)) { store.closeViewer() }
                     }
                     .padding(.trailing, Self.cornerInset)
                     .frame(maxWidth: .infinity, alignment: .trailing)
@@ -162,9 +164,9 @@ struct MediaViewer: View {
 
     private func markupButtons(_ markup: MarkupSession) -> some View {
         HStack(spacing: 8) {
-            ActionButton("Cancel", help: "Cancel (Esc)", variant: .overlay, size: .large, round: true) { cancelMarkup() }
+            ActionButton("Cancel", help: help("Cancel", "markup.cancel"), variant: .overlay, size: .large, round: true) { cancelMarkup() }
             ActionButton(
-                markup.attachment == nil ? "Add to Message" : "Done", help: "Return", variant: .primary, size: .large,
+                markup.attachment == nil ? "Add to Message" : "Done", help: store.shortcuts.label("markup.done", in: shortcutContext) ?? "", variant: .primary, size: .large,
                 pending: markup.finishing, round: true
             ) { finishMarkup() }
             .disabled(!markup.changed && markup.attachment != nil)
@@ -222,28 +224,44 @@ struct MediaViewer: View {
         }
     }
 
-    /// While an image is marked up, the keys pick its tools and colours.
-    private func handleMarkup(_ event: NSEvent, _ markup: MarkupSession) -> Bool {
+    /// While an image is marked up, the keys pick its tools and colours. A pin's note takes them
+    /// while it is written, but for the key that deselects it.
+    private func handleMarkup(_ command: String?, _ event: NSEvent, _ markup: MarkupSession) -> Bool {
         guard discarding == nil else { return false }
-        if event.keyCode == 53 {
+        if command == "markup.cancel" {
             markup.selected == nil ? cancelMarkup() : markup.deselect()
             return true
         }
         guard markup.selected == nil else { return false }
-        let key = event.charactersIgnoringModifiers?.lowercased() ?? ""
-        if event.modifierFlags.contains(.command) {
-            guard key == "z" else { return false }
-            event.modifierFlags.contains(.shift) ? markup.redo() : markup.undo()
-            return true
-        }
-        if event.keyCode == 36 || event.keyCode == 76 {
-            finishMarkup()
-        } else if let tool = MarkupTool.allCases.first(where: { $0.key.lowercased() == key }) {
-            markup.tool = tool
-        } else if let digit = Int(key), markup.inks.indices.contains(digit - 1) {
-            markup.ink = markup.inks[digit - 1]
+        switch command {
+        case "markup.undo": markup.undo()
+        case "markup.redo": markup.redo()
+        case "markup.done": finishMarkup()
+        case let command? where command.hasPrefix(Self.zoomCommand): return ZoomingScrollView.zoom(command)
+        case let command? where command.hasPrefix(Self.inkCommand):
+            let ink = String(command.dropFirst(Self.inkCommand.count))
+            guard markup.inks.contains(ink) else { return true }
+            markup.ink = ink
+        case let command? where MarkupTool(command: command) != nil:
+            markup.tool = MarkupTool(command: command) ?? markup.tool
+        default: return !event.modifierFlags.contains(.command)
         }
         return true
+    }
+
+    private static let inkCommand = "markup.ink."
+    private static let zoomCommand = "image."
+
+    /// The text with the keys of the command after it, as they are while the viewer is open.
+    private func help(_ text: String, _ command: String) -> String {
+        store.shortcuts.help(text, command, in: shortcutContext)
+    }
+
+    /// What holds for the keybindings' conditions while the viewer is open.
+    private var shortcutContext: Set<String> {
+        var context = markup == nil ? Shortcuts.viewing : Shortcuts.markingUp
+        if case .image = loaded { context.insert(Shortcuts.imageShown) }
+        return context
     }
 
     @ViewBuilder private func content(_ item: ViewedMedia) -> some View {
@@ -329,31 +347,28 @@ struct MediaViewer: View {
     /// The player's own full screen and the save panel take the keys while they are up.
     private func handle(_ event: NSEvent) -> Bool {
         guard !fullScreen, !(event.window is NSPanel) else { return false }
-        if let markup { return handleMarkup(event, markup) }
-        if event.charactersIgnoringModifiers == "m", event.modifierFlags.intersection(.deviceIndependentFlagsMask).isEmpty, markable {
+        let flags = event.modifierFlags
+        let command = ShortcutMonitor.shared.command(of: event, in: shortcutContext)
+        if let markup { return handleMarkup(command, event, markup) }
+        switch command {
+        case "viewer.markUp":
+            guard markable else { return true }
             startMarkup()
-            return true
-        }
-        if event.modifierFlags.contains(.command), let file {
-            switch event.charactersIgnoringModifiers {
-            case "c":
-                MediaFiles.copy(file, video: viewing.item.video, named: viewing.item.name)
-                copies += 1
-                return true
-            case "s":
-                MediaFiles.save(file, named: viewing.item.name)
-                return true
-            default: break
-            }
-        }
-        switch event.keyCode {
-        case 53: store.closeViewer()
-        case 123: store.viewNext(-1)
-        case 124: store.viewNext(1)
-        case 49:
+        case "viewer.copy":
+            guard let file else { return false }
+            MediaFiles.copy(file, video: viewing.item.video, named: viewing.item.name)
+            copies += 1
+        case "viewer.save":
+            guard let file else { return false }
+            MediaFiles.save(file, named: viewing.item.name)
+        case "viewer.close": store.closeViewer()
+        case let command? where command.hasPrefix(Self.zoomCommand): return ZoomingScrollView.zoom(command)
+        case "viewer.previous": store.viewNext(-1)
+        case "viewer.next": store.viewNext(1)
+        case "viewer.playPause":
             guard case .video(let player) = loaded else { return true }
             player.timeControlStatus == .paused ? player.play() : player.pause()
-        default: return !event.modifierFlags.contains(.command)
+        default: return !flags.contains(.command)
         }
         return true
     }
@@ -457,7 +472,7 @@ struct ZoomableImage: NSViewRepresentable {
     var radius: CGFloat = 0
     /// The most it is enlarged to fit, as a multiple of `size`.
     var largestFit: CGFloat = 1
-    /// Whether ⌘+, ⌘−, ⌘0 and ⌘9 are this image's.
+    /// Whether the keybindings' zoom keys are this image's.
     var keys = true
     /// What a right click on the picture offers.
     var menu: () -> [MenuAction] = { [] }
@@ -480,8 +495,8 @@ struct ZoomableImage: NSViewRepresentable {
     }
 }
 
-/// An image that fits the window until it is zoomed: by pinching, a double click, or ⌘+, ⌘−,
-/// ⌘0 for its real size and ⌘9 to fit again. Zoomed, it is moved by scrolling or dragging, or
+/// An image that fits the window until it is zoomed: by pinching, a double click, or the
+/// keybindings' zoom keys. Zoomed, it is moved by scrolling or dragging, or
 /// only by scrolling while it is marked up, when dragging draws.
 final class ZoomingScrollView: NSScrollView {
     static let viewerMargin = CGSize(width: 64, height: 52)
@@ -490,7 +505,9 @@ final class ZoomingScrollView: NSScrollView {
     /// How much smaller than fitting, or than its real size if that is smaller, an image zooms out.
     private static let zoomOut: CGFloat = 4
 
-    var keys = true
+    var keys = true {
+        didSet { claimKeys() }
+    }
     var menuActions: () -> [MenuAction] = { [] }
     var clickedBeside: () -> Void = {}
     /// The room around the picture when it fits: more while it is marked up, to clear the bar.
@@ -638,16 +655,35 @@ final class ZoomingScrollView: NSScrollView {
         toggleZoom(at: contentView.convert(event.locationInWindow, from: nil))
     }
 
-    override func performKeyEquivalent(with event: NSEvent) -> Bool {
-        guard keys, event.modifierFlags.contains(.command) else { return false }
-        switch event.charactersIgnoringModifiers {
-        case "=", "+": zoom(to: magnification * 1.5)
-        case "-": zoom(to: magnification / 1.5)
-        case "0": zoom(to: 1)
-        case "9": zoom(to: fit)
+    /// Runs a zoom command of the keybindings on the image that has the keys. Whether there was one.
+    static func zoom(_ command: String) -> Bool {
+        guard let view = withKeys, view.window?.isKeyWindow == true else { return false }
+        switch command {
+        case "image.zoomIn": view.zoom(to: view.magnification * 1.5)
+        case "image.zoomOut": view.zoom(to: view.magnification / 1.5)
+        case "image.actualSize": view.zoom(to: 1)
+        case "image.zoomToFit": view.zoom(to: view.fit)
         default: return false
         }
         return true
+    }
+
+    /// Whether an image in the key window takes the zoom keys.
+    static var takesKeys: Bool { withKeys?.window?.isKeyWindow == true }
+
+    private static weak var withKeys: ZoomingScrollView?
+
+    private func claimKeys() {
+        if keys, window != nil {
+            Self.withKeys = self
+        } else if Self.withKeys === self {
+            Self.withKeys = nil
+        }
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        claimKeys()
     }
 
     private func onPicture(_ event: NSEvent) -> Bool {

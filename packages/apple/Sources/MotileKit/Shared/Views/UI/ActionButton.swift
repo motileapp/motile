@@ -664,7 +664,7 @@ struct ActionButton: View {
         .padding(reach.outset)
         .padding(inline ? inlineBleed : EdgeInsets())
         .allowsHitTesting(!pending)
-        .help(help ?? "")
+        .tooltip(help ?? "")
         .accessibilityLabel(words.map { [$0, tinted].compactMap { $0 }.joined(separator: " ") } ?? help ?? "")
     }
 
@@ -829,7 +829,7 @@ struct ActionMenu<Content: View>: View {
         .onHover { hovering = $0 }
         .padding(reach.outset)
         .allowsHitTesting(!pending)
-        .help(help ?? "")
+        .tooltip(help ?? "")
         .accessibilityLabel(title ?? help ?? "")
     }
 }

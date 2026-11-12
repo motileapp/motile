@@ -24,7 +24,7 @@ struct LimitPills: View {
                 .frame(height: scaled(Self.height))
                 .accessibilityElement()
                 .accessibilityLabel(Self.description(of: window))
-                .help(Self.description(of: window))
+                .tooltip(Self.description(of: window))
             }
         }
     }

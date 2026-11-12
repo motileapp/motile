@@ -442,7 +442,12 @@ impl Shortcuts {
 
     /// The text with the command's keys after it in parentheses: "Hide the sidebar (⌘B)".
     pub fn help(&self, text: &str, command: &str) -> String {
-        match self.label(command) {
+        self.help_in(text, command, &[])
+    }
+
+    /// The text with the command's keys where `context` holds after it in parentheses.
+    pub fn help_in(&self, text: &str, command: &str, context: &[&str]) -> String {
+        match self.label_in(command, context) {
             Some(label) => format!("{text} ({label})"),
             None => text.to_string(),
         }

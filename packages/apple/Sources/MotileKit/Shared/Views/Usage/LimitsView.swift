@@ -135,7 +135,7 @@ struct LimitRow: View {
                         .font(.ui(.xs))
                 }
                 .foregroundStyle(Color.themeMutedStrongerForeground)
-                .help(Self.help(of: pace))
+                .tooltip(Self.help(of: pace))
             }
         }
     }
@@ -211,7 +211,7 @@ private struct LimitBar: View {
         HStack(spacing: 6) {
             if let resetsIn = window.resetsIn {
                 Text(resetsIn)
-                    .help("Starts over in \(resetsIn)")
+                    .tooltip("Starts over in \(resetsIn)")
             }
             if window.resetsIn != nil, window.resetCredits > 0 {
                 Text("·")
@@ -221,7 +221,7 @@ private struct LimitBar: View {
                     Image(.ticket, size: .sm)
                     Text("\(window.resetCredits)")
                 }
-                .help(window.resetCredits == 1 ? "1 reset to use" : "\(window.resetCredits) resets to use")
+                .tooltip(window.resetCredits == 1 ? "1 reset to use" : "\(window.resetCredits) resets to use")
             }
         }
         .font(.ui(.xs, weight: .medium))

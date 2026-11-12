@@ -542,6 +542,23 @@ class PointerTextView: NSTextView, CursorOwner {
         return linkTextAttributes?[.cursor] as? NSCursor ?? .pointingHand
     }
 
+    /// AppKit's text view takes away every tooltip when the pointer comes, moves or goes over it,
+    /// even one shown by what covers it, like the media viewer's buttons.
+    override func mouseEntered(with event: NSEvent) {
+        guard !DropdownBackdrop.covers(self, at: event) else { return }
+        super.mouseEntered(with: event)
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        guard !DropdownBackdrop.covers(self, at: event) else { return }
+        super.mouseMoved(with: event)
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        guard !DropdownBackdrop.covers(self, at: event) else { return }
+        super.mouseExited(with: event)
+    }
+
     /// The character drawn under the point, if any.
     private func characterIndex(under point: CGPoint) -> Int? {
         guard let layoutManager, let textContainer else { return nil }

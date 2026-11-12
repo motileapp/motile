@@ -283,7 +283,7 @@ struct PanelTabChip: View {
         }
         .padding(.vertical, -Self.reach)
         .onHover { hovering = $0 }
-        .help(tab.path ?? tab.title)
+        .tooltip(tab.path ?? tab.title)
         .contextMenu {
             Button("Close") { panel.close(tab) }
             Button("Close Others") { panel.closeOthers(tab) }
@@ -373,7 +373,7 @@ private struct PanelLauncher: View {
         .buttonStyle(.highlight(inset: EdgeInsets(top: Self.gap / 2, leading: 0, bottom: Self.gap / 2, trailing: 0)))
         .disabled(reason != nil)
         .opacity(.disabled, when: reason != nil)
-        .help(reason ?? "")
+        .tooltip(reason ?? "")
     }
 }
 
@@ -453,7 +453,7 @@ struct DiffSurface: View {
                         .font(.ui(.xs))
                         .foregroundStyle(Color.themeMutedStrongerForeground)
                         .padding(.leading, 6)
-                        .help(page.canReviewLines ? "Click a line's number to comment on it" : "")
+                        .tooltip(page.canReviewLines ? "Click a line's number to comment on it" : "")
                 }
                 Spacer(minLength: 4)
                 HStack(spacing: 0) {

@@ -53,7 +53,7 @@ struct PullRequestSurface: View {
                 Image(.eye, size: .sm)
                     .foregroundStyle(Color.themePrimary)
                     .padding(.leading, 4)
-                    .help("The agent hears when its checks finish, someone comments or it conflicts")
+                    .tooltip("The agent hears when its checks finish, someone comments or it conflicts")
             }
         } else {
             Text("Pull Request")
@@ -287,7 +287,7 @@ private struct PullRequestPageView: View {
                     .frame(height: pressable(24))
                 }
                 .buttonStyle(.highlight(radius: Radius.sm))
-                .help("Show what it changes")
+                .tooltip("Show what it changes")
             }
             if extended, let below = page.stackedOn {
                 Button {
@@ -307,7 +307,7 @@ private struct PullRequestPageView: View {
                 }
                 .buttonStyle(.highlight(radius: Radius.sm))
                 .padding(.leading, -6)
-                .help("Open the pull request it merges into")
+                .tooltip("Open the pull request it merges into")
             }
             if extended {
                 people
@@ -829,7 +829,7 @@ private struct CheckRow: View {
                 .font(.ui(.xs))
                 .foregroundStyle(Color.themeForeground)
                 .lineLimit(1)
-                .help(check.description ?? check.name)
+                .tooltip(check.description ?? check.name)
             if let workflow = check.workflow {
                 Text(workflow)
                     .font(.ui(.xs))

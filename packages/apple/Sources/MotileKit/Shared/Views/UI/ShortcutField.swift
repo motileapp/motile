@@ -33,7 +33,7 @@ struct ShortcutField: View {
                 .padding(margin)
         }
         .buttonStyle(ControlButtonStyle(look: ControlLook(variant: .outline, size: size, selected: recording), margin: margin))
-        .help(recording ? "Press the keys, or Esc to stop" : "Record new keys")
+        .tooltip(recording ? "Press the keys, or Esc to stop" : "Record new keys")
         .onDisappear(perform: stop)
     }
 

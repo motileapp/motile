@@ -3,6 +3,7 @@ import SwiftUI
 /// The bar under an image being marked up: the tools, the colours, undo and redo. While a pin is
 /// selected it is the pin's note instead, which Return keeps.
 struct MarkupBar: View {
+    @Environment(AppStore.self) private var store
     @Bindable var session: MarkupSession
     @FocusState private var noteFocused: Bool
 
@@ -39,7 +40,7 @@ struct MarkupBar: View {
                 ForEach(MarkupTool.allCases, id: \.self) { tool in
                     let picked = session.tool == tool
                     ActionButton(
-                        icon: tool.symbol, help: Self.mac ? "\(tool.title) (\(tool.key))" : tool.title,
+                        icon: tool.symbol, help: help(tool.title, tool.command),
                         variant: picked && !Self.mac ? .accent : .ghost, size: Self.size, selected: picked && Self.mac, round: true
                     ) { session.tool = tool }
                 }
@@ -50,9 +51,9 @@ struct MarkupBar: View {
                     Swatch(color: Self.color(session.ink), help: "Colour", selected: true, size: Self.size) { session.inksOpen = true }
                 }
                 divider
-                ActionButton(icon: .undo2, help: Self.mac ? "Undo (⌘Z)" : "Undo", size: Self.size, round: true) { session.undo() }
+                ActionButton(icon: .undo2, help: help("Undo", "markup.undo"), size: Self.size, round: true) { session.undo() }
                     .disabled(!session.canUndo)
-                ActionButton(icon: .redo2, help: Self.mac ? "Redo (⇧⌘Z)" : "Redo", size: Self.size, round: true) { session.redo() }
+                ActionButton(icon: .redo2, help: help("Redo", "markup.redo"), size: Self.size, round: true) { session.redo() }
                     .disabled(!session.canRedo)
             }
         }
@@ -60,9 +61,9 @@ struct MarkupBar: View {
 
     /// On a phone they take the tools' place while they are open, and picking one closes them.
     private var swatches: some View {
-        ForEach(Array(session.inks.enumerated()), id: \.element) { index, ink in
+        ForEach(session.inks, id: \.self) { ink in
             Swatch(
-                color: Self.color(ink), help: Self.mac ? "\(ink.capitalized) (\(index + 1))" : ink.capitalized,
+                color: Self.color(ink), help: help(ink.capitalized, "markup.ink.\(ink)"),
                 selected: session.ink == ink, size: Self.size
             ) { session.ink = ink }
         }
@@ -87,6 +88,11 @@ struct MarkupBar: View {
             }
         }
         .task(id: pin.mark) { noteFocused = true }
+    }
+
+    /// The text with the command's keys after it, on the Mac.
+    private func help(_ text: String, _ command: String) -> String {
+        Self.mac ? store.shortcuts.help(text, command, in: Shortcuts.markingUp) : text
     }
 
     private var divider: some View {

@@ -24,7 +24,7 @@ struct ChildrenStrip: View {
             .font(.ui(.xs, weight: .medium))
             .foregroundStyle(Color.themeWarning)
             .lineLimit(1)
-            .help(text)
+            .tooltip(text)
             Spacer(minLength: 8)
             ActionButton("Open \(first.ask.word)", help: "Open \(first.title)", variant: .ghost, margin: ComposerStrip.margin) {
                 store.openStartedThread(first.threadID)

@@ -11,9 +11,10 @@ final class DropdownBackdrop: NSView {
     var close: () -> Void = {}
     private weak var returns: NSResponder?
 
-    /// Whether an open dropdown or what it lies on is over the view where the pointer is.
+    /// Whether an open dropdown or what it lies on, or the media viewer, is over the view where
+    /// the pointer is.
     static func covers(_ view: NSView, at event: NSEvent) -> Bool {
-        isShown(in: view.window) && !view.isUnderPointer(event)
+        (isShown(in: view.window) || ViewerCover.isShown(in: view.window)) && !view.isUnderPointer(event)
     }
 
     /// Whether a dropdown is open over the window.
@@ -76,6 +77,55 @@ final class DropdownBackdrop: NSView {
     override func rightMouseUp(with event: NSEvent) {}
     override func otherMouseUp(with event: NSEvent) {}
     override func scrollWheel(with event: NSEvent) {}
+}
+
+/// What the media viewer lies on: the window under it, which lights nothing for the pointer and
+/// leaves the viewer's buttons their tooltips. AppKit shows one tooltip at a time, so the views
+/// under it give theirs up until it goes.
+final class ViewerCover: NSView {
+    private static weak var shown: ViewerCover?
+    private var tips: [(view: WeakView, tip: String)] = []
+
+    static func isShown(in window: NSWindow?) -> Bool {
+        guard let shown, window != nil else { return false }
+        return shown.window === window
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        guard let content = window?.contentView else { return }
+        Self.shown = self
+        let views = content.withTips
+        tips = views.map { (WeakView(view: $0), $0.toolTip ?? "") }
+        for view in views { view.toolTip = nil }
+    }
+
+    override func viewWillMove(toWindow newWindow: NSWindow?) {
+        super.viewWillMove(toWindow: newWindow)
+        guard newWindow == nil else { return }
+        if Self.shown === self { Self.shown = nil }
+        for (view, tip) in tips where view.view?.toolTip == nil { view.view?.toolTip = tip }
+        tips = []
+    }
+}
+
+struct WeakView {
+    weak var view: NSView?
+}
+
+private extension NSView {
+    /// This view and the ones inside it that have a tooltip.
+    var withTips: [NSView] {
+        (toolTip == nil ? [] : [self]) + subviews.flatMap(\.withTips)
+    }
+}
+
+/// `ViewerCover` in SwiftUI.
+struct ViewerCoverView: NSViewRepresentable {
+    func makeNSView(context: Context) -> ViewerCover { ViewerCover() }
+    func updateNSView(_ cover: ViewerCover, context: Context) {}
 }
 
 /// What a menu open inside a dropdown lies on, over the rest of the dropdown: a press on it only

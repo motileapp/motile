@@ -24,7 +24,7 @@ struct Swatch: View {
             .contentShape(Circle())
         }
         .buttonStyle(.plain)
-        .help(help)
+        .tooltip(help)
         .accessibilityLabel(help)
         .accessibilityAddTraits(selected ? .isSelected : [])
     }

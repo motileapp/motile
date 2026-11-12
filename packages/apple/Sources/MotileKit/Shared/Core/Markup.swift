@@ -24,14 +24,12 @@ enum MarkupTool: String, CaseIterable {
         }
     }
 
-    /// The key that picks it on a keyboard.
-    var key: String {
-        switch self {
-        case .pen: "P"
-        case .arrow: "A"
-        case .box: "B"
-        case .pin: "N"
-        }
+    /// The keybindings' command that picks it.
+    var command: String { "markup.\(rawValue)" }
+
+    init?(command: String) {
+        guard command.hasPrefix("markup.") else { return nil }
+        self.init(rawValue: String(command.dropFirst("markup.".count)))
     }
 }
 

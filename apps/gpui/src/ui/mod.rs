@@ -407,16 +407,17 @@ pub fn sharing(gap: f32, index: usize, count: usize) -> Edges<f32> {
 }
 
 /// The tooltip that says `text`. It isn't shown once a menu, a dropdown, a modal, a popover, the
-/// viewer or the command panel has opened over what it belongs to, nor when that was pressed while
-/// it waited to show, as the system's tooltips aren't.
+/// viewer or the command panel has opened over what it belongs to, nor when that opened or was
+/// pressed while it waited to show, as the system's tooltips aren't. What opened shows its own.
 pub fn tooltip(text: impl Into<SharedString>) -> impl Fn(&mut Window, &mut App) -> AnyView + 'static {
     let text: SharedString = text.into();
     move |window, cx| {
         let shown = component::tooltip::Tooltip::new(text.clone()).build(window, cx);
         let overlays = cx.default_global::<Overlays>();
-        let pressed_while_waiting = overlays.pressed.is_some_and(|pressed| pressed.elapsed() < TOOLTIP_DELAY);
+        let waited_through = |at: Option<std::time::Instant>| at.is_some_and(|at| at.elapsed() < TOOLTIP_DELAY);
+        let hidden = waited_through(overlays.pressed) || waited_through(overlays.opened_at);
         let opened = overlays.opened;
-        cx.new(|_| HidingTooltip { shown, opened, hidden: pressed_while_waiting }).into()
+        cx.new(|_| HidingTooltip { shown, opened, hidden }).into()
     }
 }
 
@@ -424,13 +425,21 @@ pub fn tooltip(text: impl Into<SharedString>) -> impl Fn(&mut Window, &mut App) 
 /// little more for a press that came with the pointer.
 const TOOLTIP_DELAY: std::time::Duration = std::time::Duration::from_millis(600);
 
-/// How many menus, dropdowns, modals and command panels have opened, the popovers open now, and
-/// when the mouse was last pressed: what a tooltip goes away for.
+/// How many menus, dropdowns, modals and command panels have opened and when the last did, the
+/// popovers open now, and when the mouse was last pressed: what a tooltip goes away for.
 #[derive(Default)]
 struct Overlays {
     opened: u64,
+    opened_at: Option<std::time::Instant>,
     open: std::collections::HashSet<&'static str>,
     pressed: Option<std::time::Instant>,
+}
+
+impl Overlays {
+    fn open_one(&mut self) {
+        self.opened += 1;
+        self.opened_at = Some(std::time::Instant::now());
+    }
 }
 
 impl Global for Overlays {}
@@ -438,16 +447,16 @@ impl Global for Overlays {}
 /// Says that a menu, a dropdown, a modal, a popover, the viewer or the command panel opened over
 /// the window.
 pub fn overlay_opened(cx: &mut App) {
-    cx.default_global::<Overlays>().opened += 1;
+    cx.default_global::<Overlays>().open_one();
 }
 
-/// Says that a popover the app draws, or the viewer, is open or went. No tooltip shows while one is.
+/// Says that a popover the app draws, or the viewer, is open or went.
 pub fn popover_shown(name: &'static str, shown: bool, cx: &mut App) {
     let overlays = cx.default_global::<Overlays>();
     if !shown {
         overlays.open.remove(name);
     } else if overlays.open.insert(name) {
-        overlays.opened += 1;
+        overlays.open_one();
     }
 }
 
@@ -466,7 +475,7 @@ struct HidingTooltip {
 impl Render for HidingTooltip {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let overlays = cx.default_global::<Overlays>();
-        let covered = overlays.opened != self.opened || !overlays.open.is_empty() || menu::is_open(cx);
+        let covered = overlays.opened != self.opened || menu::is_open(cx);
         self.hidden |= covered;
         div().when(!self.hidden, |tooltip| tooltip.child(self.shown.clone()))
     }

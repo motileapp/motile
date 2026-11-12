@@ -14,6 +14,7 @@ use super::zoom::ZoomableImage;
 use super::{MediaFiles, SAVE_TITLE};
 use crate::models::{MediaSource, SavedMarkup, ViewedMedia};
 use crate::store::Store;
+use crate::store::shortcuts::ShortcutContext;
 use crate::theme::{ControlSize, Opacity, Radius, ShadowSize, Surface, TextSize, colors};
 use crate::ui::menu::Menu;
 use crate::ui::modal::{Answer, Confirmation, confirmation, presented};
@@ -34,6 +35,9 @@ const MARKUP_NAME_INSET: f32 = 300.;
 const BAR_INSET: f32 = 6.;
 const BAR_SIZE: ControlSize = ControlSize::Large;
 const NOTE_WIDTH: f32 = 340.;
+/// The keybindings' commands that pick an ink, by its name after this, and that zoom.
+const INK_COMMAND: &str = "markup.ink.";
+const ZOOM_COMMAND: &str = "image.";
 /// The room around a picture being marked up, which keeps it clear of the bar under it: the
 /// bar's place, its height with its inset and border, and a gap.
 const MARKUP_MARGIN: (f32, f32) = (MARGIN.0, CORNER_INSET + 8. + BAR_SIZE.height() + 2. * (BAR_INSET + 1.) + 12.);
@@ -329,14 +333,19 @@ impl MediaViewer {
     }
 
     /// While an image is marked up, the keys pick its tools and colours. The note's field keeps
-    /// the keys it takes while a pin is selected.
-    fn markup_key(&mut self, markup: Entity<MarkupSession>, keystroke: &Keystroke, cx: &mut Context<Self>) {
+    /// the keys it takes while a pin is selected, but for the one that deselects it.
+    fn markup_key(
+        &mut self,
+        markup: Entity<MarkupSession>,
+        command: Option<&str>,
+        keystroke: &Keystroke,
+        cx: &mut Context<Self>,
+    ) {
         if self.discarding {
             return;
         }
         let selected = markup.read(cx).selected.is_some();
-        let key = keystroke.key.as_str();
-        if key == "escape" {
+        if command == Some("markup.cancel") {
             match selected {
                 true => self.change_markup(cx, MarkupSession::deselect),
                 false => self.cancel_markup(cx),
@@ -346,28 +355,51 @@ impl MediaViewer {
         if selected {
             return;
         }
-        if keystroke.modifiers.secondary() {
-            match key {
-                "z" if keystroke.modifiers.shift => self.change_markup(cx, MarkupSession::redo),
-                "z" => self.change_markup(cx, MarkupSession::undo),
-                _ => {
-                    let Some(image) = self.image.clone() else { return };
-                    if !image.update(cx, |image, cx| image.zoom_key(keystroke, cx)) {
-                        return;
-                    }
+        let inks = markup.read(cx).inks.clone();
+        match command {
+            Some("markup.undo") => self.change_markup(cx, MarkupSession::undo),
+            Some("markup.redo") => self.change_markup(cx, MarkupSession::redo),
+            Some("markup.done") => self.finish_markup(cx),
+            Some(command) if command.starts_with(ZOOM_COMMAND) => {
+                if !self.zoom(command, cx) {
+                    return;
                 }
             }
-            return cx.stop_propagation();
-        }
-        let inks = markup.read(cx).inks.clone();
-        if key == "enter" {
-            self.finish_markup(cx);
-        } else if let Some(tool) = MarkupTool::ALL.into_iter().find(|tool| tool.key().eq_ignore_ascii_case(key)) {
-            self.change_markup(cx, |markup| markup.set_tool(tool));
-        } else if let Some(ink) = key.parse::<usize>().ok().and_then(|digit| inks.get(digit.checked_sub(1)?)) {
-            self.change_markup(cx, |markup| markup.set_ink(ink));
+            Some(command) if command.starts_with(INK_COMMAND) => {
+                let Some(ink) = inks.iter().find(|ink| **ink == command[INK_COMMAND.len()..]) else { return };
+                self.change_markup(cx, |markup| markup.set_ink(ink));
+            }
+            Some(command) => {
+                let Some(tool) = MarkupTool::ALL.into_iter().find(|tool| tool.command() == command) else { return };
+                self.change_markup(cx, |markup| markup.set_tool(tool));
+            }
+            None if keystroke.modifiers.secondary() => return,
+            None => {}
         }
         cx.stop_propagation();
+    }
+
+    /// Zooms the image shown as the command says. Whether there was one to zoom.
+    fn zoom(&mut self, command: &str, cx: &mut Context<Self>) -> bool {
+        let Some(image) = self.image.clone() else { return false };
+        image.update(cx, |image, cx| image.zoom(command, cx))
+    }
+
+    /// What holds for the keybindings' conditions while the viewer is open.
+    fn shortcut_context(&self) -> ShortcutContext {
+        let mut context = vec!["viewerOpen"];
+        if self.markup.is_some() {
+            context.push("markingUp");
+        }
+        if self.image.is_some() {
+            context.push("imageShown");
+        }
+        context
+    }
+
+    /// The text with the keys of the command after it, as they are while the viewer is open.
+    fn help(&self, text: &str, command: &str, cx: &App) -> String {
+        self.store.read(cx).shortcuts.help_in(text, command, &self.shortcut_context())
     }
 
     fn pause(&mut self, cx: &mut Context<Self>) {
@@ -454,32 +486,36 @@ impl MediaViewer {
             }
             return cx.stop_propagation();
         }
+        let shortcut = crate::keyboard::press_of(keystroke).and_then(|press| {
+            self.store.read(cx).shortcuts.command_for(&press, &self.shortcut_context()).map(String::from)
+        });
         if let Some(markup) = self.markup.clone() {
-            return self.markup_key(markup, keystroke, cx);
+            return self.markup_key(markup, shortcut.as_deref(), keystroke, cx);
         }
-        if keystroke.key == "m" && !keystroke.modifiers.modified() && self.markable(cx) {
-            self.start_markup(window, cx);
-            return cx.stop_propagation();
-        }
-        match keystroke.key.as_str() {
-            "c" if command && self.file.is_some() => self.copy_checked(cx),
-            "s" if command && self.file.is_some() => self.save(cx),
-            "escape" => self.close(cx),
-            "left" => self.step(-1, cx),
-            "right" => self.step(1, cx),
-            "space" =>
+        match shortcut.as_deref() {
+            Some("viewer.markUp") => {
+                if self.markable(cx) {
+                    self.start_markup(window, cx);
+                }
+            }
+            Some("viewer.copy") if self.file.is_some() => self.copy_checked(cx),
+            Some("viewer.save") if self.file.is_some() => self.save(cx),
+            Some("viewer.close") => self.close(cx),
+            Some("viewer.previous") => self.step(-1, cx),
+            Some("viewer.next") => self.step(1, cx),
+            Some("viewer.playPause") =>
             {
                 #[cfg(target_os = "macos")]
                 if let Some(player) = &self.player {
                     player.update(cx, |player, cx| player.toggle(cx));
                 }
             }
-            _ if command => {
-                let Some(image) = self.image.clone() else { return };
-                if !image.update(cx, |image, cx| image.zoom_key(keystroke, cx)) {
+            Some(zoom) if zoom.starts_with(ZOOM_COMMAND) => {
+                if !self.zoom(zoom, cx) {
                     return;
                 }
             }
+            _ if command => return,
             _ => {}
         }
         cx.stop_propagation();
@@ -576,8 +612,6 @@ impl Render for MediaViewer {
                 )))
             });
 
-        let shortcuts = &self.store.read(cx).shortcuts;
-        let (copy_keys, save_keys) = (shortcuts.keys_label("mod+c"), shortcuts.keys_label("mod+s"));
         let trailing = CORNER_INSET + crate::window_frame::trailing_room(window, cx);
         let buttons = 4. * ControlSize::Large.height() + 3. * CORNER_GAP;
         let name_inset = match marking {
@@ -595,7 +629,7 @@ impl Render for MediaViewer {
                 corner.child(Self::round_button(
                     "mark-up",
                     "pencil.line",
-                    "Mark Up (M)",
+                    self.help("Mark Up", "viewer.markUp", cx),
                     beside(0., CORNER_GAP / 2.),
                     cx.listener(|this, _, window, cx| this.start_markup(window, cx)),
                 ))
@@ -607,7 +641,7 @@ impl Render for MediaViewer {
                         div().on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation()).child(
                             CopyButton::new(
                                 "copy-viewed",
-                                format!("{} ({copy_keys})", copy_title(item.video)),
+                                self.help(copy_title(item.video), "viewer.copy", cx),
                                 move |_, cx| {
                                     let _ = copy.update(cx, |viewer, cx| viewer.copy(cx));
                                 },
@@ -623,7 +657,7 @@ impl Render for MediaViewer {
                     .child(Self::round_button(
                         "save-viewed",
                         "download",
-                        format!("Save As ({save_keys})"),
+                        self.help(SAVE_TITLE, "viewer.save", cx),
                         beside(CORNER_GAP / 2., CORNER_GAP / 2.),
                         cx.listener(|this, _, _, cx| this.save(cx)),
                     ))
@@ -632,7 +666,7 @@ impl Render for MediaViewer {
                 corner.child(Self::round_button(
                     "close-viewer",
                     "x",
-                    "Close (Esc)",
+                    self.help("Close", "viewer.close", cx),
                     beside(if self.file.is_some() { CORNER_GAP / 2. } else { 0. }, 0.),
                     cx.listener(|this, _, _, cx| this.close(cx)),
                 ))
@@ -682,14 +716,14 @@ impl Render for MediaViewer {
                                 .child(Self::round_button(
                                     "previous",
                                     "chevron-left",
-                                    "Previous (←)",
+                                    self.help("Previous", "viewer.previous", cx),
                                     Edges::default(),
                                     cx.listener(|this, _, _, cx| this.step(-1, cx)),
                                 ))
                                 .child(Self::round_button(
                                     "next",
                                     "chevron-right",
-                                    "Next (→)",
+                                    self.help("Next", "viewer.next", cx),
                                     Edges::default(),
                                     cx.listener(|this, _, _, cx| this.step(1, cx)),
                                 )),
@@ -787,7 +821,7 @@ impl MediaViewer {
             .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
             .child(
                 ActionButton::new("cancel-markup", "Cancel")
-                    .help("Cancel (Esc)")
+                    .help(self.help("Cancel", "markup.cancel", cx))
                     .overlay()
                     .large()
                     .round(true)
@@ -796,7 +830,13 @@ impl MediaViewer {
             )
             .child(
                 ActionButton::new("finish-markup", title)
-                    .help("Return")
+                    .help(
+                        self.store
+                            .read(cx)
+                            .shortcuts
+                            .label_in("markup.done", &self.shortcut_context())
+                            .unwrap_or_default(),
+                    )
                     .primary()
                     .large()
                     .round(true)
@@ -858,10 +898,8 @@ impl MediaViewer {
     fn tool_bar(&self, markup: &Entity<MarkupSession>, cx: &mut Context<Self>) -> Div {
         let session = markup.read(cx);
         let c = colors(cx);
-        let shortcuts = &self.store.read(cx).shortcuts;
-        let (undo_keys, redo_keys) = (shortcuts.keys_label("mod+z"), shortcuts.keys_label("mod+shift+z"));
         let tools = MarkupTool::ALL.into_iter().enumerate().map(|(index, tool)| {
-            ActionButton::icon(("markup-tool", index), tool.symbol(), format!("{} ({})", tool.title(), tool.key()))
+            ActionButton::icon(("markup-tool", index), tool.symbol(), self.help(tool.title(), tool.command(), cx))
                 .size(BAR_SIZE)
                 .round(true)
                 .surface(Surface::Popover)
@@ -870,13 +908,17 @@ impl MediaViewer {
         });
         let inks = session.inks.iter().enumerate().map(|(index, ink)| {
             let picked = ink.clone();
-            Swatch::new(("markup-ink", index), ink_color(ink, c), format!("{} ({})", capitalized(ink), index + 1))
-                .size(BAR_SIZE)
-                .selected(session.ink == *ink)
-                .on_click(cx.listener(move |this, _, _, cx| {
-                    let picked = picked.clone();
-                    this.change_markup(cx, move |markup| markup.set_ink(&picked))
-                }))
+            Swatch::new(
+                ("markup-ink", index),
+                ink_color(ink, c),
+                self.help(&capitalized(ink), &format!("{INK_COMMAND}{ink}"), cx),
+            )
+            .size(BAR_SIZE)
+            .selected(session.ink == *ink)
+            .on_click(cx.listener(move |this, _, _, cx| {
+                let picked = picked.clone();
+                this.change_markup(cx, move |markup| markup.set_ink(&picked))
+            }))
         });
         div()
             .flex()
@@ -887,7 +929,7 @@ impl MediaViewer {
             .children(inks)
             .child(bar_divider(cx))
             .child(
-                ActionButton::icon("markup-undo", "undo-2", format!("Undo ({undo_keys})"))
+                ActionButton::icon("markup-undo", "undo-2", self.help("Undo", "markup.undo", cx))
                     .size(BAR_SIZE)
                     .round(true)
                     .surface(Surface::Popover)
@@ -895,7 +937,7 @@ impl MediaViewer {
                     .on_click(cx.listener(|this, _, _, cx| this.change_markup(cx, MarkupSession::undo))),
             )
             .child(
-                ActionButton::icon("markup-redo", "redo-2", format!("Redo ({redo_keys})"))
+                ActionButton::icon("markup-redo", "redo-2", self.help("Redo", "markup.redo", cx))
                     .size(BAR_SIZE)
                     .round(true)
                     .surface(Surface::Popover)

@@ -100,7 +100,7 @@ private struct Segment: View {
                 .padding(margin)
         }
         .buttonStyle(SegmentStyle(selected: selected, lit: lit, radius: radius, margin: margin))
-        .help(symbol == nil ? "" : title)
+        .tooltip(symbol == nil ? "" : title)
         .accessibilityLabel(title)
     }
 

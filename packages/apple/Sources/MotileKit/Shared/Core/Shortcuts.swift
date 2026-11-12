@@ -110,6 +110,12 @@ struct ShortcutGroup: Identifiable, Equatable {
 
 /// The keyboard shortcuts as the core last sent them.
 struct Shortcuts: Equatable {
+    /// The conditions that hold in the media viewer, which takes every key while it is open.
+    static let viewing: Set<String> = ["viewerOpen"]
+    static let markingUp: Set<String> = ["viewerOpen", "markingUp"]
+    /// Holds where an image takes the zoom keys.
+    static let imageShown = "imageShown"
+
     var rules: [ShortcutRule] = []
     var groups: [ShortcutGroup] = []
     var commands: [(id: String, label: String)] = []

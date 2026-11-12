@@ -151,13 +151,13 @@ private struct PullRequestListRow: View {
             if let review = row.review {
                 Image(review.tone == .success ? .circleCheck : review.tone == .danger ? .circleAlert : .eye, size: .sm)
                     .foregroundStyle(review.tone.color)
-                    .help(review.label)
+                    .tooltip(review.label)
             }
             if let checks = row.checks {
                 Circle()
                     .fill(checks.color)
                     .frame(width: 7, height: 7)
-                    .help(row.checksLabel ?? "")
+                    .tooltip(row.checksLabel ?? "")
             }
             if row.additions + row.deletions > 0 {
                 Text(AttributedString(LineCountText.text(added: row.additions, removed: row.deletions)))

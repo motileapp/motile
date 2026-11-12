@@ -125,7 +125,7 @@ struct ServerUpdateStatus<Otherwise: View>: View {
                     store.update(server, when: .now)
                 }
             }
-            .help("\(server.name) restarts once its agents have finished")
+            .tooltip("\(server.name) restarts once its agents have finished")
         } else if let update = store.serverUpdate(of: server) {
             HStack(spacing: 6) {
                 Text(progress(of: update))

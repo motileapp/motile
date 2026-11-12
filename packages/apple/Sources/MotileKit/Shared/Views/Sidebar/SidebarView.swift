@@ -1049,7 +1049,7 @@ struct SlimThreadRow: View, Equatable {
                     Text(Time.left(until, now: AgoClock.shared.now))
                         .monospacedDigit()
                 }
-                .help("Wakes \(Time.stamp(until))")
+                .tooltip("Wakes \(Time.stamp(until))")
             } else {
                 Text(Time.ago(thread.archivedAt ?? thread.updatedAt, now: AgoClock.shared.now))
             }
@@ -1127,12 +1127,12 @@ struct ThreadStatus: View {
             label("Read-only", Color.themeWarning) {
                 symbol(.unlink)
             }
-            .help("Its server is unlinked, so this thread can only be read or continued on another server.")
+            .tooltip("Its server is unlinked, so this thread can only be read or continued on another server.")
         } else if let asking = thread.waitsFor {
             label(asking.word, Color.themeWarning) {
                 symbol(asking.symbol)
             }
-            .help(thread.asking == nil ? thread.children?.waitingText ?? "" : "")
+            .tooltip(thread.asking == nil ? thread.children?.waitingText ?? "" : "")
         } else if thread.waitsOnAgents {
             let agents = thread.children?.running ?? 0
             HStack(spacing: Self.gap) {
@@ -1145,7 +1145,7 @@ struct ThreadStatus: View {
                     }
                 }
             }
-            .help(thread.children?.runningText ?? "")
+            .tooltip(thread.children?.runningText ?? "")
         } else if thread.working {
             let agents = max(thread.agents, thread.children?.running ?? 0)
             HStack(spacing: Self.gap) {
@@ -1153,7 +1153,7 @@ struct ThreadStatus: View {
                     label("\(agents)", Color.themePending) {
                         symbol(.bot)
                     }
-                    .help(agents == 1 ? "1 agent is working" : "\(agents) agents are working")
+                    .tooltip(agents == 1 ? "1 agent is working" : "\(agents) agents are working")
                 }
                 TimelineView(.periodic(from: .now, by: 1)) { context in
                     label(Time.elapsed(since: thread.updatedAt, now: context.date.timeIntervalSince1970), Color.themeProcess) {
@@ -1175,7 +1175,7 @@ struct ThreadStatus: View {
             label(interruption.word.capitalized, Color.themeWarning) {
                 symbol(interruption.symbol)
             }
-            .help(interruption.detail())
+            .tooltip(interruption.detail())
         } else if thread.woke {
             label("Woke", Color.themeWarning) {
                 symbol(.alarmClock)
@@ -1385,7 +1385,7 @@ struct ServerLine: View {
                     .monospacedDigit()
             }
         }
-        .help(server.error ?? detail)
+        .tooltip(server.error ?? detail)
     }
 
     private var detail: String {
