@@ -12,8 +12,8 @@ use std::time::{Duration, Instant};
 use anyhow::{Context, bail};
 use motile_protocol::now;
 use motile_protocol::wire::{
-    Access, Agent, AgentAccount, AgentNotice, Approval, Ask, Interruption, ItemKind, Message, NewThread, NewWorktree,
-    NoticeEvent, Queued, RunsOn, Subagent, Thread, ThreadParent, ToolCall, ToolStatus,
+    Access, Actor, Agent, AgentAccount, AgentNotice, Approval, Ask, Interruption, ItemKind, Message, NewThread,
+    NewWorktree, NoticeEvent, Queued, RunsOn, ServerReason, Subagent, Thread, ThreadParent, ToolCall, ToolStatus,
 };
 use serde::Serialize;
 use serde_json::{Value, json};
@@ -351,8 +351,9 @@ impl Hub {
             self.lock_worktrees().insert(thread_id, worktree);
         }
         self.add_thread(Live::new(stored, self.media.clone()));
+        let by = self.agent_actor(caller).await;
         let mut live = self.live_or(&child_id, "The agent's thread is gone.").await?;
-        live.append_queued(&self.store, plain_message(prompt.clone()))?;
+        live.append_queued(&self.store, plain_message(prompt.clone(), by))?;
         self.start_turn(&mut live, prompt)?;
         drop(live);
         if let Some(request) = request {
@@ -556,7 +557,8 @@ impl Hub {
             self.store.save_thread(&live.stored)?;
         }
         self.wake(id).await;
-        self.send(Some(id.to_string()), None, NewMessage { now: true, ..NewMessage::text(text) }).await?;
+        let by = self.agent_actor(caller).await;
+        self.send(Some(id.to_string()), None, NewMessage { now: true, ..NewMessage::text(text, by) }).await?;
         Ok(self.child_states(caller, &[id.to_string()], None).await?.remove(0))
     }
 
@@ -573,7 +575,7 @@ impl Hub {
             let asking = live.activity.approvals.iter().find(|approval| approval.ask() == Ask::Question);
             asking.context("That agent isn't asking anything now.")?.id.clone()
         };
-        self.answer(id, &approval_id, true, answers).await?;
+        self.answer(id, &approval_id, true, answers, self.agent_actor(caller).await).await?;
         Ok(self.child_states(caller, &[id.to_string()], None).await?.remove(0))
     }
 
@@ -609,7 +611,7 @@ impl Hub {
                  Tell the user it waits for them in its thread."
             );
         }
-        self.answer(id, approval_id, allow, HashMap::new()).await?;
+        self.answer(id, approval_id, allow, HashMap::new(), self.agent_actor(caller).await).await?;
         Ok(self.child_states(caller, &[id.to_string()], None).await?.remove(0))
     }
 
@@ -621,7 +623,7 @@ impl Hub {
             live.stored.reports = false;
             self.store.save_thread(&live.stored)?;
         }
-        self.stop(id).await;
+        self.stop(id, self.agent_actor(caller).await).await;
         Ok(self.child_states(caller, &[id.to_string()], None).await?.remove(0))
     }
 
@@ -899,7 +901,7 @@ impl Hub {
             held: false,
             sending: false,
             notice: Some(notice),
-            device: None,
+            by: Actor::Server { reason: ServerReason::Unknown },
             context: None,
             programs: Vec::new(),
         };
@@ -1152,6 +1154,7 @@ mod tests {
             output: None,
             status: ToolStatus::Running,
             agent: None,
+            decided_by: Actor::Unknown,
         };
         assert_eq!(doing(&call("Bash", json!({"command": "cargo\n  test"})), "/srv"), "Running cargo test");
         assert_eq!(doing(&call("mcp__motile__read_thread", json!({"thread_id": "t"})), "/srv"), "Using read_thread");

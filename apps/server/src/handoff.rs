@@ -256,7 +256,7 @@ fn file_change_text(call: &ToolCall) -> String {
 
 #[cfg(test)]
 mod tests {
-    use motile_protocol::wire::TurnSummary;
+    use motile_protocol::wire::{Actor, TurnSummary};
 
     use super::*;
 
@@ -282,6 +282,7 @@ mod tests {
                 skills: Vec::new(),
                 context: None,
                 programs: Vec::new(),
+                by: Actor::Unknown,
             },
         )
     }
@@ -298,6 +299,7 @@ mod tests {
             output: output.map(String::from),
             status,
             agent: None,
+            decided_by: Actor::Unknown,
         };
         item(seq, ItemKind::Tool { call })
     }
@@ -309,8 +311,14 @@ mod tests {
     #[test]
     fn a_message_is_told_with_what_its_program_sent() {
         let context = Some(json!(["User clicked: Book it", { "people": 4 }]));
-        let message =
-            ItemKind::User { text: "Book it".into(), attachments: vec![], skills: vec![], context, programs: vec![] };
+        let message = ItemKind::User {
+            text: "Book it".into(),
+            attachments: vec![],
+            skills: vec![],
+            context,
+            programs: vec![],
+            by: Actor::Unknown,
+        };
 
         let handoff =
             build("t", &[item(0, message), reply(1, "Booked.")], Range::Full, 2, HANDOFF_CAP).unwrap().unwrap();

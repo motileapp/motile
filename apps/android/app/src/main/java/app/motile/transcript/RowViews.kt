@@ -92,6 +92,8 @@ import app.motile.ui.GatewayMark
 import app.motile.ui.proxied
 import app.motile.ui.Text
 import app.motile.ui.color
+import app.motile.ui.symbol
+import androidx.compose.foundation.shape.CircleShape
 import app.motile.transcript.openui.UiRow
 import kotlinx.coroutines.delay
 
@@ -132,17 +134,40 @@ fun ticking(running: Boolean): Double {
 
 private object Bubble {
     const val PADDING = 14f
+    /** How far the text of a message with nothing attached is from the bubble's top and bottom. */
+    val textInset = 10.dp
     val radius = 18.dp
+    val avatarGap = 8.dp
 }
 
-/** A bubble is as wide as what it holds, up to the widest it may be: most of the column, and never too narrow for a word. */
-private fun Modifier.bubbleWidth(): Modifier = layout { measurable, constraints ->
-    val widest = bubbleWidest(constraints.maxWidth)
+/**
+ * A bubble is as wide as what it holds, up to the widest it may be: most of the column, and never
+ * too narrow for a word. It leaves `beside` at its left for an avatar.
+ */
+private fun Modifier.bubbleWidth(beside: Dp = 0.dp): Modifier = layout { measurable, constraints ->
+    val widest = bubbleWidest(constraints.maxWidth, beside)
     val placeable = measurable.measure(constraints.copy(minWidth = 0, maxWidth = widest))
     layout(placeable.width, placeable.height) { placeable.place(0, 0) }
 }
 
-private fun Density.bubbleWidest(maxWidth: Int): Int = maxOf(120.dp.roundToPx(), (maxWidth * 0.8f).toInt()).coerceAtMost(maxWidth)
+private fun Density.bubbleWidest(maxWidth: Int, beside: Dp = 0.dp): Int =
+    maxOf(120.dp.roundToPx(), (maxWidth * 0.8f).toInt()).coerceAtMost(maxWidth - beside.roundToPx())
+
+/** The room an avatar takes at a bubble's left: none without one. */
+@Composable
+private fun avatarBeside(avatar: MessageAvatar): Dp {
+    if (avatar == MessageAvatar.None) return 0.dp
+    return avatarSide() + Bubble.avatarGap
+}
+
+/** The avatar beside a message the user didn't write is a circle as tall as a message of one line. */
+@Composable
+private fun avatarSide(): Dp {
+    val measurer = rememberTextMeasurer()
+    val density = LocalDensity.current
+    val line = remember(measurer, density) { measurer.measure("M", messageStyle).size.height }
+    return Bubble.textInset * 2 + with(density) { line.toDp() }
+}
 
 private val messageStyle: TextStyle get() = TextStyle(fontSize = Theme.proseSize, lineHeight = Typesetter.messageLineHeight)
 
@@ -162,20 +187,21 @@ private object Cut {
 private fun UserRow(row: RowModel, user: RowModel.Kind.User) {
     val palette = LocalPalette.current
     val text = remember(user.text, palette) { user.text.styled.get(palette) }
-    if (!user.collapsible) return UserBubble(row, user, text, more = false)
+    val beside = avatarBeside(user.avatar)
+    if (!user.collapsible) return UserBubble(row, user, text, more = false, beside)
     // A long message counts its lines as its bubble's widest text sets them, before it is drawn.
     BoxWithConstraints(Modifier.fillMaxWidth()) {
         val measurer = rememberTextMeasurer()
         val density = LocalDensity.current
-        val width = with(density) { bubbleWidest(constraints.maxWidth) - (Bubble.PADDING.dp * 2).roundToPx() }
+        val width = with(density) { bubbleWidest(constraints.maxWidth, beside) - (Bubble.PADDING.dp * 2).roundToPx() }
         val lines = remember(text, width) { measurer.measure(text, messageStyle, constraints = Constraints(maxWidth = width)).lineCount }
-        UserBubble(row, user, text, more = lines > Cut.PAST)
+        UserBubble(row, user, text, more = lines > Cut.PAST, beside)
     }
 }
 
 /** A message in its bubble: a `more` one is cut, unless it is open, with the button that shows the rest or hides it again. */
 @Composable
-private fun UserBubble(row: RowModel, user: RowModel.Kind.User, text: AnnotatedString, more: Boolean) {
+private fun UserBubble(row: RowModel, user: RowModel.Kind.User, text: AnnotatedString, more: Boolean, beside: Dp) {
     val palette = LocalPalette.current
     val actions = LocalTranscript.current
     val pending = row.id == RowModel.pendingID
@@ -187,42 +213,44 @@ private fun UserBubble(row: RowModel, user: RowModel.Kind.User, text: AnnotatedS
     val cutFade = with(LocalDensity.current) { (Typesetter.messageLineHeight * Cut.FADE_LINES).toDp() }
     Column(Modifier.fillMaxWidth().padding(top = 14.dp), horizontalAlignment = Alignment.End) {
         val shape = RoundedCornerShape(Bubble.radius)
-        Column(
-            Modifier
-                .bubbleWidth()
-                .opacity(Opacity.Disabled, on = pending)
-                .clip(shape)
-                .background(palette.backgroundSecondary, shape)
-                .padding(
-                    start = Bubble.PADDING.dp, end = Bubble.PADDING.dp,
-                    top = if (hasFiles) Bubble.PADDING.dp else 10.dp,
-                    bottom = when {
-                        more -> 0.dp
-                        hasText -> 10.dp
-                        else -> Bubble.PADDING.dp
-                    },
-                ),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            CompositionLocalProvider(LocalSurface provides Surface.Secondary) {
-                if (hasFiles) AttachedFiles(user.attachments)
-                if (hasText) {
-                    MessageWithMore(more) {
-                        val shown = if (cut) Modifier.heightIn(max = cutHeight).clipToBounds().edgeFade(above = { 0f }, below = { Float.MAX_VALUE }, length = cutFade) else Modifier
-                        val found = user.text.found(actions.model.found[row.id])
-                        val cutPx = with(LocalDensity.current) { cutHeight.toPx() }
-                        SelectionContainer(shown) {
-                            MarkedText(text, messageStyle, found = found, onCurrent = { local, window ->
-                                actions.currentMatch(row.id, window)
-                                if (cut && actions.revealing == row.id && local.bottom > cutPx) actions.toggleExpansion(row.id)
-                            }, sent = user.text::sentOffset)
-                        }
-                        if (more) {
-                            ActionButton(
-                                if (open) "Show less" else "Show more", variant = ButtonVariant.Ghost, prose = true, expanded = open,
-                                padding = Bubble.PADDING.dp - Cut.inset, stretches = true,
-                                margin = PaddingValues(start = Cut.inset, top = Cut.gap, bottom = Cut.below),
-                            ) { actions.toggleExpansion(row.id) }
+        WithAvatar(user.avatar, beside) {
+            Column(
+                Modifier
+                    .bubbleWidth(beside)
+                    .opacity(Opacity.Disabled, on = pending)
+                    .clip(shape)
+                    .background(palette.backgroundSecondary, shape)
+                    .padding(
+                        start = Bubble.PADDING.dp, end = Bubble.PADDING.dp,
+                        top = if (hasFiles) Bubble.PADDING.dp else Bubble.textInset,
+                        bottom = when {
+                            more -> 0.dp
+                            hasText -> Bubble.textInset
+                            else -> Bubble.PADDING.dp
+                        },
+                    ),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                CompositionLocalProvider(LocalSurface provides Surface.Secondary) {
+                    if (hasFiles) AttachedFiles(user.attachments)
+                    if (hasText) {
+                        MessageWithMore(more) {
+                            val shown = if (cut) Modifier.heightIn(max = cutHeight).clipToBounds().edgeFade(above = { 0f }, below = { Float.MAX_VALUE }, length = cutFade) else Modifier
+                            val found = user.text.found(actions.model.found[row.id])
+                            val cutPx = with(LocalDensity.current) { cutHeight.toPx() }
+                            SelectionContainer(shown) {
+                                MarkedText(text, messageStyle, found = found, onCurrent = { local, window ->
+                                    actions.currentMatch(row.id, window)
+                                    if (cut && actions.revealing == row.id && local.bottom > cutPx) actions.toggleExpansion(row.id)
+                                }, sent = user.text::sentOffset)
+                            }
+                            if (more) {
+                                ActionButton(
+                                    if (open) "Show less" else "Show more", variant = ButtonVariant.Ghost, prose = true, expanded = open,
+                                    padding = Bubble.PADDING.dp - Cut.inset, stretches = true,
+                                    margin = PaddingValues(start = Cut.inset, top = Cut.gap, bottom = Cut.below),
+                                ) { actions.toggleExpansion(row.id) }
+                            }
                         }
                     }
                 }
@@ -231,6 +259,31 @@ private fun UserBubble(row: RowModel, user: RowModel.Kind.User, text: AnnotatedS
         MessageMeta(Time.stamp(user.at), trailing = true, help = "Copy message", Modifier.padding(top = 4.dp, bottom = 25.dp)) {
             Platform.copy(user.text.text)
         }
+    }
+}
+
+/** A message's bubble, with the avatar of who sent it at its left, level with its top, when it has one. */
+@Composable
+private fun WithAvatar(avatar: MessageAvatar, beside: Dp, bubble: @Composable () -> Unit) {
+    if (avatar == MessageAvatar.None) return bubble()
+    Layout({ MessageAvatarView(avatar, beside - Bubble.avatarGap); bubble() }) { measurables, constraints ->
+        val circle = measurables[0].measure(Constraints())
+        val placed = measurables[1].measure(constraints.copy(minWidth = 0))
+        val right = constraints.maxWidth
+        layout(right, maxOf(placed.height, circle.height)) {
+            placed.place(right - placed.width, 0)
+            circle.place(right - placed.width - Bubble.avatarGap.roundToPx() - circle.width, 0)
+        }
+    }
+}
+
+/** The circle beside a message the user didn't write, in the bubble's colour, with the logo of the agent that sent it in the agent's colour, or the server's in the colour of sending. */
+@Composable
+private fun MessageAvatarView(avatar: MessageAvatar, side: Dp) {
+    val palette = LocalPalette.current
+    val agent = avatar.agent
+    Box(Modifier.size(side).background(palette.backgroundSecondary, CircleShape), contentAlignment = Alignment.Center) {
+        Icon(agent?.symbol ?: Symbol.Server, IconSize.Lg, color = agent?.color(palette) ?: palette.primary)
     }
 }
 

@@ -1,12 +1,9 @@
 ## What is this?
 
 Motile is the open-source command center for coding agents. The agents (Claude Code and Codex)
-run on machines the user owns, called servers. Native clients drive them: a client connects straight to
-its servers over [iroh](https://www.iroh.computer), which needs no open ports, and keeps a local
-copy of every thread so it opens where it was left. There is no local mode; a client always talks
-to a server.
-
-These programs make it up, plus the code the clients share:
+run on machines the user owns, called servers. Native clients connect straight to their servers
+over [iroh](https://www.iroh.computer) and keep a local copy of every thread. There is no local
+mode; a client always talks to a server.
 
 | Program | Where it runs | What it does |
 | --- | --- | --- |
@@ -24,9 +21,8 @@ These programs make it up, plus the code the clients share:
 
 Every device is an ed25519 key, which is also its iroh address. The auth server only says which
 keys belong to one account; it never sees a thread. A server accepts connections only from its
-account's clients. An account has at most one gateway, a device too, which serves only its account's
-servers and clients. The web app is not a device: it holds a session, which can manage the account
-but can never connect to a server. README.md covers how a user sets things up.
+account's clients. An account has at most one gateway, which serves only its account. The web app
+is not a device: it holds a session, which can manage the account but never connect to a server.
 
 Production is the `Motile` project on Unbind:
 
@@ -43,598 +39,173 @@ Production is the `Motile` project on Unbind:
 
 What the programs agree on.
 
-- `wire.rs`: every message between a client and a server. Bump `PROTOCOL_VERSION` when an old
-  client or server could no longer understand the other. It has the change logs the servers copy
-  each other's threads with too (`Watermarks`, `Changes`, `Apply`), which the clients carry.
+- `wire.rs`: every message between a client and a server, and the change logs servers copy each
+  other's threads with. Bump `PROTOCOL_VERSION` when an old client or server could no longer
+  understand the other.
 - `auth_api.rs`, `auth_client.rs`: the auth server's JSON and the client for it.
 - `identity.rs`: the device key and request signing.
-- `media.rs`: names an image, a video or a file an agent sends by its contents.
-- `skills.rs`: how a message names the skills it starts, `$name` at the start of a word.
-- `activity.rs`: the features the Activity tab counts: which a client's request uses, which a motile
-  tool call of an agent does, and what each is called.
-- `gateway_wire.rs`: what servers and clients say to the account's gateway on `GATEWAY_ALPN`, a stream
-  for each request.
-- `search.rs`: how a search through the messages matches, alike on the servers and the clients:
-  its words in any order, whatever their case and accents, a message graded by whether they are
-  whole words, start words or sit inside them, and written together; and the excerpt shown.
-- `select.rs`: which account a new thread starts on: of those that can carry it through the next
-  hours, the one whose spare quota lapses soonest. The gateway ranks its accounts with it, from what it
-  measures; the clients rank a server's own accounts with it.
+- `gateway_wire.rs`: what servers and clients say to the gateway.
+- `activity.rs`: the features the Activity tab counts.
+- `search.rs`: how a search through the messages matches, alike on servers and clients.
+- `select.rs`: which account a new thread starts on.
+- `media.rs`, `skills.rs`: naming an agent's files by their contents; `$name` skills in a message.
 
 ### crates/openui
 
-OpenUI Lang 1.0, the language of the programs agents show in their replies (thesysdev/openui's
-`spec/`), for the server and the core alike.
+OpenUI Lang 1.0, the language of the programs agents show in their replies, for the server and
+the core alike.
 
-- `lexer.rs`, `parser.rs`, `eval.rs`, `store.rs`, `query.rs`, `merge.rs`, `serialize.rs`: the
-  language as the spec says, streamed (a program grows statement by statement while it arrives),
-  with JavaScript's semantics where the spec asks for them (`js.rs`). `runtime.rs` is what a host
-  drives: text, input and tool results in; a tree, tool calls, timers and events out. `fences.rs`
-  finds a reply's programs.
-- `motile.rs`: Motile's library, which is open-intelligent-ui's: 55 components (`components.rs`), 59
-  functions (`functions/`) and `@CopyToClipboard`, with its names, argument order and defaults, so
-  that its programs work unchanged. `prompt.rs` writes the system prompt the server gives the agents
-  from it.
-- `LAYOUT.md`: every component's geometry and behaviour in our tokens. Every client follows it.
-- `fixtures/`: the spec's conformance cases (`openui/1.0`), which `tests/conformance.rs` runs whole
-  and streamed, and open-intelligent-ui's library and prompts (`oiu`), each with its project's
-  licence; and the prompts this crate writes (`prompt`), which `OPENUI_BLESS=1` rewrites. The
-  programs the clients and the fake agent show are the repo's `fixtures/openui`.
+- `lexer.rs` … `serialize.rs`, `js.rs`: the language, streamed. `runtime.rs` is what a host drives,
+  `fences.rs` finds a reply's programs.
+- `motile.rs`, `components.rs`, `functions/`: Motile's library, open-intelligent-ui's.
+  `prompt.rs` writes the prompt the agents are taught with.
+- `LAYOUT.md`: every component's geometry and behaviour. Every client follows it.
+- `fixtures/`: the spec's conformance cases, open-intelligent-ui's library and prompts, and the
+  prompts this crate writes (`OPENUI_BLESS=1` rewrites them). The programs the clients and the
+  fake agent show are the repo's `fixtures/openui`.
 
 ### apps/auth (Rust, Axum, sqlx on Postgres)
 
-- `sign_in.rs`: the browser's side of a sign-in. `google.rs` is the OIDC exchange. `/mcp/callback`
-  is where an MCP server's sign-in, which a gateway started, comes back to, and goes on to
-  `motile://mcp`: an https address, which some MCP servers insist on.
-- `api.rs`: what clients, servers and the web app call. A caller is a device that signed the
-  request or a session's `Bearer` token. A server removed from an account is kept in
-  `removed_servers` with its name, so that its threads, which live on as copies on the account's
-  other servers, still show it; deleting it completely marks it there, and every server and client
-  then drops its copies. Linking the key again makes it an ordinary server. The clients call these
-  "Unlink Server" and "Delete".
-- `config.rs`: builds the install command a token comes with.
-- A gateway enrolls with the code a server installs with, as a device of kind `gateway`, and takes the
-  place of the account's last one. It can't make codes or remove devices.
-- `pages.rs`: the page a failed sign-in ends on, drawn like the web app's with the colours of
-  `packages/theme/tokens.css` and DM Sans from `assets/`.
-- `migrations/`: the schema.
-- `e2e/`: the real router on a fresh database per test, with a fake Google. `e2e/whole.rs`
-  runs all three programs together.
-- `DEV_LOGIN=1` lets anyone sign in as anyone without Google. It is for tests, the demo and
-  local work, and must never be set in production.
+- `sign_in.rs`, `google.rs`: signing in. `/mcp/callback` is where an MCP server's sign-in comes back.
+- `api.rs`: what clients, servers and the web app call.
+- `config.rs`: the install command a token comes with. `pages.rs`: the page a failed sign-in ends on.
+- `migrations/`: the schema. `e2e/`: the real router on a fresh database per test.
+- `DEV_LOGIN=1` lets anyone sign in as anyone. It is for tests, the demo and local work, and must
+  never be set in production.
 
 ### apps/gateway (Rust, the `motile-gateway` image)
 
-The account's gateway, which the user runs from `ghcr.io/motileapp/motile-gateway` on a machine that is
-always on, with a volume at `/data`. It links itself to the account as a server does, with the code a
-client's Settings → Agent Gateway or MCP Gateway makes: `motile-gateway setup <code>` in a shell in it, which links it again over
-any link it has, or `MOTILE_ENROLL_CODE` on a first start without a link; until then it waits. It holds Claude Code's and Codex's
-accounts, signed in from the clients, and the agents of a server's Gateway accounts reach Anthropic and
-OpenAI through it with them. It translates nothing: a request passes through with an account's token in
-place of the agent's. It holds the logins of the account's MCP servers too, which every agent gets. The
-clients manage its two jobs on two pages, Agent Gateway and MCP Gateway, with the gateway itself at the
-top of both.
+Runs from `ghcr.io/motileapp/motile-gateway` with a volume at `/data`, linked with
+`motile-gateway setup <code>` or `MOTILE_ENROLL_CODE`.
 
-- `serve.rs`, `access.rs`: the iroh endpoint, which takes the account's servers' traffic and its
-  clients' management, and nothing from anyone else.
-- `router.rs`: which account a thread's requests go to. A thread stays on its account until the account
-  runs out, is turned off, or the thread was idle longer than its cache lasts; then
-  `select::rank` places it again, from what the gateway measures of each account's windows. A
-  thread pinned to an account (the request's `pin`) goes there only, and gets its limit error.
-- `upstream.rs`, `websocket.rs`: the HTTP requests and Codex's WebSockets. A limit error before
-  anything streamed rests the account and tries the next; a response that streamed is never replayed.
-- `oauth.rs`: signing accounts in and renewing their tokens, as the CLIs do. `seal.rs` keeps the
-  tokens sealed under a key from the gateway's device key.
-- `limits.rs`, `usage.rs`, `pricing.rs`: the accounts' limits from every response's headers (and
-  asked of an idle one every minute), the tokens each response spent, and what they cost at the
-  API's prices.
-- `mcp/`: the account's MCP servers, MCPs the gateway holds the logins of, which every agent of
-  every server gets, each as an MCP server of its own named by its slug (`mcp__linear__…`). An agent's
-  MCP requests pass through to the MCP server with its login (`passthrough.rs`), which drops the
-  blocked tools from `tools/list`, refuses calls to them, holds a call to a tool that needs approval
-  until the server sends it again approved, and logs every call. Each tool is always allowed, needs
-  approval or is blocked, by its own permission or its kind's (read-only, write/delete, other, as its
-  annotations say). `sign_in.rs` signs one in as MCP's authorization spec says (protected resource
-  metadata, client registration, PKCE), back to the auth server's `/mcp/callback`, which sends it on
-  to `motile://mcp`; one that doesn't sign in takes a key. `client.rs` asks one for its tools and
-  calls the tool the user tries.
-- `store.rs`: its SQLite on the volume, with the request log and the requests captured in full.
-- `tests/e2e.rs`: the gateway over real iroh connections, against fake upstreams.
+- `serve.rs`, `access.rs`: the iroh endpoint, for the account's servers and clients only.
+- `router.rs`: which account a thread's requests go to.
+- `upstream.rs`, `websocket.rs`: the HTTP requests and Codex's WebSockets.
+- `oauth.rs`, `seal.rs`: the accounts' sign-ins and their sealed tokens.
+- `limits.rs`, `usage.rs`, `pricing.rs`: the accounts' limits, usage and cost.
+- `mcp/`: the account's MCP servers: passing calls through, permissions, sign-in.
+- `store.rs`: its SQLite. `tests/e2e.rs`: the gateway against fake upstreams.
 
 ### packages/theme
 
-The design tokens. `tokens.json` is the one source of every colour, opacity, shadow, radius and
-text size in the repo; `pnpm tokens` (`build.mjs`) writes it out as `tokens.css` (plain variables, for the
-auth page), `theme.css` (Tailwind, for the web projects), the clients' `Tokens.swift` and the
-GPUI app's `apps/gpui/src/tokens.rs`, and the Android app's `Tokens.kt` with the few colours Android
-itself draws before the app does (`res/values/tokens.xml` and `res/values-night/tokens.xml`). It
-also writes OpenUI's map style for MapLibre, `map-style-light.json` and `map-style-dark.json`
-beside it, which every client bundles (the Apple package from its copy in
-`Sources/MotileKit/Map`): OpenFreeMap's vector tiles drawn in the `map-*` tokens, with the route and
-the pins as layers. A colour that only one place needs, like the window buttons
-of the demo or the icons' tile, is added to the JSON, never written where it is used.
+`tokens.json` is the one source of every colour, opacity, shadow, radius and text size in the
+repo. `pnpm tokens` writes it out for every program, and the map styles beside it. A colour only
+one place needs is still added to the JSON, never written where it is used.
 
 ### apps/marketing (Astro, static) and apps/web (TanStack Start)
 
-One pnpm workspace. Both use shadcn/ui (preset `b1VlIvUO`); add components with
-`pnpm dlx shadcn@latest add <name>` inside the app, then rewrite the component on our tokens:
-shadcn's own colours, opacities and radii are gone from the theme.
+One pnpm workspace, both on shadcn/ui (preset `b1VlIvUO`): add a component with
+`pnpm dlx shadcn@latest add <name>` in the app, then rewrite it on our tokens. Both take their
+colours from `packages/theme/theme.css`; an opacity is one of the tokens
+(`bg-overlay/(--opacity-overlay)`).
 
-- Both take their colours from `packages/theme/theme.css`: the design tokens as Tailwind
-  colours, shadows and radii. An opacity is one of the tokens, as Tailwind's own modifier:
-  `bg-overlay/(--opacity-overlay)`, `opacity-(--opacity-disabled)`. Dark is the default; the
-  theme switch keeps the choice in a cookie on motile.app, which both read.
-- `apps/marketing` ships no JavaScript but the theme switch, the download button and the demo.
-  The download button (`src/components/download-button.tsx`) offers the client for the reader's
-  system and every other one behind its chevron, from `DOWNLOADS` in `src/lib/links.ts`.
-  `src/components/demo` is the Mac app's window in React, with made-up threads. `public/i` is the server's installer, and `public/install.sh` its old address.
-  `public/linux` installs the GPUI app on Linux, which the download button copies as a command.
-  `scripts/icons.mjs` draws the icons of both web projects: `pnpm --filter motile-marketing icons`.
-  `scripts/preview.mjs` draws the link preview image of both from the `/preview/` page, the
-  tagline over the demo: `pnpm --filter motile-marketing preview-image`. Run it when the demo
-  changes.
-- `apps/web`: `src/server/auth.ts` holds the session (the browser only gets an HttpOnly
-  cookie), `src/lib/account.ts` is the server functions the pages call, and `src/routes/auth/`
-  starts and finishes a sign-in.
+- `apps/marketing`: ships no JavaScript but the theme switch, the download button and the demo.
+  `src/components/demo` is the Mac app's window in React. `public/i` is the server's installer,
+  `public/linux` the GPUI app's. `pnpm --filter motile-marketing icons` draws the icons and
+  `pnpm --filter motile-marketing preview-image` the link preview; run that when the demo changes.
+- `apps/web`: `src/server/auth.ts` holds the session, `src/lib/account.ts` the server functions,
+  `src/routes/auth/` the sign-in.
 
 ### apps/server
 
-- `agent_accounts.rs`: the agents' accounts. Each is the folder its CLI keeps the sign-in in
-  (`CLAUDE_CONFIG_DIR`, `CODEX_HOME`, or none for the CLI's usual one) and the variables its agent
-  is given. Every account is alike: an agent's first is its default, which any can be made, and
-  any but an agent's last can be removed. A Codex account can share the usual folder but for its
-  sign-in. A thread works with one account and can move to another. While the account has a
-  gateway, each agent also has a Gateway account, which the server keeps and nobody edits, and the
-  gateway places its threads; and one Gateway account pinned to each of the gateway's accounts (`pin`),
-  whose threads stay on that account and stop at its limit. Only agents pick a pinned one, through
-  `start_agent`; the clients' pickers leave them out.
-- `sign_in.rs`: signs a Claude Code account in for a client: it runs `claude auth login` with the
-  account's folder, the client opens the page it links to, and the code that page shows comes
-  back to it.
-- `hub.rs`: the live state of every thread: turns, queued messages, approvals, monitoring,
-  worktrees, snapshots and the agents an agent starts. It continues a thread once its usage limit
-  resets, and after a restart that cut its agent off, where the server's settings say so. A
-  snoozed thread wakes at its time, or before when it asks the user something, reaches its limit
-  or fails, and goes back to the top of the active ones; writing to it or archiving it ends the
-  snooze too. Claude
-  Code's process rests for ten minutes after a turn to take the thread's next message, and a new
-  one holds its first prompt until its MCP servers, claude.ai's connectors too, have connected. Every
-  server has a "No project" project, whose threads each work in a folder of their own under
-  `no-project` in its data folder, out of reach of any git repository above it. A message comes
-  with the id its client gave it, and one sent again that the thread already has, queued or in its
-  transcript, is only answered `Sent`.
-- `handoff.rs`: what an agent is told of a thread that went on without it. A thread keeps a
-  session for each agent and sessions folder it ran in (`thread_sessions`); going back to one
-  resumes it with what it missed, a new one is told everything before. Items are told whole, as
-  many as the model's context has room for, Codex's as messages (`thread/inject_items`). The
-  transcript shows the switch as a `Handoff` item.
-- `mcp.rs`: the `motile` MCP server on the loopback interface, which an agent calls by the token of
-  its own thread: `read_thread` reads any thread of the server, for what a handoff left out,
-  `openui_guide` gives the prompt that teaches programs in pages that fit in a tool's answer,
-  `check_ui` checks a program before the agent shows it, and `list_accounts`, `start_agent`,
-  `agent_status`, `message_agent`, `answer_agent`, `approve_agent` and `stop_agent` start and follow
-  agents on any of the server's accounts, Claude Code's or Codex's. The same tools follow any thread
-  of the server and drive one with no more access than the caller's, except `approve_agent`, which
-  only answers the threads the caller's agent started (`started_by`) and the ones those started,
-  never the user's. `create_thread`, `list_threads`,
-  `update_thread`, `thread_queue`, `list_projects`, `add_project`, `read_pull_request`,
-  `link_pull_request` and `git_status` (`hub/threads.rs`) start threads the sidebar lists, find and
-  change threads, projects and pull requests, under the same rule. A thread an agent starts,
-  with `start_agent` or `create_thread`, keeps the thread whose agent started it (`started_by`),
-  which sets it apart from the user's; `parent` only says where a thread sits.
-- `hub/children.rs`: those agents. Each works in a thread of its own, which knows the thread and
-  the tool call that started it (`parent`); the sidebar doesn't list it. It gets only its prompt,
-  works in its parent's folder unless given a worktree, and never has more access than its parent.
-  Its parent's tool call follows how it does, and the parent's agent is told (`Notice`) when the
-  turn it gave the thread ends, the thread asks a question, or a thread with full access waits for a
-  tool call to be allowed (Claude Code asks for some under any access), unless a call of its own
-  waited for that. Only an agent with full access allows one, with `approve_agent`, and only for a
-  thread it started or one under it; a thread with less, or the user's, waits for the user. Stopping or deleting a thread stops or deletes the ones it started.
-- `pacing.rs`: passes a streamed reply on in finished blocks.
-- `agents/`: builds the command for a turn and parses its output into `AgentEvent`s
-  (`claude.rs`, `codex.rs`). `skills.rs` asks each account's CLI for the skills it offers in a
-  project (Claude Code's `initialize`, Codex's `skills/list`), which `hub.rs` keeps for half a
-  minute; a message's `$name`s of them are kept with it, Codex reads them itself and Claude Code is
-  given the last as the `/name` command it runs, with the rest of the message as its arguments. `models.rs` asks each account's CLI what its picker lists and the
-  effort each model runs at by default (`ask.rs` asks a CLI without running a turn); `hub.rs`
-  keeps the answer and asks again when a client connects or opens a draft, at most once a minute.
-- `store.rs`: SQLite. Every item has a position (`seq`) and the revision that last changed it
-  (`rev`); a client asks for what changed after the revision it has. It also keeps what the
-  agents spend, by model and by what it was spent on (a turn, or writing a title, a branch's
-  name, a commit message or a pull request): Claude Code reports a session's total with each
-  result and Codex what each answer took.
-- `activity.rs`: what the user and the agents did, for the usage view's Activity tab: the clients
-  that connected (each says which it is with `Hello`), every turn once it ends (what started it, the
-  client that sent its message, how long it worked and waited on the user, its tools, steers, agents,
-  reasoning and fast mode, how it ended), every feature used, by a client or by an agent's motile
-  tool, with how the client was connected, and the user's time in the clients (`engaged`: a
-  stretch for each device and project, on the server of the project, which a client sends with
-  `Engaged` and the server keeps as the connection's device's). All of it goes into the change log,
-  as the usage does, and stays when its thread is deleted. Once, on the first start that keeps them, the server reads the
-  turns and the user's messages from before out of its transcripts (`backfill_activity`); which
-  client sent a message, waiting, reasoning, fast mode and features start then.
-- `search.rs`: the sidebar's search through the messages, by an FTS5 trigram index of the user's
-  and the agents' messages (`item_search`, `copied_item_search`, kept by triggers): the newest
-  messages with every word of three letters or more, narrowed by the shorter words, then each
-  thread once by its best message, ranked as `motile_protocol::search` grades them. It reads on a
-  connection of its own, beside the writes.
-- `pricing.rs`: what the models cost at the API's prices, fetched from LiteLLM's list once a day,
-  to say what the tokens Codex spent would have cost. Claude Code says what its own cost.
-- `limits.rs`: how much of their plans the agents' accounts have used, as their CLIs say without
-  spending tokens: `codex app-server` answers `account/rateLimits/read` and Claude Code the
-  `get_usage` control request. `hub.rs` reads them every five minutes and again whenever a client
-  or an agent asks, unless the last read is under 30 seconds old, and takes a pinned Gateway
-  account's from the gateway's list of its accounts each time it asks for it, every minute.
-- `git.rs`: branches, worktrees, status, commit, pull, push, pull requests (through `gh`),
-  snapshots and patches.
-- `pull_requests.rs`: what GitHub says of a pull request (one `gh api graphql` read), the
-  repository's list of them, and what the pull request tab does to one: merge, auto-merge, update
-  its branch, close, revert, review its lines, edit, react. `hub.rs` watches a thread's pull
-  request for its agent and settles the thread once it merges. Where the server's settings say
-  so, it fast-forwards a project's folder on its default branch after each fetch and each merge.
-- `files.rs`: browses the server's folders, takes uploads, and reads the files of a thread's
-  folder, never outside it.
-- `media.rs`: keeps the images and videos threads show and the files agents send and users attach,
-  named by their contents. At start the server keeps the files attached to earlier messages that it
-  still has the uploads of. An agent sends any file as a Markdown image of its path, and gives a video its
-  preview image as the image's title.
-- `title.rs`, `drafts.rs`: have an agent write titles, commit messages, pull request texts and
-  branch names, through `generate.rs`, which also says what each answer took so that it is kept
-  with the usage. A title is told what the pull requests and issues its message links to are
-  about.
-- `github.rs`: the server's GitHub login, its repositories and cloning one.
-- `linear.rs`: the server's connections to Linear workspaces. The user approves Motile's
-  application in a browser and the server exchanges the code with the verifier it made (PKCE, no
-  secret), so the token never leaves the server, which renews it. With it the server reads a
-  workspace's teams, users and issues, searches them, reads one with its comments, changes its
-  status, assignee and priority, comments on it and files new ones. `MOTILE_LINEAR_URL` stands
-  in for Linear.
-- `ricrac.rs`: the same for Ricrac (ricrac.app, our own tracker), through its REST operations
-  (`POST /v1/ops/<name>`) where Linear's is GraphQL. `MOTILE_RICRAC_URL` stands in for Ricrac.
-- `ui.rs`: the programs agents show in their replies (OpenUI Lang in an `openui-lang` fence), which
-  every agent is taught by the prompt `crates/openui` writes. Its instructions only say what a
-  program is and to read that prompt with `openui_guide`, unless it has no motile MCP server, when
-  they hold the whole prompt. Once a
-  thread has a program, a fence with no `root` statement is a patch merged over the latest. When a
-  turn ends with a program that has errors, the agent is sent them as a `Notice` and asked for a
-  patch, twice at most for a message, never for a turn that was stopped or hit the limit. An
-  assistant item keeps the state the user left each program in (`ui`, by block, set with `SetUi`),
-  which syncs like the rest of the item. A message that a program sent (`context`) and the state of
-  the programs the user changed since the last message (`programs`) reach the agent after its text,
-  a line each: `context and form values = <JSON>`.
-- `ui_tools.rs`: the tools a program's `Query` and `Mutation` call (`UiTool`), inside the thread's
-  folder, with their JSON schemas for the agent's prompt. `run` runs a command the user confirmed,
-  or any under full access, and only from a `Mutation`, which a click fires.
-- `ui_lookups.rs`: a program's photos from Bing's image search, the first whose page's title names
-  the query, else Wikipedia's and Wikimedia Commons' by the same rule, kept as the thread's media
-  (`UiImages`), and street routes from OSRM (`UiRoute`), both kept in memory a while.
-- `icons.rs`: finds a project's icon in its folder.
-- `access.rs`: asks the auth server which clients belong to the account, which servers it has and
-  unlinked, which it deleted completely, and which device is its gateway.
-- `backup.rs`: the account's S3 bucket, which a client gives the server (`SetBackup`). The server
-  puts its log's batches (`<key>/log/<log id>/…`), its `server.json` and its media
-  (`<key>/media/…`) there under its own key, and every minute copies the account's other servers'
-  logs from it, the unlinked ones' too, through `sync.rs`'s `apply`; it deletes the prefix of a
-  server the account deleted completely. A copied thread's media it fetches from the bucket when a
-  client asks for it. Clients don't carry to a server what it copies from the bucket.
-- `gateway.rs`: how the Gateway accounts' agents reach the gateway: an HTTP listener on the loopback
-  interface, called with the thread's token, and the iroh connection to the gateway that carries each
-  request. Codex's gateway sessions declare OpenAI actor authorization with that token so native
-  image tools are available; the header is stripped before forwarding. The token never leaves the
-  server; the gateway is told the thread. Every agent, on any account, reaches the gateway's MCP
-  servers there too (`/mcp/<slug>`), which `hub.rs` adds
-  beside `motile` to its MCP servers while the account has a gateway. A call the gateway says needs
-  approval is asked of the user in the thread, under any access, and sent again approved; the agents
-  themselves never ask for those servers' tools.
-- `sync.rs`: the server's change log and its copies of the account's other servers' logs. Triggers
-  give each write to a project, a thread, an item or the usage the next number of the log
-  (`migrations/0018_sync.sql`), and a delete leaves a tombstone. A client asks a server what changed
-  after a number and hands the batch, compressed, to another server, which keeps only what its copy
-  lacks, so a batch that comes twice changes nothing. A copy keeps its origin's numbers and can be
-  passed on to a third server. The copies are apart from the server's own threads: agents,
-  `read_thread` and git never see them. A new thread can go on from a copied one, which it starts
-  with the copy's transcript.
-- `setup.rs`, `service.rs`: what the installer runs, and the systemd or launchd service.
-- `update.rs`: replaces the server's own program with the latest release.
-- `tests/e2e.rs`: runs the server against `scripts/fake-agent` over real iroh connections.
+- `hub.rs`, `hub/`: the live state of every thread. `hub/children.rs` is the agents an agent
+  starts, `hub/threads.rs` the motile tools that find and change threads.
+- `mcp.rs`: the `motile` MCP server the agents call.
+- `agents/`: running Claude Code and Codex and parsing what they say.
+- `agent_accounts.rs`, `sign_in.rs`: the agents' accounts and signing them in.
+- `handoff.rs`: what an agent is told of a thread that went on without it.
+- `actors.rs`: who took each action in a thread, and labelling the ones from before.
+- `store.rs`: SQLite. `sync.rs`: the change log and the copies of other servers' logs.
+- `activity.rs`, `search.rs`, `pricing.rs`, `limits.rs`: the activity, message search, prices and
+  the accounts' limits.
+- `git.rs`, `pull_requests.rs`, `github.rs`: git, pull requests and GitHub.
+- `linear.rs`, `ricrac.rs`: Linear and Ricrac. `MOTILE_LINEAR_URL`, `MOTILE_RICRAC_URL` stand in
+  for them.
+- `ui.rs`, `ui_tools.rs`, `ui_lookups.rs`: the programs agents show, the tools they call, their
+  photos and routes.
+- `files.rs`, `media.rs`, `icons.rs`: files, media and project icons.
+- `title.rs`, `drafts.rs`, `generate.rs`: titles, commit messages, pull request texts, branch names.
+- `access.rs`, `backup.rs`, `gateway.rs`: the account, the S3 backup, the gateway.
+- `pacing.rs`, `setup.rs`, `service.rs`, `update.rs`.
+- `tests/e2e.rs`: the server against `scripts/fake-agent` over real iroh connections.
 
 ### crates/core
 
 A static library for the clients (`ffi.rs`: JSON commands in, JSON events out) and a Rust library
-for tests.
+for tests. `api.rs` is the JSON the client and the core exchange.
 
-- `core.rs`: one loop that owns all state. Anything that waits on the network runs in its own
-  task. A server removed from the account stays, `removed`: its threads come from the copies its
-  account's other servers keep, can be read and searched, and end with a row that says it was
-  removed, in place of the composer. A thread says how the threads its agent started are doing
-  (`children`): how many work, and which wait for the user, for its sidebar row and the strip over
-  its composer.
-- `sync.rs`: carries the threads between the servers: a round a moment after a server connects or a
-  thread changes asks each server how far its own log and its copies go, and moves what each lacks,
-  from the origin itself or, for a removed server, from the server whose copy goes furthest. On a
-  metered network only what follows a copy is carried. A server copies from its bucket what it says
-  it does (`Watermarks`' `bucket`), and nothing of that is carried to it.
-- `backup.rs`: the account's S3 bucket as the client knows it: its keys, kept in `backup.json`
-  beside the device key and given to every server that connects without one, and what Settings →
-  Servers says of the backup and under each server.
-- `link.rs`: keeps one server connected and follows its threads. A connection can look open while
-  nothing gets through, so the link pings its server (`Ping`) every half minute, when a request has
-  waited ten seconds, and when the client comes back or the network changes, and gives up one that
-  doesn't answer, saying why in the server's error. When the core replaces the endpoint it retires
-  the links first: what ends on the old one ends because the core closed it, so they show as
-  dialing, not dial on it, until the new one is open.
-- `away.rs`: whether the client was away, paused by the system or in the background. Coming back
-  after a while the core opens a new endpoint, and a connection or a dial from before that ends
-  then only dials again, without an error: the clients show an outage only once a dial made after
-  coming back fails.
-- `outbox.rs`: the messages on their way, kept in the cache before they are sent and until their
-  server has them, each with the id the server knows it by, so that a lost connection or a restart
-  sends it again and never twice. The clients show what waits, and put back in its composer a
-  message its server refused.
-- `engaged.rs`: the user's time in the client, as analytics apps count it: while the client is
-  focused (`Focus`, which also says the project on screen) and they used it (`Input`) in the last
-  five minutes. A longer pause ends the stretch at their last input; leaving ends it at once. Each
-  stretch waits in the cache until the server of its project, or any for none, has it.
-- `follow.rs`: keeps the cached copy of an active thread that isn't open current.
-- `cache.rs`: the client's SQLite copy of its servers' threads, read a page of whole turns at a
-  time.
-- `log.rs`: the client's log, `client.log` in its data folder, which starts over at 5 MB and keeps
-  the one before as `client.old.log`: how each server's link connects and fails, when the endpoint
-  is replaced, panics, and inputs that kept the core busy. Settings → General → Troubleshooting
-  shows it in the Mac's Finder and the GPUI app's file manager, and shares it on iOS and Android.
-- `media.rs`: the images and videos the client has fetched, as files, with a size limit.
-- `markup.rs`: marking up an image in the viewer to show an agent what to change: pen strokes,
-  arrows, boxes and numbered pins that carry a note, in the image's pixels, with their undo history.
-  A client passes the pointer in (`motile_markup`, `Native.markup`) and paints the scene that comes
-  back over the picture; `flatten` writes the image with its marks (tiny-skia), and the pins' notes
-  go in the message after it, or in the place of those it had when it is marked up again.
-- `git.rs`: which git action a project's status calls for.
-- `pull_request.rs`: the pull request tabs: a pull request's statuses, the button its state calls
-  for, its menu, its activity and conversations with the Markdown set, the list's rows, and the
-  prompts that hand conflicts, failures and lines to the agent.
-- `linear.rs`: the Linear tabs: issues under their statuses, as Linear lists them, one issue
-  with its description and comments set, and the prompt that hands it to an agent. `ricrac.rs`
-  is the same for the Ricrac tabs.
-- `browse.rs`: browsing a server's folders by typing a path.
-- `skills.rs`: the skills the composer offers while the word before its cursor starts with `$`
-  or `/`, best match first, and the chips a message's `$name`s become.
-- `snooze.rs`: the times a snooze menu offers and a day and time the user writes, which the
-  clients ask through `motile_snooze` and `Native.snooze`. Each thread says which part of the
-  sidebar it is in (`section`: active, working, snoozed or archived) and whether it woke unseen.
-- `search.rs`: the sidebar's search through every server's messages, asked a moment after the
-  search stops changing. What was found stays while it still fits the search, so the list never
-  empties and fills again. Each server's answer shows as it comes, below what already shows, and
-  the search says it still searches until the last one answered. Its excerpts come in parts that
-  set off the words.
-- `usage.rs`: what the agents spent on every server, added up for the usage view: a series for
-  each agent, and the models, projects and kinds of token.
-- `activity.rs`: the Activity tab of the usage view, from every server's activity: the headline
-  numbers, the work over time by the client it came from, the clients, the hours of the week, how
-  turns ended and what started them, and the features used, every label and number ready to draw.
-  The user's time comes as the stretches themselves, with this client's own that its servers don't
-  have yet, so that time on two devices at once counts once.
-- `limits.rs`: the Limits tab of the usage view: a section for each account, shown once however
-  many servers share it, and a row for each window with when it starts over and its pace. The
-  gateway's accounts are sections too. It ranks a server's accounts for new threads with
-  `select::rank`.
-- `gateway.rs`: the account's gateway, connected while Settings → Agent Gateway or the Limits tab shows: its
-  accounts as the page draws them, their sign-ins, its request log and captured requests, and how to
-  add one. `mcp_servers.rs` is Settings → MCP Gateway: each MCP server's card, the known MCPs the add
-  sheet offers, the form a tool is tried with from its schema, and the calls agents made.
-- `render/`: turns transcripts into rows ready to draw: `rows.rs` (the row list and its
-  splices), `markdown.rs`, `highlight.rs`, `diff.rs`, `agents.rs`.
-- `render/openui/host.rs`: runs the programs of an open thread's rows (`RowKind::Ui`), each in a
-  runtime of its own: the row carries its tree, then `ui_patch` events what changed in it, by node
-  id (the path from its root, `node_id` in `render/openui/mod.rs`). What the user does comes as
-  `Command::Ui`; the host calls the program's tools on the thread's server (a `run` asks the user
-  first, `ui_confirm`, unless the thread has full access), keeps its timers, sends its
-  `@ToAssistant` messages with their context, keeps its state with `SetUi` half a second after it
-  stops changing, and looks up its photos and routes. Which fences are programs and which patch
-  the one before is `motile_openui::fences`, as the server finds them.
-- `render/openui/tree.rs`: the tree a client draws for an OpenUI program, a `UiNode` for each
-  component with its props final for drawing (`crates/openui/LAYOUT.md`): colours, points, text
-  runs, the context rules. `tree/` resolves an evaluated program into it, reusing the components
-  that didn't change; the canvas components carry the input of `canvas/`'s layout. Its golden
-  trees are `fixtures/openui`, one for each program of the repo's `fixtures/openui`
-  (`OPENUI_BLESS=1` rewrites them). `scripts/ui-types.sh` writes its Swift and Kotlin copies
-  (`examples/ui_types.rs`), and `scripts/lucide-names.mjs` the Lucide names its icons take
-  (`tree/lucide.rs`). Run them after changing the types or the font.
-- `render/openui/canvas/`: charts, drawings, formulas (RaTeX with the KaTeX fonts), a flashcard's
-  flip and confetti as scenes of paths, text and the regions a pointer lights, which the clients
-  only paint (`motile_ui_layout`, `Native.uiLayout`). `tests/paint` paints them as a reference, into
-  `fixtures/canvas`, which every client's painter is compared with.
-- `render/openui/web.rs`: the pages of HtmlView and YouTube for the clients' sandboxed web views
-  (`motile_ui_page`, `Native.uiPage`).
-- `render/openui/map.rs`: the map's camera in MapLibre's zoom levels: where the first pin and a fit
-  put it, the fly between two cameras, the route revealed along its length. The Apple and Android
-  clients ask it through `motile_ui_map` and `Native.uiMap`.
-- The frames the clients lay the corpus out in: each client's tests write `build/frames/<client>`
-  (`{"<node id>": [x, y, width, height]}`, every golden tree at 390 and 720) and a picture of each,
-  dark, to `build/programs/<client>`. `examples/compare_frames.rs` compares two clients node by
-  node: gaps, paddings, control heights and the widths a column or a grid gives within a point, what
-  text decides within whole lines and the typefaces' widths. `fixtures/frames/mac` and `ios` are the
-  references CI holds every client to (GPUI to the Mac's, Android to iOS's, as LAYOUT.md pairs
-  them), and `known.txt` the drift let through until the client that strays is fixed.
-  `scripts/compare-frames.sh` lays the corpus out on every client, compares them and lays their
-  pictures side by side in `build/programs/sheets` (`examples/program_sheet.rs`); `--bless` makes
-  the Mac's and iOS's frames the references, after a change to how a program is laid out.
-- `api.rs`: the JSON the client and the core exchange.
-- `examples/drive.rs` drives the core from a terminal; `examples/seed.rs` makes the dev app's
-  account, project and threads.
+- `core.rs`: one loop that owns all state.
+- `link.rs`, `away.rs`, `sync.rs`, `backup.rs`: connections, coming back, carrying threads between
+  servers, the backup.
+- `cache.rs`, `outbox.rs`, `follow.rs`, `media.rs`, `log.rs`: the local copy, messages on their
+  way, media and the client's log.
+- `engaged.rs`, `usage.rs`, `activity.rs`, `limits.rs`, `gateway.rs`, `mcp_servers.rs`: the usage
+  view and the gateway pages.
+- `pull_request.rs`, `linear.rs`, `ricrac.rs`, `git.rs`, `browse.rs`, `skills.rs`, `snooze.rs`,
+  `search.rs`, `markup.rs`: what those parts of the clients show.
+- `render/`: transcripts as rows ready to draw. `render/openui/` runs the programs and resolves
+  them into the trees the clients draw; `canvas/` lays out charts and drawings, `map.rs` the map's
+  camera. The golden trees are `fixtures/openui` (`OPENUI_BLESS=1` rewrites them). After changing
+  the types or the font, run `scripts/ui-types.sh` and `scripts/lucide-names.mjs`.
+- `fixtures/frames`: the layout references CI holds the clients to. `scripts/compare-frames.sh`
+  compares them; `--bless` takes the Mac's and iOS's frames after a layout change.
+- `examples/drive.rs` drives the core from a terminal; `examples/seed.rs` makes the dev data.
 
 ### packages/apple (Swift: SwiftUI, with AppKit and UIKit for the transcript)
 
-`MotileKit`, the Swift package both clients are made of. `Sources/MotileKit/Shared` is what both
-use, `Mac` and `iOS` what only one does, each file of those inside `#if os(…)`. A view that has
-to be AppKit on the Mac and UIKit on iOS has a twin in each, named alike (`KitMac.swift`,
-`KitIOS.swift`); what the two do is written once, in `Shared`, on top of them.
+`MotileKit`, the Swift package both clients are made of. `Shared` is what both use, `Mac` and
+`iOS` what only one does. A view that has to be AppKit on the Mac and UIKit on iOS has a twin in
+each, named alike (`KitMac.swift`, `KitIOS.swift`).
 
-- `Shared/Platform/Platform.swift`: what the two systems call differently, behind one name.
-  Sizes are written as they are on the Mac; `Platform.scale` enlarges them on iOS.
-- `Shared/Platform/Symbol.swift`: the icons, drawn from Lucide's font (`Fonts/lucide.ttf`), not
-  SF Symbols. A new one is a case with the character it has in lucide-static's
-  `font/codepoints.json`. Linear's and Ricrac's logos, which Lucide doesn't have, are drawn by
-  hand there.
-- `Shared/Core`: `CoreBridge.swift` calls the Rust core, `AppStore.swift` is the state the
-  views show, `RightPanel.swift` the right panel's state, `Linear.swift` the Linear tab's and `Ricrac.swift`
-  the Ricrac tab's.
-- `Shared/Views/Transcript`: the transcript. `TranscriptView.swift` only keeps views for the
-  rows on screen, `Rows.swift` builds their text and measures them off the main thread,
-  `RowViews.swift` are the rows. `Map/` is OpenUI's map (`MapView.swift`, with `MapPilot.swift`
-  moving its camera and drawing its route as core says): MapLibre Native on iOS
-  (`iOS/MapEngineIOS.swift`) and MapLibre GL JS, bundled in `Sources/MotileKit/Map`, in a web view
-  on the Mac (`Mac/MapEngineMac.swift`). Three run at most, the others show a picture of themselves.
-- `Shared/Views/Sidebar`, `Composer`, `Onboarding`, `Thread`: SwiftUI. In the composer a skill is
-  picked from `SkillMenuStrip.swift`, a strip over it, and becomes a chip (`SkillChip.swift`): an
-  attachment in the composer's text, which is written `$name`, and in a message a box its layout
-  manager draws; `Shared/Core/Skills.swift` is their state. While the sidebar
-  searches it is one flat list (`SearchResults.swift`): the threads found by their title, project
-  or pull request, then the ones found by a message, each row as tall whatever it shows.
-- `Shared/Views/UI`: the components every view is made of. `ActionButton` and `ActionMenu` (a
-  variant, one of three sizes, an optional symbol, a pending state), `Spinner`, `Chip`,
-  `InputField`. Their sizes are `ControlSize` and their corners `Radius`, in `Theme.swift`.
-  Every line to type in on the Mac is a `LineField` (`Mac/LineFieldMac.swift`), an AppKit field
-  whose cell keeps its text in from its sides, so that the cursor after the last letter isn't cut
-  off as in SwiftUI's plain field. Return in one is `onReturn`, a key a view steers with
-  `onLineKey`, in place of SwiftUI's `onSubmit` and `onKeyPress`, which don't reach it.
-- `Shared/Theme/Theme.swift`: the design tokens, generated into `Tokens.swift` beside it from
-  `packages/theme/tokens.json`. Every colour is a `Theme` token, every text size one of `TextSize`, every opacity one of `Opacity`,
-  every shadow a `ShadowSize` at one of the shadow opacities and every radius one of `Radius`. A view lies on a `Surface` (the page, a box, a card or a popover) and what it
-  draws on it, a control, a row or a box, takes that surface's accent. A colour's wash is
-  `.wash()`, a whole disabled view `.opacity(.disabled)`.
-- `Shared/Views/CommandPanel.swift`: the panel behind ⌘K, ⌘N and ⌘P, a sheet on iOS.
-- `Shared/Views/Settings`: the settings, a route over the whole client with a way back: the
-  sections and a search of their groups in a sidebar (`SettingsSidebar.swift`) and the open
-  section's page (`SettingsPage.swift`). The Mac lays them out in `Mac/SettingsRoute.swift`, iOS
-  in `iOS/SettingsSheet.swift`, a sheet. The Integrations page turns each issue tracker's tab on
-  or off on this device (`Shared/Core/Integration.swift`; Linear is on to start with, Ricrac off).
-- `Shared/Views/Usage`: the usage, a route of its own opened from the sidebar's footer, with the
-  servers it counts picked in its title. `UsageView.swift` holds its tabs and what they read,
-  `ActivityView.swift` is the Activity tab, what the user and the agents did,
-  `LimitsView.swift` is the Limits tab, what the agents' plans have used, and `SpendingView.swift`
-  the Cost and Tokens tabs: a chart by agent and the models, projects and kinds of token under it.
-  The Mac lays it out in `Mac/UsageRoute.swift`, iOS in `iOS/UsageSheet.swift`.
-- `Shared/Views/Markup`: marking up an image in the viewer (`Shared/Core/Markup.swift` is its
-  state): the bar of tools, colours and undo, which is the selected pin's note while one is
-  (`MarkupBar.swift`), and the marks painted over the picture (`MarkupCanvas.swift`), which the
-  viewer's zooming view gives the pointer: a drag on the Mac, one finger on iOS, where two move it.
-  A marked-up image goes in the composer in the place of the attachment it was, and keeps what it
-  was made from to be marked up again.
-- `Shared/Views/Panel`: the panel on the right of the thread: changes, files, agents
-  (`AgentsView.swift`: the agents at work, the ones that ended folded under them, and the thread
-  that started this one; an agent opens in the thread's place, in its own thread when it has one
-  and read only with `AgentBar` otherwise) and pull
-  requests (`PullRequestView.swift`, `PullRequestActivity.swift`, `PullRequestList.swift`,
-  `LineCommentSheet.swift`, `PullRequestParts.swift`), Linear (`LinearView.swift`) and Ricrac
-  (`RicracView.swift`).
-  `CodeView.swift` draws a diff or a file.
-- `Mac/`: `MotileApp.swift` lays out the window, `MediaViewer.swift`, `AppUpdater.swift`,
-  `Glass.swift`, `Demo/DemoDriver.swift`.
-- `iOS/`: `MotileAppIOS.swift` is the client and its layout, `Drawer.swift` the sidebar under the
-  thread, `PanelScreen.swift`, `ThreadScreen.swift`, `SidebarScreen.swift`, `Tables.swift`,
-  `DemoDriverIOS.swift` the steps `do.sh` runs.
+- `Shared/Platform`: `Platform.swift` hides what the systems do differently. Sizes are written as
+  on the Mac; `Platform.scale` enlarges them on iOS. `Symbol.swift` is the icons, from Lucide's
+  font; a new one is a case with its character from lucide-static's `font/codepoints.json`.
+- `Shared/Core`: `CoreBridge.swift` calls the core, `AppStore.swift` is the state the views show.
+- `Shared/Theme/Theme.swift`: the tokens. Every colour, text size, opacity, shadow and radius is
+  one of them. A view lies on a `Surface`, and what it draws takes that surface's accent.
+- `Shared/Views/UI`: the components every view is made of. Every line to type in on the Mac is a
+  `LineField`, with `onReturn` and `onLineKey`.
+- `Shared/Views/Transcript`: the transcript. `TranscriptView.swift` only keeps views for the rows
+  on screen, `Rows.swift` prepares them off the main thread, `RowViews.swift` draws them.
+- `Shared/Views/…`: `Sidebar`, `Composer`, `Thread`, `Panel`, `Settings`, `Usage`, `Markup`,
+  `Onboarding`, `CommandPanel.swift`.
+- `Mac/`, `iOS/`: each client's layout, and `DemoDriver.swift`, `DemoDriverIOS.swift`.
 
 ### apps/android (Kotlin, Jetpack Compose)
 
-The iOS app ported to Android, for phones and tablets, from Android 10. A Gradle project of its own:
-run `./gradlew` from `apps/android`, with a JDK 21 (`JAVA_HOME`). It does what the iOS app does, the
-way iOS does it, with Android's own facilities where iOS uses the system's: Custom Tabs for signing
-in, the photo picker and the camera for attachments, the share sheet, Media3 for videos, the back
-gesture for what Esc does. Its package is `app.motile`, its application `app.motile.motile`.
+The iOS app in Kotlin, from Android 10. Run `./gradlew` from `apps/android` with a JDK 21.
+Package `app.motile`, application `app.motile.motile`.
 
-- `core/`: the Rust core's JNI crate (`motile-android`, a member of the workspace), which wraps
-  `crates/core/src/ffi.rs`. Its events wait in a queue the app's event thread takes them from, so no
-  thread of the core calls into Java. It gives the JVM to `rustls-platform-verifier`, whose Kotlin
-  half comes from its Maven repository at the version in `Cargo.lock`, and to `ndk-context`, which
-  iroh's resolver reads the system's nameservers through, and sends the core's log to logcat.
-  `scripts/build-core.sh` builds it with cargo-ndk into `app/build/jniLibs`; Gradle runs it before
-  every build, and `-Pmotile.skipCore` leaves the one built last.
-- `app/src/main/java/app/motile/`: `core/` is `Shared/Core` in Kotlin (`CoreBridge.kt`, `Models.kt`,
-  `AppStore.kt`, whose state is Compose state, `Preferences.kt` for what UserDefaults keeps,
-  `SignInSession.kt` for a Custom Tab that returns a `motile://` address, `AppUpdater.kt`, which
-  updates the client from the latest release as the Mac app's does: it downloads the release's APK,
-  checks that it is signed with the client's own key, and hands it to Android's installer), `theme/` is `Theme.swift`,
-  `platform/` is `Platform.swift` and `Symbol.swift`, `ui/` is the component kit of `Shared/Views/UI`
-  and `Shared/Views/Shared`, and `transcript/`, `composer/`, `sidebar/`, `thread/`, `panel/`,
-  `commandpanel/`, `settings/`, `usage/`, `onboarding/` and `media/` are the views of the same names.
-  `transcript/map/` is OpenUI's map on MapLibre Native (`UiMapView.kt`, `MapDirector.kt`).
-  `layout/` lays out the screen: on a phone the sidebar and the panel are under the thread, which a
-  swipe slides aside (`Drawer.kt`), on a tablet all three are side by side (`MainScreen.kt`).
-  `Keyboard.kt` runs the core's keybindings from a keyboard with keys, where `mod` is Ctrl.
-  `Root.kt` shows the sheets, the viewer and the alerts. `DemoDriver.kt` runs the steps `do.sh` writes.
-- `app/src/test` tests the models. `gestures/` uses the client with fingers (`GestureTests.kt`, the
-  iOS app's gesture tests): a test module of its own that runs in a process of its own, so that it
-  can stop the client and open it again, as the iOS app's UI tests do. The unit tests lay programs
-  out with the core built for this machine, which `scripts/build-core.sh` puts in `app/build/hostLibs`.
-- `scripts/release.sh` builds the signed APK. Only a development build takes the dev scripts'
-  variables (launch extras: `MOTILE_AUTH_URL`, `MOTILE_RELEASES_URL` and the others), since any app
-  can start the client with extras. The dev app scripts are under Development.
+- `core/`: the core's JNI crate. `scripts/build-core.sh` builds it; Gradle runs it before every
+  build, and `-Pmotile.skipCore` keeps the last one.
+- `app/src/main/java/app/motile/`: `core/` is `Shared/Core`, `theme/` is `Theme.swift`,
+  `platform/` is `Platform.swift` and `Symbol.swift`, `ui/` is the component kit, and the other
+  folders are the views of the same names. `layout/` lays out phone and tablet.
+- `app/src/test` tests the models, `gestures/` uses the client with fingers.
+- `scripts/release.sh` builds the signed APK.
 
 ### apps/macos and apps/ios
 
-- `apps/macos`: the Mac app's executable and what builds it (`scripts/build-app.sh`).
-  `Resources/AppIcon.icon` is the icon of both clients. `scripts/ci-demo.sh` runs the demo in CI.
-- `apps/ios`: the Xcode project, for iOS 18 and later. `scripts/build-core.sh` builds the core
-  for iOS, `MotileUITests` uses the client with fingers, `scripts/testflight.sh` uploads a build.
-- The dev app scripts of both are under Development.
+- `apps/macos`: the Mac app's executable, `scripts/build-app.sh` and `scripts/ci-demo.sh`.
+- `apps/ios`: the Xcode project, for iOS 18 and later. `scripts/build-core.sh`, `MotileUITests`,
+  `scripts/testflight.sh`.
 
 ### apps/gpui (Rust: GPUI with GPUI Kit)
 
-The Mac app ported to Rust, the client on Linux and Windows. A Cargo workspace of its own with its
-own `Cargo.lock`: run `cargo` from `apps/gpui`. CI checks it on Linux and Windows, and every release
-carries it for both, built by `scripts/package.sh` (`Motile-GPUI-linux-x86_64.tar.gz`,
-`-linux-aarch64.tar.gz`, `-windows-x86_64.zip`, `-windows-aarch64.zip`), which its updater installs.
-Every release carries it for Macs too, signed and notarized as `Motile-GPUI-macos-aarch64.zip` by the
-`macOS` workflow, but motile.app doesn't offer it and its updater only opens the release's page there:
-the Mac app is the client on a Mac. It uses `crates/core` as a Rust library. Its data is in
-`%LOCALAPPDATA%\Motile GPUI` on Windows, `~/.local/share/motile-gpui` on Linux and `Motile GPUI`
-on a Mac, so it is a device of its own. On Linux and Windows it takes `motile://` links itself, and
-a second launch hands its link to the running one (`instance.rs`).
+The Mac app in Rust, the client on Linux and Windows. A Cargo workspace of its own: run `cargo`
+from `apps/gpui`. `scripts/package.sh` builds what a release carries.
 
-It builds on GPUI and wgpu with patches of ours, so that Linux redraws and presents only what
-changed in a frame: `patches/` holds a `.patch` for each crate, and `scripts/patch-crates.sh`
-unpacks the crates with them into `patched/`, which `[patch.crates-io]` points at. Run it before
-`cargo`; the scripts and CI do. To change a patch, edit its crate in `patched/`, then run
-`scripts/patch-crates.sh --save`. A GPUI Kit on another GPUI needs the patches
-redone for its versions in `patches/crates`; the script refuses a patch that `Cargo.lock` left unused.
+GPUI and wgpu carry patches of ours in `patches/`. `scripts/patch-crates.sh` unpacks them into
+`patched/`; run it before `cargo`. To change a patch, edit its crate in `patched/`, then run
+`scripts/patch-crates.sh --save`.
 
-- `bridge.rs`: runs the core and prepares a transcript's rows off the main thread. `store/` is
-  the state the views show, as `AppStore.swift` is, a module per area (`threads.rs`, `git.rs`,
-  `projects.rs`, `pull_requests.rs`, `linear.rs`, `ricrac.rs`, `settings.rs`, `sidebar.rs`).
-- `root.rs`, `main_view.rs`, `app_menu.rs`: the window, its layout and the menu bar.
-  `keyboard.rs` runs the core's keybindings ahead of the menus and the focused view, as
-  `ShortcutMonitor.swift` does, with the commands in `store/commands.rs` and the rules in
-  `store/shortcuts.rs`, and does what Esc means when nothing focused claims it.
-  `settings/` is the settings route over the window, with `usage.rs` the Usage chart.
-- `theme.rs`: `Theme.swift` in Rust: the tokens of `tokens.rs` with the colours made from them,
-  the `Surface`s and their layers, `ControlSize`, and shadows. The typeface is DM Sans, bundled in
-  `assets/fonts`.
-- `ui/`: the component library of `Shared/Views/UI` (`control.rs`: `ActionButton`,
-  `ActionMenu`, `Spinner`, `Chip`, `Switch`, `Segmented`, `InputField`, `TextArea`, cards;
-  `parts.rs`: `KeyCaps`, `CopyButton`, `CommandBox`, `PickMark`, `FadingScroll`, `CheckMenu`),
-  the row light (`Highlight` in `mod.rs`), the menus the app draws itself (`menu.rs`), the modal
-  stack and confirmations (`modal.rs`), the Lucide icons by the names of `Symbol.swift`
-  (`icons.rs`). Nothing native is imitated: a menu or a modal is drawn in the app's own style.
-- `transcript/`: `model.rs` (the rows and their splices into GPUI's list), `prose.rs`,
-  `rows.rs`, `view.rs`. `map/` is OpenUI's map, which draws OpenFreeMap's vector tiles itself with
-  the bundled style (`paint.rs`), with no MapLibre and no web view, on every system.
-- `composer/`, `sidebar/`, `thread/`, `git.rs`, `command_panel.rs`, `media/`,
-  `onboarding.rs`: the views of the same names in the Apple kit. The skills' menu and chips are
-  `composer/skills.rs`, `store/skills.rs` and `ui/skill_chip.rs`; GPUI Kit's inline tokens are the
-  composer's chips. `app_window.rs` keeps the
-  window invisible until it has something to show and its frame across launches, `lifecycle.rs`
-  tells the core when the Mac wakes or changes networks. `window_frame.rs` is the window's
-  buttons in the top bar where the desktop draws no title bar (GNOME under Wayland); GPUI Kit
-  draws the edges that resize it.
-- `panel/`: the right panel: `state.rs` (the tabs, as `RightPanel.swift`), `view.rs` (the chrome
-  and the changes, files and agents tabs), `code_view.rs`, `pull_request.rs`,
-  `pull_request_list.rs`, `line_comment.rs`, `linear.rs` and `ricrac.rs`.
-- `scripts/dev-app.sh` opens its dev app on the Mac's dev stack (`apps/macos/scripts/dev-stack.sh`),
-  a device of its own with its data in `apps/macos/build/dev/gpui`; `--mac` opens the Mac's dev
-  app beside it to compare. `scripts/shot.sh` takes a picture of it, and `scripts/do.sh "click 85
-  330" "key cmd-k" "type hello" "slide Tip 1" "press Alex"` clicks, types, drags a program's
-  slider, presses its button and runs commands in it, through `dev_drive.rs`.
-  `scripts/build-app.sh` builds `Motile GPUI.app`.
+- `bridge.rs`: runs the core. `store/` is the state the views show, as `AppStore.swift` is.
+- `root.rs`, `main_view.rs`, `app_menu.rs`, `keyboard.rs`: the window, its layout, the menus and
+  the keys.
+- `theme.rs`: `Theme.swift` in Rust. `ui/`: the component library.
+- `transcript/`, `composer/`, `sidebar/`, `thread/`, `panel/`, `settings/`, `media/`: the views.
+- `scripts/dev-app.sh`, `scripts/shot.sh`, `scripts/do.sh`: its dev app on the Mac's dev stack;
+  `--mac` opens the Mac's beside it.
 
 ## General Rules:
 
@@ -649,22 +220,15 @@ redone for its versions in `patches/crates`; the script refuses a patch that `Ca
   stored hashed. Anything that changes this needs a test in `apps/auth/src/e2e`.
 - A server runs agents with full access to its machine. It must only ever accept devices of its
   own account.
-- A machine that runs agents is a server, in the code and in what the user reads. What the user
-  reads says "your server" or its name, not "the server" alone, which sounds like ours. The auth
-  server is always called the auth server.
-- A program that drives servers is a client, in the code and in what the user reads. "App" is
-  only said with what it is: the Mac app, the iOS app, the web app (which is not a client), the
-  dev app.
-- Rendering logic belongs in `crates/core`, not in a client, so that every future client (Android,
-  Windows, Linux) gets it.
+- A machine that runs agents is a server, in the code and in what the user reads. The auth server
+  is always called the auth server.
+- Rendering logic belongs in `crates/core`, not in a client, so that every client gets it.
 - The marketing site's demo (`apps/marketing/src/components/demo`) shows the Mac app as it is.
-  When a change alters anything it shows (a view, a colour, a label, a state), update the demo in
-  the same change.
+  When a change alters anything it shows, update the demo in the same change.
 - The Mac app, the iOS app, the GPUI app and the Android app do the same things. What one gets, the
   others get in the same change. What the two Apple clients do is written once, in
-  `packages/apple/Sources/MotileKit/Shared`, and only what a system does differently is written
-  twice; the GPUI app writes it again in Rust, as the Mac app does it, and the Android app in Kotlin,
-  as the iOS app does it.
+  `packages/apple/Sources/MotileKit/Shared`; the GPUI app writes it again in Rust as the Mac app
+  does it, and the Android app in Kotlin as the iOS app does it.
 - A button, a menu, a spinner, a chip or a field in the clients comes from
   `packages/apple/Sources/MotileKit/Shared/Views/UI`, `apps/gpui/src/ui` in the GPUI app, or
   `apps/android/app/src/main/java/app/motile/ui` in the Android app. Its
@@ -681,21 +245,13 @@ redone for its versions in `patches/crates`; the script refuses a patch that `Ca
   always move with code, not be left behind.
 - Use guard statement patterns in any code you write.
 - Do not edit generated code: `Cargo.lock`, `pnpm-lock.yaml`, `apps/web/src/routeTree.gen.ts`,
-  and what `pnpm tokens` writes from `packages/theme/tokens.json`: `tokens.css`, `theme.css`,
-  `Tokens.swift`, `apps/gpui/src/tokens.rs`, the Android app's `Tokens.kt` and its
-  `res/values*/tokens.xml`, and `packages/theme/map-style-*.json` with their copies in
-  `packages/apple/Sources/MotileKit/Map`. Also what
-  `scripts/ui-types.sh` writes, `UiNodes.swift` and `UiNodes.kt`, and what
-  `scripts/lucide-names.mjs` writes, `crates/core/src/render/openui/tree/lucide.rs`.
-  The shadcn components in `src/components/ui` are ours once added: they are rewritten on the
-  design tokens and edited like any view. Never edit an applied migration in
-  `apps/auth/migrations` or `apps/server/migrations`, add a new one.
+  what `pnpm tokens` writes (`tokens.css`, `theme.css`, `Tokens.swift`, `apps/gpui/src/tokens.rs`,
+  `Tokens.kt`, `res/values*/tokens.xml`, `map-style-*.json` and their copies), what
+  `scripts/ui-types.sh` writes (`UiNodes.swift`, `UiNodes.kt`) and what `scripts/lucide-names.mjs`
+  writes (`crates/core/src/render/openui/tree/lucide.rs`). The shadcn components in
+  `src/components/ui` are ours once added. Never edit an applied migration; add a new one.
 - Do not write useless tests; tests should cover input/output behaviour.
-- What we take from another project keeps its licence beside it: OpenUI's conformance cases and
-  open-intelligent-ui's library (MIT, `crates/openui/fixtures`), the KaTeX fonts math is drawn with
-  (OFL, `crates/core/fonts/katex`), MapLibre GL JS (BSD, `packages/apple/Sources/MotileKit/Map`),
-  DM Sans (OFL) and Lucide (ISC). The iOS and Android apps draw maps with MapLibre Native (BSD).
-  Maps are OpenFreeMap's tiles of OpenStreetMap's data, which every client credits on the map.
+- What we take from another project keeps its licence beside it.
 - Reinvent the wheel but do not reinvent the car. If you are solving a simple problem do not
   introduce a library. If you are solving a complex but common problem, there is likely a
   modern library for it, if so, use it.
@@ -710,28 +266,22 @@ redone for its versions in `patches/crates`; the script refuses a patch that `Ca
   ad space.
 - When a deploy changes required env vars, deploy the code first and change the variables
   after. Unbind restarts the running pod on every variable change.
-- Do not slow the machine to a crawl. Other sessions work on it at the same time. Before you
-  start a dev app, a simulator or a big build, look at what already runs and how much memory is
-  free (`memory_pressure`, `xcrun simctl list devices booted`, `pgrep -fl build/dev`). If there
-  is headroom, go ahead. If not, wait for it instead of adding to the pile. Use one simulator or
-  emulator at a time, and when you are done, stop what you started: `scripts/dev-app.sh --stop`,
-  which on iOS also shuts its simulator down, and on Android its emulator.
+- Do not slow the machine to a crawl; other sessions work on it too. Before a dev app, a simulator
+  or a big build, check what runs and how much memory is free (`memory_pressure`,
+  `xcrun simctl list devices booted`, `pgrep -fl build/dev`), and wait if there is no headroom.
+  Use one simulator or emulator at a time, and stop what you started (`scripts/dev-app.sh --stop`).
 - After you make code changes, run the checks below and fix what they raise.
-- A change must not break what CI runs on it: the checks, the e2e tests, the iOS UI tests and
-  the Mac app's demo (`DemoDriver.swift`, run by `scripts/ci-demo.sh` in the `Release` and
-  `macOS` workflows), which signs in, adds a project, and drives threads, git, drafts and a program
-  (a slider dragged, a button pressed) end to end. When a change touches what one of them does or
-  expects, read it, update it in the same change, and run it (`apps/macos/scripts/build-app.sh`,
-  then `apps/macos/scripts/ci-demo.sh`, then read `screenshots/checks.txt`) before calling the
-  change done. A push to `main` with a red workflow blocks the release.
+- A change must not break CI: the checks, the e2e tests, the iOS UI tests and the Mac app's demo
+  (`DemoDriver.swift`). When a change touches what one of them does, update it in the same change
+  and run it: `apps/macos/scripts/build-app.sh`, then `apps/macos/scripts/ci-demo.sh`, then read
+  `screenshots/checks.txt`. A push to `main` with a red workflow blocks the release.
 
 ## Development
 
-Needs Rust stable, Docker (for Postgres), and Node 24 with pnpm for the marketing site and the
-web app. The Mac app and the iOS app need a Mac with Xcode 26 or later, the iOS app also
-`rustup target add aarch64-apple-ios aarch64-apple-ios-sim`. The Android app needs a JDK 21, the
-Android SDK with platform 37, the NDK and an emulator image (`sdkmanager`), `cargo install cargo-ndk`
-and `rustup target add aarch64-linux-android x86_64-linux-android`.
+Needs Rust stable, Docker (for Postgres), and Node 24 with pnpm. The Mac and iOS apps need Xcode 26
+or later, the iOS app also `rustup target add aarch64-apple-ios aarch64-apple-ios-sim`. The
+Android app needs a JDK 21, the Android SDK with platform 37, the NDK, an emulator image,
+`cargo install cargo-ndk` and `rustup target add aarch64-linux-android x86_64-linux-android`.
 
     docker compose up -d                        # Postgres on localhost:5435
     cargo run -p motile-auth                    # with the variables from .env.example exported
@@ -789,18 +339,12 @@ app. A change to a view both clients share is then looked at in both.
     scripts/check.sh [path]                 # compiles the Kotlin and lists its errors
     MOTILE_AVD=tablet scripts/dev-app.sh    # another emulator, made the first time
 
-Both are signed in as `demo@motile.app` on an auth server with the dev login, never a real
-account. Their server, `studio`, runs `scripts/fake-agent` and starts with a project, which has two skills of its own, and three
-finished threads. All of it lives in `apps/macos/build/dev` and keeps running until you stop it,
-which you do when your task is done; its ports are in `build/dev/ports`. Other sessions run
-their own dev apps from other trees at the same time: each tree claims its ports in
-`~/Library/Caches/motile-dev/ports` (`apps/macos/scripts/claims.sh`), and `dev-app.sh` moves off
-ports another tree claimed on its own. `ci-demo.sh` claims its ports too and waits for another
-tree's demo to finish. Never pick ports by hand, delete another tree's claims, or stop or kill a process that isn't
-in your tree's `build/dev`. On the Mac, type with `osascript` (System Events
-`keystroke`, which needs Accessibility; pictures need Screen Recording) and address the client by
-the pid in `build/dev/app.pid`. The Mac's dev app is built without whole-module optimization, so
-that it builds fast; judge speed with the demo (`scripts/ci-demo.sh`), and use it only for that.
+Both are signed in as `demo@motile.app` on a local auth server with the dev login. Their server,
+`studio`, runs `scripts/fake-agent` and starts with a project and three finished threads. It all
+lives in `apps/macos/build/dev`, with its ports in `build/dev/ports`. Other trees run their own
+dev apps at the same time: never pick ports by hand, delete another tree's port claims, or stop a
+process that isn't in your tree's `build/dev`. On the Mac, type with `osascript` and address the
+client by the pid in `build/dev/app.pid`. Judge speed with `scripts/ci-demo.sh`, not the dev app.
 
 ### The fake agent
 
@@ -840,61 +384,31 @@ clients. It replays the recorded output in `fixtures/` or makes up a turn, depen
 | "show a broken ui" | Shows a program with an unknown component and a missing prop; told its errors, replies with a patch that fixes them (Claude Code) |
 | "$ship-it", "$review" | Says it followed the skill: the project's in `.claude/skills` (`.agents/skills` for Codex), or one it makes up |
 
-As `claude auth login` it signs in with any code but one with "wrong" in it, as the folder's
-name at motile.app. On a Gateway account it sends a request through the gateway with each message (Claude Code),
-so that the gateway places its thread, and ends the turn on the gateway's limit error as Claude Code
-does for a gateway: without saying when the limit resets. A message sent now while it works is read after its next tool call, or stops a reply that
-streams (Claude Code). Asked for a title, a commit message, a pull request's text or a branch's
-name, it writes one.
+As `claude auth login` it takes any code without "wrong" in it.
 
-`scripts/fake-gh` stands in for GitHub's `gh` in the tests and the dev apps (through
-`MOTILE_GH_PATH`), whose project has a local `origin` to push to. It keeps its pull requests in
-`build/dev/github.json`; edit that file to see a pull request fail its checks, conflict, wait for
-a review, have conversations on its lines or sit in a stack, and set `delay` to see a client wait.
-
-`scripts/fake-s3` stands in for S3 in the dev apps: a backup set up in a client with the endpoint
-`http://127.0.0.1:<S3_PORT>` (from `build/dev/ports`) and any bucket and keys keeps it in
-`build/dev/s3`; an access key with "wrong" in it is refused.
-
-`scripts/fake-linear` stands in for Linear in the dev apps (through `MOTILE_LINEAR_URL`), whose
-server starts out connected to its workspace. It keeps its team, users and issues in
-`build/dev/linear.json`. `MOTILE_DEV_LINEAR=real scripts/dev-app.sh`, after a `--stop`, leaves
-Linear the real one, to connect a workspace of your own. `scripts/fake-ricrac` does the same for
-Ricrac (`MOTILE_RICRAC_URL`, `build/dev/ricrac.json`, `MOTILE_DEV_RICRAC=real`).
-
-The dev stack runs the account's gateway too, linked the first time, whose Anthropic and OpenAI are
-`scripts/fake-upstream`: it signs in a Claude Code account with any code but one with "wrong" in it,
-approves a Codex account at once, and gives each account limits. It is two MCPs for Settings →
-MCP servers as well, which its address in `build/dev/ports` reaches: `/mcp/tracker` signs in and
-approves at once, `/mcp/docs` takes any key but one with "wrong" in it. Nothing looks the gateway up locally, so
-the clients are told its address in `MOTILE_SERVER_ADDRS` and the server in `MOTILE_GATEWAY_ADDR`.
+Other stand-ins in the dev apps: `scripts/fake-gh` for `gh` (its pull requests in
+`build/dev/github.json`, which you can edit), `scripts/fake-s3` for S3 (endpoint
+`http://127.0.0.1:<S3_PORT>`), `scripts/fake-linear` and `scripts/fake-ricrac` for Linear and
+Ricrac (`MOTILE_DEV_LINEAR=real` or `MOTILE_DEV_RICRAC=real` after a `--stop` uses the real ones),
+and `scripts/fake-upstream` for Anthropic, OpenAI and two MCP servers behind the dev gateway. Each
+refuses a code or key with "wrong" in it.
 
 ## Releasing and deploying
 
-Every push to `main` that touches the server, the auth server, the gateway, the Mac app, the GPUI app or
-the Android app is a release. The `Release` workflow publishes the server, the auth server and the
-gateway for Linux,
-the server, the client and the GPUI app for Macs, the GPUI app for Linux and Windows, and the Android
-app (`Motile-android.apk`), as a GitHub release. Its
-version is the first two numbers of `version` in `Cargo.toml` and the number of commits as the third
-(`scripts/release-version.sh`), so set `version` only to change the first two. The installer and the
-download button always fetch the latest release, and clients and servers compare their own version
-with it to offer an update. The Mac app in a release is signed with the Developer ID certificate
-and notarized, using the repository's `APPLE_*` secrets; running the `macOS` workflow by hand with
-`sign` does the same without a release. Once the release exists, the gateway's binaries become its
-image, `ghcr.io/motileapp/motile-gateway` for amd64 and arm64, tagged `latest` and with the version.
+Every push to `main` that touches the server, the auth server, the gateway, the Mac app, the GPUI
+app or the Android app is a release: the `Release` workflow publishes everything as a GitHub
+release. Its version is the first two numbers of `version` in `Cargo.toml` and the commit count as
+the third (`scripts/release-version.sh`), so set `version` only to change the first two. The Mac
+app is signed and notarized with the `APPLE_*` secrets; the gateway's image,
+`ghcr.io/motileapp/motile-gateway`, is built once the release exists.
 
-Every push and pull request that touches the Android app lints, tests and builds it (the `Android`
-workflow). Its release is built by `apps/android/scripts/release.sh` with the release's version, the
-commit count as its version code, and signed with the key in the `ANDROID_KEYSTORE`,
-`ANDROID_KEYSTORE_PASSWORD` and `ANDROID_KEY_ALIAS` secrets. Every release must be signed with that
-one key: the client only installs an update signed as it is, and Android refuses one that isn't.
-Without the secrets, a release carries no Android app.
+The Android app is signed with the key in the `ANDROID_KEYSTORE`, `ANDROID_KEYSTORE_PASSWORD` and
+`ANDROID_KEY_ALIAS` secrets. Every release must be signed with that one key, or installed clients
+can't update. Without the secrets, a release carries no Android app.
 
 Every push to `main` that touches the iOS app uploads it to TestFlight
-(`apps/ios/scripts/testflight.sh`, with the repository's `APPLE_TEAM_ID` and `IOS_BUNDLE_ID`
-variables), with the version in `Cargo.toml` as it is. It is signed with the Apple Distribution
-certificate and the App Store profile in the `IOS_*` secrets, which expire on 2027-10-04.
+(`apps/ios/scripts/testflight.sh`). Its signing certificate and profile, in the `IOS_*` secrets,
+expire on 2027-10-04.
 
 Unbind builds the `Marketing`, `Web` and `Auth` services from `main` and deploys them on every
 push that touches their files.

@@ -24,12 +24,60 @@ enum TranscriptColumn {
     }
 }
 
+/// What stands beside a message the user didn't write: the logo of the agent that sent it, or
+/// the server's.
+enum MessageAvatar: String {
+    case none, claude, codex, server
+
+    var symbol: Symbol? {
+        switch self {
+        case .none: nil
+        case .claude: Agent.claude.symbol
+        case .codex: Agent.codex.symbol
+        case .server: .server
+        }
+    }
+
+    var platformColor: PlatformColor {
+        switch self {
+        case .none, .server: Theme.primary
+        case .claude: Agent.claude.platformColor
+        case .codex: Agent.codex.platformColor
+        }
+    }
+
+    var agent: Agent? {
+        switch self {
+        case .claude: .claude
+        case .codex: .codex
+        case .none, .server: nil
+        }
+    }
+}
+
+/// What the card an avatar opens says of who sent the message: the thread whose agent sent it
+/// and the account it ran on then, empty for the server, and what it did.
+struct MessageSender {
+    let threadID: String
+    let account: String
+    let note: String
+    /// The message tells the agent that the thread's pull request changed.
+    let pullRequest: Bool
+
+    init(json: JSON) {
+        threadID = json.string("thread_id")
+        account = json.string("account")
+        note = json.string("note")
+        pullRequest = json.bool("pull_request")
+    }
+}
+
 /// One row of the transcript, decoded from the core's JSON. Its text is laid out for display
 /// here, off the main thread, so showing a row costs the main thread nothing but drawing.
 final class RowModel {
     enum Kind {
         /// `collapsible` when it is long enough to be shown cut, with a button that shows the rest.
-        case user(text: NSAttributedString, attachments: [AttachedFile], at: Double, collapsible: Bool)
+        case user(text: NSAttributedString, attachments: [AttachedFile], at: Double, collapsible: Bool, avatar: MessageAvatar, sender: MessageSender)
         /// `uncoloured` when code inside it still waits for highlighting.
         case prose(NSAttributedString, uncoloured: Bool)
         case code(CodeContent)
@@ -91,7 +139,9 @@ final class RowModel {
         switch json.string("kind") {
         case "user":
             let attachments = json.objects("attachments").map(AttachedFile.init(json:))
-            kind = .user(text: Typesetter.message(json), attachments: attachments, at: json.double("at"), collapsible: json.bool("collapsible"))
+            let avatar = MessageAvatar(rawValue: json.string("avatar")) ?? .none
+            let sender = MessageSender(json: json.object("sender") ?? [:])
+            kind = .user(text: Typesetter.message(json), attachments: attachments, at: json.double("at"), collapsible: json.bool("collapsible"), avatar: avatar, sender: sender)
         case "prose":
             let uncoloured = json.objects("paras").contains { $0.string("kind") == "pre" && $0["spans"] as? [NSNumber] == nil }
             kind = .prose(Typesetter.prose(json), uncoloured: uncoloured)
@@ -143,7 +193,7 @@ final class RowModel {
             let content = QueuedContent(text: typeset, attachments: attachments, status: "Queued")
             return RowModel(id: pendingID, itemID: pendingID, kind: .queued(content))
         }
-        return RowModel(id: pendingID, itemID: pendingID, kind: .user(text: typeset, attachments: attachments, at: Date().timeIntervalSince1970, collapsible: collapsible))
+        return RowModel(id: pendingID, itemID: pendingID, kind: .user(text: typeset, attachments: attachments, at: Date().timeIntervalSince1970, collapsible: collapsible, avatar: .none, sender: MessageSender(json: [:])))
     }
 
     static let pendingID = "pending"

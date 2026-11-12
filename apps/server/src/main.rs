@@ -137,6 +137,9 @@ async fn run(data_dir: &DataDir, allow_keys: Vec<String>, options: BindOptions) 
         }
     }
     let store = Store::open(&data_dir.database()).context("The thread database can't be opened.")?;
+    if let Err(error) = store.label_actors() {
+        tracing::error!("couldn't label who took the actions from before: {error:#}");
+    }
     let hub = Hub::new(
         store,
         data_dir.media(),

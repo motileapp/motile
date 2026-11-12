@@ -17,13 +17,13 @@ use motile_protocol::frame::{read_frame, write_frame};
 use motile_protocol::gateway_wire::{AccountStatus, GatewayAccount, GatewayReply, GatewayRequest, WsMessage};
 use motile_protocol::identity::DeviceKey;
 use motile_protocol::wire::{
-    Access as AgentAccess, Agent, AgentAccount, AgentLimits, Approval, Ask, CONTINUE_PROMPT, Change, CheckStatus,
-    ClientForm, ClientInfo, ClientKind, CopiedThread, DiffScope, EngagedRecord, EventKind, FileKind, GitAction,
-    GitHubState, GitStage, GitStatus, Interruption, Item, ItemKind, LimitWindow, LineComment, MergeMethod, Mergeable,
-    Message, NewThread, NewWorktree, Project, PullRequestAction, PullRequestDetail, PullRequestEdit, PullRequestState,
-    Queued, ReactionKind, Request, RestartWhen, ReviewVerdict, ServerInfo, ServerUpdate, Side, Skill, SkillMention,
-    SkillSource, Thread, ThreadChange, Tokens, ToolCall, ToolStatus, TurnChanges, TurnOutcome, TurnStarter,
-    TurnSummary, UsageBucket, Variable,
+    Access as AgentAccess, Actor, Agent, AgentAccount, AgentLimits, Approval, Ask, CONTINUE_PROMPT, Change,
+    CheckStatus, ClientForm, ClientInfo, ClientKind, CopiedThread, DiffScope, EngagedRecord, EventKind, FileKind,
+    GitAction, GitHubState, GitStage, GitStatus, Interruption, Item, ItemKind, LimitWindow, LineComment, MergeMethod,
+    Mergeable, Message, NewThread, NewWorktree, Project, PullRequestAction, PullRequestDetail, PullRequestEdit,
+    PullRequestState, Queued, ReactionKind, Request, RestartWhen, ReviewVerdict, ServerInfo, ServerReason,
+    ServerUpdate, Side, Skill, SkillMention, SkillSource, Thread, ThreadChange, Tokens, ToolCall, ToolStatus,
+    TurnChanges, TurnOutcome, TurnStarter, TurnSummary, UsageBucket, Variable,
 };
 use motile_server::access::Access;
 use motile_server::agents::environment::Environment;
@@ -397,6 +397,15 @@ impl Transcript {
         texts.collect()
     }
 
+    /// Who sent each message, in order.
+    fn senders(&self) -> Vec<&Actor> {
+        let senders = self.items.iter().filter_map(|item| match &item.kind {
+            ItemKind::User { by, .. } => Some(by),
+            _ => None,
+        });
+        senders.collect()
+    }
+
     fn user_texts(&self) -> Vec<&str> {
         let texts = self.items.iter().filter_map(|item| match &item.kind {
             ItemKind::User { text, .. } => Some(text.as_str()),
@@ -424,7 +433,7 @@ impl Transcript {
     /// Each handoff's agents, and the message of the turn it starts.
     fn handoffs(&self) -> Vec<(Agent, Agent, &str)> {
         let handoffs = self.items.windows(2).filter_map(|pair| match (&pair[0].kind, &pair[1].kind) {
-            (ItemKind::Handoff { from, to }, ItemKind::User { text, .. }) => {
+            (ItemKind::Handoff { from, to, .. }, ItemKind::User { text, .. }) => {
                 Some((from.agent, to.agent, text.as_str()))
             }
             (ItemKind::Handoff { .. }, other) => panic!("a handoff is followed by {other:?}"),
@@ -984,6 +993,16 @@ async fn a_tool_call_that_needs_approval_waits_for_the_answer(agent: Agent) {
     assert_eq!(answer(bash.id, false).await.unwrap(), Message::Ok);
     transcript.follow_until_idle(&mut follow).await;
     assert_eq!(transcript.tools(), vec![("Edit", ToolStatus::Succeeded), ("Bash", ToolStatus::Failed)]);
+    let user = Actor::device(harness.app_key.public());
+    let deciders: Vec<&Actor> = transcript
+        .items
+        .iter()
+        .filter_map(|item| match &item.kind {
+            ItemKind::Tool { call } => Some(&call.decided_by),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(deciders, [&user, &user], "the transcript keeps who allowed and refused each call");
     assert_eq!(transcript.texts().last().unwrap(), &"`greet` uses an f-string now. I didn't run it.");
     assert!(transcript.approvals.is_empty());
     let ended = thread_where(&mut list, |thread| !thread.running).await;
@@ -1040,6 +1059,17 @@ async fn a_question_the_agent_asks_is_answered_by_the_user(agent: Agent) {
         .collect();
     assert_eq!(questions.len(), 1);
     assert_eq!(questions[0]["answers"], json!({"Which color should the button be?": "Blue"}));
+    let user = Actor::device(harness.app_key.public());
+    let actors: Vec<&Actor> = transcript
+        .items
+        .iter()
+        .filter_map(|item| match &item.kind {
+            ItemKind::User { by, .. } => Some(by),
+            ItemKind::Tool { call } if call.name == "AskUserQuestion" => Some(&call.decided_by),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(actors, [&user, &user], "the user sent the message and answered the question");
 }
 
 #[tokio::test]
@@ -1252,6 +1282,7 @@ async fn a_thread_the_usage_limit_stopped_continues_once_the_limit_resets() {
 
     let transcript = finished_transcript(&connection, &thread_id).await;
     assert_eq!(transcript.user_texts(), vec!["Hit the limit", CONTINUE_PROMPT]);
+    assert_eq!(transcript.senders().last(), Some(&&Actor::Server { reason: ServerReason::Limit }));
     let errors = transcript.errors();
     assert!(matches!(&errors[..], [limit] if limit.starts_with("You've hit your limit")), "{errors:?}");
 }
@@ -1322,6 +1353,7 @@ async fn a_turn_a_restart_cuts_off_says_so_and_continues_once_the_server_is_back
     transcript.follow_until_idle(&mut follow).await;
 
     assert_eq!(transcript.errors(), vec!["Your server restarted before the agent finished."]);
+    assert_eq!(transcript.senders().last(), Some(&&Actor::Server { reason: ServerReason::Restart }));
     assert_eq!(transcript.tools()[0], ("Edit", ToolStatus::Failed), "the call the restart cut off failed");
     assert_eq!(messages_and_turn_ends(&transcript), vec!["Run greet.py", "(turn end)", CONTINUE_PROMPT, "(turn end)"]);
 }
@@ -2006,10 +2038,11 @@ async fn a_thread_works_with_the_account_it_was_started_with_and_moves_to_anothe
     send(&connection, Some(thread_id.clone()), None, "And in Cargo.toml?").await;
     let transcript = finished_transcript(&connection, &thread_id).await;
     let handoff = transcript.items.iter().find_map(|item| match &item.kind {
-        ItemKind::Handoff { from, to } => Some((from.account.as_deref(), to.account.as_deref())),
+        ItemKind::Handoff { from, to, by } => Some((from.account.as_deref(), to.account.as_deref(), by.clone())),
         _ => None,
     });
-    assert_eq!(handoff, Some((Some("Personal"), Some("Default"))));
+    let user = Actor::device(harness.app_key.public());
+    assert_eq!(handoff, Some((Some("Personal"), Some("Default"), user)), "the user moved it");
     let moved = turns_in("arguments.txt");
     assert_eq!(moved.len(), 1, "{moved:?}");
     assert!(!moved[0].contains("--resume"), "a new session starts where the old one isn't: {moved:?}");
@@ -3955,7 +3988,7 @@ async fn a_thread_handed_from_claude_to_codex_and_back_tells_each_what_it_missed
         .items
         .iter()
         .filter_map(|item| match &item.kind {
-            ItemKind::Handoff { from, to } => Some((from.model.as_deref(), to.model.as_deref())),
+            ItemKind::Handoff { from, to, .. } => Some((from.model.as_deref(), to.model.as_deref())),
             _ => None,
         })
         .collect();
@@ -4345,6 +4378,17 @@ async fn an_agent_stopped_at_its_usage_limit_stays_stopped_once_the_limit_resets
     tokio::time::sleep(Duration::from_millis(2500)).await;
     let transcript = finished_transcript(&connection, &child).await;
     assert!(!transcript.user_texts().contains(&CONTINUE_PROMPT), "the limit has reset, and it stays stopped");
+    let stoppers: Vec<&Actor> = transcript
+        .items
+        .iter()
+        .filter_map(|item| match &item.kind {
+            ItemKind::TurnEnd { summary } if summary.stopped => Some(&summary.stopped_by),
+            _ => None,
+        })
+        .collect();
+    let account = harness.hub.thread(&parent).await.unwrap().agent_account;
+    let lead = Actor::Agent { thread_id: parent, agent: Agent::Codex, account };
+    assert_eq!(stoppers, [&lead], "the agent that stopped it is kept");
 }
 
 #[tokio::test]
@@ -4372,6 +4416,20 @@ async fn an_agent_answers_the_question_an_agent_it_started_asks() {
         finished_text.is_some_and(|text| text.ends_with("Its reply:\n\nThe button will be blue.")),
         "{finished_text:?}"
     );
+    let account = harness.hub.thread(&parent).await.unwrap().agent_account;
+    let lead = Actor::Agent { thread_id: parent.clone(), agent: Agent::Claude, account };
+    let child = started_agents(&told).into_keys().next().unwrap();
+    let child = finished_transcript(&connection, &child).await;
+    let actors: Vec<&Actor> = child
+        .items
+        .iter()
+        .filter_map(|item| match &item.kind {
+            ItemKind::User { by, .. } => Some(by),
+            ItemKind::Tool { call } if call.name == "AskUserQuestion" => Some(&call.decided_by),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(actors, [&lead, &lead], "the agent that started it sent its prompt and answered its question");
 }
 
 #[tokio::test]

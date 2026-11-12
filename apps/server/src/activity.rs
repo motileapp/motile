@@ -6,9 +6,9 @@ use std::collections::HashSet;
 
 use motile_protocol::activity::{self as features, Use};
 use motile_protocol::wire::{
-    Access, ActionBucket, ActionRecord, ActivityReport, Actor, Agent, CONTINUE_PROMPT, ClientForm, ClientInfo,
-    ClientKind, ClientRecord, ConnectionPath, EngagedRecord, EngagedSpans, HourBucket, Item, ItemKind, Thread,
-    TurnBucket, TurnOutcome, TurnRecord, TurnStarter,
+    Access, ActionBucket, ActionRecord, ActivityReport, Actor, ActorKind, Agent, CONTINUE_PROMPT, ClientForm,
+    ClientInfo, ClientKind, ClientRecord, ConnectionPath, EngagedRecord, EngagedSpans, HourBucket, Item, ItemKind,
+    Thread, TurnBucket, TurnOutcome, TurnRecord, TurnStarter,
 };
 use rusqlite::types::Value;
 use rusqlite::{Connection, OptionalExtension, Row, params, params_from_iter};
@@ -172,7 +172,7 @@ pub async fn keep_uses(hub: &Hub, sender: &Sender, uses: Vec<Use>, thread_id: Op
         };
         let action = ActionRecord {
             at: motile_protocol::now(),
-            actor: Actor::User,
+            actor: ActorKind::User,
             device: Some(sender.device.clone()),
             feature: used.feature.to_string(),
             variant: used.variant,
@@ -192,7 +192,7 @@ pub fn keep_used(store: &Store, sender: &Sender, uses: Vec<Use>, thread_id: &str
     for used in uses {
         let action = ActionRecord {
             at: motile_protocol::now(),
-            actor: Actor::User,
+            actor: ActorKind::User,
             device: Some(sender.device.clone()),
             feature: used.feature.to_string(),
             variant: used.variant,
@@ -305,7 +305,7 @@ pub(crate) fn action_values(action: &ActionRecord) -> Vec<Value> {
 pub(crate) fn action_record(row: &Row, first: usize) -> rusqlite::Result<ActionRecord> {
     Ok(ActionRecord {
         at: row.get(first)?,
-        actor: from_text(&row.get::<_, String>(first + 1)?).unwrap_or(Actor::Other),
+        actor: from_text(&row.get::<_, String>(first + 1)?).unwrap_or(ActorKind::Other),
         device: row.get(first + 2)?,
         feature: row.get(first + 3)?,
         variant: row.get(first + 4)?,
@@ -487,7 +487,7 @@ impl Store {
             let rows = statement.query_map(params![since, until, offset, size, origin], |row| {
                 Ok(ActionBucket {
                     start: start(row.get(0)?),
-                    actor: from_text(&row.get::<_, String>(1)?).unwrap_or(Actor::Other),
+                    actor: from_text(&row.get::<_, String>(1)?).unwrap_or(ActorKind::Other),
                     device: row.get(2)?,
                     feature: row.get(3)?,
                     variant: row.get(4)?,
@@ -606,10 +606,10 @@ pub fn from_transcript(stored: &StoredThread, items: &[Item]) -> (Vec<TurnRecord
     let mut open: Option<Derived> = None;
     let mut first_message = true;
     let agent_thread = stored.started_by.is_some() || thread.parent.is_some();
-    let action = |item: &Item, feature: &str, variant: &str| ActionRecord {
+    let action = |item: &Item, device: &Option<String>, feature: &str, variant: &str| ActionRecord {
         at: item.created_at,
-        actor: Actor::User,
-        device: None,
+        actor: ActorKind::User,
+        device: device.clone(),
         feature: feature.to_string(),
         variant: variant.to_string(),
         thread_id: thread.id.clone(),
@@ -619,33 +619,35 @@ pub fn from_transcript(stored: &StoredThread, items: &[Item]) -> (Vec<TurnRecord
     };
     for item in own {
         match &item.kind {
-            ItemKind::User { text, context, .. } => {
-                let from_agent = agent_thread;
+            ItemKind::User { text, context, by, .. } => {
                 let continued = text == CONTINUE_PROMPT;
+                // Messages from before senders were kept are told apart as well as they can be.
+                let starter = match by {
+                    Actor::User { .. } => TurnStarter::User,
+                    Actor::Agent { .. } => TurnStarter::Agent,
+                    Actor::Server { .. } => TurnStarter::Server,
+                    Actor::Unknown if agent_thread => TurnStarter::Agent,
+                    Actor::Unknown if continued => TurnStarter::Server,
+                    Actor::Unknown => TurnStarter::User,
+                };
+                let device = by.device_key();
                 match &mut open {
                     Some(turn) => turn.steers += 1,
-                    None => {
-                        let starter = match (from_agent, continued) {
-                            (true, _) => TurnStarter::Agent,
-                            (false, true) => TurnStarter::Server,
-                            (false, false) => TurnStarter::User,
-                        };
-                        open = Some(Derived::new(starter, item.created_at));
-                    }
+                    None => open = Some(Derived { device: device.clone(), ..Derived::new(starter, item.created_at) }),
                 }
-                if !from_agent && !continued {
+                if starter == TurnStarter::User && !continued {
                     let variant = match (first_message, context.is_some()) {
                         (true, _) => "new",
                         (false, true) => "program",
                         (false, false) => "reply",
                     };
-                    messages.push(action(item, features::MESSAGE, variant));
+                    messages.push(action(item, &device, features::MESSAGE, variant));
                     if first_message {
                         let kind = if stored.worktree.is_some() { "worktree" } else { "local" };
-                        messages.push(action(item, "thread.new", kind));
+                        messages.push(action(item, &device, "thread.new", kind));
                     }
                     if context.is_some() {
-                        messages.push(action(item, "program.message", ""));
+                        messages.push(action(item, &device, "program.message", ""));
                     }
                 }
                 first_message = false;
@@ -699,7 +701,7 @@ pub fn from_transcript(stored: &StoredThread, items: &[Item]) -> (Vec<TurnRecord
                     effort: thread.effort.clone().unwrap_or_default(),
                     access: thread.access,
                     starter: turn.starter,
-                    device: None,
+                    device: turn.device,
                     started_at,
                     ended_at,
                     outcome,
@@ -723,6 +725,7 @@ pub fn from_transcript(stored: &StoredThread, items: &[Item]) -> (Vec<TurnRecord
 /// A turn as its transcript shows it, until the item that ends it.
 struct Derived {
     starter: TurnStarter,
+    device: Option<String>,
     started_at: f64,
     steers: u32,
     tools: HashSet<String>,
@@ -733,7 +736,16 @@ struct Derived {
 
 impl Derived {
     fn new(starter: TurnStarter, started_at: f64) -> Self {
-        Self { starter, started_at, steers: 0, tools: HashSet::new(), agents: 0, subagents: 0, errors: Vec::new() }
+        Self {
+            starter,
+            device: None,
+            started_at,
+            steers: 0,
+            tools: HashSet::new(),
+            agents: 0,
+            subagents: 0,
+            errors: Vec::new(),
+        }
     }
 }
 
@@ -827,7 +839,7 @@ mod tests {
     ) -> ActionRecord {
         ActionRecord {
             at,
-            actor: if device.is_some() { Actor::User } else { Actor::Agent },
+            actor: if device.is_some() { ActorKind::User } else { ActorKind::Agent },
             device: device.map(str::to_string),
             feature: feature.into(),
             variant: String::new(),
@@ -1004,7 +1016,7 @@ mod tests {
         }
         for (thread_id, device) in [("t", None), ("child", None), ("child", Some("mac"))] {
             let action = ActionRecord {
-                actor: Actor::User,
+                actor: ActorKind::User,
                 thread_id: thread_id.into(),
                 ..action(100.0, "message", device, None, None)
             };

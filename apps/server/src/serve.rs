@@ -12,7 +12,7 @@ use iroh::{Endpoint, SecretKey};
 use motile_protocol::activity;
 use motile_protocol::frame::{read_frame, write_frame};
 use motile_protocol::identity::DeviceKey;
-use motile_protocol::wire::{ClientRecord, ConnectionPath, Message, Request, RestartWhen, ServerUpdate};
+use motile_protocol::wire::{Actor, ClientRecord, ConnectionPath, Message, Request, RestartWhen, ServerUpdate};
 use motile_protocol::{ALPN, error_text, now};
 use tokio::io::AsyncReadExt;
 use tokio::sync::broadcast::error::RecvError;
@@ -191,7 +191,13 @@ impl Server {
                 Err(error) => Err(error),
             },
             Request::Send { thread_id, new_thread, text, attachments, now, context, message_id } => {
-                let message = NewMessage { text, attachments, now, context, message_id, sender: Some(caller.sender()) };
+                let message = NewMessage {
+                    attachments,
+                    now,
+                    context,
+                    message_id,
+                    ..NewMessage::from_client(text, caller.sender())
+                };
                 if let Some(thread_id) = &thread_id {
                     hub.wake(thread_id).await;
                 }
@@ -211,7 +217,8 @@ impl Server {
             }
             Request::UiRoute { stops } => hub.lookups.route(&stops).await.map(|points| Message::UiRoute { points }),
             Request::Answer { thread_id, approval_id, allow, answers } => {
-                hub.answer(&thread_id, &approval_id, allow, answers).await.map(|_| Message::Ok)
+                let by = Actor::device(&caller.device);
+                hub.answer(&thread_id, &approval_id, allow, answers, by).await.map(|_| Message::Ok)
             }
             Request::SendQueued { thread_id, message_id } => {
                 hub.send_queued(&thread_id, &message_id).await.map(|_| Message::Ok)
@@ -220,13 +227,15 @@ impl Server {
                 hub.cancel_queued(&thread_id, &message_id).await.map(|_| Message::Ok)
             }
             Request::Continue { thread_id } => {
-                hub.continue_thread(&thread_id, Some(caller.sender())).await.map(|_| Message::Ok)
+                hub.continue_thread(&thread_id, Ok(caller.sender())).await.map(|_| Message::Ok)
             }
             Request::Stop { thread_id } => {
-                hub.stop(&thread_id).await;
+                hub.stop(&thread_id, Actor::device(&caller.device)).await;
                 Ok(Message::Ok)
             }
-            Request::Update { thread_id, change } => hub.update(&thread_id, change).await.map(|_| Message::Ok),
+            Request::Update { thread_id, change } => {
+                hub.update(&thread_id, change, Actor::device(&caller.device)).await.map(|_| Message::Ok)
+            }
             Request::Delete { thread_id } => hub.delete(&thread_id).await.map(|_| Message::Ok),
             Request::AddProject { path } => hub.add_project(&path).await.map(|_| Message::Ok),
             Request::RemoveProject { project_id } => hub.remove_project(&project_id).await.map(|_| Message::Ok),

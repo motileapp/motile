@@ -9,8 +9,8 @@ use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 
 use motile_protocol::wire::{
-    Agent, Approval, Ask, Change, ChangedFile, HandoffEnd, Item, ItemKind, Media, PLAN_TOOL, QUESTION_TOOL, Queued,
-    SkillMention, ToolCall, ToolStatus, TurnChanges,
+    Actor, Agent, Approval, Ask, CONTINUE_PROMPT, Change, ChangedFile, HandoffEnd, Item, ItemKind, Media, PLAN_TOOL,
+    QUESTION_TOOL, Queued, ServerReason, SkillMention, ToolCall, ToolStatus, TurnChanges, is_pull_request_news,
 };
 use serde::Serialize;
 use serde_json::Value;
@@ -63,6 +63,74 @@ fn is_zero(size: &u64) -> bool {
     *size == 0
 }
 
+/// What stands beside a message that the user didn't write: the icon of the agent that sent it, or
+/// the server's.
+#[derive(Serialize, Clone, Copy, PartialEq, Debug)]
+#[serde(rename_all = "snake_case")]
+pub enum MessageAvatar {
+    None,
+    Claude,
+    Codex,
+    Server,
+}
+
+impl MessageAvatar {
+    pub fn of(by: &Actor) -> Self {
+        match by {
+            Actor::Agent { agent: Agent::Claude, .. } => Self::Claude,
+            Actor::Agent { agent: Agent::Codex, .. } => Self::Codex,
+            Actor::Server { .. } => Self::Server,
+            Actor::User { .. } | Actor::Unknown => Self::None,
+        }
+    }
+
+    fn is_none(&self) -> bool {
+        *self == Self::None
+    }
+}
+
+/// What the card an avatar opens says of who sent the message.
+#[derive(Serialize, Clone, PartialEq, Debug, Default)]
+pub struct MessageSender {
+    /// The thread whose agent sent it, and the account the agent ran on then. Empty for the server.
+    pub thread_id: String,
+    pub account: String,
+    /// What it did: "Started this thread", or a sentence for the server: "The server told the agent to continue."
+    pub note: String,
+    /// The message tells the agent that the thread's pull request changed.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub pull_request: bool,
+}
+
+impl MessageSender {
+    pub fn of(by: &Actor, text: &str, first: bool) -> Self {
+        match by {
+            Actor::Agent { thread_id, account, .. } => Self {
+                thread_id: thread_id.clone(),
+                account: account.clone(),
+                note: if first { "Started this thread" } else { "Messaged this thread" }.to_string(),
+                pull_request: false,
+            },
+            Actor::Server { reason } => {
+                let pull_request = *reason == ServerReason::PullRequest || is_pull_request_news(text);
+                let note = match reason {
+                    ServerReason::Restart => "The server restarted and told the agent to continue.",
+                    ServerReason::Limit => "The server told the agent to continue once the limit reset.",
+                    _ if pull_request => "The server told the agent its pull request changed.",
+                    _ if text == CONTINUE_PROMPT => "The server told the agent to continue.",
+                    _ => "The server sent this message.",
+                };
+                Self { note: note.to_string(), pull_request, ..Self::default() }
+            }
+            Actor::User { .. } | Actor::Unknown => Self::default(),
+        }
+    }
+
+    fn is_empty(&self) -> bool {
+        self.note.is_empty()
+    }
+}
+
 #[derive(Serialize, Clone, PartialEq, Debug)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum RowKind {
@@ -76,6 +144,10 @@ pub enum RowKind {
         /// The message is long enough to be shown cut, with a button that shows the rest.
         #[serde(skip_serializing_if = "std::ops::Not::not")]
         collapsible: bool,
+        #[serde(skip_serializing_if = "MessageAvatar::is_none")]
+        avatar: MessageAvatar,
+        #[serde(skip_serializing_if = "MessageSender::is_empty")]
+        sender: MessageSender,
     },
     Prose {
         #[serde(flatten)]
@@ -604,6 +676,7 @@ impl Transcript {
             output: None,
             status: ToolStatus::Running,
             agent: None,
+            decided_by: Actor::Unknown,
         };
         let tool = describe(&call, &self.cwd, 0.0);
         let ask = approval.ask();
@@ -1333,13 +1406,17 @@ fn render(item: &Item, cwd: &str, started: &Started, streaming: Option<&mut Hash
         after: None,
     };
     match &item.kind {
-        ItemKind::User { text, attachments, skills, .. } => {
+        ItemKind::User { text, attachments, skills, by, .. } => {
             let attachments = attached(attachments, &item.media);
             let links = markdown::links_in(text);
             let skills = skill_chips(text, skills);
             let collapsible = collapses(text, &skills);
             let at = item.created_at;
-            vec![row(0, RowKind::User { text: text.clone(), links, skills, attachments, at, collapsible })]
+            let avatar = MessageAvatar::of(by);
+            let sender = MessageSender::of(by, text, item.seq == 0);
+            let kind =
+                RowKind::User { text: text.clone(), links, skills, attachments, at, collapsible, avatar, sender };
+            vec![row(0, kind)]
         }
         ItemKind::Assistant { text } => render_markdown(item, text, streaming),
         ItemKind::Thinking { text } => vec![row(0, RowKind::Thinking { text: text.clone() })],
@@ -1369,7 +1446,7 @@ fn render(item: &Item, cwd: &str, started: &Started, streaming: Option<&mut Hash
                 at: item.created_at,
             },
         )],
-        ItemKind::Handoff { from, to } => {
+        ItemKind::Handoff { from, to, .. } => {
             vec![row(0, RowKind::Handoff { from: HandoffLabel::new(from), to: HandoffLabel::new(to) })]
         }
         ItemKind::Notice { notice, .. } => {
@@ -1707,6 +1784,7 @@ mod tests {
             skills: Vec::new(),
             context: None,
             programs: Vec::new(),
+            by: Actor::Unknown,
         }
     }
 
@@ -1715,13 +1793,65 @@ mod tests {
     }
 
     fn tool(name: &str, input: Value, status: ToolStatus) -> Tool {
-        let call =
-            ToolCall { id: "t".into(), name: name.into(), input: input.to_string(), output: None, status, agent: None };
+        let call = ToolCall {
+            id: "t".into(),
+            name: name.into(),
+            input: input.to_string(),
+            output: None,
+            status,
+            agent: None,
+            decided_by: Actor::Unknown,
+        };
         describe(&call, "/srv/api", 0.0)
     }
 
     fn apply(rows: &mut Vec<Row>, splice: Splice) {
         rows.splice(splice.start..splice.start + splice.remove, splice.rows);
+    }
+
+    #[test]
+    fn a_message_an_agent_or_the_server_sent_shows_its_avatar_and_the_users_own_none() {
+        let sent = |id: &str, seq, by: Actor| {
+            let mut message = item(id, seq, said("Look over greet.py"));
+            if let ItemKind::User { by: sender, .. } = &mut message.kind {
+                *sender = by;
+            }
+            message
+        };
+        let agent = |agent| Actor::Agent { thread_id: "lead".into(), agent, account: "a".into() };
+        let mut transcript = Transcript::new("/srv/api");
+        transcript.load(vec![
+            sent("a", 0, agent(Agent::Codex)),
+            sent("b", 1, agent(Agent::Claude)),
+            sent("c", 2, Actor::Server { reason: ServerReason::Limit }),
+            sent("d", 3, Actor::device("mac")),
+            sent("e", 4, Actor::Unknown),
+        ]);
+
+        let avatars: Vec<Value> =
+            transcript.rows().iter().map(|row| serde_json::to_value(row).unwrap()["avatar"].clone()).collect();
+        assert_eq!(
+            avatars,
+            [
+                serde_json::json!("codex"),
+                serde_json::json!("claude"),
+                serde_json::json!("server"),
+                Value::Null,
+                Value::Null
+            ]
+        );
+        let senders: Vec<Value> =
+            transcript.rows().iter().map(|row| serde_json::to_value(row).unwrap()["sender"].clone()).collect();
+        assert_eq!(
+            senders,
+            [
+                serde_json::json!({"thread_id": "lead", "account": "a", "note": "Started this thread"}),
+                serde_json::json!({"thread_id": "lead", "account": "a", "note": "Messaged this thread"}),
+                serde_json::json!({"thread_id": "", "account": "", "note": "The server told the agent to continue once the limit reset."}),
+                Value::Null,
+                Value::Null,
+            ]
+        );
     }
 
     #[test]
@@ -1752,6 +1882,7 @@ mod tests {
                 skills: Vec::new(),
                 context: None,
                 programs: Vec::new(),
+                by: Actor::Unknown,
             },
         );
         message.media = vec![
@@ -1824,6 +1955,7 @@ mod tests {
             output: None,
             status: ToolStatus::Succeeded,
             agent: None,
+            decided_by: Actor::Unknown,
         };
         let mut read = item("t", 0, ItemKind::Tool { call });
         read.media = vec![Media {
@@ -1925,6 +2057,7 @@ mod tests {
                 skills,
                 context: None,
                 programs: Vec::new(),
+                by: Actor::Unknown,
             };
             transcript.load(vec![item("u", 0, message)]);
             matches!(transcript.rows()[0].kind, RowKind::User { collapsible: true, .. })
@@ -1953,6 +2086,7 @@ mod tests {
                 skills: Vec::new(),
                 context: None,
                 programs: Vec::new(),
+                by: Actor::Unknown,
             },
         );
         apply(&mut shown, transcript.upsert(user, true).unwrap());
@@ -2088,8 +2222,15 @@ mod tests {
     }
 
     fn call(id: &str, seq: u64, name: &str, input: Value, status: ToolStatus) -> Item {
-        let call =
-            ToolCall { id: id.into(), name: name.into(), input: input.to_string(), output: None, status, agent: None };
+        let call = ToolCall {
+            id: id.into(),
+            name: name.into(),
+            input: input.to_string(),
+            output: None,
+            status,
+            agent: None,
+            decided_by: Actor::Unknown,
+        };
         item(id, seq, ItemKind::Tool { call })
     }
 
@@ -2378,6 +2519,7 @@ mod tests {
             output: None,
             status: ToolStatus::Running,
             agent: None,
+            decided_by: Actor::Unknown,
         };
         let waiting = describe(&call, "", 0.0);
         assert_eq!((waiting.verb.as_str(), waiting.target.as_str()), ("Which color? · Rounded?", ""));
@@ -2606,7 +2748,7 @@ mod tests {
             read,
             assistant("a2", 3, "Done."),
             item("e1", 4, ItemKind::TurnEnd { summary: TurnSummary::default() }),
-            item("h", 5, ItemKind::Handoff { from, to }),
+            item("h", 5, ItemKind::Handoff { from, to, by: Actor::Unknown }),
             user("u2", 6),
             assistant("b1", 7, "Sure."),
             item("e2", 8, ItemKind::TurnEnd { summary: TurnSummary::default() }),
@@ -2646,7 +2788,7 @@ mod tests {
             held,
             sending: false,
             notice: None,
-            device: None,
+            by: Actor::Unknown,
             context: None,
             programs: Vec::new(),
         };
@@ -2690,7 +2832,7 @@ mod tests {
             held: false,
             sending: false,
             notice: None,
-            device: None,
+            by: Actor::Unknown,
             context: None,
             programs: Vec::new(),
         };

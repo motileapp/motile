@@ -714,7 +714,7 @@ fn described(item: &Item) -> (&'static str, &'static str, String) {
         ItemKind::Error { message } => ("error", "done", message.clone()),
         ItemKind::TurnEnd { summary } if summary.stopped => ("turn_end", "done", "Turn stopped".to_string()),
         ItemKind::TurnEnd { .. } => ("turn_end", "done", "Turn ended".to_string()),
-        ItemKind::Handoff { from, to } => ("handoff", "done", format!("{} → {}", end_name(from), end_name(to))),
+        ItemKind::Handoff { from, to, .. } => ("handoff", "done", format!("{} → {}", end_name(from), end_name(to))),
         ItemKind::Notice { text, .. } => ("notice", "done", text.clone()),
         ItemKind::Unknown => ("unknown", "done", String::new()),
     }
@@ -733,7 +733,7 @@ fn agent_name(agent: Agent) -> &'static str {
 
 #[cfg(test)]
 mod tests {
-    use motile_protocol::wire::{Thread, ToolCall, ToolStatus};
+    use motile_protocol::wire::{Actor, Thread, ToolCall, ToolStatus};
 
     use super::*;
     use crate::store::{StoredThread, TitleSource};
@@ -787,6 +787,7 @@ mod tests {
             output: Some("ok".into()),
             status: ToolStatus::Succeeded,
             agent: None,
+            decided_by: Actor::Unknown,
         };
         let kinds = [
             ItemKind::User {
@@ -795,6 +796,7 @@ mod tests {
                 skills: Vec::new(),
                 context: None,
                 programs: Vec::new(),
+                by: Actor::Unknown,
             },
             ItemKind::Thinking { text: "hmm".into() },
             ItemKind::Tool { call: call("Bash", r#"{"command":"cargo test"}"#) },

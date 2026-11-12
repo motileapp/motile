@@ -392,6 +392,8 @@ fn add_activity(connection: &Connection) -> rusqlite::Result<()> {
 
 #[cfg(test)]
 mod tests {
+    use motile_protocol::wire::Actor;
+
     use super::*;
 
     #[test]
@@ -495,6 +497,7 @@ mod tests {
             output: None,
             status: ToolStatus::Running,
             agent,
+            decided_by: Actor::Unknown,
         };
         let item = |id: &str, seq, parent: Option<&str>, kind| Item {
             id: id.into(),
@@ -517,6 +520,7 @@ mod tests {
                     skills: Vec::new(),
                     context: None,
                     programs: Vec::new(),
+                    by: Actor::Unknown,
                 },
             ),
             item("a", 1, None, ItemKind::Tool { call: call("a", Some(agent)) }),
@@ -559,6 +563,7 @@ mod tests {
             skills: Vec::new(),
             context,
             programs: vec![state],
+            by: Actor::Unknown,
         };
         let message = item("u", 1, message);
 
@@ -582,6 +587,7 @@ mod tests {
                     skills: Vec::new(),
                     context: None,
                     programs: Vec::new(),
+                    by: Actor::Unknown,
                 },
                 100 => ItemKind::TurnEnd { summary: TurnSummary::default() },
                 _ => ItemKind::Assistant { text: "Done".into() },

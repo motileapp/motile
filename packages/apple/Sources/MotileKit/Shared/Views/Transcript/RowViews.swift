@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 import QuartzCore
 
 #if os(macOS)
@@ -34,6 +35,8 @@ protocol RowOwner: AnyObject {
     func openAgent(itemID: String)
     /// Opens the thread an agent the thread's agent started works in.
     func openThread(id: String)
+    /// What the avatar beside a message the user didn't write opens.
+    func senderCard(avatar: MessageAvatar, sender: MessageSender) -> AnyView?
     /// Whether a file that couldn't be fetched can be asked for again: not from a removed server.
     var fetchesAgain: Bool { get }
     /// The user did something to a node of the program in the row.
@@ -84,8 +87,8 @@ class RowView: FlippedView {
     /// the main thread. A queued message is only estimated: it is always among the last rows.
     class func height(_ row: RowModel, width: CGFloat) -> CGFloat {
         switch row.kind {
-        case .user(let text, let attachments, _, let collapsible):
-            let fit = BubbleFit(text: text, attachments: attachments, width: width, collapsible: collapsible)
+        case .user(let text, let attachments, _, let collapsible, let avatar, _):
+            let fit = BubbleFit(text: text, attachments: attachments, width: width, collapsible: collapsible, avatar: avatar)
             let textHeight = fit.hasText ? TextMeasure.height(of: text, width: fit.innerWidth) : 0
             let tops = collapsible ? TextMeasure.lineTops(of: text, count: UserRowView.linesCounted, width: fit.innerWidth) : []
             return UserRowView.height(fit, shown: UserRowView.Shown(textHeight: textHeight, lineTops: tops, open: false))
@@ -103,7 +106,7 @@ class RowView: FlippedView {
     /// What the row would be without measuring its text, until it has been measured.
     class func estimatedHeight(_ row: RowModel, width: CGFloat) -> CGFloat {
         switch row.kind {
-        case .user(let text, let attachments, _, let collapsible):
+        case .user(let text, let attachments, _, let collapsible, _, _):
             let full = estimatedTextHeight(text.length, width: width * 0.75)
             let shown = collapsible ? min(full, UserRowView.cutHeight + UserRowView.moreHeight) : full
             return shown + 34 + UserRowView.footHeight + AttachedFilesView.height(attachments, width: width)
@@ -189,6 +192,8 @@ class RowView: FlippedView {
 /// to the widest it may be, and the files stand above the text with their own room around them.
 struct BubbleFit {
     static let padding: CGFloat = 14
+    /// How far the text of a message with nothing attached is from the bubble's top and bottom.
+    static let textInset: CGFloat = 10
 
     let hasText: Bool
     let files: CGSize
@@ -196,15 +201,17 @@ struct BubbleFit {
     let top: CGFloat
     let between: CGFloat
 
-    /// A `collapsible` message is at least as wide as the button that shows the rest of it.
-    init(text: NSAttributedString, attachments: [AttachedFile], width: CGFloat, least: CGFloat = 12, collapsible: Bool = false) {
-        let widest = max(120, width * 0.8) - Self.padding * 2
+    /// A `collapsible` message is at least as wide as the button that shows the rest of it, and
+    /// one with an `avatar` leaves it room at its left.
+    init(text: NSAttributedString, attachments: [AttachedFile], width: CGFloat, least: CGFloat = 12, collapsible: Bool = false, avatar: MessageAvatar = .none) {
+        let beside = avatar == .none ? 0 : UserRowView.avatarSide + UserRowView.avatarGap
+        let widest = min(max(120, width * 0.8), width - beside) - Self.padding * 2
         let natural = text.bounds(width: widest)
         hasText = text.length > 0
         files = AttachedFilesView.size(attachments, width: widest)
         let buttonWidth = collapsible ? UserRowView.moreWidth : 0
         innerWidth = min(widest, max(hasText ? ceil(natural.width) + 2 : 0, files.width, buttonWidth, least))
-        top = files.height > 0 ? Self.padding : 10
+        top = files.height > 0 ? Self.padding : Self.textInset
         between = files.height > 0 && hasText ? 8 : 0
     }
 }
@@ -218,8 +225,11 @@ final class UserRowView: RowView {
     private var more: ExpandButton!
     private let attachments = AttachedFilesView()
     private let meta = MessageMeta(trailing: true, tooltip: "Copy message")
+    private let avatarView = MessageAvatarView()
     private var files: [AttachedFile] = []
     private var collapsible = false
+    private var avatar = MessageAvatar.none
+    private var sender = MessageSender(json: [:])
     private var pending = false
 
     override var showsMeta: Bool {
@@ -245,6 +255,11 @@ final class UserRowView: RowView {
         }
         bubble.addSubview(more)
         bubble.addSubview(attachments)
+        addSubview(avatarView)
+        avatarView.onOpen = { [weak self] in
+            guard let self else { return nil }
+            return self.owner?.senderCard(avatar: self.avatar, sender: self.sender)
+        }
         addSubview(meta)
         meta.onCopy = { [weak self] in
             guard let self else { return }
@@ -260,11 +275,15 @@ final class UserRowView: RowView {
 
     override func configure(_ row: RowModel) {
         super.configure(row)
-        guard case .user(let content, let files, let at, let collapsible) = row.kind else { return }
+        guard case .user(let content, let files, let at, let collapsible, let avatar, let sender) = row.kind else { return }
         meta.show(Time.stamp(at))
         found.show(content, in: text)
         self.files = files
         self.collapsible = collapsible
+        self.avatar = avatar
+        self.sender = sender
+        avatarView.avatar = avatar
+        avatarView.isHidden = avatar == .none
         more.dim()
         text.isHidden = content.length == 0
         attachments.show(files, owner: owner)
@@ -283,7 +302,7 @@ final class UserRowView: RowView {
 
     private static func bubbleHeight(_ fit: BubbleFit, shown: Shown) -> CGFloat {
         let more = shown.more ? moreHeight : 0
-        let bottom: CGFloat = if shown.more { ExpandButton.below } else if fit.hasText { 10 } else { BubbleFit.padding }
+        let bottom: CGFloat = if shown.more { ExpandButton.below } else if fit.hasText { BubbleFit.textInset } else { BubbleFit.padding }
         return fit.top + fit.files.height + fit.between + shown.textHeight + more + bottom
     }
 
@@ -314,6 +333,10 @@ final class UserRowView: RowView {
     /// The text's width that leaves room for the button's light at either side.
     static let moreWidth = ExpandButton.litWidth - 2 * (BubbleFit.padding - moreInset)
 
+    /// The avatar beside a message the user didn't write is a circle as tall as a message of one line.
+    static let avatarSide = BubbleFit.textInset * 2 + linesHeight(1)
+    static let avatarGap = scaled(4)
+
     private static func linesHeight(_ count: Int) -> CGFloat {
         let lines = Array(repeating: "M", count: count).joined(separator: "\u{2028}")
         return TextMeasure.height(of: Typesetter.plain(lines, color: Theme.foreground), width: 1000)
@@ -321,13 +344,15 @@ final class UserRowView: RowView {
 
     override func layout(width: CGFloat) -> CGFloat {
         let padding = BubbleFit.padding
-        let fit = BubbleFit(text: text.content, attachments: files, width: width, collapsible: collapsible)
+        let fit = BubbleFit(text: text.content, attachments: files, width: width, collapsible: collapsible, avatar: avatar)
         let textHeight = fit.hasText ? text.height(forWidth: fit.innerWidth) : 0
         let open = owner?.isExpanded(id: rowID) ?? false
         let tops = collapsible && fit.hasText ? text.lineTops(Self.linesCounted, forWidth: fit.innerWidth) : []
         let shown = Shown(textHeight: textHeight, lineTops: tops, open: open)
         let bubbleSize = CGSize(width: fit.innerWidth + padding * 2, height: Self.bubbleHeight(fit, shown: shown))
         bubble.frame = CGRect(x: width - bubbleSize.width, y: Self.margin, width: bubbleSize.width, height: bubbleSize.height)
+        let side = Self.avatarSide
+        avatarView.frame = CGRect(x: bubble.frame.minX - Self.avatarGap - side, y: Self.margin, width: side, height: side)
         attachments.frame = CGRect(x: padding, y: fit.top, width: fit.innerWidth, height: fit.files.height)
         attachments.layout(width: fit.innerWidth)
         clip.frame = CGRect(x: padding - RowTextView.overhang, y: fit.top + fit.files.height + fit.between, width: fit.innerWidth + 2 * RowTextView.overhang, height: shown.textHeight)
@@ -372,6 +397,56 @@ final class UserRowView: RowView {
     }
 
     override func clearSelection() { text.clearSelection() }
+
+    override func viewportMoved() { HungDropdown.shared.follow(avatarView) }
+
+    override func recycled() {
+        guard HungDropdown.shared.isOpen(from: avatarView) else { return }
+        HungDropdown.shared.close()
+    }
+}
+
+/// The circle beside a message the user didn't write, in the bubble's colour, with the logo of the
+/// agent that sent it in the agent's colour, or the server's in the colour of sending. It is a
+/// button that drops a card of who sent it, and is lit while the pointer is on it or the card is open.
+final class MessageAvatarView: FlippedView {
+    var avatar = MessageAvatar.none {
+        didSet {
+            guard avatar != oldValue else { return }
+            tip = avatar.agent.map { "Sent by \($0.name)" } ?? "Sent by your server"
+            describe(tip ?? "", button: true)
+            redraw()
+        }
+    }
+    /// What the card shows, asked for each time it opens.
+    var onOpen: (() -> AnyView?)?
+    private var hovered = false { didSet { if hovered != oldValue { redraw() } } }
+    private var open = false { didSet { if open != oldValue { redraw() } } }
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        #if os(iOS)
+        backgroundColor = .clear
+        isOpaque = false
+        #endif
+        onHover = { [weak self] point in self?.hovered = point != nil }
+        onPress = { [weak self] _ in self?.toggle() }
+    }
+
+    required init?(coder: NSCoder) { fatalError("not used") }
+
+    private func toggle() {
+        guard let card = onOpen?() else { return }
+        HungDropdown.shared.toggle(from: self, content: card) { [weak self] in self?.open = false }
+        open = HungDropdown.shared.isOpen(from: self)
+    }
+
+    override func draw(_ dirtyRect: CGRect) {
+        guard let symbol = avatar.symbol else { return }
+        (hovered || open ? Theme.backgroundSecondaryAccent : Theme.backgroundSecondary).setFill()
+        RoundedBox.fill(bounds, radius: bounds.width / 2)
+        TintedSymbol.draw(symbol, size: .md, color: avatar.platformColor, in: bounds)
+    }
 }
 
 /// A message that waits for the agent: what it says, how it waits, and the buttons that steer

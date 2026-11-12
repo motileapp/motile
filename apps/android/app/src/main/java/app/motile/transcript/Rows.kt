@@ -54,7 +54,10 @@ class RowModel(
 ) {
     sealed interface Kind {
         /** `collapsible` when it is long enough to be shown cut, with a button that shows the rest. */
-        class User(val text: MessageText, val attachments: List<AttachedFile>, val at: Double, val collapsible: Boolean) : Kind
+        class User(
+            val text: MessageText, val attachments: List<AttachedFile>, val at: Double, val collapsible: Boolean,
+            val avatar: MessageAvatar = MessageAvatar.None,
+        ) : Kind
         class Prose(val content: ProseContent) : Kind
         class Code(val content: CodeContent) : Kind
         /** A program the core runs, drawn from the tree it resolves. */
@@ -122,7 +125,7 @@ class RowModel(
             val kind = when (json.string("kind")) {
                 "user" -> Kind.User(
                     MessageText(json, muted = false), json.objects("attachments").map(::AttachedFile), json.double("at"),
-                    json.bool("collapsible"),
+                    json.bool("collapsible"), MessageAvatar.of(json.optionalString("avatar")),
                 )
                 "prose" -> Kind.Prose(ProseContent(json))
                 "code" -> Kind.Code(CodeContent(json.string("language"), json.string("code"), json.optionalInts("spans")))
@@ -151,6 +154,15 @@ class RowModel(
             val kind = if (queued) Kind.Queued(QueuedContent(message, attachments, "Queued")) else Kind.User(message, attachments, Time.now(), collapsible)
             return RowModel(pendingID, pendingID, false, kind)
         }
+    }
+}
+
+/** What stands beside a message the user didn't write: the logo of the agent that sent it, or the server's. */
+enum class MessageAvatar(val raw: String?, val agent: Agent?) {
+    None(null, null), Claude("claude", Agent.Claude), Codex("codex", Agent.Codex), Server("server", null);
+
+    companion object {
+        fun of(raw: String?): MessageAvatar = entries.firstOrNull { it.raw == raw } ?: None
     }
 }
 

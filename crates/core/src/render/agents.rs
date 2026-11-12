@@ -5,7 +5,7 @@
 use std::collections::HashMap;
 
 use motile_protocol::wire::{
-    Agent, AgentNotice, Ask, Interruption, Item, ItemKind, NoticeEvent, Subagent, Thread, ToolCall, ToolStatus,
+    Actor, Agent, AgentNotice, Ask, Interruption, Item, ItemKind, NoticeEvent, Subagent, Thread, ToolCall, ToolStatus,
     Workflow, WorkflowAgent,
 };
 use serde::Serialize;
@@ -392,6 +392,7 @@ pub fn workflow_items(item: &Item) -> Vec<Item> {
             output: agent.result.clone(),
             status,
             agent: None,
+            decided_by: Actor::Unknown,
         };
         let started_at = agent.started_at.unwrap_or(item.created_at);
         items.push(child(format!("agent/{index}"), started_at, ItemKind::Tool { call }));
@@ -446,6 +447,7 @@ mod tests {
             output: None,
             status: ToolStatus::Succeeded,
             agent: Some(agent),
+            decided_by: Actor::Unknown,
         };
         let kind = ItemKind::Tool { call };
         Item {

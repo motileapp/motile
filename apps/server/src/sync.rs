@@ -514,7 +514,10 @@ impl Store {
             values.extend(turn_values(&logged.value));
             transaction.execute(
                 &format!(
-                    "INSERT OR IGNORE INTO copied_turns (origin, change, {TURN_COLUMNS}) VALUES ({})",
+                    "INSERT INTO copied_turns (origin, change, {TURN_COLUMNS}) VALUES ({})
+                     ON CONFLICT (origin, id) DO UPDATE SET change = excluded.change, starter = excluded.starter,
+                         device = excluded.device
+                     WHERE excluded.change > copied_turns.change",
                     placeholders(0, 24)
                 ),
                 params_from_iter(values),
@@ -849,7 +852,7 @@ mod tests {
     #[test]
     fn activity_is_copied_counted_by_its_origin_and_passed_on() {
         use motile_protocol::wire::{
-            ActionRecord, Actor, ClientForm, ClientInfo, ClientKind, ClientRecord, EngagedRecord, TurnRecord,
+            ActionRecord, ActorKind, ClientForm, ClientInfo, ClientKind, ClientRecord, EngagedRecord, TurnRecord,
         };
         let (_a, a) = store();
         let (_b, b) = store();
@@ -871,7 +874,7 @@ mod tests {
         a.save_turn(&turn).unwrap();
         let action = ActionRecord {
             at: 12.0,
-            actor: Actor::User,
+            actor: ActorKind::User,
             device: Some("ipad".into()),
             feature: "thread.archive".into(),
             variant: String::new(),
