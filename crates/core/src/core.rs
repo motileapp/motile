@@ -18,8 +18,9 @@ use motile_protocol::gateway_wire::{GatewayReply, GatewaySignIn, GatewayState, M
 use motile_protocol::identity::{DeviceKey, random_token};
 use motile_protocol::now;
 use motile_protocol::wire::{
-    Access, AccountSkills, Activity, Agent, AgentLimits, Bucket, ContinueSettings, FileKind, Item, ItemKind, Media,
-    Message, Project, PullRequestSettings, Request, ServerInfo, Skill, Thread, ThreadMatch, ToolStatus, Worktree,
+    Access, AccountSkills, Activity, Actor, Agent, AgentLimits, Bucket, ContinueSettings, FileKind, Item, ItemKind,
+    Media, Message, Project, PullRequestSettings, Request, ServerInfo, Skill, Thread, ThreadMatch, ToolStatus,
+    Worktree,
 };
 use serde_json::{Value, json};
 use tokio::sync::mpsc;
@@ -2661,6 +2662,14 @@ impl Core {
         self.carry_out(thread_id, outs);
     }
 
+    /// The agent of an open thread, as the agents it starts are told what to do by.
+    fn agent_of(&self, thread_id: &str) -> Actor {
+        let Some(open) = self.open.get(thread_id) else { return Actor::Unknown };
+        let server = self.servers.iter().find(|server| server.device.public_key == open.server_id);
+        let Some(thread) = server.and_then(|server| server.threads.get(thread_id)) else { return Actor::Unknown };
+        Actor::Agent { thread_id: thread.id.clone(), agent: thread.agent, account: thread.agent_account.clone() }
+    }
+
     /// Tells the thread's programs what its server can do and how much the thread may.
     fn refresh_programs(&mut self, thread_id: &str) {
         let Some(open) = self.open.get(thread_id) else { return };
@@ -2994,6 +3003,7 @@ impl Core {
     }
 
     fn open_agent(&mut self, thread_id: &str, agent_id: &str) {
+        let by = self.agent_of(thread_id);
         let Some(open) = self.open.get_mut(thread_id) else { return };
         let call = open.agents.iter().find(|item| item.id == agent_id);
         let started = call.and_then(|call| agents::view(call, &open.threads));
@@ -3009,6 +3019,7 @@ impl Core {
                 skills: Vec::new(),
                 context: None,
                 programs: Vec::new(),
+                by,
             };
             items.insert(0, Item { id: format!("{agent_id}/prompt"), kind, ..call.clone() });
         }
@@ -4919,6 +4930,7 @@ mod tests {
                 skills: Vec::new(),
                 context: None,
                 programs: Vec::new(),
+                by: Actor::Unknown,
             },
             1 => ItemKind::Assistant { text: format!("reply {seq}") },
             _ => ItemKind::TurnEnd { summary: Default::default() },

@@ -4,7 +4,7 @@ import SwiftUI
 /// the composer shows them, and its pull request.
 struct ThreadCard: View {
     static let maxWidth: CGFloat = 320
-    fileprivate static let iconSize = IconSize.sm
+    static let iconSize = IconSize.sm
     @Environment(AppStore.self) private var store
     let threadID: String
 
@@ -42,18 +42,7 @@ struct ThreadCard: View {
             if let pullRequest = project?.pullRequest(of: thread) {
                 ThemeDivider()
                     .padding(.vertical, 10)
-                HStack(spacing: 8) {
-                    Image(pullRequest.state.symbol, size: Self.iconSize)
-                        .foregroundStyle(pullRequest.state.color)
-                    Text(verbatim: "#\(pullRequest.number)")
-                        .font(.ui(.xs, weight: .medium))
-                        .monospacedDigit()
-                        .foregroundStyle(Color.themeMutedStrongerForeground)
-                    Text(pullRequest.title)
-                        .font(.ui(.xs))
-                        .foregroundStyle(Color.themeMutedForeground)
-                        .lineLimit(1)
-                }
+                PullRequestLine(pullRequest: pullRequest)
             }
         }
         .padding(12)
@@ -61,23 +50,35 @@ struct ThreadCard: View {
     }
 }
 
-private struct CardLine<Icon: View>: View {
+struct CardLine<Icon: View>: View {
     let text: String
     /// Cut in the middle, as a path or a branch is.
     var middle = false
     var proxied = false
     var pinned = false
+    /// Goes on to more lines rather than being cut.
+    var wraps = false
     @ViewBuilder let icon: () -> Icon
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
             icon()
+                .levelWithFirstLine(.xs)
             ProxiedLine(text, proxied: proxied, pinned: pinned, fontSize: .xs, size: ThreadCard.iconSize)
                 .font(.ui(.xs))
-                .lineLimit(1)
+                .lineLimit(wraps ? nil : 1)
                 .truncationMode(middle ? .middle : .tail)
         }
         .foregroundStyle(Color.themeMutedForeground)
+    }
+}
+
+extension View {
+    /// Stands an icon level with the middle of the first line of the text of `size` beside it, in
+    /// a stack lined up by their first baselines.
+    func levelWithFirstLine(_ size: TextSize) -> some View {
+        let font = PlatformFont.ui(size)
+        return alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + (font.ascender + font.descender) / 2 }
     }
 }
 

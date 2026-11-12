@@ -247,7 +247,7 @@ pub fn states(items: &[Item]) -> Vec<ProgramState> {
 
 #[cfg(test)]
 mod tests {
-    use motile_protocol::wire::{AgentNotice, NoticeEvent, TurnSummary};
+    use motile_protocol::wire::{Actor, AgentNotice, NoticeEvent, TurnSummary};
 
     use super::*;
 
@@ -287,6 +287,7 @@ note = Badge(\"Tuesday was the best day\", \"success\")";
             skills: Vec::new(),
             context: None,
             programs: Vec::new(),
+            by: Actor::Unknown,
         };
         item(id, kind)
     }

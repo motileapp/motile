@@ -39,6 +39,9 @@ struct TranscriptRepresentable {
         view.onCancelQueued = { messageID in store.takeBack(queued: messageID) }
         view.onOpenAgent = { itemID in store.rightPanel.showAgent(itemID) }
         view.onOpenThread = { threadID in store.openStartedThread(threadID) }
+        view.makeSenderCard = { avatar, sender in
+            AnyView(SenderCard(avatar: avatar, sender: sender, threadID: model.threadID ?? "").environment(store))
+        }
         view.canFetchAgain = { store.openThreadRemovedServer == nil }
         view.onProgramEvent = { rowID, node, event in
             guard let threadID = model.threadID else { return }

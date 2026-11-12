@@ -1,5 +1,6 @@
 pub mod access;
 pub mod activity;
+pub mod actors;
 pub mod agent_accounts;
 pub mod agents;
 pub mod backup;

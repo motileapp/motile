@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 import QuartzCore
 import os
 
@@ -36,6 +37,7 @@ final class TranscriptView: FlippedView, RowOwner {
     /// What the agent did that the item's tool call started is to be shown.
     var onOpenAgent: ((String) -> Void)?
     var onOpenThread: ((String) -> Void)?
+    var makeSenderCard: ((MessageAvatar, MessageSender) -> AnyView)?
     /// Whether a file that couldn't be fetched can be asked for again.
     var canFetchAgain: (() -> Bool)?
     /// What the user did to a node of a program: the row, the node and the event.
@@ -1045,6 +1047,8 @@ final class TranscriptView: FlippedView, RowOwner {
     func openAgent(itemID: String) { onOpenAgent?(itemID) }
 
     func openThread(id: String) { onOpenThread?(id) }
+
+    func senderCard(avatar: MessageAvatar, sender: MessageSender) -> AnyView? { makeSenderCard?(avatar, sender) }
 
     var fetchesAgain: Bool { canFetchAgain?() ?? true }
 

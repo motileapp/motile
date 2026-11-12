@@ -117,6 +117,9 @@ extension View {
             if let open {
                 DropdownLayer(open: open)
                     .appearing()
+            } else if let hung = HungDropdown.shared.shown {
+                DropdownLayer(hung: hung)
+                    .appearing()
             }
         }
     }
@@ -152,21 +155,109 @@ extension View {
     }
 }
 
+/// A dropdown that hangs from a view outside SwiftUI, as a transcript row's button, at that
+/// view's frame in its window, which follows the view while the dropdown is open.
+@Observable
+final class HungDropdown {
+    static let shared = HungDropdown()
+
+    struct Shown {
+        /// The view's frame in its window, from the window's top left corner.
+        var frame: CGRect
+        let content: AnyView
+    }
+
+    private(set) var shown: Shown?
+    @ObservationIgnored private weak var source: PlatformView?
+    @ObservationIgnored private var closed: (() -> Void)?
+
+    private init() {}
+
+    func isOpen(from view: PlatformView) -> Bool {
+        shown != nil && source === view
+    }
+
+    /// Opens `content` under `view`, or closes it when it is open from there already. `closed`
+    /// is told when it closes.
+    func toggle(from view: PlatformView, content: AnyView, closed: @escaping () -> Void) {
+        guard !isOpen(from: view) else { return close() }
+        close()
+        guard let frame = Self.frame(of: view) else { return }
+        source = view
+        self.closed = closed
+        shown = Shown(frame: frame, content: content)
+    }
+
+    /// Moves the dropdown with the view it hangs from, which scrolled or was laid out again.
+    func follow(_ view: PlatformView) {
+        guard isOpen(from: view) else { return }
+        guard let frame = Self.frame(of: view) else { return close() }
+        shown?.frame = frame
+    }
+
+    func close() {
+        guard shown != nil else { return }
+        shown = nil
+        source = nil
+        let closed = closed
+        self.closed = nil
+        closed?()
+    }
+
+    private static func frame(of view: PlatformView) -> CGRect? {
+        guard let window = view.window else { return nil }
+        let inWindow = view.convert(view.bounds, to: nil)
+        #if os(macOS)
+        let height = window.contentView?.bounds.height ?? window.frame.height
+        return CGRect(x: inWindow.minX, y: height - inWindow.maxY, width: inWindow.width, height: inWindow.height)
+        #else
+        _ = window
+        return inWindow
+        #endif
+    }
+}
+
 private struct DropdownLayer: View {
     private static let gap: CGFloat = 4
     private static let roomBelow: CGFloat = 220
 
-    let open: OpenDropdown.Shown
+    private let content: AnyView
+    private let up: Bool
+    private let trailing: Bool
+    private let close: () -> Void
+    private let closeAll: (() -> Void)?
+    private let place: (GeometryProxy) -> CGRect
     #if os(macOS)
     @State private var escape: Any?
     #endif
 
+    init(open: OpenDropdown.Shown) {
+        content = open.content
+        up = open.up
+        trailing = open.trailing
+        close = open.close
+        closeAll = open.closeAll
+        place = { $0[open.anchor] }
+    }
+
+    init(hung: HungDropdown.Shown) {
+        content = hung.content
+        up = false
+        trailing = false
+        close = { HungDropdown.shared.close() }
+        closeAll = nil
+        place = { proxy in
+            let origin = proxy.frame(in: .global).origin
+            return hung.frame.offsetBy(dx: -origin.x, dy: -origin.y)
+        }
+    }
+
     @ViewBuilder private func lined(up button: CGRect) -> some View {
-        if open.trailing {
-            open.content
+        if trailing {
+            content
                 .frame(width: button.maxX, alignment: .trailing)
         } else {
-            open.content
+            content
                 .offset(x: button.minX)
         }
     }
@@ -174,23 +265,23 @@ private struct DropdownLayer: View {
     /// Takes every press around the dropdown, which only closes it, as a menu does.
     @ViewBuilder private var backdrop: some View {
         #if os(macOS)
-        DropdownBackdropView(close: open.closeAll ?? open.close)
+        DropdownBackdropView(close: closeAll ?? close)
         #else
         Color.clear
             .contentShape(Rectangle())
-            .onTapGesture(perform: open.closeAll ?? open.close)
+            .onTapGesture(perform: closeAll ?? close)
         #endif
     }
 
     var body: some View {
         GeometryReader { proxy in
-            let button = proxy[open.anchor]
+            let button = place(proxy)
             ZStack(alignment: .topLeading) {
                 backdrop
                 // One that would have too little room under its button, as the strip under the
                 // composer at the window's bottom, opens above it.
                 let below = proxy.size.height - button.maxY
-                if open.up || (below < Self.roomBelow && button.minY > below) {
+                if up || (below < Self.roomBelow && button.minY > below) {
                     lined(up: button)
                         .frame(maxHeight: max(0, button.minY - 3 * Self.gap), alignment: .bottom)
                         .frame(height: max(0, button.minY - Self.gap), alignment: .bottom)
@@ -206,7 +297,7 @@ private struct DropdownLayer: View {
         .onAppear {
             escape = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
                 guard event.keyCode == 53 else { return event }
-                open.close()
+                close()
                 return nil
             }
         }

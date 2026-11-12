@@ -68,13 +68,14 @@ impl Hub {
             worktree,
             from: None,
         };
-        let message = NewMessage::text(text);
+        let message = NewMessage::text(text, self.agent_actor(caller).await);
         let thread_id = self.send_started_by(None, Some(new_thread), message, Some(caller.to_string())).await?;
         if let Some(request) = request {
             self.lock_started().insert(request, thread_id.clone());
         }
         if let Some(title) = create.title.filter(|title| !title.trim().is_empty()) {
-            self.update(&thread_id, ThreadChange { title: Some(title), ..ThreadChange::default() }).await?;
+            let change = ThreadChange { title: Some(title), ..ThreadChange::default() };
+            self.update(&thread_id, change, self.agent_actor(caller).await).await?;
         }
         self.thread_json_of(&thread_id).await
     }
@@ -151,7 +152,7 @@ impl Hub {
             }
             change.agent_account = moves.then_some(account.id);
         }
-        self.update(&thread_id, change).await?;
+        self.update(&thread_id, change, self.agent_actor(caller).await).await?;
         self.thread_json_of(&thread_id).await
     }
 

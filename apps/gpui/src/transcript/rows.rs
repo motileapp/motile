@@ -10,8 +10,10 @@ use std::time::{Duration, Instant};
 use gpui_kit::prelude::*;
 use gpui_kit::*;
 use motile_core::render::agents::AgentState;
-use motile_core::render::rows::{AgentRow, CardPlace, ChangeEntry, HandoffLabel, RowKind, StateCount, Tool};
-use motile_protocol::wire::{Ask, ToolStatus};
+use motile_core::render::rows::{
+    AgentRow, CardPlace, ChangeEntry, HandoffLabel, MessageAvatar, RowKind, StateCount, Tool,
+};
+use motile_protocol::wire::{Agent, Ask, ToolStatus};
 
 use super::find::{self, Marks};
 use super::kit::{GrowthFade, RowButton, Shimmer, Sideways, TailLine, dashed_outline};
@@ -22,7 +24,7 @@ use crate::models::{AttachedFile, duration, elapsed};
 use crate::store::Store;
 use crate::theme::{self, Colors, ControlSize, IconSize, Radius, Surface, TextSize, colors};
 use crate::ui::rich_text::Sent;
-use crate::ui::{ActionButton, GatewayMark, Highlight, edges, icons};
+use crate::ui::{ActionButton, GatewayMark, Highlight, edges, icons, logos};
 
 /// The room a prose row has around its text, which is what keeps two rows apart.
 pub const PROSE_GAP: f32 = 9.;
@@ -37,6 +39,11 @@ const META_HEIGHT: f32 = 28.;
 pub const TURN_END_HEIGHT: f32 = META_HEIGHT + 10.;
 const BUBBLE_PADDING: f32 = 14.;
 const BUBBLE_RADIUS: f32 = 18.;
+/// How far a message's text is from its bubble's top and bottom.
+const BUBBLE_TEXT_INSET: f32 = 10.;
+/// The avatar beside a message the user didn't write is a circle as tall as a message of one line.
+const AVATAR_SIDE: f32 = BUBBLE_TEXT_INSET * 2. + MESSAGE_LINE;
+const AVATAR_GAP: f32 = 8.;
 const QUEUED_RADIUS: f32 = Radius::XL;
 const CODE_HEADER: f32 = META_HEIGHT + 8.;
 const CODE_BOTTOM: f32 = 12.;
@@ -829,6 +836,7 @@ fn bubble_content(
     model: &RowModel,
     message: Message,
     collapsible: bool,
+    avatar: MessageAvatar,
     attachments: &[AttachedFile],
     color: Hsla,
     ctx: &RowContext,
@@ -842,12 +850,12 @@ fn bubble_content(
     let found: Vec<(Range<usize>, bool)> =
         found.iter().filter_map(|(range, current)| Some((shown.moved(range)?, *current))).collect();
     let has_files = !attachments.is_empty();
-    let widest = (ctx.width * 0.8).max(120.) - BUBBLE_PADDING * 2.;
+    let widest = bubble_widest(ctx.width, avatar) - BUBBLE_PADDING * 2.;
     let cut = if collapsible { cut_height(&shown.text, widest, window) } else { None };
     let more = cut.is_some();
     let bubble = div()
         .px(px(BUBBLE_PADDING))
-        .pt(px(if has_files { BUBBLE_PADDING } else { 10. }))
+        .pt(px(if has_files { BUBBLE_PADDING } else { BUBBLE_TEXT_INSET }))
         .flex()
         .flex_col()
         .gap(px(if has_files && !text.is_empty() { 8. } else { 0. }))
@@ -875,6 +883,35 @@ fn bubble_content(
             bubble.child(body)
         });
     (bubble, more)
+}
+
+/// The widest a bubble may be, leaving room at its left for its avatar.
+fn bubble_widest(width: f32, avatar: MessageAvatar) -> f32 {
+    let beside = if avatar == MessageAvatar::None { 0. } else { AVATAR_SIDE + AVATAR_GAP };
+    (width * 0.8).max(120.).min(width - beside)
+}
+
+/// The circle beside a message the user didn't write, in the bubble's colour, with the logo of
+/// the agent that sent it in the agent's colour, or the server's in the colour of sending.
+fn message_avatar(avatar: MessageAvatar, cx: &App) -> Option<Div> {
+    let c = colors(cx);
+    let icon = match avatar {
+        MessageAvatar::None => return None,
+        MessageAvatar::Claude => logos::agent_icon(Agent::Claude, IconSize::Lg, cx).into_any_element(),
+        MessageAvatar::Codex => logos::agent_icon(Agent::Codex, IconSize::Lg, cx).into_any_element(),
+        MessageAvatar::Server => icons::symbol("server", IconSize::Lg).text_color(c.primary).into_any_element(),
+    };
+    Some(
+        div()
+            .flex_none()
+            .size(px(AVATAR_SIDE))
+            .rounded_full()
+            .bg(c.background_secondary)
+            .flex()
+            .items_center()
+            .justify_center()
+            .child(icon),
+    )
 }
 
 /// What covers the end of a cut message: the bubble's colour, coming in to its bottom.
@@ -940,6 +977,7 @@ fn user_row(
     attachments: &[AttachedFile],
     at: f64,
     collapsible: bool,
+    avatar: MessageAvatar,
     ctx: &RowContext,
     window: &mut Window,
     cx: &mut App,
@@ -947,13 +985,14 @@ fn user_row(
     let c = colors(cx);
     let text = message.text;
     let copied_text = text.to_string();
-    let (bubble, more) = bubble_content(model, message, collapsible, attachments, c.foreground, ctx, window, cx);
+    let (bubble, more) =
+        bubble_content(model, message, collapsible, avatar, attachments, c.foreground, ctx, window, cx);
     let bottom = if text.is_empty() {
         BUBBLE_PADDING
     } else if more {
         0.
     } else {
-        10.
+        BUBBLE_TEXT_INSET
     };
     div()
         .pt(px(14.))
@@ -962,14 +1001,23 @@ fn user_row(
         .flex_col()
         .items_end()
         .child(
-            bubble
-                .when(more, |bubble| bubble.child(more_button(model, ctx)))
-                .max_w(relative(0.8))
-                .min_w(px(12. + BUBBLE_PADDING * 2.))
-                .pb(px(bottom))
-                .bg(c.background_secondary)
-                .rounded(px(BUBBLE_RADIUS))
-                .when(model.is_pending(), |bubble| bubble.opacity(0.6)),
+            div()
+                .w_full()
+                .flex()
+                .justify_end()
+                .items_start()
+                .gap(px(AVATAR_GAP))
+                .children(message_avatar(avatar, cx))
+                .child(
+                    bubble
+                        .when(more, |bubble| bubble.child(more_button(model, ctx)))
+                        .max_w(px(bubble_widest(ctx.width, avatar)))
+                        .min_w(px(12. + BUBBLE_PADDING * 2.))
+                        .pb(px(bottom))
+                        .bg(c.background_secondary)
+                        .rounded(px(BUBBLE_RADIUS))
+                        .when(model.is_pending(), |bubble| bubble.opacity(0.6)),
+                ),
         )
         .child(div().w_full().mt(px(4.)).child(message_meta(
             &model.row.id,
@@ -1079,7 +1127,20 @@ fn queued_row(
                 .flex()
                 .flex_col()
                 .child(dashed_outline(QUEUED_RADIUS, [2., 3.], c.border))
-                .child(bubble_content(model, shown, false, attachments, c.muted_foreground, ctx, window, cx).0)
+                .child(
+                    bubble_content(
+                        model,
+                        shown,
+                        false,
+                        MessageAvatar::None,
+                        attachments,
+                        c.muted_foreground,
+                        ctx,
+                        window,
+                        cx,
+                    )
+                    .0,
+                )
                 .child(foot),
         )
         .into_any_element()
@@ -2101,11 +2162,11 @@ fn fitted(from: f32, to: f32, room: f32) -> (f32, f32) {
 
 pub fn render_row(model: &RowModel, ctx: &RowContext, window: &mut Window, cx: &mut App) -> AnyElement {
     match &model.row.kind {
-        RowKind::User { text, links, skills, attachments, at, collapsible } => {
+        RowKind::User { text, links, skills, attachments, at, collapsible, avatar, .. } => {
             let files: Vec<AttachedFile> = attachments.iter().map(AttachedFile::from).collect();
             let message =
                 Message { text, links: prose::link_ranges(text, links), skills: prose::skill_ranges(text, skills) };
-            user_row(model, message, &files, *at, *collapsible, ctx, window, cx)
+            user_row(model, message, &files, *at, *collapsible, *avatar, ctx, window, cx)
         }
         RowKind::Prose { .. } => prose_row(model, ctx, cx),
         RowKind::Code { language, code, .. } => code_row(model, language, code, ctx, cx),

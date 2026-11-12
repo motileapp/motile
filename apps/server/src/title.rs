@@ -282,6 +282,8 @@ fn keep_ends(message: &str, limit: usize) -> String {
 
 #[cfg(test)]
 mod tests {
+    use motile_protocol::wire::Actor;
+
     use super::*;
 
     #[test]
@@ -337,7 +339,14 @@ mod tests {
     fn user(text: String) -> Item {
         said(
             "u",
-            ItemKind::User { text, attachments: Vec::new(), skills: Vec::new(), context: None, programs: Vec::new() },
+            ItemKind::User {
+                text,
+                attachments: Vec::new(),
+                skills: Vec::new(),
+                context: None,
+                programs: Vec::new(),
+                by: Actor::Unknown,
+            },
         )
     }
 

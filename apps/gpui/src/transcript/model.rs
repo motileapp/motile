@@ -11,7 +11,7 @@ use gpui_kit::*;
 use motile_core::api::{Event, FindFrom, ScrollAt};
 use motile_core::render::agents::AgentState;
 use motile_core::render::markdown::{ParaKind, utf16_len};
-use motile_core::render::rows::{After, Row, RowKind, searched_text};
+use motile_core::render::rows::{After, MessageAvatar, Row, RowKind, searched_text};
 
 use super::find::Marks;
 use super::prose::{self, PreparedProse};
@@ -65,6 +65,8 @@ impl RowModel {
                 skills: Vec::new(),
                 attachments,
                 at: crate::models::now(),
+                avatar: MessageAvatar::None,
+                sender: Default::default(),
             }
         };
         Self::new(Row { id: Self::PENDING_ID.into(), item: Self::PENDING_ID.into(), nested: false, kind, after: None })

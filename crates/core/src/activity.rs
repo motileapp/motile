@@ -7,7 +7,7 @@ use std::collections::HashMap;
 
 use motile_protocol::activity as features;
 use motile_protocol::wire::{
-    ActionBucket, ActivityReport, Actor, Agent, ClientForm, ClientKind, ClientRecord, HourBucket, TurnBucket,
+    ActionBucket, ActivityReport, ActorKind, Agent, ClientForm, ClientKind, ClientRecord, HourBucket, TurnBucket,
     TurnOutcome, TurnStarter,
 };
 use serde::Serialize;
@@ -491,8 +491,10 @@ pub fn view(done: &[Done], window: Window, grid: Grid, names: &Names, local: &[S
         .collect();
     let actions: Vec<&ActionBucket> =
         done.iter().flat_map(|done| &done.report.actions).filter(|bucket| bucket.start >= window.since).collect();
-    let messages: Vec<&&ActionBucket> =
-        actions.iter().filter(|bucket| bucket.actor == Actor::User && bucket.feature == features::MESSAGE).collect();
+    let messages: Vec<&&ActionBucket> = actions
+        .iter()
+        .filter(|bucket| bucket.actor == ActorKind::User && bucket.feature == features::MESSAGE)
+        .collect();
     let message_count: u32 = messages.iter().map(|bucket| bucket.count).sum();
     let turn_count: u32 = turns.iter().map(|(_, bucket)| bucket.turns).sum();
     let asked_spans = spans(done, asked, window.until, names, local, every_server);
@@ -642,7 +644,7 @@ pub fn view(done: &[Done], window: Window, grid: Grid, names: &Names, local: &[S
         projects,
         facts: facts(&turns, &messages, turn_count),
         features: feature_groups(&actions),
-        agent_features: feature_lines(actions.iter().copied().filter(|bucket| bucket.actor == Actor::Agent)),
+        agent_features: feature_lines(actions.iter().copied().filter(|bucket| bucket.actor == ActorKind::Agent)),
     }
 }
 
@@ -1143,7 +1145,7 @@ fn facts(turns: &[(&str, &TurnBucket)], messages: &[&&ActionBucket], turn_count:
 }
 
 fn feature_groups(actions: &[&ActionBucket]) -> Vec<FeatureGroup> {
-    let users: Vec<&ActionBucket> = actions.iter().copied().filter(|bucket| bucket.actor == Actor::User).collect();
+    let users: Vec<&ActionBucket> = actions.iter().copied().filter(|bucket| bucket.actor == ActorKind::User).collect();
     let lines = feature_lines(users.iter().copied());
     let mut groups: Vec<FeatureGroup> = Vec::new();
     for line in lines {
@@ -1375,7 +1377,7 @@ mod tests {
 
     fn action(
         start: f64,
-        actor: Actor,
+        actor: ActorKind,
         device: Option<&str>,
         feature: &str,
         variant: &str,
@@ -1417,10 +1419,10 @@ mod tests {
                 turn(DAY, TurnStarter::Server, None, TurnOutcome::Done, 2, 120.0),
             ],
             actions: vec![
-                action(0.0, Actor::User, Some("mac"), "message", "reply", 3),
-                action(DAY, Actor::User, Some("phone"), "message", "new", 1),
-                action(DAY, Actor::User, Some("phone"), "thread.new", "local", 1),
-                action(DAY, Actor::Agent, None, "agent.start_agent", "", 2),
+                action(0.0, ActorKind::User, Some("mac"), "message", "reply", 3),
+                action(DAY, ActorKind::User, Some("phone"), "message", "new", 1),
+                action(DAY, ActorKind::User, Some("phone"), "thread.new", "local", 1),
+                action(DAY, ActorKind::Agent, None, "agent.start_agent", "", 2),
             ],
             hours: vec![HourBucket {
                 start: Some(DAY + 15.0 * HOUR),
@@ -1494,9 +1496,9 @@ mod tests {
         let report = |phone: ClientRecord| ActivityReport {
             turns: vec![],
             actions: vec![
-                action(0.0, Actor::User, Some("mac"), "message", "reply", 1),
-                action(0.0, Actor::User, Some("phone"), "message", "reply", 1),
-                action(0.0, Actor::User, Some("tablet"), "message", "reply", 1),
+                action(0.0, ActorKind::User, Some("mac"), "message", "reply", 1),
+                action(0.0, ActorKind::User, Some("phone"), "message", "reply", 1),
+                action(0.0, ActorKind::User, Some("tablet"), "message", "reply", 1),
             ],
             hours: vec![],
             clients: vec![
@@ -1524,9 +1526,9 @@ mod tests {
         let window = Window { since: 0.0, until: DAY, bucket_secs: 86_400, utc_offset_secs: 0 };
         let report = |mac: u32, phone: u32| ActivityReport {
             actions: vec![
-                action(0.0, Actor::User, Some("mac"), "message", "reply", mac),
-                action(0.0, Actor::User, Some("phone"), "message", "reply", phone),
-                action(0.0, Actor::User, Some("old"), "message", "reply", 1),
+                action(0.0, ActorKind::User, Some("mac"), "message", "reply", mac),
+                action(0.0, ActorKind::User, Some("phone"), "message", "reply", phone),
+                action(0.0, ActorKind::User, Some("old"), "message", "reply", 1),
             ],
             clients: vec![
                 client("mac", ClientKind::Mac, "macos", ClientForm::Desktop),
@@ -1612,9 +1614,9 @@ mod tests {
         let window = Window { since: 0.0, until: DAY, bucket_secs: 86_400, utc_offset_secs: 0 };
         let report = ActivityReport {
             actions: vec![
-                action(0.0, Actor::User, Some("mac"), "message", "reply", 3),
-                action(0.0, Actor::User, Some("phone"), "message", "reply", 1),
-                action(0.0, Actor::User, None, "message", "reply", 1000),
+                action(0.0, ActorKind::User, Some("mac"), "message", "reply", 3),
+                action(0.0, ActorKind::User, Some("phone"), "message", "reply", 1),
+                action(0.0, ActorKind::User, None, "message", "reply", 1000),
             ],
             clients: vec![
                 client("mac", ClientKind::Mac, "macos", ClientForm::Desktop),
@@ -1633,7 +1635,7 @@ mod tests {
         let report = ActivityReport {
             actions: ["mac", "phone", "tablet"]
                 .into_iter()
-                .map(|device| action(0.0, Actor::User, Some(device), "message", "reply", 1))
+                .map(|device| action(0.0, ActorKind::User, Some(device), "message", "reply", 1))
                 .collect(),
             clients: vec![
                 client("mac", ClientKind::Mac, "macos", ClientForm::Desktop),
@@ -1710,7 +1712,7 @@ mod tests {
             let done = [Done {
                 server_id: "studio".into(),
                 report: ActivityReport {
-                    actions: vec![action(window.since, Actor::User, Some("mac"), "message", "reply", 1)],
+                    actions: vec![action(window.since, ActorKind::User, Some("mac"), "message", "reply", 1)],
                     hours: vec![HourBucket {
                         start: Some(now - 46.0 * 60.0),
                         weekday: 3,
@@ -1770,7 +1772,7 @@ mod tests {
 
     #[test]
     fn each_group_of_features_goes_in_the_shorter_column() {
-        let use_ = |feature: &str, count: u32| action(0.0, Actor::User, Some("mac"), feature, "", count);
+        let use_ = |feature: &str, count: u32| action(0.0, ActorKind::User, Some("mac"), feature, "", count);
         let actions = [
             ["message", "thread.new", "thread.archive", "search", "approval", "file.upload"]
                 .map(|feature| use_(feature, 50))

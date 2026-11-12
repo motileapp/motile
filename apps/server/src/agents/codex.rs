@@ -8,7 +8,9 @@
 
 use std::collections::HashMap;
 
-use motile_protocol::wire::{Access, Approval, QUESTION_TOOL, Subagent, Tokens, ToolCall, ToolStatus, TurnSummary};
+use motile_protocol::wire::{
+    Access, Actor, Approval, QUESTION_TOOL, Subagent, Tokens, ToolCall, ToolStatus, TurnSummary,
+};
 use serde_json::{Value, json};
 
 use super::{AgentEvent, ModelUsage, PLAN_TOOL, Settings, ToolImage, Turn, content_images};
@@ -514,6 +516,7 @@ impl Parser {
                 output,
                 status,
                 agent: None,
+                decided_by: Actor::Unknown,
             };
             vec![AgentEvent::Thinking { active: false }, AgentEvent::Tool { call }]
         };
@@ -601,6 +604,7 @@ impl Parser {
                     output: None,
                     status: ToolStatus::Succeeded,
                     agent: Some(agent),
+                    decided_by: Actor::Unknown,
                 };
                 vec![AgentEvent::Thinking { active: false }, AgentEvent::Tool { call }]
             }
@@ -702,6 +706,7 @@ fn todo_list(params: &Value) -> Vec<AgentEvent> {
         output: None,
         status: ToolStatus::Succeeded,
         agent: None,
+        decided_by: Actor::Unknown,
     };
     vec![AgentEvent::Tool { call }]
 }
@@ -983,6 +988,7 @@ mod tests {
                 skills: Vec::new(),
                 context: None,
                 programs: Vec::new(),
+                by: Actor::Unknown,
             },
         };
         let range = crate::handoff::Range::Full;
