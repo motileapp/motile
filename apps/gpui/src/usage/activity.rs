@@ -13,7 +13,7 @@ use crate::models::ago;
 use crate::store::Store;
 use crate::store::usage::{
     ActivityClient, ActivityFact, ActivityHeatmap, ActivityLine, ActivityReport, ActivitySource, FeatureLine,
-    UsagePeriod,
+    HeatmapShape, UsagePeriod,
 };
 use crate::theme::{Colors, ControlSize, IconSize, Layer, Opacity, Radius, Surface, TextSize, colors};
 use crate::ui::control::dotted;
@@ -154,8 +154,8 @@ pub struct ActivityView {
     pointed: Option<usize>,
     /// Where the plot was drawn, to tell which bucket the pointer is over.
     plot: Anchor,
-    /// The heatmap's cell the pointer is over, or the last one clicked.
-    chosen: Option<usize>,
+    /// The heatmap's cell the pointer was over or clicked last, with the heatmap's shape then.
+    chosen: Option<(usize, HeatmapShape)>,
     /// How wide the content is, which lays it out.
     pub width: f32,
     period: UsagePeriod,
@@ -499,9 +499,9 @@ impl ActivityView {
             .into_any_element()
     }
 
-    /// When the work was done, each slice as busy as its colour is strong. The slice the pointer is
-    /// over, or the last one clicked, says what was done in it. The gaps between the slices are only
-    /// drawn: each one's hit area is an even share of its cell's.
+    /// When the work was done, each slice as busy as its colour is strong. The slice the pointer was
+    /// over or clicked last says what was done in it, the slice of now to start with. The gaps
+    /// between the slices are only drawn: each one's hit area is an even share of its cell's.
     fn heatmap(
         &self,
         heatmap: &ActivityHeatmap,
@@ -510,6 +510,8 @@ impl ActivityView {
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let c = colors(cx);
+        let of = heatmap.shape();
+        let shown = self.shown(heatmap);
         let inner = self.width - 2. * HEATMAP_PADDING - 2.;
         let labels = heatmap
             .rows
@@ -553,25 +555,16 @@ impl ActivityView {
                     .h(px(height))
                     .rounded(px(corner))
                     .bg(level_fill(level, c))
-                    .when(self.chosen == Some(index), |shape| shape.border_1().border_color(c.foreground));
+                    .when(shown == index, |shape| shape.border_1().border_color(c.foreground));
                 slot.relative()
                     .id(("activity-cell", index))
                     .child(shape)
                     .on_hover(cx.listener(move |this, inside: &bool, _, cx| {
-                        let chosen = match (*inside, this.chosen) {
-                            (true, _) => Some(index),
-                            (false, Some(shown)) if shown == index => None,
-                            (false, shown) => shown,
-                        };
-                        if this.chosen != chosen {
-                            this.chosen = chosen;
-                            cx.notify();
+                        if *inside {
+                            this.choose(index, of, cx);
                         }
                     }))
-                    .on_click(cx.listener(move |this, _, _, cx| {
-                        this.chosen = if this.chosen == Some(index) { None } else { Some(index) };
-                        cx.notify();
-                    }))
+                    .on_click(cx.listener(move |this, _, _, cx| this.choose(index, of, cx)))
                     .into_any_element()
             }))
         });
@@ -590,32 +583,47 @@ impl ActivityView {
             .flex_col()
             .gap(px(12.))
             .child(grid)
-            .child(self.heatmap_caption(heatmap, inner, window, c))
+            .child(self.heatmap_caption(heatmap, shown, inner, window, c))
             .into_any_element()
     }
 
-    /// What the chosen cell holds, or how to choose one, and the key to the colours: beside each
-    /// other, or the key under it where they don't fit.
-    fn heatmap_caption(&self, heatmap: &ActivityHeatmap, room: f32, window: &mut Window, c: &Colors) -> Div {
-        let chosen = self.chosen.and_then(|index| heatmap.cells.get(index)).and_then(Option::as_ref);
-        let (said, color) = match chosen {
-            Some(cell) => {
-                let messages =
-                    if cell.messages == 1 { "1 message".into() } else { format!("{} messages", number(cell.messages)) };
-                let turns = if cell.turns == 1 { "1 turn".into() } else { format!("{} turns", number(cell.turns)) };
-                let said = if cell.time.is_empty() {
-                    format!("{} · {messages} · {turns}", cell.label)
-                } else {
-                    format!("{} · {} · {messages} · {turns}", cell.label, cell.time)
-                };
-                (said, c.muted_foreground)
+    /// The cell chosen in this heatmap's shape, or the cell of now.
+    fn shown(&self, heatmap: &ActivityHeatmap) -> usize {
+        self.chosen.filter(|(_, shape)| *shape == heatmap.shape()).map_or(heatmap.latest, |(index, _)| index)
+    }
+
+    fn choose(&mut self, index: usize, shape: HeatmapShape, cx: &mut Context<Self>) {
+        if self.chosen != Some((index, shape)) {
+            self.chosen = Some((index, shape));
+            cx.notify();
+        }
+    }
+
+    /// What the chosen cell holds and the key to the colours: beside each other, or the key under it
+    /// where they don't fit.
+    fn heatmap_caption(
+        &self,
+        heatmap: &ActivityHeatmap,
+        shown: usize,
+        room: f32,
+        window: &mut Window,
+        c: &Colors,
+    ) -> Div {
+        let said = heatmap.cells.get(shown).and_then(Option::as_ref).map_or_else(String::new, |cell| {
+            let messages =
+                if cell.messages == 1 { "1 message".into() } else { format!("{} messages", number(cell.messages)) };
+            let turns = if cell.turns == 1 { "1 turn".into() } else { format!("{} turns", number(cell.turns)) };
+            if cell.time.is_empty() {
+                format!("{} · {messages} · {turns}", cell.label)
+            } else {
+                format!("{} · {} · {messages} · {turns}", cell.label, cell.time)
             }
-            None => (format!("Point at {} to see what was done in it", heatmap.unit), c.muted_stronger_foreground),
-        };
+        });
         let words = |text: &str, window: &mut Window| text_width(text, TextSize::Xxs, FontWeight::NORMAL, window);
         let key_width = words("Less", window) + words("More", window) + 2. * 3. + 5. * 10. + 6. * HEATMAP_GAP;
         let fits = tabular_text_width(&said, TextSize::Xxs, FontWeight::NORMAL, window) + 8. + key_width <= room;
-        let said = div().min_w_0().overflow_hidden().text_ellipsis().text_color(color).child(dotted(said, c));
+        let said =
+            div().min_w_0().overflow_hidden().text_ellipsis().text_color(c.muted_foreground).child(dotted(said, c));
         let key = div()
             .flex_shrink_0()
             .flex()

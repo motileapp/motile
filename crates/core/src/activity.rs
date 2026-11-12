@@ -132,6 +132,8 @@ pub struct Heatmap {
     pub axis: Vec<AxisLabel>,
     /// Row by row; one yet to come is `None`.
     pub cells: Vec<Option<HeatCell>>,
+    /// The cell of now, which the clients start on.
+    pub latest: usize,
     /// What a cell is: "an hour", "four hours" or "a day".
     pub unit: String,
 }
@@ -1015,6 +1017,7 @@ fn heatmap(hours: &[&HourBucket], together: &[(f64, f64)], grid: &Grid) -> (Heat
         columns: grid.columns * grid.parts,
         axis: grid.axis(),
         cells,
+        latest: grid.position(grid.filled.saturating_sub(1)),
         unit: match grid.slice_secs {
             DAY => "a day",
             HOUR => "an hour",
@@ -1671,6 +1674,7 @@ mod tests {
         assert_eq!((day.rows.len(), day.columns, day.cells.len(), day.unit.as_str()), (0, 24, 24, "an hour"));
         assert_eq!(axis(&day), [(2, "06:00".into()), (8, "12:00".into()), (14, "18:00".into()), (20, "00:00".into())]);
         assert_eq!(day.cells[23].as_ref().unwrap().messages, 2);
+        assert_eq!(day.latest, 23);
 
         let week = shape(86_400, 7);
         assert_eq!(week.rows, ["Fri 6", "Sat 7", "Sun 8", "Mon 9", "Tue 10", "Wed 11", "Thu 12"]);
@@ -1679,6 +1683,7 @@ mod tests {
         assert_eq!(label(&week, 6 * 24 + 3), Some("Thu, Nov 12, 03:00–04:00".into()));
         assert_eq!(week.cells[6 * 24 + 3].as_ref().unwrap().messages, 2);
         assert_eq!(label(&week, 6 * 24 + 4), None);
+        assert_eq!(week.latest, 6 * 24 + 3);
 
         let month = shape(86_400, 30);
         assert_eq!(month.rows, ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]);
@@ -1691,6 +1696,7 @@ mod tests {
         assert_eq!(label(&month, thursday(&month, 24)), Some("Thu, Nov 12, 00:00–04:00".into()));
         assert_eq!(month.cells[thursday(&month, 24)].as_ref().unwrap().messages, 2);
         assert_eq!(label(&month, thursday(&month, 25)), None);
+        assert_eq!(month.latest, thursday(&month, 24));
         assert_eq!(label(&month, thursday(&month, 23)), Some("Thu, Nov 5, 20:00–00:00".into()));
 
         let quarter = shape(86_400, 90);
@@ -1698,6 +1704,7 @@ mod tests {
         assert_eq!(quarter.cells.iter().flatten().count(), 12 * 7 + 4);
         assert_eq!(label(&quarter, thursday(&quarter, 12)), Some("Thu, Nov 12".into()));
         assert_eq!(quarter.cells[thursday(&quarter, 12)].as_ref().unwrap().messages, 2);
+        assert_eq!(quarter.latest, thursday(&quarter, 12));
         assert_eq!(axis(&quarter).first(), Some(&(0, "Aug 17".into())));
         assert_eq!(axis(&quarter).len(), 7);
     }

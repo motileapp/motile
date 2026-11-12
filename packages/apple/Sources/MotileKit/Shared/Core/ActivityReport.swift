@@ -78,6 +78,8 @@ struct ActivityReport {
         let axis: [AxisLabel]
         /// Row by row; one yet to come is nil.
         let cells: [Cell?]
+        /// The cell of now, which the heatmap starts on.
+        let latest: Int
         /// What a cell is: "an hour", "four hours" or "a day".
         let unit: String
 
@@ -93,6 +95,7 @@ struct ActivityReport {
                     label: cell.string("label"), messages: cell.int("messages"), turns: cell.int("turns"),
                     time: cell.string("time"), timeLevel: cell.int("time_level"), messageLevel: cell.int("message_level"))
             }
+            latest = json.int("latest")
             unit = json.string("unit")
         }
     }

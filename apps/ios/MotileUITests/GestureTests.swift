@@ -212,7 +212,8 @@ final class GestureTests: XCTestCase {
         let below = app.staticTexts["When you work"]
         XCTAssertTrue(shown(heading))
         XCTAssertTrue(below.waitForExistence(timeout: 10))
-        let pointedDay = app.staticTexts.matching(NSPredicate(format: "label MATCHES %@", "^(Mon|Tue|Wed|Thu|Fri|Sat|Sun)[a-z]*[ ,].+")).firstMatch
+        let pointedDay = app.staticTexts.matching(NSPredicate(format: "label MATCHES %@", "^(Mon|Tue|Wed|Thu|Fri|Sat|Sun)[a-z]*[ ,][^·]+$")).firstMatch
+        let cellSaid = app.staticTexts.matching(NSPredicate(format: "label MATCHES %@", "^(Mon|Tue|Wed|Thu|Fri|Sat|Sun)[a-z]*,.*· .* turns?$")).firstMatch
         XCTAssertFalse(pointedDay.exists)
         let top = settled(heading)
         let middle = (app.buttons["Turns"].frame.maxY + below.frame.minY) / 2
@@ -222,13 +223,14 @@ final class GestureTests: XCTestCase {
         XCTAssertEqual(heading.frame.minY, top, accuracy: 1)
         chart.press(forDuration: 0.05, thenDragTo: chart.withOffset(CGVector(dx: 0, dy: -200)), withVelocity: .slow, thenHoldForDuration: 0)
         XCTAssertLessThan(heading.frame.minY, top - 50)
-        let hint = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Tap ")).firstMatch
         let row = app.staticTexts["Wed"]
-        XCTAssertTrue(shown(hint))
+        XCTAssertTrue(shown(cellSaid))
         XCTAssertTrue(shown(row))
+        let latest = cellSaid.label
         let cells = app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: row.frame.maxX + 30, dy: row.frame.midY))
         cells.press(forDuration: 0.05, thenDragTo: cells.withOffset(CGVector(dx: app.frame.width * 0.5, dy: 0)), withVelocity: .slow, thenHoldForDuration: 0)
-        XCTAssertTrue(hint.waitForNonExistence(timeout: 3))
+        let moved = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label != %@", latest), object: cellSaid)
+        XCTAssertEqual(XCTWaiter.wait(for: [moved], timeout: 3), .completed)
     }
 
     func testSettingsOpenInASheetWhoseSectionsPushAndCloseTakesThemAway() {
