@@ -68,7 +68,6 @@ struct Segmented<Value: Hashable>: View {
         .background(Color.themeSegment, in: shape)
         .overlay { shape.strokeBorder(Color.themeBorder, lineWidth: Self.border) }
         .opacity(.disabled, when: !enabled)
-        .animation(.easeOut(duration: 0.12), value: selection)
     }
 
     private func margin(at index: Int) -> EdgeInsets {

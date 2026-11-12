@@ -501,29 +501,25 @@ impl Store {
             rows.collect::<rusqlite::Result<Vec<_>>>()?
         };
         let hours = {
-            let local = |column: &str| {
-                format!(
-                    "(CAST(strftime('%w', {column} + ?3, 'unixepoch') AS INTEGER) + 6) % 7 AS weekday,
-                     CAST(strftime('%H', {column} + ?3, 'unixepoch') AS INTEGER) AS hour"
-                )
-            };
             let mut statement = connection.prepare(&format!(
-                "SELECT weekday, hour, SUM(messages), SUM(turns), SUM(seconds) FROM (
-                     SELECT {}, 1 AS messages, 0 AS turns, 0.0 AS seconds FROM {actions}
-                     WHERE feature = 'message' AND actor = 'user' AND at >= ?1 AND at < ?2
+                "SELECT hour, SUM(messages), SUM(turns), SUM(seconds) FROM (
+                     SELECT CAST((at + ?3) / 3600 AS INTEGER) AS hour, 1 AS messages, 0 AS turns, 0.0 AS seconds
+                     FROM {actions} WHERE feature = 'message' AND actor = 'user' AND at >= ?1 AND at < ?2
                      UNION ALL
-                     SELECT {}, 0, 1, ended_at - started_at FROM {turns} WHERE ended_at >= ?1 AND ended_at < ?2
-                 ) WHERE ?4 > 0 GROUP BY weekday, hour ORDER BY weekday, hour",
-                local("at"),
-                local("started_at")
+                     SELECT CAST((started_at + ?3) / 3600 AS INTEGER), 0, 1, ended_at - started_at
+                     FROM {turns} WHERE ended_at >= ?1 AND ended_at < ?2
+                 ) WHERE ?4 > 0 GROUP BY hour ORDER BY hour"
             ))?;
             let rows = statement.query_map(params![since, until, offset, size, origin], |row| {
+                let hour: i64 = row.get(0)?;
                 Ok(HourBucket {
-                    weekday: row.get(0)?,
-                    hour: row.get(1)?,
-                    messages: row.get(2)?,
-                    turns: row.get(3)?,
-                    seconds: row.get(4)?,
+                    start: Some(hour as f64 * 3600.0 - offset),
+                    // The first of January 1970 was a Thursday.
+                    weekday: (hour.div_euclid(24) + 3).rem_euclid(7) as u8,
+                    hour: hour.rem_euclid(24) as u8,
+                    messages: row.get(1)?,
+                    turns: row.get(2)?,
+                    seconds: row.get(3)?,
                 })
             })?;
             rows.collect::<rusqlite::Result<Vec<_>>>()?
@@ -887,8 +883,8 @@ mod tests {
         let message = report.actions.iter().find(|bucket| bucket.feature == "message").unwrap();
         assert_eq!((message.count, message.direct, message.relay, message.rtt_ms, message.timed), (2, 1, 1, 100, 2));
         let hours: Vec<_> =
-            report.hours.iter().map(|hour| (hour.weekday, hour.hour, hour.messages, hour.turns)).collect();
-        assert_eq!(hours, [(3, 3, 2, 2), (4, 2, 0, 1)]);
+            report.hours.iter().map(|hour| (hour.start, hour.weekday, hour.hour, hour.messages, hour.turns)).collect();
+        assert_eq!(hours, [(Some(3600.0), 3, 3, 2, 2), (Some(day), 4, 2, 0, 1)]);
     }
 
     fn item(seq: u64, at: f64, kind: serde_json::Value) -> Item {

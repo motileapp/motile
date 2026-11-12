@@ -1397,9 +1397,12 @@ pub struct ActionBucket {
     pub timed: u32,
 }
 
-/// What happened in an hour of the week on the asking clock, over the whole time asked about.
+/// What happened in an hour on the asking clock.
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct HourBucket {
+    /// When the hour starts. A server from before sends none, and adds up each hour of the week.
+    #[serde(default)]
+    pub start: Option<f64>,
     /// From 0, Monday, to 6, Sunday.
     pub weekday: u8,
     pub hour: u8,

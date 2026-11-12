@@ -7,8 +7,8 @@ use std::collections::HashMap;
 
 use motile_protocol::activity as features;
 use motile_protocol::wire::{
-    ActionBucket, ActivityReport, Actor, Agent, ClientForm, ClientKind, ClientRecord, TurnBucket, TurnOutcome,
-    TurnStarter,
+    ActionBucket, ActivityReport, Actor, Agent, ClientForm, ClientKind, ClientRecord, HourBucket, TurnBucket,
+    TurnOutcome, TurnStarter,
 };
 use serde::Serialize;
 
@@ -16,6 +16,9 @@ use crate::engaged::Stretch;
 use crate::usage::{Window, agent_name};
 
 const WEEKDAYS: [&str; 7] = ["Mondays", "Tuesdays", "Wednesdays", "Thursdays", "Fridays", "Saturdays", "Sundays"];
+const DAYS: [&str; 7] = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const HOUR: f64 = 3_600.0;
+const DAY: f64 = 86_400.0;
 
 /// What a server said was done: its own, or its copy of a removed server's.
 pub struct Done {
@@ -48,8 +51,7 @@ pub struct View {
     pub engaged_ticks: Vec<f64>,
     pub second_ticks: Vec<f64>,
     pub clients: Vec<ClientRow>,
-    /// The 168 hours of the week, Monday's first.
-    pub hours: Vec<HourCell>,
+    pub heatmap: Heatmap,
     /// When the user is in the clients the most, as a sentence.
     pub busiest_time: Option<String>,
     /// When the user sends the most messages, as a sentence.
@@ -118,19 +120,149 @@ pub struct ClientRow {
     pub removed: bool,
 }
 
+/// When the work was done: the hours of the last day in a row, the hours of the last week a row a
+/// day, or the last weeks a row a weekday, each day four hours a column for up to thirty days and
+/// a column a week for longer.
+#[derive(Serialize, Debug, Default, PartialEq)]
+pub struct Heatmap {
+    /// The rows' names, or none for a single row.
+    pub rows: Vec<String>,
+    pub columns: usize,
+    /// The names under the columns, each from its column on.
+    pub axis: Vec<AxisLabel>,
+    /// Row by row; one yet to come is `None`.
+    pub cells: Vec<Option<HeatCell>>,
+    /// What a cell is: "an hour", "four hours" or "a day".
+    pub unit: String,
+}
+
 #[derive(Serialize, Debug, PartialEq)]
-pub struct HourCell {
-    pub weekday: u8,
-    pub hour: u8,
+pub struct AxisLabel {
+    pub column: usize,
+    pub label: String,
+}
+
+#[derive(Serialize, Debug, PartialEq)]
+pub struct HeatCell {
+    /// When it is: "Wed, Nov 11, 5–6 PM", "Wed, Nov 11, 4–8 PM" or "Wed, Nov 11".
+    pub label: String,
     pub messages: u32,
     pub turns: u32,
     pub engaged_seconds: f64,
     /// The user's time in it, or empty: "42m".
     pub time: String,
-    /// The user's time in it next to the hour they spent the most time in, from 0, nothing, to 4.
+    /// The user's time in it next to the slice they spent the most time in, from 0, nothing, to 4.
     pub time_level: u8,
-    /// Its messages next to the hour with the most, from 0 to 4.
+    /// Its messages next to the slice with the most, from 0 to 4.
     pub message_level: u8,
+}
+
+/// Where the heatmap's slices lie in time: slices of `slice_secs` from `since`, of which the first
+/// `filled` have come. For a calendar, `rows` are the weekdays and `columns` the weeks.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Grid {
+    pub since: f64,
+    calendar: bool,
+    slice_secs: f64,
+    rows: usize,
+    columns: usize,
+    parts: usize,
+    filled: usize,
+    utc_offset_secs: i32,
+}
+
+impl Grid {
+    /// The last day by the hour for a window of hours, the last week's days by the hour, and whole
+    /// weeks from Monday for longer, their days by four hours up to thirty days and whole beyond.
+    pub fn of(window: &Window, now: f64) -> Self {
+        let offset = f64::from(window.utc_offset_secs);
+        let days = ((window.until - window.since) / DAY).round() as usize;
+        let (calendar, since, rows, columns, parts) = if window.bucket_secs < 86_400 {
+            (false, window.since, 1, ((window.until - window.since) / HOUR).round() as usize, 1)
+        } else if days <= 7 {
+            (false, window.since, days, 24, 1)
+        } else {
+            let today = ((now + offset) / DAY).floor();
+            // The first of January 1970 was a Thursday.
+            let monday = today - (today + 3.0).rem_euclid(7.0);
+            let weeks = days.div_ceil(7);
+            let parts = if days <= 30 { 6 } else { 1 };
+            (true, (monday - 7.0 * (weeks - 1) as f64) * DAY - offset, 7, weeks, parts)
+        };
+        let slice_secs = if calendar { DAY / parts as f64 } else { HOUR };
+        let filled = (((now - since) / slice_secs).floor() as usize + 1).min(rows * columns * parts);
+        Self { since, calendar, slice_secs, rows, columns, parts, filled, utc_offset_secs: window.utc_offset_secs }
+    }
+
+    /// Where the `slice`th slice from `since` is drawn: down a week's days, then on to the next.
+    fn position(&self, slice: usize) -> usize {
+        if !self.calendar {
+            return slice;
+        }
+        let (day, part) = (slice / self.parts, slice % self.parts);
+        ((day % self.rows) * self.columns + day / self.rows) * self.parts + part
+    }
+
+    fn start(&self, slice: usize) -> f64 {
+        self.since + slice as f64 * self.slice_secs
+    }
+
+    /// From 0, Monday's first hour, to 167.
+    fn hour_of_week(&self, at: f64) -> usize {
+        let hour = ((at + f64::from(self.utc_offset_secs)) / HOUR).floor() as i64;
+        // The first of January 1970 was a Thursday.
+        ((hour.div_euclid(24) + 3).rem_euclid(7) * 24 + hour.rem_euclid(24)) as usize
+    }
+
+    fn local(&self, at: f64) -> Option<chrono::DateTime<chrono::FixedOffset>> {
+        let offset = chrono::FixedOffset::east_opt(self.utc_offset_secs)?;
+        Some(chrono::DateTime::from_timestamp(at as i64, 0)?.with_timezone(&offset))
+    }
+
+    fn format(&self, at: f64, format: &str) -> String {
+        self.local(at).map(|at| at.format(format).to_string()).unwrap_or_default()
+    }
+
+    fn hour(&self, at: f64) -> u8 {
+        self.format(at, "%-H").parse().unwrap_or(0)
+    }
+
+    fn rows(&self) -> Vec<String> {
+        match (self.calendar, self.rows) {
+            (true, _) => DAYS.iter().map(|day| day.to_string()).collect(),
+            (false, 1) => Vec::new(),
+            (false, rows) => (0..rows).map(|row| self.format(self.start(row * 24), "%a %-d")).collect(),
+        }
+    }
+
+    /// Every sixth hour, but where it would run past the last column, or each week's Monday,
+    /// every other one when there are many.
+    fn axis(&self) -> Vec<AxisLabel> {
+        let label = |column: usize, label: String| AxisLabel { column, label };
+        if !self.calendar {
+            return (0..self.columns.saturating_sub(3))
+                .filter_map(|column| {
+                    let hour = self.hour(self.start(column));
+                    hour.is_multiple_of(6).then(|| label(column, hour_label(hour)))
+                })
+                .collect();
+        }
+        let step = if self.columns > 6 { 2 } else { 1 };
+        (0..self.columns)
+            .step_by(step)
+            .map(|column| label(column * self.parts, self.format(self.start(column * 7 * self.parts), "%b %-d")))
+            .collect()
+    }
+
+    /// "Wed, Nov 11, 5–6 PM", "Wed, Nov 11, 4–8 PM" or "Wed, Nov 11".
+    fn label(&self, slice: usize) -> String {
+        let start = self.start(slice);
+        if self.slice_secs >= DAY {
+            return self.format(start, "%a, %b %-d");
+        }
+        let hours = (self.slice_secs / HOUR) as u8;
+        format!("{}, {}", self.format(start, "%a, %b %-d"), hour_range(self.hour(start), hours))
+    }
 }
 
 /// An agent, a model, a project or an outcome of turns and its part of them.
@@ -157,6 +289,8 @@ pub struct FeatureGroup {
     pub name: String,
     pub count: u32,
     pub features: Vec<FeatureLine>,
+    /// Which of two columns side by side it goes in, 0 or 1: the shorter one when it comes.
+    pub column: u8,
 }
 
 #[derive(Serialize, Debug, PartialEq)]
@@ -312,6 +446,7 @@ fn form_symbol(form: ClientForm, system: &str) -> &'static str {
 }
 
 /// A stretch of the user's time, on a project of a server or on none (both empty).
+#[derive(Clone)]
 struct Span {
     device: String,
     server_id: String,
@@ -320,9 +455,11 @@ struct Span {
     end: f64,
 }
 
-/// What was done in `window`. `local` is this client's own time that its servers may not have yet,
+/// What was done in `window`, and in `grid` for its heatmap, which the servers were asked from
+/// whichever starts first. `local` is this client's own time that its servers may not have yet,
 /// and time on no project only counts with `every_server`.
-pub fn view(done: &[Done], window: Window, names: &Names, local: &[Stretch], every_server: bool) -> View {
+pub fn view(done: &[Done], window: Window, grid: Grid, names: &Names, local: &[Stretch], every_server: bool) -> View {
+    let asked = window.since.min(grid.since);
     let starts = window.starts();
     let point = |start: f64| {
         let index = ((start - window.since) / f64::from(window.bucket_secs)).round();
@@ -343,13 +480,20 @@ pub fn view(done: &[Done], window: Window, names: &Names, local: &[Stretch], eve
     let turns: Vec<(&str, &TurnBucket)> = done
         .iter()
         .flat_map(|done| done.report.turns.iter().map(move |bucket| (done.server_id.as_str(), bucket)))
+        .filter(|(_, bucket)| bucket.start >= window.since)
         .collect();
-    let actions: Vec<&ActionBucket> = done.iter().flat_map(|done| &done.report.actions).collect();
+    let actions: Vec<&ActionBucket> =
+        done.iter().flat_map(|done| &done.report.actions).filter(|bucket| bucket.start >= window.since).collect();
     let messages: Vec<&&ActionBucket> =
         actions.iter().filter(|bucket| bucket.actor == Actor::User && bucket.feature == features::MESSAGE).collect();
     let message_count: u32 = messages.iter().map(|bucket| bucket.count).sum();
     let turn_count: u32 = turns.iter().map(|(_, bucket)| bucket.turns).sum();
-    let spans = spans(done, &window, names, local, every_server);
+    let asked_spans = spans(done, asked, window.until, names, local, every_server);
+    let spans: Vec<Span> = asked_spans
+        .iter()
+        .filter(|span| span.end > window.since)
+        .map(|span| Span { start: span.start.max(window.since), ..span.clone() })
+        .collect();
     if message_count == 0 && turn_count == 0 && actions.is_empty() && spans.is_empty() {
         return View { empty: true, starts, ..View::default() };
     }
@@ -397,6 +541,7 @@ pub fn view(done: &[Done], window: Window, names: &Names, local: &[Stretch], eve
     let seconds: f64 = turns.iter().map(|(_, bucket)| bucket.seconds).sum();
     let waited: f64 = turns.iter().map(|(_, bucket)| bucket.waited_secs).sum();
     let asks: u32 = turns.iter().map(|(_, bucket)| bucket.asks).sum();
+    let together_asked = together(&asked_spans);
     let together = together(&spans);
     let yours: f64 = together.iter().map(|(start, end)| end - start).sum();
     let threads: u32 = actions.iter().filter(|bucket| bucket.feature == "thread.new").map(|bucket| bucket.count).sum();
@@ -430,7 +575,8 @@ pub fn view(done: &[Done], window: Window, names: &Names, local: &[Stretch], eve
     ];
 
     let client_rows = client_rows(&messages, &turns, &spans, &clients, names);
-    let (hours, busiest_time, busiest_messages) = hours(done, &together, window.utc_offset_secs);
+    let hours: Vec<&HourBucket> = done.iter().flat_map(|done| &done.report.hours).collect();
+    let (heatmap, busiest_time, busiest_messages) = heatmap(&hours, &together_asked, &grid);
 
     let lines = |key: &LineKey<'_>| {
         let mut found: Vec<(String, Option<Agent>, Option<String>, Sums)> = Vec::new();
@@ -475,7 +621,7 @@ pub fn view(done: &[Done], window: Window, names: &Names, local: &[Stretch], eve
         engaged_ticks,
         second_ticks,
         clients: client_rows,
-        hours,
+        heatmap,
         busiest_time,
         busiest_messages,
         outcomes,
@@ -490,7 +636,8 @@ pub fn view(done: &[Done], window: Window, names: &Names, local: &[Stretch], eve
 
 /// The user's stretches in `window` that the servers reported and this client has that they may
 /// not yet, each once.
-fn spans(done: &[Done], window: &Window, names: &Names, local: &[Stretch], every_server: bool) -> Vec<Span> {
+/// The stretches from `since`, where the servers' are counted from, to `until`.
+fn spans(done: &[Done], since: f64, until: f64, names: &Names, local: &[Stretch], every_server: bool) -> Vec<Span> {
     let mut spans = Vec::new();
     for done in done {
         for group in done.report.engaged.iter().filter(|group| every_server || !group.project_id.is_empty()) {
@@ -498,13 +645,13 @@ fn spans(done: &[Done], window: &Window, names: &Names, local: &[Stretch], every
                 device: group.device.clone(),
                 server_id: done.server_id.clone(),
                 project_id: group.project_id.clone(),
-                start: window.since + f64::from(*start),
-                end: window.since + f64::from(*end),
+                start: since + f64::from(*start),
+                end: since + f64::from(*end),
             }));
         }
     }
     for stretch in local {
-        let (start, end) = (stretch.started_at.max(window.since), stretch.ended_at.min(window.until));
+        let (start, end) = (stretch.started_at.max(since), stretch.ended_at.min(until));
         let reported = spans.iter().any(|span| span.device == names.this_device && (span.start - start).abs() < 1.0);
         if end <= start || reported {
             continue;
@@ -813,70 +960,111 @@ fn client_rows(
     rows
 }
 
-/// The hours of the week on the asking clock, each as busy by the user's time in it and by their
-/// messages, and when each of the two is the most, as a sentence.
-fn hours(
-    done: &[Done],
-    together: &[(f64, f64)],
-    utc_offset_secs: i32,
-) -> (Vec<HourCell>, Option<String>, Option<String>) {
-    let mut cells: Vec<HourCell> = (0..168)
-        .map(|index| HourCell {
-            weekday: (index / 24) as u8,
-            hour: (index % 24) as u8,
-            messages: 0,
-            turns: 0,
-            engaged_seconds: 0.0,
-            time: String::new(),
-            time_level: 0,
-            message_level: 0,
-        })
-        .collect();
-    for hour in done.iter().flat_map(|done| &done.report.hours) {
-        let Some(cell) = cells.get_mut(usize::from(hour.weekday) * 24 + usize::from(hour.hour)) else { continue };
-        cell.messages += hour.messages;
-        cell.turns += hour.turns;
-    }
-    for (start, end) in together {
-        split(*start, *end, -f64::from(utc_offset_secs), 3600.0, |hour, seconds| {
-            // The first of January 1970 was a Thursday.
-            let weekday = (hour.div_euclid(24) + 3).rem_euclid(7);
-            cells[(weekday * 24 + hour.rem_euclid(24)) as usize].engaged_seconds += seconds;
-        });
-    }
-    for cell in cells.iter_mut().filter(|cell| cell.engaged_seconds >= 60.0) {
-        cell.time = duration(cell.engaged_seconds);
-    }
-    let time = |cell: &HourCell| if cell.engaged_seconds >= 60.0 { cell.engaged_seconds.round() } else { 0.0 };
-    let messages = |cell: &HourCell| f64::from(cell.messages);
-    let levels: Vec<(u8, u8)> =
-        cells.iter().map(|cell| (level(&cells, time, cell), level(&cells, messages, cell))).collect();
-    for (cell, (time_level, message_level)) in cells.iter_mut().zip(levels) {
-        cell.time_level = time_level;
-        cell.message_level = message_level;
-    }
-    let busiest_time = busiest(&cells, time, "You're in Motile the most");
-    let busiest_messages = busiest(&cells, messages, "You send the most messages");
-    (cells, busiest_time, busiest_messages)
+/// What was done in a cell of the heatmap, or in an hour of the week.
+#[derive(Clone, Copy, Default)]
+struct Tally {
+    messages: u32,
+    turns: u32,
+    engaged_seconds: f64,
 }
 
-/// How busy a cell is by `weight` next to the busiest, from 0, nothing, to 4.
-fn level(cells: &[HourCell], weight: impl Fn(&HourCell) -> f64, cell: &HourCell) -> u8 {
-    let most = cells.iter().map(&weight).fold(0.0, f64::max);
-    let value = weight(cell);
+impl Tally {
+    /// The user's time in it, once it is a minute.
+    fn time(&self) -> f64 {
+        if self.engaged_seconds >= 60.0 { self.engaged_seconds.round() } else { 0.0 }
+    }
+}
+
+/// The heatmap of `grid`, and when the user is in the clients and sends messages the most, as
+/// sentences: in its hours for a day, or in the hours of the week for longer.
+fn heatmap(hours: &[&HourBucket], together: &[(f64, f64)], grid: &Grid) -> (Heatmap, Option<String>, Option<String>) {
+    let until = grid.start(grid.filled);
+    let mut slices = vec![Tally::default(); grid.filled];
+    let mut week = [Tally::default(); 168];
+    for hour in hours {
+        let Some(start) = hour.start.filter(|start| (grid.since..until).contains(start)) else { continue };
+        let slice = &mut slices[((start - grid.since) / grid.slice_secs) as usize];
+        slice.messages += hour.messages;
+        slice.turns += hour.turns;
+        week[grid.hour_of_week(start)].messages += hour.messages;
+    }
+    for (start, end) in together {
+        let (start, end) = (start.max(grid.since), end.min(until));
+        split(start, end, grid.since, grid.slice_secs, |slice, seconds| {
+            if let Some(slice) = usize::try_from(slice).ok().and_then(|slice| slices.get_mut(slice)) {
+                slice.engaged_seconds += seconds;
+            }
+        });
+        split(start, end, grid.since, HOUR, |hour, seconds| {
+            week[grid.hour_of_week(grid.since + hour as f64 * HOUR)].engaged_seconds += seconds;
+        });
+    }
+
+    let most = |weight: fn(&Tally) -> f64| slices.iter().map(weight).fold(0.0, f64::max);
+    let (most_time, most_messages) = (most(Tally::time), most(|slice| f64::from(slice.messages)));
+    let mut cells: Vec<Option<HeatCell>> = (0..grid.rows * grid.columns * grid.parts).map(|_| None).collect();
+    for (index, slice) in slices.iter().enumerate() {
+        cells[grid.position(index)] = Some(HeatCell {
+            label: grid.label(index),
+            messages: slice.messages,
+            turns: slice.turns,
+            engaged_seconds: slice.engaged_seconds,
+            time: if slice.time() > 0.0 { duration(slice.time()) } else { String::new() },
+            time_level: level(slice.time(), most_time),
+            message_level: level(f64::from(slice.messages), most_messages),
+        });
+    }
+    let heatmap = Heatmap {
+        rows: grid.rows(),
+        columns: grid.columns * grid.parts,
+        axis: grid.axis(),
+        cells,
+        unit: match grid.slice_secs {
+            DAY => "a day",
+            HOUR => "an hour",
+            _ => "four hours",
+        }
+        .into(),
+    };
+
+    let when: Vec<(String, Tally)> = match grid.calendar {
+        false => slices
+            .iter()
+            .enumerate()
+            .map(|(slice, tally)| {
+                let start = grid.start(slice);
+                (format!("on {} around {}", grid.format(start, "%A"), clock(grid.hour(start))), *tally)
+            })
+            .collect(),
+        true => week
+            .iter()
+            .enumerate()
+            .map(|(index, tally)| (format!("on {} around {}", WEEKDAYS[index / 24], clock((index % 24) as u8)), *tally))
+            .collect(),
+    };
+    let busiest_time = busiest(&when, Tally::time, "You're in Motile the most");
+    let busiest_messages = busiest(&when, |tally| f64::from(tally.messages), "You send the most messages");
+    (heatmap, busiest_time, busiest_messages)
+}
+
+/// How busy `value` is next to `most`, from 0, nothing, to 4.
+fn level(value: f64, most: f64) -> u8 {
     if most == 0.0 || value == 0.0 {
         return 0;
     }
     (value / most * 4.0).ceil().clamp(1.0, 4.0) as u8
 }
 
-/// "<what> on Wednesdays around 5 pm", of the busiest cell by `weight`, the earliest of a tie.
-fn busiest(cells: &[HourCell], weight: impl Fn(&HourCell) -> f64, what: &str) -> Option<String> {
-    let cell = cells.iter().filter(|cell| weight(cell) > 0.0).fold(None::<&HourCell>, |best, cell| match best {
-        Some(best) if weight(best) >= weight(cell) => Some(best),
-        _ => Some(cell),
-    })?;
-    Some(format!("{what} on {} around {}", WEEKDAYS[usize::from(cell.weekday)], clock(cell.hour)))
+/// "<what> on Wednesdays around 5 PM", of the busiest by `weight`, the earliest of a tie.
+fn busiest(when: &[(String, Tally)], weight: fn(&Tally) -> f64, what: &str) -> Option<String> {
+    let (phrase, _) = when.iter().filter(|(_, tally)| weight(tally) > 0.0).fold(
+        None::<&(String, Tally)>,
+        |best, entry| match best {
+            Some(best) if weight(&best.1) >= weight(&entry.1) => Some(best),
+            _ => Some(entry),
+        },
+    )?;
+    Some(format!("{what} {phrase}"))
 }
 
 fn facts(turns: &[(&str, &TurnBucket)], messages: &[&&ActionBucket], turn_count: u32) -> Vec<Fact> {
@@ -939,7 +1127,7 @@ fn feature_groups(actions: &[&ActionBucket]) -> Vec<FeatureGroup> {
         let Some(feature) = features::find(&line.id) else { continue };
         let name = feature.group.label().to_string();
         let index = groups.iter().position(|group| group.name == name).unwrap_or_else(|| {
-            groups.push(FeatureGroup { name, count: 0, features: Vec::new() });
+            groups.push(FeatureGroup { name, count: 0, features: Vec::new(), column: 0 });
             groups.len() - 1
         });
         groups[index].count += line.count;
@@ -950,6 +1138,12 @@ fn feature_groups(actions: &[&ActionBucket]) -> Vec<FeatureGroup> {
         group.features.iter_mut().for_each(|line| line.share = f64::from(line.count) / f64::from(most));
     }
     groups.sort_by(|a, b| b.count.cmp(&a.count).then(a.name.cmp(&b.name)));
+    let mut heights = [0usize; 2];
+    for group in &mut groups {
+        group.column = u8::from(heights[1] < heights[0]);
+        // The header is about a row and a half.
+        heights[usize::from(group.column)] += 3 + 2 * group.features.len();
+    }
     groups
 }
 
@@ -1094,22 +1288,48 @@ pub fn duration(seconds: f64) -> String {
     }
 }
 
+/// "12 AM", "6 AM", "12 PM", "6 PM".
+fn hour_label(hour: u8) -> String {
+    let (number, half) = twelve_hour(hour);
+    format!("{number} {half}")
+}
+
+/// "5–6 PM" for `hours` from `hour`, or "8 AM–12 PM" across noon or midnight.
+fn hour_range(hour: u8, hours: u8) -> String {
+    let end = (hour + hours) % 24;
+    let (from, to) = (twelve_hour(hour), twelve_hour(end));
+    match from.1 == to.1 {
+        true => format!("{}–{} {}", from.0, to.0, to.1),
+        false => format!("{}–{}", hour_label(hour), hour_label(end)),
+    }
+}
+
+fn twelve_hour(hour: u8) -> (u8, &'static str) {
+    let half = if hour < 12 { "AM" } else { "PM" };
+    match hour % 12 {
+        0 => (12, half),
+        number => (number, half),
+    }
+}
+
 fn clock(hour: u8) -> String {
     match hour {
         0 => "midnight".into(),
         12 => "noon".into(),
-        1..12 => format!("{hour} am"),
-        _ => format!("{} pm", hour - 12),
+        _ => hour_label(hour),
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use motile_protocol::wire::{ClientInfo, HourBucket};
+    use motile_protocol::wire::ClientInfo;
 
     use super::*;
 
-    const DAY: f64 = 86_400.0;
+    /// The heatmap's cells for `window` on its last hour.
+    fn grid(window: &Window) -> Grid {
+        Grid::of(window, window.until - 1.0)
+    }
 
     fn client(device: &str, kind: ClientKind, system: &str, form: ClientForm) -> ClientRecord {
         ClientRecord {
@@ -1201,14 +1421,21 @@ mod tests {
                 action(DAY, Actor::User, Some("phone"), "thread.new", "local", 1),
                 action(DAY, Actor::Agent, None, "agent.start_agent", "", 2),
             ],
-            hours: vec![HourBucket { weekday: 1, hour: 15, messages: 4, turns: 6, seconds: 780.0 }],
+            hours: vec![HourBucket {
+                start: Some(DAY + 15.0 * HOUR),
+                weekday: 4,
+                hour: 15,
+                messages: 4,
+                turns: 6,
+                seconds: 780.0,
+            }],
             clients: vec![
                 client("mac", ClientKind::Mac, "macos", ClientForm::Desktop),
                 client("phone", ClientKind::Ios, "ios", ClientForm::Phone),
             ],
             ..ActivityReport::default()
         };
-        let view = view(&[Done { server_id: "studio".into(), report }], window, &names(), &[], true);
+        let view = view(&[Done { server_id: "studio".into(), report }], window, grid(&window), &names(), &[], true);
 
         let tiles: Vec<_> =
             view.tiles.iter().map(|tile| (tile.label.as_str(), tile.value.as_str(), tile.detail.as_str())).collect();
@@ -1249,10 +1476,11 @@ mod tests {
             .collect();
         assert_eq!(clients, [("Studio Mac", "Mac app · macOS", 3, true), ("Pocket", "iOS app · iOS", 1, false)]);
         assert_eq!(view.clients[0].detail, "Version 0.1.9 · Direct · 20 ms");
-        assert_eq!(view.busiest_messages.as_deref(), Some("You send the most messages on Tuesdays around 3 pm"));
+        assert_eq!(view.busiest_messages.as_deref(), Some("You send the most messages on Friday around 3 PM"));
         assert_eq!(view.busiest_time, None);
-        assert_eq!(view.hours.iter().filter(|cell| cell.message_level == 4).count(), 1);
-        assert!(view.hours.iter().all(|cell| cell.time_level == 0));
+        let busy = view.heatmap.cells[24 + 15].as_ref().unwrap();
+        assert_eq!((busy.label.as_str(), busy.messages, busy.message_level), ("Fri, Jan 2, 3–4 PM", 4, 4));
+        assert!(view.heatmap.cells.iter().flatten().all(|cell| cell.time_level == 0));
         assert_eq!(view.projects[0].name, "Motile");
         assert_eq!(view.features[0].features[0].label, "Messages sent");
         assert_eq!(view.features[0].features[0].detail, "3 replies · 1 new threads");
@@ -1282,7 +1510,7 @@ mod tests {
             Done { server_id: "studio".into(), report: report(ClientRecord { connected: true, ..phone.clone() }) },
             Done { server_id: "attic".into(), report: report(ClientRecord { seen_at: 90.0, ..phone }) },
         ];
-        let view = view(&done, window, &names(), &[], true);
+        let view = view(&done, window, grid(&window), &names(), &[], true);
 
         let mut active: Vec<_> =
             view.clients.iter().map(|row| (row.device.as_str(), row.active, row.last_seen)).collect();
@@ -1306,7 +1534,7 @@ mod tests {
             ..ActivityReport::default()
         };
         let colors = |report: ActivityReport| -> Vec<(String, u8)> {
-            let view = view(&[Done { server_id: "studio".into(), report }], window, &names(), &[], true);
+            let view = view(&[Done { server_id: "studio".into(), report }], window, grid(&window), &names(), &[], true);
             let mut colors: Vec<_> = view.sources.into_iter().map(|source| (source.label, source.color)).collect();
             colors.sort();
             colors
@@ -1335,7 +1563,7 @@ mod tests {
             clients: vec![client("mac", ClientKind::Mac, "macos", ClientForm::Desktop)],
             ..ActivityReport::default()
         };
-        let view = view(&[Done { server_id: "studio".into(), report }], window, &names(), &[], true);
+        let view = view(&[Done { server_id: "studio".into(), report }], window, grid(&window), &names(), &[], true);
         let sources: Vec<_> =
             view.sources.iter().map(|source| (source.label.as_str(), source.turns, source.seconds)).collect();
         assert_eq!(sources, [("Agents", 2, 15.0), ("Subagents", 4, 450.0)]);
@@ -1356,7 +1584,7 @@ mod tests {
             ],
             ..ActivityReport::default()
         };
-        let view = view(&[Done { server_id: "studio".into(), report }], window, &names(), &[], true);
+        let view = view(&[Done { server_id: "studio".into(), report }], window, grid(&window), &names(), &[], true);
         let shares: Vec<_> = view.clients.iter().map(|row| (row.name.as_str(), row.share)).collect();
         assert_eq!(shares, [("Studio Mac", 0.75), ("Pocket", 0.25)]);
     }
@@ -1376,7 +1604,7 @@ mod tests {
             ],
             ..ActivityReport::default()
         };
-        let view = view(&[Done { server_id: "studio".into(), report }], window, &names(), &[], true);
+        let view = view(&[Done { server_id: "studio".into(), report }], window, grid(&window), &names(), &[], true);
         let mut summaries: Vec<_> = view.clients.iter().map(|row| row.summary.as_str()).collect();
         summaries.sort();
         assert_eq!(summaries, ["1 message (33%)", "1 message (33%)", "1 message (34%)"]);
@@ -1418,7 +1646,7 @@ mod tests {
         }];
         let done = [Done { server_id: "studio".into(), report }];
 
-        let shown = view(&done, window, &names(), &local, true);
+        let shown = view(&done, window, grid(&window), &names(), &local, true);
         assert_eq!(shown.tiles[0].value, "1h 40m");
         assert_eq!(shown.tiles[0].detail, "Since Jan 2 · agents 6× as long");
         assert_eq!(shown.engaged_ticks, [0.0, 3_600.0, 7_200.0, 10_800.0]);
@@ -1427,19 +1655,99 @@ mod tests {
         let clients: Vec<_> = shown.clients.iter().map(|row| (row.name.as_str(), row.summary.as_str())).collect();
         assert_eq!(clients, [("Studio Mac", "1h 10m (54%)"), ("Pocket", "1h (46%)")]);
         assert_eq!(shown.projects[0].detail, "You 2h · Agents 12h");
-        assert_eq!(shown.busiest_time.as_deref(), Some("You're in Motile the most on Fridays around 10 am"));
-        let friday = |hour: usize| shown.hours[4 * 24 + hour].time.as_str();
+        assert_eq!(shown.busiest_time.as_deref(), Some("You're in Motile the most on Friday around 10 AM"));
+        let friday = |hour: usize| shown.heatmap.cells[24 + hour].as_ref().unwrap().time.as_str();
         assert_eq!((friday(10), friday(11)), ("1h", "40m"));
 
-        let one_server = view(&done, window, &names(), &[], false);
+        let one_server = view(&done, window, grid(&window), &names(), &[], false);
         assert_eq!(one_server.tiles[0].value, "1h 30m");
+    }
+
+    #[test]
+    fn the_heatmap_has_the_hours_of_a_day_or_the_days_of_weeks_split_into_hours() {
+        // Thursday, November 12 2026, 3:46 am.
+        let now = 1_794_455_160.0;
+        let shape = |bucket_secs: u32, buckets: u32| {
+            let window = Window::ending(now, bucket_secs, buckets, 0);
+            let done = [Done {
+                server_id: "studio".into(),
+                report: ActivityReport {
+                    actions: vec![action(window.since, Actor::User, Some("mac"), "message", "reply", 1)],
+                    hours: vec![HourBucket {
+                        start: Some(now - 46.0 * 60.0),
+                        weekday: 3,
+                        hour: 3,
+                        messages: 2,
+                        turns: 0,
+                        seconds: 0.0,
+                    }],
+                    ..ActivityReport::default()
+                },
+            }];
+            view(&done, window, Grid::of(&window, now), &names(), &[], true).heatmap
+        };
+        let axis = |heatmap: &Heatmap| -> Vec<(usize, String)> {
+            heatmap.axis.iter().map(|label| (label.column, label.label.clone())).collect()
+        };
+        let label = |heatmap: &Heatmap, index: usize| heatmap.cells[index].as_ref().map(|cell| cell.label.clone());
+
+        let day = shape(3600, 24);
+        assert_eq!((day.rows.len(), day.columns, day.cells.len(), day.unit.as_str()), (0, 24, 24, "an hour"));
+        assert_eq!(axis(&day), [(2, "6 AM".into()), (8, "12 PM".into()), (14, "6 PM".into()), (20, "12 AM".into())]);
+        assert_eq!(day.cells[23].as_ref().unwrap().messages, 2);
+
+        let week = shape(86_400, 7);
+        assert_eq!(week.rows, ["Fri 6", "Sat 7", "Sun 8", "Mon 9", "Tue 10", "Wed 11", "Thu 12"]);
+        assert_eq!((week.columns, week.unit.as_str()), (24, "an hour"));
+        assert_eq!(axis(&week), [(0, "12 AM".into()), (6, "6 AM".into()), (12, "12 PM".into()), (18, "6 PM".into())]);
+        assert_eq!(label(&week, 6 * 24 + 3), Some("Thu, Nov 12, 3–4 AM".into()));
+        assert_eq!(week.cells[6 * 24 + 3].as_ref().unwrap().messages, 2);
+        assert_eq!(label(&week, 6 * 24 + 4), None);
+
+        let month = shape(86_400, 30);
+        assert_eq!(month.rows, ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]);
+        assert_eq!((month.columns, month.unit.as_str()), (5 * 6, "four hours"));
+        let mondays = ["Oct 12", "Oct 19", "Oct 26", "Nov 2", "Nov 9"];
+        let expected: Vec<(usize, String)> =
+            mondays.iter().enumerate().map(|(week, day)| (week * 6, day.to_string())).collect();
+        assert_eq!(axis(&month), expected);
+        let thursday = |heatmap: &Heatmap, column: usize| 3 * heatmap.columns + column;
+        assert_eq!(label(&month, thursday(&month, 24)), Some("Thu, Nov 12, 12–4 AM".into()));
+        assert_eq!(month.cells[thursday(&month, 24)].as_ref().unwrap().messages, 2);
+        assert_eq!(label(&month, thursday(&month, 25)), None);
+        assert_eq!(label(&month, thursday(&month, 23)), Some("Thu, Nov 5, 8 PM–12 AM".into()));
+
+        let quarter = shape(86_400, 90);
+        assert_eq!((quarter.columns, quarter.unit.as_str()), (13, "a day"));
+        assert_eq!(quarter.cells.iter().flatten().count(), 12 * 7 + 4);
+        assert_eq!(label(&quarter, thursday(&quarter, 12)), Some("Thu, Nov 12".into()));
+        assert_eq!(quarter.cells[thursday(&quarter, 12)].as_ref().unwrap().messages, 2);
+        assert_eq!(axis(&quarter).first(), Some(&(0, "Aug 17".into())));
+        assert_eq!(axis(&quarter).len(), 7);
+    }
+
+    #[test]
+    fn each_group_of_features_goes_in_the_shorter_column() {
+        let use_ = |feature: &str, count: u32| action(0.0, Actor::User, Some("mac"), feature, "", count);
+        let actions = [
+            ["message", "thread.new", "thread.archive", "search", "approval", "file.upload"]
+                .map(|feature| use_(feature, 50))
+                .to_vec(),
+            vec![use_("git.worktree", 30), use_("git.pull", 1)],
+            vec![use_("pull_request.merge", 20)],
+            vec![use_("git.commit", 5)],
+        ]
+        .concat();
+        let groups = feature_groups(&actions.iter().collect::<Vec<_>>());
+        let columns: Vec<_> = groups.iter().map(|group| (group.name.as_str(), group.column)).collect();
+        assert_eq!(columns, [("Threads", 0), ("Git", 1), ("Pull requests", 1)]);
     }
 
     #[test]
     fn nothing_done_is_an_empty_view() {
         let window = Window { since: 0.0, until: DAY, bucket_secs: 3600, utc_offset_secs: 0 };
         let done = [Done { server_id: "studio".into(), report: ActivityReport::default() }];
-        let view = view(&done, window, &names(), &[], true);
+        let view = view(&done, window, grid(&window), &names(), &[], true);
         assert!(view.empty);
         assert_eq!(view.starts.len(), 24);
     }
@@ -1459,6 +1767,9 @@ mod tests {
             ["42s", "10m", "1h", "1h 30m", "111h"]
         );
         assert_eq!(number(1_234_567), "1,234,567");
-        assert_eq!(clock(15), "3 pm");
+        assert_eq!(
+            [clock(15), clock(0), hour_range(11, 1), hour_range(0, 4), hour_range(20, 4)],
+            ["3 PM", "midnight", "11 AM–12 PM", "12–4 AM", "8 PM–12 AM"]
+        );
     }
 }

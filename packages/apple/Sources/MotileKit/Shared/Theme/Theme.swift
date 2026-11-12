@@ -114,7 +114,7 @@ enum Theme {
     }
 
     // Layout
-    /// The widest the transcript gets.
+    /// The widest a page's content gets: the transcript's, the settings' and the usage's.
     static let contentWidth: CGFloat = 768
     static let contentPadding: CGFloat = Platform.scale > 1 ? 16 : 38
     /// How far the composer reaches past the transcript on each side.

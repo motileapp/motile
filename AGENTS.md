@@ -672,6 +672,9 @@ redone for its versions in `patches/crates`; the script refuses a patch that `Ca
   style a control by hand; what is missing is added to the component. A button inside something is
   as far from its top and bottom as from its side. A button that waits is `pending`: it shows the
   spinner, or turns its arrow if its symbol `turns`, and a spinner is never followed by "…".
+- A gap between things of a kind side by side (a grid's cells, a chart's bars, segments, rows) is
+  only drawn. What each one hovers, clicks and taps on grows to meet its neighbours', so the pointer
+  never falls through between them.
 - Do not leave paragraphs of comments on top of the code. You should try to avoid them as much
   as possible with understandable function names and code. If they are necessary even then, make
   them concise. Remove such comments when you come by them in the codebase. Comments should

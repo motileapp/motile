@@ -14,8 +14,7 @@ use crate::ui::{ActionMenu, Switch, card_default, icons};
 pub const INSET: f32 = 14.;
 /// How tall a row is at least.
 pub const ROW_HEIGHT: f32 = 48.;
-/// How wide the groups are at most, however wide the window.
-pub const CONTENT_WIDTH: f32 = 640.;
+pub use crate::theme::CONTENT_WIDTH;
 /// The room around the page's groups, and under the last one.
 pub const PAGE_PADDING: f32 = 20.;
 pub const END_ROOM: f32 = 80.;

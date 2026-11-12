@@ -18,8 +18,6 @@ use crate::ui::menu::Menu;
 use crate::ui::parts::{Check, CheckMenu};
 use crate::ui::{ActionButton, ActionMenu, Segmented, Spinner, Variant, beside, text_width};
 
-/// How wide the content is at most.
-const CONTENT_WIDTH: f32 = 880.;
 const MARGIN: f32 = 24.;
 const TOP: f32 = 36.;
 const TRAILING: f32 = 14.;
@@ -227,7 +225,7 @@ impl UsageRoute {
 impl Render for UsageRoute {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let c = colors(cx);
-        let content_width = (self.width - 2. * MARGIN).clamp(0., CONTENT_WIDTH);
+        let content_width = (self.width - 2. * MARGIN).clamp(0., theme::CONTENT_WIDTH);
         let size = ControlSize::Regular;
         let store = self.store.clone();
         let back = ActionButton::new("usage-back", "Back")
@@ -289,7 +287,7 @@ impl Render for UsageRoute {
                             .px(px(MARGIN))
                             .pt(px(TOP))
                             .pb(px(80.))
-                            .child(div().w_full().max_w(px(CONTENT_WIDTH)).child(content)),
+                            .child(div().w_full().max_w(px(theme::CONTENT_WIDTH)).child(content)),
                     ),
                 ),
             )

@@ -42,7 +42,7 @@ struct ActivityView: View {
         var label: String { self == .you ? "You" : "Agents" }
     }
 
-    /// What the hours of the week are coloured by.
+    /// What the heatmap's cells are coloured by.
     enum HourMeasure: String, CaseIterable, Identifiable {
         case time, messages
 
@@ -267,7 +267,7 @@ struct ActivityView: View {
             ActivityHeading(title: "When you work", detail: hourMeasure == .time ? report.busiestTime : report.busiestMessages, stacked: true) {
                 Segmented(HourMeasure.allCases.map { ($0.label, $0) }, selection: $hourMeasure, fills: !beside)
             }
-            ActivityHeatmap(hours: report.hours, measure: hourMeasure)
+            ActivityHeatmap(heatmap: report.heatmap, measure: hourMeasure)
                 .padding(16)
                 .card()
         }
@@ -364,16 +364,27 @@ struct ActivityView: View {
             }
             switch current {
             case .you:
-                let columns = Array(repeating: GridItem(.flexible(), spacing: 12, alignment: .top), count: beside ? 2 : 1)
-                LazyVGrid(columns: columns, alignment: .leading, spacing: 12) {
-                    ForEach(report.features) { group in
-                        ActivityFeatureCard(title: group.name, count: group.count, features: group.features, maxHeight: listHeight)
+                if beside {
+                    HStack(alignment: .top, spacing: 12) {
+                        featureColumn(report.features.filter { $0.column == 0 })
+                        featureColumn(report.features.filter { $0.column == 1 })
                     }
+                } else {
+                    featureColumn(report.features)
                 }
             case .agents:
                 ActivityFeatureCard(title: "Motile tools", count: report.agentFeatures.reduce(0) { $0 + $1.count }, features: report.agentFeatures, maxHeight: listHeight)
             }
         }
+    }
+
+    private func featureColumn(_ groups: [ActivityReport.FeatureGroup]) -> some View {
+        VStack(spacing: 12) {
+            ForEach(groups) { group in
+                ActivityFeatureCard(title: group.name, count: group.count, features: group.features, maxHeight: listHeight)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .top)
     }
 
     // MARK: Colours and words
@@ -718,75 +729,102 @@ private struct ActivityBar: View {
     }
 }
 
-/// The hours of the week, a row a day, each as busy as its colour is strong. The hour the pointer
-/// is over, or the last one tapped, says what was done in it.
+/// When the work was done, each cell as busy as its colour is strong. The cell the pointer is over,
+/// or the last one tapped, says what was done in it. The gaps between the cells are only drawn:
+/// each cell's hit area reaches halfway into them.
 private struct ActivityHeatmap: View {
-    private static let days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
-    private static let weekdays = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
     private static let gap: CGFloat = 3
 
-    @Environment(\.colorScheme) private var scheme
     @Environment(\.surface) private var surface
-    let hours: [ActivityReport.Hour]
+    let heatmap: ActivityReport.Heatmap
     let measure: ActivityView.HourMeasure
-    @State private var chosen: ActivityReport.Hour?
+    @State private var chosen: Int?
     @State private var width: CGFloat = 0
 
-    private var labels: CGFloat { scaled(30) }
-    /// A cell's width, a 24th of what is beside the days' names.
-    private var side: CGFloat { max((width - labels - Self.gap * 24) / 24, 4) }
+    /// A cell and the gap after it.
+    private var pitch: CGFloat { (width + Self.gap) / CGFloat(max(heatmap.columns, 1)) }
+    private var cellHeight: CGFloat { min(max(pitch - Self.gap, 4), scaled(18)) }
     /// Small cells round less, so that they stay squares and don't turn into dots.
-    private var corner: CGFloat { min(Radius.xs, side / 4) }
+    private var corner: CGFloat { min(Radius.xs, min(pitch - Self.gap, cellHeight) / 4) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            VStack(alignment: .leading, spacing: Self.gap) {
-                ForEach(0..<7, id: \.self) { day in
-                    HStack(spacing: Self.gap) {
-                        Text(Self.days[day])
-                            .font(.ui(.xxs))
-                            .foregroundStyle(Color.themeMutedForeground)
-                            .frame(width: labels, alignment: .leading)
-                        ForEach(0..<24, id: \.self) { hour in
-                            cell(hours[safe: day * 24 + hour])
+            HStack(alignment: .top, spacing: 8) {
+                if !heatmap.rows.isEmpty {
+                    VStack(alignment: .leading, spacing: Self.gap) {
+                        ForEach(heatmap.rows.indices, id: \.self) { row in
+                            Text(heatmap.rows[row])
+                                .font(.ui(.xxs))
+                                .foregroundStyle(Color.themeMutedForeground)
+                                .lineLimit(1)
+                                .frame(height: cellHeight)
                         }
                     }
+                    .fixedSize()
                 }
-                // Each label spans six cells and the gaps between them, so the row is as wide as the cells'.
-                HStack(spacing: Self.gap) {
-                    Color.clear.frame(width: labels, height: 1)
-                    ForEach([0, 6, 12, 18], id: \.self) { hour in
-                        Text(Self.hourLabel(hour))
-                            .font(.ui(.xxs))
-                            .foregroundStyle(Color.themeMutedForeground)
-                            .lineLimit(1)
-                            .frame(width: side * 6 + Self.gap * 5, alignment: .leading)
-                    }
+                VStack(alignment: .leading, spacing: 6) {
+                    cells
+                    axis
                 }
-                .padding(.top, 2)
+                .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
+                .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
             }
-            .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
-            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
             caption
         }
     }
 
-    private func cell(_ hour: ActivityReport.Hour?) -> some View {
-        let isChosen = hour != nil && hour?.id == chosen?.id
-        return RoundedRectangle(cornerRadius: corner, style: .continuous)
-            .fill(fill(hour.map { measure == .time ? $0.timeLevel : $0.messageLevel } ?? 0))
-            .frame(width: side, height: min(side, scaled(18)))
-            .overlay {
-                if isChosen {
-                    RoundedRectangle(cornerRadius: corner, style: .continuous)
-                        .strokeBorder(Color.themeForeground, lineWidth: 1)
+    private var cells: some View {
+        VStack(spacing: 0) {
+            ForEach(0..<heatmap.rowCount, id: \.self) { row in
+                HStack(spacing: 0) {
+                    ForEach(0..<heatmap.columns, id: \.self) { column in
+                        cell(row * heatmap.columns + column)
+                    }
                 }
             }
-            .contentShape(Rectangle())
-            .onHover { inside in
-                if inside { chosen = hour } else if chosen?.id == hour?.id { chosen = nil }
+        }
+        .frame(width: width + Self.gap)
+        .padding(-Self.gap / 2)
+    }
+
+    @ViewBuilder private func cell(_ index: Int) -> some View {
+        let slot = CGSize(width: pitch, height: cellHeight + Self.gap)
+        if let cell = heatmap.cells[safe: index] ?? nil {
+            let isChosen = chosen == index
+            RoundedRectangle(cornerRadius: corner, style: .continuous)
+                .fill(fill(measure == .time ? cell.timeLevel : cell.messageLevel))
+                .overlay {
+                    if isChosen {
+                        RoundedRectangle(cornerRadius: corner, style: .continuous)
+                            .strokeBorder(Color.themeForeground, lineWidth: 1)
+                    }
+                }
+                .padding(Self.gap / 2)
+                .frame(width: slot.width, height: slot.height)
+                .contentShape(Rectangle())
+                .onHover { inside in
+                    if inside { chosen = index } else if chosen == index { chosen = nil }
+                }
+                .onTapGesture { chosen = isChosen ? nil : index }
+        } else {
+            Color.clear.frame(width: slot.width, height: slot.height)
+        }
+    }
+
+    /// Each label from the left edge of its column.
+    private var axis: some View {
+        ZStack(alignment: .topLeading) {
+            Text(verbatim: " ").font(.ui(.xxs)).hidden()
+            ForEach(heatmap.axis) { label in
+                Text(label.label)
+                    .font(.ui(.xxs))
+                    .foregroundStyle(Color.themeMutedForeground)
+                    .lineLimit(1)
+                    .fixedSize()
+                    .offset(x: CGFloat(label.column) * pitch)
             }
-            .onTapGesture { chosen = isChosen ? nil : hour }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func fill(_ level: Int) -> AnyShapeStyle {
@@ -799,7 +837,7 @@ private struct ActivityHeatmap: View {
         }
     }
 
-    /// What the chosen hour holds, or how to choose one, and the key to the colours: beside each
+    /// What the chosen cell holds, or how to choose one, and the key to the colours: beside each
     /// other, or the key under it where they don't fit.
     private var caption: some View {
         ViewThatFits(in: .horizontal) {
@@ -818,17 +856,16 @@ private struct ActivityHeatmap: View {
     }
 
     @ViewBuilder private var said: some View {
-        if let chosen {
-            let hour = Text("\(Self.weekdays[chosen.weekday]), \(Self.hourLabel(chosen.hour))–\(Self.hourLabel((chosen.hour + 1) % 24))")
-            let time = chosen.time.isEmpty ? [] : [Text(verbatim: chosen.time)]
-            Text(dotted: [hour] + time + [
-                Text(chosen.messages == 1 ? "1 message" : "\(chosen.messages.formatted()) messages"),
-                Text(chosen.turns == 1 ? "1 turn" : "\(chosen.turns.formatted()) turns"),
+        if let chosen, let cell = heatmap.cells[safe: chosen] ?? nil {
+            let time = cell.time.isEmpty ? [] : [Text(verbatim: cell.time)]
+            Text(dotted: [Text(verbatim: cell.label)] + time + [
+                Text(cell.messages == 1 ? "1 message" : "\(cell.messages.formatted()) messages"),
+                Text(cell.turns == 1 ? "1 turn" : "\(cell.turns.formatted()) turns"),
             ])
             .foregroundStyle(Color.themeMutedForeground)
             .fixedSize()
         } else {
-            Text(Platform.hoverReveals ? "Point at an hour to see what was done in it" : "Tap an hour to see what was done in it")
+            Text(verbatim: "\(Platform.hoverReveals ? "Point at" : "Tap") \(heatmap.unit) to see what was done in it")
                 .foregroundStyle(Color.themeMutedStrongerForeground)
                 .fixedSize()
         }
@@ -849,15 +886,6 @@ private struct ActivityHeatmap: View {
                 .padding(.leading, 3)
         }
         .fixedSize()
-    }
-
-    static func hourLabel(_ hour: Int) -> String {
-        switch hour {
-        case 0: "12 am"
-        case 12: "12 pm"
-        case 1..<12: "\(hour) am"
-        default: "\(hour - 12) pm"
-        }
     }
 }
 

@@ -3,9 +3,6 @@ import SwiftUI
 
 /// One section of the settings: its groups of rows, and the way to the group a search picked.
 struct SettingsPage: View {
-    /// How wide the groups are at most, however wide the window.
-    static let contentWidth: CGFloat = 640
-
     @Environment(AppStore.self) private var store
     let section: SettingsSection
     @AppStorage("appearance") private var appearance = Appearance.system
@@ -32,7 +29,7 @@ struct SettingsPage: View {
                     case .integrations: IntegrationSettings()
                     }
                 }
-                .frame(maxWidth: Self.contentWidth)
+                .frame(maxWidth: Theme.contentWidth)
                 .padding(.horizontal, 20)
                 .padding(.top, 20)
                 .padding(.bottom, 80)

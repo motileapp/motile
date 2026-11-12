@@ -477,7 +477,7 @@ pub const fn heading_size(level: u8) -> TextSize {
     }
 }
 
-/// The widest the transcript gets.
+/// The widest a page's content gets: the transcript's, the settings' and the usage's.
 pub const CONTENT_WIDTH: f32 = 768.;
 pub const CONTENT_PADDING: f32 = 38.;
 /// How far the composer reaches past the transcript on each side.

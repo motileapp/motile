@@ -43,7 +43,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.max
@@ -115,7 +114,7 @@ private enum class TurnBreakdown(val raw: String, val label: String) {
 
 private enum class Who(val raw: String, val label: String) { You("you", "You"), Agents("agents", "Agents") }
 
-/** What the hours of the week are coloured by. */
+/** What the heatmap's cells are coloured by. */
 private enum class HourMeasure(val raw: String, val label: String) { Time("time", "Time spent"), Messages("messages", "Messages sent") }
 
 private const val MEASURE_KEY = "activity.measure"
@@ -137,7 +136,7 @@ private fun Hours(report: ActivityReport, beside: Boolean) {
             Preferences.set(HOURS_KEY, it.raw)
         }, fills = !beside)
     }) {
-        Card(Modifier.fillMaxWidth()) { Heatmap(report.hours, measure, Modifier.padding(16.dp)) }
+        Card(Modifier.fillMaxWidth()) { Heatmap(report.heatmap, measure, Modifier.padding(16.dp)) }
     }
 }
 
@@ -149,7 +148,7 @@ private val Int.grouped: String get() = integers.format(this)
 
 /**
  * What the user and the agents did on the servers counted, the Activity tab: the headline numbers,
- * the work over time by where it came from, the clients it came from, the hours of the week, how
+ * the work over time by where it came from, the clients it came from, when the work was done, how
  * the turns went and the features used.
  */
 @Composable
@@ -445,10 +444,24 @@ private fun Features(report: ActivityReport, beside: Boolean) {
         }
     }) {
         when (current) {
-            Who.You -> Grid(report.features, if (beside) 2 else 1, 12.dp) { group, modifier ->
-                key(group.name) { FeatureCard(group.name, group.count, group.features, modifier) }
+            Who.You -> if (beside) {
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.Top) {
+                    FeatureColumn(report.features.filter { it.column == 0 }, Modifier.weight(1f))
+                    FeatureColumn(report.features.filter { it.column == 1 }, Modifier.weight(1f))
+                }
+            } else {
+                FeatureColumn(report.features, Modifier.fillMaxWidth())
             }
             Who.Agents -> FeatureCard("Motile tools", report.agentFeatures.sumOf { it.count }, report.agentFeatures, Modifier.fillMaxWidth())
+        }
+    }
+}
+
+@Composable
+private fun FeatureColumn(groups: List<ActivityReport.FeatureGroup>, modifier: Modifier) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        groups.forEach { group ->
+            key(group.name) { FeatureCard(group.name, group.count, group.features, Modifier.fillMaxWidth()) }
         }
     }
 }
@@ -510,19 +523,20 @@ private fun ActivityBar(share: Double, color: Color, modifier: Modifier) {
     }
 }
 
-private val days = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
-private val weekdays = listOf("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
 private val cellGap = 3.dp
 private val keySide = 10.dp
 
-/** The hours of the week, a row a day, each as busy as its colour is strong. The hour last tapped says what was done in it. */
+/**
+ * When the work was done, each cell as busy as its colour is strong. The cell last tapped says what
+ * was done in it. The gaps are only drawn: each cell's tap area reaches halfway into them.
+ */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun Heatmap(hours: List<ActivityReport.Hour>, measure: HourMeasure, modifier: Modifier) {
+private fun Heatmap(heatmap: ActivityReport.Heatmap, measure: HourMeasure, modifier: Modifier) {
     val palette = LocalPalette.current
     val density = LocalDensity.current
     val surface = LocalSurface.current
-    var chosen by remember(hours) { mutableStateOf<ActivityReport.Hour?>(null) }
+    var chosen by remember(heatmap) { mutableStateOf<Int?>(null) }
     val fills = listOf(
         surface.color(Surface.Layer.Control),
         palette.chart1.at(Opacity.ColorTintChart),
@@ -532,54 +546,60 @@ private fun Heatmap(hours: List<ActivityReport.Hour>, measure: HourMeasure, modi
     )
     val measurer = rememberTextMeasurer()
     val labelStyle = Theme.ui(TextSize.Xxs).copy(color = palette.mutedForeground)
-    val dayLabels = days.map { measurer.measure(it, labelStyle) }
-    val labels = scaled(30f).dp
+    val rowLabels = heatmap.rows.map { measurer.measure(it, labelStyle, maxLines = 1) }
+    val axisLabels = heatmap.axis.map { it.column to measurer.measure(it.label, labelStyle, maxLines = 1) }
+    val axisHeight = with(density) { measurer.measure(" ", labelStyle).size.height.toDp() }
+    val leading = with(density) { rowLabels.maxOfOrNull { it.size.width }?.toDp()?.plus(8.dp) ?: 0.dp }
+    // The canvas reaches half a gap past each side, so that the slots, each a cell and half the gaps around it, start at its edge.
+    val reach = cellGap / 2
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         BoxWithConstraints(Modifier.fillMaxWidth()) {
-            val side = max((maxWidth - labels - cellGap * 24) / 24, 4.dp)
-            val cell = min(side, scaled(18f).dp)
-            val corner = min(Radius.xs, side / 4)
-            val span = with(density) { (side * 6 + cellGap * 5).roundToPx() }
-            val hourLabels = listOf(0, 6, 12, 18).map {
-                measurer.measure(hourLabel(it), labelStyle, overflow = TextOverflow.Ellipsis, maxLines = 1, constraints = Constraints(maxWidth = span))
-            }
-            val hourHeight = with(density) { (hourLabels.maxOfOrNull { it.size.height } ?: 0).toDp() }
+            val pitch = (maxWidth - leading + cellGap) / maxOf(heatmap.columns, 1)
+            val cellWidth = max(pitch - cellGap, 1.dp)
+            val cellHeight = min(max(cellWidth, 4.dp), scaled(18f).dp)
+            // Small cells round less, so that they don't turn into dots.
+            val corner = min(Radius.xs, min(cellWidth, cellHeight) / 4)
+            val gridHeight = (cellHeight + cellGap) * heatmap.rowCount - cellGap
             Canvas(
                 Modifier
                     .fillMaxWidth()
-                    .height(cell * 7 + cellGap * 7 + 2.dp + hourHeight)
-                    .pointerInput(hours, side, cell) {
+                    .height(max(gridHeight, 0.dp) + 6.dp + axisHeight)
+                    .reaching(reach, reach, reach, reach)
+                    .pointerInput(heatmap, pitch, cellHeight, leading) {
                         detectTapGestures { at ->
-                            val column = ((at.x - (labels + cellGap).toPx()) / (side + cellGap).toPx()).toInt()
-                            val row = (at.y / (cell + cellGap).toPx()).toInt()
-                            if (at.x < (labels + cellGap).toPx() || column !in 0 until 24 || row !in 0 until 7) return@detectTapGestures
-                            val hour = hours.getOrNull(row * 24 + column) ?: return@detectTapGestures
-                            chosen = if (chosen?.id == hour.id) null else hour
+                            val (x, y) = at.x - leading.toPx() to at.y
+                            if (x < 0 || y < 0) return@detectTapGestures
+                            val column = (x / pitch.toPx()).toInt()
+                            val row = (y / (cellHeight + cellGap).toPx()).toInt()
+                            if (column >= heatmap.columns || row >= heatmap.rowCount) return@detectTapGestures
+                            val index = row * heatmap.columns + column
+                            if (heatmap.cells.getOrNull(index) == null) return@detectTapGestures
+                            chosen = if (chosen == index) null else index
                         }
                     },
             ) {
-                val (sidePx, cellPx, gapPx) = Triple(side.toPx(), cell.toPx(), cellGap.toPx())
-                val start = labels.toPx() + gapPx
+                val origin = reach.toPx()
+                val (pitchPx, cellPx, gapPx) = Triple(pitch.toPx(), cellHeight.toPx(), cellGap.toPx())
+                val start = origin + leading.toPx()
+                val cellSize = Size(cellWidth.toPx(), cellPx)
                 val radius = CornerRadius(corner.toPx())
-                for (day in 0 until 7) {
-                    val y = day * (cellPx + gapPx)
-                    val label = dayLabels[day]
-                    drawText(label, topLeft = Offset(0f, y + (cellPx - label.size.height) / 2))
-                    for (hour in 0 until 24) {
-                        val cellHour = hours.getOrNull(day * 24 + hour)
-                        val topLeft = Offset(start + hour * (sidePx + gapPx), y)
-                        drawRoundRect(fills[(cellHour?.let { if (measure == HourMeasure.Time) it.timeLevel else it.messageLevel } ?: 0).coerceIn(0, 4)], topLeft, Size(sidePx, cellPx), radius)
-                        if (cellHour == null || cellHour.id != chosen?.id) continue
-                        val stroke = 1.dp.toPx()
-                        drawRoundRect(
-                            palette.foreground, topLeft + Offset(stroke / 2, stroke / 2), Size(sidePx - stroke, cellPx - stroke), radius, style = Stroke(stroke),
-                        )
-                    }
+                val stroke = 1.dp.toPx()
+                rowLabels.forEachIndexed { row, label ->
+                    drawText(label, topLeft = Offset(origin, origin + row * (cellPx + gapPx) + (cellPx - label.size.height) / 2))
                 }
-                val labelsTop = 7 * (cellPx + gapPx) + 2.dp.toPx()
-                hourLabels.forEachIndexed { index, label ->
-                    drawText(label, topLeft = Offset(start + index * 6 * (sidePx + gapPx), labelsTop))
+                heatmap.cells.forEachIndexed { index, cell ->
+                    if (cell == null) return@forEachIndexed
+                    val left = start + index % heatmap.columns * pitchPx
+                    val topLeft = Offset(left, origin + index / heatmap.columns * (cellPx + gapPx))
+                    val level = if (measure == HourMeasure.Time) cell.timeLevel else cell.messageLevel
+                    drawRoundRect(fills[level.coerceIn(0, 4)], topLeft, cellSize, radius)
+                    if (index != chosen) return@forEachIndexed
+                    drawRoundRect(
+                        palette.foreground, topLeft + Offset(stroke / 2, stroke / 2), Size(cellSize.width - stroke, cellPx - stroke), radius, style = Stroke(stroke),
+                    )
                 }
+                val axisTop = origin + gridHeight.toPx() + 6.dp.toPx()
+                axisLabels.forEach { (column, label) -> drawText(label, topLeft = Offset(start + column * pitchPx, axisTop)) }
             }
         }
         FlowRow(
@@ -587,14 +607,13 @@ private fun Heatmap(hours: List<ActivityReport.Hour>, measure: HourMeasure, modi
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            val shown = chosen
+            val shown = chosen?.let { heatmap.cells.getOrNull(it) }
             val said = Modifier.padding(end = 8.dp).align(Alignment.CenterVertically)
             if (shown != null) {
-                val hour = "${weekdays[shown.weekday]}, ${hourLabel(shown.hour)}–${hourLabel((shown.hour + 1) % 24)}"
-                val text = listOf(hour, shown.time, messages(shown.messages), turns(shown.turns)).filter { it.isNotEmpty() }.joinToString(" · ")
+                val text = listOf(shown.label, shown.time, messages(shown.messages), turns(shown.turns)).filter { it.isNotEmpty() }.joinToString(" · ")
                 Text(dotted(text, palette.mutedStrongerForeground), said, style = Theme.uiDigits(TextSize.Xxs), color = palette.mutedForeground)
             } else {
-                Text("Tap an hour to see what was done in it", said, size = TextSize.Xxs, color = palette.mutedStrongerForeground)
+                Text("Tap ${heatmap.unit} to see what was done in it", said, size = TextSize.Xxs, color = palette.mutedStrongerForeground)
             }
             Row(Modifier.align(Alignment.CenterVertically), horizontalArrangement = Arrangement.spacedBy(cellGap), verticalAlignment = Alignment.CenterVertically) {
                 Text("Less", Modifier.padding(end = 3.dp), size = TextSize.Xxs, color = palette.mutedForeground, maxLines = 1)
@@ -633,13 +652,6 @@ private fun turns(count: Int): String = if (count == 1) "1 turn" else "${count.g
 /** The time pointed at, in the legend: the weekday and the hour over a day, the weekday and the date otherwise. */
 private fun pointedTime(seconds: Double, period: UsageModel.Period): String =
     formatted(seconds, if (period == UsageModel.Period.Day) "EEEEj" else "EEEEMMMMd")
-
-private fun hourLabel(hour: Int): String = when (hour) {
-    0 -> "12 am"
-    12 -> "12 pm"
-    in 1 until 12 -> "$hour am"
-    else -> "${hour - 12} pm"
-}
 
 private fun activityDuration(value: Double): String {
     val seconds = Math.round(maxOf(value, 0.0)).toInt()
