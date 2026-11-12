@@ -93,6 +93,13 @@ private enum class ActivityMeasure(val raw: String, val label: String) {
         Time -> source.seconds
     }
 
+    fun percent(source: ActivityReport.Source): Int = when (this) {
+        Messages -> source.messagePercent
+        Turns -> source.turnPercent
+        Yours -> source.engagedPercent
+        Time -> source.secondPercent
+    }
+
     /** The lines of a chart of durations, where people count time; null leaves a count's to the chart. */
     fun ticks(report: ActivityReport): List<Double>? = when (this) {
         Yours -> report.engagedTicks
@@ -265,8 +272,9 @@ private fun OverTime(report: ActivityReport, period: UsageModel.Period, beside: 
                             Dot(palette.chart(source.color))
                             Icon(source.symbol, IconSize.Xs, color = palette.mutedForeground)
                             Text(source.label, size = TextSize.Xs, color = palette.foreground, maxLines = 1)
-                            val value = index?.let { measure.points(source).getOrElse(it) { 0.0 } } ?: measure.total(source)
-                            Text(measure.amount(value), style = Theme.uiDigits(TextSize.Xs), color = palette.mutedForeground, maxLines = 1)
+                            val amount = index?.let { measure.amount(measure.points(source).getOrElse(it) { 0.0 }) }
+                                ?: "${measure.amount(measure.total(source))} (${measure.percent(source)}%)"
+                            Text(amount, style = Theme.uiDigits(TextSize.Xs), color = palette.mutedForeground, maxLines = 1)
                         }
                     }
                 }
