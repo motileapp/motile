@@ -140,6 +140,11 @@ pub struct ActivitySource {
     /// The user's time on its devices.
     pub engaged_seconds: f64,
     pub engaged_points: Vec<f64>,
+    /// Its share of each total, in whole percentages that add up to 100 across the sources.
+    pub message_percent: u32,
+    pub turn_percent: u32,
+    pub second_percent: u32,
+    pub engaged_percent: u32,
 }
 
 #[derive(Clone, PartialEq, Debug, Deserialize)]

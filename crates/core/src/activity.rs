@@ -92,6 +92,11 @@ pub struct Source {
     /// The user's time on its devices.
     pub engaged_seconds: f64,
     pub engaged_points: Vec<f64>,
+    /// Its share of each total, as whole percentages that add up to 100 across the sources.
+    pub message_percent: u32,
+    pub turn_percent: u32,
+    pub second_percent: u32,
+    pub engaged_percent: u32,
 }
 
 #[derive(Serialize, Debug, PartialEq)]
@@ -539,6 +544,11 @@ pub fn view(done: &[Done], window: Window, grid: Grid, names: &Names, local: &[S
     sources.sort_by(|(a, x), (b, y)| {
         a.rank().cmp(&b.rank()).then((y.messages + y.turns).cmp(&(x.messages + x.turns))).then(x.label.cmp(&y.label))
     });
+    let mut sources: Vec<Source> = sources.into_iter().map(|(_, source)| source).collect();
+    share_out(&mut sources, |source| f64::from(source.messages), |source, percent| source.message_percent = percent);
+    share_out(&mut sources, |source| f64::from(source.turns), |source, percent| source.turn_percent = percent);
+    share_out(&mut sources, |source| source.seconds, |source, percent| source.second_percent = percent);
+    share_out(&mut sources, |source| source.engaged_seconds, |source, percent| source.engaged_percent = percent);
 
     let seconds: f64 = turns.iter().map(|(_, bucket)| bucket.seconds).sum();
     let waited: f64 = turns.iter().map(|(_, bucket)| bucket.waited_secs).sum();
@@ -619,7 +629,7 @@ pub fn view(done: &[Done], window: Window, grid: Grid, names: &Names, local: &[S
         empty: false,
         starts,
         tiles,
-        sources: sources.into_iter().map(|(_, source)| source).collect(),
+        sources,
         engaged_ticks,
         second_ticks,
         clients: client_rows,
@@ -837,9 +847,21 @@ fn source_of(sources: &mut Vec<(From, Source)>, from: From, points: usize) -> us
         second_points: vec![0.0; points],
         engaged_seconds: 0.0,
         engaged_points: vec![0.0; points],
+        message_percent: 0,
+        turn_percent: 0,
+        second_percent: 0,
+        engaged_percent: 0,
     };
     sources.push((from, source));
     sources.len() - 1
+}
+
+/// Gives each source its whole percentage of the total `of` measures.
+fn share_out(sources: &mut [Source], of: fn(&Source) -> f64, set: fn(&mut Source, u32)) {
+    let percents = whole_percents(&sources.iter().map(of).collect::<Vec<_>>());
+    for (source, percent) in sources.iter_mut().zip(percents) {
+        set(source, percent);
+    }
 }
 
 fn client_rows(
@@ -1546,6 +1568,43 @@ mod tests {
         let sources: Vec<_> =
             view.sources.iter().map(|source| (source.label.as_str(), source.turns, source.seconds)).collect();
         assert_eq!(sources, [("Agents", 2, 15.0), ("Subagents", 4, 450.0)]);
+    }
+
+    #[test]
+    fn each_measure_of_the_sources_adds_up_to_a_hundred_percent() {
+        let window = Window { since: 0.0, until: DAY, bucket_secs: 86_400, utc_offset_secs: 0 };
+        let report = ActivityReport {
+            turns: vec![
+                turn(0.0, TurnStarter::User, Some("mac"), TurnOutcome::Done, 2, 100.0),
+                TurnBucket { agent_thread: true, ..turn(0.0, TurnStarter::Agent, None, TurnOutcome::Done, 1, 200.0) },
+            ],
+            actions: ["mac", "phone", "tablet"]
+                .into_iter()
+                .map(|device| action(0.0, Actor::User, Some(device), "message", "reply", 1))
+                .collect(),
+            clients: vec![
+                client("mac", ClientKind::Mac, "macos", ClientForm::Desktop),
+                client("phone", ClientKind::Ios, "ios", ClientForm::Phone),
+                client("tablet", ClientKind::Ios, "ios", ClientForm::Tablet),
+            ],
+            ..ActivityReport::default()
+        };
+        let view = view(&[Done { server_id: "studio".into(), report }], window, grid(&window), &names(), &[], true);
+        let percents: Vec<_> = view
+            .sources
+            .iter()
+            .map(|source| (source.label.as_str(), source.message_percent, source.turn_percent, source.second_percent))
+            .collect();
+        assert_eq!(
+            percents,
+            [
+                ("Mac", 34, 0, 0),
+                ("iPad", 33, 0, 0),
+                ("iPhone", 33, 0, 0),
+                ("Agents", 0, 67, 33),
+                ("Subagents", 0, 33, 67)
+            ]
+        );
     }
 
     #[test]

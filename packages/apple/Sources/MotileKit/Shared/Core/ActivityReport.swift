@@ -26,6 +26,11 @@ struct ActivityReport {
         /// The user's time on its devices.
         let engagedSeconds: Double
         let engagedPoints: [Double]
+        /// Its share of each total, in whole percentages that add up to 100 across the sources.
+        let messagePercent: Int
+        let turnPercent: Int
+        let secondPercent: Int
+        let engagedPercent: Int
     }
 
     struct Client: Identifiable {
@@ -167,7 +172,9 @@ struct ActivityReport {
                 color: source.int("color"), messages: source.int("messages"), turns: source.int("turns"),
                 seconds: source.double("seconds"), messagePoints: points("message_points"), turnPoints: points("turn_points"),
                 secondPoints: points("second_points"), engagedSeconds: source.double("engaged_seconds"),
-                engagedPoints: points("engaged_points"))
+                engagedPoints: points("engaged_points"), messagePercent: source.int("message_percent"),
+                turnPercent: source.int("turn_percent"), secondPercent: source.int("second_percent"),
+                engagedPercent: source.int("engaged_percent"))
         }
         engagedTicks = (json["engaged_ticks"] as? [NSNumber] ?? []).map(\.doubleValue)
         secondTicks = (json["second_ticks"] as? [NSNumber] ?? []).map(\.doubleValue)

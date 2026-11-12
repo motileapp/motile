@@ -132,6 +132,15 @@ struct ActivityView: View {
         }
     }
 
+    private func percent(of source: ActivityReport.Source) -> Int {
+        switch measure {
+        case .messages: source.messagePercent
+        case .turns: source.turnPercent
+        case .engaged: source.engagedPercent
+        case .time: source.secondPercent
+        }
+    }
+
     /// The lines of a chart of durations, where people count time; nil leaves a count's to the chart.
     private var durationTicks: [Double]? {
         switch measure {
@@ -158,7 +167,7 @@ struct ActivityView: View {
         }
     }
 
-    /// Each source with its total, or what it did at the time the pointer is over.
+    /// Each source with its total and its share of it, or what it did at the time the pointer is over.
     private var legend: some View {
         let index = pointedIndex
         return HStack(alignment: .firstTextBaseline, spacing: 12) {
@@ -172,7 +181,7 @@ struct ActivityView: View {
                             .foregroundStyle(Color.themeMutedForeground)
                         Text(source.label)
                             .foregroundStyle(Color.themeForeground)
-                        Text(amount(index.map { points(of: source)[safe: $0] ?? 0 } ?? total(of: source)))
+                        Text(index.map { amount(points(of: source)[safe: $0] ?? 0) } ?? "\(amount(total(of: source))) (\(percent(of: source))%)")
                             .foregroundStyle(Color.themeMutedForeground)
                             .monospacedDigit()
                     }

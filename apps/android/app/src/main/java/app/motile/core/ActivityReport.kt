@@ -43,6 +43,11 @@ data class ActivityReport(
         /** The user's time on its devices. */
         val engagedSeconds: Double,
         val engagedPoints: List<Double>,
+        /** Its share of each total, in whole percentages that add up to 100 across the sources. */
+        val messagePercent: Int,
+        val turnPercent: Int,
+        val secondPercent: Int,
+        val engagedPercent: Int,
     )
 
     data class Client(
@@ -130,7 +135,8 @@ data class ActivityReport(
                         source.string("id"), source.string("label"), symbol(source.string("symbol")), source.int("color"),
                         source.int("messages"), source.int("turns"), source.double("seconds"), source.numbers("message_points"),
                         source.numbers("turn_points"), source.numbers("second_points"), source.double("engaged_seconds"),
-                        source.numbers("engaged_points"),
+                        source.numbers("engaged_points"), source.int("message_percent"), source.int("turn_percent"),
+                        source.int("second_percent"), source.int("engaged_percent"),
                     )
                 },
                 engagedTicks = json.numbers("engaged_ticks"),

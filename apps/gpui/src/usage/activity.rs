@@ -77,6 +77,15 @@ impl Measure {
         }
     }
 
+    fn percent(self, source: &ActivitySource) -> u32 {
+        match self {
+            Measure::Messages => source.message_percent,
+            Measure::Turns => source.turn_percent,
+            Measure::Engaged => source.engaged_percent,
+            Measure::Time => source.second_percent,
+        }
+    }
+
     fn amount(self, value: f64) -> String {
         match self {
             Measure::Messages | Measure::Turns => number(value.max(0.).round() as u32),
@@ -233,7 +242,7 @@ impl ActivityView {
             .into_any_element()
     }
 
-    /// Each source with its total, or what it did in the bucket the pointer is over, whose date
+    /// Each source with its total and its share of it, or what it did in the bucket the pointer is over, whose date
     /// ends the line.
     fn legend(&self, report: &ActivityReport, measure: Measure, cx: &App) -> AnyElement {
         let c = colors(cx);
@@ -245,7 +254,10 @@ impl ActivityView {
             .text_size(TextSize::Xs)
             .child(div().flex_1().min_w_0().flex().flex_wrap().gap_x(px(14.)).gap_y(px(8.)).children(
                 shown_sources(report, measure).map(|source| {
-                    let shown = index.map_or_else(|| measure.total(source), |index| measure.at(source, index));
+                    let shown = index.map_or_else(
+                        || format!("{} ({}%)", measure.amount(measure.total(source)), measure.percent(source)),
+                        |index| measure.amount(measure.at(source, index)),
+                    );
                     div()
                         .flex()
                         .items_center()
@@ -254,12 +266,7 @@ impl ActivityView {
                         .child(dot(chart_color(source.color, c)))
                         .child(icons::symbol(symbol_name(&source.symbol), IconSize::Xs).text_color(c.muted_foreground))
                         .child(div().text_color(c.foreground).child(source.label.clone()))
-                        .child(
-                            div()
-                                .text_color(c.muted_foreground)
-                                .font_features(tabular_numbers())
-                                .child(measure.amount(shown)),
-                        )
+                        .child(div().text_color(c.muted_foreground).font_features(tabular_numbers()).child(shown))
                 }),
             ))
             .when_some(index, |legend, index| {
