@@ -1,15 +1,6 @@
 package app.motile.transcript
 
 import androidx.compose.foundation.background
-import androidx.compose.ui.unit.Density
-import androidx.compose.ui.unit.Constraints
-import androidx.compose.ui.text.rememberTextMeasurer
-import app.motile.theme.TextSize
-import app.motile.ui.edgeFade
-import app.motile.ui.ButtonVariant
-import app.motile.ui.ActionButton
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -21,11 +12,13 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.selection.SelectionContainer
@@ -33,14 +26,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.text.TextLayoutResult
-import app.motile.core.FoundMarks
-import app.motile.core.FoundSpan
-import app.motile.core.within
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -48,30 +36,40 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.layout
-import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.motile.core.Activity
 import app.motile.core.AgentState
+import app.motile.core.FoundMarks
+import app.motile.core.FoundSpan
 import app.motile.core.Time
+import app.motile.core.within
+import app.motile.panel.FileSymbol
 import app.motile.platform.Platform
 import app.motile.platform.Symbol
 import app.motile.platform.scaled
-import app.motile.panel.FileSymbol
-import app.motile.theme.iconSize
-import app.motile.theme.IconSize
 import app.motile.theme.ControlSize
+import app.motile.theme.IconSize
 import app.motile.theme.LocalPalette
 import app.motile.theme.LocalSurface
 import app.motile.theme.Opacity
@@ -79,22 +77,27 @@ import app.motile.theme.Palette
 import app.motile.theme.Radius
 import app.motile.theme.Surface
 import app.motile.theme.SurfaceBox
+import app.motile.theme.TextSize
 import app.motile.theme.Theme
+import app.motile.theme.iconSize
 import app.motile.theme.opacity
 import app.motile.theme.wash
+import app.motile.transcript.openui.UiRow
+import app.motile.ui.ActionButton
 import app.motile.ui.AgentAvatar
 import app.motile.ui.AgentAvatars
 import app.motile.ui.AgentIcon
+import app.motile.ui.ButtonVariant
 import app.motile.ui.CopyButton
+import app.motile.ui.Dropdown
+import app.motile.ui.GatewayMark
 import app.motile.ui.HighlightButton
 import app.motile.ui.Icon
-import app.motile.ui.GatewayMark
-import app.motile.ui.proxied
 import app.motile.ui.Text
 import app.motile.ui.color
+import app.motile.ui.edgeFade
+import app.motile.ui.proxied
 import app.motile.ui.symbol
-import androidx.compose.foundation.shape.CircleShape
-import app.motile.transcript.openui.UiRow
 import kotlinx.coroutines.delay
 
 /** The view of one row, by its kind. */
@@ -213,7 +216,7 @@ private fun UserBubble(row: RowModel, user: RowModel.Kind.User, text: AnnotatedS
     val cutFade = with(LocalDensity.current) { (Typesetter.messageLineHeight * Cut.FADE_LINES).toDp() }
     Column(Modifier.fillMaxWidth().padding(top = 14.dp), horizontalAlignment = Alignment.End) {
         val shape = RoundedCornerShape(Bubble.radius)
-        WithAvatar(user.avatar, beside) {
+        WithAvatar(user.avatar, user.sender, beside) {
             Column(
                 Modifier
                     .bubbleWidth(beside)
@@ -264,9 +267,9 @@ private fun UserBubble(row: RowModel, user: RowModel.Kind.User, text: AnnotatedS
 
 /** A message's bubble, with the avatar of who sent it at its left, level with its top, when it has one. */
 @Composable
-private fun WithAvatar(avatar: MessageAvatar, beside: Dp, bubble: @Composable () -> Unit) {
+private fun WithAvatar(avatar: MessageAvatar, sender: MessageSender, beside: Dp, bubble: @Composable () -> Unit) {
     if (avatar == MessageAvatar.None) return bubble()
-    Layout({ MessageAvatarView(avatar, beside - Bubble.avatarGap); bubble() }) { measurables, constraints ->
+    Layout({ MessageAvatarView(avatar, sender, beside - Bubble.avatarGap); bubble() }) { measurables, constraints ->
         val circle = measurables[0].measure(Constraints())
         val placed = measurables[1].measure(constraints.copy(minWidth = 0))
         val right = constraints.maxWidth
@@ -277,13 +280,26 @@ private fun WithAvatar(avatar: MessageAvatar, beside: Dp, bubble: @Composable ()
     }
 }
 
-/** The circle beside a message the user didn't write, in the bubble's colour, with the logo of the agent that sent it in the agent's colour, or the server's in the colour of sending. */
+/**
+ * The circle beside a message the user didn't write, in the bubble's colour, with the logo of the agent that sent it in the agent's colour, or the
+ * server's in the colour of sending. It is a button that drops a card of who sent it, and is lit while pressed or while the card is open.
+ */
 @Composable
-private fun MessageAvatarView(avatar: MessageAvatar, side: Dp) {
+private fun MessageAvatarView(avatar: MessageAvatar, sender: MessageSender, side: Dp) {
     val palette = LocalPalette.current
+    val actions = LocalTranscript.current
     val agent = avatar.agent
-    Box(Modifier.size(side).background(palette.backgroundSecondary, CircleShape), contentAlignment = Alignment.Center) {
-        Icon(agent?.symbol ?: Symbol.Server, IconSize.Lg, color = agent?.color(palette) ?: palette.primary)
+    var open by remember { mutableStateOf(false) }
+    val help = agent?.let { "Sent by ${it.title}" } ?: "Sent by your server"
+    Box {
+        HighlightButton(
+            { open = !open },
+            Modifier.size(side).background(palette.backgroundSecondary, CircleShape).semantics { contentDescription = help },
+            radius = side / 2, lit = open, fill = palette.backgroundSecondaryAccent, contentAlignment = Alignment.Center,
+        ) {
+            Icon(agent?.symbol ?: Symbol.Server, IconSize.Lg, color = agent?.color(palette) ?: palette.primary)
+        }
+        Dropdown(open, onDismiss = { open = false }) { SenderCard(avatar, sender, actions.model.threadID ?: "") }
     }
 }
 

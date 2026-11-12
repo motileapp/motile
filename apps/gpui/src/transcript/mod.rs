@@ -8,6 +8,7 @@ pub mod model;
 pub mod openui;
 pub mod prose;
 pub mod rows;
+pub mod sender;
 pub mod view;
 
 use gpui_kit::*;

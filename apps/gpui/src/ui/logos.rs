@@ -243,6 +243,30 @@ pub fn pull_request_color(pull_request: &PullRequest, c: &Colors) -> Hsla {
     if pull_request.draft { c.muted_foreground } else { c.success }
 }
 
+/// A pull request's state, number and title on one line, as the thread card shows it. Its title
+/// goes on to more lines when it `wraps`, rather than being cut.
+pub fn pull_request_line(pull_request: &PullRequest, size: IconSize, wraps: bool, cx: &App) -> Div {
+    let c = colors(cx);
+    let title = div().min_w_0().text_size(TextSize::Xs).text_color(c.muted_foreground);
+    let title = if wraps { title } else { title.truncate() };
+    div()
+        .min_w_0()
+        .flex()
+        .items_center()
+        .gap(px(8.))
+        .child(icons::symbol(pull_request_symbol(pull_request), size).text_color(pull_request_color(pull_request, c)))
+        .child(
+            div()
+                .flex_shrink_0()
+                .text_size(TextSize::Xs)
+                .font_weight(FontWeight::MEDIUM)
+                .font_features(crate::ui::tabular_numbers())
+                .text_color(c.muted_stronger_foreground)
+                .child(format!("#{}", pull_request.number)),
+        )
+        .child(title.child(pull_request.title.clone()))
+}
+
 /// A thread's pull request: what became of it, and its number. In the colour of what became of
 /// it, or as quiet as the row it is in. When it has a click, its number underlines under the
 /// pointer.

@@ -5,7 +5,7 @@ use std::path::Path;
 use std::sync::Mutex;
 
 use motile_protocol::auth_api::Me;
-use motile_protocol::wire::{Activity, Item, ItemKind, Project, ServerInfo, Thread};
+use motile_protocol::wire::{Activity, ITEMS_FORMAT, Item, ItemKind, Project, ServerInfo, Thread};
 use rusqlite::{Connection, OptionalExtension, params};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -84,6 +84,7 @@ impl Cache {
         rename_hosts(&connection)?;
         connection.execute_batch(SCHEMA)?;
         add_activity(&connection)?;
+        refresh_older_items(&connection)?;
         Ok(connection)
     }
 
@@ -354,6 +355,23 @@ impl Cache {
     }
 }
 
+/// Has every thread read again from the start the next time it opens or works, when its items were
+/// kept in an older shape, which lost what that shape didn't have. They show as they were meanwhile.
+fn refresh_older_items(connection: &Connection) -> rusqlite::Result<()> {
+    let format = ITEMS_FORMAT.to_string();
+    let kept: Option<String> =
+        connection.query_row("SELECT value FROM kv WHERE key = 'items_format'", [], |row| row.get(0)).optional()?;
+    if kept.as_deref() == Some(format.as_str()) {
+        return Ok(());
+    }
+    connection.execute("UPDATE threads SET synced_rev = 0", [])?;
+    connection.execute(
+        "INSERT INTO kv (key, value) VALUES ('items_format', ?1) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        [format],
+    )?;
+    Ok(())
+}
+
 fn upsert_thread(connection: &Connection, server_id: &str, thread: &Thread) -> rusqlite::Result<usize> {
     connection.execute(
         "INSERT INTO threads (server_id, id, payload) VALUES (?1, ?2, ?3)
@@ -443,6 +461,37 @@ mod tests {
         assert_eq!(cache.kept::<(f64, Vec<String>)>("limits:h"), Some((5.0, vec!["claude".to_string()])));
         cache.clear();
         assert_eq!(cache.kept::<(f64, Vec<String>)>("limits:h"), None);
+    }
+
+    #[test]
+    fn threads_kept_in_an_older_shape_are_read_again_once_and_show_meanwhile() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("cache.sqlite");
+        let thread: Thread = serde_json::from_str(
+            r#"{"id": "t", "title": "T", "project_id": "p", "cwd": "/srv", "agent": "claude", "model": null,
+            "effort": null, "access": "full", "created_at": 1.0, "updated_at": 2.0, "running": false,
+            "needs_approval": false, "turn_ended_at": null, "rev": 5}"#,
+        )
+        .unwrap();
+        let item: Item = serde_json::from_str(
+            r#"{"id": "u", "seq": 1, "rev": 5, "created_at": 1.0, "type": "user", "text": "Hi", "attachments": []}"#,
+        )
+        .unwrap();
+        let cache = Cache::open(&path).unwrap();
+        cache.set_threads("s", std::slice::from_ref(&thread));
+        cache.save_items("t", &[&item], Some(5));
+        drop(cache);
+        assert_eq!(Cache::open(&path).unwrap().synced_rev("t"), 5);
+
+        let older = Connection::open(&path).unwrap();
+        older.execute("UPDATE kv SET value = '0' WHERE key = 'items_format'", []).unwrap();
+        drop(older);
+        let cache = Cache::open(&path).unwrap();
+
+        assert_eq!((cache.synced_rev("t"), cache.page("t", None).items), (0, vec![item]));
+        cache.save_items("t", &[], Some(5));
+        drop(cache);
+        assert_eq!(Cache::open(&path).unwrap().synced_rev("t"), 5);
     }
 
     #[test]

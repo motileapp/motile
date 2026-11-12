@@ -368,6 +368,7 @@ clients. It replays the recorded output in `fixtures/` or makes up a turn, depen
 | "ask a pinned agent" | Starts two agents that look over greet.py slowly, one pinned to one of the gateway's Claude Code accounts and one the gateway places, through `start_agent` (Claude Code) |
 | "ask an agent which color" | Starts an agent that asks which color; told it asks, answers blue through `answer_agent` (Claude Code) |
 | "ask an agent to change the settings" | Starts an agent that asks before it edits `.claude/settings.json` under any access; told it waits, allows it through `approve_agent` (Claude Code) |
+| "ask a background agent" | Starts an agent in the background and ends its turn while it works; once the agent reports, wakes by itself and says what it found (Claude Code) |
 | "look over" | Reads greet.py and runs the tests, a step every `FAKE_AGENT_CHILD_STEP` seconds, and says what it would change |
 | "run the workflow" | Runs a workflow of two phases, whose last agent fails (Claude Code) |
 | "wait for more" | Sent now while it writes, waits for the next message sent now, which stops it before its answer, so it is never repeated (Claude Code) |

@@ -143,6 +143,11 @@ pub fn is_pull_request_news(text: &str) -> bool {
     first.starts_with("PR #") && first.ends_with(" changed on GitHub:") && text.ends_with(PULL_REQUEST_NEWS_END)
 }
 
+/// The shape of the items a client caches. Raised when items gain something a client of the shape
+/// before would drop as it caches them, so that clients read their threads again. 1: who took each
+/// action.
+pub const ITEMS_FORMAT: u32 = 1;
+
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct Item {
     pub id: String,
@@ -304,6 +309,9 @@ pub enum Actor {
         thread_id: String,
         agent: Agent,
         account: String,
+        /// Empty for the agent's default.
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        model: String,
     },
     /// The server by itself, for `reason`.
     Server {
@@ -2945,6 +2953,61 @@ pub enum Message {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The definitions of the types an item is made of, as written in this file without comments.
+    fn item_shape() -> String {
+        let source = include_str!("wire.rs");
+        let mut shape = String::new();
+        let mut names = vec!["Item".to_string()];
+        let mut seen = std::collections::HashSet::new();
+        while let Some(name) = names.pop() {
+            if !seen.insert(name.clone()) {
+                continue;
+            }
+            let Some(definition) = definition(source, &name) else { continue };
+            names.extend(field_types(&definition));
+            shape.push_str(&definition);
+        }
+        shape
+    }
+
+    /// A type's definition with the attributes above it, its comments left out.
+    fn definition(source: &str, name: &str) -> Option<String> {
+        let start = ["struct", "enum"].iter().find_map(|kind| source.find(&format!("\npub {kind} {name} ")))?;
+        let above = source[..start].lines().rev().take_while(|line| line.starts_with("#[") || line.starts_with("///"));
+        let above: Vec<&str> = above.collect();
+        let body = &source[start + 1..];
+        let body = &body[..body.find("\n}\n")?];
+        let lines = above.into_iter().rev().chain(body.lines()).map(str::trim);
+        Some(lines.filter(|line| !line.starts_with("//")).collect::<Vec<_>>().join("\n"))
+    }
+
+    /// The types its fields are of.
+    fn field_types(definition: &str) -> Vec<String> {
+        let fields = definition.lines().filter(|line| !line.starts_with('#')).filter_map(|line| line.split_once(':'));
+        let words = fields.flat_map(|(_, of)| of.split(|c: char| !c.is_alphanumeric() && c != '_'));
+        words.filter(|word| word.starts_with(char::is_uppercase)).map(str::to_string).collect()
+    }
+
+    fn fingerprint(text: &str) -> u64 {
+        text.bytes().fold(0xcbf29ce484222325, |hash, byte| (hash ^ u64::from(byte)).wrapping_mul(0x100000001b3))
+    }
+
+    #[test]
+    fn items_keep_their_shape_until_items_format_is_raised() {
+        let shape = item_shape();
+        assert!(
+            ["pub struct Item ", "pub enum ItemKind ", "pub struct Subagent ", "pub enum Actor "]
+                .iter()
+                .all(|name| shape.contains(name))
+        );
+        assert_eq!(
+            (ITEMS_FORMAT, format!("{:x}", fingerprint(&shape))),
+            (1, "9c200587c962cbc0".to_string()),
+            "An item changed shape. If a client caching it before this change would drop what changed, raise \
+             ITEMS_FORMAT. Then write both numbers here."
+        );
+    }
 
     #[test]
     fn items_are_flat_tagged_objects() {

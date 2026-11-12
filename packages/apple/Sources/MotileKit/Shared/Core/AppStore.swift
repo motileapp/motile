@@ -1309,12 +1309,16 @@ final class AppStore {
 
     /// The thread's model as the composer shows it, with the account when its agent has more than one.
     func modelLabel(of thread: ThreadInfo) -> String {
-        let server = self.server(thread.serverID)
-        let offered = server?.models.filter { $0.agent == thread.agent } ?? []
-        guard let server, let model = Server.model(thread.model, account: thread.agentAccount, among: offered) else {
-            return thread.model ?? thread.agent.name
+        modelLabel(thread.model, account: thread.agentAccount, of: thread.agent, on: thread.serverID)
+    }
+
+    func modelLabel(_ model: String?, account: String, of agent: Agent, on serverID: String) -> String {
+        let server = self.server(serverID)
+        let offered = server?.models.filter { $0.agent == agent } ?? []
+        guard let server, let offer = Server.model(model, account: account, among: offered) else {
+            return model ?? agent.name
         }
-        return server.label(of: model, account: thread.agentAccount)
+        return server.label(of: offer, account: account)
     }
 
     /// What the composer's model menu lists: each account with its agent's models, titled with

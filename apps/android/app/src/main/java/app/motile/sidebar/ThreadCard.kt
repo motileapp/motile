@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
@@ -30,6 +31,7 @@ import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntRect
@@ -40,6 +42,7 @@ import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
 import app.motile.LocalStore
+import app.motile.core.PullRequest
 import app.motile.platform.Symbol
 import app.motile.theme.TextSize
 import app.motile.theme.iconSize
@@ -92,28 +95,45 @@ fun ThreadCard(threadID: String, modifier: Modifier = Modifier) {
             }
             val pullRequest = project?.pullRequest(thread) ?: return@Column
             ThemeDivider(Modifier.padding(vertical = 10.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(pullRequest.state.symbol, ThreadCard.iconSize, color = pullRequest.state.color)
-                Text("#${pullRequest.number}", style = Theme.uiDigits(TextSize.Xs, FontWeight.Medium), color = palette.mutedStrongerForeground)
-                Text(pullRequest.title, size = TextSize.Xs, color = palette.mutedForeground, maxLines = 1)
-            }
+            PullRequestLine(pullRequest)
         }
     }
 }
 
+/** A line of the card: its icon, then its words, cut at the end or the `middle`, or going on to more lines when it `wraps`. */
 @Composable
-private fun CardLine(text: String, middle: Boolean = false, proxied: Boolean = false, pinned: Boolean = false, icon: @Composable () -> Unit) {
+fun CardLine(text: String, middle: Boolean = false, proxied: Boolean = false, pinned: Boolean = false, wraps: Boolean = false, icon: @Composable () -> Unit) {
     val palette = Theme.colors
     CompositionLocalProvider(LocalForeground provides palette.mutedForeground) {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            icon()
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = if (wraps) Alignment.Top else Alignment.CenterVertically) {
+            LevelWithFirstLine(wraps, icon)
             Text(
-                dotted(text, palette.mutedStrongerForeground).proxied(proxied, pinned), size = TextSize.Xs, maxLines = 1,
+                dotted(text, palette.mutedStrongerForeground).proxied(proxied, pinned), size = TextSize.Xs, maxLines = if (wraps) Int.MAX_VALUE else 1,
                 overflow = if (middle) TextOverflow.MiddleEllipsis else TextOverflow.Ellipsis,
                 inlineContent = if (proxied) GatewayMark.content(palette.mutedForeground, TextSize.Xs, ThreadCard.iconSize) else emptyMap(),
             )
         }
     }
+}
+
+/** A pull request's state, number and title on one line, or more when its title `wraps`. */
+@Composable
+fun PullRequestLine(pullRequest: PullRequest, wraps: Boolean = false) {
+    val palette = Theme.colors
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = if (wraps) Alignment.Top else Alignment.CenterVertically) {
+        LevelWithFirstLine(wraps) { Icon(pullRequest.state.symbol, ThreadCard.iconSize, color = pullRequest.state.color) }
+        Text("#${pullRequest.number}", style = Theme.uiDigits(TextSize.Xs, FontWeight.Medium), color = palette.mutedStrongerForeground)
+        Text(pullRequest.title, size = TextSize.Xs, color = palette.mutedForeground, maxLines = if (wraps) Int.MAX_VALUE else 1)
+    }
+}
+
+/** The icon, centred on the first line of the words beside it when they wrap. */
+@Composable
+private fun LevelWithFirstLine(wraps: Boolean, icon: @Composable () -> Unit) {
+    if (!wraps) return icon()
+    val measurer = rememberTextMeasurer()
+    val line = remember(measurer) { measurer.measure("M", Theme.ui(TextSize.Xs)).size.height }
+    Box(Modifier.height(with(LocalDensity.current) { line.toDp() }), contentAlignment = Alignment.Center) { icon() }
 }
 
 /** The thread whose card shows, and its row in the window. */

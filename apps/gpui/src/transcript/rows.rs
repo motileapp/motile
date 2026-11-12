@@ -11,20 +11,21 @@ use gpui_kit::prelude::*;
 use gpui_kit::*;
 use motile_core::render::agents::AgentState;
 use motile_core::render::rows::{
-    AgentRow, CardPlace, ChangeEntry, HandoffLabel, MessageAvatar, RowKind, StateCount, Tool,
+    AgentRow, CardPlace, ChangeEntry, HandoffLabel, MessageAvatar, MessageSender, RowKind, StateCount, Tool,
 };
-use motile_protocol::wire::{Agent, Ask, ToolStatus};
+use motile_protocol::wire::{Ask, ToolStatus};
 
 use super::find::{self, Marks};
 use super::kit::{GrowthFade, RowButton, Shimmer, Sideways, TailLine, dashed_outline};
 use super::model::RowModel;
 use super::prose::{self, CodeBox, ParaStyle, ProseBlock, TableCell, TextPara};
+use super::sender::SenderAvatar;
 use super::view::TranscriptView;
 use crate::models::{AttachedFile, duration, elapsed};
 use crate::store::Store;
 use crate::theme::{self, Colors, ControlSize, IconSize, Radius, Surface, TextSize, colors};
 use crate::ui::rich_text::Sent;
-use crate::ui::{ActionButton, GatewayMark, Highlight, edges, icons, logos};
+use crate::ui::{ActionButton, GatewayMark, Highlight, edges, icons};
 
 /// The room a prose row has around its text, which is what keeps two rows apart.
 pub const PROSE_GAP: f32 = 9.;
@@ -893,25 +894,17 @@ fn bubble_widest(width: f32, avatar: MessageAvatar) -> f32 {
 
 /// The circle beside a message the user didn't write, in the bubble's colour, with the logo of
 /// the agent that sent it in the agent's colour, or the server's in the colour of sending.
-fn message_avatar(avatar: MessageAvatar, cx: &App) -> Option<Div> {
-    let c = colors(cx);
-    let icon = match avatar {
-        MessageAvatar::None => return None,
-        MessageAvatar::Claude => logos::agent_icon(Agent::Claude, IconSize::Lg, cx).into_any_element(),
-        MessageAvatar::Codex => logos::agent_icon(Agent::Codex, IconSize::Lg, cx).into_any_element(),
-        MessageAvatar::Server => icons::symbol("server", IconSize::Lg).text_color(c.primary).into_any_element(),
-    };
-    Some(
-        div()
-            .flex_none()
-            .size(px(AVATAR_SIDE))
-            .rounded_full()
-            .bg(c.background_secondary)
-            .flex()
-            .items_center()
-            .justify_center()
-            .child(icon),
-    )
+fn message_avatar(
+    model: &RowModel,
+    avatar: MessageAvatar,
+    sender: &MessageSender,
+    ctx: &RowContext,
+) -> Option<SenderAvatar> {
+    if avatar == MessageAvatar::None {
+        return None;
+    }
+    let id = format!("{}-avatar", model.row.id);
+    Some(SenderAvatar::new(id, avatar, sender.clone(), AVATAR_SIDE, ctx.store.clone(), ctx.thread_id.clone()))
 }
 
 /// What covers the end of a cut message: the bubble's colour, coming in to its bottom.
@@ -978,6 +971,7 @@ fn user_row(
     at: f64,
     collapsible: bool,
     avatar: MessageAvatar,
+    sender: &MessageSender,
     ctx: &RowContext,
     window: &mut Window,
     cx: &mut App,
@@ -1007,7 +1001,7 @@ fn user_row(
                 .justify_end()
                 .items_start()
                 .gap(px(AVATAR_GAP))
-                .children(message_avatar(avatar, cx))
+                .children(message_avatar(model, avatar, sender, ctx))
                 .child(
                     bubble
                         .when(more, |bubble| bubble.child(more_button(model, ctx)))
@@ -2162,11 +2156,11 @@ fn fitted(from: f32, to: f32, room: f32) -> (f32, f32) {
 
 pub fn render_row(model: &RowModel, ctx: &RowContext, window: &mut Window, cx: &mut App) -> AnyElement {
     match &model.row.kind {
-        RowKind::User { text, links, skills, attachments, at, collapsible, avatar, .. } => {
+        RowKind::User { text, links, skills, attachments, at, collapsible, avatar, sender } => {
             let files: Vec<AttachedFile> = attachments.iter().map(AttachedFile::from).collect();
             let message =
                 Message { text, links: prose::link_ranges(text, links), skills: prose::skill_ranges(text, skills) };
-            user_row(model, message, &files, *at, *collapsible, *avatar, ctx, window, cx)
+            user_row(model, message, &files, *at, *collapsible, *avatar, sender, ctx, window, cx)
         }
         RowKind::Prose { .. } => prose_row(model, ctx, cx),
         RowKind::Code { language, code, .. } => code_row(model, language, code, ctx, cx),
