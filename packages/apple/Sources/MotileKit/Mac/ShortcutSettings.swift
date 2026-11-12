@@ -135,7 +135,7 @@ private struct ShortcutRowView: View {
                 HStack(spacing: 6) {
                     Text(row.label)
                         .font(.ui(.sm, weight: .medium))
-                        .help(row.command)
+                        .tooltip(row.command)
                     if row.custom {
                         Chip("Custom")
                     }
@@ -260,7 +260,7 @@ private struct ConditionButton: View {
     var body: some View {
         ActionButton(when.isEmpty ? "Always" : "When \(when)", variant: .ghost, size: .small, padding: padding, opens: true, action: edit)
             .truncationMode(.tail)
-            .help(when.isEmpty ? "Runs wherever the keys are pressed. Click to add a condition." : "Runs only while this holds. Click to edit it.")
+            .tooltip(when.isEmpty ? "Runs wherever the keys are pressed. Click to add a condition." : "Runs only while this holds. Click to edit it.")
     }
 }
 
@@ -272,7 +272,7 @@ private struct ConflictMark: View {
         if !conflicts.isEmpty {
             Image(.triangleAlert, size: .md)
                 .foregroundStyle(Color.themeWarning)
-                .help("Also on \(conflicts.joined(separator: ", ")). Where both can run, the one added last wins.")
+                .tooltip("Also on \(conflicts.joined(separator: ", ")). Where both can run, the one added last wins.")
         }
     }
 }

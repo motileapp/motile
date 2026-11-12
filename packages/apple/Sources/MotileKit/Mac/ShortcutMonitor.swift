@@ -33,6 +33,16 @@ final class ShortcutMonitor {
         }
     }
 
+    /// The command the key press runs where `context` holds, for a view that takes its own keys.
+    func command(of event: NSEvent, in context: Set<String>) -> String? {
+        let flags = event.modifierFlags
+        return store?.shortcuts.command(
+            for: KeyNames.names(of: event),
+            command: flags.contains(.command), control: flags.contains(.control), option: flags.contains(.option), shift: flags.contains(.shift),
+            in: context
+        )
+    }
+
     private func handle(_ event: NSEvent) -> Bool {
         guard let store, !recording, store.viewing == nil, Modals.shared.isEmpty, NSApp.modalWindow == nil else { return false }
         guard let window = event.window, !(window is NSPanel), window.attachedSheet == nil, window.sheetParent == nil else { return false }
@@ -41,13 +51,9 @@ final class ShortcutMonitor {
         let composing = (responder as? ComposerNSTextView)?.sends == true
         // The skills' menu takes its own keys.
         if composing, store.skillMenu != nil, SkillMenuKey(event) != nil { return false }
-        let flags = event.modifierFlags
-        let command = store.shortcuts.command(
-            for: KeyNames.names(of: event),
-            command: flags.contains(.command), control: flags.contains(.control), option: flags.contains(.option), shift: flags.contains(.shift),
-            in: store.shortcutContext(composerFocus: composing, editableFocus: editing)
-        )
-        guard let command else { return false }
+        var context = store.shortcutContext(composerFocus: composing, editableFocus: editing)
+        if ZoomingScrollView.takesKeys { context.insert(Shortcuts.imageShown) }
+        guard let command = command(of: event, in: context) else { return false }
         // The command panel takes its own keys, the digits of its rows among them.
         guard store.panel == nil || command == "commandPalette.toggle" || command == "threadPicker.toggle" else { return false }
         if event.isARepeat, !Self.repeating.contains(command) { return true }
@@ -157,6 +163,8 @@ extension AppStore {
             return true
         case "modelPicker.toggle", "composer.workspace", "composer.server":
             return ShortcutTargets.press(command)
+        case "image.zoomIn", "image.zoomOut", "image.actualSize", "image.zoomToFit":
+            return ZoomingScrollView.zoom(command)
         default:
             return false
         }

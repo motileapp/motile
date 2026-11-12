@@ -180,26 +180,23 @@ impl ZoomableImage {
         cx.set_global(ZoomKeys(image.map(Entity::downgrade)));
     }
 
-    /// Zooms the image whose keys they are, when the key is one of them. Whether it did.
-    pub fn key(keystroke: &Keystroke, cx: &mut App) -> bool {
+    /// Runs a zoom command of the keybindings on the image that has the keys. Whether it did.
+    pub fn command(command: &str, cx: &mut App) -> bool {
         let Some(image) = cx.try_global::<ZoomKeys>().and_then(|keys| keys.0.as_ref()?.upgrade()) else {
             return false;
         };
-        image.update(cx, |image, cx| image.zoom_key(keystroke, cx))
+        image.update(cx, |image, cx| image.zoom(command, cx))
     }
 
-    /// ⌘+, ⌘−, ⌘0 and ⌘9. Whether the key was one of them.
-    pub fn zoom_key(&mut self, keystroke: &Keystroke, cx: &mut Context<Self>) -> bool {
-        if !keystroke.modifiers.secondary() {
-            return false;
-        }
+    /// Zooms as the command says. Whether it was a zoom command.
+    pub fn zoom(&mut self, command: &str, cx: &mut Context<Self>) -> bool {
         let scale = self.scale_now(cx);
         let (_, points) = self.picture(cx);
-        let target = match keystroke.key.as_str() {
-            "=" | "+" => scale * 1.5,
-            "-" => scale / 1.5,
-            "0" => 1.,
-            "9" => self.fit(points),
+        let target = match command {
+            "image.zoomIn" => scale * 1.5,
+            "image.zoomOut" => scale / 1.5,
+            "image.actualSize" => 1.,
+            "image.zoomToFit" => self.fit(points),
             _ => return false,
         };
         self.zoom_smoothly(target, None, cx);

@@ -111,7 +111,7 @@ private struct TileLook: ViewModifier {
             }
             .padding(removeInset)
         }
-        .help(attachment.summary)
+        .tooltip(attachment.summary)
         .accessibilityLabel(attachment.summary)
         .environment(\.surface, box)
     }
@@ -132,7 +132,7 @@ struct ContinuedThreadChip: View {
                 .environment(\.row, .chip)
         }
         .modifier(ComposerChipLook())
-        .help("The new thread starts with everything that happened in “\(from.title)”")
+        .tooltip("The new thread starts with everything that happened in “\(from.title)”")
     }
 }
 
@@ -176,7 +176,7 @@ private struct AttachmentProgress: View {
                 .padding(.vertical, 2)
                 .background(Color.themeDestructive)
                 .button(DimButtonStyle()) { store.retryAttachment(attachment.id) }
-                .help("\(reason) Click to try again.")
+                .tooltip("\(reason) Click to try again.")
         }
     }
 }

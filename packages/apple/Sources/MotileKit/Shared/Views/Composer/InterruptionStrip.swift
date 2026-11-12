@@ -29,7 +29,7 @@ struct InterruptionStrip: View {
                 }
                 .font(.ui(.xs))
                 .lineLimit(1)
-                .help("\(interruption.title). \(interruption.detail(now: now)).")
+                .tooltip("\(interruption.title). \(interruption.detail(now: now)).")
                 Spacer(minLength: 8)
                 action(now: now)
             }

@@ -27,7 +27,7 @@ struct ReviewerChip: View {
 
     var body: some View {
         Chip(reviewer.name, dot: reviewer.tone == .neutral ? Color.themeMutedStrongerForeground : reviewer.tone.color)
-            .help("\(reviewer.name): \(reviewer.label)")
+            .tooltip("\(reviewer.name): \(reviewer.label)")
     }
 }
 

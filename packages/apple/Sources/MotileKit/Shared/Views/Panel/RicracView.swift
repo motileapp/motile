@@ -257,7 +257,7 @@ private struct RicracInitials: View {
             .foregroundStyle(Color.themeMutedForeground)
             .frame(width: scaled(18), height: scaled(18))
             .background(Color.themeBackgroundAccent, in: Circle())
-            .help(name)
+            .tooltip(name)
     }
 }
 

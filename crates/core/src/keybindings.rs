@@ -14,10 +14,10 @@ const MAX_WHEN: usize = 256;
 const MAX_DEPTH: usize = 64;
 
 /// The sections of the settings page, in order.
-const GROUPS: [&str; 5] = ["Navigation", "Threads", "Composer", "Right Panel", "Usage"];
+const GROUPS: [&str; 7] = ["Navigation", "Threads", "Composer", "Right Panel", "Usage", "Viewer", "Mark Up"];
 
 /// What the conditions can ask about the client. Any other name is false.
-pub const CONDITIONS: [&str; 9] = [
+pub const CONDITIONS: [&str; 12] = [
     "composerFocus",
     "editableFocus",
     "turnRunning",
@@ -27,6 +27,9 @@ pub const CONDITIONS: [&str; 9] = [
     "usagePageOpen",
     "modelPickerOpen",
     "findOpen",
+    "viewerOpen",
+    "markingUp",
+    "imageShown",
 ];
 
 /// Every command, by group, in the order the settings list them.
@@ -102,6 +105,30 @@ const COMMANDS: &[(&str, &str, usize)] = &[
     ("usage.period.week", "Show the Last 7 Days", 4),
     ("usage.period.month", "Show the Last 30 Days", 4),
     ("usage.period.quarter", "Show the Last 90 Days", 4),
+    ("viewer.markUp", "Mark Up", 5),
+    ("viewer.copy", "Copy", 5),
+    ("viewer.save", "Save As", 5),
+    ("viewer.close", "Close", 5),
+    ("viewer.previous", "Previous", 5),
+    ("viewer.next", "Next", 5),
+    ("viewer.playPause", "Play or Pause", 5),
+    ("image.zoomIn", "Zoom In", 5),
+    ("image.zoomOut", "Zoom Out", 5),
+    ("image.actualSize", "Actual Size", 5),
+    ("image.zoomToFit", "Zoom to Fit", 5),
+    ("markup.pen", "Pen", 6),
+    ("markup.arrow", "Arrow", 6),
+    ("markup.box", "Box", 6),
+    ("markup.pin", "Pin a Note", 6),
+    ("markup.ink.red", "Red", 6),
+    ("markup.ink.yellow", "Yellow", 6),
+    ("markup.ink.green", "Green", 6),
+    ("markup.ink.blue", "Blue", 6),
+    ("markup.ink.white", "White", 6),
+    ("markup.undo", "Undo", 6),
+    ("markup.redo", "Redo", 6),
+    ("markup.done", "Done", 6),
+    ("markup.cancel", "Deselect or Cancel", 6),
 ];
 
 /// The keys every command has until the user changes them, in order of precedence.
@@ -180,6 +207,31 @@ const DEFAULTS: &[(&str, &str, Option<&str>)] = &[
     ("mod+shift+2", "usage.period.week", Some("usagePageOpen")),
     ("mod+shift+3", "usage.period.month", Some("usagePageOpen")),
     ("mod+shift+4", "usage.period.quarter", Some("usagePageOpen")),
+    ("e", "viewer.markUp", Some("viewerOpen && !markingUp")),
+    ("mod+c", "viewer.copy", Some("viewerOpen && !markingUp")),
+    ("mod+s", "viewer.save", Some("viewerOpen && !markingUp")),
+    ("escape", "viewer.close", Some("viewerOpen && !markingUp")),
+    ("arrowleft", "viewer.previous", Some("viewerOpen && !markingUp")),
+    ("arrowright", "viewer.next", Some("viewerOpen && !markingUp")),
+    ("space", "viewer.playPause", Some("viewerOpen && !markingUp")),
+    ("mod+=", "image.zoomIn", Some("imageShown")),
+    ("mod+shift+=", "image.zoomIn", Some("imageShown")),
+    ("mod+-", "image.zoomOut", Some("imageShown")),
+    ("mod+0", "image.actualSize", Some("imageShown")),
+    ("mod+9", "image.zoomToFit", Some("imageShown")),
+    ("p", "markup.pen", Some("markingUp")),
+    ("a", "markup.arrow", Some("markingUp")),
+    ("b", "markup.box", Some("markingUp")),
+    ("n", "markup.pin", Some("markingUp")),
+    ("1", "markup.ink.red", Some("markingUp")),
+    ("2", "markup.ink.yellow", Some("markingUp")),
+    ("3", "markup.ink.green", Some("markingUp")),
+    ("4", "markup.ink.blue", Some("markingUp")),
+    ("5", "markup.ink.white", Some("markingUp")),
+    ("mod+z", "markup.undo", Some("markingUp")),
+    ("mod+shift+z", "markup.redo", Some("markingUp")),
+    ("enter", "markup.done", Some("markingUp")),
+    ("escape", "markup.cancel", Some("markingUp")),
 ];
 
 /// A rule as the file has it. A `command` that starts with `-` takes the command's keys away.
@@ -1028,6 +1080,18 @@ mod tests {
             assert_eq!(row.when, when);
             assert!(row.conflicts.is_empty());
         }
+    }
+
+    #[test]
+    fn viewer_and_markup_keys_are_listed_without_clashing() {
+        let (_dir, bindings) = loaded(None);
+        let view = bindings.view();
+        for title in ["Viewer", "Mark Up"] {
+            let group = view.groups.iter().find(|group| group.title == title).unwrap();
+            assert!(group.rows.iter().all(|row| !row.key.is_empty() && row.conflicts.is_empty()), "{title}");
+        }
+        assert_eq!(keys_of(&view, "viewer.markUp"), vec!["e"]);
+        assert_eq!(keys_of(&view, "markup.undo"), vec!["mod+z"]);
     }
 
     #[test]

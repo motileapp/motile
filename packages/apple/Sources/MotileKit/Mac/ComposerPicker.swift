@@ -32,7 +32,7 @@ struct ComposerSettings: View {
         }
         .buttonStyle(ControlButtonStyle(look: ControlLook(variant: .ghost, size: .regular, selected: open != nil), margin: reach.around))
         .padding(reach.outset)
-        .help(store.shortcuts.help("Model, effort and access", "modelPicker.toggle"))
+        .tooltip(store.shortcuts.help("Model, effort and access", "modelPicker.toggle"))
         .disabled(store.composerModels.isEmpty)
         .shortcutTarget("modelPicker.toggle")
         .fixedSize()
@@ -289,7 +289,7 @@ private struct ComposerPicker: View {
                         lit = 0
                         searching = true
                     }
-                    .help(shown.name)
+                    .tooltip(shown.name)
             }
             Spacer(minLength: 0)
         }

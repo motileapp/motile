@@ -226,7 +226,7 @@ struct ServerLabel: View {
                 .lineLimit(1)
         }
         .foregroundStyle(Color.themeMutedStrongerForeground)
-        .help("On \(server.name)")
+        .tooltip("On \(server.name)")
     }
 }
 
@@ -297,7 +297,7 @@ struct PullRequestLabel: View {
                 .underline(hovering)
         }
         .foregroundStyle(colored ? pullRequest.state.color : Color.themeMutedStrongerForeground)
-        .help(pullRequest.title)
+        .tooltip(pullRequest.title)
     }
 }
 

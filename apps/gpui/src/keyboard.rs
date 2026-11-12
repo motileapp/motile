@@ -66,12 +66,11 @@ fn handle(store: &Entity<Store>, event: &KeystrokeEvent, window: &mut Window, cx
         store.update(cx, |store, cx| store.skill_key(key, cx));
         return true;
     }
-    let context = state.shortcut_context(composing, editing);
-    let Some(command) = state.shortcuts.command_for(&press, &context).map(String::from) else {
-        // ⌘+, ⌘−, ⌘0 and ⌘9 zoom the image file the right panel shows.
-        let image_shown = state.right_panel.is_open && matches!(state.panel_tabs().active, Some(PanelTab::File(_)));
-        return image_shown && crate::media::zoom::ZoomableImage::key(&event.keystroke, cx);
-    };
+    let mut context = state.shortcut_context(composing, editing);
+    if state.right_panel.is_open && matches!(state.panel_tabs().active, Some(PanelTab::File(_))) {
+        context.push("imageShown");
+    }
+    let Some(command) = state.shortcuts.command_for(&press, &context).map(String::from) else { return false };
     // The command panel takes its own keys, the digits of its rows among them.
     if state.panel.is_some() && command != "commandPalette.toggle" && command != "threadPicker.toggle" {
         return false;
@@ -126,6 +125,9 @@ pub fn perform(store: &Entity<Store>, command: &str, window: &mut Window, cx: &m
                 cx.notify();
             });
             true
+        }
+        "image.zoomIn" | "image.zoomOut" | "image.actualSize" | "image.zoomToFit" => {
+            crate::media::zoom::ZoomableImage::command(command, cx)
         }
         "modelPicker.toggle" | "composer.workspace" => !store.read(cx).composer_away() && press(command, window, cx),
         "composer.server" if !store.read(cx).composer_away() && press(command, window, cx) => true,
@@ -184,7 +186,7 @@ fn key_down() -> Option<objc2::rc::Retained<objc2_app_kit::NSEvent>> {
 
 /// The press as the rules name it: by the key's place and the layout's letters, as the Mac app's
 /// `KeyNames` does, when the system's event is at hand; else as GPUI names it.
-fn press_of(keystroke: &Keystroke) -> Option<KeyPress> {
+pub fn press_of(keystroke: &Keystroke) -> Option<KeyPress> {
     #[cfg(target_os = "macos")]
     if let Some(event) = key_down() {
         use objc2_app_kit::NSEventModifierFlags;

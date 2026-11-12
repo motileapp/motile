@@ -101,7 +101,7 @@ struct ContextStrip: View {
             }
             label(project.name, icon: .picture(AnyView(ProjectIcon(project: project))))
                 .padding(server == nil ? ComposerStrip.firstMargin : ComposerStrip.middleMargin)
-                .help(project.path)
+                .tooltip(project.path)
             Spacer(minLength: 8)
             workspace(labeled: workspaceLabel)
             if hasWorkspace, branch != nil {
@@ -118,7 +118,7 @@ struct ContextStrip: View {
         if copies.isEmpty {
             label(server.shortName, icon: .picture(symbol))
                 .padding(ComposerStrip.firstMargin)
-                .help("On \(server.name)")
+                .tooltip("On \(server.name)")
         } else {
             ActionButton(
                 server.shortName, picture: symbol, help: store.shortcuts.help("The server the thread starts on", "composer.server"),
@@ -159,7 +159,7 @@ struct ContextStrip: View {
         if let branch {
             if project.worktree != nil {
                 branchLabel(branch)
-                    .help("The branch of this thread's worktree")
+                    .tooltip("The branch of this thread's worktree")
             } else if store.canSwitchBranches(of: project) {
                 ActionButton(
                     startsInWorktree ? "From \(store.draftStart ?? branch)" : branch, icon: .gitBranch,
@@ -177,7 +177,7 @@ struct ContextStrip: View {
                 }
             } else {
                 branchLabel(branch)
-                    .help(server?.known == true ? "Update \(server?.name ?? "your server") to switch branches from here" : "The branch checked out there")
+                    .tooltip(server?.known == true ? "Update \(server?.name ?? "your server") to switch branches from here" : "The branch checked out there")
             }
         }
     }
@@ -191,10 +191,10 @@ struct ContextStrip: View {
     @ViewBuilder private func workspace(labeled: Bool) -> some View {
         if let worktree = project.worktree {
             working(in: labeled ? "Worktree" : nil, symbol: .folderGit2)
-                .help(worktree.path)
+                .tooltip(worktree.path)
         } else if store.selectedThread != nil, project.branch != nil {
             working(in: labeled ? "Local checkout" : nil, symbol: .folder)
-                .help("The thread works in the project's folder")
+                .tooltip("The thread works in the project's folder")
         } else if store.selectedThread == nil, store.canUseWorktrees(of: project) {
             let inWorktree = store.draftUsesWorktree
             let title = inWorktree ? "New worktree" : "Current checkout"
@@ -223,7 +223,7 @@ struct ContextStrip: View {
             .shortcutTarget("composer.workspace")
         } else if store.selectedThread == nil, let branch = project.branch, project.git?.hasCommit == false {
             working(in: labeled ? "Current checkout" : nil, symbol: .folder)
-                .help("A worktree can start once \(branch) has a commit")
+                .tooltip("A worktree can start once \(branch) has a commit")
         }
     }
 

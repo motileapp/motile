@@ -55,13 +55,13 @@ impl MarkupTool {
         }
     }
 
-    /// The key that picks it on a keyboard.
-    pub fn key(self) -> &'static str {
+    /// The keybindings' command that picks it.
+    pub fn command(self) -> &'static str {
         match self {
-            MarkupTool::Pen => "P",
-            MarkupTool::Arrow => "A",
-            MarkupTool::Box => "B",
-            MarkupTool::Pin => "N",
+            MarkupTool::Pen => "markup.pen",
+            MarkupTool::Arrow => "markup.arrow",
+            MarkupTool::Box => "markup.box",
+            MarkupTool::Pin => "markup.pin",
         }
     }
 }
