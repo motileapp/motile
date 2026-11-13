@@ -7,12 +7,14 @@ use gpui_kit::prelude::*;
 use gpui_kit::*;
 use serde::{Deserialize, Serialize};
 
+use super::placeholder_bar;
 use crate::format::{self, abbreviated as count, percent, usd as cost};
 use crate::models::agent_name;
 use crate::store::Store;
 use crate::store::usage::{UsageLine, UsagePeriod, UsageReport, UsageSeries, UsageTab};
-use crate::theme::{Colors, IconSize, Layer, Opacity, Surface, TextSize, colors};
+use crate::theme::{Colors, IconSize, Layer, Opacity, Radius, Surface, TextSize, colors};
 use crate::ui::menu::Anchor;
+use crate::ui::motion::pulsing;
 use crate::ui::{Segmented, card_default, divider_on, logos, tabular_numbers, text_width};
 
 pub(super) const CHART_HEIGHT: f32 = 190.;
@@ -96,22 +98,27 @@ impl SpendingView {
         let c = colors(cx);
         let total = if cost_shown { cost(report.cost_usd) } else { count(report.tokens) };
         let written = if cost_shown { cost(report.writing_cost_usd) } else { count(report.writing_tokens) };
+        let total = match report.loading {
+            true => placeholder_bar("usage-total-placeholder", 120., TextSize::Xxl, Surface::Background, cx),
+            false => div()
+                .text_size(TextSize::Xxl)
+                .font_weight(FontWeight::SEMIBOLD)
+                .font_features(tabular_numbers())
+                .text_color(c.foreground)
+                .child(total),
+        };
         let numbers = div()
             .flex()
             .flex_col()
             .gap(px(3.))
-            .child(
-                div()
-                    .text_size(TextSize::Xxl)
-                    .font_weight(FontWeight::SEMIBOLD)
-                    .font_features(tabular_numbers())
-                    .text_color(c.foreground)
-                    .child(total),
-            )
+            .child(total)
             .child(caption(
                 if cost_shown { "What the API would have charged" } else { "Tokens in and out" },
                 c.muted_foreground,
             ))
+            .when(report.loading, |summary| {
+                summary.child(placeholder_bar("usage-writing-placeholder", 200., CAPTION, Surface::Background, cx))
+            })
             .when(report.writing_tokens > 0, |summary| {
                 summary.child(caption(format!("{written} for titles, branch names, etc."), c.muted_stronger_foreground))
             })
@@ -126,6 +133,7 @@ impl SpendingView {
             .flex()
             .flex_col()
             .gap(px(10.))
+            .when(report.loading, |lines| lines.child(agent_placeholder(cx)).child(cache_placeholder(cx)))
             .children(report.agents.iter().map(|series| agent_line(report, series, cost_shown, cx)))
             .when(report.cache_savings_usd > 0., |lines| {
                 lines.child(
@@ -148,6 +156,10 @@ impl SpendingView {
 
     /// The agents with what each spent: in all, or at the time the pointer is over.
     fn legend(&self, report: &UsageReport, cost_shown: bool, cx: &App) -> AnyElement {
+        if report.loading {
+            return placeholder_bar("usage-legend-placeholder", 180., TextSize::Xs, Surface::Background, cx)
+                .into_any_element();
+        }
         let c = colors(cx);
         let index = self.pointed.filter(|index| *index < report.starts.len());
         div()
@@ -180,6 +192,14 @@ impl SpendingView {
     }
 
     fn chart(&self, report: &UsageReport, cost_shown: bool, cx: &mut Context<Self>) -> AnyElement {
+        if report.loading {
+            let block = div()
+                .w_full()
+                .h(px(CHART_HEIGHT))
+                .rounded(px(Radius::MD))
+                .bg(Surface::Background.layer(Layer::Control, colors(cx)));
+            return pulsing("usage-chart-placeholder", block, cx).into_any_element();
+        }
         let c = colors(cx);
         let count = report.starts.len();
         let series: Vec<(Hsla, Vec<f64>)> = report
@@ -317,6 +337,14 @@ impl SpendingView {
         });
         let last = shown.len().saturating_sub(1);
         let mut rows = Vec::new();
+        if report.loading {
+            for index in 0..3 {
+                rows.push(line_placeholder(index, cx));
+                if index < 2 {
+                    rows.push(divider_on(Surface::Card, cx).into_any_element());
+                }
+            }
+        }
         for (index, line) in shown.iter().enumerate() {
             rows.push(self.line_row(line, cost_shown, stacked, window, cx));
             if index < last {
@@ -410,7 +438,7 @@ impl Render for SpendingView {
             .filter(|server| server.connected() && server.protocol_version < 10)
             .map(|server| server.name.clone())
             .collect();
-        let body: Vec<AnyElement> = if report.tokens == 0 {
+        let body: Vec<AnyElement> = if report.tokens == 0 && !report.loading {
             vec![super::note(
                 "Nothing was spent in this time. Servers keep what their agents spend from the version that shows this on.",
                 cx,
@@ -471,6 +499,55 @@ fn agent_line(report: &UsageReport, series: &UsageSeries, cost_shown: bool, cx: 
                 .font_features(tabular_numbers())
                 .child(format!("{} of {of} · {other}", percent(share))),
         )
+        .into_any_element()
+}
+
+/// Bars where an agent's line will be.
+fn agent_placeholder(cx: &App) -> AnyElement {
+    let bar = |id: &'static str, width: f32| placeholder_bar(id, width, TextSize::Xs, Surface::Background, cx);
+    div()
+        .flex()
+        .flex_col()
+        .gap(px(2.))
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .gap(px(7.))
+                .child(bar("usage-agent-name", 110.))
+                .child(div().flex_1().min_w(px(8.)))
+                .child(bar("usage-agent-amount", 48.)),
+        )
+        .child(div().pl(px(15.)).child(bar("usage-agent-share", 160.)))
+        .into_any_element()
+}
+
+/// Bars where what the cache saved will be.
+fn cache_placeholder(cx: &App) -> AnyElement {
+    let bar = |id: &'static str, width: f32| placeholder_bar(id, width, TextSize::Xs, Surface::Background, cx);
+    div()
+        .flex()
+        .items_center()
+        .gap(px(8.))
+        .child(bar("usage-cache-name", 120.))
+        .child(div().flex_1())
+        .child(bar("usage-cache-amount", 48.))
+        .into_any_element()
+}
+
+/// Bars where a line's name, tokens and cost will be.
+fn line_placeholder(index: usize, cx: &App) -> AnyElement {
+    let bar = |id: &'static str, width: f32| placeholder_bar((id, index), width, TextSize::Xs, Surface::Card, cx);
+    div()
+        .min_h(px(36.))
+        .px(px(12.))
+        .flex()
+        .items_center()
+        .gap(px(10.))
+        .child(bar("usage-line-name", 140.))
+        .child(div().flex_1().min_w(px(8.)))
+        .child(bar("usage-line-tokens", 48.))
+        .child(bar("usage-line-cost", 56.))
         .into_any_element()
 }
 

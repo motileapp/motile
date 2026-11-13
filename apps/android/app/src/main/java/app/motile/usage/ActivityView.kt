@@ -73,6 +73,8 @@ import app.motile.ui.Text
 import app.motile.ui.ThemeDivider
 import app.motile.ui.color
 import app.motile.ui.dotted
+import app.motile.ui.pulse
+import app.motile.ui.pulsing
 import app.motile.ui.reaching
 import java.text.NumberFormat
 
@@ -135,13 +137,13 @@ private fun listHeight(): Dp = maxOf(240.dp, LocalConfiguration.current.screenHe
 private fun Hours(report: ActivityReport, beside: Boolean) {
     var measure by remember { mutableStateOf(HourMeasure.entries.firstOrNull { it.raw == Preferences.string(HOURS_KEY) } ?: HourMeasure.Time) }
     val busiest = if (measure == HourMeasure.Time) report.busiestTime else report.busiestMessages
-    Section("When you work", busiest, stacked = true, trailing = {
+    Section("When you work", busiest, loading = report.loading, stacked = true, trailing = {
         Segmented(HourMeasure.entries.map { it.label to it }, measure, {
             measure = it
             Preferences.set(HOURS_KEY, it.raw)
         }, fills = !beside)
     }) {
-        Card(Modifier.fillMaxWidth()) { Heatmap(report.heatmap, measure, Modifier.padding(16.dp)) }
+        Card(Modifier.fillMaxWidth()) { Heatmap(report.heatmap, measure, report.loading, Modifier.padding(16.dp)) }
     }
 }
 
@@ -169,7 +171,7 @@ fun ActivityView(report: ActivityReport, period: UsageModel.Period) {
             if (report.empty) {
                 UsageNote("Nothing was done in this time. Servers keep what is done from the version that shows this on.")
             } else {
-                StatGrid(report.tiles.map { Stat(it.label, it.value, it.detail) }, if (beside) 4 else 2, TextSize.Xl)
+                StatGrid(report.tiles.map { Stat(it.label, it.value, it.detail) }, if (beside) 4 else 2, TextSize.Xl, report.loading)
                 OverTime(report, period, beside, pointed) { pointed = it }
                 Hours(report, beside)
                 if (report.clients.isNotEmpty()) Clients(report, beside)
@@ -189,6 +191,8 @@ fun ActivityView(report: ActivityReport, period: UsageModel.Period) {
 private fun Section(
     title: String,
     detail: String? = null,
+    /** A bar where the detail will be. */
+    loading: Boolean = false,
     stacked: Boolean = false,
     trailing: @Composable () -> Unit = {},
     content: @Composable () -> Unit,
@@ -197,7 +201,11 @@ private fun Section(
     val words = @Composable { modifier: Modifier ->
         Column(modifier, verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(title, size = TextSize.Md, weight = FontWeight.Medium, color = palette.foreground)
-            detail?.let { Text(it, size = TextSize.Xs, color = palette.mutedForeground) }
+            if (loading) {
+                PlaceholderBar(260.dp, Theme.ui(TextSize.Xs))
+            } else {
+                detail?.let { Text(it, size = TextSize.Xs, color = palette.mutedForeground) }
+            }
         }
     }
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -238,14 +246,19 @@ private data class Stat(val label: String, val value: String, val detail: String
 
 /** Numbers in cards, `columns` to a row, every card of a row as tall as its tallest. */
 @Composable
-private fun StatGrid(stats: List<Stat>, columns: Int, valueSize: TextSize) {
+private fun StatGrid(stats: List<Stat>, columns: Int, valueSize: TextSize, loading: Boolean = false) {
     val palette = LocalPalette.current
     Grid(stats, columns, 10.dp, even = true) { stat, modifier ->
         Card(modifier) {
             Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(stat.label, size = TextSize.Xs, color = palette.mutedForeground, maxLines = 1)
-                Text(stat.value, style = Theme.uiDigits(valueSize, FontWeight.SemiBold), color = palette.foreground, maxLines = 1)
-                Text(stat.detail, style = Theme.uiDigits(TextSize.Xxs), color = palette.mutedStrongerForeground)
+                if (loading) {
+                    PlaceholderBar(72.dp, Theme.uiDigits(valueSize, FontWeight.SemiBold))
+                    PlaceholderBar(120.dp, Theme.uiDigits(TextSize.Xxs))
+                } else {
+                    Text(stat.value, style = Theme.uiDigits(valueSize, FontWeight.SemiBold), color = palette.foreground, maxLines = 1)
+                    Text(stat.detail, style = Theme.uiDigits(TextSize.Xxs), color = palette.mutedStrongerForeground)
+                }
             }
         }
     }
@@ -265,22 +278,30 @@ private fun OverTime(report: ActivityReport, period: UsageModel.Period, beside: 
         }, fills = !beside)
     }) {
         Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.Top) {
-                FlowRow(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    for (source in shown) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Dot(palette.chart(source.color))
-                            Icon(source.symbol, IconSize.Xs, color = palette.mutedForeground)
-                            Text(source.label, size = TextSize.Xs, color = palette.foreground, maxLines = 1)
-                            val amount = index?.let { measure.amount(measure.points(source).getOrElse(it) { 0.0 }) }
-                                ?: "${measure.amount(measure.total(source))} (${measure.percent(source)}%)"
-                            Text(amount, style = Theme.uiDigits(TextSize.Xs), color = palette.mutedForeground, maxLines = 1)
+            if (report.loading) {
+                PlaceholderBar(180.dp, Theme.ui(TextSize.Xs))
+                Box(
+                    Modifier.fillMaxWidth().height(activityChartHeight).pulsing()
+                        .background(LocalSurface.current.color(Surface.Layer.Control), RoundedCornerShape(Radius.md)),
+                )
+            } else {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.Top) {
+                    FlowRow(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        for (source in shown) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Dot(palette.chart(source.color))
+                                Icon(source.symbol, IconSize.Xs, color = palette.mutedForeground)
+                                Text(source.label, size = TextSize.Xs, color = palette.foreground, maxLines = 1)
+                                val amount = index?.let { measure.amount(measure.points(source).getOrElse(it) { 0.0 }) }
+                                    ?: "${measure.amount(measure.total(source))} (${measure.percent(source)}%)"
+                                Text(amount, style = Theme.uiDigits(TextSize.Xs), color = palette.mutedForeground, maxLines = 1)
+                            }
                         }
                     }
+                    if (index != null) Text(pointedTime(report.starts[index], period), size = TextSize.Xs, color = palette.mutedForeground, maxLines = 1)
                 }
-                if (index != null) Text(pointedTime(report.starts[index], period), size = TextSize.Xs, color = palette.mutedForeground, maxLines = 1)
+                ActivityChart(report.starts, shown.map { palette.chart(it.color) to measure.points(it) }, measure.ticks(report), period, index, measure::amount, point)
             }
-            ActivityChart(report.starts, shown.map { palette.chart(it.color) to measure.points(it) }, measure.ticks(report), period, index, measure::amount, point)
         }
     }
 }
@@ -538,12 +559,13 @@ private val keySide = 10.dp
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun Heatmap(heatmap: ActivityReport.Heatmap, measure: HourMeasure, modifier: Modifier) {
+private fun Heatmap(heatmap: ActivityReport.Heatmap, measure: HourMeasure, loading: Boolean, modifier: Modifier) {
     val palette = LocalPalette.current
     val density = LocalDensity.current
     val surface = LocalSurface.current
     var picked by remember(heatmap.columns, heatmap.cells.size, heatmap.latest) { mutableStateOf<Int?>(null) }
-    val chosen = picked ?: heatmap.latest
+    val chosen = if (loading) null else picked ?: heatmap.latest
+    val cellAlpha = if (loading) pulse() else null
     val fills = listOf(
         surface.color(Surface.Layer.Control),
         palette.chart1.at(Opacity.ColorTintChart),
@@ -573,16 +595,22 @@ private fun Heatmap(heatmap: ActivityReport.Heatmap, measure: HourMeasure, modif
                     .fillMaxWidth()
                     .height(max(gridHeight, 0.dp) + 6.dp + axisHeight)
                     .reaching(reach, reach, reach, reach)
-                    .chartPointing(chosen, { picked = it ?: chosen }) { at, _ ->
-                        with(density) {
-                            val (x, y) = at.x - leading.toPx() to at.y
-                            if (x < 0 || y < 0) return@chartPointing null
-                            val column = (x / pitch.toPx()).toInt()
-                            val row = (y / (cellHeight + cellGap).toPx()).toInt()
-                            if (column >= heatmap.columns || row >= heatmap.rowCount) return@chartPointing null
-                            (row * heatmap.columns + column).takeIf { heatmap.cells.getOrNull(it) != null }
-                        }
-                    },
+                    .then(
+                        if (chosen == null) {
+                            Modifier
+                        } else {
+                            Modifier.chartPointing(chosen, { picked = it ?: chosen }) { at, _ ->
+                                with(density) {
+                                    val (x, y) = at.x - leading.toPx() to at.y
+                                    if (x < 0 || y < 0) return@chartPointing null
+                                    val column = (x / pitch.toPx()).toInt()
+                                    val row = (y / (cellHeight + cellGap).toPx()).toInt()
+                                    if (column >= heatmap.columns || row >= heatmap.rowCount) return@chartPointing null
+                                    (row * heatmap.columns + column).takeIf { heatmap.cells.getOrNull(it) != null }
+                                }
+                            }
+                        },
+                    ),
             ) {
                 val origin = reach.toPx()
                 val (pitchPx, cellPx, gapPx) = Triple(pitch.toPx(), cellHeight.toPx(), cellGap.toPx())
@@ -590,6 +618,7 @@ private fun Heatmap(heatmap: ActivityReport.Heatmap, measure: HourMeasure, modif
                 val cellSize = Size(cellWidth.toPx(), cellPx)
                 val radius = CornerRadius(corner.toPx())
                 val stroke = 1.dp.toPx()
+                val alpha = cellAlpha?.value ?: 1f
                 rowLabels.forEachIndexed { row, label ->
                     drawText(label, topLeft = Offset(origin, origin + row * (cellPx + gapPx) + (cellPx - label.size.height) / 2))
                 }
@@ -598,7 +627,7 @@ private fun Heatmap(heatmap: ActivityReport.Heatmap, measure: HourMeasure, modif
                     val left = start + index % heatmap.columns * pitchPx
                     val topLeft = Offset(left, origin + index / heatmap.columns * (cellPx + gapPx))
                     val level = if (measure == HourMeasure.Time) cell.timeLevel else cell.messageLevel
-                    drawRoundRect(fills[level.coerceIn(0, 4)], topLeft, cellSize, radius)
+                    drawRoundRect(fills[level.coerceIn(0, 4)], topLeft, cellSize, radius, alpha = alpha)
                     if (index != chosen) return@forEachIndexed
                     drawRoundRect(
                         palette.foreground, topLeft + Offset(stroke / 2, stroke / 2), Size(cellSize.width - stroke, cellPx - stroke), radius, style = Stroke(stroke),
@@ -613,7 +642,8 @@ private fun Heatmap(heatmap: ActivityReport.Heatmap, measure: HourMeasure, modif
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            heatmap.cells.getOrNull(chosen)?.let { shown ->
+            if (loading) PlaceholderBar(220.dp, Theme.uiDigits(TextSize.Xxs), Modifier.padding(end = 8.dp).align(Alignment.CenterVertically))
+            chosen?.let { heatmap.cells.getOrNull(it) }?.let { shown ->
                 val text = listOf(shown.label, shown.time, messages(shown.messages), turns(shown.turns)).filter { it.isNotEmpty() }.joinToString(" · ")
                 Text(
                     dotted(text, palette.mutedStrongerForeground),

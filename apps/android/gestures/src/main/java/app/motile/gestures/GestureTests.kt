@@ -239,6 +239,7 @@ class GestureTests {
         device.wait(Until.findObject(By.text("Usage")), 3_000).click()
         val heading = device.wait(Until.findObject(By.text("Over time")), 10_000) ?: return fail("no chart")
         val below = device.wait(Until.findObject(By.text("When you work")), 10_000) ?: return fail("no heatmap")
+        device.wait(Until.findObject(By.text(Pattern.compile("^You('re in Motile| send) the most.*"))), 10_000) ?: return fail("no activity")
         val pointedDay = By.text(Pattern.compile("^(Mon|Tue|Wed|Thu|Fri|Sat|Sun)[a-z]*[ ,][^·]+$"))
         assertFalse(shown(pointedDay, 1_000))
         val top = settled(heading)

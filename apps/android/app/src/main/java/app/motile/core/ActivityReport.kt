@@ -7,6 +7,8 @@ import kotlinx.serialization.json.JsonObject
 /** What the user and the agents did on the servers counted, as the core lays it out for the Activity tab of the usage view. */
 data class ActivityReport(
     val empty: Boolean,
+    /** Only the period's shape, while the servers are asked. */
+    val loading: Boolean,
     /** When each bucket starts, in seconds since 1970. */
     val starts: List<Double>,
     val tiles: List<Tile>,
@@ -128,6 +130,7 @@ data class ActivityReport(
             fun feature(line: JSON) = Feature(line.string("id"), line.string("label"), line.int("count"), line.double("share"), line.string("detail"))
             return ActivityReport(
                 empty = json.bool("empty"),
+                loading = json.bool("loading"),
                 starts = json.numbers("starts"),
                 tiles = json.objects("tiles").map { Tile(it.string("label"), it.string("value"), it.string("detail")) },
                 sources = json.objects("sources").map { source ->

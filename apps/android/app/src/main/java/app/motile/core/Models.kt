@@ -1586,6 +1586,8 @@ object Time {
 
 /** What the agents spent on the account's servers in a stretch of time, as the core added it up. */
 data class UsageReport(
+    /** Only the period's points, while the servers are asked. */
+    val loading: Boolean,
     val costUSD: Double,
     val tokens: Long,
     val unpricedTokens: Long,
@@ -1636,6 +1638,7 @@ data class UsageReport(
                 gateway = line.bool("gateway"),
             )
             return UsageReport(
+                loading = json.bool("loading"),
                 costUSD = cost,
                 tokens = tokens,
                 unpricedTokens = json.long("unpriced_tokens"),

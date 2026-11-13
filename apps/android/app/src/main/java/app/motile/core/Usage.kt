@@ -152,7 +152,7 @@ class UsageModel {
                 store.loadActivity(seconds, buckets, kept = false, servers = counted) { result ->
                     if (number != asked) return@loadActivity
                     refreshing = false
-                    activity = Loaded.of(result, activity)
+                    activity = Loaded.of(result, if (activity.value?.loading == true) Loaded.Loading else activity)
                 }
             }
         } else {
@@ -164,7 +164,7 @@ class UsageModel {
                 store.loadUsage(seconds, buckets, kept = false, servers = counted) { result ->
                     if (number != asked) return@loadUsage
                     refreshing = false
-                    spending = Loaded.of(result, spending)
+                    spending = Loaded.of(result, if (spending.value?.loading == true) Loaded.Loading else spending)
                 }
             }
         }

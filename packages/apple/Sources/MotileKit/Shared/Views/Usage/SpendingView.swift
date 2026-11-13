@@ -30,6 +30,7 @@ struct SpendingView: View {
 
     @Environment(AppStore.self) private var store
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.surface) private var surface
     let report: UsageReport
     let measure: Measure
     let period: UsageModel.Period
@@ -44,7 +45,7 @@ struct SpendingView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
-            if report.tokens == 0 {
+            if report.tokens == 0 && !report.loading {
                 UsageNote(text: "Nothing was spent in this time. Servers keep what their agents spend from the version that shows this on.")
             } else {
                 if width >= Self.besideWidth {
@@ -74,13 +75,20 @@ struct SpendingView: View {
     private var summary: some View {
         VStack(alignment: .leading, spacing: 14) {
             VStack(alignment: .leading, spacing: 3) {
-                Text(measure == .cost ? Self.cost(report.costUSD) : Self.count(report.tokens))
-                    .font(.ui(.xxl, weight: .semibold))
-                    .foregroundStyle(Color.themeForeground)
-                    .monospacedDigit()
+                if report.loading {
+                    PlaceholderBar(width: 120, size: .xxl, weight: .semibold)
+                } else {
+                    Text(measure == .cost ? Self.cost(report.costUSD) : Self.count(report.tokens))
+                        .font(.ui(.xxl, weight: .semibold))
+                        .foregroundStyle(Color.themeForeground)
+                        .monospacedDigit()
+                }
                 Text(measure == .cost ? "What the API would have charged" : "Tokens in and out")
                     .font(.ui(.xxs))
                     .foregroundStyle(Color.themeMutedForeground)
+                if report.loading {
+                    PlaceholderBar(width: 200, size: .xxs)
+                }
                 if report.writingTokens > 0 {
                     let written = measure == .cost ? Self.cost(report.writingCostUSD) : Self.count(report.writingTokens)
                     Text("\(written) for titles, branch names, etc.")
@@ -96,6 +104,14 @@ struct SpendingView: View {
                 }
             }
             VStack(alignment: .leading, spacing: 10) {
+                if report.loading {
+                    agentPlaceholder
+                    HStack {
+                        PlaceholderBar(width: 120, size: .xs)
+                        Spacer(minLength: 8)
+                        PlaceholderBar(width: 48, size: .xs)
+                    }
+                }
                 ForEach(report.agents) { series in
                     agentLine(series)
                 }
@@ -142,6 +158,19 @@ struct SpendingView: View {
         }
     }
 
+    /// Bars where an agent's line will be.
+    private var agentPlaceholder: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 7) {
+                PlaceholderBar(width: 110, size: .xs)
+                Spacer(minLength: 8)
+                PlaceholderBar(width: 48, size: .xs)
+            }
+            PlaceholderBar(width: 160, size: .xs)
+                .padding(.leading, 15)
+        }
+    }
+
     private func value(of series: UsageReport.Series, at index: Int) -> Double {
         let points = measure == .cost ? series.costPoints : series.tokenPoints
         return points.indices.contains(index) ? points[index] : 0
@@ -179,49 +208,61 @@ struct SpendingView: View {
 
     private var chart: some View {
         VStack(alignment: .leading, spacing: 10) {
-            legend
-            Chart {
-                ForEach(report.agents) { series in
-                    ForEach(Array(report.starts.enumerated()), id: \.offset) { index, start in
-                        AreaMark(x: .value("Time", start), y: .value("Spent", value(of: series, at: index)), stacking: .unstacked)
-                            .foregroundStyle(by: .value("Agent", series.agent.name))
-                            .interpolationMethod(.monotone)
-                            .opacity(Opacity.colorTintChart.value(for: scheme))
-                        LineMark(x: .value("Time", start), y: .value("Spent", value(of: series, at: index)))
-                            .foregroundStyle(by: .value("Agent", series.agent.name))
-                            .interpolationMethod(.monotone)
-                            .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
-                    }
-                }
-                if let index = pointedIndex {
-                    RuleMark(x: .value("Time", report.starts[index]))
-                        .foregroundStyle(Color.themeBorder)
-                        .lineStyle(StrokeStyle(lineWidth: 1))
-                }
+            if report.loading {
+                PlaceholderBar(width: 180, size: .xs)
+                Pulsing { RoundedRectangle(cornerRadius: Radius.md, style: .continuous).fill(surface.color(.control)) }
+                    .frame(height: Self.chartHeight)
+            } else {
+                legend
+                chartMarks
             }
-            .chartForegroundStyleScale(
-                domain: report.agents.map(\.agent.name), range: report.agents.map { $0.agent.color }
-            )
-            .chartLegend(.hidden)
-            .chartPointing($pointed, starts: report.starts, marks: .points)
-            .chartXScale(range: .plotDimension(startPadding: 16, endPadding: 16))
-            .chartXAxis {
-                AxisMarks(preset: .aligned, values: .automatic(desiredCount: 5)) { _ in
-                    AxisValueLabel(format: period == .day ? .dateTime.hour() : .dateTime.month(.abbreviated).day())
-                        .foregroundStyle(Color.themeMutedForeground)
-                }
-            }
-            .chartYAxis {
-                AxisMarks(values: .automatic(desiredCount: 4)) { mark in
-                    AxisGridLine().foregroundStyle(Color.themeBorder)
-                    AxisValueLabel {
-                        if let value = mark.as(Double.self) { Text(amount(value)) }
-                    }
-                    .foregroundStyle(Color.themeMutedForeground)
-                }
-            }
-            .frame(height: 190)
         }
+    }
+
+    private static let chartHeight: CGFloat = 190
+
+    private var chartMarks: some View {
+        Chart {
+            ForEach(report.agents) { series in
+                ForEach(Array(report.starts.enumerated()), id: \.offset) { index, start in
+                    AreaMark(x: .value("Time", start), y: .value("Spent", value(of: series, at: index)), stacking: .unstacked)
+                        .foregroundStyle(by: .value("Agent", series.agent.name))
+                        .interpolationMethod(.monotone)
+                        .opacity(Opacity.colorTintChart.value(for: scheme))
+                    LineMark(x: .value("Time", start), y: .value("Spent", value(of: series, at: index)))
+                        .foregroundStyle(by: .value("Agent", series.agent.name))
+                        .interpolationMethod(.monotone)
+                        .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+                }
+            }
+            if let index = pointedIndex {
+                RuleMark(x: .value("Time", report.starts[index]))
+                    .foregroundStyle(Color.themeBorder)
+                    .lineStyle(StrokeStyle(lineWidth: 1))
+            }
+        }
+        .chartForegroundStyleScale(
+            domain: report.agents.map(\.agent.name), range: report.agents.map { $0.agent.color }
+        )
+        .chartLegend(.hidden)
+        .chartPointing($pointed, starts: report.starts, marks: .points)
+        .chartXScale(range: .plotDimension(startPadding: 16, endPadding: 16))
+        .chartXAxis {
+            AxisMarks(preset: .aligned, values: .automatic(desiredCount: 5)) { _ in
+                AxisValueLabel(format: period == .day ? .dateTime.hour() : .dateTime.month(.abbreviated).day())
+                    .foregroundStyle(Color.themeMutedForeground)
+            }
+        }
+        .chartYAxis {
+            AxisMarks(values: .automatic(desiredCount: 4)) { mark in
+                AxisGridLine().foregroundStyle(Color.themeBorder)
+                AxisValueLabel {
+                    if let value = mark.as(Double.self) { Text(amount(value)) }
+                }
+                .foregroundStyle(Color.themeMutedForeground)
+            }
+        }
+        .frame(height: Self.chartHeight)
     }
 
     private var pointedIndex: Int? {
@@ -244,6 +285,12 @@ struct SpendingView: View {
         return VStack(alignment: .leading, spacing: 8) {
             Segmented(offered.map { ($0.label, $0) }, selection: Binding { current } set: { breakdown = $0 }, fills: stacked)
             VStack(spacing: 0) {
+                if report.loading {
+                    ForEach(0..<3, id: \.self) { index in
+                        UsageLinePlaceholder()
+                        if index < 2 { ThemeDivider() }
+                    }
+                }
                 ForEach(shown) { line in
                     UsageLineRow(line: line, measure: measure, stacked: stacked)
                     if line.id != shown.last?.id {
@@ -262,6 +309,20 @@ struct SpendingView: View {
 
     static func count(_ value: Int) -> String {
         value.abbreviated
+    }
+}
+
+/// Bars where a line's name, tokens and cost will be.
+private struct UsageLinePlaceholder: View {
+    var body: some View {
+        HStack(spacing: 10) {
+            PlaceholderBar(width: 140, size: .xs)
+            Spacer(minLength: 8)
+            PlaceholderBar(width: 48, size: .xs)
+            PlaceholderBar(width: 56, size: .xs)
+        }
+        .frame(minHeight: scaled(36))
+        .padding(.horizontal, 12)
     }
 }
 

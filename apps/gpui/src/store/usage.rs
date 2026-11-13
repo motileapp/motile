@@ -15,6 +15,9 @@ use crate::panel::state::Loaded;
 /// What the agents spent, as the core adds it up: `motile_core::usage::View`, read back.
 #[derive(Clone, PartialEq, Debug, Deserialize, Default)]
 pub struct UsageReport {
+    /// Only the period's points, while the servers are asked.
+    #[serde(default)]
+    pub loading: bool,
     pub cost_usd: f64,
     pub tokens: u64,
     pub unpriced_tokens: u64,
@@ -95,6 +98,9 @@ impl UsageReport {
 #[derive(Clone, PartialEq, Debug, Deserialize, Default)]
 pub struct ActivityReport {
     pub empty: bool,
+    /// Only the period's shape, while the servers are asked.
+    #[serde(default)]
+    pub loading: bool,
     pub starts: Vec<f64>,
     pub tiles: Vec<ActivityFact>,
     pub sources: Vec<ActivitySource>,
@@ -564,7 +570,10 @@ impl Store {
                         return;
                     }
                     store.usage.refreshing = false;
-                    let shown = std::mem::replace(&mut store.usage.activity, Loaded::Loading);
+                    let shown = match std::mem::replace(&mut store.usage.activity, Loaded::Loading) {
+                        Loaded::Ready(report) if report.loading => Loaded::Loading,
+                        shown => shown,
+                    };
                     store.usage.activity = loaded(result, shown);
                 });
             });
@@ -582,7 +591,10 @@ impl Store {
                     return;
                 }
                 store.usage.refreshing = false;
-                let shown = std::mem::replace(&mut store.usage.spending, Loaded::Loading);
+                let shown = match std::mem::replace(&mut store.usage.spending, Loaded::Loading) {
+                    Loaded::Ready(report) if report.loading => Loaded::Loading,
+                    shown => shown,
+                };
                 store.usage.spending = loaded(result, shown);
             });
         });

@@ -1,10 +1,5 @@
 package app.motile.composer
 
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -51,8 +46,6 @@ import app.motile.theme.Radius
 import app.motile.theme.Surface
 import app.motile.theme.Theme
 import app.motile.theme.opacity
-import app.motile.theme.value
-import app.motile.theme.LocalDark
 import app.motile.ui.DropdownList
 import app.motile.ui.DropdownRow
 import app.motile.ui.Highlight
@@ -60,6 +53,7 @@ import app.motile.ui.Icon
 import app.motile.ui.InputField
 import app.motile.ui.Text
 import app.motile.ui.ThemeDivider
+import app.motile.ui.pulsing
 
 /**
  * The branches of the project's repository, to switch to one or make a new one. What is typed
@@ -215,12 +209,9 @@ private fun RowScope.BranchRow(choice: BranchChoice, base: String?) {
 @Composable
 private fun BranchPlaceholder(index: Int) {
     val fill = LocalSurface.current.color(Surface.Layer.Control)
-    val faded = Opacity.Disabled.value(LocalDark.current)
     val widths = listOf(90, 150, 120, 170, 105)
-    val pulse = rememberInfiniteTransition(label = "placeholder")
-    val alpha by pulse.animateFloat(1f, faded, infiniteRepeatable(tween(800), RepeatMode.Reverse), label = "fade")
     Row(
-        Modifier.fillMaxWidth().height(DropdownList.rowHeight).padding(horizontal = DropdownList.rowPadding).alpha(alpha),
+        Modifier.fillMaxWidth().height(DropdownList.rowHeight).padding(horizontal = DropdownList.rowPadding).pulsing(),
         horizontalArrangement = Arrangement.spacedBy(DropdownList.gap),
         verticalAlignment = Alignment.CenterVertically,
     ) {

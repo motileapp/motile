@@ -1651,6 +1651,8 @@ struct UsageReport {
         var id: String { "\(agent?.rawValue ?? "")/\(server ?? "")/\(name)" }
     }
 
+    /// Only the period's points, while the servers are asked.
+    let loading: Bool
     let costUSD: Double
     let tokens: Int
     let unpricedTokens: Int
@@ -1668,6 +1670,7 @@ struct UsageReport {
     let accounts: [Line]
 
     init(json: JSON) {
+        loading = json.bool("loading")
         costUSD = json.double("cost_usd")
         tokens = json.int("tokens")
         unpricedTokens = json.int("unpriced_tokens")

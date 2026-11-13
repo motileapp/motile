@@ -212,6 +212,8 @@ final class GestureTests: XCTestCase {
         let below = app.staticTexts["When you work"]
         XCTAssertTrue(shown(heading))
         XCTAssertTrue(below.waitForExistence(timeout: 10))
+        let busiest = NSPredicate(format: "label BEGINSWITH %@ OR label BEGINSWITH %@", "You're in Motile", "You send")
+        XCTAssertTrue(app.staticTexts.matching(busiest).firstMatch.waitForExistence(timeout: 10))
         let pointedDay = app.staticTexts.matching(NSPredicate(format: "label MATCHES %@", "^(Mon|Tue|Wed|Thu|Fri|Sat|Sun)[a-z]*[ ,][^·]+$")).firstMatch
         let cellSaid = app.staticTexts.matching(NSPredicate(format: "label MATCHES %@", "^(Mon|Tue|Wed|Thu|Fri|Sat|Sun)[a-z]*,.*· .* turns?$")).firstMatch
         XCTAssertFalse(pointedDay.exists)

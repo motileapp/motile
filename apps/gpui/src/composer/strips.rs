@@ -24,6 +24,7 @@ use crate::ui::control::{ControlIcon, ControlLabel};
 use crate::ui::dropdown::{backdrop, drop_from, light, over_content};
 use crate::ui::dropdown_list as list;
 use crate::ui::menu::Anchor;
+use crate::ui::motion::pulsing;
 use crate::ui::parts::{hidden_edges, with_edge_fades};
 use crate::ui::rich_text::RichText;
 use crate::ui::{
@@ -1152,8 +1153,7 @@ impl BranchPicker {
 /// in and out.
 fn placeholder(index: usize, cx: &App) -> impl IntoElement {
     let fill = Surface::Popover.layer(theme::Layer::Control, colors(cx));
-    let faded = colors(cx).opacity(theme::Opacity::Disabled);
-    div()
+    let row = div()
         .h(px(list::ROW_HEIGHT))
         .px(px(list::ROW_PADDING))
         .flex()
@@ -1167,12 +1167,8 @@ fn placeholder(index: usize, cx: &App) -> impl IntoElement {
                 .justify_center()
                 .child(div().size(px(12.)).rounded(px(Radius::XS)).bg(fill)),
         )
-        .child(div().w(px(PLACEHOLDER_WIDTHS[index % PLACEHOLDERS])).h(px(8.)).rounded_full().bg(fill))
-        .with_animation(
-            ("branch-placeholder", index),
-            Animation::new(std::time::Duration::from_millis(800)).repeat().with_easing(bounce(ease_in_out)),
-            move |row, delta| row.opacity(1. - (1. - faded) * delta),
-        )
+        .child(div().w(px(PLACEHOLDER_WIDTHS[index % PLACEHOLDERS])).h(px(8.)).rounded_full().bg(fill));
+    pulsing(("branch-placeholder", index), row, cx)
 }
 
 impl Render for BranchPicker {

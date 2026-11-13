@@ -6,6 +6,7 @@ use std::time::{Duration, Instant};
 
 use gpui_kit::*;
 
+use crate::theme::{Opacity, colors};
 use crate::ui::ease_out;
 
 /// SwiftUI's `.easeOut(duration: 0.12)`, which choices, marks and dropdowns change with.
@@ -124,6 +125,23 @@ pub fn lingering<T: Clone + 'static>(
     state.update(cx, |kept, _| *kept = Some((last.clone(), Some(went))));
     window.request_animation_frame();
     Some((last, true))
+}
+
+/// How long a placeholder takes to fade and come back.
+const PULSE: Duration = Duration::from_millis(800);
+
+/// What stands in for what is yet to come, fading in and out.
+pub fn pulsing<E: IntoElement + Styled + 'static>(
+    id: impl Into<ElementId>,
+    element: E,
+    cx: &App,
+) -> AnimationElement<E> {
+    let faded = colors(cx).opacity(Opacity::Disabled);
+    element.with_animation(
+        id,
+        Animation::new(PULSE).repeat().with_easing(bounce(gpui_kit::ease_in_out)),
+        move |element, delta| element.opacity(1. - (1. - faded) * delta),
+    )
 }
 
 /// How long SwiftUI's default animation takes to come to rest: a spring without bounce.

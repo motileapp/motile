@@ -143,6 +143,8 @@ struct ActivityReport {
     }
 
     let empty: Bool
+    /// Only the period's shape, while the servers are asked.
+    let loading: Bool
     let starts: [Date]
     let tiles: [Tile]
     let sources: [Source]
@@ -163,6 +165,7 @@ struct ActivityReport {
 
     init(json: JSON) {
         empty = json.bool("empty")
+        loading = json.bool("loading")
         starts = (json["starts"] as? [NSNumber] ?? []).map { Date(timeIntervalSince1970: $0.doubleValue) }
         tiles = json.objects("tiles").map { Tile(label: $0.string("label"), value: $0.string("value"), detail: $0.string("detail")) }
         sources = json.objects("sources").map { source in
