@@ -13,8 +13,8 @@ use crate::format;
 use crate::models::ago;
 use crate::store::Store;
 use crate::store::usage::{
-    ActivityClient, ActivityFact, ActivityHeatmap, ActivityLine, ActivityReport, ActivitySource, FeatureLine,
-    HeatmapShape, UsagePeriod,
+    ActivityClient, ActivityFact, ActivityHeatmap, ActivityLegend, ActivityLine, ActivityReport, ActivitySource,
+    FeatureLine, HeatmapShape, UsagePeriod,
 };
 use crate::theme::{Colors, ControlSize, IconSize, Layer, Opacity, Radius, Surface, TextSize, colors};
 use crate::ui::control::dotted;
@@ -80,12 +80,12 @@ impl Measure {
         }
     }
 
-    fn percent(self, source: &ActivitySource) -> u32 {
+    fn legend(self, source: &ActivitySource) -> &ActivityLegend {
         match self {
-            Measure::Messages => source.message_percent,
-            Measure::Turns => source.turn_percent,
-            Measure::Engaged => source.engaged_percent,
-            Measure::Time => source.second_percent,
+            Measure::Messages => &source.message_legend,
+            Measure::Turns => &source.turn_legend,
+            Measure::Engaged => &source.engaged_legend,
+            Measure::Time => &source.second_legend,
         }
     }
 
@@ -256,8 +256,8 @@ impl ActivityView {
         section.child(self.legend(report, measure, cx)).child(self.chart(report, measure, cx)).into_any_element()
     }
 
-    /// Each source with its total and its share of it, or what it did in the bucket the pointer is over, whose date
-    /// ends the line.
+    /// Each source with its total and its share, or those in the bucket the pointer is over, whose date ends the
+    /// line. Every text holds the room of the widest it can show, so the legend never moves with the pointer.
     fn legend(&self, report: &ActivityReport, measure: Measure, cx: &App) -> AnyElement {
         let c = colors(cx);
         let index = self.pointed.filter(|index| *index < report.starts.len());
@@ -268,10 +268,8 @@ impl ActivityView {
             .text_size(TextSize::Xs)
             .child(div().flex_1().min_w_0().flex().flex_wrap().gap_x(px(14.)).gap_y(px(8.)).children(
                 shown_sources(report, measure).map(|source| {
-                    let shown = index.map_or_else(
-                        || format!("{} ({}%)", measure.amount(measure.total(source)), measure.percent(source)),
-                        |index| measure.amount(measure.at(source, index)),
-                    );
+                    let legend = measure.legend(source);
+                    let shown = index.and_then(|index| legend.points.get(index)).unwrap_or(&legend.total).clone();
                     div()
                         .flex()
                         .items_center()
@@ -280,18 +278,25 @@ impl ActivityView {
                         .child(dot(chart_color(source.color, c)))
                         .child(icons::symbol(symbol_name(&source.symbol), IconSize::Xs).text_color(c.muted_foreground))
                         .child(div().text_color(c.foreground).child(source.label.clone()))
-                        .child(div().text_color(c.muted_foreground).font_features(tabular_numbers()).child(shown))
+                        .child(
+                            holding(&legend.shapes, Some(shown))
+                                .items_start()
+                                .text_color(c.muted_foreground)
+                                .font_features(tabular_numbers()),
+                        )
                 }),
             ))
-            .when_some(index, |legend, index| {
-                legend.child(
-                    div()
-                        .flex_shrink_0()
-                        .whitespace_nowrap()
-                        .text_color(c.muted_foreground)
-                        .child(pointed_label(report.starts[index], self.period)),
+            .child(
+                holding(
+                    &pointed_shapes(&report.starts, self.period),
+                    index.map(|index| pointed_label(report.starts[index], self.period)),
                 )
-            })
+                .items_end()
+                .flex_shrink_0()
+                .whitespace_nowrap()
+                .text_color(c.muted_foreground)
+                .font_features(tabular_numbers()),
+            )
             .into_any_element()
     }
 
@@ -1174,6 +1179,26 @@ fn symbol_name(name: &str) -> &'static str {
         "bot" => "bot",
         _ => "monitor-smartphone",
     }
+}
+
+/// `shown` in the room of the widest of `shapes`, which lie under it unseen.
+fn holding(shapes: &[String], shown: Option<String>) -> Div {
+    div()
+        .flex()
+        .flex_col()
+        .children(shapes.iter().map(|shape| div().h_0().invisible().child(shape.clone())))
+        .children(shown)
+}
+
+/// Every shape the time pointed at takes, its digits as zeros.
+fn pointed_shapes(starts: &[f64], period: UsagePeriod) -> Vec<String> {
+    let mut shapes: Vec<String> = starts
+        .iter()
+        .map(|start| pointed_label(*start, period).chars().map(|c| if c.is_ascii_digit() { '0' } else { c }).collect())
+        .collect();
+    shapes.sort();
+    shapes.dedup();
+    shapes
 }
 
 fn pointed_label(start: f64, period: UsagePeriod) -> String {

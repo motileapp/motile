@@ -29,6 +29,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -95,11 +96,11 @@ private enum class ActivityMeasure(val raw: String, val label: String) {
         Time -> source.seconds
     }
 
-    fun percent(source: ActivityReport.Source): Int = when (this) {
-        Messages -> source.messagePercent
-        Turns -> source.turnPercent
-        Yours -> source.engagedPercent
-        Time -> source.secondPercent
+    fun legend(source: ActivityReport.Source): ActivityReport.Legend = when (this) {
+        Messages -> source.messageLegend
+        Turns -> source.turnLegend
+        Yours -> source.engagedLegend
+        Time -> source.secondLegend
     }
 
     /** The lines of a chart of durations, where people count time; null leaves a count's to the chart. */
@@ -292,13 +293,15 @@ private fun OverTime(report: ActivityReport, period: UsageModel.Period, beside: 
                                 Dot(palette.chart(source.color))
                                 Icon(source.symbol, IconSize.Xs, color = palette.mutedForeground)
                                 Text(source.label, size = TextSize.Xs, color = palette.foreground, maxLines = 1)
-                                val amount = index?.let { measure.amount(measure.points(source).getOrElse(it) { 0.0 }) }
-                                    ?: "${measure.amount(measure.total(source))} (${measure.percent(source)}%)"
-                                Text(amount, style = Theme.uiDigits(TextSize.Xs), color = palette.mutedForeground, maxLines = 1)
+                                val legend = measure.legend(source)
+                                Holding(legend.shapes, index?.let { legend.points.getOrNull(it) } ?: legend.total, Alignment.TopStart)
                             }
                         }
                     }
-                    if (index != null) Text(pointedTime(report.starts[index], period), size = TextSize.Xs, color = palette.mutedForeground, maxLines = 1)
+                    val pointedShapes = remember(report.starts, period) {
+                        report.starts.map { pointedTime(it, period).replace(Regex("\\d"), "0") }.distinct()
+                    }
+                    Holding(pointedShapes, index?.let { pointedTime(report.starts[it], period) }, Alignment.TopEnd)
                 }
                 ActivityChart(report.starts, shown.map { palette.chart(it.color) to measure.points(it) }, measure.ticks(report), period, index, measure::amount, point)
             }
@@ -685,6 +688,17 @@ private fun Palette.outcome(name: String): Color = when (name) {
 private fun messages(count: Int): String = if (count == 1) "1 message" else "${count.grouped} messages"
 
 private fun turns(count: Int): String = if (count == 1) "1 turn" else "${count.grouped} turns"
+
+/** [shown] in the room of the widest of [shapes], which lie under it unseen. */
+@Composable
+private fun Holding(shapes: List<String>, shown: String?, alignment: Alignment) {
+    val style = Theme.uiDigits(TextSize.Xs)
+    val color = LocalPalette.current.mutedForeground
+    Box(contentAlignment = alignment) {
+        for (shape in shapes) Text(shape, Modifier.alpha(0f), style = style, color = color, maxLines = 1)
+        if (shown != null) Text(shown, style = style, color = color, maxLines = 1)
+    }
+}
 
 /** The time pointed at, in the legend: the weekday and the hour over a day, the weekday and the date otherwise. */
 private fun pointedTime(seconds: Double, period: UsageModel.Period): String =

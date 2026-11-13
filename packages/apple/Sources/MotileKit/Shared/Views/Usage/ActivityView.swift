@@ -133,12 +133,12 @@ struct ActivityView: View {
         }
     }
 
-    private func percent(of source: ActivityReport.Source) -> Int {
+    private func legendLine(of source: ActivityReport.Source) -> ActivityReport.Legend {
         switch measure {
-        case .messages: source.messagePercent
-        case .turns: source.turnPercent
-        case .engaged: source.engagedPercent
-        case .time: source.secondPercent
+        case .messages: source.messageLegend
+        case .turns: source.turnLegend
+        case .engaged: source.engagedLegend
+        case .time: source.secondLegend
         }
     }
 
@@ -174,12 +174,14 @@ struct ActivityView: View {
         }
     }
 
-    /// Each source with its total and its share of it, or what it did at the time the pointer is over.
+    /// Each source with its total and its share, or those at the time the pointer is over. Every
+    /// text holds the room of the widest it can show, so the legend never moves with the pointer.
     private var legend: some View {
         let index = pointedIndex
         return HStack(alignment: .firstTextBaseline, spacing: 12) {
             FlowRow(spacing: 14) {
                 ForEach(shownSources) { source in
+                    let line = legendLine(of: source)
                     HStack(spacing: 6) {
                         Circle()
                             .fill(Self.color(source.color, in: scheme))
@@ -188,24 +190,37 @@ struct ActivityView: View {
                             .foregroundStyle(Color.themeMutedForeground)
                         Text(source.label)
                             .foregroundStyle(Color.themeForeground)
-                        Text(index.map { amount(points(of: source)[safe: $0] ?? 0) } ?? "\(amount(total(of: source))) (\(percent(of: source))%)")
-                            .foregroundStyle(Color.themeMutedForeground)
-                            .monospacedDigit()
+                        ZStack(alignment: .leading) {
+                            ForEach(line.shapes, id: \.self) { Text($0).hidden() }
+                            Text(index.flatMap { line.points[safe: $0] } ?? line.total)
+                        }
+                        .foregroundStyle(Color.themeMutedForeground)
+                        .monospacedDigit()
                     }
                     .font(.ui(.xs))
                     .lineLimit(1)
                 }
             }
             Spacer(minLength: 0)
-            if let index {
-                let start = report.starts[index]
-                Text(period == .day ? start.formatted(.dateTime.weekday().hour()) : start.formatted(.dateTime.weekday().month(.abbreviated).day()))
-                    .font(.ui(.xs))
-                    .foregroundStyle(Color.themeMutedForeground)
-                    .lineLimit(1)
-                    .fixedSize()
+            ZStack(alignment: .trailing) {
+                ForEach(pointedShapes, id: \.self) { Text($0).hidden() }
+                if let index { Text(pointedLabel(report.starts[index])) }
             }
+            .font(.ui(.xs))
+            .monospacedDigit()
+            .foregroundStyle(Color.themeMutedForeground)
+            .lineLimit(1)
+            .fixedSize()
         }
+    }
+
+    private func pointedLabel(_ start: Date) -> String {
+        period == .day ? start.formatted(.dateTime.weekday().hour()) : start.formatted(.dateTime.weekday().month(.abbreviated).day())
+    }
+
+    /// Every shape the time pointed at takes, its digits as zeros.
+    private var pointedShapes: [String] {
+        Array(Set(report.starts.map { String(pointedLabel($0).map { $0.isASCII && $0.isNumber ? "0" : $0 }) })).sorted()
     }
 
     private var chart: some View {

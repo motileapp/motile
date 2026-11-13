@@ -94,11 +94,23 @@ pub struct Source {
     /// The user's time on its devices.
     pub engaged_seconds: f64,
     pub engaged_points: Vec<f64>,
-    /// Its share of each total, as whole percentages that add up to 100 across the sources.
-    pub message_percent: u32,
-    pub turn_percent: u32,
-    pub second_percent: u32,
-    pub engaged_percent: u32,
+    pub message_legend: Legend,
+    pub turn_legend: Legend,
+    pub second_legend: Legend,
+    pub engaged_legend: Legend,
+}
+
+/// What the chart's legend says of a source in one measure.
+#[derive(Serialize, Debug, PartialEq, Default)]
+pub struct Legend {
+    /// "3h 24m (5%)": its total and its share of all the sources', in whole percentages that add
+    /// up to 100.
+    pub total: String,
+    /// Each point's, with its share of that point.
+    pub points: Vec<String>,
+    /// Every shape these take, their digits as zeros: the client holds the room of the widest, so
+    /// the legend never moves as the pointer does.
+    pub shapes: Vec<String>,
 }
 
 #[derive(Serialize, Debug, PartialEq)]
@@ -549,10 +561,32 @@ pub fn view(done: &[Done], window: Window, grid: Grid, names: &Names, local: &[S
         a.rank().cmp(&b.rank()).then((y.messages + y.turns).cmp(&(x.messages + x.turns))).then(x.label.cmp(&y.label))
     });
     let mut sources: Vec<Source> = sources.into_iter().map(|(_, source)| source).collect();
-    share_out(&mut sources, |source| f64::from(source.messages), |source, percent| source.message_percent = percent);
-    share_out(&mut sources, |source| f64::from(source.turns), |source, percent| source.turn_percent = percent);
-    share_out(&mut sources, |source| source.seconds, |source, percent| source.second_percent = percent);
-    share_out(&mut sources, |source| source.engaged_seconds, |source, percent| source.engaged_percent = percent);
+    let count = |value: f64| number(value.max(0.0).round() as u32);
+    let counts = |points: &[u32]| points.iter().map(|point| f64::from(*point)).collect();
+    write_legends(
+        &mut sources,
+        |source| (f64::from(source.messages), counts(&source.message_points)),
+        count,
+        |source, legend| source.message_legend = legend,
+    );
+    write_legends(
+        &mut sources,
+        |source| (f64::from(source.turns), counts(&source.turn_points)),
+        count,
+        |source, legend| source.turn_legend = legend,
+    );
+    write_legends(
+        &mut sources,
+        |source| (source.seconds, source.second_points.clone()),
+        duration,
+        |source, legend| source.second_legend = legend,
+    );
+    write_legends(
+        &mut sources,
+        |source| (source.engaged_seconds, source.engaged_points.clone()),
+        duration,
+        |source, legend| source.engaged_legend = legend,
+    );
 
     let seconds: f64 = turns.iter().map(|(_, bucket)| bucket.seconds).sum();
     let waited: f64 = turns.iter().map(|(_, bucket)| bucket.waited_secs).sum();
@@ -864,20 +898,40 @@ fn source_of(sources: &mut Vec<(From, Source)>, from: From, points: usize) -> us
         second_points: vec![0.0; points],
         engaged_seconds: 0.0,
         engaged_points: vec![0.0; points],
-        message_percent: 0,
-        turn_percent: 0,
-        second_percent: 0,
-        engaged_percent: 0,
+        message_legend: Legend::default(),
+        turn_legend: Legend::default(),
+        second_legend: Legend::default(),
+        engaged_legend: Legend::default(),
     };
     sources.push((from, source));
     sources.len() - 1
 }
 
-/// Gives each source its whole percentage of the total `of` measures.
-fn share_out(sources: &mut [Source], of: fn(&Source) -> f64, set: fn(&mut Source, u32)) {
-    let percents = whole_percents(&sources.iter().map(of).collect::<Vec<_>>());
-    for (source, percent) in sources.iter_mut().zip(percents) {
-        set(source, percent);
+/// Writes each source's legend of the measure `of` gives the total and the points of.
+fn write_legends(
+    sources: &mut [Source],
+    of: impl Fn(&Source) -> (f64, Vec<f64>),
+    amount: impl Fn(f64) -> String,
+    set: fn(&mut Source, Legend),
+) {
+    let measured: Vec<(f64, Vec<f64>)> = sources.iter().map(of).collect();
+    let totals = whole_percents(&measured.iter().map(|(total, _)| *total).collect::<Vec<_>>());
+    let points = measured.first().map_or(0, |(_, points)| points.len());
+    let at: Vec<Vec<u32>> = (0..points)
+        .map(|index| whole_percents(&measured.iter().map(|(_, points)| points[index]).collect::<Vec<_>>()))
+        .collect();
+    for (row, (source, (total, values))) in sources.iter_mut().zip(&measured).enumerate() {
+        let shown = |value: f64, percent: u32| format!("{} ({percent}%)", amount(value));
+        let total = shown(*total, totals[row]);
+        let points: Vec<String> =
+            values.iter().zip(&at).map(|(value, percents)| shown(*value, percents[row])).collect();
+        let mut shapes: Vec<String> = std::iter::once(&total)
+            .chain(&points)
+            .map(|text| text.chars().map(|c| if c.is_ascii_digit() { '0' } else { c }).collect())
+            .collect();
+        shapes.sort();
+        shapes.dedup();
+        set(source, Legend { total, points, shapes });
     }
 }
 
@@ -1610,18 +1664,43 @@ mod tests {
         let percents: Vec<_> = view
             .sources
             .iter()
-            .map(|source| (source.label.as_str(), source.message_percent, source.turn_percent, source.second_percent))
+            .map(|source| {
+                let legends = [&source.message_legend, &source.turn_legend, &source.second_legend];
+                (source.label.as_str(), legends.map(|legend| legend.total.as_str()))
+            })
             .collect();
         assert_eq!(
             percents,
             [
-                ("Mac", 34, 0, 0),
-                ("iPad", 33, 0, 0),
-                ("iPhone", 33, 0, 0),
-                ("Agents", 0, 67, 33),
-                ("Subagents", 0, 33, 67)
+                ("Mac", ["1 (34%)", "0 (0%)", "0s (0%)"]),
+                ("iPad", ["1 (33%)", "0 (0%)", "0s (0%)"]),
+                ("iPhone", ["1 (33%)", "0 (0%)", "0s (0%)"]),
+                ("Agents", ["0 (0%)", "2 (67%)", "1m (33%)"]),
+                ("Subagents", ["0 (0%)", "1 (33%)", "3m (67%)"])
             ]
         );
+    }
+
+    #[test]
+    fn the_legend_gives_each_point_its_share_of_that_point_and_every_shape_it_takes() {
+        let window = Window { since: 0.0, until: 2.0 * DAY, bucket_secs: 86_400, utc_offset_secs: 0 };
+        let report = ActivityReport {
+            turns: vec![
+                turn(0.0, TurnStarter::User, Some("mac"), TurnOutcome::Done, 1, 100.0),
+                turn(DAY, TurnStarter::User, Some("mac"), TurnOutcome::Done, 1, 4_000.0),
+                TurnBucket {
+                    agent_thread: true,
+                    ..turn(DAY, TurnStarter::Agent, None, TurnOutcome::Done, 1, 12_000.0)
+                },
+            ],
+            ..ActivityReport::default()
+        };
+        let view = view(&[Done { server_id: "studio".into(), report }], window, grid(&window), &names(), &[], true);
+        let agents = &view.sources[0].second_legend;
+        assert_eq!(agents.total, "1h 8m (25%)");
+        assert_eq!(agents.points, ["1m (100%)", "1h 6m (25%)"]);
+        assert_eq!(agents.shapes, ["0h 0m (00%)", "0m (000%)"]);
+        assert_eq!(view.sources[1].second_legend.points, ["0s (0%)", "3h 20m (75%)"]);
     }
 
     #[test]

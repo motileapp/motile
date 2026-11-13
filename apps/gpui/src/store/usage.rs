@@ -146,11 +146,22 @@ pub struct ActivitySource {
     /// The user's time on its devices.
     pub engaged_seconds: f64,
     pub engaged_points: Vec<f64>,
-    /// Its share of each total, in whole percentages that add up to 100 across the sources.
-    pub message_percent: u32,
-    pub turn_percent: u32,
-    pub second_percent: u32,
-    pub engaged_percent: u32,
+    pub message_legend: ActivityLegend,
+    pub turn_legend: ActivityLegend,
+    pub second_legend: ActivityLegend,
+    pub engaged_legend: ActivityLegend,
+}
+
+/// What the chart's legend says of a source in one measure.
+#[derive(Clone, PartialEq, Debug, Deserialize, Default)]
+#[serde(default)]
+pub struct ActivityLegend {
+    /// "3h 24m (5%)": its total and its share of all the sources'.
+    pub total: String,
+    /// Each point's, with its share of that point.
+    pub points: Vec<String>,
+    /// Every shape these take, their digits as zeros, to hold the widest's room.
+    pub shapes: Vec<String>,
 }
 
 #[derive(Clone, PartialEq, Debug, Deserialize)]
