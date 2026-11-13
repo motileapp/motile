@@ -25,8 +25,33 @@ const QUEUED_CHARS: usize = 2000;
 const BODY_CHARS: usize = 6000;
 const PULL_REQUEST_EVENTS: usize = 20;
 const CHANGED_FILES: usize = 200;
+/// The fewest characters of a thread's id that find it.
+const SHORTEST_ID: usize = 8;
 
 impl Hub {
+    /// The thread of this server whose id is `given`, or the only one whose id starts with it.
+    pub fn thread_id_of(&self, given: &str) -> anyhow::Result<String> {
+        let given = given.trim();
+        let found: Vec<String> = {
+            let threads = self.lock_threads();
+            if threads.contains_key(given) {
+                return Ok(given.to_string());
+            }
+            if given.len() < SHORTEST_ID {
+                bail!("Give at least the first {SHORTEST_ID} characters of the thread's id, or all of it.");
+            }
+            threads.keys().filter(|id| id.starts_with(given)).cloned().collect()
+        };
+        match &found[..] {
+            [id] => Ok(id.clone()),
+            [] if self.store.copies_thread(given)? => {
+                bail!("That thread is on another of your servers. Agents only reach the threads of their own server.")
+            }
+            [] => bail!("Your server has no thread whose id is or starts with {given}."),
+            _ => bail!("{} threads' ids start with {given}. Give more of the id.", found.len()),
+        }
+    }
+
     /// Starts a thread of its own, which the sidebar lists, as the user starts one.
     pub async fn create_thread(self: &Arc<Self>, caller: &str, create: CreateThread) -> anyhow::Result<Value> {
         let text = create.prompt.trim().to_string();
