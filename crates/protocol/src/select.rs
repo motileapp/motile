@@ -1,6 +1,8 @@
 //! Which account a new thread starts on. Of the accounts that can carry it through the next hours
-//! without running dry, the one whose spare quota lapses soonest: first to expire, first spent. The
-//! gateway ranks its accounts with it, from what it measures; the clients rank a server's own accounts.
+//! without running dry, the one whose spare quota lapses soonest: first to expire, first spent. Quota
+//! only lapses when the account could have spent it: what a session leaves is spent after it resets
+//! when the week runs out first anyway. The gateway ranks its accounts with it, from what it
+//! measures; the clients rank a server's own accounts.
 
 use crate::wire::{Agent, LimitWindow};
 
@@ -18,6 +20,8 @@ const PROJECT_AFTER: f64 = 120.0;
 const STALE_AFTER: f64 = 15.0 * 60.0;
 const SESSION: f64 = 5.0 * 3600.0;
 const WEEK: f64 = 7.0 * 86400.0;
+/// How far spending may stray from the time that has passed and still be on pace, in points.
+pub const ON_PACE: f64 = 5.0;
 
 /// One of an account's windows that applies to the thread's model.
 #[derive(Clone, Debug, PartialEq)]
@@ -70,7 +74,7 @@ fn key(candidate: &Candidate, index: usize, now: f64, horizon: f64) -> Vec<f64> 
     let fit = fit(&windows, horizon);
     let margin = if candidate.measured { MARGIN_MEASURED } else { MARGIN_PRIOR };
     if fit >= margin {
-        let lapse = (lapse(&windows) / SAME_LAPSE).floor();
+        let lapse = (lapse(&windows, horizon) / SAME_LAPSE).floor();
         return vec![0.0, priority, lapse, if candidate.current { 0.0 } else { 1.0 }, -fit, order];
     }
     if candidate.reset_credits > 0 {
@@ -79,22 +83,32 @@ fn key(candidate: &Candidate, index: usize, now: f64, horizon: f64) -> Vec<f64> 
     vec![3.0, stall(&windows), order]
 }
 
-/// A window as it is now: its room in points, the seconds until it resets, and the points per
-/// hour it would be spent at with the thread on it.
+/// A window as it is now: its room in points, the seconds until it resets, the points per hour it
+/// would be spent at with the thread on it, and whether it was spent ahead of its pace.
 struct Live {
     room: f64,
     left: f64,
     rate: f64,
+    ahead: bool,
 }
 
 impl Live {
     fn new(window: &Window, age: f64, now: f64) -> Self {
         let rate = (window.spend + window.thread).max(0.0);
         let Some(at) = window.resets_at.filter(|at| *at > now) else {
-            return Self { room: 100.0, left: window.length, rate };
+            return Self { room: 100.0, left: window.length, rate, ahead: false };
         };
         let projected = if age > PROJECT_AFTER { window.spend.max(0.0) * age / 3600.0 } else { 0.0 };
-        Self { room: (100.0 - window.used - projected).clamp(0.0, 100.0), left: at - now, rate }
+        let room = (100.0 - window.used - projected).clamp(0.0, 100.0);
+        let left = at - now;
+        let passed = (1.0 - left / window.length).clamp(0.0, 1.0) * 100.0;
+        Self { room, left, rate, ahead: 100.0 - room - passed > ON_PACE }
+    }
+
+    /// Whether it still has room when it resets: what runs on the account and the thread leave some
+    /// over the horizon, and it isn't spent ahead of its pace.
+    fn spares(&self, horizon: f64) -> bool {
+        !self.ahead && self.room > self.rate * self.left.min(horizon) / 3600.0
     }
 
     /// How many times over the room covers what the next `seconds` take.
@@ -121,13 +135,13 @@ fn fit(windows: &[Live], horizon: f64) -> f64 {
         .fold(f64::INFINITY, f64::min)
 }
 
-/// Seconds until the first of the account's quota that nothing would spend lapses. A window's room is
-/// only as large as the tightest window's.
-fn lapse(windows: &[Live]) -> f64 {
-    let cap = windows.iter().map(|window| window.room).fold(f64::INFINITY, f64::min);
+/// Seconds until the first of the account's spare quota lapses. A window that won't spare runs out
+/// before it resets, so what the windows that reset before it leave is spent after them.
+fn lapse(windows: &[Live], horizon: f64) -> f64 {
+    let bound = windows.iter().filter(|window| !window.spares(horizon)).map(|window| window.left).fold(0.0, f64::max);
     windows
         .iter()
-        .filter(|window| cap - window.rate * window.left / 3600.0 > 0.0)
+        .filter(|window| window.left > bound && window.spares(horizon))
         .map(|window| window.left)
         .fold(f64::INFINITY, f64::min)
 }
@@ -230,6 +244,30 @@ mod tests {
     }
 
     #[test]
+    fn a_session_about_to_lapse_only_draws_the_thread_while_its_week_is_on_pace() {
+        let fresh =
+            account(vec![session(7.0, (3.0 * 60.0 + 52.0) * 60.0, 0.0), weekly(5.0, 6.0 * 86400.0 + 17.0 * HOUR)]);
+        let resetting = |week| account(vec![session(67.0, 14.0 * 60.0, 0.0), weekly(week, 4.0 * 86400.0 + 6.0 * HOUR)]);
+        assert_eq!(first(&[resetting(92.0), fresh.clone()]), 1);
+        assert_eq!(first(&[resetting(40.0), fresh]), 0);
+    }
+
+    #[test]
+    fn a_week_ahead_of_pace_is_held_back_until_time_catches_up() {
+        let fresh = account(vec![session(30.0, 4.0 * HOUR, 0.0), weekly(10.0, 6.0 * 86400.0)]);
+        let ahead = |resets_in| account(vec![session(10.0, 0.5 * HOUR, 0.0), weekly(90.0, resets_in)]);
+        assert_eq!(first(&[ahead(3.0 * 86400.0), fresh.clone()]), 1);
+        assert_eq!(first(&[ahead(12.0 * HOUR), fresh]), 0);
+    }
+
+    #[test]
+    fn of_weeks_under_pace_the_one_that_resets_first_is_spent_first() {
+        let late = account(vec![session(60.0, 4.0 * HOUR, 0.0), weekly(10.0, 6.0 * 86400.0)]);
+        let soon = account(vec![session(60.0, 4.0 * HOUR, 0.0), weekly(30.0, 2.0 * 86400.0)]);
+        assert_eq!(first(&[late, soon]), 1);
+    }
+
+    #[test]
     fn threads_that_start_together_are_spread_by_what_each_adds() {
         let resetting = |spend| account(vec![session(80.0, 0.2 * HOUR, spend)]);
         let fresh = account(vec![session(0.0, 5.0 * HOUR, 0.0)]);
@@ -239,7 +277,7 @@ mod tests {
 
     #[test]
     fn the_current_account_keeps_the_thread_among_equals() {
-        let mut current = account(vec![session(50.0, 3.0 * HOUR, 0.0)]);
+        let mut current = account(vec![session(40.0, 3.0 * HOUR, 0.0)]);
         current.current = true;
         let other = account(vec![session(20.0, 3.1 * HOUR, 0.0)]);
         assert_eq!(first(&[other, current]), 1);
