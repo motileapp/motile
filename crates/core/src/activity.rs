@@ -42,6 +42,8 @@ pub struct Names {
 pub struct View {
     /// Nothing was done in the time asked about.
     pub empty: bool,
+    /// Only the period's shape, with nothing in it, while the servers are asked.
+    pub loading: bool,
     pub starts: Vec<f64>,
     pub tiles: Vec<Tile>,
     /// Each with a point for each of `starts`: the user's messages by the kind of client they came
@@ -629,6 +631,7 @@ pub fn view(done: &[Done], window: Window, grid: Grid, names: &Names, local: &[S
 
     View {
         empty: false,
+        loading: false,
         starts,
         tiles,
         sources,
@@ -645,6 +648,18 @@ pub fn view(done: &[Done], window: Window, grid: Grid, names: &Names, local: &[S
         facts: facts(&turns, &messages, turn_count),
         features: feature_groups(&actions),
         agent_features: feature_lines(actions.iter().copied().filter(|bucket| bucket.actor == ActorKind::Agent)),
+    }
+}
+
+/// The period's tiles, chart and heatmap with nothing in them yet, for while the servers are asked.
+pub fn loading(window: &Window, grid: &Grid) -> View {
+    let tile = |label: &str| Tile { label: label.into(), value: String::new(), detail: String::new() };
+    View {
+        loading: true,
+        starts: window.starts(),
+        tiles: ["Your time", "Agent time", "Waiting on you", "Messages"].into_iter().map(tile).collect(),
+        heatmap: heatmap(&[], &[], grid).0,
+        ..View::default()
     }
 }
 
@@ -1582,7 +1597,7 @@ mod tests {
             ],
             actions: ["mac", "phone", "tablet"]
                 .into_iter()
-                .map(|device| action(0.0, Actor::User, Some(device), "message", "reply", 1))
+                .map(|device| action(0.0, ActorKind::User, Some(device), "message", "reply", 1))
                 .collect(),
             clients: vec![
                 client("mac", ClientKind::Mac, "macos", ClientForm::Desktop),
@@ -1768,6 +1783,35 @@ mod tests {
         assert_eq!(quarter.latest, thursday(&quarter, 12));
         assert_eq!(axis(&quarter).first(), Some(&(0, "Aug 17".into())));
         assert_eq!(axis(&quarter).len(), 7);
+    }
+
+    #[test]
+    fn the_loading_view_has_the_shape_of_the_answer() {
+        let now = 1_794_455_160.0;
+        for (bucket_secs, buckets) in [(3600, 24), (86_400, 7), (86_400, 30), (86_400, 90)] {
+            let window = Window::ending(now, bucket_secs, buckets, 0);
+            let grid = Grid::of(&window, now);
+            let done = [Done {
+                server_id: "studio".into(),
+                report: ActivityReport {
+                    actions: vec![action(window.since, ActorKind::User, Some("mac"), "message", "reply", 1)],
+                    ..ActivityReport::default()
+                },
+            }];
+            let answer = view(&done, window, grid, &names(), &[], true);
+            let loading = loading(&window, &grid);
+            assert!(loading.loading && !answer.loading);
+            assert_eq!(loading.starts, answer.starts);
+            let labels = |view: &View| view.tiles.iter().map(|tile| tile.label.clone()).collect::<Vec<_>>();
+            assert_eq!(labels(&loading), labels(&answer));
+            let cells = |heatmap: &Heatmap| {
+                heatmap.cells.iter().map(|cell| cell.as_ref().map(|cell| cell.label.clone())).collect::<Vec<_>>()
+            };
+            assert_eq!(
+                (&loading.heatmap.rows, loading.heatmap.columns, loading.heatmap.latest, cells(&loading.heatmap)),
+                (&answer.heatmap.rows, answer.heatmap.columns, answer.heatmap.latest, cells(&answer.heatmap))
+            );
+        }
     }
 
     #[test]

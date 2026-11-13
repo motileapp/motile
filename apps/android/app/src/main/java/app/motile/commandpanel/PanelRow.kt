@@ -1,11 +1,5 @@
 package app.motile.commandpanel
 
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -22,10 +16,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -35,7 +27,6 @@ import app.motile.platform.scaled
 import app.motile.theme.TextSize
 import app.motile.theme.symbolSide
 import app.motile.theme.IconSize
-import app.motile.theme.LocalDark
 import app.motile.theme.LocalPalette
 import app.motile.theme.LocalSurface
 import app.motile.theme.Opacity
@@ -43,13 +34,13 @@ import app.motile.theme.Radius
 import app.motile.theme.Surface
 import app.motile.theme.Theme
 import app.motile.theme.opacity
-import app.motile.theme.value
 import app.motile.theme.wash
 import app.motile.ui.HighlightButton
 import app.motile.ui.Icon
 import app.motile.ui.ProjectIcon
 import app.motile.ui.Spinner
 import app.motile.ui.Text
+import app.motile.ui.pulsing
 
 internal object PanelRow {
     val height = scaled(52f).dp
@@ -89,19 +80,6 @@ internal fun PanelRow(item: PanelItem, lit: Boolean, onClick: () -> Unit) {
             }
         }
     }
-}
-
-/** Fades in and out, as a row that is on its way. */
-@Composable
-private fun Modifier.pulsing(): Modifier {
-    val faded = Opacity.Disabled.value(LocalDark.current)
-    val alpha by rememberInfiniteTransition(label = "placeholder").animateFloat(
-        initialValue = 1f,
-        targetValue = faded,
-        animationSpec = infiniteRepeatable(tween(800, easing = FastOutSlowInEasing), RepeatMode.Reverse),
-        label = "fade",
-    )
-    return alpha(alpha)
 }
 
 @Composable

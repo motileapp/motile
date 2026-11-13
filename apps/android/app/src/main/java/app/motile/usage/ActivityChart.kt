@@ -23,7 +23,7 @@ import app.motile.theme.Theme
 import app.motile.theme.at
 import kotlin.math.max
 
-private val chartHeight = 190.dp
+internal val activityChartHeight = 190.dp
 private val labelGap = 6.dp
 
 /**
@@ -59,7 +59,7 @@ fun ActivityChart(
     Canvas(
         Modifier
             .fillMaxWidth()
-            .height(chartHeight)
+            .height(activityChartHeight)
             .chartPointing(pointed, point) { at, size ->
                 if (count == 0) return@chartPointing null
                 (at.x / slotOf(size.width.toFloat())).toInt().coerceIn(0, count - 1)

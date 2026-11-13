@@ -13,8 +13,9 @@ use self::spending::SpendingView;
 use crate::panel::state::Loaded;
 use crate::store::Store;
 use crate::store::usage::{UsagePeriod, UsageTab};
-use crate::theme::{self, ControlSize, TextSize, colors};
+use crate::theme::{self, ControlSize, Layer, Radius, Surface, TextSize, colors};
 use crate::ui::menu::Menu;
+use crate::ui::motion::pulsing;
 use crate::ui::parts::{Check, CheckMenu};
 use crate::ui::{ActionButton, ActionMenu, Segmented, Spinner, Variant, beside, text_width};
 
@@ -320,4 +321,19 @@ pub fn note(text: impl Into<SharedString>, cx: &App) -> AnyElement {
         .text_center()
         .child(text.into())
         .into_any_element()
+}
+
+/// A bar where a line of `size` will be, in its line and as tall as its capitals, fading in and out.
+fn placeholder_bar(id: impl Into<ElementId>, width: f32, size: TextSize, surface: Surface, cx: &App) -> Div {
+    let system = cx.text_system();
+    let font = system.resolve_font(&crate::transcript::rows::font(theme::UI_FONT, FontWeight::NORMAL, false));
+    let cap = f32::from(system.cap_height(font, Pixels::from(size))).round();
+    let bar = div().w_full().h(px(cap)).rounded(px(Radius::XS)).bg(surface.layer(Layer::Control, colors(cx)));
+    div()
+        .relative()
+        .flex_shrink_0()
+        .w(px(width))
+        .text_size(size)
+        .child(" ")
+        .child(div().absolute().inset_0().flex().items_center().child(pulsing(id, bar, cx)))
 }

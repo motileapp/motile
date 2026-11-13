@@ -177,7 +177,7 @@ final class UsageModel {
                 store.loadActivity(bucketSeconds: seconds, buckets: buckets, kept: false, servers: counted) { [weak self] result in
                     guard let self, number == asked else { return }
                     refreshing = false
-                    activity = Self.loaded(result, over: activity)
+                    activity = Self.loaded(result, over: activity.value?.loading == true ? .loading : activity)
                 }
             }
         } else {
@@ -188,7 +188,7 @@ final class UsageModel {
                 store.loadUsage(bucketSeconds: seconds, buckets: buckets, kept: false, servers: counted) { [weak self] result in
                     guard let self, number == asked else { return }
                     refreshing = false
-                    spending = Self.loaded(result, over: spending)
+                    spending = Self.loaded(result, over: spending.value?.loading == true ? .loading : spending)
                 }
             }
         }

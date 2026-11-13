@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -43,6 +44,7 @@ import app.motile.theme.TextSize
 import app.motile.theme.iconSize
 import app.motile.theme.LocalPalette
 import app.motile.theme.LocalSurface
+import app.motile.theme.Radius
 import app.motile.theme.Surface
 import app.motile.theme.Theme
 import app.motile.theme.symbolSide
@@ -54,6 +56,7 @@ import app.motile.ui.Text
 import app.motile.ui.ThemeDivider
 import app.motile.ui.color
 import app.motile.ui.proxied
+import app.motile.ui.pulsing
 import java.text.NumberFormat
 import java.util.Currency
 
@@ -98,13 +101,21 @@ fun SpendingView(report: UsageReport, measure: Measure, period: UsageModel.Perio
     BoxWithConstraints(Modifier.fillMaxWidth()) {
         val width = maxWidth
         Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(24.dp)) {
-            if (report.tokens == 0L) {
+            if (report.tokens == 0L && !report.loading) {
                 UsageNote("Nothing was spent in this time. Servers keep what their agents spend from the version that shows this on.")
             } else {
                 val chart = @Composable { modifier: Modifier ->
                     Column(modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Legend(report, measure, period, pointed)
-                        SpendingChart(report, measure, period, pointed) { pointed = it }
+                        if (report.loading) {
+                            PlaceholderBar(180.dp, Theme.ui(TextSize.Xs))
+                            Box(
+                                Modifier.fillMaxWidth().height(spendingChartHeight).pulsing()
+                                    .background(LocalSurface.current.color(Surface.Layer.Control), RoundedCornerShape(Radius.md)),
+                            )
+                        } else {
+                            Legend(report, measure, period, pointed)
+                            SpendingChart(report, measure, period, pointed) { pointed = it }
+                        }
                     }
                 }
                 if (width >= besideWidth) {
@@ -129,10 +140,15 @@ private fun Summary(report: UsageReport, measure: Measure) {
     val cost = measure == Measure.Cost
     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-            Text(
-                if (cost) cost(report.costUSD) else count(report.tokens), style = Theme.uiDigits(TextSize.Xxl, FontWeight.SemiBold), color = palette.foreground,
-            )
+            if (report.loading) {
+                PlaceholderBar(120.dp, Theme.uiDigits(TextSize.Xxl, FontWeight.SemiBold))
+            } else {
+                Text(
+                    if (cost) cost(report.costUSD) else count(report.tokens), style = Theme.uiDigits(TextSize.Xxl, FontWeight.SemiBold), color = palette.foreground,
+                )
+            }
             Text(if (cost) "What the API would have charged" else "Tokens in and out", size = TextSize.Xs, color = palette.mutedForeground)
+            if (report.loading) PlaceholderBar(200.dp, Theme.ui(TextSize.Xs))
             if (report.writingTokens > 0) {
                 val written = if (cost) cost(report.writingCostUSD) else count(report.writingTokens)
                 Text(
@@ -145,6 +161,14 @@ private fun Summary(report: UsageReport, measure: Measure) {
             }
         }
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            if (report.loading) {
+                AgentPlaceholder()
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    PlaceholderBar(120.dp, Theme.ui(TextSize.Xs))
+                    Spacer(Modifier.weight(1f))
+                    PlaceholderBar(48.dp, Theme.ui(TextSize.Xs))
+                }
+            }
             for (series in report.agents) AgentLine(report, series, measure)
             if (report.cacheSavingsUSD > 0) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -176,6 +200,19 @@ private fun AgentLine(report: UsageReport, series: UsageReport.Series, measure: 
             "${percent.format(share)} of ${if (cost) "the cost" else "the tokens"} · $other",
             Modifier.padding(start = 15.dp), style = Theme.uiDigits(TextSize.Xs), color = palette.mutedStrongerForeground,
         )
+    }
+}
+
+/** Bars where an agent's line will be. */
+@Composable
+private fun AgentPlaceholder() {
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically) {
+            PlaceholderBar(110.dp, Theme.ui(TextSize.Xs))
+            Spacer(Modifier.weight(1f))
+            PlaceholderBar(48.dp, Theme.ui(TextSize.Xs))
+        }
+        PlaceholderBar(160.dp, Theme.ui(TextSize.Xs), Modifier.padding(start = 15.dp))
     }
 }
 
@@ -221,6 +258,14 @@ private fun Lines(report: UsageReport, measure: Measure, stacked: Boolean) {
             breakdown = it
             Preferences.set(BREAKDOWN_KEY, it.raw)
         }, fills = stacked)
+        if (report.loading) {
+            Card(Modifier.fillMaxWidth()) {
+                repeat(3) { index ->
+                    if (index > 0) ThemeDivider()
+                    LinePlaceholder()
+                }
+            }
+        }
         if (shown.isNotEmpty()) {
             Card(Modifier.fillMaxWidth()) {
                 shown.forEachIndexed { index, line ->
@@ -229,6 +274,20 @@ private fun Lines(report: UsageReport, measure: Measure, stacked: Boolean) {
                 }
             }
         }
+    }
+}
+
+/** Bars where a line's name, tokens and cost will be. */
+@Composable
+private fun LinePlaceholder() {
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = scaled(36f).dp).padding(horizontal = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(spacing), verticalAlignment = Alignment.CenterVertically,
+    ) {
+        PlaceholderBar(140.dp, Theme.ui(TextSize.Xs))
+        Spacer(Modifier.weight(1f))
+        PlaceholderBar(48.dp, Theme.ui(TextSize.Xs))
+        PlaceholderBar(56.dp, Theme.ui(TextSize.Xs))
     }
 }
 

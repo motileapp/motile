@@ -56,6 +56,7 @@ struct ActivityView: View {
 
     @Environment(AppStore.self) private var store
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.surface) private var surface
     @Environment(\.usagePageHeight) private var pageHeight
     let report: ActivityReport
     let period: UsageModel.Period
@@ -105,7 +106,7 @@ struct ActivityView: View {
     private var tiles: some View {
         ActivityStatGrid(
             stats: report.tiles.map { ActivityStat(label: $0.label, value: $0.value, detail: $0.detail) },
-            columns: beside ? 4 : 2, valueSize: .xl)
+            columns: beside ? 4 : 2, valueSize: .xl, loading: report.loading)
     }
 
     // MARK: Over time
@@ -162,8 +163,14 @@ struct ActivityView: View {
             ActivityHeading(title: "Over time", stacked: true) {
                 Segmented(Measure.allCases.map { ($0.label, $0) }, selection: $measure, fills: !beside)
             }
-            legend
-            chart
+            if report.loading {
+                PlaceholderBar(width: 180, size: .xs)
+                Pulsing { RoundedRectangle(cornerRadius: Radius.md, style: .continuous).fill(surface.color(.control)) }
+                    .frame(height: Self.chartHeight)
+            } else {
+                legend
+                chart
+            }
         }
     }
 
@@ -234,8 +241,10 @@ struct ActivityView: View {
                 AxisMarks(values: .automatic(desiredCount: 4)) { mark in yMark(mark) }
             }
         }
-        .frame(height: 190)
+        .frame(height: Self.chartHeight)
     }
+
+    private static let chartHeight: CGFloat = 190
 
     @AxisMarkBuilder private func yMark(_ mark: AxisValue) -> some AxisMark {
         AxisGridLine().foregroundStyle(Color.themeBorder)
@@ -272,10 +281,13 @@ struct ActivityView: View {
 
     private var hours: some View {
         VStack(alignment: .leading, spacing: 12) {
-            ActivityHeading(title: "When you work", detail: hourMeasure == .time ? report.busiestTime : report.busiestMessages, stacked: true) {
+            ActivityHeading(
+                title: "When you work", detail: hourMeasure == .time ? report.busiestTime : report.busiestMessages,
+                loading: report.loading, stacked: true
+            ) {
                 Segmented(HourMeasure.allCases.map { ($0.label, $0) }, selection: $hourMeasure, fills: !beside)
             }
-            ActivityHeatmap(heatmap: report.heatmap, measure: hourMeasure)
+            ActivityHeatmap(heatmap: report.heatmap, measure: hourMeasure, loading: report.loading)
                 .padding(16)
                 .card()
         }
@@ -444,6 +456,7 @@ private struct ActivityStatGrid: View {
     let stats: [ActivityStat]
     let columns: Int
     let valueSize: TextSize
+    var loading = false
 
     var body: some View {
         let rows = stride(from: 0, to: stats.count, by: columns).map { Array(stats[$0..<min($0 + columns, stats.count)]) }
@@ -463,17 +476,22 @@ private struct ActivityStatGrid: View {
                 .font(.ui(.xs))
                 .foregroundStyle(Color.themeMutedForeground)
                 .lineLimit(1)
-            Text(stat.value)
-                .font(.ui(valueSize, weight: .semibold))
-                .foregroundStyle(Color.themeForeground)
-                .monospacedDigit()
-                .lineLimit(1)
-                .fixedSize(horizontal: false, vertical: true)
-            Text(stat.detail)
-                .font(.ui(.xxs))
-                .foregroundStyle(Color.themeMutedStrongerForeground)
-                .monospacedDigit()
-                .fixedSize(horizontal: false, vertical: true)
+            if loading {
+                PlaceholderBar(width: 72, size: valueSize, weight: .semibold)
+                PlaceholderBar(width: 120, size: .xxs)
+            } else {
+                Text(stat.value)
+                    .font(.ui(valueSize, weight: .semibold))
+                    .foregroundStyle(Color.themeForeground)
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(stat.detail)
+                    .font(.ui(.xxs))
+                    .foregroundStyle(Color.themeMutedStrongerForeground)
+                    .monospacedDigit()
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .padding(.horizontal, 14)
@@ -487,6 +505,8 @@ private struct ActivityStatGrid: View {
 private struct ActivityHeading<Trailing: View>: View {
     let title: String
     var detail: String?
+    /// A bar where the detail will be.
+    var loading = false
     var stacked = false
     @ViewBuilder var trailing: Trailing
 
@@ -514,7 +534,9 @@ private struct ActivityHeading<Trailing: View>: View {
             Text(title)
                 .font(.ui(.md, weight: .medium))
                 .foregroundStyle(Color.themeForeground)
-            if let detail {
+            if loading {
+                PlaceholderBar(width: 260, size: .xs)
+            } else if let detail {
                 Text(detail)
                     .font(.ui(.xs))
                     .foregroundStyle(Color.themeMutedForeground)
@@ -746,6 +768,8 @@ private struct ActivityHeatmap: View {
     @Environment(\.surface) private var surface
     let heatmap: ActivityReport.Heatmap
     let measure: ActivityView.HourMeasure
+    /// Only the cells' places, with nothing in them yet.
+    let loading: Bool
     @State private var chosen: Int?
     @State private var width: CGFloat = 0
 
@@ -775,7 +799,11 @@ private struct ActivityHeatmap: View {
                     .fixedSize()
                 }
                 VStack(alignment: .leading, spacing: 6) {
-                    cells
+                    if loading {
+                        Pulsing { cells }.allowsHitTesting(false)
+                    } else {
+                        cells
+                    }
                     axis
                 }
                 .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
@@ -817,7 +845,7 @@ private struct ActivityHeatmap: View {
     @ViewBuilder private func cell(_ index: Int) -> some View {
         let slot = CGSize(width: pitch, height: cellHeight + Self.gap)
         if let cell = heatmap.cells[safe: index] ?? nil {
-            let isChosen = shown == index
+            let isChosen = shown == index && !loading
             RoundedRectangle(cornerRadius: corner, style: .continuous)
                 .fill(fill(measure == .time ? cell.timeLevel : cell.messageLevel))
                 .overlay {
@@ -883,7 +911,9 @@ private struct ActivityHeatmap: View {
     }
 
     @ViewBuilder private var said: some View {
-        if let cell = heatmap.cells[safe: shown] ?? nil {
+        if loading {
+            PlaceholderBar(width: 220, size: .xxs)
+        } else if let cell = heatmap.cells[safe: shown] ?? nil {
             let time = cell.time.isEmpty ? [] : [Text(verbatim: cell.time)]
             Text(dotted: [Text(verbatim: cell.label)] + time + [
                 Text(cell.messages == 1 ? "1 message" : "\(cell.messages.formatted()) messages"),

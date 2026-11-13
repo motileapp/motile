@@ -7,6 +7,7 @@ use gpui_kit::*;
 use motile_core::activity::{duration, number};
 use serde::{Deserialize, Serialize};
 
+use super::placeholder_bar;
 use super::spending::{CAPTION, CHART_HEIGHT, X_GUTTER, Y_GUTTER, axis_label, axis_ticks, caption, dot, ticks};
 use crate::format;
 use crate::models::ago;
@@ -18,6 +19,7 @@ use crate::store::usage::{
 use crate::theme::{Colors, ControlSize, IconSize, Layer, Opacity, Radius, Surface, TextSize, colors};
 use crate::ui::control::dotted;
 use crate::ui::menu::Anchor;
+use crate::ui::motion::pulsing;
 use crate::ui::{
     Chip, FadingScroll, Segmented, card_default, divider_on, icons, logos, middle_truncated, tabular_numbers,
     tabular_text_width, text_width,
@@ -32,6 +34,7 @@ const FEATURE_BAR_WIDTH: f32 = 56.;
 const HEATMAP_PADDING: f32 = 16.;
 const HEATMAP_GAP: f32 = 3.;
 const HEATMAP_CELL_HEIGHT: f32 = 18.;
+const SAID_PLACEHOLDER_WIDTH: f32 = 220.;
 const MEASURE_KEY: &str = "activity.measure";
 const BREAKDOWN_KEY: &str = "activity.breakdown";
 const WHO_KEY: &str = "activity.who";
@@ -226,20 +229,31 @@ impl ActivityView {
     }
 
     fn tiles(&self, report: &ActivityReport, cx: &App) -> AnyElement {
-        stat_grid(&report.tiles, self.columns(), TextSize::Xl, cx).into_any_element()
+        stat_grid(&report.tiles, self.columns(), TextSize::Xl, report.loading, cx).into_any_element()
     }
 
     fn over_time(&self, report: &ActivityReport, cx: &mut Context<Self>) -> AnyElement {
         let measure: Measure = self.pref(MEASURE_KEY, cx);
         let picker = self.picker(MEASURE_KEY, Measure::ALL.to_vec(), measure, Measure::label).fills(!self.beside());
-        div()
-            .flex()
-            .flex_col()
-            .gap(px(12.))
-            .child(heading("Over time", None, Some(picker.into_any_element()), true, cx))
-            .child(self.legend(report, measure, cx))
-            .child(self.chart(report, measure, cx))
-            .into_any_element()
+        let section = div().flex().flex_col().gap(px(12.)).child(heading(
+            "Over time",
+            None,
+            Some(picker.into_any_element()),
+            true,
+            cx,
+        ));
+        if report.loading {
+            let block = div()
+                .w_full()
+                .h(px(CHART_HEIGHT))
+                .rounded(px(Radius::MD))
+                .bg(Surface::Background.layer(Layer::Control, colors(cx)));
+            return section
+                .child(placeholder_bar("activity-legend-placeholder", 180., TextSize::Xs, Surface::Background, cx))
+                .child(pulsing("activity-chart-placeholder", block, cx))
+                .into_any_element();
+        }
+        section.child(self.legend(report, measure, cx)).child(self.chart(report, measure, cx)).into_any_element()
     }
 
     /// Each source with its total and its share of it, or what it did in the bucket the pointer is over, whose date
@@ -386,7 +400,7 @@ impl ActivityView {
             .flex()
             .flex_col()
             .gap(px(12.))
-            .child(heading("Clients", Some("Where you worked from".into()), None, false, cx))
+            .child(heading("Clients", Some(detail("Where you worked from", cx)), None, false, cx))
             .child(card_default(div().flex().flex_col(), cx).child(list))
             .into_any_element()
     }
@@ -492,6 +506,13 @@ impl ActivityView {
             HourMeasure::Time => report.busiest_time.clone(),
             HourMeasure::Messages => report.busiest_messages.clone(),
         };
+        let busiest = match report.loading {
+            true => Some(
+                placeholder_bar("activity-busiest-placeholder", 260., TextSize::Xs, Surface::Background, cx)
+                    .into_any_element(),
+            ),
+            false => busiest.map(|busiest| detail(busiest, cx)),
+        };
         div()
             .flex()
             .flex_col()
@@ -500,6 +521,7 @@ impl ActivityView {
             .child(card_default(div().p(px(HEATMAP_PADDING)), cx).child(self.heatmap(
                 &report.heatmap,
                 measure,
+                report.loading,
                 window,
                 cx,
             )))
@@ -508,11 +530,13 @@ impl ActivityView {
 
     /// When the work was done, each slice as busy as its colour is strong. The slice the pointer was
     /// over or clicked last says what was done in it, the slice of now to start with. The gaps
-    /// between the slices are only drawn: each one's hit area is an even share of its cell's.
+    /// between the slices are only drawn: each one's hit area is an even share of its cell's. While
+    /// `loading`, only the slices' places, fading in and out.
     fn heatmap(
         &self,
         heatmap: &ActivityHeatmap,
         measure: HourMeasure,
+        loading: bool,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
@@ -562,7 +586,10 @@ impl ActivityView {
                     .h(px(height))
                     .rounded(px(corner))
                     .bg(level_fill(level, c))
-                    .when(shown == index, |shape| shape.border_1().border_color(c.foreground));
+                    .when(shown == index && !loading, |shape| shape.border_1().border_color(c.foreground));
+                if loading {
+                    return slot.relative().child(shape).into_any_element();
+                }
                 slot.relative()
                     .id(("activity-cell", index))
                     .child(shape)
@@ -576,6 +603,10 @@ impl ActivityView {
             }))
         });
         let cells = div().w(px(width + HEATMAP_GAP)).m(px(-HEATMAP_GAP / 2.)).flex().flex_col().children(rows);
+        let cells = match loading {
+            true => pulsing("activity-cells-placeholder", cells, cx).into_any_element(),
+            false => cells.into_any_element(),
+        };
         let axis = div().relative().w(px(width)).child(label(" ").invisible()).children(
             heatmap.axis.iter().map(|axis| label(&axis.label).absolute().top_0().left(px(axis.column as f32 * pitch))),
         );
@@ -590,7 +621,7 @@ impl ActivityView {
             .flex_col()
             .gap(px(12.))
             .child(grid)
-            .child(self.heatmap_caption(heatmap, shown, inner, window, c))
+            .child(self.heatmap_caption(heatmap, shown, loading, inner, window, cx))
             .into_any_element()
     }
 
@@ -612,10 +643,12 @@ impl ActivityView {
         &self,
         heatmap: &ActivityHeatmap,
         shown: usize,
+        loading: bool,
         room: f32,
         window: &mut Window,
-        c: &Colors,
+        cx: &App,
     ) -> Div {
+        let c = colors(cx);
         let said = heatmap.cells.get(shown).and_then(Option::as_ref).map_or_else(String::new, |cell| {
             let messages =
                 if cell.messages == 1 { "1 message".into() } else { format!("{} messages", number(cell.messages)) };
@@ -628,9 +661,19 @@ impl ActivityView {
         });
         let words = |text: &str, window: &mut Window| text_width(text, TextSize::Xxs, FontWeight::NORMAL, window);
         let key_width = words("Less", window) + words("More", window) + 2. * 3. + 5. * 10. + 6. * HEATMAP_GAP;
-        let fits = tabular_text_width(&said, TextSize::Xxs, FontWeight::NORMAL, window) + 8. + key_width <= room;
-        let said =
-            div().min_w_0().overflow_hidden().text_ellipsis().text_color(c.muted_foreground).child(dotted(said, c));
+        let said_width = match loading {
+            true => SAID_PLACEHOLDER_WIDTH,
+            false => tabular_text_width(&said, TextSize::Xxs, FontWeight::NORMAL, window),
+        };
+        let fits = said_width + 8. + key_width <= room;
+        let said = match loading {
+            true => {
+                placeholder_bar("activity-said-placeholder", SAID_PLACEHOLDER_WIDTH, TextSize::Xxs, Surface::Card, cx)
+            }
+            false => {
+                div().min_w_0().overflow_hidden().text_ellipsis().text_color(c.muted_foreground).child(dotted(said, c))
+            }
+        };
         let key = div()
             .flex_shrink_0()
             .flex()
@@ -663,7 +706,7 @@ impl ActivityView {
             .child(heading("Turns", None, None, false, cx))
             .child(cards)
             .when(!report.facts.is_empty(), |turns| {
-                turns.child(stat_grid(&report.facts, self.columns(), TextSize::Lg, cx))
+                turns.child(stat_grid(&report.facts, self.columns(), TextSize::Lg, false, cx))
             })
             .into_any_element()
     }
@@ -848,9 +891,14 @@ impl Render for ActivityView {
     }
 }
 
+/// What a section's heading says under its title.
+fn detail(text: impl Into<SharedString>, cx: &App) -> AnyElement {
+    div().text_size(TextSize::Xs).text_color(colors(cx).muted_foreground).child(text.into()).into_any_element()
+}
+
 /// A section's title, with what it says under it and a control on its right, or `stacked` across
 /// the row under it, where a narrow page has no room beside the title.
-fn heading(title: &str, detail: Option<String>, trailing: Option<AnyElement>, stacked: bool, cx: &App) -> Div {
+fn heading(title: &str, detail: Option<AnyElement>, trailing: Option<AnyElement>, stacked: bool, cx: &App) -> Div {
     let c = colors(cx);
     let words = div()
         .flex()
@@ -863,9 +911,7 @@ fn heading(title: &str, detail: Option<String>, trailing: Option<AnyElement>, st
                 .text_color(c.foreground)
                 .child(title.to_string()),
         )
-        .when_some(detail, |words, detail| {
-            words.child(div().text_size(TextSize::Xs).text_color(c.muted_foreground).child(detail))
-        });
+        .children(detail);
     if stacked {
         return div().flex().flex_col().gap(px(10.)).child(words.px(px(4.))).children(trailing);
     }
@@ -919,13 +965,15 @@ fn line_row(line: &ActivityLine, tint: Option<Hsla>, cx: &App) -> AnyElement {
         .into_any_element()
 }
 
-/// Numbers in cards, `columns` to a row, every card of a row as tall as its tallest.
-fn stat_grid(stats: &[ActivityFact], columns: usize, value_size: TextSize, cx: &App) -> Div {
+/// Numbers in cards, `columns` to a row, every card of a row as tall as its tallest. While
+/// `loading`, bars stand where the numbers will be.
+fn stat_grid(stats: &[ActivityFact], columns: usize, value_size: TextSize, loading: bool, cx: &App) -> Div {
     let c = colors(cx);
     let cards = stats
         .iter()
-        .map(|stat| {
-            card_default(div(), cx)
+        .enumerate()
+        .map(|(index, stat)| {
+            let card = card_default(div(), cx)
                 .px(px(14.))
                 .py(px(12.))
                 .flex()
@@ -940,20 +988,23 @@ fn stat_grid(stats: &[ActivityFact], columns: usize, value_size: TextSize, cx: &
                         .overflow_hidden()
                         .text_ellipsis()
                         .child(stat.label.clone()),
-                )
-                .child(
-                    div()
-                        .text_size(value_size)
-                        .font_weight(FontWeight::SEMIBOLD)
-                        .text_color(c.foreground)
-                        .whitespace_nowrap()
-                        .overflow_hidden()
-                        .text_ellipsis()
-                        .child(stat.value.clone()),
-                )
-                .child(
-                    div().text_size(TextSize::Xxs).text_color(c.muted_stronger_foreground).child(stat.detail.clone()),
-                )
+                );
+            if loading {
+                return card
+                    .child(placeholder_bar(("activity-tile-value", index), 72., value_size, Surface::Card, cx))
+                    .child(placeholder_bar(("activity-tile-detail", index), 120., TextSize::Xxs, Surface::Card, cx));
+            }
+            card.child(
+                div()
+                    .text_size(value_size)
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .text_color(c.foreground)
+                    .whitespace_nowrap()
+                    .overflow_hidden()
+                    .text_ellipsis()
+                    .child(stat.value.clone()),
+            )
+            .child(div().text_size(TextSize::Xxs).text_color(c.muted_stronger_foreground).child(stat.detail.clone()))
         })
         .collect();
     grid(cards, columns, 10., true)

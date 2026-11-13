@@ -45,6 +45,8 @@ pub struct Spent {
 
 #[derive(Serialize, Debug, PartialEq, Default)]
 pub struct View {
+    /// Only the period's points, with nothing in them, while the servers are asked.
+    pub loading: bool,
     /// What the API would have charged for the tokens whose model has a known price.
     pub cost_usd: f64,
     pub tokens: u64,
@@ -103,6 +105,11 @@ pub struct Line {
 
 fn total(tokens: &Tokens) -> u64 {
     tokens.input + tokens.cache_read + tokens.cache_write + tokens.output
+}
+
+/// The period with nothing in it yet, for while the servers are asked.
+pub fn loading(window: &Window) -> View {
+    View { loading: true, starts: window.starts(), ..View::default() }
 }
 
 /// `project_names` are the projects' names by server and project, `server_names` the servers'.

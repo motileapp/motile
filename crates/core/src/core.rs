@@ -3726,11 +3726,12 @@ impl Core {
             }
             Command::Usage { bucket_secs, buckets, utc_offset_secs, servers, kept } => {
                 let key = usage_key(bucket_secs, buckets, servers.as_ref());
+                let window = usage::Window::ending(now(), bucket_secs, buckets, utc_offset_secs);
                 if kept {
                     let last: Option<Value> = self.cache.kept(&key);
-                    return self.reply(id, last.ok_or_else(|| "Nothing was kept.".to_string()));
+                    let shown = last.map_or_else(|| serde_json::to_value(usage::loading(&window)), Ok);
+                    return self.reply(id, shown.map_err(|error| error.to_string()));
                 }
-                let window = usage::Window::ending(now(), bucket_secs, buckets, utc_offset_secs);
                 let mut project_names = HashMap::new();
                 let mut server_names = HashMap::new();
                 let mut proxied = HashMap::new();
@@ -3822,12 +3823,13 @@ impl Core {
             }
             Command::Activity { bucket_secs, buckets, utc_offset_secs, servers, kept } => {
                 let key = format!("activity:{}", &usage_key(bucket_secs, buckets, servers.as_ref())["usage:".len()..]);
-                if kept {
-                    let last: Option<Value> = self.cache.kept(&key);
-                    return self.reply(id, last.ok_or_else(|| "Nothing was kept.".to_string()));
-                }
                 let window = usage::Window::ending(now(), bucket_secs, buckets, utc_offset_secs);
                 let grid = activity::Grid::of(&window, now());
+                if kept {
+                    let last: Option<Value> = self.cache.kept(&key);
+                    let shown = last.map_or_else(|| serde_json::to_value(activity::loading(&window, &grid)), Ok);
+                    return self.reply(id, shown.map_err(|error| error.to_string()));
+                }
                 let mut names = activity::Names {
                     this_device: self.key.public(),
                     devices: self

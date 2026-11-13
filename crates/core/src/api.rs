@@ -387,7 +387,7 @@ pub enum Command {
     },
     /// What was done on the connected `servers`, or all of them, in the last `buckets` spans of
     /// `bucket_secs`, on a clock `utc_offset_secs` ahead of UTC: an `activity::View`. `kept`
-    /// answers at once with what was last read.
+    /// answers at once with what was last read, or the period's shape while nothing was.
     Activity {
         bucket_secs: u32,
         buckets: u32,
@@ -399,7 +399,7 @@ pub enum Command {
     },
     /// What the agents spent on the connected `servers`, or all of them, in the last `buckets`
     /// spans of `bucket_secs`, on a clock `utc_offset_secs` ahead of UTC: a `usage::View`. `kept`
-    /// answers at once with what was last read.
+    /// answers at once with what was last read, or the period with nothing in it while nothing was.
     Usage {
         bucket_secs: u32,
         buckets: u32,

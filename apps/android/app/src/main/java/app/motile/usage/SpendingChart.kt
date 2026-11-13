@@ -36,7 +36,7 @@ import kotlin.math.pow
 import kotlin.math.roundToInt
 import kotlin.math.sign
 
-private val chartHeight = 190.dp
+internal val spendingChartHeight = 190.dp
 /** The room the first and the last point keep from the plot's sides. */
 private val edgeRoom = 16.dp
 private val labelGap = 6.dp
@@ -71,7 +71,7 @@ fun SpendingChart(report: UsageReport, measure: Measure, period: UsageModel.Peri
     Canvas(
         Modifier
             .fillMaxWidth()
-            .height(chartHeight)
+            .height(spendingChartHeight)
             .chartPointing(pointed, point) { at, size ->
                 val width = size.width.toFloat()
                 (0 until count).minByOrNull { abs(xOf(it, width) - at.x) }
