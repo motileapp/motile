@@ -446,9 +446,9 @@ final class AppStore {
         didSet { defaults.set(openedDraftPreview, forKey: "openedDraftPreview") }
     }
     private(set) var undo: UndoNotice?
-    /// The thread the sidebar brings into sight, opening Done if it is there: the one its pull
-    /// request's end last archived, or the one opened from the search. It stays until another
-    /// is opened.
+    /// The thread the sidebar brings into sight, opening its shelf if it is on one: the one its
+    /// pull request's end last archived, the one opened from the search, or the one just started.
+    /// It stays until another is opened.
     var revealedThreadID: String?
     /// Unknown until Settings asks for it.
     private(set) var mediaStorage: MediaStorage?
@@ -994,15 +994,31 @@ final class AppStore {
     }
 
     /// Every draft with something written in it, newest first. The open one is listed as it was
-    /// when it was opened, and one being sent at once, until its thread takes its place.
+    /// when it was opened, and one being sent at once, until its thread takes its place, unless
+    /// the working shelf lists it.
     var listedDrafts: [ListedDraft] {
         threadDrafts.reversed().compactMap { draft -> ListedDraft? in
             if let sending = sendingDrafts[draft.id] {
-                return ListedDraft(draft: draft, preview: sending.preview, sending: true)
+                return workingShelf ? nil : ListedDraft(draft: draft, preview: sending.preview, sending: true)
             }
             let written = selection == .draft(draft.id) ? openedDraftPreview : preview(of: draft)
             return written.map { ListedDraft(draft: draft, preview: $0) }
         }
+    }
+
+    /// The drafts being sent, newest first, which the working shelf lists until their threads
+    /// take their place.
+    var startingDrafts: [ListedDraft] {
+        guard workingShelf else { return [] }
+        return threadDrafts.reversed().compactMap { draft in
+            sendingDrafts[draft.id].map { ListedDraft(draft: draft, preview: $0.preview, sending: true) }
+        }
+    }
+
+    /// The shelf the thread, or the draft that starts it, is listed on.
+    func shelf(of id: String) -> ThreadSection? {
+        if let thread = anyThread(id) { return thread.section == .active ? nil : thread.section }
+        return startingDrafts.contains { $0.id == id } ? .working : nil
     }
 
     /// The first line of what was written in a draft, or what is attached to it. Nothing for a
@@ -2565,6 +2581,7 @@ final class AppStore {
                 text: text, paths: paths, attachments: shown, serverID: project.serverID, threadID: draft.id, startsThread: true
             )
             sendingDrafts[draft.id] = sending
+            if workingShelf { revealedThreadID = draft.id }
             activity = sending.activity
             transcript.setActivity(activity)
         }

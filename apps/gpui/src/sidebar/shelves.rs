@@ -331,7 +331,8 @@ impl Sidebar {
     pub(super) fn section_row(&self, shelf: Shelf, cx: &mut Context<Self>) -> AnyElement {
         let c = colors(cx);
         let store = self.store.read(cx);
-        let (count, expanded) = (shelf.threads(store).len(), shelf.expanded(&store.prefs));
+        let starting = if shelf == Shelf::Working { store.starting_drafts().len() } else { 0 };
+        let (count, expanded) = (starting + shelf.threads(store).len(), shelf.expanded(&store.prefs));
         let key = shelf.group();
         let lit = self.hovering(key);
         let (title, _) = section_label(shelf.section());

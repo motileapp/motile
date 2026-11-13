@@ -19,9 +19,9 @@ const UNDO_FOR: Duration = Duration::from_secs(5);
 
 #[derive(Default)]
 pub struct SidebarState {
-    /// The thread the sidebar brings into sight, opening Done if it is there: the one its pull
-    /// request's end last archived, or the one opened from the search. It stays until another
-    /// is opened.
+    /// The thread the sidebar brings into sight, opening its shelf if it is on one: the one its
+    /// pull request's end last archived, the one opened from the search, or the one just started.
+    /// It stays until another is opened.
     pub revealed_thread_id: Option<String>,
     /// What the threads are searched for. Their messages are searched on the servers.
     pub search: String,
@@ -183,6 +183,14 @@ impl Store {
         let SearchResult::Thread(_, Some(found)) = result else { return };
         let item_id = Some(found.item_id.clone()).filter(|item_id| !item_id.is_empty());
         self.light_found(search, item_id, cx);
+    }
+
+    /// The section of the shelf the thread, or the draft that starts it, is listed on.
+    pub fn shelf_of(&self, id: &str) -> Option<Section> {
+        if let Some(thread) = self.threads.get(id) {
+            return Some(thread.section).filter(|section| *section != Section::Active);
+        }
+        self.starting_drafts().iter().any(|listed| listed.draft.id == id).then_some(Section::Working)
     }
 
     /// Opens the thread and brings its row into sight in the sidebar.

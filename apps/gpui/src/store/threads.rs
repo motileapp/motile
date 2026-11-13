@@ -386,6 +386,9 @@ impl Store {
             self.activity = sending.activity();
             let activity = self.activity.clone();
             self.sending_drafts.insert(draft.id.clone(), sending);
+            if self.working_shelf() {
+                self.sidebar.revealed_thread_id = Some(draft.id.clone());
+            }
             self.transcript.update(cx, |transcript, cx| {
                 transcript.set_activity(activity);
                 cx.notify();

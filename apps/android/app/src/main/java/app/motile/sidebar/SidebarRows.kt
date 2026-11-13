@@ -440,6 +440,38 @@ private fun DraftRow(listed: ListedDraft, modifier: Modifier = Modifier, onLongC
     }
 }
 
+/** A draft whose first message is on its way, on the working shelf until its thread takes its row. */
+@Composable
+fun StartingRow(listed: ListedDraft, modifier: Modifier = Modifier, open: (Selection) -> Unit) {
+    val store = LocalStore.current
+    val hover = remember { MutableInteractionSource() }
+    val hovering by hover.collectIsHoveredAsState()
+    HighlightButton(
+        onClick = { open(Selection.Draft(listed.id)) },
+        modifier = modifier.hoverable(hover),
+        radius = Radius.md,
+        selected = store.selection == Selection.Draft(listed.id),
+        inset = rowMargin,
+        hovered = hovering,
+        opaque = true,
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        Row(
+            Modifier.fillMaxWidth().padding(rowMargin).padding(horizontal = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            ProjectIcon(store.project(listed.draft.projectID), size = iconSize(text = TextSize.Sm))
+            Text(listed.preview, Modifier.weight(1f).padding(start = 7.dp, end = 6.dp), size = TextSize.Sm, maxLines = 1, color = rowText())
+            CompositionLocalProvider(LocalForeground provides Theme.colors.mutedForeground) {
+                Row(horizontalArrangement = Arrangement.spacedBy(3.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Spinner(iconSize(text = TextSize.Xs))
+                    Text("Sending", size = TextSize.Xs, weight = FontWeight.Medium)
+                }
+            }
+        }
+    }
+}
+
 /** A thread that is working, snoozed or archived: one quiet line, with its pull request and its live status, how soon it wakes or when it was archived. */
 @Composable
 fun SlimThreadRow(

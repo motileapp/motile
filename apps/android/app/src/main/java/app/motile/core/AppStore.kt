@@ -414,7 +414,7 @@ class AppStore(private val context: Context) {
         }
     var undo by mutableStateOf<UndoNotice?>(null)
         private set
-    /** The thread the sidebar brings into sight, opening Archived if it is there: the one its pull request's end last archived, or the one opened from the search. It stays until another is opened. */
+    /** The thread the sidebar brings into sight, opening its shelf if it is on one: the one its pull request's end last archived, the one opened from the search, or the one just started. It stays until another is opened. */
     var revealedThreadID by mutableStateOf<String?>(null)
     /** Unknown until Settings asks for it. */
     var mediaStorage by mutableStateOf<MediaStorage?>(null)
@@ -983,14 +983,27 @@ class AppStore(private val context: Context) {
     val selectedDraft: ThreadDraft?
         get() = (selection as? Selection.Draft)?.let { selected -> threadDrafts.firstOrNull { it.id == selected.id } }
 
-    /** Every draft with something written in it, newest first. The open one is listed as it was when it was opened, and one being sent at once, until its thread takes its place. */
+    /** Every draft with something written in it, newest first. The open one is listed as it was when it was opened, and one being sent at once, until its thread takes its place, unless the working shelf lists it. */
     val listedDrafts: List<ListedDraft>
         get() = threadDrafts.reversed().mapNotNull { draft ->
             val sending = sendingDrafts[draft.id]
-            if (sending != null) return@mapNotNull ListedDraft(draft, sending.preview, sending = true)
+            if (sending != null) return@mapNotNull if (workingShelf) null else ListedDraft(draft, sending.preview, sending = true)
             val written = if (selection == Selection.Draft(draft.id)) openedDraftPreview else preview(draft)
             written?.let { ListedDraft(draft, it) }
         }
+
+    /** The drafts being sent, newest first, which the working shelf lists until their threads take their place. */
+    val startingDrafts: List<ListedDraft>
+        get() {
+            if (!workingShelf) return emptyList()
+            return threadDrafts.reversed().mapNotNull { draft -> sendingDrafts[draft.id]?.let { ListedDraft(draft, it.preview, sending = true) } }
+        }
+
+    /** The shelf the thread, or the draft that starts it, is listed on. */
+    fun shelf(id: String): ThreadSection? {
+        anyThread(id)?.let { return it.section.takeIf { section -> section != ThreadSection.Active } }
+        return if (startingDrafts.any { it.id == id }) ThreadSection.Working else null
+    }
 
     /** The first line of what was written in a draft, or what is attached to it. Nothing for a draft that is still empty. */
     private fun preview(draft: ThreadDraft): String? = preview(drafts[draft.id] ?: "", attachmentsByKey[draft.id]?.size ?: 0)
@@ -2465,6 +2478,7 @@ class AppStore(private val context: Context) {
             command["shown"] = OutgoingMessage.shown(attached.map { it.attached }, draft)
             val sending = SendingDraft(text, attached.map { it.attached }, attached.mapNotNull { it.path }, project.serverID, Time.now())
             setSending(draft.id, sending)
+            if (workingShelf) revealedThreadID = draft.id
             activity = sending.activity
             transcript.changeActivity(activity)
         }

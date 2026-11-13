@@ -51,6 +51,7 @@ struct SidebarView: View {
         let searching = store.isSearchingThreads
         let lists = SidebarLists(
             active: searching ? [] : store.activeThreads, working: searching ? [] : store.workingThreads,
+            starting: searching ? [] : store.startingDrafts,
             snoozed: searching ? [] : store.snoozedThreads, archived: searching ? [] : store.archivedThreads
         )
         let projects = store.projectsByID
@@ -73,8 +74,8 @@ struct SidebarView: View {
             FieldFocus.take { searchFocused = true }
         }
         .onChange(of: store.revealedThreadID) { _, revealed in
-            guard let revealed, let thread = store.anyThread(revealed), thread.section != .active else { return }
-            expanded(thread.section).wrappedValue = true
+            guard let revealed, let section = store.shelf(of: revealed) else { return }
+            expanded(section).wrappedValue = true
         }
         .modal(item: $renaming) { thread in
             RenameThread(thread: thread)
@@ -109,6 +110,7 @@ struct SidebarView: View {
                 clicked: { item in
                     switch item {
                     case .active(let thread), .shelved(let thread): store.select(.thread(thread.id))
+                    case .starting(let listed): store.select(.draft(listed.id))
                     case .result(let result): store.openSearchResult(result)
                     case .header(let section, _): expanded(section).wrappedValue.toggle()
                     default: break
@@ -180,6 +182,8 @@ struct SidebarView: View {
                         rename: beginRename, delete: { deleting = $0 }
                     ) { store.select($0) }
                     .equatable()
+                case .starting(let listed):
+                    StartingRow(listed: listed) { store.select($0) }
                 }
             }
             .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { listHeight = $0 }
@@ -211,9 +215,10 @@ struct SidebarView: View {
         var shelved: [SidebarItem] = []
         let shelves = lists.shelves
         for (index, (section, threads)) in shelves.enumerated() {
-            shelved.append(.header(section, threads.count))
+            let starting = section == .working ? lists.starting : []
+            shelved.append(.header(section, starting.count + threads.count))
             guard expanded(section).wrappedValue else { continue }
-            shelved += threads.map(SidebarItem.shelved)
+            shelved += starting.map(SidebarItem.starting) + threads.map(SidebarItem.shelved)
             if index < shelves.count - 1 { shelved.append(.sectionEnd(section)) }
         }
         guard !shelved.isEmpty else { return items }
@@ -225,6 +230,7 @@ struct SidebarView: View {
     /// The shelf the thread the sidebar reveals is on.
     private func revealedSection(_ lists: SidebarLists) -> ThreadSection? {
         guard let revealed = store.revealedThreadID else { return nil }
+        if lists.starting.contains(where: { $0.id == revealed }) { return .working }
         return lists.shelves.first { $0.threads.contains { $0.id == revealed } }?.section
     }
 
@@ -250,7 +256,7 @@ struct SidebarView: View {
         case .gap(let height): height
         case .header: SectionHeaderRow.height
         case .sectionEnd: ListDivider.height
-        case .shelved: doneRowHeight + rowGap
+        case .shelved, .starting: doneRowHeight + rowGap
         case .result: SearchResultRow.height + rowGap
         case .empty: Self.emptyLineHeight + 2 * (6 + rowGap / 2)
         case .newThread: doneRowHeight + rowGap
@@ -318,12 +324,15 @@ private struct SectionHeaderRow: View {
 private struct SidebarLists {
     let active: [ThreadInfo]
     let working: [ThreadInfo]
+    /// The drafts being sent, which the working shelf lists above its threads.
+    let starting: [ListedDraft]
     let snoozed: [ThreadInfo]
     let archived: [ThreadInfo]
 
-    /// The parts on shelves at the bottom, the ones that hold threads.
+    /// The parts on shelves at the bottom, the ones that hold threads or starting drafts.
     var shelves: [(section: ThreadSection, threads: [ThreadInfo])] {
-        [(ThreadSection.working, working), (.snoozed, snoozed), (.archived, archived)].filter { !$0.1.isEmpty }
+        [(ThreadSection.working, working), (.snoozed, snoozed), (.archived, archived)]
+            .filter { !$0.1.isEmpty || ($0.0 == .working && !starting.isEmpty) }
     }
 }
 
@@ -337,6 +346,8 @@ private enum SidebarItem: Identifiable {
     case gap(CGFloat)
     case header(ThreadSection, Int)
     case shelved(ThreadInfo)
+    /// A draft being sent, whose thread takes its row once it is there.
+    case starting(ListedDraft)
     /// The line under an open section that has another below it.
     case sectionEnd(ThreadSection)
 
@@ -344,6 +355,7 @@ private enum SidebarItem: Identifiable {
         switch self {
         case .drafts: "drafts"
         case .active(let thread), .shelved(let thread): thread.id
+        case .starting(let listed): listed.id
         case .result(let result): "result:\(result.id)"
         case .empty: "empty"
         case .newThread: "newThread"
@@ -1203,6 +1215,38 @@ struct ThreadStatus: View {
 
     private func symbol(_ name: Symbol) -> some View {
         Image(name, size: .sm)
+    }
+}
+
+/// A draft whose first message is on its way, on the working shelf until its thread takes its row.
+struct StartingRow: View {
+    @Environment(AppStore.self) private var store
+    let listed: ListedDraft
+    var open: (Selection) -> Void = { _ in }
+    @State private var hovering = false
+
+    var body: some View {
+        HStack(spacing: 7) {
+            ProjectIcon(project: store.project(listed.draft.projectID), size: .md)
+            Text(listed.preview)
+                .font(.ui(.sm))
+                .lineLimit(1)
+                .rowText()
+            Spacer(minLength: 6)
+            HStack(spacing: 3) {
+                Spinner(size: .sm)
+                Text("Sending")
+                    .font(.ui(.xs, weight: .medium))
+            }
+            .foregroundStyle(Color.themeMutedForeground)
+        }
+        .padding(.horizontal, sidebarRowPadding)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        .padding(rowMargin)
+        .button(.highlight(radius: Radius.md, selected: store.selection == .draft(listed.id), inset: rowMargin, hovered: hovering, opaque: true)) {
+            open(.draft(listed.id))
+        }
+        .onHover { hovering = $0 }
     }
 }
 
