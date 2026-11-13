@@ -407,7 +407,7 @@ final class UserRowView: RowView {
 }
 
 /// The circle beside a message the user didn't write, in the bubble's colour, with the logo of the
-/// agent that sent it in the agent's colour, or the server's in the colour of sending. It is a
+/// agent that sent it in the agent's colour, or the server's in the text's colour. It is a
 /// button that drops a card of who sent it, and is lit while the pointer is on it or the card is open.
 final class MessageAvatarView: FlippedView {
     var avatar = MessageAvatar.none {
@@ -445,7 +445,7 @@ final class MessageAvatarView: FlippedView {
         guard let symbol = avatar.symbol else { return }
         (hovered || open ? Theme.backgroundSecondaryAccent : Theme.backgroundSecondary).setFill()
         RoundedBox.fill(bounds, radius: bounds.width / 2)
-        TintedSymbol.draw(symbol, size: .md, color: avatar.platformColor, in: bounds)
+        TintedSymbol.draw(symbol, size: .lg, color: avatar.platformColor, in: bounds)
     }
 }
 
