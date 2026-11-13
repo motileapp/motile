@@ -4237,12 +4237,15 @@ impl Hub {
         thread.asking = None;
         thread.agents = 0;
         thread.updated_at = now();
+        if interrupted {
+            thread.interruption = None;
+        }
         live.activity = Activity::default();
         live.server_asks.clear();
         live.open.clear();
 
-        // What the user stopped doesn't go on by itself: the messages that waited stay until
-        // they are sent.
+        // What the user stopped doesn't go on by itself, not even once its usage limit resets: the
+        // messages that waited stay until they are sent.
         for queued in &mut live.queued {
             queued.held |= interrupted;
         }

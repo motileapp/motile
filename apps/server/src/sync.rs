@@ -627,6 +627,12 @@ impl Store {
         Ok(items)
     }
 
+    /// Whether the copy of another server holds a thread whose id starts with `prefix`.
+    pub fn copies_thread(&self, prefix: &str) -> rusqlite::Result<bool> {
+        let query = "SELECT EXISTS(SELECT 1 FROM copied_threads WHERE substr(id, 1, length(?1)) = ?1)";
+        self.connection().query_row(query, [prefix], |row| row.get(0))
+    }
+
     pub fn copied_thread(&self, origin: &str, thread_id: &str) -> rusqlite::Result<Option<Thread>> {
         let payload: Option<String> = self
             .connection()
@@ -827,6 +833,19 @@ mod tests {
         assert!(c.copied_items("a", "gone").unwrap().is_empty());
         let tombstones = set(&c.copied_changes("a", 0).unwrap()).tombstones;
         assert_eq!(tombstones.iter().map(|tombstone| tombstone.id.as_str()).collect::<Vec<_>>(), vec!["gone"]);
+    }
+
+    #[test]
+    fn a_copy_tells_which_thread_ids_are_another_servers() {
+        let (_a, a) = store();
+        let (_b, b) = store();
+        add_thread(&a, "1b949867-aaaa", 1);
+        carry(&a, "a", true, &b);
+
+        assert!(b.copies_thread("1b949867").unwrap());
+        assert!(b.copies_thread("1b949867-aaaa").unwrap());
+        assert!(!b.copies_thread("1b949868").unwrap());
+        assert!(!a.copies_thread("1b949867").unwrap(), "a server's own threads aren't copies");
     }
 
     #[test]

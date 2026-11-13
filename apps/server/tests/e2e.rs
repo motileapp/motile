@@ -1312,6 +1312,25 @@ async fn a_thread_whose_agents_the_usage_limit_stopped_after_its_turn_rests_and_
 }
 
 #[tokio::test]
+async fn a_thread_stopped_while_its_agents_work_past_its_usage_limit_stays_stopped_once_the_limit_resets() {
+    let harness = Harness::start_with(fixture(Agent::Claude), "0", &[("FAKE_AGENT_STEP", "3")]).await;
+    let connection = harness.connect().await;
+    let new_thread = harness.new_thread(&connection, Agent::Claude).await;
+    let mut list = connection.follow(&Request::Subscribe).await.unwrap();
+    next(&mut list).await;
+    let thread_id = send(&connection, None, new_thread, "Agents hit the limit").await;
+
+    let limited = thread_where(&mut list, |thread| thread.interruption.is_some() && thread.agents == 2).await;
+    assert_eq!(limited.id, thread_id);
+    connection.request(&Request::Stop { thread_id: thread_id.clone() }).await.unwrap();
+    thread_where(&mut list, |thread| !thread.running && thread.interruption.is_none()).await;
+
+    tokio::time::sleep(Duration::from_millis(3000)).await;
+    let transcript = finished_transcript(&connection, &thread_id).await;
+    assert_eq!(transcript.user_texts(), vec!["Agents hit the limit"], "the limit has reset, and it stays stopped");
+}
+
+#[tokio::test]
 async fn a_thread_the_usage_limit_stopped_waits_when_it_is_not_to_continue() {
     let harness = Harness::start(fixture(Agent::Codex), "0").await;
     let connection = harness.connect().await;
@@ -4639,8 +4658,12 @@ async fn an_agent_follows_any_thread_and_starts_agents_only_on_accounts_that_exi
 
     let (said, failed) = call_tool(url, token, "agent_status", json!({"ids": [child.id]})).await;
     assert!(!failed && said.contains(&child.id), "{said}");
-    let (said, failed) = call_tool(url, token, "agent_status", json!({"ids": ["nope"]})).await;
-    assert!(failed && said.starts_with("Your server has no thread with that id"), "{said}");
+    let (said, failed) = call_tool(url, token, "agent_status", json!({"ids": [&child.id[..8]]})).await;
+    assert!(!failed && said.contains(&child.id), "the first 8 characters of its id find it: {said}");
+    let (said, failed) = call_tool(url, token, "agent_status", json!({"ids": [&child.id[..7]]})).await;
+    assert!(failed && said.contains("at least the first 8 characters"), "{said}");
+    let (said, failed) = call_tool(url, token, "agent_status", json!({"ids": ["nope-nope"]})).await;
+    assert!(failed && said.starts_with("Your server has no thread whose id is or starts with nope-nope"), "{said}");
     // It follows another's agent, but only the user allows what that one asks, full access or not.
     let approve = json!({"id": child.id, "approval_id": "nope", "allow": true});
     let (said, failed) = call_tool(url, token, "approve_agent", approve).await;

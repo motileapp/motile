@@ -144,6 +144,14 @@ impl Tools {
     fn hub(&self) -> anyhow::Result<Arc<Hub>> {
         self.hub.upgrade().context("Your server is stopping.")
     }
+
+    fn thread_id(&self, given: &str) -> anyhow::Result<String> {
+        self.hub()?.thread_id_of(given)
+    }
+
+    fn thread_id_or_own(&self, given: Option<String>) -> anyhow::Result<Option<String>> {
+        given.map(|id| self.thread_id(&id)).transpose()
+    }
 }
 
 fn caller(parts: &Parts) -> anyhow::Result<String> {
@@ -162,8 +170,12 @@ impl Tools {
     /// Reads a thread of this server: its messages, or everything that happened in it, a page at
     /// a time.
     #[tool(name = "read_thread", annotations(title = "Read a thread", read_only_hint = true))]
-    async fn read_thread(&self, Parameters(request): Parameters<ReadThread>) -> CallToolResult {
-        answered(self.hub().and_then(|hub| read_thread(hub.store(), &request)))
+    async fn read_thread(&self, Parameters(mut request): Parameters<ReadThread>) -> CallToolResult {
+        let read = async {
+            request.thread_id = self.thread_id(&request.thread_id)?;
+            read_thread(self.hub()?.store(), &request)
+        };
+        answered(read.await)
     }
 
     /// How to write an openui-lang program: the language, Motile's components and functions, the
@@ -235,7 +247,10 @@ impl Tools {
             let seconds = request.timeout_seconds.map(std::time::Duration::from_secs);
             seconds.unwrap_or(crate::hub::WAIT).min(crate::hub::LONGEST_WAIT)
         });
-        let states = async { self.hub()?.child_states(&caller(&parts)?, &request.ids, wait).await };
+        let states = async {
+            let ids = request.ids.iter().map(|id| self.thread_id(id)).collect::<anyhow::Result<Vec<_>>>()?;
+            self.hub()?.child_states(&caller(&parts)?, &ids, wait).await
+        };
         answered(states.await)
     }
 
@@ -248,7 +263,8 @@ impl Tools {
         Extension(parts): Extension<Parts>,
         Parameters(request): Parameters<MessageAgent>,
     ) -> CallToolResult {
-        let state = async { self.hub()?.message_child(&caller(&parts)?, &request.id, request.text).await };
+        let state =
+            async { self.hub()?.message_child(&caller(&parts)?, &self.thread_id(&request.id)?, request.text).await };
         answered(state.await)
     }
 
@@ -260,7 +276,8 @@ impl Tools {
         Extension(parts): Extension<Parts>,
         Parameters(request): Parameters<AnswerAgent>,
     ) -> CallToolResult {
-        let state = async { self.hub()?.answer_child(&caller(&parts)?, &request.id, request.answers).await };
+        let state =
+            async { self.hub()?.answer_child(&caller(&parts)?, &self.thread_id(&request.id)?, request.answers).await };
         answered(state.await)
     }
 
@@ -276,7 +293,8 @@ impl Tools {
     ) -> CallToolResult {
         let state = async {
             let hub = self.hub()?;
-            hub.approve_child(&caller(&parts)?, &request.id, &request.approval_id, request.allow).await
+            hub.approve_child(&caller(&parts)?, &self.thread_id(&request.id)?, &request.approval_id, request.allow)
+                .await
         };
         answered(state.await)
     }
@@ -289,7 +307,7 @@ impl Tools {
         Extension(parts): Extension<Parts>,
         Parameters(request): Parameters<StopAgent>,
     ) -> CallToolResult {
-        let state = async { self.hub()?.stop_child(&caller(&parts)?, &request.id).await };
+        let state = async { self.hub()?.stop_child(&caller(&parts)?, &self.thread_id(&request.id)?).await };
         answered(state.await)
     }
 
@@ -320,9 +338,12 @@ impl Tools {
     async fn update_thread(
         &self,
         Extension(parts): Extension<Parts>,
-        Parameters(request): Parameters<UpdateThread>,
+        Parameters(mut request): Parameters<UpdateThread>,
     ) -> CallToolResult {
-        let updated = async { self.hub()?.update_thread(&caller(&parts)?, request).await };
+        let updated = async {
+            request.thread_id = self.thread_id_or_own(request.thread_id.take())?;
+            self.hub()?.update_thread(&caller(&parts)?, request).await
+        };
         answered(updated.await)
     }
 
@@ -332,9 +353,12 @@ impl Tools {
     async fn thread_queue(
         &self,
         Extension(parts): Extension<Parts>,
-        Parameters(request): Parameters<ThreadQueue>,
+        Parameters(mut request): Parameters<ThreadQueue>,
     ) -> CallToolResult {
-        let queued = async { self.hub()?.thread_queue(&caller(&parts)?, request).await };
+        let queued = async {
+            request.thread_id = self.thread_id(&request.thread_id)?;
+            self.hub()?.thread_queue(&caller(&parts)?, request).await
+        };
         answered(queued.await)
     }
 
@@ -359,9 +383,12 @@ impl Tools {
     async fn read_pull_request(
         &self,
         Extension(parts): Extension<Parts>,
-        Parameters(request): Parameters<ReadPullRequest>,
+        Parameters(mut request): Parameters<ReadPullRequest>,
     ) -> CallToolResult {
-        let read = async { self.hub()?.pull_request_for(&caller(&parts)?, request).await };
+        let read = async {
+            request.thread_id = self.thread_id_or_own(request.thread_id.take())?;
+            self.hub()?.pull_request_for(&caller(&parts)?, request).await
+        };
         answered(read.await)
     }
 
@@ -372,9 +399,12 @@ impl Tools {
     async fn link_pull_request(
         &self,
         Extension(parts): Extension<Parts>,
-        Parameters(request): Parameters<LinkPullRequest>,
+        Parameters(mut request): Parameters<LinkPullRequest>,
     ) -> CallToolResult {
-        let linked = async { self.hub()?.link_pull_request_for(&caller(&parts)?, request).await };
+        let linked = async {
+            request.thread_id = self.thread_id_or_own(request.thread_id.take())?;
+            self.hub()?.link_pull_request_for(&caller(&parts)?, request).await
+        };
         answered(linked.await)
     }
 
@@ -386,7 +416,10 @@ impl Tools {
         Extension(parts): Extension<Parts>,
         Parameters(request): Parameters<GitStatusOf>,
     ) -> CallToolResult {
-        let status = async { self.hub()?.git_status_for(&caller(&parts)?, request.thread_id, request.fetch).await };
+        let status = async {
+            let thread_id = self.thread_id_or_own(request.thread_id)?;
+            self.hub()?.git_status_for(&caller(&parts)?, thread_id, request.fetch).await
+        };
         answered(status.await)
     }
 }
@@ -448,7 +481,8 @@ struct CheckUi {
 
 #[derive(Deserialize, JsonSchema)]
 struct AgentStatus {
-    /// The ids start_agent gave you, or the ids of any threads of your server.
+    /// The ids start_agent gave you, or the ids of any threads of your server. The first 8 characters
+    /// of an id or more do too.
     ids: Vec<String>,
     /// Returns once all of them have finished, one asks a question, or `timeout_seconds` pass.
     #[serde(default)]
@@ -459,12 +493,14 @@ struct AgentStatus {
 
 #[derive(Deserialize, JsonSchema)]
 struct MessageAgent {
+    /// The thread's id, or its first 8 characters or more.
     id: String,
     text: String,
 }
 
 #[derive(Deserialize, JsonSchema)]
 struct AnswerAgent {
+    /// The thread's id, or its first 8 characters or more.
     id: String,
     /// Each question's text, as the agent asked it, to the answer.
     answers: HashMap<String, String>,
@@ -472,6 +508,7 @@ struct AnswerAgent {
 
 #[derive(Deserialize, JsonSchema)]
 struct ApproveAgent {
+    /// The thread's id, or its first 8 characters or more.
     id: String,
     /// The approval_id agent_status or the notice gave you, so that you allow only what you read.
     approval_id: String,
@@ -481,6 +518,7 @@ struct ApproveAgent {
 
 #[derive(Deserialize, JsonSchema)]
 struct StopAgent {
+    /// The thread's id, or its first 8 characters or more.
     id: String,
 }
 
@@ -536,7 +574,7 @@ pub struct ListThreads {
 
 #[derive(Deserialize, JsonSchema)]
 pub struct UpdateThread {
-    /// The thread's id. Yours when not given.
+    /// The thread's id, or its first 8 characters or more. Yours when not given.
     pub thread_id: Option<String>,
     pub title: Option<String>,
     /// A model its account offers; empty for the account's default.
@@ -564,6 +602,7 @@ pub enum QueueAction {
 
 #[derive(Deserialize, JsonSchema)]
 pub struct ThreadQueue {
+    /// The thread's id, or its first 8 characters or more.
     pub thread_id: String,
     pub action: QueueAction,
     /// The message `send_now` and `cancel` act on, as `list` names it.
@@ -582,7 +621,8 @@ pub struct AddProject {
 
 #[derive(Deserialize, JsonSchema)]
 pub struct ReadPullRequest {
-    /// The thread whose repository it is in. Yours when not given.
+    /// The thread whose repository it is in, by its id or its first 8 characters or more. Yours when
+    /// not given.
     pub thread_id: Option<String>,
     /// The pull request's number. The thread's own when not given.
     pub number: Option<u64>,
@@ -590,7 +630,7 @@ pub struct ReadPullRequest {
 
 #[derive(Deserialize, JsonSchema)]
 pub struct LinkPullRequest {
-    /// The thread's id. Yours when not given.
+    /// The thread's id, or its first 8 characters or more. Yours when not given.
     pub thread_id: Option<String>,
     /// The pull request to link, by its number in the thread's repository.
     pub number: Option<u64>,
@@ -603,7 +643,7 @@ pub struct LinkPullRequest {
 
 #[derive(Deserialize, JsonSchema)]
 struct GitStatusOf {
-    /// The thread's id. Yours when not given.
+    /// The thread's id, or its first 8 characters or more. Yours when not given.
     thread_id: Option<String>,
     /// Asks the remote first, to say how far behind the branch is.
     #[serde(default)]
@@ -612,7 +652,7 @@ struct GitStatusOf {
 
 #[derive(Deserialize, JsonSchema, Default)]
 pub struct ReadThread {
-    /// The thread's id.
+    /// The thread's id, or its first 8 characters or more.
     pub thread_id: String,
     /// `messages` for what the user and the agents said and the plans they made, `activity` for
     /// everything, the agents' tool calls and the agents they started included.
