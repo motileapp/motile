@@ -45,11 +45,20 @@ data class ActivityReport(
         /** The user's time on its devices. */
         val engagedSeconds: Double,
         val engagedPoints: List<Double>,
-        /** Its share of each total, in whole percentages that add up to 100 across the sources. */
-        val messagePercent: Int,
-        val turnPercent: Int,
-        val secondPercent: Int,
-        val engagedPercent: Int,
+        val messageLegend: Legend,
+        val turnLegend: Legend,
+        val secondLegend: Legend,
+        val engagedLegend: Legend,
+    )
+
+    /** What the chart's legend says of a source in one measure. */
+    data class Legend(
+        /** "3h 24m (5%)": its total and its share of all the sources'. */
+        val total: String,
+        /** Each point's, with its share of that point. */
+        val points: List<String>,
+        /** Every shape these take, their digits as zeros, to hold the widest's room. */
+        val shapes: List<String>,
     )
 
     data class Client(
@@ -127,6 +136,7 @@ data class ActivityReport(
                     line.string("detail"), line.double("share"),
                 )
             }
+            fun legend(json: JSON?) = Legend(json?.string("total") ?: "", json?.strings("points") ?: emptyList(), json?.strings("shapes") ?: emptyList())
             fun feature(line: JSON) = Feature(line.string("id"), line.string("label"), line.int("count"), line.double("share"), line.string("detail"))
             return ActivityReport(
                 empty = json.bool("empty"),
@@ -138,8 +148,8 @@ data class ActivityReport(
                         source.string("id"), source.string("label"), symbol(source.string("symbol")), source.int("color"),
                         source.int("messages"), source.int("turns"), source.double("seconds"), source.numbers("message_points"),
                         source.numbers("turn_points"), source.numbers("second_points"), source.double("engaged_seconds"),
-                        source.numbers("engaged_points"), source.int("message_percent"), source.int("turn_percent"),
-                        source.int("second_percent"), source.int("engaged_percent"),
+                        source.numbers("engaged_points"), legend(source.obj("message_legend")), legend(source.obj("turn_legend")),
+                        legend(source.obj("second_legend")), legend(source.obj("engaged_legend")),
                     )
                 },
                 engagedTicks = json.numbers("engaged_ticks"),

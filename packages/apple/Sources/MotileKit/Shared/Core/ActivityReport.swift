@@ -26,11 +26,26 @@ struct ActivityReport {
         /// The user's time on its devices.
         let engagedSeconds: Double
         let engagedPoints: [Double]
-        /// Its share of each total, in whole percentages that add up to 100 across the sources.
-        let messagePercent: Int
-        let turnPercent: Int
-        let secondPercent: Int
-        let engagedPercent: Int
+        let messageLegend: Legend
+        let turnLegend: Legend
+        let secondLegend: Legend
+        let engagedLegend: Legend
+    }
+
+    /// What the chart's legend says of a source in one measure.
+    struct Legend {
+        /// "3h 24m (5%)": its total and its share of all the sources'.
+        let total: String
+        /// Each point's, with its share of that point.
+        let points: [String]
+        /// Every shape these take, their digits as zeros, to hold the widest's room.
+        let shapes: [String]
+
+        init(json: JSON) {
+            total = json.string("total")
+            points = json["points"] as? [String] ?? []
+            shapes = json["shapes"] as? [String] ?? []
+        }
     }
 
     struct Client: Identifiable {
@@ -175,9 +190,9 @@ struct ActivityReport {
                 color: source.int("color"), messages: source.int("messages"), turns: source.int("turns"),
                 seconds: source.double("seconds"), messagePoints: points("message_points"), turnPoints: points("turn_points"),
                 secondPoints: points("second_points"), engagedSeconds: source.double("engaged_seconds"),
-                engagedPoints: points("engaged_points"), messagePercent: source.int("message_percent"),
-                turnPercent: source.int("turn_percent"), secondPercent: source.int("second_percent"),
-                engagedPercent: source.int("engaged_percent"))
+                engagedPoints: points("engaged_points"), messageLegend: Legend(json: source.object("message_legend") ?? [:]),
+                turnLegend: Legend(json: source.object("turn_legend") ?? [:]), secondLegend: Legend(json: source.object("second_legend") ?? [:]),
+                engagedLegend: Legend(json: source.object("engaged_legend") ?? [:]))
         }
         engagedTicks = (json["engaged_ticks"] as? [NSNumber] ?? []).map(\.doubleValue)
         secondTicks = (json["second_ticks"] as? [NSNumber] ?? []).map(\.doubleValue)
