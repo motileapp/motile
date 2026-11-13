@@ -4,11 +4,12 @@
 
 use gpui_kit::prelude::*;
 use gpui_kit::*;
+use std::rc::Rc;
 
 use crate::media::pictures::{Picture, Pictures};
 use crate::models::{Attachment, UploadState};
 use crate::store::Store;
-use crate::theme::{ControlSize, IconSize, Layer, Opacity, Radius, ShadowSize, Surface, TextSize, colors};
+use crate::theme::{ControlSize, IconSize, Layer, Radius, Surface, TextSize, colors};
 use crate::ui::{ActionButton, Chip, Variant, icons};
 
 pub const TILE: f32 = 96.;
@@ -22,6 +23,8 @@ const KIND_WIDTH: f32 = TILE - KIND_INSET - 4. - ControlSize::Small.height() - R
 /// How wide the title of the thread a draft goes on from gets before it is cut.
 const CONTINUES_WIDTH: f32 = 320.;
 
+type OnClick = dyn Fn(&ClickEvent, &mut Window, &mut App);
+
 pub fn attachments(store: &Entity<Store>, cx: &mut App) -> impl IntoElement {
     let attached = store.read(cx).attachments();
     let pictured: Vec<Attachment> = attached.iter().filter(|attachment| attachment.pictured).cloned().collect();
@@ -33,7 +36,7 @@ pub fn attachments(store: &Entity<Store>, cx: &mut App) -> impl IntoElement {
     }
     for (index, attachment) in pictured.iter().enumerate() {
         let (opens, viewed) = (store.clone(), viewed.clone());
-        let tile = tile(attachment, store.clone(), cx).on_click(move |_, _, cx| {
+        let open = Rc::new(move |_: &ClickEvent, _: &mut Window, cx: &mut App| {
             cx.stop_propagation();
             let viewed = viewed.clone();
             opens.update(cx, |store, cx| {
@@ -41,6 +44,8 @@ pub fn attachments(store: &Entity<Store>, cx: &mut App) -> impl IntoElement {
                 cx.notify();
             })
         });
+        let tile = tile(attachment, store.clone(), open.clone(), cx)
+            .on_click(move |event, window, cx| open(event, window, cx));
         items.push(tile.into_any_element());
     }
     for attachment in attached.iter().filter(|attachment| !attachment.pictured) {
@@ -54,8 +59,7 @@ pub fn attachments(store: &Entity<Store>, cx: &mut App) -> impl IntoElement {
 
 /// An image or a video: its picture, how far it is on its way to the server, and the button that
 /// removes it.
-fn tile(attachment: &Attachment, store: Entity<Store>, cx: &mut App) -> Stateful<Div> {
-    let c = colors(cx);
+fn tile(attachment: &Attachment, store: Entity<Store>, open: Rc<OnClick>, cx: &mut App) -> Stateful<Div> {
     let picture: Option<AnyElement> = match &attachment.file {
         Some(file) => {
             let (key, max_pixels) = (format!("tile:{}", attachment.id), (TILE * 4.) as u32);
@@ -83,10 +87,11 @@ fn tile(attachment: &Attachment, store: Entity<Store>, cx: &mut App) -> Stateful
     let tile = crate::ui::dims(tile, cx).children(picture).when(attachment.video, |tile| {
         tile.child(
             div().absolute().inset_0().flex().items_center().justify_center().child(
-                div()
-                    .rounded_full()
-                    .shadow(c.shadow(ShadowSize::Sm, Opacity::ShadowStrongest))
-                    .child(icons::symbol("play", IconSize::Lg).text_color(c.foreground_over_picture)),
+                ActionButton::icon(SharedString::from(format!("play-{}", attachment.id)), "play", "Play")
+                    .round(true)
+                    .variant(Variant::Secondary)
+                    .surface(Surface::ComposerBox)
+                    .on_click(move |event, window, cx| open(event, window, cx)),
             ),
         )
     });
