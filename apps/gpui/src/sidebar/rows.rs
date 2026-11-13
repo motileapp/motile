@@ -1,5 +1,5 @@
 //! The sidebar's rows: an active thread on three lines, a draft laid out like one, a working,
-//! snoozed or archived thread on one quiet line, the offer to start a thread, the line that says
+//! snoozed or archived thread on one quiet line, a draft being sent on the working shelf, the offer to start a thread, the line that says
 //! there is nothing, and what a thread is up to.
 
 use gpui_kit::prelude::*;
@@ -28,6 +28,17 @@ pub const LIST_DIVIDER: f32 = 1. + 2. * (4. + ROW_GAP / 2.);
 pub const EMPTY_LINE_HEIGHT: f32 = 15.;
 /// The room between the parts of a row's status, and of its last line.
 const STATUS_GAP: f32 = 9.;
+
+/// A draft's status while its first message is on its way.
+fn sending_status(cx: &App) -> AnyElement {
+    div()
+        .flex()
+        .items_center()
+        .gap(px(3.))
+        .child(Spinner::new(IconSize::Sm).render(cx))
+        .child(div().text_size(TextSize::Xs).font_weight(FontWeight::MEDIUM).child("Sending"))
+        .into_any_element()
+}
 
 /// The light under a row: the row layer when the pointer is over it, the selected one when it is
 /// selected, drawn inside the row's margin.
@@ -295,13 +306,7 @@ impl Sidebar {
         let hovering = self.hovering(&key);
         let id = listed.draft.id.clone();
         let status = if listed.sending {
-            div()
-                .flex()
-                .items_center()
-                .gap(px(3.))
-                .child(Spinner::new(IconSize::Sm).render(cx))
-                .child(div().text_size(TextSize::Xs).font_weight(FontWeight::MEDIUM).child("Sending"))
-                .into_any_element()
+            sending_status(cx)
         } else if hovering {
             let (store, draft) = (self.store.clone(), listed.draft.clone());
             let button = ActionButton::icon(SharedString::from(format!("discard-{id}")), "x", "Discard draft")
@@ -527,6 +532,56 @@ impl Sidebar {
                     menu.show(event.position, window, cx);
                 }),
             )
+            .into_any_element()
+    }
+
+    /// A draft whose first message is on its way, on the working shelf until its thread takes its
+    /// row: one quiet line, like the thread's.
+    pub(super) fn starting_row(&self, listed: &ListedDraft, cx: &mut Context<Self>) -> AnyElement {
+        let c = colors(cx);
+        let store = self.store.read(cx);
+        let selected = store.selection == Selection::Draft(listed.draft.id.clone());
+        let project = store.project(listed.draft.project_id.as_deref()).cloned();
+        let key = format!("slim-{}", listed.draft.id);
+        let hovering = self.hovering(&key);
+        let (select, id) = (self.store.clone(), listed.draft.id.clone());
+        let margin = row_margin();
+        div()
+            .id(SharedString::from(key.clone()))
+            .group(SharedString::from(key.clone()))
+            .relative()
+            .size_full()
+            .pt(px(margin.top))
+            .pb(px(margin.bottom))
+            .px(px(margin.left))
+            .child(row_light(&key, selected, false, cx))
+            .child(
+                div()
+                    .relative()
+                    .size_full()
+                    .px(px(ROW_PADDING))
+                    .flex()
+                    .items_center()
+                    .gap(px(7.))
+                    .child(logos::project_icon(project.as_ref(), IconSize::Md, cx))
+                    .child(
+                        div()
+                            .min_w_0()
+                            .text_size(TextSize::Sm)
+                            .text_color(if selected || hovering { c.foreground } else { c.muted_foreground })
+                            .truncate()
+                            .child(listed.preview.clone()),
+                    )
+                    .child(div().flex_1().min_w(px(6.)))
+                    .child(div().flex_shrink_0().text_color(c.muted_foreground).child(sending_status(cx))),
+            )
+            .on_hover(self.row_hover(key, None, cx))
+            .on_click(move |_, _, cx| {
+                select.update(cx, |store, cx| {
+                    store.select(Selection::Draft(id.clone()), cx);
+                    cx.notify();
+                })
+            })
             .into_any_element()
     }
 

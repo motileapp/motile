@@ -33,8 +33,9 @@ struct SidebarScreen: View {
         let results = store.searchResults
         let highlightedID = results.indices.contains(highlighted.index) ? results[highlighted.index].id : nil
         let shown = Shown(projects: store.projectsByID, selection: store.selection, swiped: swiped, highlighted: highlightedID)
-        let items = searching ? searchItems(results) : items(active: active, sections: sections)
-        let revealedIndex = items.firstIndex { $0.thread?.id == store.revealedThreadID }
+        let starting = searching ? [] : store.startingDrafts
+        let items = searching ? searchItems(results) : items(active: active, starting: starting, sections: sections)
+        let revealedIndex = items.firstIndex { ($0.thread?.id ?? $0.startingDraft?.id) == store.revealedThreadID }
         // The thread goes to the top; its section's line only comes along when it is right above
         // it, so that a thread near the line isn't left down the screen under it.
         let revealedAnchor = revealedIndex.flatMap { index in
@@ -77,8 +78,8 @@ struct SidebarScreen: View {
                 swiped = thread.section == .active ? thread.id : "slim:\(thread.id)"
             }
             .onChange(of: store.revealedThreadID) { _, revealed in
-                guard let revealed, let thread = store.anyThread(revealed), thread.section != .active else { return }
-                expanded(thread.section).wrappedValue = true
+                guard let revealed, let section = store.shelf(of: revealed) else { return }
+                expanded(section).wrappedValue = true
             }
             if let undo = store.undo {
                 UndoRow(notice: undo)
@@ -149,22 +150,25 @@ struct SidebarScreen: View {
     }
 
     /// The drafts, the active threads, and under them the working, the snoozed and the archived
-    /// ones: each a line that opens into their list.
-    private func items(active: [ThreadInfo], sections: [(section: ThreadSection, threads: [ThreadInfo])]) -> [SidebarItem] {
+    /// ones: each a line that opens into their list. The working one lists the drafts being sent first.
+    private func items(
+        active: [ThreadInfo], starting: [ListedDraft], sections: [(section: ThreadSection, threads: [ThreadInfo])]
+    ) -> [SidebarItem] {
         var items: [SidebarItem] = [.drafts]
         items += active.map(SidebarItem.active)
         if active.isEmpty { items.append(.empty) }
         if store.offersNewThread(drafts: store.listedDrafts, active: active) {
             items.append(.newThread)
         }
-        let shown = sections.filter { !$0.threads.isEmpty }
+        let shown = sections.filter { !$0.threads.isEmpty || ($0.section == .working && !starting.isEmpty) }
         guard !shown.isEmpty else { return items }
         // The gap holds the sections at the bottom while everything fits.
         items.append(.gap)
         for (index, (section, threads)) in shown.enumerated() {
-            items.append(.header(section, threads.count))
+            let starting = section == .working ? starting : []
+            items.append(.header(section, starting.count + threads.count))
             guard expanded(section).wrappedValue else { continue }
-            items += threads.map(SidebarItem.slim)
+            items += starting.map(SidebarItem.starting) + threads.map(SidebarItem.slim)
             if index < shown.count - 1 { items.append(.sectionEnd(section)) }
         }
         return items
@@ -253,6 +257,9 @@ struct SidebarScreen: View {
             } else {
                 row.rowSwipe(actions, isOpen: swipe(item.id, swiped: shown.swiped))
             }
+        case .starting(let listed):
+            StartingRow(listed: listed, open: open)
+                .frame(height: 44)
         }
     }
 
@@ -448,6 +455,8 @@ private enum SidebarItem: Identifiable {
     case gap
     case header(ThreadSection, Int)
     case slim(ThreadInfo)
+    /// A draft being sent, whose thread takes its row once it is there.
+    case starting(ListedDraft)
     /// The line under an open section that has another below it.
     case sectionEnd(ThreadSection)
 
@@ -463,6 +472,7 @@ private enum SidebarItem: Identifiable {
         case .sectionEnd(let section): "end:\(section.rawValue)"
         // A slim row has an id of its own, or the list keeps the thread's active row for it.
         case .slim(let thread): "slim:\(thread.id)"
+        case .starting(let listed): "slim:\(listed.id)"
         }
     }
 
@@ -474,6 +484,11 @@ private enum SidebarItem: Identifiable {
     var activeThread: ThreadInfo? {
         guard case .active(let thread) = self else { return nil }
         return thread
+    }
+
+    var startingDraft: ListedDraft? {
+        guard case .starting(let listed) = self else { return nil }
+        return listed
     }
 
     var thread: ThreadInfo? {

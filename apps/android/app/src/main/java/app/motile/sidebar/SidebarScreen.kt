@@ -62,6 +62,7 @@ import androidx.compose.ui.zIndex
 import app.motile.DemoHooks
 import app.motile.LocalStore
 import app.motile.core.AppStore
+import app.motile.core.ListedDraft
 import app.motile.core.PanelPage
 import app.motile.core.Preferences
 import app.motile.core.SearchResult
@@ -148,6 +149,11 @@ private sealed interface SidebarItem {
         override val id: String get() = "slim:${thread.id}"
     }
 
+    /** A draft being sent, whose thread takes its row once it is there. */
+    data class Starting(val listed: ListedDraft) : SidebarItem {
+        override val id: String get() = "slim:${listed.id}"
+    }
+
     /** The room that holds the sections at the bottom of the list while everything fits. */
     data object Gap : SidebarItem {
         override val id = "gap"
@@ -159,6 +165,8 @@ private sealed interface SidebarItem {
     }
 
     val activeThread: ThreadInfo? get() = (this as? Active)?.thread
+
+    val startingDraft: ListedDraft? get() = (this as? Starting)?.listed
 
     val rowThread: ThreadInfo?
         get() = when (this) {
@@ -200,6 +208,7 @@ fun SidebarScreen(underThread: Boolean) {
 
     val searching = store.isSearchingThreads
     val active = if (searching) emptyList() else store.activeThreads
+    val starting = if (searching) emptyList() else store.startingDrafts
     val sections = if (searching) emptyList() else listOf(
         ThreadSection.Working to store.workingThreads, ThreadSection.Snoozed to store.snoozedThreads, ThreadSection.Archived to store.archivedThreads,
     )
@@ -210,7 +219,7 @@ fun SidebarScreen(underThread: Boolean) {
     }
     val results = store.searchResults
     val highlightedID = results.getOrNull(highlighted.index)?.id
-    val items = if (searching) searchItems(results, store.messageSearch.searching) else items(store, active, sections, ::expanded)
+    val items = if (searching) searchItems(results, store.messageSearch.searching) else items(store, active, starting, sections, ::expanded)
     val shown = reorder.arranged(items) { it.id }
     val places = if (store.showsJumpHints) jumpPlaces(store.jumpThreads) else emptyMap()
 
@@ -299,8 +308,8 @@ fun SidebarScreen(underThread: Boolean) {
         snapshotFlow { store.serversExpandedRequests }.drop(1).collect { serversExpanded = true }
     }
     LaunchedEffect(store.revealedThreadID) {
-        val revealed = store.revealedThreadID?.let(store::anyThread) ?: return@LaunchedEffect
-        if (revealed.section != ThreadSection.Active) setExpanded(revealed.section, true)
+        val section = store.revealedThreadID?.let(store::shelf) ?: return@LaunchedEffect
+        setExpanded(section, true)
     }
     LaunchedEffect(store.expandStep) {
         val step = store.expandStep ?: return@LaunchedEffect
@@ -311,9 +320,13 @@ fun SidebarScreen(underThread: Boolean) {
         val thread = store.swipeStep?.let(store::anyThread) ?: return@LaunchedEffect
         swiped = if (thread.section == ThreadSection.Active) thread.id else "slim:${thread.id}"
     }
-    val target = if (searching) highlightedID?.let { "result:$it" } else items.firstOrNull { it.rowThread?.id == store.revealedThreadID }?.id
+    val target = if (searching) highlightedID?.let { "result:$it" } else items.firstOrNull { (it.rowThread?.id ?: it.startingDraft?.id) == store.revealedThreadID }?.id
     val targetIndex = target?.let { id -> shown.indexOfFirst { it.id == id } } ?: -1
-    val revealedSection = sections.firstOrNull { (_, threads) -> threads.any { it.id == store.revealedThreadID } }?.first
+    val revealedSection = if (starting.any { it.id == store.revealedThreadID }) {
+        ThreadSection.Working
+    } else {
+        sections.firstOrNull { (_, threads) -> threads.any { it.id == store.revealedThreadID } }?.first
+    }
     val anchorIndex = revealedSection?.let { section -> shown.indexOfFirst { it.id == "header:${section.raw}" } } ?: -1
     LaunchedEffect(target) {
         if (targetIndex < 0) return@LaunchedEffect
@@ -431,6 +444,7 @@ fun SidebarScreen(underThread: Boolean) {
                                 RowSwipe(actions, isOpen = swiped == item.id, onOpenChange = swipe(item.id).onOpenChange, content = row)
                             }
                         }
+                        is SidebarItem.Starting -> StartingRow(item.listed, Modifier.fillMaxWidth().height(lineHeight), open = ::open)
                     }
                 }
             }
@@ -467,10 +481,11 @@ fun SidebarScreen(underThread: Boolean) {
     }
 }
 
-/** The drafts, the active threads, and under them the working, the snoozed and the archived ones: each a line that opens into their list. */
+/** The drafts, the active threads, and under them the working, the snoozed and the archived ones: each a line that opens into their list. The working one lists the drafts being sent first. */
 private fun items(
     store: AppStore,
     active: List<ThreadInfo>,
+    starting: List<ListedDraft>,
     sections: List<Pair<ThreadSection, List<ThreadInfo>>>,
     expanded: (ThreadSection) -> Boolean,
 ): List<SidebarItem> = buildList {
@@ -478,11 +493,13 @@ private fun items(
     active.forEach { add(SidebarItem.Active(it)) }
     if (active.isEmpty()) add(SidebarItem.Empty)
     if (store.offersNewThread(store.listedDrafts, active)) add(SidebarItem.NewThread)
-    val shown = sections.filter { it.second.isNotEmpty() }
+    val shown = sections.filter { (section, threads) -> threads.isNotEmpty() || (section == ThreadSection.Working && starting.isNotEmpty()) }
     if (shown.isNotEmpty()) add(SidebarItem.Gap)
     shown.forEachIndexed { index, (section, threads) ->
-        add(SidebarItem.Header(section, threads.size))
+        val drafts = if (section == ThreadSection.Working) starting else emptyList()
+        add(SidebarItem.Header(section, drafts.size + threads.size))
         if (!expanded(section)) return@forEachIndexed
+        drafts.forEach { add(SidebarItem.Starting(it)) }
         threads.forEach { add(SidebarItem.Slim(it)) }
         if (index < shown.size - 1) add(SidebarItem.SectionEnd(section))
     }

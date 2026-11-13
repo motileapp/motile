@@ -1006,14 +1006,20 @@ impl Store {
     }
 
     /// Every draft with something written in it, newest first. The open one is listed as it was
-    /// when it was opened, and one being sent at once, until its thread takes its place.
+    /// when it was opened, and one being sent at once, until its thread takes its place, unless
+    /// the working shelf lists it.
     pub fn listed_drafts(&self) -> Vec<ListedDraft> {
+        let shelved = self.working_shelf();
         self.thread_drafts
             .iter()
             .rev()
             .filter_map(|draft| {
                 if let Some(sending) = self.sending_drafts.get(&draft.id) {
-                    return Some(ListedDraft { draft: draft.clone(), preview: sending.preview(), sending: true });
+                    return (!shelved).then(|| ListedDraft {
+                        draft: draft.clone(),
+                        preview: sending.preview(),
+                        sending: true,
+                    });
                 }
                 let written = if self.selection == Selection::Draft(draft.id.clone()) {
                     self.opened_draft_preview.clone()
@@ -1021,6 +1027,22 @@ impl Store {
                     self.preview(draft)
                 };
                 written.map(|preview| ListedDraft { draft: draft.clone(), preview, sending: false })
+            })
+            .collect()
+    }
+
+    /// The drafts being sent, newest first, which the working shelf lists until their threads
+    /// take their place.
+    pub fn starting_drafts(&self) -> Vec<ListedDraft> {
+        if !self.working_shelf() {
+            return Vec::new();
+        }
+        self.thread_drafts
+            .iter()
+            .rev()
+            .filter_map(|draft| {
+                let sending = self.sending_drafts.get(&draft.id)?;
+                Some(ListedDraft { draft: draft.clone(), preview: sending.preview(), sending: true })
             })
             .collect()
     }

@@ -118,9 +118,9 @@ enum Shelf {
 
 /// A row of the list: the drafts as one, an active thread, what the search found, the line that
 /// says there is nothing, the offer to start a thread, the room that holds the working, the
-/// snoozed and the archived threads at the bottom, a line over them, one of them, and the line
-/// under an open one that has another below it. Threads and
-/// results are by their place in the store's list and in the search's.
+/// snoozed and the archived threads at the bottom, a line over them, one of them, a draft being
+/// sent on the working one's, and the line under an open one that has another below it. Threads,
+/// drafts being sent and results are by their place in the store's lists and in the search's.
 #[derive(Clone, Copy)]
 enum Item {
     Drafts,
@@ -131,6 +131,7 @@ enum Item {
     Gap,
     Section(Shelf),
     Shelved(Shelf, usize),
+    Starting(usize),
     SectionEnd(Shelf),
 }
 
@@ -141,6 +142,8 @@ struct Plan {
     searching: bool,
     results: Vec<SearchResult>,
     drafts: Vec<ListedDraft>,
+    /// The drafts being sent, which the working shelf lists above its threads.
+    starting: Vec<ListedDraft>,
     items: Vec<Item>,
     /// Where the rows of the list are, with the gap at its least, which of them can move, and the
     /// thread of each, for a row being moved.
@@ -317,10 +320,7 @@ impl Sidebar {
         }
         if revealed != self.revealed_seen {
             self.revealed_seen = revealed.clone();
-            let shelf = revealed
-                .as_ref()
-                .and_then(|id| store.read(cx).threads.get(id))
-                .and_then(|thread| Shelf::of(thread.section));
+            let shelf = revealed.as_ref().and_then(|id| store.read(cx).shelf_of(id)).and_then(Shelf::of);
             if let Some(shelf) = shelf {
                 store.update(cx, |store, _| shelf.open(&mut store.prefs, true));
             }
@@ -539,7 +539,7 @@ impl Sidebar {
             Item::Active(_) => THREAD_ROW_HEIGHT + ROW_GAP,
             Item::Result(_) => RESULT_ROW_HEIGHT + ROW_GAP,
             Item::Empty => EMPTY_LINE_HEIGHT + 2. * (6. + ROW_GAP / 2.),
-            Item::NewThread | Item::Section(_) | Item::Shelved(..) => DONE_ROW_HEIGHT + ROW_GAP,
+            Item::NewThread | Item::Section(_) | Item::Shelved(..) | Item::Starting(_) => DONE_ROW_HEIGHT + ROW_GAP,
             Item::Gap => GAP_LEAST,
             Item::SectionEnd(_) => LIST_DIVIDER,
         }
@@ -552,7 +552,7 @@ impl Sidebar {
         }
         self.stale = false;
         let plan = Rc::new(self.make_plan(cx));
-        let ids = plan.items.iter().map(|item| self.item_id(*item, &plan.results, cx)).collect();
+        let ids = plan.items.iter().map(|item| self.item_id(*item, &plan, cx)).collect();
         if plan.searching {
             self.keep_highlight(plan.results.iter().map(SearchResult::id).collect());
         } else {
@@ -572,6 +572,7 @@ impl Sidebar {
         let searching = store.is_searching_threads();
         let results = if searching { store.search_results() } else { Vec::new() };
         let drafts = if searching { Vec::new() } else { store.listed_drafts() };
+        let starting = if searching { Vec::new() } else { store.starting_drafts() };
         let active = store.active_threads();
         let mut items: Vec<Item> = Vec::new();
         if searching {
@@ -598,13 +599,16 @@ impl Sidebar {
             Shelf::THREADS
                 .iter()
                 .map(|shelf| (*shelf, shelf.threads(store).len()))
-                .filter(|(_, count)| *count > 0)
+                .filter(|(shelf, count)| *count > 0 || (*shelf == Shelf::Working && !starting.is_empty()))
                 .collect()
         };
         for (index, (shelf, count)) in shown.iter().enumerate() {
             sections.push(Item::Section(*shelf));
             if !shelf.expanded(&store.prefs) {
                 continue;
+            }
+            if *shelf == Shelf::Working {
+                sections.extend((0..starting.len()).map(Item::Starting));
             }
             sections.extend((0..*count).map(|at| Item::Shelved(*shelf, at)));
             if index < shown.len() - 1 {
@@ -651,6 +655,7 @@ impl Sidebar {
             running: store.listed_threads().any(ThreadInfo::busy),
             results,
             drafts,
+            starting,
             items,
             movable,
             row_threads,
@@ -666,17 +671,18 @@ impl Sidebar {
             Item::Shelved(shelf, at) => {
                 shelf.threads(store).get(at).filter(|thread| thread.id == revealed).map(|_| shelf)
             }
+            Item::Starting(at) => (plan.starting[at].draft.id == revealed).then_some(Shelf::Working),
             _ => None,
         })
     }
 
-    fn item_id(&self, item: Item, results: &[SearchResult], cx: &App) -> String {
+    fn item_id(&self, item: Item, plan: &Plan, cx: &App) -> String {
         match item {
             Item::Drafts => "drafts".into(),
             Item::Active(index) => {
                 self.store.read(cx).active_threads().get(index).map(|thread| thread.id.clone()).unwrap_or_default()
             }
-            Item::Result(index) => result_item_id(&results[index]),
+            Item::Result(index) => result_item_id(&plan.results[index]),
             Item::Empty => "empty".into(),
             Item::NewThread => "new-thread".into(),
             Item::Gap => "gap".into(),
@@ -685,6 +691,8 @@ impl Sidebar {
             Item::Shelved(shelf, at) => {
                 shelf.threads(self.store.read(cx)).get(at).map(|thread| thread.id.clone()).unwrap_or_default()
             }
+            // The thread a draft starts takes its row, by the draft's id.
+            Item::Starting(at) => plan.starting[at].draft.id.clone(),
         }
     }
 
@@ -756,6 +764,7 @@ impl Sidebar {
                     let Some(thread) = shelf.threads(self.store.read(cx)).get(at).cloned() else { continue };
                     self.slim_row(&thread, cx)
                 }
+                Item::Starting(at) => self.starting_row(&plan.starting[at], cx),
             };
             rows.push(place(layout, index, shift, element));
         }
