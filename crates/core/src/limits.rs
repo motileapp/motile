@@ -5,12 +5,9 @@
 use std::collections::HashMap;
 
 use motile_protocol::gateway_wire::{AccountStatus, GatewayAccount};
-use motile_protocol::select::{self, Candidate, HORIZON, Window};
+use motile_protocol::select::{self, Candidate, HORIZON, ON_PACE, Window};
 use motile_protocol::wire::{Agent, AgentAccount, AgentLimits, LimitWindow, ModelInfo};
 use serde::Serialize;
-
-/// How far spending may stray from the time that has passed and still be on pace, in points.
-const ON_PACE: f64 = 5.0;
 
 /// What a server said of its agents' accounts.
 pub struct Read {
