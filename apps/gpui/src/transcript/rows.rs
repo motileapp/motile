@@ -893,7 +893,7 @@ fn bubble_widest(width: f32, avatar: MessageAvatar) -> f32 {
 }
 
 /// The circle beside a message the user didn't write, in the bubble's colour, with the logo of
-/// the agent that sent it in the agent's colour, or the server's in the colour of sending.
+/// the agent that sent it in the agent's colour, or the server's in the text's colour.
 fn message_avatar(
     model: &RowModel,
     avatar: MessageAvatar,

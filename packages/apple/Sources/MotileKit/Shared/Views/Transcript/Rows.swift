@@ -40,7 +40,7 @@ enum MessageAvatar: String {
 
     var platformColor: PlatformColor {
         switch self {
-        case .none, .server: Theme.primary
+        case .none, .server: Theme.foreground
         case .claude: Agent.claude.platformColor
         case .codex: Agent.codex.platformColor
         }

@@ -82,7 +82,7 @@ impl RenderOnce for SenderAvatar {
                 format!("Sent by {}", agent_name(agent)),
             ),
             None => (
-                icons::symbol("server", IconSize::Lg).text_color(c.primary).into_any_element(),
+                icons::symbol("server", IconSize::Lg).text_color(c.foreground).into_any_element(),
                 "Sent by your server".to_string(),
             ),
         };
