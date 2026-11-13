@@ -22,9 +22,7 @@ struct AttachmentTile: View {
                 Spinner(size: .lg)
                     .foregroundStyle(Color.themeMutedForeground)
             } else if attachment.video {
-                Image(.play, size: .lg)
-                    .foregroundStyle(Color.themeForegroundOverPicture)
-                    .shadow(.sm, .shadowStrongest)
+                ActionButton(icon: .play, help: "Play", variant: .secondary, round: true, action: open)
             }
         }
         .modifier(TileLook(attachment: attachment, open: open))

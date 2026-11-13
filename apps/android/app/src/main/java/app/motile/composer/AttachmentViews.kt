@@ -47,12 +47,9 @@ import app.motile.theme.LocalSurface
 import app.motile.theme.OnSurface
 import app.motile.theme.OverPicture
 import app.motile.theme.Radius
-import app.motile.theme.ShadowSize
-import app.motile.theme.Opacity
 import app.motile.theme.Surface
 import app.motile.theme.Theme
 import app.motile.theme.scrimStronger
-import app.motile.theme.shadow
 import app.motile.ui.ActionButton
 import app.motile.ui.ButtonVariant
 import app.motile.ui.Chip
@@ -96,7 +93,7 @@ fun AttachmentTile(attachment: Attachment, open: () -> Unit) {
             if (attachment.state == Attachment.State.Preparing) {
                 Spinner(IconSize.Lg, color = palette.mutedForeground)
             } else if (attachment.video) {
-                Icon(Symbol.Play, IconSize.Lg, Modifier.shadow(ShadowSize.Sm, CircleShape, Opacity.ShadowStrongest), color = OverPicture.foreground)
+                ActionButton(icon = Symbol.Play, help = "Play", variant = ButtonVariant.Secondary, round = true, onClick = open)
             }
         }
     }
