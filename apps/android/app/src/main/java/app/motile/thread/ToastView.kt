@@ -57,6 +57,9 @@ object ToastView {
     /** Tucks the close button into the corner, its own corner running along the toast's. */
     internal val closeMargin = radius - ControlSize.Regular.radius
     internal val trailing = closeMargin + closeSize + 4.dp
+    internal val titleSpacing = 4.dp
+    /** Starts the output, which runs under the close button, just below it. */
+    internal val outputTop = closeMargin + closeSize + 2.dp - padding - titleHeight - titleSpacing
     internal val shape = RoundedCornerShape(radius)
     internal val edge = padding
 
@@ -92,7 +95,7 @@ fun ToastView(toast: Toast, modifier: Modifier = Modifier) {
                         else -> Icon(Symbol.CircleCheck, symbolSize, color = palette.success)
                     }
                 }
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(ToastView.titleSpacing)) {
                     Box(Modifier.heightIn(min = ToastView.titleHeight), contentAlignment = Alignment.CenterStart) {
                         Text(toast.title, size = TextSize.Sm, weight = FontWeight.Medium)
                     }
@@ -147,7 +150,7 @@ private fun Output(text: String) {
     val style = Theme.uiMono(ToastView.outputSize).copy(lineHeight = ToastView.outputLine.value.sp)
     SurfaceBox(
         RoundedCornerShape(Radius.md),
-        Modifier.padding(top = 4.dp).outset(end = ToastView.trailing - ToastView.edge).fillMaxWidth(),
+        Modifier.padding(top = ToastView.outputTop).outset(end = ToastView.trailing - ToastView.edge).fillMaxWidth(),
         bordered = true,
     ) {
         FadingScroll(ToastView.outputHeight, anchor = Alignment.Bottom, padding = ToastView.outputPadding) {
