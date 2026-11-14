@@ -9,7 +9,7 @@ name = "motile"
 path = "src/main.rs"
 
 [dependencies]
-motile-protocol = { workspace = true, features = ["auth-client"] }
+motile-protocol = { workspace = true, features = ["auth-client", "relay"] }
 motile-openui.workspace = true
 reqwest.workspace = true
 anyhow.workspace = true

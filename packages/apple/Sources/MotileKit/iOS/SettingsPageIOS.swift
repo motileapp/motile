@@ -217,6 +217,7 @@ struct SettingsPage: View {
             }
         }
         .id("servers")
+        relay
         backup
         if !store.removedServers.isEmpty {
             Section("Unlinked") {
@@ -255,6 +256,35 @@ struct SettingsPage: View {
         }
     }
 
+    /// The account's own iroh relay, which every device uses in place of iroh's public ones.
+    @ViewBuilder private var relay: some View {
+        let url = store.account.relay
+        Section {
+            Button {
+                store.editedRelay = EditedRelay(url: url)
+            } label: {
+                SheetRowLabel {
+                    SettingsItem("Relay", description: url ?? "iroh's public relays", truncates: .middle) {
+                        SettingsTile(symbol: .radioTower)
+                    }
+                }
+            }
+            if url != nil {
+                Button { store.useIrohRelays() } label: {
+                    SettingsActionLabel("Use iroh's Relays", symbol: .undo2)
+                }
+            }
+        } header: {
+            Text("Relay")
+        } footer: {
+            if url != nil {
+                Text("Your servers, clients and gateway reach each other through it when they can't connect directly.")
+                    .foregroundStyle(Color.themeMutedForeground)
+            }
+        }
+        .id("relay")
+    }
+
     /// The account's S3 bucket, which every server backs up to and syncs through.
     @ViewBuilder private var backup: some View {
         let on = store.backup.bucket != nil
@@ -262,8 +292,10 @@ struct SettingsPage: View {
             Button {
                 store.editedBackup = EditedBackup(bucket: store.backup.bucket)
             } label: {
-                SettingsItem("S3 Bucket", description: on ? store.backup.description : "Not set up", truncates: .middle) {
-                    SettingsTile(symbol: .cloudUpload)
+                SheetRowLabel {
+                    SettingsItem("S3 Bucket", description: on ? store.backup.description : "Not set up", truncates: .middle) {
+                        SettingsTile(symbol: .cloudUpload)
+                    }
                 }
             }
             if on {
@@ -740,6 +772,20 @@ struct SettingsActionLabel: View {
             Image(symbol, size: .xl)
         }
         .foregroundStyle(Color.themePrimary)
+    }
+}
+
+/// A row that opens a sheet: its content, then a chevron, as a row that opens a page has.
+private struct SheetRowLabel<Content: View>: View {
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        HStack(spacing: 0) {
+            content
+            Spacer(minLength: 8)
+            Image(.chevronRight, size: .md)
+                .foregroundStyle(Color.themeMutedStrongerForeground)
+        }
     }
 }
 

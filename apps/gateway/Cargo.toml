@@ -9,7 +9,7 @@ name = "motile-gateway"
 path = "src/main.rs"
 
 [dependencies]
-motile-protocol = { workspace = true, features = ["auth-client"] }
+motile-protocol = { workspace = true, features = ["auth-client", "relay"] }
 anyhow.workspace = true
 base64.workspace = true
 chacha20poly1305 = "0.10"
@@ -29,6 +29,7 @@ tokio-tungstenite = { version = "0.29", features = ["rustls-tls-native-roots"] }
 tracing.workspace = true
 tracing-subscriber.workspace = true
 uuid.workspace = true
+zstd = "0.13"
 
 [dev-dependencies]
 axum = { version = "0.8", default-features = false, features = ["tokio", "http1", "ws", "json", "form", "original-uri"] }

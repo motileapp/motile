@@ -251,6 +251,16 @@ fun SettingsButton(title: String, destructive: Boolean = false, enabled: Boolean
     }
 }
 
+/** A row that does something at once, without a page: its symbol and its words, in the tint. */
+@Composable
+fun SettingsAction(title: String, symbol: Symbol, onClick: () -> Unit) {
+    SettingsPressRow(onClick) {
+        Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            SettingsActionLabel(title, symbol)
+        }
+    }
+}
+
 /** A button's row in a list: its symbol and its words, in the tint. */
 @Composable
 fun SettingsActionLabel(title: String, symbol: Symbol) {
@@ -343,12 +353,19 @@ fun <T> SettingsPicker(title: String, options: List<Pair<String, T>>, selection:
 
 /** A line to type in, in a row of its own. */
 @Composable
-fun SettingsField(placeholder: String, text: String, onTextChange: (String) -> Unit, monospaced: Boolean = false, secure: Boolean = false) {
+fun SettingsField(
+    placeholder: String,
+    text: String,
+    onTextChange: (String) -> Unit,
+    monospaced: Boolean = false,
+    secure: Boolean = false,
+    keyboardOptions: androidx.compose.foundation.text.KeyboardOptions = plainKeyboard,
+) {
     SettingsRow {
         Box(Modifier.weight(1f).height(ControlSize.Large.height)) {
             InputField(
                 placeholder, text, onTextChange, variant = InputVariant.Bare, size = ControlSize.Large, monospaced = monospaced, secure = secure,
-                keyboardOptions = plainKeyboard,
+                keyboardOptions = keyboardOptions,
             )
         }
     }
@@ -370,3 +387,6 @@ internal val plainKeyboard = androidx.compose.foundation.text.KeyboardOptions(
     capitalization = androidx.compose.ui.text.input.KeyboardCapitalization.None,
     autoCorrectEnabled = false,
 )
+
+/** An address, typed as it is. */
+internal val urlKeyboard = plainKeyboard.copy(keyboardType = androidx.compose.ui.text.input.KeyboardType.Uri)

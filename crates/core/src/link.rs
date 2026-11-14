@@ -757,7 +757,7 @@ mod tests {
         // As the core replaces an endpoint: the old one is closed while the new one is bound, which
         // takes a while, and only then do the links hear of it.
         link.retire();
-        crate::connection::leave_relays(&stale).await;
+        crate::connection::leave_relays(&stale, None).await;
         stale.close().await;
         tokio::time::sleep(Duration::from_secs(1)).await;
         link.redial_on(bind(&key, true).await.unwrap());

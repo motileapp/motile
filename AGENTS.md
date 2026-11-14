@@ -76,7 +76,9 @@ the core alike.
 ### apps/gateway (Rust, the `motile-gateway` image)
 
 Runs from `ghcr.io/motileapp/motile-gateway` with a volume at `/data`, linked with
-`motile-gateway setup <code>` or `MOTILE_ENROLL_CODE`.
+`motile-gateway setup <code>` or `MOTILE_ENROLL_CODE`. Behind a NAT devices can't get through, as
+in a cluster, `MOTILE_GATEWAY_PORT` fixes its UDP port and `MOTILE_GATEWAY_EXTERNAL_ADDR` announces
+the address that port is forwarded from, so devices reach it directly.
 
 - `serve.rs`, `access.rs`: the iroh endpoint, for the account's servers and clients only.
 - `router.rs`: which account a thread's requests go to.

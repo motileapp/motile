@@ -123,6 +123,7 @@ enum class Symbol(val character: String?) {
     Play("\uE13C"),
     Plug("\uE37F"),
     Plus("\uE13D"),
+    RadioTower("\uE404"),
     Redo2("\uE2A0"),
     RefreshCw("\uE145"),
     /** Ricrac's logo, which Lucide doesn't have. */

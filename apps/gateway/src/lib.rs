@@ -51,6 +51,9 @@ pub async fn start(options: Options) -> anyhow::Result<(Arc<Gateway>, Endpoint)>
     }
     gateway.start_background(fetch_prices);
     let endpoint = serve::bind(&options.key, &options.bind).await?;
+    if !options.bind.local_only {
+        motile_protocol::relay::keep_following(endpoint.clone(), options.access.watch_relay());
+    }
     options.access.keep_fresh();
     tokio::spawn(serve::run(gateway.clone(), options.access, endpoint.clone()));
     Ok((gateway, endpoint))

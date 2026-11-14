@@ -29,6 +29,10 @@ struct SettingsSheet: View {
             BackupSheet(bucket: edited.bucket)
                 .sheetSurface()
         }
+        .sheet(item: Bindable(store).editedRelay) { edited in
+            RelaySheet(url: edited.url)
+                .sheetSurface()
+        }
         .presentationSizing(.page)
         .presentationDragIndicator(.visible)
     }

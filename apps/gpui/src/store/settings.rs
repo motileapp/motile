@@ -87,7 +87,7 @@ pub struct SettingsEntry {
 
 const WORKING_SHELF: &str = "sidebar.workingShelf";
 
-const ENTRIES: [(&str, &str, SettingsSection, &str); 27] = [
+const ENTRIES: [(&str, &str, SettingsSection, &str); 28] = [
     ("account", "Account", SettingsSection::General, "signed in email sign out"),
     ("updates", "Updates", SettingsSection::General, "version check for updates release"),
     ("appearance", "Theme", SettingsSection::General, "appearance light dark system mode"),
@@ -119,6 +119,7 @@ const ENTRIES: [(&str, &str, SettingsSection, &str); 27] = [
         "add remove unlink unlinked delete copies machine agents connected",
     ),
     ("backup", "Backup", SettingsSection::Servers, "s3 bucket r2 b2 minio storage sync media restore"),
+    ("relay", "Relay", SettingsSection::Servers, "iroh relay network connection nat direct"),
     ("continue-limits", "Continue after usage limits", SettingsSection::Servers, "rate limit reset resume quota wait"),
     (
         "continue-restarts",
@@ -292,6 +293,21 @@ impl Store {
             }
             done(Some(error.message), cx);
         });
+    }
+
+    /// Has every device of the account go back to iroh's public relays.
+    pub fn use_iroh_relays(&mut self) {
+        self.ask(Command::SetRelay { url: None }, |store, result, _| {
+            if let Err(error) = result {
+                store.fail(error);
+            }
+        });
+    }
+
+    /// Has every device of the account use this iroh relay; `None` goes back to iroh's public ones.
+    /// `done` hears why it couldn't, if it couldn't.
+    pub fn set_relay(&mut self, url: Option<String>, done: impl FnOnce(Option<String>, &mut gpui_kit::App) + 'static) {
+        self.ask(Command::SetRelay { url }, move |_, result, cx| done(result.err().map(|error| error.message), cx));
     }
 
     /// Adds or changes an account of an agent on the server. `done` hears whether it was kept.

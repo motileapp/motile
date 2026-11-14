@@ -45,6 +45,15 @@ pub struct Me {
     /// The servers deleted completely: no copy of their threads is kept anywhere.
     #[serde(default)]
     pub deleted: Vec<String>,
+    /// The account's own iroh relay, which its devices use in place of iroh's public ones.
+    #[serde(default)]
+    pub relay: Option<String>,
+}
+
+/// Sets the account's relay; `None` goes back to iroh's public relays.
+#[derive(Serialize, Deserialize, Debug)]
+pub struct RelayRequest {
+    pub url: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]

@@ -10,6 +10,7 @@ mod keybindings;
 mod layout;
 mod mcp_gateway;
 mod page;
+mod relay_sheet;
 mod sidebar;
 
 use std::cell::Cell;

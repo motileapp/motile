@@ -1061,6 +1061,8 @@ pub(crate) fn command(program: &str, folder: &str, environment: &Environment, ar
         .env_clear()
         .envs(&environment.variables)
         .env("GIT_TERMINAL_PROMPT", "0")
+        // Looking doesn't lock the index, which would fail the agent's own git meanwhile.
+        .env("GIT_OPTIONAL_LOCKS", "0")
         .env("GH_PROMPT_DISABLED", "1")
         .env("GH_NO_UPDATE_NOTIFIER", "1");
     command

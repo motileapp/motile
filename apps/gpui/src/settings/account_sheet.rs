@@ -479,7 +479,7 @@ pub(super) fn field(title: &str, caption: Option<String>, content: impl IntoElem
 }
 
 /// A field whose failure, while it has one, takes the place of its caption.
-fn failing_field(
+pub(super) fn failing_field(
     title: &str,
     caption: Option<String>,
     failure: Option<String>,
@@ -492,7 +492,11 @@ fn failing_field(
         .flex()
         .flex_col()
         .gap(px(6.))
-        .child(div().px(px(4.)).text_size(TextSize::Xs).font_weight(FontWeight::MEDIUM).child(title.to_string()))
+        .when(!title.is_empty(), |field| {
+            field.child(
+                div().px(px(4.)).text_size(TextSize::Xs).font_weight(FontWeight::MEDIUM).child(title.to_string()),
+            )
+        })
         .child(content)
         .when_some(failure.or(caption), |field, caption| {
             field.child(div().px(px(4.)).text_size(TextSize::Xs).text_color(tint).child(caption))

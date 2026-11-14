@@ -58,6 +58,9 @@ struct SettingsPage: View {
         .modal(item: section == .servers ? Bindable(store).editedBackup : .constant(nil)) { edited in
             BackupSheet(bucket: edited.bucket)
         }
+        .modal(item: section == .servers ? Bindable(store).editedRelay : .constant(nil)) { edited in
+            RelaySheet(url: edited.url)
+        }
     }
 
     @ViewBuilder private var general: some View {
@@ -176,9 +179,31 @@ struct SettingsPage: View {
                 EmptyView()
             }
         }
+        relay
         backup
         removedServers
         continuing
+    }
+
+    /// The account's own iroh relay, which every device uses in place of iroh's public ones.
+    @ViewBuilder private var relay: some View {
+        let url = store.account.relay
+        SettingsGroup("relay", "Relay", caption: url == nil ? nil : "Your servers, clients and gateway reach each other through it when they can't connect directly.") {
+            SettingsRow {
+                SettingsLabel("Relay", description: url ?? "iroh's public relays", icon: .radioTower, truncates: url == nil ? nil : .middle)
+            } trailing: {
+                if url != nil {
+                    HStack(spacing: 0) {
+                        ActionButton("Edit", variant: .outline, size: .large, margin: .beside(trailing: settingsHalfGap)) { store.editedRelay = EditedRelay(url: url) }
+                        more("What to do with the relay", margin: .beside(leading: settingsHalfGap)) {
+                            MenuItem("Use iroh's Relays", symbol: .undo2) { store.useIrohRelays() }
+                        }
+                    }
+                } else {
+                    ActionButton("Set Up", variant: .outline, size: .large) { store.editedRelay = EditedRelay(url: nil) }
+                }
+            }
+        }
     }
 
     /// The account's S3 bucket, which every server backs up to and syncs through.

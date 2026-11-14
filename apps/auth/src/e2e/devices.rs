@@ -309,3 +309,29 @@ async fn a_server_that_sends_no_kind_links_as_a_server(db: PgPool) {
     assert_eq!(names(&me), vec!["Ann's Mac", "old-box"]);
     assert_eq!(me.devices[1].kind, DeviceKind::Server);
 }
+
+#[sqlx::test]
+async fn a_client_sets_the_relay_every_device_of_the_account_follows(db: PgPool) {
+    let auth = Auth::start(db).await;
+    let (client, _) = auth.new_client(&ANN).await;
+    let (bobs, _) = auth.new_client(&BOB).await;
+    let server = DeviceKey::generate();
+    let token = auth.client.create_enroll_token(&client).await.unwrap();
+    auth.client.enroll(&server, &token.token, &LINUX).await.unwrap();
+    assert_eq!(auth.client.me(&server).await.unwrap().relay, None);
+
+    auth.client.set_relay(&client, Some(" https://relay.example.com/ ")).await.unwrap();
+    assert_eq!(auth.client.me(&server).await.unwrap().relay.as_deref(), Some("https://relay.example.com"));
+    assert_eq!(auth.client.me(&bobs).await.unwrap().relay, None);
+
+    let from_server = auth.client.set_relay(&server, Some("https://elsewhere.example.com")).await;
+    assert_eq!(from_server.unwrap_err().to_string(), "The relay is set from a client.");
+    let from_stranger = auth.client.set_relay(&DeviceKey::generate(), Some("https://elsewhere.example.com")).await;
+    assert_eq!(from_stranger.unwrap_err().to_string(), "This device isn't linked to an account.");
+    let not_a_url = auth.client.set_relay(&client, Some("relay.example.com")).await;
+    assert_eq!(not_a_url.unwrap_err().to_string(), "A relay's address starts with https://.");
+    assert_eq!(auth.client.me(&client).await.unwrap().relay.as_deref(), Some("https://relay.example.com"));
+
+    auth.client.set_relay(&client, None).await.unwrap();
+    assert_eq!(auth.client.me(&server).await.unwrap().relay, None);
+}

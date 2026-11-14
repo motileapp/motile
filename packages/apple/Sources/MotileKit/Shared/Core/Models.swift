@@ -26,6 +26,8 @@ struct Account: Equatable {
     var deviceKey = ""
     var authURL = ""
     var error: String?
+    /// The account's own iroh relay, which its devices use in place of iroh's public ones.
+    var relay: String?
 
     init() {}
 
@@ -38,6 +40,7 @@ struct Account: Equatable {
         deviceKey = json.string("device_key")
         authURL = json.string("auth_url")
         error = json.optionalString("error")
+        relay = json.optionalString("relay")
     }
 }
 

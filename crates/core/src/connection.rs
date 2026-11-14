@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 
 use anyhow::{Context, anyhow, bail};
 use iroh::endpoint::{ConnectionError, IdleTimeout, QuicTransportConfig, RecvStream, presets};
-use iroh::{Endpoint, EndpointAddr, EndpointId, RelayMode, RelayUrl, SecretKey, TransportAddr};
+use iroh::{Endpoint, EndpointAddr, EndpointId, RelayUrl, SecretKey, TransportAddr};
 use motile_protocol::frame::{read_frame, write_frame};
 use motile_protocol::identity::DeviceKey;
 use motile_protocol::wire::{FileKind, Message, Request};
@@ -94,9 +94,9 @@ pub async fn bind(key: &DeviceKey, local_only: bool) -> anyhow::Result<Endpoint>
 }
 
 /// Has an endpoint that is being replaced stop using the relays at once, instead of once its
-/// connections have closed.
-pub async fn leave_relays(endpoint: &Endpoint) {
-    let relays: Vec<RelayUrl> = RelayMode::Default.relay_map().urls();
+/// connections have closed. `relay` is the account's relay the endpoint follows.
+pub async fn leave_relays(endpoint: &Endpoint, relay: Option<&str>) {
+    let relays: Vec<RelayUrl> = motile_protocol::relay::relay_map(relay).urls();
     for relay in &relays {
         endpoint.remove_relay(relay).await;
     }

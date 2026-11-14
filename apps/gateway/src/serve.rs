@@ -1,6 +1,7 @@
 //! The iroh endpoint the account's servers and clients connect to. Every stream carries one request:
 //! a server's HTTP request or WebSocket, or a client's management command.
 
+use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -8,10 +9,10 @@ use anyhow::Context;
 use futures_util::StreamExt;
 use iroh::endpoint::{Connection, PathEvent, PathEventStream, RecvStream, SendStream, presets};
 use iroh::{Endpoint, SecretKey};
-use motile_protocol::GATEWAY_ALPN;
 use motile_protocol::frame::{read_frame, write_frame};
 use motile_protocol::gateway_wire::{GatewayReply, GatewayRequest};
 use motile_protocol::identity::DeviceKey;
+use motile_protocol::{GATEWAY_ALPN, GATEWAY_ALPN_ZSTD};
 
 use crate::access::{Access, Role};
 use crate::gateway::Gateway;
@@ -26,6 +27,9 @@ pub struct BindOptions {
     /// No relays and no address lookup: reachable only at the addresses it is bound to.
     pub local_only: bool,
     pub port: Option<u16>,
+    /// An address the gateway is reachable at that it can't find itself, such as a port forwarded
+    /// to it, so devices behind strict NATs reach it directly.
+    pub external_addr: Option<SocketAddr>,
 }
 
 pub async fn bind(key: &DeviceKey, options: &BindOptions) -> anyhow::Result<Endpoint> {
@@ -33,9 +37,14 @@ pub async fn bind(key: &DeviceKey, options: &BindOptions) -> anyhow::Result<Endp
         true => Endpoint::builder(presets::Minimal),
         false => Endpoint::builder(presets::N0),
     };
-    let mut builder = builder.secret_key(SecretKey::from_bytes(&key.to_bytes())).alpns(vec![GATEWAY_ALPN.to_vec()]);
+    let mut builder = builder
+        .secret_key(SecretKey::from_bytes(&key.to_bytes()))
+        .alpns(vec![GATEWAY_ALPN_ZSTD.to_vec(), GATEWAY_ALPN.to_vec()]);
     if let Some(port) = options.port {
         builder = builder.bind_addr(format!("0.0.0.0:{port}"))?;
+    }
+    if let Some(addr) = options.external_addr {
+        builder = builder.external_addr(addr);
     }
     builder.bind().await.context("The network endpoint couldn't be opened.")
 }
@@ -69,6 +78,7 @@ async fn handle_connection(gateway: Arc<Gateway>, access: Arc<Access>, connectio
         return;
     };
     tracing::info!(device, ?role, "connected");
+    let compressed = connection.alpn() == GATEWAY_ALPN_ZSTD;
     tokio::spawn(log_paths(device.clone(), connection.path_events()));
     let mut recheck = tokio::time::interval(RECHECK_ACCESS_EVERY);
     loop {
@@ -78,7 +88,7 @@ async fn handle_connection(gateway: Arc<Gateway>, access: Arc<Access>, connectio
                 let gateway = gateway.clone();
                 let device = device.clone();
                 tokio::spawn(async move {
-                    if let Err(error) = handle_stream(gateway, role, device, send, recv).await {
+                    if let Err(error) = handle_stream(gateway, role, device, compressed, send, recv).await {
                         tracing::debug!("stream ended: {error:#}");
                     }
                 });
@@ -99,17 +109,19 @@ async fn handle_stream(
     gateway: Arc<Gateway>,
     role: Role,
     device: String,
+    compressed: bool,
     mut send: SendStream,
     mut recv: RecvStream,
 ) -> anyhow::Result<()> {
     let request: GatewayRequest = read_frame(&mut recv).await?.context("The stream ended before a request.")?;
     let reply = match (request, role) {
         (GatewayRequest::Http { thread, agent, method, path, headers, pin }, Role::Server) => {
-            let incoming = Incoming { server: device, thread, agent, method, path, headers, pin };
+            let incoming = Incoming { server: device, thread, agent, method, path, headers, pin, compressed };
             return upstream::serve(gateway, incoming, send, recv).await;
         }
         (GatewayRequest::WebSocket { thread, agent, path, headers, pin }, Role::Server) => {
-            let incoming = Incoming { server: device, thread, agent, method: "GET".into(), path, headers, pin };
+            let method = "GET".into();
+            let incoming = Incoming { server: device, thread, agent, method, path, headers, pin, compressed: false };
             return websocket::serve(gateway, incoming, send, recv).await;
         }
         (GatewayRequest::Mcp { thread, mcp_server, method, headers }, Role::Server) => {

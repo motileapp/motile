@@ -11,7 +11,7 @@ use motile_protocol::auth_api::DeviceKind;
 use motile_protocol::auth_client::AuthClient;
 use motile_protocol::identity::DeviceKey;
 use serde::{Deserialize, Serialize};
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::{Mutex, RwLock, watch};
 
 const REFRESH_EVERY: Duration = Duration::from_secs(60);
 const MIN_REFRESH_GAP: Duration = Duration::from_secs(5);
@@ -26,6 +26,8 @@ pub enum Role {
 pub struct Access {
     fixed: HashMap<String, Role>,
     linked: RwLock<HashMap<String, Role>>,
+    /// The account's own relay, while it has one.
+    relay: watch::Sender<Option<String>>,
     account: Option<AccountAccess>,
 }
 
@@ -48,7 +50,12 @@ impl Access {
     pub fn fixed(servers: &[String], clients: &[String]) -> Arc<Self> {
         let servers = servers.iter().map(|key| (key.clone(), Role::Server));
         let clients = clients.iter().map(|key| (key.clone(), Role::Client));
-        Arc::new(Self { fixed: servers.chain(clients).collect(), linked: RwLock::default(), account: None })
+        Arc::new(Self {
+            fixed: servers.chain(clients).collect(),
+            linked: RwLock::default(),
+            relay: watch::Sender::new(None),
+            account: None,
+        })
     }
 
     pub fn account(source: AccountSource) -> Arc<Self> {
@@ -60,7 +67,12 @@ impl Access {
             cache: source.cache,
             last_refresh: Mutex::default(),
         };
-        Arc::new(Self { fixed: HashMap::new(), linked: RwLock::new(cached), account: Some(account) })
+        Arc::new(Self {
+            fixed: HashMap::new(),
+            linked: RwLock::new(cached),
+            relay: watch::Sender::new(None),
+            account: Some(account),
+        })
     }
 
     /// What the device may do, asking the auth server again if it isn't listed yet.
@@ -100,6 +112,11 @@ impl Access {
         if me.user.is_none() {
             tracing::warn!("this gateway is no longer linked to an account; no device may connect");
         }
+        self.relay.send_if_modified(|kept| {
+            let changed = *kept != me.relay;
+            kept.clone_from(&me.relay);
+            changed
+        });
         let roles: HashMap<String, Role> = me
             .devices
             .into_iter()
@@ -113,6 +130,11 @@ impl Access {
             let _ = std::fs::write(&account.cache, text);
         }
         *self.linked.write().await = roles;
+    }
+
+    /// Follows the account's own relay.
+    pub fn watch_relay(&self) -> watch::Receiver<Option<String>> {
+        self.relay.subscribe()
     }
 
     pub fn keep_fresh(self: &Arc<Self>) {

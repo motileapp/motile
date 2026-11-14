@@ -122,6 +122,8 @@ pub async fn me(db: &PgPool, user: &UserRow) -> Result<Me, sqlx::Error> {
     .await?;
     let (deleted, removed): (Vec<RemovedRow>, Vec<RemovedRow>) =
         gone.into_iter().partition(|row| row.deleted_at.is_some());
+    let relay: Option<String> =
+        sqlx::query_scalar("SELECT relay_url FROM users WHERE id = $1").bind(user.id).fetch_one(db).await?;
     let removed = removed.into_iter().map(|row| RemovedServer {
         public_key: row.public_key,
         name: row.name,
@@ -133,7 +135,13 @@ pub async fn me(db: &PgPool, user: &UserRow) -> Result<Me, sqlx::Error> {
         devices: devices.collect(),
         removed: removed.collect(),
         deleted: deleted.into_iter().map(|row| row.public_key).collect(),
+        relay,
     })
+}
+
+pub async fn set_relay(db: &PgPool, user_id: Uuid, url: Option<&str>) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE users SET relay_url = $2 WHERE id = $1").bind(user_id).bind(url).execute(db).await?;
+    Ok(())
 }
 
 fn seconds(at: DateTime<Utc>) -> f64 {

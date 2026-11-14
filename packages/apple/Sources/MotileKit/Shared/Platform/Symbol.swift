@@ -121,6 +121,7 @@ enum Symbol: String {
     case play = "\u{e13c}"
     case plug = "\u{e37f}"
     case plus = "\u{e13d}"
+    case radioTower = "\u{e404}"
     case redo2 = "\u{e2a0}"
     case refreshCw = "\u{e145}"
     /// Ricrac's logo, which Lucide doesn't have.

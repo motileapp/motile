@@ -18,6 +18,7 @@ use super::layout::{
     large_outset, more, note, proxied_label, row, switch_row, target,
 };
 use super::mcp_gateway::McpGatewayPage;
+use super::relay_sheet::RelaySheet;
 use crate::format;
 use crate::models::{self, AgentAccountExt, Project, Server, agent_name, new_account};
 use crate::sidebar::{AppUpdateRow, ServerUpdateStatus};
@@ -121,6 +122,7 @@ pub struct SettingsPage {
     setup: Option<Entity<SetupSheet>>,
     account: Option<Entity<AccountSheet>>,
     backup: Option<Entity<BackupSheet>>,
+    relay: Option<Entity<RelaySheet>>,
     removal: Option<Removal>,
     keybindings: Option<Entity<KeybindingsPage>>,
     agent_gateway: Option<Entity<AgentGatewayPage>>,
@@ -144,6 +146,7 @@ impl SettingsPage {
             setup: None,
             account: None,
             backup: None,
+            relay: None,
             removal: None,
             keybindings: None,
             agent_gateway: None,
@@ -399,10 +402,53 @@ impl SettingsPage {
             row(vec![div().ml(px(-large_outset())).child(add).into_any_element()], Vec::new()).into_any_element(),
         );
         let mut groups = vec![group("servers", "Servers", None, true, rows, cx)];
+        groups.push(self.relay(cx));
         groups.extend(self.backup(cx));
         groups.extend(self.removed_servers(&removed, cx));
         groups.extend(self.continuing(cx));
         groups
+    }
+
+    /// The account's own iroh relay, which its devices reach each other through in place of iroh's.
+    fn relay(&self, cx: &mut Context<Self>) -> AnyElement {
+        let relay = self.store.read(cx).account.relay.clone();
+        let on = relay.is_some();
+        let page = cx.weak_entity();
+        let open = large("relay-edit", if on { "Edit" } else { "Set Up" }).on_click(move |_, window, cx| {
+            let _ = page.update(cx, |page, cx| page.open_relay_sheet(window, cx));
+        });
+        let cut = if on { Cut::Middle } else { Cut::Wraps };
+        let description = relay.unwrap_or_else(|| "iroh's public relays".into());
+        let leading = label("Relay", Some(description), Some("radio-tower"), cut, cx);
+        let trailing = if on {
+            let store = self.store.clone();
+            let menu = more("relay-menu", "What to do with the relay", move |_, _| {
+                let store = store.clone();
+                Menu::new().symbol_item("Use iroh's Relays", "undo-2", move |_, cx| {
+                    store.update(cx, |store, _| store.use_iroh_relays())
+                })
+            })
+            .margin(beside(TRAILING_GAP / 2., 0.));
+            div().flex().items_center().child(open.margin(beside(0., TRAILING_GAP / 2.))).child(menu).into_any_element()
+        } else {
+            open.into_any_element()
+        };
+        let caption = on.then_some(
+            "Your servers, clients and gateway reach each other through it when they can't connect directly.",
+        );
+        let rows = vec![row(vec![leading], vec![trailing]).into_any_element()];
+        group("relay", "Relay", caption, true, rows, cx)
+    }
+
+    fn open_relay_sheet(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let (store, page) = (self.store.clone(), cx.weak_entity());
+        self.relay = Some(cx.new(|cx| RelaySheet::new(store, page, window, cx)));
+        cx.notify();
+    }
+
+    pub fn close_relay_sheet(&mut self, cx: &mut Context<Self>) {
+        self.relay = None;
+        cx.notify();
     }
 
     /// The account's S3 bucket, which every server backs up to and syncs through.
@@ -966,6 +1012,7 @@ impl Render for SettingsPage {
         let account =
             present_sheet("agent-account", self.account.clone(), |sheet, leaving| sheet.leaving = leaving, window, cx);
         let backup = present_sheet("backup", self.backup.clone(), |sheet, leaving| sheet.leaving = leaving, window, cx);
+        let relay = present_sheet("relay", self.relay.clone(), |sheet, leaving| sheet.leaving = leaving, window, cx);
         div()
             .size_full()
             .pt(px(theme::TOP_BAR))
@@ -990,6 +1037,7 @@ impl Render for SettingsPage {
             .children(setup)
             .children(account)
             .children(backup)
+            .children(relay)
             .children(removal)
     }
 }

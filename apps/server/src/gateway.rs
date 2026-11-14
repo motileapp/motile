@@ -21,14 +21,14 @@ use axum::response::{IntoResponse, Response};
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use futures_lite::StreamExt;
-use iroh::endpoint::{Connection, RecvStream, SendStream};
+use iroh::endpoint::{ConnectOptions, Connection, RecvStream, SendStream};
 use iroh::{Endpoint, EndpointAddr, EndpointId};
 use motile_protocol::frame::{read_frame, write_frame};
 use motile_protocol::gateway_wire::{
     GatewayAccount, GatewayReply, GatewayRequest, MCP_APPROVED, MCP_NEEDS_APPROVAL, WsMessage,
 };
 use motile_protocol::wire::{Agent, AgentLimits};
-use motile_protocol::{GATEWAY_ALPN, now};
+use motile_protocol::{GATEWAY_ALPN, GATEWAY_ALPN_ZSTD, now};
 use tokio::sync::{Mutex, mpsc, watch};
 
 use crate::hub::Hub;
@@ -46,6 +46,10 @@ const DIAL_WITHIN: Duration = Duration::from_secs(20);
 const ANSWER_WITHIN: Duration = Duration::from_secs(30);
 const CHUNK: usize = 64 * 1024;
 const MAX_MCP_REQUEST: usize = 16 * 1024 * 1024;
+/// The most the gateway takes of an HTTP request's body.
+const MAX_HTTP_REQUEST: usize = 64 * 1024 * 1024;
+/// Fast enough to be lost in the request's time, and still shrinks an agent's JSON several times.
+const ZSTD_LEVEL: i32 = 3;
 /// What isn't the request's own, or would give the token away.
 const NOT_PASSED: [&str; 16] = [
     "host",
@@ -206,17 +210,28 @@ impl Tunnel {
 
     /// A stream to the gateway, which `request` starts.
     pub async fn open(&self, request: &GatewayRequest) -> anyhow::Result<(SendStream, RecvStream)> {
+        let (send, recv, _) = self.open_saying_compression(request).await?;
+        Ok((send, recv))
+    }
+
+    /// Also says whether the gateway takes an HTTP request's body compressed with zstd.
+    async fn open_saying_compression(
+        &self,
+        request: &GatewayRequest,
+    ) -> anyhow::Result<(SendStream, RecvStream, bool)> {
         let Some(key) = self.key.borrow().clone() else { bail!(NO_GATEWAY) };
         let connection = self.connection(&key, false).await?;
-        let (mut send, recv) = match connection.open_bi().await {
-            Ok(stream) => stream,
+        let (connection, (mut send, recv)) = match connection.open_bi().await {
+            Ok(stream) => (connection, stream),
             Err(error) => {
                 tracing::debug!("the connection to the gateway dropped: {error:#}");
-                self.connection(&key, true).await?.open_bi().await.context("Your gateway hung up.")?
+                let connection = self.connection(&key, true).await?;
+                let stream = connection.open_bi().await.context("Your gateway hung up.")?;
+                (connection, stream)
             }
         };
         write_frame(&mut send, request).await?;
-        Ok((send, recv))
+        Ok((send, recv, connection.alpn() == GATEWAY_ALPN_ZSTD))
     }
 
     async fn connection(&self, key: &str, again: bool) -> anyhow::Result<Connection> {
@@ -233,7 +248,9 @@ impl Tunnel {
         if let Some(direct) = std::env::var("MOTILE_GATEWAY_ADDR").ok().and_then(|direct| direct.parse().ok()) {
             address = address.with_ip_addr(direct);
         }
-        let dialled = tokio::time::timeout(DIAL_WITHIN, self.endpoint.connect(address, GATEWAY_ALPN)).await;
+        let options = ConnectOptions::new().with_additional_alpns(vec![GATEWAY_ALPN.to_vec()]);
+        let connecting = self.endpoint.connect_with_opts(address, GATEWAY_ALPN_ZSTD, options);
+        let dialled = tokio::time::timeout(DIAL_WITHIN, async { anyhow::Ok(connecting.await?.await?) }).await;
         let connection = dialled.context("Your gateway didn't answer.")?.context("Your gateway can't be reached.")?;
         *kept = Some((key.to_string(), connection.clone()));
         Ok(connection)
@@ -421,11 +438,26 @@ fn refused(status: StatusCode, message: &str) -> Response {
     (status, axum::Json(body)).into_response()
 }
 
-/// Sends the request and its body to the gateway as they come, and answers with what it answers, its
-/// body as it comes.
+/// Sends the request and its body to the gateway, and answers with what it answers, its body as it
+/// comes. An HTTP request's body goes compressed, whole, to a gateway that takes it so; any other
+/// goes as it comes.
 async fn tunnel(tunnel: &Tunnel, thread: &str, request: GatewayRequest, body: Body) -> anyhow::Result<Response> {
-    let (mut send, mut recv) = tunnel.open(&request).await?;
+    let is_http = matches!(request, GatewayRequest::Http { .. });
+    let (mut send, mut recv, compresses) = tunnel.open_saying_compression(&request).await?;
     tokio::spawn(async move {
+        if is_http && compresses {
+            let compressed = match axum::body::to_bytes(body, MAX_HTTP_REQUEST).await {
+                Ok(bytes) => tokio::task::spawn_blocking(move || zstd::bulk::compress(&bytes, ZSTD_LEVEL)).await,
+                Err(_) => return drop(send.reset(0u32.into())),
+            };
+            let Ok(Ok(compressed)) = compressed else { return drop(send.reset(0u32.into())) };
+            if send.write_all(&compressed).await.is_err() {
+                let _ = send.reset(0u32.into());
+                return;
+            }
+            let _ = send.finish();
+            return;
+        }
         let mut chunks = body.into_data_stream();
         while let Some(chunk) = chunks.next().await {
             let written = match chunk {

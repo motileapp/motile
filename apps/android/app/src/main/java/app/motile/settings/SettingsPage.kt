@@ -29,6 +29,7 @@ import app.motile.core.Agent
 import app.motile.core.AgentAccount
 import app.motile.core.AppStore
 import app.motile.core.Appearance
+import app.motile.core.CoreError
 import app.motile.core.Integration
 import app.motile.core.Preferences
 import app.motile.core.Server
@@ -72,6 +73,7 @@ fun SettingsPage(section: SettingsSection) {
     var edited by remember { mutableStateOf<EditedAccount?>(null) }
     var removal by remember { mutableStateOf<Removal?>(null) }
     var editsBackup by remember { mutableStateOf(false) }
+    var editsRelay by remember { mutableStateOf(false) }
     var steers by remember { mutableStateOf(Preferences.optionalBool(AppStore.STEERS_KEY) ?: AppStore.STEERS_BY_DEFAULT) }
     var managesNewThreads by remember { mutableStateOf(Preferences.managesNewThreads) }
     LaunchedEffect(Unit) { store.refreshMediaStorage() }
@@ -84,7 +86,7 @@ fun SettingsPage(section: SettingsSection) {
                 managesNewThreads = it
                 Preferences.managesNewThreads = it
             }
-            SettingsSection.Servers -> servers(store, navigator, editBackup = { editsBackup = true }) { removal = it }
+            SettingsSection.Servers -> servers(store, navigator, editRelay = { editsRelay = true }, editBackup = { editsBackup = true }) { removal = it }
             SettingsSection.Accounts -> agentAccounts(store, edit = { server, account -> edited = EditedAccount(server, account) }) { removal = it }
             SettingsSection.Projects -> projects(store, navigator)
             SettingsSection.TextGeneration -> textGeneration(store, navigator)
@@ -96,6 +98,7 @@ fun SettingsPage(section: SettingsSection) {
     ConfirmsRemoval(removal) { removal = null }
     Modal(edited, onDismiss = { edited = null }) { AgentAccountSheet(it.server, it.account) }
     Modal(editsBackup, onDismiss = { editsBackup = false }) { BackupSheet() }
+    Modal(editsRelay, onDismiss = { editsRelay = false }) { RelaySheet() }
 }
 
 private fun SettingsGroups.general(
@@ -153,7 +156,13 @@ private fun SettingsGroups.general(
     }
 }
 
-private fun SettingsGroups.servers(store: AppStore, navigator: SettingsNavigator, editBackup: () -> Unit, remove: (Removal) -> Unit) {
+private fun SettingsGroups.servers(
+    store: AppStore,
+    navigator: SettingsNavigator,
+    editRelay: () -> Unit,
+    editBackup: () -> Unit,
+    remove: (Removal) -> Unit,
+) {
     group("servers") {
         for (server in store.servers) row {
             SettingsLink({ navigator.push(SettingsRoute.ServerPage(server.id)) }) {
@@ -163,6 +172,7 @@ private fun SettingsGroups.servers(store: AppStore, navigator: SettingsNavigator
         }
         row { SettingsLink({ navigator.push(SettingsRoute.AddServer) }) { SettingsActionLabel("Add a Server", Symbol.Plus) } }
     }
+    relay(store, editRelay)
     backup(store, editBackup, remove)
     group("removed-servers", header = "Unlinked") {
         for (server in store.removedServers) row {
@@ -183,6 +193,22 @@ private fun SettingsGroups.servers(store: AppStore, navigator: SettingsNavigator
         caption = "When your server comes back from a restart, agents that were working carry on.",
         isOn = { it.continueAfterRestarts },
     ) { server, on -> store.setContinueSettings(afterLimits = server.continueAfterLimits, afterRestarts = on, server = server) }
+}
+
+/** The account's own iroh relay, which every device uses in place of iroh's public ones. */
+private fun SettingsGroups.relay(store: AppStore, edit: () -> Unit) {
+    val relay = store.account.relay
+    val footer = relay?.let { "Your servers, clients and gateway reach each other through it when they can't connect directly." }
+    group("relay", header = "Relay", footer = footer) {
+        row {
+            SettingsLink(edit) {
+                SettingsItem("Relay", relay ?: "iroh's public relays", TextOverflow.MiddleEllipsis) { SettingsTile(Symbol.RadioTower) }
+            }
+        }
+        if (relay != null) row {
+            SettingsAction("Use iroh's Relays", Symbol.Undo2) { store.setRelay(null) { error -> error?.let { store.alert(CoreError(it)) } } }
+        }
+    }
 }
 
 /** The account's S3 bucket, which every server backs up to and syncs through. */
