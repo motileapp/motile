@@ -15,6 +15,9 @@ struct ToastView: View {
     /// Tucks the close button into the corner, its own corner running along the toast's.
     private static let closeMargin = radius - ControlSize.regular.radius
     private static let trailing = closeMargin + closeSize + 4
+    private static let titleSpacing: CGFloat = 4
+    /// Starts the output, which runs under the close button, just below it.
+    private static let outputTop = closeMargin + closeSize + 2 - padding - titleHeight - titleSpacing
 
     var body: some View {
         let url = toast.url.flatMap { URL(string: $0) }
@@ -28,7 +31,7 @@ struct ToastView: View {
                 }
             }
             .frame(height: Self.titleHeight)
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: Self.titleSpacing) {
                 Text(toast.title)
                     .font(.ui(.sm, weight: .medium))
                     .foregroundStyle(Color.themeForeground)
@@ -111,7 +114,7 @@ struct ToastView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .box(in: RoundedRectangle(cornerRadius: Radius.md, style: .continuous), bordered: true)
-        .padding(.top, 4)
+        .padding(.top, Self.outputTop)
         .padding(.trailing, Self.padding - Self.trailing)
     }
 }
