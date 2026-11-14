@@ -161,10 +161,10 @@ struct SettingsPage: View {
                     SettingsLabel(server.name, description: server.settingsDescription, icon: .server) {
                         if let sync = server.sync { ServerSyncLine(sync: sync).padding(.top, 2) }
                     }
-                } trailing: {
+                } controls: { half in
                     HStack(spacing: 0) {
-                        ServerUpdateStatus(server: server, variant: .outline, size: .large, margin: .beside(trailing: settingsHalfGap)) { EmptyView() }
-                        more("What to do with \(server.name)", margin: .beside(leading: settingsHalfGap)) {
+                        ServerUpdateStatus(server: server, variant: .outline, size: .large, margin: .beside(trailing: half)) { EmptyView() }
+                        more("What to do with \(server.name)", margin: .beside(leading: half)) {
                             MenuItem("Unlink Server", symbol: .unlink, role: .destructive) { removal = .server(server) }
                             MenuItem("Delete", symbol: .trash2, role: .destructive) { removal = .serverCompletely(server) }
                         }
@@ -191,11 +191,11 @@ struct SettingsPage: View {
         SettingsGroup("relay", "Relay", caption: url == nil ? nil : "Your servers, clients and gateway reach each other through it when they can't connect directly.") {
             SettingsRow {
                 SettingsLabel("Relay", description: url ?? "iroh's public relays", icon: .radioTower, truncates: url == nil ? nil : .middle)
-            } trailing: {
+            } controls: { half in
                 if url != nil {
                     HStack(spacing: 0) {
-                        ActionButton("Edit", variant: .outline, size: .large, margin: .beside(trailing: settingsHalfGap)) { store.editedRelay = EditedRelay(url: url) }
-                        more("What to do with the relay", margin: .beside(leading: settingsHalfGap)) {
+                        ActionButton("Edit", variant: .outline, size: .large, margin: .beside(trailing: half)) { store.editedRelay = EditedRelay(url: url) }
+                        more("What to do with the relay", margin: .beside(leading: half)) {
                             MenuItem("Reset to Default", symbol: .undo2, role: .destructive) { removal = .relay }
                         }
                     }
@@ -212,11 +212,11 @@ struct SettingsPage: View {
         SettingsGroup("backup", "Backup", caption: on ? "Your servers keep their threads, images and files in it, and sync through it." : nil) {
             SettingsRow {
                 SettingsLabel("S3 Bucket", description: store.backup.description, icon: .cloudUpload, truncates: on ? .middle : nil)
-            } trailing: {
+            } controls: { half in
                 if on {
                     HStack(spacing: 0) {
-                        ActionButton("Edit", variant: .outline, size: .large, margin: .beside(trailing: settingsHalfGap)) { store.editedBackup = EditedBackup(bucket: store.backup.bucket) }
-                        more("What to do with the backup", margin: .beside(leading: settingsHalfGap)) {
+                        ActionButton("Edit", variant: .outline, size: .large, margin: .beside(trailing: half)) { store.editedBackup = EditedBackup(bucket: store.backup.bucket) }
+                        more("What to do with the backup", margin: .beside(leading: half)) {
                             MenuItem("Turn Off", symbol: .ban, role: .destructive) { removal = .backup }
                         }
                     }
@@ -492,10 +492,6 @@ func rowOutset(for height: CGFloat, in row: CGFloat = settingsRowHeight) -> CGFl
     settingsInset - (row - height) / 2
 }
 
-/// Half the room between the lights of two controls side by side at a row's end, which each
-/// takes as its own.
-let settingsHalfGap = settingsRowSpacing / 2
-
 /// How a server's writer is told to name the branches it makes, to change and to put back.
 private struct BranchInstructionsEditor: View {
     @Environment(AppStore.self) private var store
@@ -682,22 +678,34 @@ struct SettingsRow<Leading: View, Trailing: View>: View {
     /// How tall the trailing control is, which stands as far from the row's right as from its top and bottom.
     let control: CGFloat
     let leading: Leading
-    let trailing: Trailing
+    /// The controls, given half the room between them, which is as wide as the room between the last and
+    /// the row's right.
+    let controls: (_ halfGap: CGFloat) -> Trailing
     @State private var height = settingsRowHeight
 
     init(control: CGFloat = ControlSize.large.height, @ViewBuilder leading: () -> Leading, @ViewBuilder trailing: () -> Trailing) {
+        let trailing = trailing()
+        self.init(control: control, leading: leading, controls: { _ in trailing })
+    }
+
+    init(
+        control: CGFloat = ControlSize.large.height, @ViewBuilder leading: () -> Leading,
+        @ViewBuilder controls: @escaping (_ halfGap: CGFloat) -> Trailing
+    ) {
         self.control = control
         self.leading = leading()
-        self.trailing = trailing()
+        self.controls = controls
     }
+
+    private var edge: CGFloat { settingsInset - rowOutset(for: control, in: height) }
 
     var body: some View {
         HStack(spacing: settingsRowSpacing) {
             leading
                 .padding(.vertical, scaled(8))
             Spacer(minLength: 12)
-            HStack(spacing: settingsRowSpacing) { trailing }
-                .padding(.trailing, -rowOutset(for: control, in: height))
+            HStack(spacing: edge) { controls(edge / 2) }
+                .padding(.trailing, edge - settingsInset)
         }
         .padding(.horizontal, settingsInset)
         .frame(minHeight: settingsRowHeight)

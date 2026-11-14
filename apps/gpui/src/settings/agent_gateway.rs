@@ -15,7 +15,7 @@ use motile_protocol::gateway_wire::{AccountChange, Capture};
 use motile_protocol::wire::Agent;
 
 use super::layout::{
-    CONTENT_WIDTH, Cut, INSET, PAGE_PADDING, TRAILING_GAP, footed_label, group, label, large_outset, more, row,
+    CONTENT_WIDTH, Cut, INSET, PAGE_PADDING, footed_label, group, half_gap, label, more, row, spaced_row,
 };
 use crate::models::{agent_name, now};
 use crate::panel::code_view::{CodeActions, CodeSnapshot, CodeView};
@@ -137,25 +137,25 @@ impl AgentGatewayPage {
                 cx.notify();
             })
         });
+        let row_id = format!("gateway-account-{}", account.id);
+        let half = half_gap(&row_id, cx);
         let signs_in_again = account.status == AccountState::SignInAgain;
         let sign_in_again = signs_in_again.then(|| {
             let (store, agent, again) = (self.store.clone(), account.agent, account.id.clone());
-            large(("account-sign-in", index), "Sign In Again").margin(beside(0., TRAILING_GAP / 2.)).on_click(
-                move |_, _, cx| {
-                    store.update(cx, |store, cx| {
-                        store.start_gateway_sign_in(agent, Some(again.clone()));
-                        cx.notify();
-                    })
-                },
-            )
+            large(("account-sign-in", index), "Sign In Again").margin(beside(0., half)).on_click(move |_, _, cx| {
+                store.update(cx, |store, cx| {
+                    store.start_gateway_sign_in(agent, Some(again.clone()));
+                    cx.notify();
+                })
+            })
         });
-        let switch = switch.margin(beside(if signs_in_again { TRAILING_GAP / 2. } else { 0. }, TRAILING_GAP / 2.));
-        let menu = self.account_menu(index, account, count, cx).margin(beside(TRAILING_GAP / 2., 0.));
+        let switch = switch.margin(beside(if signs_in_again { half } else { 0. }, half));
+        let menu = self.account_menu(index, account, count, cx).margin(beside(half, 0.));
         let trailing = div().flex().items_center().children(sign_in_again).child(switch).child(menu);
         // As tall as an MCP server's card's top row, which has a tile beside the same two lines.
         let leading =
             vec![div().flex_1().min_w_0().flex().py(px(4.)).child(account_label(account, cx)).into_any_element()];
-        let mut rows = vec![row(leading, vec![trailing.into_any_element()]).into_any_element()];
+        let mut rows = vec![spaced_row(row_id, leading, vec![trailing.into_any_element()]).into_any_element()];
         let beside = width >= BESIDE_WIDTH;
         let windows = account.windows.iter().enumerate().map(|(place, window)| {
             let window = LimitWindow::from(window);
@@ -248,6 +248,7 @@ impl AgentGatewayPage {
         let log = &store.gateway.log;
         let (rows, more_rows, loading, error, errors_only) =
             (log.rows.clone(), log.more, log.loading, log.error.clone(), log.errors_only);
+        let half = half_gap("gateway-capture-row", cx);
         let handle = self.store.clone();
         let capture = ActionMenu::new("gateway-capture", "Capture", move |_, _| {
             let next = {
@@ -275,10 +276,10 @@ impl AgentGatewayPage {
                 .submenu("Capture a Thread", picked)
         })
         .button(outline)
-        .margin(beside(if view.capture.on { large_outset() / 2. } else { 0. }, 0.));
+        .margin(beside(if view.capture.on { half } else { 0. }, 0.));
         let stop = view.capture.on.then(|| {
             let handle = self.store.clone();
-            large("gateway-capture-stop", "Stop").margin(beside(0., large_outset() / 2.)).on_click(move |_, _, cx| {
+            large("gateway-capture-stop", "Stop").margin(beside(0., half)).on_click(move |_, _, cx| {
                 handle.update(cx, |store, cx| {
                     store.capture_gateway(Capture::Off);
                     cx.notify();
@@ -287,7 +288,11 @@ impl AgentGatewayPage {
         });
         let trailing = div().flex().items_center().children(stop).child(capture).into_any_element();
         let leading = label(view.capture.text.clone(), None, None, Cut::Wraps, cx);
-        let capture_card = card_default(div().flex().flex_col(), cx).child(row(vec![leading], vec![trailing]));
+        let capture_card = card_default(div().flex().flex_col(), cx).child(spaced_row(
+            "gateway-capture-row",
+            vec![leading],
+            vec![trailing],
+        ));
 
         let handle = self.store.clone();
         let filter =

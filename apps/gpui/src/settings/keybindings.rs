@@ -9,8 +9,8 @@ use gpui_kit::*;
 use motile_core::keybindings::{Group, Row};
 
 use super::layout::{
-    END_ROOM, GROUP_GAP, INSET, PAGE_PADDING, ROW_HEIGHT, TITLE_GAP, column, group, group_title, large_outset, note,
-    row,
+    END_ROOM, GROUP_GAP, INSET, PAGE_PADDING, ROW_HEIGHT, TITLE_GAP, column, group, group_title, half_gap,
+    large_outset, note, spaced_row,
 };
 use crate::store::Store;
 use crate::store::shortcuts::ShortcutCheck;
@@ -19,24 +19,17 @@ use crate::ui::control::Look;
 use crate::ui::menu::{Anchor, Menu};
 use crate::ui::motion;
 use crate::ui::{
-    ActionButton, ActionMenu, Chip, InputField, KeyCaps, Variant, beside, card_default, card_slice, edges, icons,
-    tooltip,
+    ActionButton, ActionMenu, Chip, InputField, KeyCaps, Variant, beside, card_default, card_slice, icons, tooltip,
 };
 
 /// The field the new shortcut records its keys in.
 const NEW_FIELD: &str = "new-shortcut";
+const NEW_ROW: &str = "new-shortcut-row";
 /// The deferred priority of the condition's editor: over the page, under the menus.
 const POPOVER_PRIORITY: usize = 50;
 const POPOVER_WIDTH: f32 = 420.;
 /// Room before a command's name and its condition in the new shortcut's row.
 const COMMAND_PADDING: f32 = 10.;
-
-/// Half the room between a row's buttons, which is as wide as the room between them and the row's
-/// edge. Each button takes its half, so that a click between them still lands on one.
-fn half_gap(leading: bool, trailing: bool) -> Edges<f32> {
-    let half = (ROW_HEIGHT - ControlSize::Large.height()) / 4.;
-    edges(0., if leading { half } else { 0. }, 0., if trailing { half } else { 0. })
-}
 
 /// A shortcut being added: its command, its keys and its condition, kept once all are right.
 #[derive(Default)]
@@ -343,19 +336,20 @@ impl KeybindingsPage {
             .child(div().relative().when(editing, |cell| cell.child(self.anchor.track())).child(condition))
             .into_any_element();
         let can_add = adding.command.is_some() && !adding.key.is_empty() && adding.check.when_error.is_none();
+        let half = half_gap(NEW_ROW, cx);
         let buttons = div()
             .flex()
             .items_center()
             .child(
                 ShortcutField::new(NEW_FIELD, adding.check.caps.clone(), &self.store)
                     .placeholder("Record Keys")
-                    .margin(half_gap(false, true)),
+                    .margin(beside(0., half)),
             )
             .child(
                 ActionButton::new("add-new-shortcut", "Add")
                     .primary()
                     .large()
-                    .margin(half_gap(true, true))
+                    .margin(beside(half, half))
                     .disabled(!can_add)
                     .on_click(cx.listener(|this, _, _, cx| {
                         let Some(adding) = this.adding.take() else { return };
@@ -371,7 +365,7 @@ impl KeybindingsPage {
                 ActionButton::icon("cancel-new-shortcut", "x", "Cancel")
                     .large()
                     .surface(Surface::Card)
-                    .margin(half_gap(true, false))
+                    .margin(beside(half, 0.))
                     .on_click(cx.listener(|this, _, _, cx| {
                         this.adding = None;
                         cx.notify();
@@ -380,7 +374,7 @@ impl KeybindingsPage {
             .into_any_element();
         let mut trailing = conflict_mark(&adding.check.conflicts, cx).into_iter().collect::<Vec<_>>();
         trailing.push(buttons);
-        let rows = vec![row(vec![leading], trailing).into_any_element()];
+        let rows = vec![spaced_row(NEW_ROW, vec![leading], trailing).into_any_element()];
         Some(group("new-shortcut", "New shortcut", None, true, rows, cx))
     }
 
@@ -413,22 +407,23 @@ impl KeybindingsPage {
                 ))
             })
             .into_any_element();
-        let menu = self.row_menu(shortcut, cx);
+        let row_id = format!("shortcut-row-{id}");
+        let half = half_gap(&row_id, cx);
+        let menu = self.row_menu(shortcut, half, cx);
         let buttons = div()
             .flex()
             .items_center()
             .child(
-                ShortcutField::new(format!("field-{id}"), shortcut.caps.clone(), &self.store)
-                    .margin(half_gap(false, true)),
+                ShortcutField::new(format!("field-{id}"), shortcut.caps.clone(), &self.store).margin(beside(0., half)),
             )
             .child(menu)
             .into_any_element();
         let mut trailing = conflict_mark(&shortcut.conflicts, cx).into_iter().collect::<Vec<_>>();
         trailing.push(buttons);
-        row(vec![leading], trailing).into_any_element()
+        spaced_row(row_id, vec![leading], trailing).into_any_element()
     }
 
-    fn row_menu(&self, shortcut: &Row, cx: &mut Context<Self>) -> AnyElement {
+    fn row_menu(&self, shortcut: &Row, half: f32, cx: &mut Context<Self>) -> AnyElement {
         let has_key = !shortcut.key.is_empty();
         let (page, store, shortcut_row) = (cx.weak_entity(), self.store.clone(), shortcut.clone());
         let condition_title = if shortcut.when.is_empty() { "Add a Condition" } else { "Edit the Condition" };
@@ -469,7 +464,7 @@ impl KeybindingsPage {
             button
                 .size(ControlSize::Large)
                 .surface(Surface::Card)
-                .margin(half_gap(true, false))
+                .margin(beside(half, 0.))
                 .disabled(!has_key && !shortcut.resettable)
         })
         .into_any_element()

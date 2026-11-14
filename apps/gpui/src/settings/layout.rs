@@ -22,8 +22,9 @@ pub const END_ROOM: f32 = 80.;
 pub const GROUP_GAP: f32 = 22.;
 /// The room between a group's title and its rows.
 pub const TITLE_GAP: f32 = 12.;
-/// The room between a row's controls, which buttons side by side share as their margins.
-pub const TRAILING_GAP: f32 = 10.;
+/// The room between a row's controls, which buttons side by side share as their margins: as wide as
+/// the room between the last and the row's right.
+pub const TRAILING_GAP: f32 = (ROW_HEIGHT - ControlSize::Large.height()) / 2.;
 
 /// What stands a control this tall as far from its row's right as from its top and bottom.
 pub fn row_outset(height: f32) -> f32 {
@@ -33,6 +34,40 @@ pub fn row_outset(height: f32) -> f32 {
 /// How far a large control is pulled past the row's inset.
 pub fn large_outset() -> f32 {
     row_outset(ControlSize::Large.height())
+}
+
+/// How tall the rows that space their controls were drawn last, by their ids.
+#[derive(Default)]
+struct RowHeights(HashMap<SharedString, f32>);
+
+impl Global for RowHeights {}
+
+/// Half the room between the controls of the row `id`, which each takes so that a click between
+/// them still lands on one. Together they are as wide as the room between the last and the row's
+/// right, which grows with a row taller than `ROW_HEIGHT`.
+pub fn half_gap(id: &str, cx: &App) -> f32 {
+    let height = cx.try_global::<RowHeights>().and_then(|heights| heights.0.get(id).copied()).unwrap_or(ROW_HEIGHT);
+    (TRAILING_GAP + (height - ROW_HEIGHT).max(0.) / 2.) / 2.
+}
+
+/// A row whose controls stand `half_gap(id)` twice apart, drawn again when its height changes it.
+pub fn spaced_row(id: impl Into<SharedString>, leading: Vec<AnyElement>, trailing: Vec<AnyElement>) -> Div {
+    let id = id.into();
+    let measure = canvas(
+        move |bounds, window, cx| {
+            let height = f32::from(bounds.size.height);
+            let heights = &mut cx.default_global::<RowHeights>().0;
+            if heights.get(&id).is_some_and(|last| (last - height).abs() < 0.5) {
+                return;
+            }
+            heights.insert(id.clone(), height);
+            window.refresh();
+        },
+        |_, _, _, _| {},
+    )
+    .absolute()
+    .size_full();
+    row(leading, trailing).relative().child(measure)
 }
 
 /// Where the groups and rows a search can scroll to were drawn last, by their ids.

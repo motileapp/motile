@@ -153,19 +153,19 @@ private struct ShortcutRowView: View {
                     editingCondition = false
                 }
             }
-        } trailing: {
+        } controls: { half in
             ConflictMark(conflicts: row.conflicts)
             HStack(spacing: 0) {
-                ShortcutField(row.caps, margin: halfGap(trailing: true)) { key in
+                ShortcutField(row.caps, margin: .beside(trailing: half)) { key in
                     store.setShortcut(row.command, key: key, when: row.when, replacing: row)
                 }
-                menu
+                menu(margin: .beside(leading: half))
             }
         }
     }
 
-    private var menu: some View {
-        ActionMenu(icon: .ellipsis, help: "What to do with the shortcut", size: .large, margin: halfGap(leading: true)) {
+    private func menu(margin: EdgeInsets) -> some View {
+        ActionMenu(icon: .ellipsis, help: "What to do with the shortcut", size: .large, margin: margin) {
             if !row.key.isEmpty {
                 MenuItem(row.when.isEmpty ? "Add a Condition" : "Edit the Condition", symbol: .pencil) { editingCondition = true }
                 MenuItem("Add Another Shortcut", symbol: .plus) { addAnother(row.command) }
@@ -222,17 +222,17 @@ private struct NewShortcutRow: View {
                     editingCondition = false
                 }
             }
-        } trailing: {
+        } controls: { half in
             ConflictMark(conflicts: check.conflicts)
             HStack(spacing: 0) {
-                ShortcutField(check.caps, placeholder: "Record Keys", margin: halfGap(trailing: true)) { key = $0 }
-                ActionButton("Add", variant: .primary, size: .large, margin: halfGap(leading: true, trailing: true)) {
+                ShortcutField(check.caps, placeholder: "Record Keys", margin: .beside(trailing: half)) { key = $0 }
+                ActionButton("Add", variant: .primary, size: .large, margin: .beside(leading: half, trailing: half)) {
                     guard let command else { return }
                     store.setShortcut(command, key: key, when: when)
                     done()
                 }
                 .disabled(command == nil || key.isEmpty || check.whenError != nil)
-                ActionButton(icon: .x, help: "Cancel", size: .large, margin: halfGap(leading: true), action: done)
+                ActionButton(icon: .x, help: "Cancel", size: .large, margin: .beside(leading: half), action: done)
             }
         }
         .task(id: "\(key)\u{0}\(when)") {
@@ -348,12 +348,5 @@ private struct ConditionEditor: View {
         .font(.ui(.xs))
         .foregroundStyle(color)
     }
-}
-
-/// Half the room between a row's buttons, which is as wide as the room between them and the row's
-/// edge. Each button takes its half, so that a click between them still lands on one.
-private func halfGap(leading: Bool = false, trailing: Bool = false) -> EdgeInsets {
-    let half = (settingsRowHeight - ControlSize.large.height) / 4
-    return EdgeInsets(top: 0, leading: leading ? half : 0, bottom: 0, trailing: trailing ? half : 0)
 }
 #endif
