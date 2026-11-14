@@ -217,22 +217,8 @@ struct SettingsPage: View {
             }
         }
         .id("servers")
-        relay
         backup
-        if !store.removedServers.isEmpty {
-            Section("Unlinked") {
-                ForEach(store.removedServers) { server in
-                    NavigationLink {
-                        ServerSettingsPage(serverID: server.id, removed: true).glassBackButton()
-                    } label: {
-                        SettingsItem(server.name, description: "Its threads stay readable from the copies") {
-                            SettingsTile(symbol: .server)
-                        }
-                    }
-                }
-            }
-            .id("removed-servers")
-        }
+        relay
         let continuing = store.servers.filter { $0.state == .connected && store.canChooseRestart($0) }
         if !continuing.isEmpty {
             SettingsToggles(
@@ -253,6 +239,20 @@ struct SettingsPage: View {
                 }
             }
             .id("continue-restarts")
+        }
+        if !store.removedServers.isEmpty {
+            Section("Unlinked") {
+                ForEach(store.removedServers) { server in
+                    NavigationLink {
+                        ServerSettingsPage(serverID: server.id, removed: true).glassBackButton()
+                    } label: {
+                        SettingsItem(server.name, description: "Its threads stay readable from the copies") {
+                            SettingsTile(symbol: .server)
+                        }
+                    }
+                }
+            }
+            .id("removed-servers")
         }
     }
 
