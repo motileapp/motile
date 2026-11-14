@@ -6,7 +6,7 @@ use gpui_kit::*;
 
 use crate::models::agent_name;
 use crate::store::Store;
-use crate::store::usage::{LimitWindow, LimitsReport, LimitsSection, Pace, Resets, Tone};
+use crate::store::usage::{LimitWindow, LimitsReport, LimitsSection, Pace, ResetQuestion, Resets, Tone};
 use crate::theme::{ControlSize, IconSize, Layer, Opacity, Radius, Surface, TextSize, colors};
 use crate::ui::menu::Menu;
 use crate::ui::{ActionMenu, Chip, Variant, card_default, divider_on, icons, logos, tabular_numbers, tooltip};
@@ -308,11 +308,11 @@ pub fn reset_menu(
             let usable = option.usable || (at_limit && option.at_limit);
             let detail =
                 if usable { option.detail.clone() } else { option.note.clone().unwrap_or(option.detail.clone()) };
-            let (store, resets, picked) = (handle.clone(), resets.clone(), option.id.clone());
+            let (store, resets, option) = (handle.clone(), resets.clone(), option.clone());
             menu.detailed_item(usable, option.title.clone(), detail, move |_, cx| {
-                let (resets, picked) = (resets.clone(), picked.clone());
+                let asked = ResetQuestion { resets: resets.clone(), option: option.clone(), used };
                 store.update(cx, |store, cx| {
-                    store.use_limit_reset(&resets, &picked, used);
+                    store.usage.asked_reset = Some(asked);
                     cx.notify();
                 })
             })

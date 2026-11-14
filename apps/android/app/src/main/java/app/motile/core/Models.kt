@@ -1693,6 +1693,10 @@ data class LimitResets(
         val atLimit: Boolean,
         /** Why it can't be used now. */
         val note: String?,
+        /** "Use a weekly reset?" */
+        val question: String,
+        /** "Refills the weekly limit now. It spends 1 of the 2 left, and can't be undone." */
+        val consequence: String,
     ) {
         constructor(json: JSON) : this(
             id = json.string("id"),
@@ -1701,6 +1705,8 @@ data class LimitResets(
             usable = json.bool("usable"),
             atLimit = json.bool("at_limit"),
             note = json.optionalString("note"),
+            question = json.string("question"),
+            consequence = json.string("consequence"),
         )
     }
 

@@ -6,6 +6,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -21,6 +25,9 @@ import app.motile.settings.SettingsTile
 import app.motile.theme.IconSize
 import app.motile.theme.LocalPalette
 import app.motile.ui.ActionMenu
+import app.motile.ui.Answer
+import app.motile.ui.Asking
+import app.motile.ui.Confirmation
 import app.motile.theme.ControlSize
 import app.motile.ui.ButtonVariant
 import app.motile.ui.Icon
@@ -40,6 +47,8 @@ fun ResetsRow(resets: LimitResets, used: (() -> Unit)? = null) {
     val palette = LocalPalette.current
     val pending = store.usingReset(resets)
     val menu = rememberMenuState()
+    var picked by remember { mutableStateOf<LimitResets.Option?>(null) }
+    Asking(picked, { picked = null }) { confirmation(store, resets, it, used) }
     Box {
         SettingsPressRow({ menu.open() }, enabled = !pending) {
             Box(Modifier.size(SettingsTile.size.dp), contentAlignment = Alignment.Center) {
@@ -51,7 +60,7 @@ fun ResetsRow(resets: LimitResets, used: (() -> Unit)? = null) {
             }
             if (pending) Spinner(IconSize.Xl)
         }
-        MenuPopup(menu) { resetOptions(store, resets, thread = null, used = used) }
+        MenuPopup(menu) { resetOptions(resets, thread = null) { picked = it } }
     }
 }
 
@@ -70,6 +79,8 @@ fun ResetMenu(
 ) {
     val store = LocalStore.current
     val pending = store.usingReset(resets)
+    var picked by remember { mutableStateOf<LimitResets.Option?>(null) }
+    Asking(picked, { picked = null }) { confirmation(store, resets, it, used) }
     ActionMenu(
         "Use Reset",
         help = "Refill this account's limits now with one of its resets",
@@ -78,14 +89,18 @@ fun ResetMenu(
         pending = pending,
         disabled = pending,
         margin = margin,
-    ) { resetOptions(store, resets, thread, used) }
+    ) { resetOptions(resets, thread) { picked = it } }
 }
 
 /** An item for each kind of reset, with its detail or why it can't be used now, which disables it. */
-private fun MenuBuilder.resetOptions(store: AppStore, resets: LimitResets, thread: ThreadInfo?, used: (() -> Unit)?) {
+private fun MenuBuilder.resetOptions(resets: LimitResets, thread: ThreadInfo?, pick: (LimitResets.Option) -> Unit) {
     val usable = { option: LimitResets.Option -> option.usable || (thread != null && option.atLimit) }
     for (option in resets.options) {
         val detail = if (usable(option)) option.detail else option.note ?: option.detail
-        item(option.title, detail = detail, disabled = !usable(option)) { store.useLimitReset(option, resets, used) }
+        item(option.title, detail = detail, disabled = !usable(option)) { pick(option) }
     }
 }
+
+/** What the user is asked before the option is used. */
+private fun confirmation(store: AppStore, resets: LimitResets, option: LimitResets.Option, used: (() -> Unit)?) =
+    Confirmation(option.question, option.consequence, listOf(Answer("Use Reset") { store.useLimitReset(option, resets, used) }))

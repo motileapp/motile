@@ -27,7 +27,7 @@ const FRESH_FOR: f64 = 60.0;
 pub async fn claude(environment: &Environment) -> Vec<LimitReset> {
     let Some(token) = claude_token(environment).await.filter(Token::fresh) else { return Vec::new() };
     let path = format!("/api/oauth/usage?{}", resets::CLAUDE_USAGE_QUERY);
-    match claude_request(&token, reqwest::Method::GET, &path, None).await {
+    match claude_request(environment, &token, reqwest::Method::GET, &path, None).await {
         Ok(usage) => resets::claude(&usage["cedar_ember"], motile_protocol::now()),
         Err(error) => {
             tracing::debug!("couldn't read Claude's resets: {error:#}");
@@ -54,11 +54,11 @@ async fn use_claude(environment: &Environment, reset: &str) -> anyhow::Result<()
             token.context("Claude Code's sign-in couldn't be read. Sign in to Claude Code again.")?
         }
     };
-    let profile = claude_request(&token, reqwest::Method::GET, "/api/oauth/profile", None).await?;
+    let profile = claude_request(environment, &token, reqwest::Method::GET, "/api/oauth/profile", None).await?;
     let organization = profile["organization"]["uuid"].as_str().context("Claude didn't say which organisation.")?;
     let path = format!("/api/organizations/{organization}/reset_rate_limits");
     let claim = resets::claude_claim(reset, &uuid::Uuid::new_v4().to_string());
-    let answer = claude_request(&token, reqwest::Method::POST, &path, Some(claim)).await?;
+    let answer = claude_request(environment, &token, reqwest::Method::POST, &path, Some(claim)).await?;
     resets::claude_claimed(&answer).map_err(anyhow::Error::msg)
 }
 
@@ -133,6 +133,7 @@ fn token_of(kept: &Value) -> Option<Token> {
 }
 
 async fn claude_request(
+    environment: &Environment,
     token: &Token,
     method: reqwest::Method,
     path: &str,
@@ -142,6 +143,8 @@ async fn claude_request(
     let url = format!("{}{path}", stand_in().as_deref().unwrap_or(CLAUDE_URL));
     let request = reqwest::Client::builder().timeout(TIMEOUT).build()?.request(method, url);
     let request = request.bearer_auth(&token.access).header("anthropic-beta", CLAUDE_OAUTH_BETA);
+    let claude_code = resets::claude_code_headers(environment.version(Agent::Claude));
+    let request = claude_code.into_iter().fold(request, |request, (name, value)| request.header(name, value));
     let request = match body {
         Some(body) => request.json(&body),
         None => request,

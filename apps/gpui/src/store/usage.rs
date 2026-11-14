@@ -314,6 +314,18 @@ pub struct ResetOption {
     pub at_limit: bool,
     /// Why it can't be used now.
     pub note: Option<String>,
+    /// "Use a weekly reset?"
+    pub question: String,
+    /// "Refills the weekly limit now. It spends 1 of the 2 left, and can't be undone."
+    pub consequence: String,
+}
+
+/// A reset the user picked, which waits for them to say to use it.
+#[derive(Clone)]
+pub struct ResetQuestion {
+    pub resets: Resets,
+    pub option: ResetOption,
+    pub used: fn(&mut Store),
 }
 
 impl From<&limits::Resets> for Resets {
@@ -331,6 +343,8 @@ impl From<&limits::Resets> for Resets {
                     usable: option.usable,
                     at_limit: option.at_limit,
                     note: option.note.clone(),
+                    question: option.question.clone(),
+                    consequence: option.consequence.clone(),
                 })
                 .collect(),
             target: resets.target.clone(),
@@ -478,6 +492,8 @@ pub struct Usage {
     pub refreshing: bool,
     /// The accounts a limit reset is being used of, by their resets' target.
     using_resets: std::collections::HashSet<String>,
+    /// The reset that waits for the user to say to use it.
+    pub asked_reset: Option<ResetQuestion>,
     /// Counts what was asked, so that only the last answer is shown.
     asked: u64,
 }
@@ -490,6 +506,7 @@ impl Default for Usage {
             activity: Loaded::Loading,
             refreshing: false,
             using_resets: Default::default(),
+            asked_reset: None,
             asked: 0,
         }
     }
@@ -839,7 +856,8 @@ mod tests {
                 "note": null,
                 "resets": {"title": "1 reset", "detail": null, "target": {"type": "gateway", "account_id": "org"},
                     "options": [{"id": "week", "title": "Weekly reset", "detail": "Refills the weekly limit · 1 left",
-                        "usable": true, "at_limit": false, "note": null}]}
+                        "usable": true, "at_limit": false, "note": null, "question": "Use a weekly reset?",
+                        "consequence": "Refills the weekly limit now. It spends the last one, and can't be undone."}]}
             }],
             "notes": []
         });

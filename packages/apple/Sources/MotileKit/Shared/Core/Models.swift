@@ -1789,6 +1789,10 @@ struct LimitResets: Equatable {
         let atLimit: Bool
         /// Why it can't be used now.
         let note: String?
+        /// "Use a weekly reset?"
+        let question: String
+        /// "Refills the weekly limit now. It spends 1 of the 2 left, and can't be undone."
+        let consequence: String
 
         init(json: JSON) {
             id = json.string("id")
@@ -1797,6 +1801,8 @@ struct LimitResets: Equatable {
             usable = json.bool("usable")
             atLimit = json.bool("at_limit")
             note = json.optionalString("note")
+            question = json.string("question")
+            consequence = json.string("consequence")
         }
     }
 

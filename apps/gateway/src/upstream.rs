@@ -107,6 +107,9 @@ pub async fn serve(
     let lifetime = cache_lifetime(incoming.agent, &body);
     let key = incoming.key();
     let captured = gateway.capturing(&incoming.server, &incoming.thread);
+    if let (Agent::Claude, Some(user_agent)) = (incoming.agent, header(&incoming.headers, "user-agent")) {
+        gateway.saw_claude_code(user_agent);
+    }
 
     let mut tried: Vec<String> = Vec::new();
     let mut renewed: Vec<String> = Vec::new();

@@ -65,6 +65,8 @@ pub struct Gateway {
     capture: Mutex<(Capture, Option<f64>)>,
     data_dir: PathBuf,
     pub mcp_servers: McpServers,
+    /// The version of Claude Code whose requests came last, which Claude is told the gateway's own are.
+    claude_code: Mutex<Option<String>>,
 }
 
 impl Gateway {
@@ -102,6 +104,7 @@ impl Gateway {
             capture: Mutex::new(capture),
             data_dir,
             mcp_servers,
+            claude_code: Mutex::default(),
         };
         gateway.pick_threads_up(now());
         Ok(Arc::new(gateway))
@@ -665,6 +668,12 @@ impl Gateway {
         }
     }
 
+    /// Notes the version of Claude Code that sent a thread's request.
+    pub fn saw_claude_code(&self, user_agent: &str) {
+        let Some(version) = resets::claude_code_version(user_agent) else { return };
+        *self.claude_code.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(version.to_string());
+    }
+
     /// The agent's backend's JSON answer to a request of the account's.
     async fn ask(
         &self,
@@ -675,10 +684,16 @@ impl Gateway {
         body: Option<serde_json::Value>,
     ) -> anyhow::Result<serde_json::Value> {
         let request = match account.agent {
-            Agent::Claude => self
-                .http
-                .request(method, format!("{}{path}", self.upstreams.anthropic))
-                .header("anthropic-beta", oauth::CLAUDE_OAUTH_BETA),
+            Agent::Claude => {
+                let version = self.claude_code.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).clone();
+                let request = self
+                    .http
+                    .request(method, format!("{}{path}", self.upstreams.anthropic))
+                    .header("anthropic-beta", oauth::CLAUDE_OAUTH_BETA);
+                resets::claude_code_headers(version.as_deref())
+                    .into_iter()
+                    .fold(request, |request, (name, value)| request.header(name, value))
+            }
             Agent::Codex => self
                 .http
                 .request(method, format!("{}{path}", self.upstreams.chatgpt))

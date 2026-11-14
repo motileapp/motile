@@ -70,6 +70,10 @@ impl Environment {
         String::from_utf8_lossy(&buffer[..length]).into_owned()
     }
 
+    pub fn version(&self, agent: Agent) -> Option<&str> {
+        self.versions.get(&agent).map(String::as_str)
+    }
+
     pub fn agents(&self) -> Vec<AgentInfo> {
         [Agent::Claude, Agent::Codex]
             .into_iter()

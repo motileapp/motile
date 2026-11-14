@@ -14,6 +14,21 @@ use crate::wire::{LimitReset, ResetKind};
 pub const CLAUDE_PROGRAM: &str = "cedar_ember";
 /// The query that has Claude's usage page list the resets.
 pub const CLAUDE_USAGE_QUERY: &str = "cedar_ember=1&skip_spend=1";
+/// Claude Code's version when it isn't known. Claude refuses the resets to one too old.
+const CLAUDE_CODE_VERSION: &str = "2.1.322";
+
+/// The headers Claude knows Claude Code by. Claude lists and claims resets for Claude Code alone.
+pub fn claude_code_headers(version: Option<&str>) -> [(&'static str, String); 2] {
+    let version = version.filter(|version| version.starts_with(|first: char| first.is_ascii_digit()));
+    let version = version.unwrap_or(CLAUDE_CODE_VERSION);
+    [("user-agent", format!("claude-cli/{version} (external, cli)")), ("x-app", "cli".to_string())]
+}
+
+/// The version of Claude Code that sent a request, from its `user-agent`.
+pub fn claude_code_version(user_agent: &str) -> Option<&str> {
+    let version = user_agent.strip_prefix("claude-cli/")?.split_whitespace().next()?;
+    version.starts_with(|first: char| first.is_ascii_digit()).then_some(version)
+}
 
 /// The grants of Claude's `cedar_ember` block that have uses left and haven't ended.
 pub fn claude(block: &Value, now: f64) -> Vec<LimitReset> {
@@ -135,7 +150,7 @@ pub fn codex_consumed(outcome: &str) -> Result<(), String> {
 }
 
 const ALREADY_USED: &str = "That reset was already used.";
-const NOT_LIMITED: &str = "None of the limits this reset refills is used up yet, so nothing was spent.";
+const NOT_LIMITED: &str = "Nothing was spent. None of the limits this reset refills is used up yet.";
 const NONE_LEFT: &str = "This account has no reset left to use.";
 const UNCONFIRMED: &str =
     "Couldn't confirm that the reset went through. If the limits are still used up in a minute, try again.";
@@ -202,9 +217,20 @@ mod tests {
     }
 
     #[test]
+    fn claude_is_told_the_request_is_claude_codes() {
+        assert_eq!(claude_code_version("claude-cli/2.1.400 (external, sdk-cli)"), Some("2.1.400"));
+        assert_eq!(claude_code_version("claude-cli/ (external)"), None);
+        assert_eq!(claude_code_version("reqwest/0.12"), None);
+        let [agent, app] = claude_code_headers(Some("2.1.400"));
+        assert_eq!((agent.1.as_str(), app.1.as_str()), ("claude-cli/2.1.400 (external, cli)", "cli"));
+        assert!(claude_code_headers(None)[0].1.starts_with("claude-cli/2."));
+        assert_eq!(claude_code_headers(Some("test")), claude_code_headers(None));
+    }
+
+    #[test]
     fn only_a_reset_is_success_and_the_rest_say_why() {
         assert_eq!(claude_claimed(&json!({"result": "reset"})), Ok(()));
-        assert!(claude_claimed(&json!({"result": "not_limited"})).unwrap_err().contains("nothing was spent"));
+        assert!(claude_claimed(&json!({"result": "not_limited"})).unwrap_err().starts_with("Nothing was spent."));
         assert!(claude_claimed(&json!({"result": "unavailable"})).unwrap_err().contains("Couldn't confirm"));
         assert_eq!(codex_consumed("reset"), Ok(()));
         assert_eq!(codex_consumed("noCredit"), codex_consumed("no_credit"));

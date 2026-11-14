@@ -64,6 +64,10 @@ pub struct ResetOption {
     pub at_limit: bool,
     /// Why it can't be used now.
     pub note: Option<String>,
+    /// What the user is asked before it is used: "Use a weekly reset?"
+    pub question: String,
+    /// "Refills the weekly limit now. It spends 1 of the 2 left, and can't be undone."
+    pub consequence: String,
 }
 
 /// Who uses a reset: a server, for one of its accounts, or the gateway, for one of its own.
@@ -268,7 +272,12 @@ pub(crate) fn resets(held: &[LimitReset], target: ResetTarget, now: f64) -> Opti
             });
             let first = of_kind[0];
             let left: u32 = of_kind.iter().map(|reset| reset.left).sum();
-            let (title, refills) = kind_text(kind);
+            let (title, question, refills) = kind_text(kind);
+            let spends = match left {
+                1 => "It spends the last one".to_string(),
+                left => format!("It spends 1 of the {left} left"),
+            };
+            let consequence = format!("{refills} now. {spends}, and can't be undone.");
             let mut detail = vec![refills, format!("{left} left")];
             detail.extend(first.expires_at.map(|at| format!("expires in {}", expires_in(at - now))));
             let at_limit = !first.usable && first.needs_limit;
@@ -283,6 +292,8 @@ pub(crate) fn resets(held: &[LimitReset], target: ResetTarget, now: f64) -> Opti
                     (false, true) => Some("Usable once a limit it refills is used up".to_string()),
                     (false, false) => Some("Can't be used right now".to_string()),
                 },
+                question,
+                consequence,
             }
         })
         .collect();
@@ -296,18 +307,22 @@ pub(crate) fn resets(held: &[LimitReset], target: ResetTarget, now: f64) -> Opti
     Some(Resets { title, detail, options, target })
 }
 
-/// What a kind of reset is called, and what it refills.
-fn kind_text(kind: &ResetKind) -> (String, String) {
-    let (title, refills) = match kind {
-        ResetKind::Session => ("Session reset", "Refills the session limit".to_string()),
-        ResetKind::Weekly => ("Weekly reset", "Refills the weekly limit".to_string()),
-        ResetKind::Full => ("Full reset", "Refills every limit".to_string()),
+/// What a kind of reset is called, what the user is asked before using one, and what it refills.
+fn kind_text(kind: &ResetKind) -> (String, String, String) {
+    let (title, question, refills) = match kind {
+        ResetKind::Session => ("Session reset", "Use a session reset?", "Refills the session limit"),
+        ResetKind::Weekly => ("Weekly reset", "Use a weekly reset?", "Refills the weekly limit"),
+        ResetKind::Full => ("Full reset", "Use a full reset?", "Refills every limit"),
         ResetKind::Model { name } => {
-            return (format!("{name} reset"), format!("Refills {name}'s weekly allowance"));
+            return (
+                format!("{name} reset"),
+                format!("Use a {name} reset?"),
+                format!("Refills {name}'s weekly allowance"),
+            );
         }
-        ResetKind::Other => ("Reset", "Refills some of the limits".to_string()),
+        ResetKind::Other => ("Reset", "Use a reset?", "Refills some of the limits"),
     };
-    (title.to_string(), refills)
+    (title.to_string(), question.to_string(), refills.to_string())
 }
 
 /// "9 days", "1 day", "5h 30m".
@@ -625,6 +640,10 @@ mod tests {
             .collect();
         assert_eq!(options, [("week-soon", "Weekly reset", true), ("five", "Session reset", false)]);
         assert_eq!(held_resets.options[0].detail, "Refills the weekly limit · 2 left · expires in 9 days");
+        assert_eq!(
+            (held_resets.options[0].question.as_str(), held_resets.options[0].consequence.as_str()),
+            ("Use a weekly reset?", "Refills the weekly limit now. It spends 1 of the 2 left, and can't be undone.")
+        );
         assert!(held_resets.options[1].at_limit);
         assert_eq!(held_resets.options[1].note.as_deref(), Some("Usable once a limit it refills is used up"));
         assert_eq!(resets(&held[3..], target, 1000.0), None, "none with uses left that haven't ended");

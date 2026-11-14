@@ -147,8 +147,18 @@ async fn claude_profile(headers: HeaderMap) -> Json<Value> {
     }))
 }
 
-async fn claude_usage(State(fake): Shared) -> Json<Value> {
+/// As Claude, which lists and claims resets for Claude Code alone.
+fn from_claude_code(headers: &HeaderMap) -> bool {
+    let header = |name: &str| headers.get(name).and_then(|value| value.to_str().ok()).unwrap_or_default();
+    header("user-agent").starts_with("claude-cli/") && header("x-app") == "cli"
+}
+
+async fn claude_usage(State(fake): Shared, headers: HeaderMap) -> Json<Value> {
     fake.polls.fetch_add(1, Ordering::SeqCst);
+    if !from_claude_code(&headers) {
+        return Json(json!({"five_hour": {"utilization": 10.0, "resets_at": null},
+                           "cedar_ember": {"eligible": false, "ineligible_reason": "surface", "grants": []}}));
+    }
     let left = u32::from(!fake.reset_used.load(Ordering::SeqCst));
     let grant = json!({"id": "week", "resets_left": left, "usable_now": true, "clears": ["seven_day"]});
     Json(json!({"five_hour": {"utilization": 10.0, "resets_at": null},
@@ -157,6 +167,9 @@ async fn claude_usage(State(fake): Shared) -> Json<Value> {
 
 async fn claude_reset(State(fake): Shared, Path(org): Path<String>, headers: HeaderMap, body: Bytes) -> Json<Value> {
     fake.see(&format!("/api/organizations/{org}/reset_rate_limits"), &headers, &body);
+    if !from_claude_code(&headers) {
+        return Json(json!({"result": "ineligible"}));
+    }
     let used = fake.reset_used.swap(true, Ordering::SeqCst);
     Json(json!({"result": if used { "already_used" } else { "reset" }}))
 }

@@ -12,11 +12,14 @@ struct ResetsRow: View {
     let resets: LimitResets
     /// After a reset was used.
     var used: (() -> Void)?
+    #if os(iOS)
+    @State private var picked: LimitResets.Option?
+    #endif
 
     var body: some View {
         #if os(iOS)
         Menu {
-            ResetOptions(resets: resets, used: used)
+            ResetOptions(resets: resets) { picked = $0 }
         } label: {
             HStack {
                 Label {
@@ -36,6 +39,7 @@ struct ResetsRow: View {
             }
         }
         .disabled(store.usingReset(of: resets))
+        .asking($picked) { resets.confirmation(of: $0, store: store, used: used) }
         #else
         HStack(spacing: 10) {
             Image(.ticket, size: .md)
@@ -60,22 +64,30 @@ struct ResetsRow: View {
     }
 }
 
-/// The items of the system's menu that uses one of an account's resets.
+/// The items of the system's menu that picks one of an account's resets.
 struct ResetOptions: View {
-    @Environment(AppStore.self) private var store
     let resets: LimitResets
     /// The thread its limit stopped.
     var thread: ThreadInfo?
-    var used: (() -> Void)?
+    let pick: (LimitResets.Option) -> Void
 
     var body: some View {
         ForEach(resets.options) { option in
-            Button { store.useLimitReset(option, of: resets, done: used) } label: {
+            Button { pick(option) } label: {
                 Text(option.title)
                 Text(option.shown(at: thread != nil))
             }
             .disabled(!option.usable(at: thread != nil))
         }
+    }
+}
+
+extension LimitResets {
+    /// What the user is asked before the option is used.
+    func confirmation(of option: Option, store: AppStore, used: (() -> Void)?) -> Confirmation {
+        Confirmation(title: option.question, message: option.consequence, answers: [
+            Answer(title: "Use Reset") { store.useLimitReset(option, of: self, done: used) },
+        ])
     }
 }
 
@@ -105,6 +117,7 @@ struct ResetMenu: View {
     /// It opens above its button, as what the composer's buttons open does.
     var up = false
     var used: (() -> Void)?
+    @State private var picked: LimitResets.Option?
     #if os(macOS)
     @State private var open = false
     #endif
@@ -119,6 +132,7 @@ struct ResetMenu: View {
             open.toggle()
         }
         .disabled(pending)
+        .asking($picked) { resets.confirmation(of: $0, store: store, used: used) }
         .background {
             Color.clear
                 .padding(margin)
@@ -131,9 +145,10 @@ struct ResetMenu: View {
         }
         #else
         ActionMenu(Self.title, help: Self.help, variant: variant, size: size, pending: pending, margin: margin) {
-            ResetOptions(resets: resets, thread: thread, used: used)
+            ResetOptions(resets: resets, thread: thread) { picked = $0 }
         }
         .disabled(pending)
+        .asking($picked) { resets.confirmation(of: $0, store: store, used: used) }
         #endif
     }
 
@@ -156,7 +171,7 @@ struct ResetMenu: View {
                 .opacity(.disabled, when: !usable(option))
                 .button(.dropdownLight()) {
                     open = false
-                    use(option)
+                    picked = option
                 }
                 .disabled(!usable(option))
             }
@@ -164,10 +179,6 @@ struct ResetMenu: View {
         .padding(DropdownList.padding)
         .fixedSize()
         .dropdownCard()
-    }
-
-    private func use(_ option: LimitResets.Option) {
-        store.useLimitReset(option, of: resets, done: used)
     }
 
     private func detail(of option: LimitResets.Option) -> String {
