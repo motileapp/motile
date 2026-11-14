@@ -1402,6 +1402,18 @@ impl Core {
         });
     }
 
+    /// Has the gateway read every account's limits and resets now, for a view of it that opened: it
+    /// shows what was kept until they come.
+    fn read_gateway_limits(&self) {
+        let Some(link) = self.gateway.link.clone() else { return };
+        let inputs = self.inputs.clone();
+        tokio::spawn(async move {
+            if let Ok(GatewayReply::State { state }) = link.manage(Manage::ReadLimits).await {
+                let _ = inputs.send(Input::Gateway { key: link.key.clone(), event: GatewayEvent::State(state) });
+            }
+        });
+    }
+
     /// Uses a limit reset on the server or the gateway its target names. One of the gateway's accounts is
     /// told to the servers that didn't use it, so that their threads stop waiting for its limit.
     fn use_limit_reset(&self, id: u64, target: limits::ResetTarget, reset: String) {
@@ -3280,8 +3292,12 @@ impl Core {
                 });
             }
             Command::WatchGateway { on } => {
+                let opened = on && !self.gateway.watching;
                 self.gateway.watching = on;
                 self.sync_gateway();
+                if opened {
+                    self.read_gateway_limits();
+                }
                 self.reply(id, Ok(json!({})));
             }
             Command::AddGateway => {
