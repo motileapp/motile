@@ -78,6 +78,7 @@ struct GatewayAccount: Equatable, Identifiable {
     let windows: [LimitsReport.Window]
     /// Why there are no windows.
     let note: String?
+    let resets: LimitResets?
     /// "1 thread": the threads on it now. None when none is.
     let threadsText: String?
 
@@ -95,6 +96,7 @@ struct GatewayAccount: Equatable, Identifiable {
         next = json.bool("next")
         windows = json.objects("windows").map(LimitsReport.Window.init(json:))
         note = json.optionalString("note")
+        resets = json.object("resets").map(LimitResets.init(json:))
         threadsText = json.optionalString("threads_text")
     }
 

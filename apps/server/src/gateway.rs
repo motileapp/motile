@@ -39,6 +39,8 @@ pub const SERVER_THREAD: &str = "server";
 /// What Codex reads the thread's token from, as `config.toml` says.
 pub const CODEX_TOKEN_VARIABLE: &str = "MOTILE_GATEWAY_TOKEN";
 pub const CODEX_ACTOR_HEADER: &str = "x-openai-actor-authorization";
+/// Long enough for the gateway to use a reset and read the account's limits again.
+const RESET_WITHIN: Duration = Duration::from_secs(60);
 const NO_GATEWAY: &str = "Your account has no gateway. Add one in Settings, or switch the thread to another account.";
 const DIAL_WITHIN: Duration = Duration::from_secs(20);
 const ANSWER_WITHIN: Duration = Duration::from_secs(30);
@@ -235,6 +237,22 @@ impl Tunnel {
         let connection = dialled.context("Your gateway didn't answer.")?.context("Your gateway can't be reached.")?;
         *kept = Some((key.to_string(), connection.clone()));
         Ok(connection)
+    }
+
+    /// Spends one of the limit resets of the gateway's account `pinned`, or else of the one a new thread of
+    /// `agent` would start on.
+    pub async fn use_reset(&self, agent: Agent, pinned: Option<String>, reset: &str) -> anyhow::Result<()> {
+        let request = GatewayRequest::UseReset { agent, account: pinned, reset: reset.to_string() };
+        let asked = async {
+            let (mut send, mut recv) = self.open(&request).await?;
+            send.finish()?;
+            match read_frame(&mut recv).await?.context("Your gateway hung up.")? {
+                GatewayReply::Ok => Ok(()),
+                GatewayReply::Error { message } => bail!(message),
+                other => bail!("Your gateway answered {other:?}."),
+            }
+        };
+        tokio::time::timeout(RESET_WITHIN, asked).await.context("Your gateway didn't answer in time.")?
     }
 
     /// The limits of the account a new thread of `agent` would start on, if the gateway has one.

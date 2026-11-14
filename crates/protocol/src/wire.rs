@@ -1084,6 +1084,21 @@ pub enum Request {
     /// How much of their plans the agents' accounts have used, which the server reads again
     /// unless it just did. `Limits` answers.
     Limits,
+    /// Spends one of the account's limit resets, `reset` being one of its `LimitReset`s' ids. Its
+    /// threads its limit stopped stop waiting: those to continue at its reset continue now. `Limits`
+    /// answers, read again.
+    UseLimitReset {
+        account_id: String,
+        reset: String,
+    },
+    /// One of the gateway's accounts of `agent` used a reset elsewhere: `account`, or the one its threads
+    /// of the agent start on. The threads on it, and those the gateway places, stop waiting for their
+    /// limit as after `UseLimitReset`. `Limits` answers, read again.
+    GatewayLimitReset {
+        agent: Agent,
+        #[serde(default)]
+        account: Option<String>,
+    },
     /// Has the agents asked what models they run, unless they were in the last minute. `Ok`
     /// answers at once, and `Server` follows on the list when what they run changed.
     RefreshModels,
@@ -2578,9 +2593,9 @@ pub struct AgentLimits {
     pub account: Option<String>,
     pub plan: Option<String>,
     pub windows: Vec<LimitWindow>,
-    /// Resets the login may use to start its windows over.
-    #[serde(default)]
-    pub reset_credits: u32,
+    /// What the login may use to refill its windows before they start over.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub resets: Vec<LimitReset>,
     pub error: Option<String>,
     /// For the Gateway account, the name of the gateway's account a new thread would start on, whose
     /// limits these are.
@@ -2598,6 +2613,39 @@ pub struct LimitWindow {
     /// The agent warns that the window is running out.
     #[serde(default)]
     pub warning: bool,
+}
+
+/// A limit reset an account holds: Claude's grant, or Codex's credit.
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct LimitReset {
+    /// What the agent's backend knows it by. Empty when it only said how many there are.
+    pub id: String,
+    pub kind: ResetKind,
+    /// The times it can still be used.
+    pub left: u32,
+    pub expires_at: Option<f64>,
+    /// It can be used now.
+    pub usable: bool,
+    /// It can only be used at a limit it refills.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub needs_limit: bool,
+}
+
+/// What a reset refills.
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ResetKind {
+    Session,
+    Weekly,
+    /// Every window.
+    Full,
+    /// A model's own allowance, and what it used of the week: Claude's Fable.
+    Model {
+        name: String,
+    },
+    /// One a newer backend made.
+    #[serde(other)]
+    Other,
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]

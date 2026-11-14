@@ -280,6 +280,8 @@ final class AppStore {
     /// The `draftWorktreeKey`s whose base is being pulled.
     private(set) var pullingBases: Set<String> = []
     private(set) var toast: Toast?
+    /// The accounts a limit reset is being used of, by their resets' target.
+    private(set) var usingResets: Set<String> = []
     /// The servers whose toast was closed while they still can't be reached.
     @ObservationIgnored private var dismissedOutages: Set<String> = []
     /// What a new worktree starts at, like `origin/main`, by `draftWorktreeKey`.
@@ -2961,6 +2963,31 @@ final class AppStore {
     func setContinues(_ on: Bool) {
         guard let thread = selectedThread, case .limit(let resetsAt, _) = thread.interruption else { return }
         update(thread, ["continues": on]) { $0.interruption = .limit(resetsAt: resetsAt, continues: on) }
+    }
+
+    /// The limit resets of the account the thread works on, when it holds some.
+    func resets(of thread: ThreadInfo) -> LimitResets? {
+        server(thread.serverID)?.accountResets[thread.agentAccount]
+    }
+
+    /// Uses one of an account's limit resets. The threads its limit stopped stop waiting: those to
+    /// continue at its reset continue.
+    func useLimitReset(_ option: LimitResets.Option, of resets: LimitResets, done: (() -> Void)? = nil) {
+        let key = "\(resets.target)"
+        guard !usingResets.contains(key) else { return }
+        usingResets.insert(key)
+        core.send("use_limit_reset", ["target": resets.target.json, "reset": option.id]) { [weak self] result in
+            self?.usingResets.remove(key)
+            switch result {
+            case .success: done?()
+            case .failure(let error): self?.alert(error)
+            }
+        }
+    }
+
+    /// Whether a reset of these is being used.
+    func usingReset(of resets: LimitResets) -> Bool {
+        usingResets.contains("\(resets.target)")
     }
 
     func toggleArchived() {

@@ -180,10 +180,12 @@ impl Harness {
     fn recorded_turns_in(&self, file: &str) -> Vec<String> {
         let recorded = std::fs::read_to_string(self.dir.path().join(file)).unwrap_or_default();
         let calls = recorded.lines().filter_map(|line| serde_json::from_str::<Vec<String>>(line).ok());
+        // What writes titles and what asks Claude Code what was used run without hooks, and aren't turns.
         let is_turn = |arguments: &Vec<String>| {
-            !arguments
-                .iter()
-                .any(|argument| ["--json-schema", "--output-last-message", "--bare"].contains(&argument.as_str()))
+            !arguments.iter().any(|argument| {
+                ["--json-schema", "--output-last-message", "--bare", r#"{"disableAllHooks":true}"#]
+                    .contains(&argument.as_str())
+            })
         };
         calls.filter(is_turn).map(|arguments| arguments.join("\n")).collect()
     }
@@ -276,12 +278,12 @@ async fn next(follow: &mut Follow) -> Message {
     message.unwrap().expect("the stream ended")
 }
 
-/// The next change to a thread on the list, skipping the project updates in between.
+/// The next change to a thread on the list, skipping the project and server updates in between.
 async fn next_thread(list: &mut Follow) -> Thread {
     loop {
         match next(list).await {
             Message::ThreadUpsert { thread } => return thread,
-            Message::Projects { .. } => {}
+            Message::Projects { .. } | Message::Server { .. } => {}
             other => panic!("expected a thread to be announced, got {other:?}"),
         }
     }
@@ -1331,7 +1333,73 @@ async fn a_thread_stopped_while_its_agents_work_past_its_usage_limit_stays_stopp
 }
 
 #[tokio::test]
-async fn a_thread_the_usage_limit_stopped_waits_when_it_is_not_to_continue() {
+async fn a_limit_reset_refills_the_account_and_ends_its_threads_wait() {
+    let variables = [("FAKE_AGENT_RESETS_FILE", "resets.txt"), ("FAKE_AGENT_RESET", "600")];
+    let harness = Harness::start_with(fixture(Agent::Codex), "0", &variables).await;
+    let connection = harness.connect().await;
+    let mut list = connection.follow(&Request::Subscribe).await.unwrap();
+    next(&mut list).await;
+    let limited = |continues: bool| {
+        let (harness, connection) = (&harness, &connection);
+        async move {
+            let new_thread = harness.new_thread(connection, Agent::Codex).await.unwrap();
+            let new_thread = NewThread { access: AgentAccess::Full, ..new_thread };
+            let thread_id = send(connection, None, Some(new_thread), "Hit the limit").await;
+            finished_transcript(connection, &thread_id).await;
+            let change = ThreadChange { continues: Some(continues), ..ThreadChange::default() };
+            assert_eq!(update(connection, &thread_id, change).await, Message::Ok);
+            thread_id
+        }
+    };
+    let manual = limited(false).await;
+    let continuing = limited(true).await;
+
+    let reset = Request::UseLimitReset { account_id: "codex".into(), reset: "credit-1".into() };
+    let Message::Limits { agents } = connection.request(&reset).await.unwrap() else {
+        panic!("the limits, read again")
+    };
+    let codex = agents.iter().find(|limits| limits.agent == Agent::Codex).unwrap();
+    assert!(codex.resets.is_empty(), "{:?}", codex.resets);
+    assert!(codex.windows.iter().all(|window| window.used_percent == 0.0));
+    thread_where(&mut list, |thread| thread.id == manual && thread.interruption.is_none()).await;
+    thread_where(&mut list, |thread| thread.id == continuing && thread.running).await;
+    let transcript = finished_transcript(&connection, &continuing).await;
+    assert_eq!(transcript.user_texts(), vec!["Hit the limit", CONTINUE_PROMPT], "it was to continue at the reset");
+    let transcript = finished_transcript(&connection, &manual).await;
+    assert_eq!(transcript.user_texts(), vec!["Hit the limit"], "the reset only ends its wait");
+
+    let again = connection.request(&reset).await.unwrap();
+    assert!(
+        matches!(&again, Message::Error { message } if message == "This account has no reset left to use."),
+        "{again:?}"
+    );
+}
+
+#[tokio::test]
+async fn a_thread_stops_waiting_once_its_account_reads_room_again_before_the_reset() {
+    let harness = Harness::start_with(fixture(Agent::Codex), "0", &[("FAKE_AGENT_RESET", "600")]).await;
+    let connection = harness.connect().await;
+    let new_thread = harness.new_thread(&connection, Agent::Codex).await.unwrap();
+    let new_thread = NewThread { access: AgentAccess::Full, ..new_thread };
+    let mut list = connection.follow(&Request::Subscribe).await.unwrap();
+    next(&mut list).await;
+    let thread_id = send(&connection, None, Some(new_thread), "Hit the limit").await;
+    thread_where(&mut list, |thread| thread.interruption.is_some()).await;
+    let change = ThreadChange { continues: Some(false), ..ThreadChange::default() };
+    assert_eq!(update(&connection, &thread_id, change).await, Message::Ok);
+
+    let cleared = |thread: &Thread| thread.id == thread_id && thread.interruption.is_none();
+    let early = tokio::time::timeout(Duration::from_millis(1500), thread_where(&mut list, cleared)).await;
+    assert!(early.is_err(), "its limits still read used up");
+    // A reset used elsewhere, as on ChatGPT's page.
+    std::fs::remove_file(harness.dir.path().join("limited-codex")).unwrap();
+    thread_where(&mut list, cleared).await;
+    let transcript = finished_transcript(&connection, &thread_id).await;
+    assert_eq!(transcript.user_texts(), vec!["Hit the limit"], "it was to wait, so it doesn't continue");
+}
+
+#[tokio::test]
+async fn a_thread_the_usage_limit_stopped_stops_waiting_at_the_reset_when_it_is_not_to_continue() {
     let harness = Harness::start(fixture(Agent::Codex), "0").await;
     let connection = harness.connect().await;
     let new_thread = harness.new_thread(&connection, Agent::Codex).await.unwrap();
@@ -1348,9 +1416,9 @@ async fn a_thread_the_usage_limit_stopped_waits_when_it_is_not_to_continue() {
     })
     .await;
 
-    tokio::time::sleep(Duration::from_millis(2500)).await;
+    thread_where(&mut list, |thread| thread.id == thread_id && thread.interruption.is_none()).await;
     let transcript = finished_transcript(&connection, &thread_id).await;
-    assert_eq!(transcript.user_texts(), vec!["Hit the limit"], "the limit has reset, and the thread still waits");
+    assert_eq!(transcript.user_texts(), vec!["Hit the limit"], "the limit has reset, and the thread didn't continue");
     assert_eq!(transcript.errors(), vec!["You've hit your usage limit."]);
 }
 
@@ -3855,7 +3923,9 @@ async fn the_agents_say_what_their_accounts_have_used_of_their_plans() {
     );
     let expected = [("Session", 34.0, false), ("Weekly", 61.0, false), ("Weekly · Fable", 82.0, true)];
     assert_eq!(windows(claude), expected.map(|(label, used, warning)| (label.to_string(), used, warning)));
-    assert_eq!((codex.agent, codex.plan.as_deref(), codex.reset_credits), (Agent::Codex, Some("Pro"), 1));
+    assert_eq!((codex.agent, codex.plan.as_deref()), (Agent::Codex, Some("Pro")));
+    let resets: Vec<_> = codex.resets.iter().map(|reset| (reset.id.as_str(), reset.left, reset.usable)).collect();
+    assert_eq!(resets, [("credit-1", 1, true)]);
     assert_eq!(windows(codex), [("Session".to_string(), 12.0, false), ("Weekly".to_string(), 48.0, false)]);
     assert!(codex.windows.iter().all(|window| window.resets_at.is_some_and(|at| at > motile_protocol::now())));
 }
@@ -4692,6 +4762,13 @@ async fn an_agent_follows_any_thread_and_starts_agents_only_on_accounts_that_exi
         .collect();
     assert!(!failed);
     assert_eq!(named, [("claude", false), ("codex", true)]);
+    let codex = &accounts["accounts"][1]["resets"][0];
+    assert_eq!((codex["id"].as_str(), codex["refills"].as_str()), (Some("credit-1"), Some("every limit")));
+
+    let (said, failed) = call_tool(url, token, "use_limit_reset", json!({})).await;
+    assert!(!failed && said.contains(r#""used":true"#), "{said}");
+    let used = harness.recorded_requests("account/rateLimitResetCredit/consume");
+    assert_eq!(used.last().unwrap()["creditId"], "credit-1", "its own account's reset it can use now");
 }
 
 #[tokio::test]
@@ -5315,7 +5392,7 @@ async fn answer_as_gateway(
                 account: Some("work@example.com".into()),
                 plan: Some("Pro".into()),
                 windows: vec![],
-                reset_credits: 0,
+                resets: vec![],
                 error: None,
                 next_account: None,
             };
@@ -5340,6 +5417,7 @@ async fn answer_as_gateway(
                     warning: false,
                 }],
                 reset_credits: 0,
+                resets: vec![],
                 threads: 0,
                 next: true,
             };
@@ -5358,6 +5436,15 @@ async fn answer_as_gateway(
                 .await
                 .unwrap();
             send.write_all(br#"{"jsonrpc":"2.0","id":1,"result":{"tools":[]}}"#).await.unwrap();
+            send.finish().unwrap();
+        }
+        GatewayRequest::UseReset { reset, .. } => {
+            let reply = match reset.as_str() {
+                "gone" => GatewayReply::Error { message: "This account no longer has that reset.".into() },
+                _ => GatewayReply::Ok,
+            };
+            asked.send((request.clone(), Vec::new())).unwrap();
+            write_frame(&mut send, &reply).await.unwrap();
             send.finish().unwrap();
         }
         GatewayRequest::Manage { .. } => panic!("a server never manages the gateway"),
@@ -5433,6 +5520,14 @@ async fn an_agents_request_reaches_the_gateway_as_its_threads_and_streams_back()
     let (request, _) = asked.recv().await.unwrap();
     let GatewayRequest::Http { pin, .. } = request else { panic!("{request:?}") };
     assert_eq!(pin.as_deref(), Some("org-1"), "a pinned thread's requests name its account");
+
+    tunnel.use_reset(Agent::Claude, Some("org-1".into()), "week").await.unwrap();
+    let (request, _) = asked.recv().await.unwrap();
+    let used = GatewayRequest::UseReset { agent: Agent::Claude, account: Some("org-1".into()), reset: "week".into() };
+    assert_eq!(request, used, "a pinned account's reset is its gateway account's");
+    let gone = tunnel.use_reset(Agent::Claude, None, "gone").await.unwrap_err();
+    assert_eq!(gone.to_string(), "This account no longer has that reset.");
+    asked.recv().await.unwrap();
 
     assert_eq!(tunnel.mcp_servers().await.unwrap(), ["tracker"]);
     let list = r#"{"jsonrpc":"2.0","id":1,"method":"tools/list"}"#;

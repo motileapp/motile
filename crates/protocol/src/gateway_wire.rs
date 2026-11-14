@@ -4,7 +4,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::wire::{Agent, AgentLimits, LimitWindow};
+use crate::wire::{Agent, AgentLimits, LimitReset, LimitWindow};
 
 /// The header of the gateway's answer to a call that waits for the user's approval, which the
 /// server asks for.
@@ -58,6 +58,9 @@ pub enum GatewayRequest {
     /// A server asks for the gateway's accounts, which its agents can be pinned to. Answered with
     /// `Accounts`.
     Accounts,
+    /// A server spends one of the limit resets of the account its threads of `agent` are pinned to,
+    /// `account`, or else of the one a new thread would start on. Answered with `Ok`.
+    UseReset { agent: Agent, account: Option<String>, reset: String },
     /// A client manages the gateway.
     Manage { command: Manage },
 }
@@ -178,6 +181,8 @@ pub enum Manage {
     McpCall { id: i64 },
     /// Calls an MCP server's tool as an agent would. Answered with `ToolResult`.
     TryTool { id: String, tool: String, arguments: serde_json::Value },
+    /// Spends one of the account's limit resets. Answered with `State`.
+    UseReset { id: String, reset: String },
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
@@ -409,7 +414,10 @@ pub struct GatewayAccount {
     pub enabled: bool,
     pub status: AccountStatus,
     pub windows: Vec<LimitWindow>,
+    /// How many uses `resets` have left, for the clients from before them.
     pub reset_credits: u32,
+    #[serde(default)]
+    pub resets: Vec<LimitReset>,
     /// Threads working on it now.
     pub threads: u32,
     /// The account a new thread of its agent starts on.

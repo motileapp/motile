@@ -206,6 +206,8 @@ data class Server(
     val roomierAccounts: Map<String, Map<String, String>>,
     /** What each agent account has used of its limits, by account id. */
     val accountLimits: Map<String, List<LimitsReport.Window>> = emptyMap(),
+    /** The limit resets of each account that holds some, by account id. */
+    val accountResets: Map<String, LimitResets> = emptyMap(),
     /** The name of the gateway's account whose limits a Gateway account's are, by account id. */
     val nextAccounts: Map<String, String> = emptyMap(),
     /** Its agents' accounts' ids, the one a new thread would start on first. */
@@ -326,6 +328,9 @@ data class Server(
                 roomierAccounts = json.obj("roomier_accounts")?.let { byAccount -> byAccount.keys.associateWith(byAccount::stringMap) } ?: emptyMap(),
                 accountLimits = json.obj("account_limits")?.let { byAccount ->
                     byAccount.keys.associateWith { id -> byAccount.objects(id).map(LimitsReport::Window) }
+                } ?: emptyMap(),
+                accountResets = json.obj("account_resets")?.let { byAccount ->
+                    byAccount.keys.mapNotNull { id -> byAccount.obj(id)?.let { id to LimitResets(it) } }.toMap()
                 } ?: emptyMap(),
                 nextAccounts = json.stringMap("next_accounts"),
                 accountsByRoom = json.strings("accounts_by_room"),
@@ -1665,6 +1670,64 @@ data class UsageReport(
     }
 }
 
+/** The limit resets an account holds, one option for each kind, and who uses one: a server for one of its accounts, or the gateway for one of its own. */
+data class LimitResets(
+    /** "2 resets". */
+    val title: String,
+    /** "First expires in 9 days". */
+    val detail: String?,
+    val options: List<Option>,
+    val target: Target,
+) {
+    data class Option(
+        val id: String,
+        /** "Weekly reset". */
+        val title: String,
+        /** "Refills the weekly limit · 2 left · expires in 9 days". */
+        val detail: String,
+        val usable: Boolean,
+        /** It can only be used at a limit it refills. */
+        val atLimit: Boolean,
+        /** Why it can't be used now. */
+        val note: String?,
+    ) {
+        constructor(json: JSON) : this(
+            id = json.string("id"),
+            title = json.string("title"),
+            detail = json.string("detail"),
+            usable = json.bool("usable"),
+            atLimit = json.bool("at_limit"),
+            note = json.optionalString("note"),
+        )
+    }
+
+    sealed interface Target {
+        val command: Map<String, Any?>
+
+        data class Server(val serverID: String, val accountID: String) : Target {
+            override val command get() = mapOf("type" to "server", "server_id" to serverID, "account_id" to accountID)
+        }
+
+        data class Gateway(val accountID: String) : Target {
+            override val command get() = mapOf("type" to "gateway", "account_id" to accountID)
+        }
+
+        companion object {
+            fun of(json: JSON): Target = when (json.string("type")) {
+                "gateway" -> Gateway(json.string("account_id"))
+                else -> Server(json.string("server_id"), json.string("account_id"))
+            }
+        }
+    }
+
+    constructor(json: JSON) : this(
+        title = json.string("title"),
+        detail = json.optionalString("detail"),
+        options = json.objects("options").map(LimitResets::Option),
+        target = Target.of(json.obj("target") ?: EmptyJSON),
+    )
+}
+
 /** How much of their plans the agents' accounts have used: a section for each account, a row for each of its windows, and what kept a server from saying. */
 data class LimitsReport(
     val sections: List<Section>,
@@ -1683,6 +1746,7 @@ data class LimitsReport(
         val note: String?,
         /** One of the gateway's accounts. */
         val gateway: Boolean = false,
+        val resets: LimitResets? = null,
     ) {
         val id: String get() = "${agent.raw}/${name ?: ""}/${account ?: servers.joinToString(",")}/${note ?: ""}"
     }
@@ -1695,7 +1759,6 @@ data class LimitsReport(
         val resetsIn: String?,
         val pace: Pace?,
         val tone: Tone,
-        val resetCredits: Int,
     ) {
         enum class Pace(val raw: String) { Limited("limited"), Ahead("ahead"), On("on"), Under("under") }
         enum class Tone(val raw: String) { Success("success"), Pending("pending"), Warning("warning") }
@@ -1709,7 +1772,6 @@ data class LimitsReport(
             resetsIn = json.optionalString("resets_in"),
             pace = Pace.entries.firstOrNull { it.raw == json.optionalString("pace") },
             tone = Tone.entries.firstOrNull { it.raw == json.string("tone") } ?: Tone.Success,
-            resetCredits = json.int("reset_credits"),
         )
     }
 
@@ -1725,6 +1787,7 @@ data class LimitsReport(
                     windows = section.objects("windows").map(::Window),
                     note = section.optionalString("note"),
                     gateway = section.bool("gateway"),
+                    resets = section.obj("resets")?.let(::LimitResets),
                 )
             },
             notes = json.strings("notes"),

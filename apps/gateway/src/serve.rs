@@ -121,6 +121,17 @@ async fn handle_stream(
         }
         (GatewayRequest::Pool { agent }, Role::Server) => GatewayReply::Pool { limits: gateway.pool(agent) },
         (GatewayRequest::Accounts, Role::Server) => GatewayReply::Accounts { accounts: gateway.state().accounts },
+        (GatewayRequest::UseReset { agent, account, reset }, Role::Server) => {
+            let used = async {
+                let id =
+                    gateway.reset_account(agent, account.as_deref()).context("Your gateway has no such account.")?;
+                gateway.use_reset(&id, &reset).await
+            };
+            match used.await {
+                Ok(()) => GatewayReply::Ok,
+                Err(error) => GatewayReply::Error { message: motile_protocol::error_text(&error) },
+            }
+        }
         (GatewayRequest::Manage { command }, Role::Client) => manage::handle(&gateway, command).await,
         _ => GatewayReply::Error { message: "This device can't ask the gateway that.".into() },
     };

@@ -1,7 +1,8 @@
 import SwiftUI
 
 /// Why the agent stopped before it finished, above the composer: the usage limit, with when the
-/// thread goes on by itself, or a restart of the server. The agent is continued from here.
+/// thread goes on by itself and the account's resets to refill it now, or a restart of the server,
+/// whose agent is continued from here.
 struct InterruptionStrip: View {
     @Environment(AppStore.self) private var store
     let interruption: Interruption
@@ -31,6 +32,9 @@ struct InterruptionStrip: View {
                 .lineLimit(1)
                 .tooltip("\(interruption.title). \(interruption.detail(now: now)).")
                 Spacer(minLength: 8)
+                if let thread = store.selectedThread, let resets = limitResets(of: thread) {
+                    resetMenu(resets, of: thread)
+                }
                 action(now: now)
             }
         }
@@ -45,11 +49,26 @@ struct InterruptionStrip: View {
             } else {
                 button("Continue at Reset", help: "Continue the agent once the limit resets") { store.setContinues(true) }
             }
-        case .limit(_?, true):
+        case .limit:
             EmptyView()
-        default:
+        case .restart:
             button("Continue", help: "Have the agent go on where it left off") { store.continueThread() }
         }
+    }
+
+    /// As the strip's other controls, filled on iOS where a control isn't lit under the pointer.
+    private func resetMenu(_ resets: LimitResets, of thread: ThreadInfo) -> some View {
+        #if os(iOS)
+        ResetMenu(resets: resets, variant: .secondary, margin: ComposerStrip.margin, thread: thread)
+        #else
+        ResetMenu(resets: resets, variant: .ghost, margin: ComposerStrip.margin, thread: thread, up: true)
+        #endif
+    }
+
+    /// The resets that can refill the limit that stopped the thread's agent.
+    private func limitResets(of thread: ThreadInfo) -> LimitResets? {
+        guard case .limit = interruption, let resets = store.resets(of: thread) else { return nil }
+        return resets.options.contains { $0.usable || $0.atLimit } ? resets : nil
     }
 
     private func button(_ title: String, help: String, action: @escaping () -> Void) -> some View {

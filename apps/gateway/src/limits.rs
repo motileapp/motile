@@ -2,9 +2,10 @@
 //! windows so that the clients show them alike. Read from every response: Anthropic's
 //! `anthropic-ratelimit-unified-*` headers, Codex's `x-codex-*` headers and `codex.rate_limits`
 //! events. An account nothing went through for a minute is asked: Claude's `/api/oauth/usage`, the
-//! ChatGPT backend's `/wham/usage`.
+//! ChatGPT backend's `/wham/usage`, which list its limit resets too.
 
-use motile_protocol::wire::{Agent, LimitWindow};
+use motile_protocol::resets;
+use motile_protocol::wire::{Agent, LimitReset, LimitWindow};
 use serde_json::Value;
 
 const SESSION_SECS: u64 = 5 * 3600;
@@ -15,7 +16,7 @@ const REST_UNSAID: f64 = 60.0;
 #[derive(Clone, Debug, PartialEq)]
 pub struct Reading {
     pub windows: Vec<LimitWindow>,
-    pub reset_credits: Option<u32>,
+    pub resets: Option<Vec<LimitReset>>,
     /// It lists every window of the account, rather than those a response's headers carry.
     pub whole: bool,
 }
@@ -55,7 +56,7 @@ pub fn from_headers(agent: Agent, headers: &[(String, String)]) -> Option<Readin
             })
             .collect(),
     };
-    (!windows.is_empty()).then_some(Reading { windows, reset_credits: None, whole: false })
+    (!windows.is_empty()).then_some(Reading { windows, resets: None, whole: false })
 }
 
 /// Codex's `codex.rate_limits` event on a WebSocket.
@@ -75,7 +76,7 @@ pub fn from_codex_event(event: &Value) -> Option<Reading> {
             )
         })
         .collect();
-    (!windows.is_empty()).then_some(Reading { windows, reset_credits: None, whole: false })
+    (!windows.is_empty()).then_some(Reading { windows, resets: None, whole: false })
 }
 
 fn codex_window(used_percent: f64, window_secs: Option<u64>, resets_at: Option<f64>) -> Option<LimitWindow> {
@@ -88,8 +89,8 @@ fn codex_window(used_percent: f64, window_secs: Option<u64>, resets_at: Option<f
     Some(LimitWindow { label: label.to_string(), used_percent, resets_at, window_secs, warning: false })
 }
 
-/// Claude's `/api/oauth/usage`.
-pub fn from_claude_usage(usage: &Value) -> Reading {
+/// Claude's `/api/oauth/usage`, asked with `resets::CLAUDE_USAGE_QUERY`.
+pub fn from_claude_usage(usage: &Value, now: f64) -> Reading {
     let windows = match usage["limits"].as_array() {
         Some(listed) => listed.iter().filter_map(claude_listed_window).collect(),
         None => [
@@ -103,7 +104,7 @@ pub fn from_claude_usage(usage: &Value) -> Reading {
         .chain(usage["model_scoped"].as_array().into_iter().flatten().filter_map(claude_model_window))
         .collect(),
     };
-    Reading { windows, reset_credits: None, whole: true }
+    Reading { windows, resets: Some(resets::claude(&usage["cedar_ember"], now)), whole: true }
 }
 
 /// A model's own week, which some accounts are told apart from the list they aren't given.
@@ -138,7 +139,8 @@ fn claude_window(limit: &Value, label: &str, secs: u64, used: &str) -> Option<Li
     })
 }
 
-/// The ChatGPT backend's `/wham/usage`, and the plan it names.
+/// The ChatGPT backend's `/wham/usage`, and the plan it names. It only says how many resets there
+/// are; `/wham/rate-limit-reset-credits` lists them.
 pub fn from_codex_usage(usage: &Value) -> (Reading, Option<String>) {
     let limits = &usage["rate_limit"];
     let windows = ["primary_window", "secondary_window"]
@@ -152,9 +154,8 @@ pub fn from_codex_usage(usage: &Value) -> (Reading, Option<String>) {
             )
         })
         .collect();
-    let credits = usage["rate_limit_reset_credits"]["available_count"].as_u64().map(|count| count as u32);
     let plan = usage["plan_type"].as_str().map(codex_plan);
-    (Reading { windows, reset_credits: Some(credits.unwrap_or(0)), whole: true }, plan)
+    (Reading { windows, resets: Some(resets::codex(&usage["rate_limit_reset_credits"])), whole: true }, plan)
 }
 
 pub fn codex_plan(plan: &str) -> String {
@@ -261,7 +262,7 @@ mod tests {
             {"kind": "session", "group": "session", "percent": 13, "resets_at": "2026-10-06T20:30:00+00:00", "severity": "normal"},
             {"kind": "weekly_scoped", "group": "weekly", "percent": 79, "resets_at": "2026-10-12T04:00:00+00:00",
              "severity": "warning", "scope": {"model": {"display_name": "Opus"}}}]});
-        let reading = from_claude_usage(&usage);
+        let reading = from_claude_usage(&usage, 0.0);
         let windows: Vec<_> =
             reading.windows.iter().map(|window| (window.label.as_str(), window.used_percent, window.warning)).collect();
         assert_eq!(windows, [("Session", 13.0, false), ("Weekly · Opus", 79.0, true)]);
@@ -269,25 +270,29 @@ mod tests {
 
         let older = json!({"five_hour": {"utilization": 8.0, "resets_at": "2026-10-06T20:30:00+00:00"},
                            "seven_day": {"utilization": 45.0, "resets_at": null}, "seven_day_opus": null});
-        let labels: Vec<_> = from_claude_usage(&older).windows.into_iter().map(|window| window.label).collect();
+        let labels: Vec<_> = from_claude_usage(&older, 0.0).windows.into_iter().map(|window| window.label).collect();
         assert_eq!(labels, ["Session", "Weekly"]);
 
         let apart = json!({"five_hour": {"utilization": 90, "resets_at": null}, "seven_day": {"utilization": 0, "resets_at": null},
                            "model_scoped": [{"display_name": "Fable", "utilization": 12, "resets_at": null}]});
-        let windows: Vec<_> =
-            from_claude_usage(&apart).windows.into_iter().map(|window| (window.label, window.used_percent)).collect();
+        let windows: Vec<_> = from_claude_usage(&apart, 0.0)
+            .windows
+            .into_iter()
+            .map(|window| (window.label, window.used_percent))
+            .collect();
         assert_eq!(windows, [("Session".into(), 90.0), ("Weekly".into(), 0.0), ("Weekly · Fable".to_string(), 12.0)]);
     }
 
     #[test]
-    fn codex_usage_has_its_windows_reset_credits_and_plan() {
+    fn codex_usage_has_its_windows_resets_and_plan() {
         let usage = json!({"plan_type": "prolite", "rate_limit": {
             "primary_window": {"used_percent": 1, "limit_window_seconds": 18000, "reset_at": 1791308081},
             "secondary_window": {"used_percent": 4, "limit_window_seconds": 604800, "reset_at": 1791580413}},
             "rate_limit_reset_credits": {"available_count": 2}});
         let (reading, plan) = from_codex_usage(&usage);
         assert_eq!(plan.as_deref(), Some("Pro Lite"));
-        assert_eq!(reading.reset_credits, Some(2));
+        let resets = reading.resets.unwrap();
+        assert_eq!((resets.len(), resets[0].left), (1, 2));
         let windows: Vec<_> =
             reading.windows.iter().map(|window| (window.label.as_str(), window.used_percent)).collect();
         assert_eq!(windows, [("Session", 1.0), ("Weekly", 4.0)]);

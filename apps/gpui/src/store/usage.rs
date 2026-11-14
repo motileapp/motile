@@ -286,6 +286,63 @@ pub struct LimitsSection {
     /// One of the gateway's accounts.
     #[serde(default)]
     pub gateway: bool,
+    #[serde(default)]
+    pub resets: Option<Resets>,
+}
+
+/// The limit resets an account holds, one option for each kind, and who uses one:
+/// `motile_core::limits::Resets`, read back.
+#[derive(Clone, PartialEq, Debug, Deserialize)]
+pub struct Resets {
+    /// "2 resets".
+    pub title: String,
+    /// "First expires in 9 days".
+    pub detail: Option<String>,
+    pub options: Vec<ResetOption>,
+    pub target: limits::ResetTarget,
+}
+
+#[derive(Clone, PartialEq, Debug, Deserialize)]
+pub struct ResetOption {
+    pub id: String,
+    /// "Weekly reset".
+    pub title: String,
+    /// "Refills the weekly limit · 2 left · expires in 9 days".
+    pub detail: String,
+    pub usable: bool,
+    /// It can only be used at a limit it refills.
+    pub at_limit: bool,
+    /// Why it can't be used now.
+    pub note: Option<String>,
+}
+
+impl From<&limits::Resets> for Resets {
+    fn from(resets: &limits::Resets) -> Self {
+        Self {
+            title: resets.title.clone(),
+            detail: resets.detail.clone(),
+            options: resets
+                .options
+                .iter()
+                .map(|option| ResetOption {
+                    id: option.id.clone(),
+                    title: option.title.clone(),
+                    detail: option.detail.clone(),
+                    usable: option.usable,
+                    at_limit: option.at_limit,
+                    note: option.note.clone(),
+                })
+                .collect(),
+            target: resets.target.clone(),
+        }
+    }
+}
+
+impl Resets {
+    /// What tells its account's pending use apart from another's.
+    fn key(&self) -> String {
+        serde_json::to_string(&self.target).unwrap_or_default()
+    }
 }
 
 #[derive(Clone, PartialEq, Debug, Deserialize)]
@@ -297,8 +354,6 @@ pub struct LimitWindow {
     pub resets_in: Option<String>,
     pub pace: Option<Pace>,
     pub tone: Tone,
-    #[serde(default)]
-    pub reset_credits: u32,
 }
 
 impl From<&limits::Row> for LimitWindow {
@@ -319,7 +374,6 @@ impl From<&limits::Row> for LimitWindow {
                 limits::Tone::Pending => Tone::Pending,
                 limits::Tone::Warning => Tone::Warning,
             },
-            reset_credits: row.reset_credits,
         }
     }
 }
@@ -422,6 +476,8 @@ pub struct Usage {
     pub spending: Loaded<UsageReport>,
     pub activity: Loaded<ActivityReport>,
     pub refreshing: bool,
+    /// The accounts a limit reset is being used of, by their resets' target.
+    using_resets: std::collections::HashSet<String>,
     /// Counts what was asked, so that only the last answer is shown.
     asked: u64,
 }
@@ -433,6 +489,7 @@ impl Default for Usage {
             spending: Loaded::Loading,
             activity: Loaded::Loading,
             refreshing: false,
+            using_resets: Default::default(),
             asked: 0,
         }
     }
@@ -649,6 +706,36 @@ impl Store {
         self.ask_read(command, read::<ActivityReport>, move |store, result, _| then(store, flatten(result)));
     }
 
+    /// The limit resets of the account the thread works on, when it holds some.
+    pub fn thread_resets(&self, server_id: &str, agent: Agent, account: &str) -> Option<Resets> {
+        let server = self.server(Some(server_id))?;
+        let account = server.account(Some(account).filter(|account| !account.is_empty()), agent)?;
+        server.account_resets.get(&account.id).map(Resets::from)
+    }
+
+    /// Whether a reset of these is being used.
+    pub fn using_reset(&self, resets: &Resets) -> bool {
+        self.usage.using_resets.contains(&resets.key())
+    }
+
+    /// Uses one of an account's limit resets. A server's account's threads that wait to continue at
+    /// their limit's reset continue, and `thread_id` too. `used` follows once it is used.
+    pub fn use_limit_reset(&mut self, resets: &Resets, option: &str, used: impl FnOnce(&mut Store) + 'static) {
+        let key = resets.key();
+        if !self.usage.using_resets.insert(key.clone()) {
+            return;
+        }
+        let command = Command::UseLimitReset { target: resets.target.clone(), reset: option.to_string() };
+        self.ask(command, move |store, result, cx| {
+            store.usage.using_resets.remove(&key);
+            match result {
+                Ok(_) => used(store),
+                Err(error) => store.fail(error),
+            }
+            cx.notify();
+        });
+    }
+
     /// How much of their plans the agents' accounts have used, as the servers read it now. `kept`
     /// answers at once with what was last read.
     fn load_limits(
@@ -748,13 +835,19 @@ mod tests {
             "sections": [{
                 "agent": "claude", "name": null, "account": "a@b.c", "plan": "Max", "servers": ["studio"],
                 "windows": [{"label": "5 hours", "used_percent": 34.0, "used": "34%", "resets_in": "3h",
-                    "pace": "ahead", "tone": "pending", "reset_credits": 2}],
-                "note": null
+                    "pace": "ahead", "tone": "pending"}],
+                "note": null,
+                "resets": {"title": "1 reset", "detail": null, "target": {"type": "gateway", "account_id": "org"},
+                    "options": [{"id": "week", "title": "Weekly reset", "detail": "Refills the weekly limit · 1 left",
+                        "usable": true, "at_limit": false, "note": null}]}
             }],
             "notes": []
         });
         let report: LimitsReport = read(value).unwrap();
         let window = &report.sections[0].windows[0];
-        assert_eq!((window.pace, window.tone, window.reset_credits), (Some(Pace::Ahead), Tone::Pending, 2));
+        assert_eq!((window.pace, window.tone), (Some(Pace::Ahead), Tone::Pending));
+        let resets = report.sections[0].resets.as_ref().unwrap();
+        assert_eq!(resets.target, limits::ResetTarget::Gateway { account_id: "org".into() });
+        assert_eq!((resets.options[0].id.as_str(), resets.options[0].usable), ("week", true));
     }
 }

@@ -56,7 +56,6 @@ import app.motile.theme.ShadowSize
 import app.motile.theme.TextSize
 import app.motile.theme.Theme
 import app.motile.theme.iconSize
-import app.motile.theme.opacity
 import app.motile.theme.shadow
 import app.motile.ui.ActionButton
 import app.motile.ui.ActionMenu
@@ -75,7 +74,7 @@ import app.motile.ui.SheetSurface
 import app.motile.ui.Spinner
 import app.motile.ui.Switch
 import app.motile.ui.Text
-import app.motile.usage.LimitWindowRow
+import app.motile.usage.limitRows
 import kotlinx.coroutines.delay
 
 /** What the gateway's pages say, on more than one page. */
@@ -171,10 +170,7 @@ private fun SettingsGroups.accounts(agent: Agent, view: GatewayView, gateway: Ga
             row { AccountRow(account, accounts.size, gateway, rename = { rename(account) }) { remove(account) } }
             row { SwitchRow(account, gateway) }
             if (account.status == GatewayAccount.Status.SignInAgain) row { SignInRow("Sign In Again", agent, gateway, Symbol.CircleUser, again = account.id) }
-            for (window in account.windows) row {
-                Box(Modifier.opacity(Opacity.Disabled, on = !account.enabled)) { LimitWindowRow(window) }
-            }
-            account.note?.let { note -> row { SettingsRow { RowText(note, color = LocalPalette.current.mutedForeground) } } }
+            limitRows(account.windows, account.resets, account.note, dimmed = !account.enabled)
         }
     }
 }

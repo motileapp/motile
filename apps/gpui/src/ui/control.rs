@@ -1181,6 +1181,8 @@ pub struct ActionMenu {
     build: BuildMenu,
     shortcut: Option<&'static str>,
     margin: Edges<f32>,
+    /// It opens over its button, its right edge on the button's, as the composer's do.
+    up: bool,
 }
 
 impl ActionMenu {
@@ -1191,7 +1193,14 @@ impl ActionMenu {
     ) -> Self {
         let mut button = ActionButton::new(id, title).variant(Variant::Ghost).opens(true);
         button.menu = true;
-        Self { button, anchor: Anchor::default(), build: Rc::new(build), shortcut: None, margin: Edges::default() }
+        Self {
+            button,
+            anchor: Anchor::default(),
+            build: Rc::new(build),
+            shortcut: None,
+            margin: Edges::default(),
+            up: false,
+        }
     }
 
     pub fn icon(
@@ -1206,6 +1215,7 @@ impl ActionMenu {
             build: Rc::new(build),
             shortcut: None,
             margin: Edges::default(),
+            up: false,
         }
     }
 
@@ -1219,6 +1229,12 @@ impl ActionMenu {
     /// Changes the button the menu opens from.
     pub fn button(mut self, change: impl FnOnce(ActionButton) -> ActionButton) -> Self {
         self.button = change(self.button);
+        self
+    }
+
+    /// Opens the menu over the button, as what the composer's buttons open does.
+    pub fn up(mut self) -> Self {
+        self.up = true;
         self
     }
 
@@ -1240,7 +1256,7 @@ impl RenderOnce for ActionMenu {
         let opens = self.anchor.clone();
         let build = self.build;
         let fills = self.button.label.fills;
-        let margin = self.margin;
+        let (margin, up) = (self.margin, self.up);
         let _ = window;
         div()
             .relative()
@@ -1261,7 +1277,10 @@ impl RenderOnce for ActionMenu {
                 if menu.is_empty() {
                     return;
                 }
-                menu.show_under(&opens, 4., opened, window, cx);
+                match up {
+                    true => menu.show_over_right(&opens, 4., opened, window, cx),
+                    false => menu.show_under(&opens, 4., opened, window, cx),
+                }
             }))
     }
 }

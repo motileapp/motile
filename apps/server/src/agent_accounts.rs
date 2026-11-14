@@ -425,6 +425,7 @@ mod tests {
             status: motile_protocol::gateway_wire::AccountStatus::Ready,
             windows: vec![],
             reset_credits: 0,
+            resets: vec![],
             threads: 0,
             next: false,
         };

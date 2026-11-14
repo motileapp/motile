@@ -9,6 +9,7 @@ pub mod frame;
 pub mod gateway_wire;
 pub mod identity;
 pub mod media;
+pub mod resets;
 pub mod search;
 pub mod select;
 pub mod skills;

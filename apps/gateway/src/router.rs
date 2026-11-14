@@ -284,6 +284,7 @@ pub struct Facts<'a> {
     pub priority: u32,
     pub windows: &'a [LimitWindow],
     pub read_at: Option<f64>,
+    /// How many times its resets can be used now.
     pub reset_credits: u32,
     /// By window label.
     pub evidence: HashMap<String, Evidence>,

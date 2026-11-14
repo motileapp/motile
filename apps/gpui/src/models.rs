@@ -63,6 +63,8 @@ pub struct Server {
     pub roomier_accounts: HashMap<String, HashMap<String, String>>,
     /// What each agent account has used of its limits, by account id.
     pub account_limits: HashMap<String, Vec<motile_core::limits::Row>>,
+    /// The limit resets of each agent account that holds some, by account id.
+    pub account_resets: HashMap<String, motile_core::limits::Resets>,
     /// The name of the gateway's account whose limits a Gateway account's are, by account id.
     pub next_accounts: HashMap<String, String>,
     /// Its agents' accounts' ids, the one a new thread would start on first.
@@ -103,6 +105,7 @@ impl From<ServerView> for Server {
             short_model_names: view.short_model_names,
             roomier_accounts: view.roomier_accounts,
             account_limits: view.account_limits,
+            account_resets: view.account_resets,
             next_accounts: view.next_accounts,
             accounts_by_room: view.accounts_by_room,
             sync: view.sync,
@@ -1269,6 +1272,7 @@ mod tests {
             short_model_names: HashMap::new(),
             roomier_accounts: HashMap::new(),
             account_limits: HashMap::new(),
+            account_resets: HashMap::new(),
             next_accounts: HashMap::new(),
             accounts_by_room: Vec::new(),
             sync: None,
@@ -1345,6 +1349,7 @@ mod tests {
             short_model_names: HashMap::new(),
             roomier_accounts: HashMap::new(),
             account_limits: HashMap::new(),
+            account_resets: HashMap::new(),
             next_accounts: HashMap::new(),
             accounts_by_room: Vec::new(),
             sync: None,

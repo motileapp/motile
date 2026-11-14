@@ -279,6 +279,12 @@ impl Server {
                 hub.store().save_engaged(&caller.device, &stretches).map(|_| Message::Ok).map_err(Into::into)
             }
             Request::Limits => Ok(hub.limits().await),
+            Request::UseLimitReset { account_id, reset } => {
+                hub.use_limit_reset(&account_id, &reset).await.map(|agents| Message::Limits { agents })
+            }
+            Request::GatewayLimitReset { agent, account } => {
+                Ok(Message::Limits { agents: hub.gateway_limit_reset(agent, account.as_deref()).await })
+            }
             Request::RefreshModels => {
                 hub.refresh_models_soon();
                 Ok(Message::Ok)

@@ -2,7 +2,7 @@
 //! the user set for it and what its limits read last.
 
 use motile_protocol::gateway_wire::AccountStatus;
-use motile_protocol::wire::{Agent, LimitWindow};
+use motile_protocol::wire::{Agent, LimitReset, LimitWindow};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug)]
@@ -19,7 +19,7 @@ pub struct Account {
     pub tokens: Tokens,
     pub windows: Vec<LimitWindow>,
     pub read_at: Option<f64>,
-    pub reset_credits: u32,
+    pub resets: Vec<LimitReset>,
     pub created_at: f64,
 }
 
@@ -46,6 +46,11 @@ impl Account {
         }
     }
 
+    /// How many times its resets can still be used now.
+    pub fn usable_resets(&self) -> u32 {
+        self.resets.iter().filter(|reset| reset.usable).map(|reset| reset.left).sum()
+    }
+
     /// Takes in what a response or the agent's usage page said of its windows.
     pub fn read(&mut self, reading: &crate::limits::Reading, now: f64) {
         if reading.whole {
@@ -58,10 +63,16 @@ impl Account {
                 }
             }
         }
-        if let Some(credits) = reading.reset_credits {
-            self.reset_credits = credits;
+        if let Some(resets) = &reading.resets {
+            self.resets = resets.clone();
         }
         self.read_at = Some(now);
+        // Refilled before its reset, as by a reset used elsewhere: it no longer rests.
+        let room =
+            reading.whole && !self.windows.is_empty() && self.windows.iter().all(|window| window.used_percent < 100.0);
+        if room && matches!(self.status, AccountStatus::Resting { .. }) {
+            self.status = AccountStatus::Ready;
+        }
     }
 }
 
@@ -88,16 +99,44 @@ mod tests {
             tokens: Tokens::default(),
             windows: vec![window("Session", 10.0), window("Weekly · Opus", 30.0)],
             read_at: None,
-            reset_credits: 0,
+            resets: vec![],
             created_at: 0.0,
         };
         assert!(!account.available(40.0) && account.available(60.0));
 
-        account.read(&Reading { windows: vec![window("Session", 20.0)], reset_credits: None, whole: false }, 70.0);
+        account.read(&Reading { windows: vec![window("Session", 20.0)], resets: None, whole: false }, 70.0);
         let used: Vec<_> = account.windows.iter().map(|window| window.used_percent).collect();
         assert_eq!((used, account.read_at), (vec![20.0, 30.0], Some(70.0)));
 
-        account.read(&Reading { windows: vec![window("Weekly", 5.0)], reset_credits: Some(1), whole: true }, 80.0);
-        assert_eq!((account.windows.len(), account.reset_credits), (1, 1));
+        let resets = motile_protocol::resets::codex(&serde_json::json!({"available_count": 1}));
+        account
+            .read(&Reading { windows: vec![window("Weekly", 5.0)], resets: Some(resets.clone()), whole: true }, 80.0);
+        assert_eq!((account.windows.len(), account.resets.clone()), (1, resets));
+    }
+
+    #[test]
+    fn an_account_refilled_before_its_reset_no_longer_rests() {
+        let resting = AccountStatus::Resting { until: Some(500.0) };
+        let mut account = Account {
+            id: "org".into(),
+            agent: Agent::Claude,
+            name: "Work".into(),
+            email: None,
+            plan: None,
+            priority: 0,
+            enabled: true,
+            status: resting.clone(),
+            tokens: Tokens::default(),
+            windows: vec![window("Session", 100.0)],
+            read_at: None,
+            resets: vec![],
+            created_at: 0.0,
+        };
+        account.read(&Reading { windows: vec![window("Session", 40.0)], resets: None, whole: false }, 10.0);
+        assert_eq!(account.status, resting, "a response's headers aren't all of its windows");
+        account.read(&Reading { windows: vec![window("Session", 100.0)], resets: None, whole: true }, 20.0);
+        assert_eq!(account.status, resting, "still used up");
+        account.read(&Reading { windows: vec![window("Session", 0.0)], resets: None, whole: true }, 30.0);
+        assert_eq!(account.status, AccountStatus::Ready);
     }
 }

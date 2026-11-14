@@ -77,6 +77,10 @@ struct AgentGatewaySettings: View {
                 LimitRow(window: window, beside: width >= LimitsView.besideWidth)
                     .opacity(.disabled, when: !account.enabled)
             }
+            if let resets = account.resets {
+                ThemeDivider()
+                ResetsRow(resets: resets)
+            }
             if let note = account.note {
                 ThemeDivider()
                 Text(note)

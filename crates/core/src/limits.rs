@@ -1,17 +1,21 @@
 //! How much of their plans the agents' accounts have used, from every server, for the Limits tab
 //! of the usage view: a section for each account and each of the gateway's accounts, with a row
-//! for each of its windows. And which account a new thread is better off starting on.
+//! for each of its windows and the limit resets it holds. And which account a new thread is better
+//! off starting on.
 
 use std::collections::HashMap;
 
 use motile_protocol::gateway_wire::{AccountStatus, GatewayAccount};
 use motile_protocol::select::{self, Candidate, HORIZON, ON_PACE, Window};
-use motile_protocol::wire::{Agent, AgentAccount, AgentLimits, LimitWindow, ModelInfo};
-use serde::Serialize;
+use motile_protocol::wire::{Agent, AgentAccount, AgentLimits, LimitReset, LimitWindow, ModelInfo, ResetKind};
+use serde::{Deserialize, Serialize};
 
 /// What a server said of its agents' accounts.
 pub struct Read {
+    pub server_id: String,
     pub server: String,
+    /// The id of the server's account, which its resets are used for.
+    pub account_id: Option<String>,
     pub limits: AgentLimits,
     /// The server's Gateway account: the gateway's account a new thread would start on.
     pub gateway: bool,
@@ -32,6 +36,42 @@ pub struct Section {
     pub note: Option<String>,
     /// One of the gateway's accounts.
     pub gateway: bool,
+    pub resets: Option<Resets>,
+}
+
+/// The limit resets an account holds, to use one of.
+#[derive(Serialize, Clone, Debug, PartialEq)]
+pub struct Resets {
+    /// "2 resets".
+    pub title: String,
+    /// "First expires in 9 days".
+    pub detail: Option<String>,
+    /// One for each kind, those that can be used now first.
+    pub options: Vec<ResetOption>,
+    pub target: ResetTarget,
+}
+
+#[derive(Serialize, Clone, Debug, PartialEq)]
+pub struct ResetOption {
+    /// The reset to use, the one of its kind that expires first.
+    pub id: String,
+    /// "Weekly reset".
+    pub title: String,
+    /// "Refills the weekly limit · 2 left · expires in 9 days".
+    pub detail: String,
+    pub usable: bool,
+    /// It can only be used at a limit it refills.
+    pub at_limit: bool,
+    /// Why it can't be used now.
+    pub note: Option<String>,
+}
+
+/// Who uses a reset: a server, for one of its accounts, or the gateway, for one of its own.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ResetTarget {
+    Server { server_id: String, account_id: String },
+    Gateway { account_id: String },
 }
 
 #[derive(Serialize, Clone, Debug, PartialEq)]
@@ -45,8 +85,6 @@ pub struct Row {
     pub resets_in: Option<String>,
     pub pace: Option<Pace>,
     pub tone: Tone,
-    /// Resets the account may use to start its windows over.
-    pub reset_credits: u32,
 }
 
 /// The colour a window's bar takes: calm until half is used, then pending, warning from three
@@ -81,7 +119,7 @@ pub fn sections(reads: Vec<Read>, accounts: &[GatewayAccount], now: f64) -> Vec<
     reads.sort_by_key(|read| {
         (read.limits.agent != Agent::Claude, read.limits.error.is_some(), read.limits.windows.is_empty())
     });
-    for Read { server, limits, .. } in reads {
+    for Read { server_id, server, account_id, limits, .. } in reads {
         let unread = limits.error.is_some() || (limits.windows.is_empty() && limits.plan.is_some());
         let same = sections.iter().position(|section| {
             section.agent == limits.agent
@@ -92,7 +130,8 @@ pub fn sections(reads: Vec<Read>, accounts: &[GatewayAccount], now: f64) -> Vec<
         });
         let Some(index) = same else {
             failed.push(if unread { vec![server.clone()] } else { Vec::new() });
-            sections.push(section(server, limits, now));
+            let target = account_id.map(|account_id| ResetTarget::Server { server_id, account_id });
+            sections.push(section(server, limits, target, now));
             continue;
         };
         if !sections[index].servers.contains(&server) {
@@ -108,7 +147,9 @@ pub fn sections(reads: Vec<Read>, accounts: &[GatewayAccount], now: f64) -> Vec<
         }
     }
     for account in accounts {
-        let windows: Vec<Row> = account.windows.iter().map(|window| row(window, account.reset_credits, now)).collect();
+        let windows: Vec<Row> = account.windows.iter().map(|window| row(window, now)).collect();
+        let target = ResetTarget::Gateway { account_id: account.id.clone() };
+        let resets = resets(&account.resets, target, now);
         let shared = account.email.as_ref().and_then(|email| {
             sections
                 .iter_mut()
@@ -119,6 +160,7 @@ pub fn sections(reads: Vec<Read>, accounts: &[GatewayAccount], now: f64) -> Vec<
             if !windows.is_empty() {
                 section.windows = windows;
                 section.note = None;
+                section.resets = resets;
             }
             continue;
         }
@@ -131,6 +173,7 @@ pub fn sections(reads: Vec<Read>, accounts: &[GatewayAccount], now: f64) -> Vec<
             note: account_note(account, &windows),
             windows,
             gateway: true,
+            resets,
         });
     }
     sections.sort_by_key(|section| section.agent != Agent::Claude);
@@ -146,9 +189,10 @@ fn listed(names: &[String]) -> String {
     }
 }
 
-fn section(server: String, limits: AgentLimits, now: f64) -> Section {
+fn section(server: String, limits: AgentLimits, target: Option<ResetTarget>, now: f64) -> Section {
     let note = note(&server, &limits);
-    let windows = limits.windows.iter().map(|window| row(window, limits.reset_credits, now)).collect();
+    let windows = limits.windows.iter().map(|window| row(window, now)).collect();
+    let resets = target.and_then(|target| resets(&limits.resets, target, now));
     let name = Some(limits.account_name).filter(|name| !name.is_empty());
     Section {
         agent: limits.agent,
@@ -159,6 +203,7 @@ fn section(server: String, limits: AgentLimits, now: f64) -> Section {
         windows,
         note,
         gateway: false,
+        resets,
     }
 }
 
@@ -186,7 +231,7 @@ fn note(server: &str, limits: &AgentLimits) -> Option<String> {
     }
 }
 
-pub(crate) fn row(window: &LimitWindow, reset_credits: u32, now: f64) -> Row {
+pub(crate) fn row(window: &LimitWindow, now: f64) -> Row {
     let used_percent = window.used_percent.clamp(0.0, 100.0);
     Row {
         label: window.label.clone(),
@@ -195,7 +240,82 @@ pub(crate) fn row(window: &LimitWindow, reset_credits: u32, now: f64) -> Row {
         resets_in: window.resets_at.map(|at| duration(at - now)),
         pace: pace(used_percent, window, now),
         tone: tone(used_percent, window.warning),
-        reset_credits,
+    }
+}
+
+/// The resets an account holds, one option for each kind, or `None` when it holds none.
+pub(crate) fn resets(held: &[LimitReset], target: ResetTarget, now: f64) -> Option<Resets> {
+    let held: Vec<&LimitReset> =
+        held.iter().filter(|reset| reset.left > 0 && reset.expires_at.is_none_or(|at| at > now)).collect();
+    let count: u32 = held.iter().map(|reset| reset.left).sum();
+    if count == 0 {
+        return None;
+    }
+    let mut kinds: Vec<&ResetKind> = Vec::new();
+    for reset in &held {
+        if !kinds.contains(&&reset.kind) {
+            kinds.push(&reset.kind);
+        }
+    }
+    let mut options: Vec<ResetOption> = kinds
+        .into_iter()
+        .map(|kind| {
+            let mut of_kind: Vec<&&LimitReset> = held.iter().filter(|reset| reset.kind == *kind).collect();
+            of_kind.sort_by(|a, b| {
+                (!a.usable, a.expires_at.unwrap_or(f64::MAX))
+                    .partial_cmp(&(!b.usable, b.expires_at.unwrap_or(f64::MAX)))
+                    .unwrap()
+            });
+            let first = of_kind[0];
+            let left: u32 = of_kind.iter().map(|reset| reset.left).sum();
+            let (title, refills) = kind_text(kind);
+            let mut detail = vec![refills, format!("{left} left")];
+            detail.extend(first.expires_at.map(|at| format!("expires in {}", expires_in(at - now))));
+            let at_limit = !first.usable && first.needs_limit;
+            ResetOption {
+                id: first.id.clone(),
+                title,
+                detail: detail.join(" · "),
+                usable: first.usable,
+                at_limit,
+                note: match (first.usable, at_limit) {
+                    (true, _) => None,
+                    (false, true) => Some("Usable once a limit it refills is used up".to_string()),
+                    (false, false) => Some("Can't be used right now".to_string()),
+                },
+            }
+        })
+        .collect();
+    options.sort_by_key(|option| !option.usable);
+    let soonest = held.iter().filter_map(|reset| reset.expires_at).min_by(f64::total_cmp);
+    let detail = soonest.map(|at| match count {
+        1 => format!("Expires in {}", expires_in(at - now)),
+        _ => format!("First expires in {}", expires_in(at - now)),
+    });
+    let title = if count == 1 { "1 reset".to_string() } else { format!("{count} resets") };
+    Some(Resets { title, detail, options, target })
+}
+
+/// What a kind of reset is called, and what it refills.
+fn kind_text(kind: &ResetKind) -> (String, String) {
+    let (title, refills) = match kind {
+        ResetKind::Session => ("Session reset", "Refills the session limit".to_string()),
+        ResetKind::Weekly => ("Weekly reset", "Refills the weekly limit".to_string()),
+        ResetKind::Full => ("Full reset", "Refills every limit".to_string()),
+        ResetKind::Model { name } => {
+            return (format!("{name} reset"), format!("Refills {name}'s weekly allowance"));
+        }
+        ResetKind::Other => ("Reset", "Refills some of the limits".to_string()),
+    };
+    (title.to_string(), refills)
+}
+
+/// "9 days", "1 day", "5h 30m".
+fn expires_in(seconds: f64) -> String {
+    match (seconds / 86400.0).floor() as u64 {
+        0 => duration(seconds),
+        1 => "1 day".to_string(),
+        days => format!("{days} days"),
     }
 }
 
@@ -352,7 +472,7 @@ impl Accounts<'_> {
             measured,
             priority: 0,
             current,
-            reset_credits: limits.reset_credits,
+            reset_credits: limits.resets.iter().filter(|reset| reset.usable).map(|reset| reset.left).sum(),
         }
     }
 
@@ -367,8 +487,28 @@ pub fn by_account(accounts: &[AgentAccount], limits: &[AgentLimits], now: f64) -
         .iter()
         .filter_map(|account| {
             let limits = read(account, limits)?;
-            let windows = limits.windows.iter().map(|window| row(window, limits.reset_credits, now)).collect();
+            let windows = limits.windows.iter().map(|window| row(window, now)).collect();
             Some((account.id.clone(), windows))
+        })
+        .collect()
+}
+
+/// The resets of each account of a server that holds some, by account id, for a thread its limit
+/// stopped.
+pub fn resets_by_account(
+    server_id: &str,
+    accounts: &[AgentAccount],
+    limits: &[AgentLimits],
+    now: f64,
+) -> HashMap<String, Resets> {
+    accounts
+        .iter()
+        .filter_map(|account| {
+            let target = ResetTarget::Server { server_id: server_id.to_string(), account_id: account.id.clone() };
+            // Its limits may not be read now while its resets still are, as when every account of the
+            // gateway is at its limit.
+            let read = limits.iter().find(|read| read.agent == account.agent && read.account_name == account.name)?;
+            Some((account.id.clone(), resets(&read.resets, target, now)?))
         })
         .collect()
 }
@@ -413,11 +553,11 @@ mod tests {
             account: account.map(String::from),
             plan: Some("Max".into()),
             windows,
-            reset_credits: 2,
+            resets: vec![],
             error: None,
             next_account: None,
         };
-        Read { server: server.into(), limits, gateway: false }
+        Read { server_id: format!("{server}-key"), server: server.into(), account_id: None, limits, gateway: false }
     }
 
     #[test]
@@ -450,7 +590,52 @@ mod tests {
                 ("100%", Some("1h 30m"), Some(Pace::Limited), Tone::Warning),
             ]
         );
-        assert_eq!(section.windows[0].reset_credits, 2);
+    }
+
+    fn reset(id: &str, kind: ResetKind, left: u32, expires_in: Option<f64>, usable: bool) -> LimitReset {
+        LimitReset {
+            id: id.into(),
+            kind,
+            left,
+            expires_at: expires_in.map(|days| 1000.0 + days * 86400.0),
+            usable,
+            needs_limit: !usable,
+        }
+    }
+
+    #[test]
+    fn an_accounts_resets_are_one_option_for_each_kind_with_the_one_that_expires_first() {
+        let held = [
+            reset("week-late", ResetKind::Weekly, 1, Some(20.0), true),
+            reset("five", ResetKind::Session, 1, Some(2.0), false),
+            reset("week-soon", ResetKind::Weekly, 1, Some(9.0), true),
+            reset("spent", ResetKind::Full, 0, None, true),
+            reset("ended", ResetKind::Full, 1, Some(-1.0), true),
+        ];
+        let target = ResetTarget::Server { server_id: "studio".into(), account_id: "claude".into() };
+        let held_resets = resets(&held, target.clone(), 1000.0).unwrap();
+        assert_eq!(
+            (held_resets.title.as_str(), held_resets.detail.as_deref()),
+            ("3 resets", Some("First expires in 2 days"))
+        );
+        let options: Vec<_> = held_resets
+            .options
+            .iter()
+            .map(|option| (option.id.as_str(), option.title.as_str(), option.usable))
+            .collect();
+        assert_eq!(options, [("week-soon", "Weekly reset", true), ("five", "Session reset", false)]);
+        assert_eq!(held_resets.options[0].detail, "Refills the weekly limit · 2 left · expires in 9 days");
+        assert!(held_resets.options[1].at_limit);
+        assert_eq!(held_resets.options[1].note.as_deref(), Some("Usable once a limit it refills is used up"));
+        assert_eq!(resets(&held[3..], target, 1000.0), None, "none with uses left that haven't ended");
+
+        let mut read = read("studio", Agent::Codex, Some("a"), vec![window("Session", 100.0, 60.0, 18000)]);
+        read.account_id = Some("codex".into());
+        read.limits.resets = vec![reset("credit", ResetKind::Full, 1, None, true)];
+        let [section] = &sections(vec![read], &[], 1000.0)[..] else { panic!("one section") };
+        let shown = section.resets.as_ref().unwrap();
+        assert_eq!((shown.title.as_str(), shown.detail.as_deref()), ("1 reset", None));
+        assert_eq!(shown.target, ResetTarget::Server { server_id: "studio-key".into(), account_id: "codex".into() });
     }
 
     #[test]
@@ -734,6 +919,7 @@ mod tests {
             status: AccountStatus::Ready,
             windows,
             reset_credits: 0,
+            resets: vec![],
             threads: 0,
             next: false,
         }

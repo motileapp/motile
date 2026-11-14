@@ -10,7 +10,7 @@ use std::time::Duration;
 
 use axum::body::{Body, Bytes};
 use axum::extract::ws::{Message as WsFrame, WebSocket, WebSocketUpgrade};
-use axum::extract::{Form, OriginalUri, State};
+use axum::extract::{Form, OriginalUri, Path, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
@@ -73,6 +73,8 @@ struct Fake {
     mcp_generation: AtomicU64,
     mcp_renewals: AtomicUsize,
     mcp_refuse_renewal: AtomicBool,
+    /// Every account's one reset was used.
+    reset_used: AtomicBool,
 }
 
 impl Fake {
@@ -147,7 +149,28 @@ async fn claude_profile(headers: HeaderMap) -> Json<Value> {
 
 async fn claude_usage(State(fake): Shared) -> Json<Value> {
     fake.polls.fetch_add(1, Ordering::SeqCst);
-    Json(json!({"five_hour": {"utilization": 10.0, "resets_at": null}}))
+    let left = u32::from(!fake.reset_used.load(Ordering::SeqCst));
+    let grant = json!({"id": "week", "resets_left": left, "usable_now": true, "clears": ["seven_day"]});
+    Json(json!({"five_hour": {"utilization": 10.0, "resets_at": null},
+                "cedar_ember": {"eligible": true, "grants": [grant], "next_grant_id": "week"}}))
+}
+
+async fn claude_reset(State(fake): Shared, Path(org): Path<String>, headers: HeaderMap, body: Bytes) -> Json<Value> {
+    fake.see(&format!("/api/organizations/{org}/reset_rate_limits"), &headers, &body);
+    let used = fake.reset_used.swap(true, Ordering::SeqCst);
+    Json(json!({"result": if used { "already_used" } else { "reset" }}))
+}
+
+async fn codex_resets(State(fake): Shared) -> Json<Value> {
+    let status = if fake.reset_used.load(Ordering::SeqCst) { "redeemed" } else { "available" };
+    Json(json!({"available_count": 1, "credits": [{"id": "credit-1", "reset_type": "codex_rate_limits",
+        "status": status, "granted_at": "2026-11-01T00:00:00Z", "expires_at": null}]}))
+}
+
+async fn codex_consume(State(fake): Shared, headers: HeaderMap, body: Bytes) -> Json<Value> {
+    fake.see("/backend-api/wham/rate-limit-reset-credits/consume", &headers, &body);
+    let used = fake.reset_used.swap(true, Ordering::SeqCst);
+    Json(json!({"code": if used { "already_redeemed" } else { "reset" }, "windows_reset": 2}))
 }
 
 async fn messages(State(fake): Shared, headers: HeaderMap, body: Bytes) -> Response {
@@ -283,10 +306,11 @@ async fn answer_socket(fake: Arc<Fake>, mut socket: WebSocket) {
     }
 }
 
-async fn codex_usage() -> Json<Value> {
+async fn codex_usage(State(fake): Shared) -> Json<Value> {
+    let count = u32::from(!fake.reset_used.load(Ordering::SeqCst));
     Json(json!({"plan_type": "pro", "rate_limit": {
         "primary_window": {"used_percent": 3, "limit_window_seconds": 18000, "reset_at": now() + 3600}},
-        "rate_limit_reset_credits": {"available_count": 1}}))
+        "rate_limit_reset_credits": {"available_count": count}}))
 }
 
 fn mcp_tools() -> Value {
@@ -395,6 +419,7 @@ async fn serve_fake(fake: Arc<Fake>) -> String {
         .route("/v1/oauth/token", post(claude_token))
         .route("/api/oauth/profile", get(claude_profile))
         .route("/api/oauth/usage", get(claude_usage))
+        .route("/api/organizations/{org}/reset_rate_limits", post(claude_reset))
         .route("/v1/messages", post(messages))
         .route("/api/accounts/deviceauth/usercode", post(device_code))
         .route("/api/accounts/deviceauth/token", post(device_token))
@@ -403,6 +428,8 @@ async fn serve_fake(fake: Arc<Fake>) -> String {
         .route("/backend-api/codex/images/generations", post(codex_image))
         .route("/backend-api/codex/images/edits", post(codex_image))
         .route("/backend-api/wham/usage", get(codex_usage))
+        .route("/backend-api/wham/rate-limit-reset-credits", get(codex_resets))
+        .route("/backend-api/wham/rate-limit-reset-credits/consume", post(codex_consume))
         .with_state(fake.clone());
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = listener.local_addr().unwrap();
@@ -947,6 +974,43 @@ async fn a_new_account_shows_its_limits_at_once() {
     let windows = harness.account(&state, "alpha").windows;
     assert_eq!((windows[0].label.as_str(), windows[0].used_percent), ("Session", 10.0));
     assert!(harness.fake.polls.load(Ordering::SeqCst) > 0);
+}
+
+#[tokio::test]
+async fn a_client_uses_a_claude_accounts_reset_once() {
+    let harness = Harness::start().await;
+    let state = harness.sign_in_claude("ada.alpha").await;
+    let account = harness.account(&state, "ada/alpha");
+    let ids: Vec<_> = account.resets.iter().map(|reset| (reset.id.as_str(), reset.left)).collect();
+    assert_eq!((ids, account.reset_credits), (vec![("week", 1)], 1));
+
+    let used = Manage::UseReset { id: account.id.clone(), reset: "week".into() };
+    let GatewayReply::State { state } = harness.manage(used.clone()).await else { panic!("the reset is used") };
+    assert!(harness.account(&state, "ada/alpha").resets.is_empty());
+    let claimed = harness.fake.seen("/api/organizations/alpha/reset_rate_limits");
+    let body: Value = serde_json::from_str(&claimed[0].body).unwrap();
+    assert_eq!((body["program"].as_str(), body["grant_id"].as_str()), (Some("cedar_ember"), Some("week")));
+    assert_eq!(claimed[0].header("authorization"), "Bearer claude-ada.alpha-0");
+
+    let GatewayReply::Error { message } = harness.manage(used).await else { panic!("a used reset is gone") };
+    assert_eq!(message, "This account no longer has that reset.");
+}
+
+#[tokio::test]
+async fn a_server_uses_the_reset_of_the_codex_account_its_threads_start_on() {
+    let harness = Harness::start().await;
+    let state = harness.sign_in_codex().await;
+    let resets = &state.accounts[0].resets;
+    assert_eq!((resets.len(), resets[0].id.as_str()), (1, "credit-1"));
+
+    let server = harness.server().await;
+    let used = GatewayRequest::UseReset { agent: Agent::Codex, account: None, reset: "credit-1".into() };
+    assert_eq!(ask(&server.connection, &used).await, GatewayReply::Ok);
+    let consumed = harness.fake.seen("/backend-api/wham/rate-limit-reset-credits/consume");
+    let body: Value = serde_json::from_str(&consumed[0].body).unwrap();
+    assert_eq!(body["credit_id"], "credit-1");
+    assert_eq!(consumed[0].header("chatgpt-account-id"), "acct-1");
+    assert!(harness.state().await.accounts[0].resets.is_empty());
 }
 
 #[tokio::test]

@@ -246,6 +246,9 @@ class AppStore(private val context: Context) {
     /** The servers that are listing their repositories now. */
     var listingRepos by mutableStateOf(setOf<String>())
         private set
+    /** The accounts a limit reset is being used of, by their resets' target. */
+    var usingResets by mutableStateOf(setOf<LimitResets.Target>())
+        private set
     private val reposListed = HashMap<String, Double>()
     var addingProject by mutableStateOf<AddingProject?>(null)
         private set
@@ -2825,6 +2828,23 @@ class AppStore(private val context: Context) {
         val limit = thread.interruption as? Interruption.Limit ?: return
         update(thread, mapOf("continues" to on)) { it.copy(interruption = Interruption.Limit(limit.resetsAt, on)) }
     }
+
+    /** The limit resets of the account the thread works on, when it holds some. */
+    fun resets(thread: ThreadInfo): LimitResets? = server(thread.serverID)?.accountResets?.get(thread.agentAccount)
+
+    /** Uses one of an account's limit resets. The threads its limit stopped stop waiting: those to continue at its reset continue. */
+    fun useLimitReset(option: LimitResets.Option, resets: LimitResets, done: (() -> Unit)? = null) {
+        val target = resets.target
+        if (target in usingResets) return
+        usingResets = usingResets + target
+        core.send("use_limit_reset", mapOf("target" to target.command, "reset" to option.id)) { result ->
+            usingResets = usingResets - target
+            result.coreError?.let(::alert) ?: done?.invoke()
+        }
+    }
+
+    /** Whether a reset of these is being used. */
+    fun usingReset(resets: LimitResets): Boolean = resets.target in usingResets
 
     fun toggleArchived() {
         val thread = selectedThread ?: return
