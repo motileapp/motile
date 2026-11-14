@@ -14,7 +14,9 @@ use motile_core::gateway::{AccountRow, AccountState, View};
 use motile_protocol::gateway_wire::{AccountChange, Capture};
 use motile_protocol::wire::Agent;
 
-use super::layout::{CONTENT_WIDTH, Cut, INSET, PAGE_PADDING, TRAILING_GAP, footed_label, group, label, more, row};
+use super::layout::{
+    CONTENT_WIDTH, Cut, INSET, PAGE_PADDING, TRAILING_GAP, footed_label, group, label, large_outset, more, row,
+};
 use crate::models::{agent_name, now};
 use crate::panel::code_view::{CodeActions, CodeSnapshot, CodeView};
 use crate::panel::state::{CodeDocument, CodeMarks, Loaded};
@@ -273,10 +275,10 @@ impl AgentGatewayPage {
                 .submenu("Capture a Thread", picked)
         })
         .button(outline)
-        .margin(beside(if view.capture.on { TRAILING_GAP / 2. } else { 0. }, 0.));
+        .margin(beside(if view.capture.on { large_outset() / 2. } else { 0. }, 0.));
         let stop = view.capture.on.then(|| {
             let handle = self.store.clone();
-            large("gateway-capture-stop", "Stop").margin(beside(0., TRAILING_GAP / 2.)).on_click(move |_, _, cx| {
+            large("gateway-capture-stop", "Stop").margin(beside(0., large_outset() / 2.)).on_click(move |_, _, cx| {
                 handle.update(cx, |store, cx| {
                     store.capture_gateway(Capture::Off);
                     cx.notify();
