@@ -50,6 +50,8 @@ object ComposerStrip {
      * stands as far from its side as from its top and bottom.
      */
     val margin = PaddingValues(start = 4.dp, top = inset, end = inset, bottom = inset)
+    /** The same for a control between two others. */
+    val middleMargin = PaddingValues(start = 4.dp, top = inset, end = 4.dp, bottom = inset)
     /** How far the strip's open edge goes under the composer, which covers its outline there. */
     val overlap = 1.dp
 }

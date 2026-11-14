@@ -50,7 +50,8 @@ extension View {
         }
         .overlay { shape.stroke(Color.themeBorderComposer, lineWidth: 1) }
         #else
-        glassSurface(in: shape)
+        // Behind, not around, so that a menu in it opens from its button, not out of the glass.
+        background { Color.clear.glassSurface(in: shape) }
         #endif
     }
 }

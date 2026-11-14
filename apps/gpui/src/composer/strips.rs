@@ -48,6 +48,11 @@ pub fn margin() -> Edges<f32> {
     edges(INSET, 4., INSET, INSET)
 }
 
+/// The same for a control between two others.
+fn middle_margin() -> Edges<f32> {
+    edges(INSET, 4., INSET, 4.)
+}
+
 /// A strip of `height`, or as tall as what is in it with none. Its outline is inside it, so it is
 /// a line taller.
 pub(super) fn strip(top: bool, height: Option<f32>, cx: &App) -> Div {
@@ -208,9 +213,11 @@ pub fn interruption_strip(store: &Entity<Store>, interruption: Interruption, cx:
     let title = interruption_title(interruption);
     let detail = interruption_detail(interruption, at);
     let symbol = interruption_label(interruption).1;
+    let resets = limit_resets(store, interruption, cx);
+    let action_margin = if resets.is_some() { middle_margin() } else { margin() };
     let button = |id: &'static str, title: &'static str, help: &'static str, run: fn(&mut Store)| {
         let store = store.clone();
-        ActionButton::new(id, title).help(help).ghost().surface(Surface::Composer).margin(margin()).on_click(
+        ActionButton::new(id, title).help(help).ghost().surface(Surface::Composer).margin(action_margin).on_click(
             move |_, _, cx| {
                 store.update(cx, |store, cx| {
                     run(store);
@@ -236,7 +243,7 @@ pub fn interruption_strip(store: &Entity<Store>, interruption: Interruption, cx:
             }))
         }
     };
-    let reset = limit_resets(store, interruption, cx).map(|(thread_id, resets)| {
+    let reset = resets.map(|(thread_id, resets)| {
         let menu = crate::usage::limits::reset_menu(0, &resets, store, Variant::Ghost, Some(thread_id), |_| {}, cx);
         menu.button(|button| button.surface(Surface::Composer)).margin(margin()).up()
     });
@@ -258,8 +265,8 @@ pub fn interruption_strip(store: &Entity<Store>, interruption: Interruption, cx:
                 .child(NarrowFallback::new(title, detail)),
         )
         .child(div().flex_1().min_w(px(8.)))
-        .children(reset)
         .children(action)
+        .children(reset)
 }
 
 /// The open thread, and the resets of its account that can refill the limit that stopped its agent.
