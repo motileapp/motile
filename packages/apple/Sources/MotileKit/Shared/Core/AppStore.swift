@@ -1816,7 +1816,7 @@ final class AppStore {
     }
 
     private func heard(github answer: JSON, serverID: String) {
-        guard let state = GitHubState(rawValue: answer.string("state")) else { return }
+        guard let state = GitHubState(rawValue: answer.string("state")), github[serverID] != state else { return }
         github[serverID] = state
         defaults.set(state.rawValue, forKey: "github-\(serverID)")
     }

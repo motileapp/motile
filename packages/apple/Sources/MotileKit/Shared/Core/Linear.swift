@@ -482,8 +482,11 @@ final class Linear {
             case .success(let answer):
                 let before = Set(connected(serverID).map(\.id))
                 let heard = answer.objects("connections")
-                connections[serverID] = heard.map(LinearConnection.init)
-                defaults.set(heard, forKey: "linear-\(serverID)")
+                let found = heard.map(LinearConnection.init)
+                if connections[serverID] != found {
+                    connections[serverID] = found
+                    defaults.set(heard, forKey: "linear-\(serverID)")
+                }
                 guard finishing, let target = store?.panelTarget else { return }
                 let added = connected(serverID).first { !before.contains($0.id) }
                 guard let added else { return }
