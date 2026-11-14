@@ -16,7 +16,7 @@ use motile_protocol::gateway_wire::{McpAuth, McpChange, ToolKind, ToolPermission
 use serde_json::{Map, Value};
 
 use super::agent_gateway::{GatewayHeader, MCP_CAPTION, large};
-use super::layout::{Cut, INSET, TRAILING_GAP, group, label, more, row};
+use super::layout::{Cut, INSET, group, half_gap, label, more, row, spaced_row};
 use crate::panel::code_view::{CodeActions, CodeSnapshot, CodeView};
 use crate::panel::state::{CodeDocument, CodeMarks, Loaded};
 use crate::sign_in::Session;
@@ -374,6 +374,8 @@ impl McpGatewayPage {
         let off = !mcp_server.enabled;
         let dim = move |part: Div| part.when(off, |part| part.opacity(c.opacity(Opacity::Disabled)));
         let id = mcp_server.id.clone();
+        let row_id = format!("mcp-server-row-{id}");
+        let half = half_gap(&row_id, cx);
         let store = self.store.clone();
         let signs_in_again = mcp_server.state == McpServerState::SignInAgain;
         let sign_in_again = signs_in_again.then(|| {
@@ -381,7 +383,7 @@ impl McpGatewayPage {
             let starting = self.store.read(cx).mcp_servers.starting_sign_in.as_ref() == Some(&mcp_server.id);
             large(named("mcp-server-sign-in", &id), "Sign In Again")
                 .pending(starting)
-                .margin(beside(0., TRAILING_GAP / 2.))
+                .margin(beside(0., half))
                 .on_click(move |_, _, cx| {
                     let id = id.clone();
                     store.update(cx, |store, cx| {
@@ -391,7 +393,7 @@ impl McpGatewayPage {
                 })
         });
         let switch = Switch::new(named("mcp-server-enabled", &id), mcp_server.enabled)
-            .margin(beside(if signs_in_again { TRAILING_GAP / 2. } else { 0. }, TRAILING_GAP / 2.))
+            .margin(beside(if signs_in_again { half } else { 0. }, half))
             .on_change({
                 let id = id.clone();
                 move |enabled, _, cx| {
@@ -402,7 +404,7 @@ impl McpGatewayPage {
                     })
                 }
             });
-        let menu = self.menu(mcp_server, cx).margin(beside(TRAILING_GAP / 2., 0.));
+        let menu = self.menu(mcp_server, cx).margin(beside(half, 0.));
         let trailing = div().flex().items_center().children(sign_in_again).child(switch).child(menu);
         let warns = matches!(mcp_server.state, McpServerState::SignInAgain | McpServerState::Failing);
         let label = div()
@@ -423,7 +425,7 @@ impl McpGatewayPage {
             dim(tile(&mcp_server.monogram, &mcp_server.tint, TILE, cx)).into_any_element(),
             dim(label).into_any_element(),
         ];
-        let mut rows = vec![row(leading, vec![trailing.into_any_element()]).into_any_element()];
+        let mut rows = vec![spaced_row(row_id, leading, vec![trailing.into_any_element()]).into_any_element()];
         let unfolded = &self.store.read(cx).mcp_servers.unfolded;
         for tools in &mcp_server.groups {
             let open = unfolded.contains(&(mcp_server.id.clone(), tools.kind));

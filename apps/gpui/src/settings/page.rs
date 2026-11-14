@@ -14,8 +14,8 @@ use super::agent_gateway::AgentGatewayPage;
 use super::backup_sheet::BackupSheet;
 use super::keybindings::KeybindingsPage;
 use super::layout::{
-    Cut, END_ROOM, GROUP_GAP, INSET, PAGE_PADDING, TRAILING_GAP, Targets, column, footed_label, group, label,
-    large_outset, more, note, proxied_label, row, switch_row, target,
+    Cut, END_ROOM, GROUP_GAP, INSET, PAGE_PADDING, Targets, column, footed_label, group, half_gap, label, large_outset,
+    more, note, proxied_label, row, spaced_row, switch_row, target,
 };
 use super::mcp_gateway::McpGatewayPage;
 use super::relay_sheet::RelaySheet;
@@ -375,11 +375,13 @@ impl SettingsPage {
         let page = cx.weak_entity();
         let mut rows = Vec::new();
         for (index, server) in servers.iter().enumerate() {
+            let row_id = format!("server-row-{index}");
+            let half = half_gap(&row_id, cx);
             let status = ServerUpdateStatus::new(&self.store, server)
                 .variant(Variant::Outline)
                 .size(ControlSize::Large)
                 .surface(Surface::Card)
-                .margin(beside(0., TRAILING_GAP / 2.));
+                .margin(beside(0., half));
             let remove = Self::ask_removal(&page, Removal::Server(Box::new(server.clone())));
             let delete = Self::ask_removal(&page, Removal::ServerCompletely(Box::new(server.clone())));
             let menu = more(("server-menu", index), format!("What to do with {}", server.name), move |_, _| {
@@ -388,12 +390,12 @@ impl SettingsPage {
                     .danger_symbol_item("Unlink Server", "unlink", move |window, cx| remove(window, cx))
                     .danger_symbol_item("Delete", "trash-2", move |window, cx| delete(window, cx))
             })
-            .margin(beside(TRAILING_GAP / 2., 0.));
+            .margin(beside(half, 0.));
             let sync = server.sync.as_ref().map(|sync| sync_line(sync, cx));
             let leading =
                 footed_label(server.name.clone(), Some(description(server)), Some("server"), Cut::Wraps, sync, cx);
             let trailing = div().flex().items_center().child(status).child(menu).into_any_element();
-            rows.push(row(vec![leading], vec![trailing]).into_any_element());
+            rows.push(spaced_row(row_id, vec![leading], vec![trailing]).into_any_element());
             rows.push(divider_on(Surface::Card, cx).into_any_element());
         }
         let store = self.store.clone();
@@ -426,20 +428,21 @@ impl SettingsPage {
         let description = relay.unwrap_or_else(|| "iroh's public relays".into());
         let leading = label("Relay", Some(description), Some("radio-tower"), cut, cx);
         let trailing = if on {
+            let half = half_gap("relay-row", cx);
             let reset = Self::ask_removal(&cx.weak_entity(), Removal::Relay);
             let menu = more("relay-menu", "What to do with the relay", move |_, _| {
                 let reset = reset.clone();
                 Menu::new().danger_symbol_item("Reset to Default", "undo-2", move |window, cx| reset(window, cx))
             })
-            .margin(beside(TRAILING_GAP / 2., 0.));
-            div().flex().items_center().child(open.margin(beside(0., TRAILING_GAP / 2.))).child(menu).into_any_element()
+            .margin(beside(half, 0.));
+            div().flex().items_center().child(open.margin(beside(0., half))).child(menu).into_any_element()
         } else {
             open.into_any_element()
         };
         let caption = on.then_some(
             "Your servers, clients and gateway reach each other through it when they can't connect directly.",
         );
-        let rows = vec![row(vec![leading], vec![trailing]).into_any_element()];
+        let rows = vec![spaced_row("relay-row", vec![leading], vec![trailing]).into_any_element()];
         group("relay", "Relay", caption, true, rows, cx)
     }
 
@@ -465,18 +468,19 @@ impl SettingsPage {
         let cut = if on { Cut::Middle } else { Cut::Wraps };
         let leading = label("S3 Bucket", Some(backup.description), Some("cloud-upload"), cut, cx);
         let trailing = if on {
+            let half = half_gap("backup-row", cx);
             let turn_off = Self::ask_removal(&cx.weak_entity(), Removal::Backup);
             let menu = more("backup-menu", "What to do with the backup", move |_, _| {
                 let turn_off = turn_off.clone();
                 Menu::new().danger_symbol_item("Turn Off", "ban", move |window, cx| turn_off(window, cx))
             })
-            .margin(beside(TRAILING_GAP / 2., 0.));
-            div().flex().items_center().child(open.margin(beside(0., TRAILING_GAP / 2.))).child(menu).into_any_element()
+            .margin(beside(half, 0.));
+            div().flex().items_center().child(open.margin(beside(0., half))).child(menu).into_any_element()
         } else {
             open.into_any_element()
         };
         let caption = on.then_some("Your servers keep their threads, images and files in it, and sync through it.");
-        let rows = vec![row(vec![leading], vec![trailing]).into_any_element()];
+        let rows = vec![spaced_row("backup-row", vec![leading], vec![trailing]).into_any_element()];
         Some(group("backup", "Backup", caption, true, rows, cx))
     }
 
