@@ -47,22 +47,32 @@ extension View {
     }
 
     /// Asks before something happens, while `item` is set: our own modal on the Mac, the system's
-    /// alert on iOS.
+    /// alert on iOS, untinted so that its last answer stands out from the dismissal.
     func asking<Item: Identifiable>(_ item: Binding<Item?>, _ confirmation: @escaping (Item) -> Confirmation) -> some View {
         #if os(macOS)
         modal(item: item) { ConfirmationView(confirmation: confirmation($0)) }
         #else
-        alert(
-            item.wrappedValue.map { confirmation($0).title } ?? "",
-            isPresented: Binding { item.wrappedValue != nil } set: { if !$0 { item.wrappedValue = nil } },
-            presenting: item.wrappedValue
-        ) { shown in
-            ForEach(Array(confirmation(shown).answers.reversed().enumerated()), id: \.offset) { _, answer in
-                Button(answer.title, role: answer.variant == .danger ? .destructive : nil, action: answer.action)
+        background {
+            Color.clear.alert(
+                item.wrappedValue.map { confirmation($0).title } ?? "",
+                isPresented: Binding { item.wrappedValue != nil } set: { if !$0 { item.wrappedValue = nil } },
+                presenting: item.wrappedValue
+            ) { shown in
+                ForEach(Array(confirmation(shown).answers.reversed().enumerated()), id: \.offset) { index, answer in
+                    if answer.variant == .danger {
+                        Button(answer.title, role: .destructive, action: answer.action)
+                    } else if index == 0 {
+                        Button(answer.title, action: answer.action)
+                            .keyboardShortcut(.defaultAction)
+                    } else {
+                        Button(answer.title, action: answer.action)
+                    }
+                }
+                Button(confirmation(shown).dismissal, role: .cancel) {}
+            } message: { shown in
+                Text(confirmation(shown).message)
             }
-            Button(confirmation(shown).dismissal, role: .cancel) {}
-        } message: { shown in
-            Text(confirmation(shown).message)
+            .tint(nil)
         }
         #endif
     }
