@@ -251,16 +251,6 @@ fun SettingsButton(title: String, destructive: Boolean = false, enabled: Boolean
     }
 }
 
-/** A row that does something at once, without a page: its symbol and its words, in the tint. */
-@Composable
-fun SettingsAction(title: String, symbol: Symbol, onClick: () -> Unit) {
-    SettingsPressRow(onClick) {
-        Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            SettingsActionLabel(title, symbol)
-        }
-    }
-}
-
 /** A button's row in a list: its symbol and its words, in the tint. */
 @Composable
 fun SettingsActionLabel(title: String, symbol: Symbol) {

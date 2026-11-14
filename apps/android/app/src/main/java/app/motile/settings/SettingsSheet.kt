@@ -59,6 +59,8 @@ sealed interface SettingsRoute {
     /** A server's page; a `removed` one's only deletes its copies. */
     data class ServerPage(val serverID: String, val removed: Boolean = false) : SettingsRoute
     data object AddServer : SettingsRoute
+    data object Relay : SettingsRoute
+    data object Backup : SettingsRoute
     data class ProjectPage(val projectID: String) : SettingsRoute
     data class WorktreeSetup(val projectID: String) : SettingsRoute
     data class BranchNames(val serverID: String) : SettingsRoute
@@ -190,6 +192,8 @@ private fun RoutePage(route: SettingsRoute) {
         is SettingsRoute.Section -> SettingsScreen(route.section.title) { SettingsPage(route.section) }
         is SettingsRoute.ServerPage -> ServerSettingsPage(route.serverID, route.removed)
         SettingsRoute.AddServer -> AddServerPage()
+        SettingsRoute.Relay -> RelayPage()
+        SettingsRoute.Backup -> BackupPage()
         is SettingsRoute.ProjectPage -> ProjectSettingsPage(route.projectID)
         is SettingsRoute.WorktreeSetup -> WorktreeSetupPage(route.projectID)
         is SettingsRoute.BranchNames -> BranchNamesPage(route.serverID)
