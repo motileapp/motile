@@ -25,24 +25,40 @@ struct AgentIcon: View {
     }
 }
 
-/// Images read from files, each read once and off the main thread.
-final class ImageFiles {
+/// Images read from files, each read once and off the main thread, and kept while the client
+/// runs. They are small icons; an NSCache would be emptied each time iOS sends the client to the
+/// back, and every SVG among them drawn again in a web view on its way back.
+final class ImageFiles: @unchecked Sendable {
     static let shared = ImageFiles()
-    private let cache = NSCache<NSString, PlatformImage>()
+    private let lock = NSLock()
+    private var images: [String: PlatformImage] = [:]
+    /// The reads under way, which everything that asks for the same file waits for together.
+    private var reads: [String: Task<PlatformImage?, Never>] = [:]
 
     func cached(_ path: String?) -> PlatformImage? {
         guard let path else { return nil }
-        return cache.object(forKey: path as NSString)
+        return lock.withLock { images[path] }
     }
 
     func load(_ path: String) async -> PlatformImage? {
         if let image = cached(path) { return image }
-        let image = await Task.detached(priority: .userInitiated) {
-            await Self.read(path).map(Self.filling)
-        }.value
-        guard let image else { return nil }
-        cache.setObject(image, forKey: path as NSString)
-        return image
+        return await reading(path).value
+    }
+
+    private func reading(_ path: String) -> Task<PlatformImage?, Never> {
+        lock.withLock {
+            if let read = reads[path] { return read }
+            let read = Task.detached(priority: .userInitiated) {
+                let image = await Self.read(path).map(Self.filling)
+                self.lock.withLock {
+                    self.images[path] = image
+                    self.reads[path] = nil
+                }
+                return image
+            }
+            reads[path] = read
+            return read
+        }
     }
 
     private static func read(_ path: String) async -> PlatformImage? {
@@ -129,7 +145,7 @@ final class ImageFiles {
     /// Reads the images now, so that menus, which can't wait, find them.
     func warm(_ paths: [String]) {
         for path in paths where cached(path) == nil {
-            Task { _ = await load(path) }
+            _ = reading(path)
         }
     }
 
