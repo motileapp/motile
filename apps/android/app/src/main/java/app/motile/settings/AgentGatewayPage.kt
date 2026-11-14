@@ -3,8 +3,6 @@ package app.motile.settings
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.ui.unit.Constraints
-import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.layout.layout
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -224,40 +222,21 @@ private fun SwitchRow(account: GatewayAccount, gateway: Gateway) {
     }
 }
 
-/** The account's name with its badges beside it, or after who is signed in under it where that would cut the name short.
+/** The account's name with its badges beside it, which keep their width: the name is cut short instead.
  * "Next" keeps its place while it is hidden, so that it never moves what is around it. */
 @Composable
 private fun AccountLines(account: GatewayAccount, modifier: Modifier) {
     val palette = LocalPalette.current
     val tone = account.status.tone()
-    val name: @Composable () -> Unit = {
-        AgentIcon(account.agent, size = iconSize(text = ROW_TEXT))
-        RowText(account.name, color = palette.foreground, maxLines = 1)
-    }
-    val badges: @Composable () -> Unit = {
-        account.statusText?.let { Chip(it, Modifier.standingPastLine(), tone = tone, compact = true) }
-        Chip("Next", Modifier.standingPastLine().alpha(if (account.next) 1f else 0f), tone = palette.primary, compact = true)
-    }
-    val line = Arrangement.spacedBy(6.dp)
-    SubcomposeLayout(modifier) { constraints ->
-        val together = subcompose("together") {
-            Row(horizontalArrangement = line, verticalAlignment = Alignment.CenterVertically) { name(); badges() }
-        }.first().measure(Constraints())
-        val beside = together.width <= constraints.maxWidth
-        val lines = subcompose("lines") {
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Row(horizontalArrangement = line, verticalAlignment = Alignment.CenterVertically) {
-                    name()
-                    if (beside) badges()
-                }
-                val who = listOfNotNull(account.email, account.plan, account.threadsText).joinToString(" · ")
-                Row(horizontalArrangement = line, verticalAlignment = Alignment.CenterVertically) {
-                    if (who.isNotEmpty()) Text(who, Modifier.weight(1f, fill = false), size = NOTE_TEXT, color = palette.mutedForeground, maxLines = 1)
-                    if (!beside) badges()
-                }
-            }
-        }.first().measure(constraints.copy(minWidth = 0))
-        layout(constraints.maxWidth, lines.height) { lines.place(0, 0) }
+    val who = listOfNotNull(account.email, account.plan, account.threadsText).joinToString(" · ")
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+            AgentIcon(account.agent, size = iconSize(text = ROW_TEXT))
+            RowText(account.name, Modifier.weight(1f, fill = false), color = palette.foreground, maxLines = 1)
+            account.statusText?.let { Chip(it, Modifier.standingPastLine(), tone = tone, compact = true) }
+            Chip("Next", Modifier.standingPastLine().alpha(if (account.next) 1f else 0f), tone = palette.primary, compact = true)
+        }
+        if (who.isNotEmpty()) Text(who, size = NOTE_TEXT, color = palette.mutedForeground, maxLines = 1)
     }
 }
 

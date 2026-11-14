@@ -40,28 +40,17 @@ extension GatewayState {
 struct GatewayAccountLabel: View {
     let account: GatewayAccount
 
-    /// The badges stand beside the name, or after the plan under it where that would cut the name short.
+    /// The badges stand beside the name and keep their width: the name is cut short instead.
     /// "Next" keeps its place while it is hidden, so that it never moves what is around it.
     var body: some View {
-        ViewThatFits(in: .horizontal) {
-            lines(badgesBeside: true)
-            lines(badgesBeside: false)
-        }
-    }
-
-    private func lines(badgesBeside: Bool) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 6) {
                 AgentIcon(agent: account.agent, size: .md)
                 name
-                if badgesBeside { chips(on: Self.titleLine) }
+                chips(on: Self.titleLine)
+                    .fixedSize(horizontal: true, vertical: false)
             }
-            HStack(spacing: 6) {
-                // Its length never decides where the badges go: it is cut short instead.
-                description
-                    .frame(minWidth: 0, idealWidth: 0, alignment: .leading)
-                if !badgesBeside { chips(on: Self.descriptionLine) }
-            }
+            description
         }
     }
 
@@ -98,12 +87,10 @@ struct GatewayAccountLabel: View {
     private static let titleFont = Font.ui(.sm, weight: .medium)
     private static let descriptionFont = Font.ui(.xs)
     private static let titleLine = PlatformFont.ui(.sm, weight: .medium).textLineHeight
-    private static let descriptionLine = PlatformFont.ui(.xs).textLineHeight
     #else
     private static let titleFont = Font.body
     private static let descriptionFont = Font.footnote
     private static let titleLine = UIFont.preferredFont(forTextStyle: .body).textLineHeight
-    private static let descriptionLine = UIFont.preferredFont(forTextStyle: .footnote).textLineHeight
     #endif
 }
 
