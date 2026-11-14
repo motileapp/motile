@@ -555,6 +555,7 @@ fn account_row(row: &Row) -> rusqlite::Result<Account> {
         tokens: Tokens::default(),
         windows: serde_json::from_str(&json(9)?).unwrap_or_default(),
         read_at: row.get(10)?,
+        polled_at: None,
         resets: serde_json::from_str(&json(11)?).unwrap_or_default(),
         created_at: row.get(12)?,
     })

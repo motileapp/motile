@@ -183,6 +183,8 @@ pub enum Manage {
     TryTool { id: String, tool: String, arguments: serde_json::Value },
     /// Spends one of the account's limit resets. Answered with `State`.
     UseReset { id: String, reset: String },
+    /// Asks every account's usage page for its limits and resets now. Answered with `State`.
+    ReadLimits,
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]

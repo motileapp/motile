@@ -19,6 +19,8 @@ pub struct Account {
     pub tokens: Tokens,
     pub windows: Vec<LimitWindow>,
     pub read_at: Option<f64>,
+    /// When its usage page was read last, which lists its resets too.
+    pub polled_at: Option<f64>,
     pub resets: Vec<LimitReset>,
     pub created_at: f64,
 }
@@ -67,6 +69,9 @@ impl Account {
             self.resets = resets.clone();
         }
         self.read_at = Some(now);
+        if reading.whole {
+            self.polled_at = Some(now);
+        }
         // Refilled before its reset, as by a reset used elsewhere: it no longer rests.
         let room =
             reading.whole && !self.windows.is_empty() && self.windows.iter().all(|window| window.used_percent < 100.0);
@@ -99,6 +104,7 @@ mod tests {
             tokens: Tokens::default(),
             windows: vec![window("Session", 10.0), window("Weekly · Opus", 30.0)],
             read_at: None,
+            polled_at: None,
             resets: vec![],
             created_at: 0.0,
         };
@@ -107,11 +113,12 @@ mod tests {
         account.read(&Reading { windows: vec![window("Session", 20.0)], resets: None, whole: false }, 70.0);
         let used: Vec<_> = account.windows.iter().map(|window| window.used_percent).collect();
         assert_eq!((used, account.read_at), (vec![20.0, 30.0], Some(70.0)));
+        assert_eq!(account.polled_at, None, "a busy account's responses don't stand in for its usage page");
 
         let resets = motile_protocol::resets::codex(&serde_json::json!({"available_count": 1}));
         account
             .read(&Reading { windows: vec![window("Weekly", 5.0)], resets: Some(resets.clone()), whole: true }, 80.0);
-        assert_eq!((account.windows.len(), account.resets.clone()), (1, resets));
+        assert_eq!((account.windows.len(), account.resets.clone(), account.polled_at), (1, resets, Some(80.0)));
     }
 
     #[test]
@@ -129,6 +136,7 @@ mod tests {
             tokens: Tokens::default(),
             windows: vec![window("Session", 100.0)],
             read_at: None,
+            polled_at: None,
             resets: vec![],
             created_at: 0.0,
         };

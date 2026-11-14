@@ -79,5 +79,9 @@ async fn answer(gateway: &Gateway, command: Manage) -> anyhow::Result<GatewayRep
             gateway.use_reset(&id, &reset).await?;
             state(gateway)
         }
+        Manage::ReadLimits => {
+            gateway.read_limits().await;
+            state(gateway)
+        }
     })
 }
