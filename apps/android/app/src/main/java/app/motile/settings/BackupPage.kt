@@ -1,29 +1,23 @@
 package app.motile.settings
 
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Modifier
 import app.motile.LocalStore
 import app.motile.core.BackupBucket
 import app.motile.platform.Platform
 import app.motile.theme.IconSize
 import app.motile.ui.ActionButton
 import app.motile.ui.ButtonVariant
-import app.motile.ui.HoldsModal
-import app.motile.ui.LocalCloseModal
 import app.motile.ui.Spinner
 
 /** The S3 bucket every server backs up to and syncs through, to set up or change. */
 @Composable
-fun BackupSheet() {
+fun BackupPage() {
     val store = LocalStore.current
-    val close = LocalCloseModal.current
+    val navigator = LocalSettingsNavigator.current
     val kept = store.backup.bucket
     var endpoint by remember { mutableStateOf(kept?.endpoint ?: "") }
     var region by remember { mutableStateOf(kept?.region ?: "") }
@@ -34,8 +28,6 @@ fun BackupSheet() {
     var error by remember { mutableStateOf<String?>(null) }
     val canSave = listOf(bucket, accessKey, secretKey).all { it.isNotBlank() }
 
-    HoldsModal(saving)
-
     fun save() {
         saving = true
         error = null
@@ -43,7 +35,7 @@ fun BackupSheet() {
         store.setBackup(edited) { failure ->
             saving = false
             error = failure
-            if (failure == null) close()
+            if (failure == null) navigator.pop()
         }
     }
 
@@ -51,9 +43,8 @@ fun BackupSheet() {
         if (saving) Spinner(IconSize.Xl)
         else ActionButton("Save", variant = ButtonVariant.Primary, disabled = !canSave) { save() }
     }
-    Column(Modifier.fillMaxSize()) {
-        CompositionLocalProvider(LocalBarLeading provides BarLeading.Close { close() }) { SettingsBar("S3 Backup", trailing) }
-        SettingsList(Modifier.weight(1f)) {
+    SettingsScreen("S3 Backup", trailing) {
+        SettingsList {
             group(header = "Endpoint", footer = "Empty for AWS.") {
                 row { SettingsField("https://<account>.r2.cloudflarestorage.com", endpoint, { endpoint = it }, monospaced = true) }
             }

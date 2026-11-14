@@ -52,7 +52,7 @@ const SHOW_IN_FILES: &str = if cfg!(target_os = "macos") {
 };
 
 /// What the settings take away once the user says so: a server, a server with every copy of its
-/// threads, a project, an agent's account or the backup.
+/// threads, a project, an agent's account, the backup or the relay.
 #[derive(Clone)]
 enum Removal {
     Server(Box<Server>),
@@ -60,6 +60,7 @@ enum Removal {
     Project(Box<Project>),
     Account(Box<(AgentAccount, Server)>),
     Backup,
+    Relay,
 }
 
 impl Removal {
@@ -70,6 +71,7 @@ impl Removal {
             Removal::Project(project) => format!("Remove “{}”?", project.name),
             Removal::Account(pair) => format!("Remove “{} · {}”?", agent_name(pair.0.agent), pair.0.name),
             Removal::Backup => "Turn Off the Backup?".into(),
+            Removal::Relay => "Reset the Relay to Default?".into(),
         }
     }
 
@@ -93,6 +95,7 @@ impl Removal {
                 pair.1.name
             ),
             Removal::Backup => "Your servers stop backing up to the bucket and sync through your clients again. What is in the bucket stays there.".into(),
+            Removal::Relay => "Every device of your account goes back to iroh's public relays when it can't connect directly.".into(),
         }
     }
 
@@ -101,6 +104,7 @@ impl Removal {
             Removal::ServerCompletely(_) => "Delete",
             Removal::Server(_) => "Unlink",
             Removal::Backup => "Turn Off",
+            Removal::Relay => "Reset",
             _ => "Remove",
         }
     }
@@ -112,6 +116,7 @@ impl Removal {
             Removal::Project(project) => store.remove_project(project),
             Removal::Account(pair) => store.remove_agent_account(&pair.0, &pair.1),
             Removal::Backup => store.set_backup(None, |_, _| {}),
+            Removal::Relay => store.use_iroh_relays(),
         }
     }
 }
@@ -421,12 +426,10 @@ impl SettingsPage {
         let description = relay.unwrap_or_else(|| "iroh's public relays".into());
         let leading = label("Relay", Some(description), Some("radio-tower"), cut, cx);
         let trailing = if on {
-            let store = self.store.clone();
+            let reset = Self::ask_removal(&cx.weak_entity(), Removal::Relay);
             let menu = more("relay-menu", "What to do with the relay", move |_, _| {
-                let store = store.clone();
-                Menu::new().symbol_item("Use iroh's Relays", "undo-2", move |_, cx| {
-                    store.update(cx, |store, _| store.use_iroh_relays())
-                })
+                let reset = reset.clone();
+                Menu::new().danger_symbol_item("Reset to Default", "undo-2", move |window, cx| reset(window, cx))
             })
             .margin(beside(TRAILING_GAP / 2., 0.));
             div().flex().items_center().child(open.margin(beside(0., TRAILING_GAP / 2.))).child(menu).into_any_element()

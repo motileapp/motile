@@ -1,7 +1,8 @@
 import SwiftUI
 
 /// What the settings take away once the user says so: a server, every copy of a server's threads,
-/// a project, an agent's account, the account's gateway, one of its accounts or one of its MCP servers.
+/// a project, an agent's account, the account's gateway, one of its accounts, one of its MCP servers,
+/// the backup or the relay.
 enum Removal: Identifiable {
     case server(Server)
     case serverCompletely(Server)
@@ -11,6 +12,7 @@ enum Removal: Identifiable {
     case gatewayAccount(GatewayAccount)
     case mcpServer(McpServerRow)
     case backup
+    case relay
 
     var id: String {
         switch self {
@@ -22,6 +24,7 @@ enum Removal: Identifiable {
         case .gatewayAccount(let account): "gateway-account/\(account.id)"
         case .mcpServer(let mcpServer): "mcp-server/\(mcpServer.id)"
         case .backup: "backup"
+        case .relay: "relay"
         }
     }
 
@@ -35,6 +38,7 @@ enum Removal: Identifiable {
         case .gatewayAccount(let account): "Remove “\(account.name)” from Your Gateway?"
         case .mcpServer(let mcpServer): "Remove the “\(mcpServer.name)” MCP Server?"
         case .backup: "Turn Off the Backup?"
+        case .relay: "Reset the Relay to Default?"
         }
     }
 
@@ -56,6 +60,8 @@ enum Removal: Identifiable {
             "Agents won't get its tools anymore, and your gateway forgets its login."
         case .backup:
             "Your servers stop backing up to the bucket and sync through your clients again. What is in the bucket stays there."
+        case .relay:
+            "Every device of your account goes back to iroh's public relays when it can't connect directly."
         }
     }
 
@@ -65,6 +71,7 @@ enum Removal: Identifiable {
         case .server: "Unlink"
         case .serverCompletely: "Delete"
         case .backup: "Turn Off"
+        case .relay: "Reset"
         default: "Remove"
         }
     }
@@ -79,6 +86,7 @@ enum Removal: Identifiable {
         case .gatewayAccount(let account): store.removeGatewayAccount(account)
         case .mcpServer(let mcpServer): store.removeMcpServer(mcpServer)
         case .backup: store.setBackup(nil)
+        case .relay: store.useIrohRelays()
         }
     }
 }

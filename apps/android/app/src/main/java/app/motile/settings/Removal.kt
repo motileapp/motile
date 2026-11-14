@@ -17,7 +17,7 @@ import app.motile.ui.Confirmation
 /**
  * What the settings take away once the user says so: a server, every copy of a server's threads, a
  * project, an agent's account, the account's gateway, one of its accounts or one of its MCP servers,
- * or the backup.
+ * the backup or the relay.
  */
 sealed interface Removal {
     data class OfServer(val server: Server) : Removal
@@ -28,6 +28,7 @@ sealed interface Removal {
     data class OfGatewayAccount(val account: GatewayAccount) : Removal
     data class OfMcpServer(val mcpServer: McpServerRow) : Removal
     data object OfBackup : Removal
+    data object OfRelay : Removal
 
     val title: String
         get() = when (this) {
@@ -39,6 +40,7 @@ sealed interface Removal {
             is OfGatewayAccount -> "Remove “${account.name}” from Your Gateway?"
             is OfMcpServer -> "Remove the “${mcpServer.name}” MCP Server?"
             OfBackup -> "Turn Off the Backup?"
+            OfRelay -> "Reset the Relay to Default?"
         }
 
     fun message(store: AppStore): String = when (this) {
@@ -53,6 +55,7 @@ sealed interface Removal {
         is OfGatewayAccount -> "Your gateway forgets its sign-in, and its threads move to your other accounts."
         is OfMcpServer -> "Agents won't get its tools anymore, and your gateway forgets its login."
         OfBackup -> "Your servers stop backing up to the bucket and sync through your clients again. What is in the bucket stays there."
+        OfRelay -> "Every device of your account goes back to iroh's public relays when it can't connect directly."
     }
 
     /** The button that goes ahead. */
@@ -60,6 +63,7 @@ sealed interface Removal {
         is OfServer -> "Unlink"
         is OfServerCompletely -> "Delete"
         OfBackup -> "Turn Off"
+        OfRelay -> "Reset"
         else -> "Remove"
     }
 
@@ -72,6 +76,7 @@ sealed interface Removal {
         is OfGatewayAccount -> store.gateway.removeAccount(account)
         is OfMcpServer -> store.gateway.mcpServers.remove(mcpServer)
         OfBackup -> store.setBackup(null) { error -> error?.let { store.alert(CoreError(it)) } }
+        OfRelay -> store.setRelay(null) { error -> error?.let { store.alert(CoreError(it)) } }
     }
 }
 

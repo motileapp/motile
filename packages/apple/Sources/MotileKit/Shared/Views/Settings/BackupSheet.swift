@@ -11,6 +11,7 @@ struct EditedBackup: Identifiable {
 struct BackupSheet: View {
     @Environment(AppStore.self) private var store
     @Environment(\.closeModal) private var close
+    @Environment(\.dismiss) private var dismiss
     @State private var bucket: BackupBucket
     @State private var saving = false
     @State private var error: String?
@@ -42,25 +43,29 @@ struct BackupSheet: View {
         .padding(20)
         .frame(width: 460)
         #else
-        NavigationStack {
-            SettingsList { listForm }
-                .scrollDismissesKeyboard(.interactively)
-                .navigationTitle(title)
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    GlassToolbarItem(placement: .cancellationAction) { SheetCloseButton() }
-                    ToolbarItem(placement: .confirmationAction) {
-                        if saving {
-                            Spinner(size: .xl)
-                        } else {
-                            Button("Save") { save() }
-                                .disabled(!bucket.isComplete)
-                        }
+        SettingsList { listForm }
+            .scrollDismissesKeyboard(.interactively)
+            .navigationTitle(title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    if saving {
+                        Spinner(size: .xl)
+                    } else {
+                        Button("Save") { save() }
+                            .disabled(!bucket.isComplete)
                     }
                 }
-        }
-        .presentationDragIndicator(.visible)
-        .interactiveDismissDisabled(saving)
+            }
+        #endif
+    }
+
+    /// Closes the Mac's modal, or goes back from the iOS page.
+    private func finish() {
+        #if os(macOS)
+        close()
+        #else
+        dismiss()
         #endif
     }
 
@@ -70,7 +75,7 @@ struct BackupSheet: View {
         store.setBackup(bucket) { failure in
             saving = false
             error = failure
-            if failure == nil { close() }
+            if failure == nil { finish() }
         }
     }
 

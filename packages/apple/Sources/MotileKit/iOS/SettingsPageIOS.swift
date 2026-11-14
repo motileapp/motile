@@ -260,19 +260,16 @@ struct SettingsPage: View {
     @ViewBuilder private var relay: some View {
         let url = store.account.relay
         Section {
-            Button {
-                store.editedRelay = EditedRelay(url: url)
+            NavigationLink {
+                RelaySheet(url: url).glassBackButton()
             } label: {
-                SheetRowLabel {
-                    SettingsItem("Relay", description: url ?? "iroh's public relays", truncates: .middle) {
-                        SettingsTile(symbol: .radioTower)
-                    }
+                SettingsItem("Relay", description: url ?? "iroh's public relays", truncates: .middle) {
+                    SettingsTile(symbol: .radioTower)
                 }
             }
             if url != nil {
-                Button { store.useIrohRelays() } label: {
-                    SettingsActionLabel("Use iroh's Relays", symbol: .undo2)
-                }
+                Button("Reset to Default", role: .destructive) { removal = .relay }
+                    .foregroundStyle(Color.themeDestructive)
             }
         } header: {
             Text("Relay")
@@ -289,13 +286,11 @@ struct SettingsPage: View {
     @ViewBuilder private var backup: some View {
         let on = store.backup.bucket != nil
         Section {
-            Button {
-                store.editedBackup = EditedBackup(bucket: store.backup.bucket)
+            NavigationLink {
+                BackupSheet(bucket: store.backup.bucket).glassBackButton()
             } label: {
-                SheetRowLabel {
-                    SettingsItem("S3 Bucket", description: on ? store.backup.description : "Not set up", truncates: .middle) {
-                        SettingsTile(symbol: .cloudUpload)
-                    }
+                SettingsItem("S3 Bucket", description: on ? store.backup.description : "Not set up", truncates: .middle) {
+                    SettingsTile(symbol: .cloudUpload)
                 }
             }
             if on {
@@ -772,20 +767,6 @@ struct SettingsActionLabel: View {
             Image(symbol, size: .xl)
         }
         .foregroundStyle(Color.themePrimary)
-    }
-}
-
-/// A row that opens a sheet: its content, then a chevron, as a row that opens a page has.
-private struct SheetRowLabel<Content: View>: View {
-    @ViewBuilder let content: Content
-
-    var body: some View {
-        HStack(spacing: 0) {
-            content
-            Spacer(minLength: 8)
-            Image(.chevronRight, size: .md)
-                .foregroundStyle(Color.themeMutedStrongerForeground)
-        }
     }
 }
 

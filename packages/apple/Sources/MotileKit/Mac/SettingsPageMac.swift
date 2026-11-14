@@ -196,7 +196,7 @@ struct SettingsPage: View {
                     HStack(spacing: 0) {
                         ActionButton("Edit", variant: .outline, size: .large, margin: .beside(trailing: settingsHalfGap)) { store.editedRelay = EditedRelay(url: url) }
                         more("What to do with the relay", margin: .beside(leading: settingsHalfGap)) {
-                            MenuItem("Use iroh's Relays", symbol: .undo2) { store.useIrohRelays() }
+                            MenuItem("Reset to Default", symbol: .undo2, role: .destructive) { removal = .relay }
                         }
                     }
                 } else {

@@ -11,6 +11,7 @@ struct EditedRelay: Identifiable {
 struct RelaySheet: View {
     @Environment(AppStore.self) private var store
     @Environment(\.closeModal) private var close
+    @Environment(\.dismiss) private var dismiss
     @State private var url: String
     @State private var saving = false
     @State private var error: String?
@@ -47,35 +48,39 @@ struct RelaySheet: View {
         .padding(20)
         .frame(width: 460)
         #else
-        NavigationStack {
-            SettingsList {
-                Section {
-                    TextField(placeholder, text: $url)
-                        .font(.system(.body, design: .monospaced))
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .keyboardType(.URL)
-                } footer: {
-                    Text(error ?? caption)
-                        .foregroundStyle(error == nil ? Color.themeMutedForeground : Color.themeDestructive)
-                }
+        SettingsList {
+            Section {
+                TextField(placeholder, text: $url)
+                    .font(.system(.body, design: .monospaced))
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .keyboardType(.URL)
+            } footer: {
+                Text(error ?? caption)
+                    .foregroundStyle(error == nil ? Color.themeMutedForeground : Color.themeDestructive)
             }
-            .scrollDismissesKeyboard(.interactively)
-            .navigationTitle(title)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                GlassToolbarItem(placement: .cancellationAction) { SheetCloseButton() }
-                ToolbarItem(placement: .confirmationAction) {
-                    if saving {
-                        Spinner(size: .xl)
-                    } else {
-                        Button("Save") { save() }
-                    }
+        }
+        .scrollDismissesKeyboard(.interactively)
+        .navigationTitle(title)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .confirmationAction) {
+                if saving {
+                    Spinner(size: .xl)
+                } else {
+                    Button("Save") { save() }
                 }
             }
         }
-        .presentationDragIndicator(.visible)
-        .interactiveDismissDisabled(saving)
+        #endif
+    }
+
+    /// Closes the Mac's modal, or goes back from the iOS page.
+    private func finish() {
+        #if os(macOS)
+        close()
+        #else
+        dismiss()
         #endif
     }
 
@@ -86,7 +91,7 @@ struct RelaySheet: View {
         store.setRelay(trimmed.isEmpty ? nil : trimmed) { failure in
             saving = false
             error = failure
-            if failure == nil { close() }
+            if failure == nil { finish() }
         }
     }
 }

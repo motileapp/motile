@@ -25,14 +25,6 @@ struct SettingsSheet: View {
             .onChange(of: store.settingsTarget) { follow(wide: wide) }
             .onChange(of: wide) { _, wide in follow(wide: wide) }
         }
-        .sheet(item: Bindable(store).editedBackup) { edited in
-            BackupSheet(bucket: edited.bucket)
-                .sheetSurface()
-        }
-        .sheet(item: Bindable(store).editedRelay) { edited in
-            RelaySheet(url: edited.url)
-                .sheetSurface()
-        }
         .presentationSizing(.page)
         .presentationDragIndicator(.visible)
     }
