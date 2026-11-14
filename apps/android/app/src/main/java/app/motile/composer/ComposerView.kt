@@ -114,7 +114,7 @@ fun ComposerView(modifier: Modifier = Modifier) {
                     val waitingText = children?.waitingText
                     CompositionLocalProvider(LocalUnderSkillMenu provides (store.skillMenu != null)) {
                         when {
-                            thread != null && approval != null -> WaitingStrip(approval, store.activity.approvals.size)
+                            thread != null && approval != null -> WaitingStrip(approval, store.activity.approvals.size, Modifier.weight(1f, fill = false))
                             waitingChild != null && waitingText != null -> ChildrenStrip(waitingText, waitingChild, children.waiting.size)
                             thread != null && !thread.busy && !store.activity.busy && interruption != null -> InterruptionStrip(interruption)
                             thread != null && store.activity.monitoring -> MonitoringStrip(thread)

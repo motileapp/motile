@@ -120,7 +120,7 @@ fun ThreadScreen(overSidebar: Boolean = true) {
     FileDrop(Modifier.fillMaxSize()) {
         Box(Modifier.fillMaxSize().background(Theme.colors.background)) {
             if (!isStart) {
-                val bottom = below.asPaddingValues().calculateBottomPadding() + composerHeight
+                val bottom = below.asPaddingValues().calculateBottomPadding() + composerHeight + TranscriptView.composerGap - TranscriptView.overlayGap
                 val model = if (agent != null) store.agentTranscript else store.transcript
                 key(model) {
                     val findCover = if (agent == null && store.find.shown && store.selectedThread != null) FindBar.cover else 0.dp
@@ -137,7 +137,7 @@ fun ThreadScreen(overSidebar: Boolean = true) {
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()
                         .onSizeChanged { composerHeight = with(density) { it.height.toDp() } }
-                        .padding(start = Theme.composerPadding, end = Theme.composerPadding, top = TranscriptView.composerGap, bottom = composerBottomGap)
+                        .padding(start = Theme.composerPadding, end = Theme.composerPadding, top = TranscriptView.overlayGap, bottom = composerBottomGap)
                     if (agent != null) {
                         Box(composerPlace, contentAlignment = Alignment.BottomCenter) { AgentBar(agent) }
                     } else if (removedServer != null) {
@@ -318,7 +318,7 @@ private fun Start(composerHeight: androidx.compose.ui.unit.Dp) {
         Modifier
             .fillMaxSize()
             .clickable(remember { MutableInteractionSource() }, indication = null) { Platform.endEditing() }
-            .padding(start = 24.dp, end = 24.dp, bottom = composerHeight),
+            .padding(start = 24.dp, end = 24.dp, bottom = composerHeight + TranscriptView.composerGap - TranscriptView.overlayGap),
         verticalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterVertically),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {

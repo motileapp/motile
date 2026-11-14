@@ -2,6 +2,7 @@
 //! outer corners and open where they meet the composer. They stand in from the composer's sides
 //! by its corner radius, so they meet its straight edge.
 
+use std::cell::Cell;
 use std::rc::Rc;
 
 use gpui_kit::component::input::{InputEvent, InputState};
@@ -362,16 +363,42 @@ const TARGET_HEIGHT: f32 = theme::CODE_LINE_HEIGHT * 8. + TARGET_INSET_VERTICAL 
 
 /// The tool call the agent waits with, above the composer: it is allowed or refused, and one
 /// that asks questions is answered. The calls behind it wait their turn.
-pub fn waiting_strip(store: &Entity<Store>, approval: &Waiting, count: usize, cx: &App) -> Div {
+pub fn waiting_strip(store: &Entity<Store>, approval: &Waiting, count: usize, room: StripRoom, cx: &App) -> Div {
     let content = if approval.questions.is_empty() {
-        waiting_call(store, approval, count, cx)
+        waiting_call(store, approval, count, room, cx)
     } else {
-        div().p(px(PADDING)).child(questions(store, approval, cx))
+        div().p(px(PADDING)).child(questions(store, approval, room, cx))
     };
     strip(true, None, cx).child(div().w_full().min_w_0().text_size(TextSize::Xs).child(content))
 }
 
-fn waiting_call(store: &Entity<Store>, approval: &Waiting, count: usize, cx: &App) -> Div {
+/// How tall what scrolls in the waiting strip may be, so the composer under it stays in the
+/// window, and where it says how tall it was drawn.
+pub struct StripRoom {
+    pub max_height: f32,
+    pub drawn: Rc<Cell<f32>>,
+}
+
+impl StripRoom {
+    /// Lies over what scrolls and says how tall it was drawn.
+    pub fn measure(&self) -> impl IntoElement {
+        let drawn = self.drawn.clone();
+        canvas(
+            move |bounds, window, _| {
+                let height = f32::from(bounds.size.height);
+                if (drawn.get() - height).abs() > 0.5 {
+                    drawn.set(height);
+                    window.refresh();
+                }
+            },
+            |_, _, _, _| {},
+        )
+        .absolute()
+        .size_full()
+    }
+}
+
+fn waiting_call(store: &Entity<Store>, approval: &Waiting, count: usize, room: StripRoom, cx: &App) -> Div {
     let c = colors(cx);
     let (refuse, allow) = (store.clone(), store.clone());
     let (refuse_id, allow_id) = (approval.id.clone(), approval.id.clone());
@@ -386,8 +413,17 @@ fn waiting_call(store: &Entity<Store>, approval: &Waiting, count: usize, cx: &Ap
         )
         .when(!approval.target.is_empty(), |call| {
             call.child(
-                div().rounded(px(Radius::MD)).bg(c.border_composer).overflow_hidden().child(
-                    FadingScroll::new(SharedString::from(format!("target-{}", approval.id)), TARGET_HEIGHT)
+                div()
+                    .relative()
+                    .rounded(px(Radius::MD))
+                    .bg(c.border_composer)
+                    .overflow_hidden()
+                    .child(room.measure())
+                    .child(
+                        FadingScroll::new(
+                            SharedString::from(format!("target-{}", approval.id)),
+                            TARGET_HEIGHT.min(room.max_height),
+                        )
                         .fill(c.border_composer)
                         .child(
                             div()
@@ -398,7 +434,7 @@ fn waiting_call(store: &Entity<Store>, approval: &Waiting, count: usize, cx: &Ap
                                 .line_height(px(theme::CODE_LINE_HEIGHT))
                                 .child(command(&approval.id, &approval.target, &approval.spans, cx)),
                         ),
-                ),
+                    ),
             )
         })
         .child(

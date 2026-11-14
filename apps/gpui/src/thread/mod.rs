@@ -22,6 +22,9 @@ use crate::ui::{ActionButton, Highlight, TOOLBAR_WIDTH, icons, logos};
 
 /// The room between the last row and the composer, which the transcript fades out in.
 pub const COMPOSER_GAP: f32 = 80.;
+/// How close under the top bar the composer and its strips may come, which is less than
+/// `COMPOSER_GAP` so that a tall strip has room before it scrolls.
+pub const OVERLAY_GAP: f32 = 16.;
 const COMPOSER_BOTTOM_GAP: f32 = 16.;
 /// How far above the middle the start is, as a part of the window's height.
 const START_LIFT: f32 = 0.03;

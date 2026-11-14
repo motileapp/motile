@@ -17,6 +17,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.motile.LocalStore
 import app.motile.core.Approval
@@ -42,6 +43,7 @@ import app.motile.ui.ActionButton
 import app.motile.ui.ButtonVariant
 import app.motile.ui.Chip
 import app.motile.ui.Disabled
+import app.motile.ui.FadingScroll
 import app.motile.ui.HighlightButton
 import app.motile.ui.Icon
 import app.motile.ui.PickMark
@@ -65,20 +67,28 @@ fun QuestionsView(approval: Approval, modifier: Modifier = Modifier) {
     val question = store.question(approval)
     val index = store.questionIndex(approval)
 
-    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            CompositionLocalProvider(LocalForeground provides palette.warning) {
-                WaitingTitle(
-                    question.header.ifEmpty { approval.title }, Symbol.MessageCircleQuestionMark,
-                    if (questions.size > 1) "${index + 1} of ${questions.size}" else null,
-                )
-            }
-            Text(question.text, size = TextSize.Sm, weight = FontWeight.Medium, style = Theme.ui(TextSize.Sm, FontWeight.Medium).copy(lineHeight = Theme.ui(TextSize.Sm).fontSize * 1.35f))
-            if (question.multiple) Text("Choose any that apply", size = TextSize.Xs, color = palette.mutedForeground)
+    Column(modifier.fillMaxWidth()) {
+        CompositionLocalProvider(LocalForeground provides palette.warning) {
+            WaitingTitle(
+                question.header.ifEmpty { approval.title }, Symbol.MessageCircleQuestionMark,
+                if (questions.size > 1) "${index + 1} of ${questions.size}" else null,
+            )
         }
-        Column(Modifier.overhang(horizontal = optionReach), verticalArrangement = Arrangement.spacedBy(optionGap)) {
-            for (option in question.options) OptionRow(approval, option, question.multiple)
-            OwnAnswerRow(approval, question.multiple)
+        // Takes only the room the composer leaves, so the composer stays above the keyboard.
+        FadingScroll(
+            Dp.Infinity,
+            Modifier.weight(1f, fill = false).padding(top = 6.dp, bottom = 12.dp).overhang(horizontal = optionReach),
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column(Modifier.padding(horizontal = optionReach), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(question.text, size = TextSize.Sm, weight = FontWeight.Medium, style = Theme.ui(TextSize.Sm, FontWeight.Medium).copy(lineHeight = Theme.ui(TextSize.Sm).fontSize * 1.35f))
+                    if (question.multiple) Text("Choose any that apply", size = TextSize.Xs, color = palette.mutedForeground)
+                }
+                Column(verticalArrangement = Arrangement.spacedBy(optionGap)) {
+                    for (option in question.options) OptionRow(approval, option, question.multiple)
+                    OwnAnswerRow(approval, question.multiple)
+                }
+            }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             if (index > 0) ActionButton("Back", Symbol.ChevronLeft, variant = ButtonVariant.Ghost) { store.goBack(approval) }

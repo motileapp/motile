@@ -113,7 +113,9 @@ extension View {
                                 store: store,
                                 ofAgent: ofAgent,
                                 topInset: edges.contains(.top) ? safe.safeAreaInsets.top : 0,
-                                bottomInset: place.room.map { proxy.size.height - proxy[$0].minY } ?? 0,
+                                bottomInset: place.room.map {
+                                    proxy.size.height - proxy[$0].minY + TranscriptView.composerGap - TranscriptView.overlayGap
+                                } ?? 0,
                                 bottomFade: place.box.map { proxy.size.height - proxy[$0].midY } ?? 0
                             )
                         }

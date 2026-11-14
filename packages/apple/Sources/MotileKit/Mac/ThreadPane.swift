@@ -29,21 +29,21 @@ struct ThreadPane: View {
             } else if let agent {
                 AgentBar(agent: agent)
                     .padding(.horizontal, Theme.composerPadding)
-                    .padding(.top, TranscriptView.composerGap)
+                    .padding(.top, TranscriptView.overlayGap)
                     .padding(.bottom, Self.composerBottomGap)
                     .frame(maxWidth: .infinity)
                     .transformAnchorPreference(key: ComposerPlace.self, value: .bounds) { $0.room = $1 }
             } else if let server = store.openThreadRemovedServer {
                 UnlinkedThreadBar(server: server)
                     .padding(.horizontal, Theme.composerPadding)
-                    .padding(.top, TranscriptView.composerGap)
+                    .padding(.top, TranscriptView.overlayGap)
                     .padding(.bottom, Self.composerBottomGap)
                     .frame(maxWidth: .infinity)
                     .transformAnchorPreference(key: ComposerPlace.self, value: .bounds) { $0.room = $1 }
             } else {
                 ComposerView()
                     .padding(.horizontal, Theme.composerPadding)
-                    .padding(.top, TranscriptView.composerGap)
+                    .padding(.top, TranscriptView.overlayGap)
                     .padding(.bottom, Self.composerBottomGap)
                     .frame(maxWidth: .infinity)
                     .transformAnchorPreference(key: ComposerPlace.self, value: .bounds) { $0.room = $1 }

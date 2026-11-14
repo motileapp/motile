@@ -47,8 +47,8 @@ object WaitingStrip {
 }
 
 @Composable
-fun WaitingStrip(approval: Approval, count: Int) {
-    Box(Modifier.fillMaxWidth().composerStrip(ComposerStrip.Edge.Top, height = null)) {
+fun WaitingStrip(approval: Approval, count: Int, modifier: Modifier = Modifier) {
+    Box(modifier.fillMaxWidth().composerStrip(ComposerStrip.Edge.Top, height = null)) {
         if (approval.questions.isEmpty()) {
             Call(approval, count)
         } else {
@@ -72,7 +72,7 @@ private fun Call(approval: Approval, count: Int) {
             val typeset = remember(approval, palette) { typesetTarget(approval, palette) }
             FadingScroll(
                 targetHeight,
-                Modifier.fillMaxWidth().background(palette.borderComposer, RoundedCornerShape(Radius.md)),
+                Modifier.weight(1f, fill = false).fillMaxWidth().background(palette.borderComposer, RoundedCornerShape(Radius.md)),
             ) {
                 Text(
                     typeset, Modifier.padding(horizontal = WaitingStrip.targetInset, vertical = WaitingStrip.targetInsetVertical),
