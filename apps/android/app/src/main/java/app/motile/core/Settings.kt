@@ -74,6 +74,7 @@ data class SettingsEntry(
             SettingsEntry("agent-accounts", "Provider Accounts", SettingsSection.Accounts, "agents claude codex sign in account folder subscription plan api key router"),
             SettingsEntry("servers", "Servers", SettingsSection.Servers, "add remove unlink unlinked delete copies machine agents connected"),
             SettingsEntry("backup", "Backup", SettingsSection.Servers, "s3 bucket r2 b2 minio storage sync media restore"),
+            SettingsEntry("relay", "Relay", SettingsSection.Servers, "iroh relay network connection nat direct"),
             SettingsEntry("continue-limits", "Continue after usage limits", SettingsSection.Servers, "rate limit reset resume quota wait"),
             SettingsEntry("continue-restarts", "Continue after restarts", SettingsSection.Servers, "restart update crash resume interrupted"),
             SettingsEntry("gateway", "Gateway", SettingsSection.AgentGateway, "add remove replace enroll docker unbind image volume code connected"),

@@ -472,6 +472,10 @@ pub enum Command {
         server_id: String,
         settings: PullRequestSettings,
     },
+    /// Has every device of the account use this iroh relay; `None` goes back to iroh's public ones.
+    SetRelay {
+        url: Option<String>,
+    },
     /// Backs every server up to the bucket, and keeps its keys on this device to give a server
     /// that has none; `None` stops. The first connected server checks the bucket before it is kept.
     SetBackup {
@@ -938,6 +942,8 @@ pub struct AccountView {
     pub auth_url: String,
     /// Set when the auth server couldn't be reached and this is the last known state.
     pub error: Option<String>,
+    /// The account's own iroh relay, which its devices use in place of iroh's public ones.
+    pub relay: Option<String>,
 }
 
 #[derive(Serialize, Clone, Debug, PartialEq)]

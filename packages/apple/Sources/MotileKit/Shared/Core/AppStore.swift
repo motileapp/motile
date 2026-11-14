@@ -208,6 +208,8 @@ final class AppStore {
     var showsAddServer = false
     /// The bucket the backup's sheet sets up or changes, while it is open.
     var editedBackup: EditedBackup?
+    /// The relay its sheet sets, while it is open.
+    var editedRelay: EditedRelay?
     /// The section of the settings open over the client, while they are.
     var settings: SettingsSection? {
         didSet { pageChanged() }

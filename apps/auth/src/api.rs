@@ -10,10 +10,11 @@ use axum::extract::{ConnectInfo, Path, State};
 use axum::http::{HeaderMap, Method, StatusCode, Uri};
 use motile_protocol::auth_api::{
     DevLoginRequest, DevLoginResponse, DeviceKind, EnrollRequest, EnrollResponse, EnrollToken, ExchangeRequest, Me,
-    Session, SessionRequest, enroll_message, link_message,
+    RelayRequest, Session, SessionRequest, enroll_message, link_message,
 };
 use motile_protocol::identity::{is_public_key, random_install_code, random_token, sha256_hex, verify, verify_request};
 use motile_protocol::now;
+use motile_protocol::relay::checked_url;
 use serde_json::{Value, json};
 use uuid::Uuid;
 
@@ -245,6 +246,35 @@ pub async fn remove_device(
     if !db::remove_device(&state.db, user.id, &target).await? {
         return Err(AppError::not_found());
     }
+    Ok(Json(json!({ "ok": true })))
+}
+
+/// Sets the account's relay, or goes back to iroh's public relays. Only someone signed in can, in a
+/// client or on the web.
+pub async fn set_relay(
+    State(state): State<AppState>,
+    method: Method,
+    uri: Uri,
+    headers: HeaderMap,
+    body: Bytes,
+) -> AppResult<Json<Value>> {
+    let user = match caller(&state, &method, &uri, &headers, &body).await? {
+        Caller::Web(user) => user,
+        Caller::Device(public_key) => {
+            let user = linked_user(&state, &public_key).await?;
+            if db::device_kind(&state.db, &public_key).await? != Some(DeviceKind::Client) {
+                return Err(AppError::new(StatusCode::FORBIDDEN, "The relay is set from a client."));
+            }
+            user
+        }
+    };
+    let request: RelayRequest =
+        serde_json::from_slice(&body).map_err(|_| AppError::bad_request("That isn't a relay request."))?;
+    let url = match request.url.as_deref().map(str::trim).filter(|url| !url.is_empty()) {
+        Some(url) => Some(checked_url(url).map_err(AppError::bad_request)?),
+        None => None,
+    };
+    db::set_relay(&state.db, user.id, url.as_deref()).await?;
     Ok(Json(json!({ "ok": true })))
 }
 

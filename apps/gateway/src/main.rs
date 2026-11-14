@@ -73,6 +73,7 @@ async fn main() -> anyhow::Result<()> {
         bind: BindOptions {
             local_only: variable("MOTILE_LOCAL").is_some(),
             port: variable("MOTILE_GATEWAY_PORT").and_then(|port| port.parse().ok()),
+            external_addr: parsed("MOTILE_GATEWAY_EXTERNAL_ADDR")?,
         },
         prices: None,
     };
@@ -147,6 +148,12 @@ async fn shutdown() {
 
 fn variable(name: &str) -> Option<String> {
     std::env::var(name).ok().filter(|value| !value.trim().is_empty())
+}
+
+fn parsed<T: std::str::FromStr>(name: &str) -> anyhow::Result<Option<T>> {
+    let Some(value) = variable(name) else { return Ok(None) };
+    let parsed = value.trim().parse().map_err(|_| anyhow::anyhow!("{name} isn't valid: {value}"))?;
+    Ok(Some(parsed))
 }
 
 /// Device keys allowed without the auth server, for tests and local runs.

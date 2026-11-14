@@ -9,7 +9,7 @@ use serde::de::DeserializeOwned;
 
 use crate::auth_api::{
     ApiError, DevLoginRequest, DevLoginResponse, DeviceKind, EnrollRequest, EnrollResponse, EnrollToken,
-    ExchangeRequest, Me, enroll_message, link_message,
+    ExchangeRequest, Me, RelayRequest, enroll_message, link_message,
 };
 use crate::identity::{DeviceKey, sha256_hex, sign_request};
 use crate::{APP_REDIRECT, now};
@@ -143,6 +143,13 @@ impl AuthClient {
     pub async fn delete_server_completely(&self, key: &DeviceKey, public_key: &str) -> anyhow::Result<()> {
         let path = format!("/api/servers/{public_key}");
         let _: serde_json::Value = self.send(self.signed(key, Method::DELETE, &path, b"")).await?;
+        Ok(())
+    }
+
+    /// Sets the account's relay; `None` goes back to iroh's public relays.
+    pub async fn set_relay(&self, key: &DeviceKey, url: Option<&str>) -> anyhow::Result<()> {
+        let body = serde_json::to_vec(&RelayRequest { url: url.map(str::to_string) })?;
+        let _: serde_json::Value = self.send(self.signed(key, Method::PUT, "/api/relay", &body)).await?;
         Ok(())
     }
 

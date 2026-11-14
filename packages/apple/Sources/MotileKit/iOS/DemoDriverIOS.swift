@@ -18,7 +18,8 @@ import UIKit
 ///     group                             opens or closes the first row of agents started together
 ///     file <path>                       opens a file in the panel
 ///     change <path>                     opens what the latest turn changed in a file
-///     sheet commands|projects|settings|usage|server|thread|close
+///     sheet commands|projects|settings|usage|server|backup|relay|thread|close
+///     relay <url>|off                   sets the account's relay, or goes back to iroh's
 ///     settings <section>|search <text>|pick <group>|close
 ///     appearance light|dark|system
 ///     usage activity|cost|tokens|limits  picks a tab of the usage sheet
@@ -145,6 +146,7 @@ enum DemoDriver {
             case "usage": store.openUsage()
             case "server": store.showsAddServer = true
             case "backup": store.editedBackup = EditedBackup(bucket: store.backup.bucket)
+            case "relay": store.editedRelay = EditedRelay(url: store.account.relay)
             case "icon":
                 guard let project = store.projects.first(where: { !$0.noProject }) else { return }
                 store.openPanel(.icon(project.id))
@@ -158,6 +160,7 @@ enum DemoDriver {
                 store.showsUsage = false
                 store.showsAddServer = false
                 store.editedBackup = nil
+                store.editedRelay = nil
                 store.showsThreadSettings = false
                 store.committingProject = nil
             }
@@ -177,6 +180,8 @@ enum DemoDriver {
         case "usage":
             guard let tab = UsageModel.Tab(rawValue: rest) else { return }
             store.usage.tab = tab
+        case "relay":
+            if rest == "off" { store.useIrohRelays() } else { store.setRelay(rest) { _ in } }
         case "appearance":
             UserDefaults.standard.set(rest, forKey: "appearance")
             (Appearance(rawValue: rest) ?? .system).apply()

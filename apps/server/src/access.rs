@@ -26,6 +26,8 @@ pub struct Access {
     servers: RwLock<HashMap<String, Named>>,
     /// The key of the account's gateway, while it has one.
     gateway: watch::Sender<Option<String>>,
+    /// The account's own relay, while it has one.
+    relay: watch::Sender<Option<String>>,
     account: Option<AccountAccess>,
 }
 
@@ -58,6 +60,7 @@ impl Access {
             deleted: RwLock::default(),
             servers: RwLock::default(),
             gateway: watch::Sender::new(cached.gateway),
+            relay: watch::Sender::new(cached.relay),
             account,
         })
     }
@@ -111,6 +114,11 @@ impl Access {
         });
     }
 
+    /// Follows the account's own relay.
+    pub fn watch_relay(&self) -> watch::Receiver<Option<String>> {
+        self.relay.subscribe()
+    }
+
     async fn refreshed_recently(&self) -> bool {
         let Some(account) = &self.account else { return true };
         account.last_refresh.lock().await.is_some_and(|at| at.elapsed() < MIN_REFRESH_GAP)
@@ -149,13 +157,21 @@ impl Access {
             let devices = me.devices.iter().filter(move |device| device.kind == kind);
             devices.map(|device| device.public_key.clone())
         };
-        let listed =
-            Listed { clients: keys_of(DeviceKind::Client).collect(), gateway: keys_of(DeviceKind::Gateway).next() };
+        let listed = Listed {
+            clients: keys_of(DeviceKind::Client).collect(),
+            gateway: keys_of(DeviceKind::Gateway).next(),
+            relay: me.relay.clone(),
+        };
         if let Ok(text) = serde_json::to_string(&listed) {
             let _ = std::fs::write(&account.cache, text);
         }
         *self.linked.write().await = listed.clients;
         self.set_gateway(listed.gateway);
+        self.relay.send_if_modified(|kept| {
+            let changed = *kept != listed.relay;
+            *kept = listed.relay;
+            changed
+        });
     }
 
     pub fn keep_fresh(self: &Arc<Self>) {
@@ -184,6 +200,8 @@ pub struct Named {
 struct Listed {
     clients: HashSet<String>,
     gateway: Option<String>,
+    #[serde(default)]
+    relay: Option<String>,
 }
 
 fn read_listed(file: &std::path::Path) -> Listed {
@@ -192,7 +210,7 @@ fn read_listed(file: &std::path::Path) -> Listed {
         return listed;
     }
     // Up to 0.1.267 the file only listed the clients.
-    Listed { clients: serde_json::from_str(&text).unwrap_or_default(), gateway: None }
+    Listed { clients: serde_json::from_str(&text).unwrap_or_default(), gateway: None, relay: None }
 }
 
 #[cfg(test)]
@@ -204,7 +222,10 @@ mod tests {
         let folder = tempfile::tempdir().unwrap();
         let file = folder.path().join("account-keys.json");
         std::fs::write(&file, r#"["client-a"]"#).unwrap();
-        assert_eq!(read_listed(&file), Listed { clients: HashSet::from(["client-a".into()]), gateway: None });
+        assert_eq!(
+            read_listed(&file),
+            Listed { clients: HashSet::from(["client-a".into()]), gateway: None, relay: None }
+        );
         std::fs::write(&file, r#"{"clients":["client-a"],"gateway":"gateway-key"}"#).unwrap();
         assert_eq!(read_listed(&file).gateway.as_deref(), Some("gateway-key"));
         assert_eq!(read_listed(&folder.path().join("missing.json")), Listed::default());

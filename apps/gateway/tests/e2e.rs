@@ -23,7 +23,6 @@ use motile_gateway::access::Access;
 use motile_gateway::config::Upstreams;
 use motile_gateway::pricing::Prices;
 use motile_gateway::serve::BindOptions;
-use motile_protocol::GATEWAY_ALPN;
 use motile_protocol::frame::{read_frame, write_frame};
 use motile_protocol::gateway_wire::{
     AccountChange, AccountStatus, GatewayAccount, GatewayReply, GatewayRequest, GatewayState, MCP_APPROVED,
@@ -31,6 +30,7 @@ use motile_protocol::gateway_wire::{
 };
 use motile_protocol::identity::DeviceKey;
 use motile_protocol::wire::Agent;
+use motile_protocol::{GATEWAY_ALPN, GATEWAY_ALPN_ZSTD};
 use serde_json::{Value, json};
 use tokio::sync::Notify;
 
@@ -467,7 +467,7 @@ impl Harness {
             key,
             access: Access::fixed(&[server_key.public()], &[client_key.public()]),
             upstreams: Upstreams::at(&base),
-            bind: BindOptions { local_only: true, port: None },
+            bind: BindOptions { local_only: true, port: None, external_addr: None },
             prices: Some(prices),
         };
         let (gateway, endpoint) = motile_gateway::start(options).await.unwrap();
@@ -477,10 +477,14 @@ impl Harness {
     }
 
     async fn connect(&self, key: &DeviceKey) -> anyhow::Result<Link> {
+        self.connect_on(key, GATEWAY_ALPN).await
+    }
+
+    async fn connect_on(&self, key: &DeviceKey, alpn: &[u8]) -> anyhow::Result<Link> {
         let endpoint =
             Endpoint::builder(presets::Minimal).secret_key(SecretKey::from_bytes(&key.to_bytes())).bind().await?;
         let address = EndpointAddr::new(EndpointId::from_str(&self.gateway_key)?).with_ip_addr(self.gateway_address);
-        let connection = endpoint.connect(address, GATEWAY_ALPN).await?;
+        let connection = endpoint.connect(address, alpn).await?;
         Ok(Link { connection, _endpoint: endpoint })
     }
 
@@ -619,6 +623,35 @@ async fn http_pinned(
     let head: GatewayReply = tokio::time::timeout(TIMEOUT, read_frame(&mut recv)).await.unwrap().unwrap().unwrap();
     let body = tokio::time::timeout(TIMEOUT, recv.read_to_end(1 << 24)).await.unwrap().unwrap_or_default();
     (head, String::from_utf8_lossy(&body).into_owned())
+}
+
+#[tokio::test]
+async fn a_server_that_offers_zstd_sends_its_bodies_compressed_and_they_go_upstream_whole() {
+    let harness = Harness::start().await;
+    harness.sign_in_claude("alpha").await;
+    let server = harness.connect_on(&harness.server_key, GATEWAY_ALPN_ZSTD).await.unwrap();
+    assert_eq!(server.alpn(), GATEWAY_ALPN_ZSTD);
+
+    let body = json!({"model": "claude-opus-4-5", "messages": [{"role": "user", "content": "hi ".repeat(1000)}]});
+    let (mut send, mut recv) = server.open_bi().await.unwrap();
+    let request = GatewayRequest::Http {
+        thread: "t1".into(),
+        agent: Agent::Claude,
+        method: "POST".into(),
+        path: "/v1/messages".into(),
+        headers: vec![],
+        pin: None,
+    };
+    write_frame(&mut send, &request).await.unwrap();
+    let compressed = zstd::bulk::compress(body.to_string().as_bytes(), 3).unwrap();
+    assert!(compressed.len() * 10 < body.to_string().len());
+    send.write_all(&compressed).await.unwrap();
+    send.finish().unwrap();
+    let head: GatewayReply = tokio::time::timeout(TIMEOUT, read_frame(&mut recv)).await.unwrap().unwrap().unwrap();
+    assert!(matches!(head, GatewayReply::HttpHead { status: 200, .. }), "{head:?}");
+
+    let seen = &harness.fake.seen("/v1/messages")[0];
+    assert_eq!(serde_json::from_str::<Value>(&seen.body).unwrap(), body);
 }
 
 #[tokio::test]

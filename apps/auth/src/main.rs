@@ -16,7 +16,7 @@ use std::time::Duration;
 use axum::Router;
 use axum::http::HeaderValue;
 use axum::http::header::{REFERRER_POLICY, X_CONTENT_TYPE_OPTIONS, X_FRAME_OPTIONS};
-use axum::routing::{delete, get, post};
+use axum::routing::{delete, get, post, put};
 use sqlx::postgres::PgPoolOptions;
 use tower_http::set_header::SetResponseHeaderLayer;
 use tower_http::trace::TraceLayer;
@@ -49,6 +49,7 @@ fn router(state: AppState) -> Router {
         .route("/api/enroll", post(api::enroll))
         .route("/api/devices/{public_key}", delete(api::remove_device))
         .route("/api/servers/{public_key}", delete(api::delete_server_completely))
+        .route("/api/relay", put(api::set_relay))
         .fallback(pages::not_found)
         .layer(header(X_CONTENT_TYPE_OPTIONS, "nosniff"))
         .layer(header(X_FRAME_OPTIONS, "DENY"))

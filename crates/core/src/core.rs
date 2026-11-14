@@ -409,6 +409,8 @@ struct Core {
     sending_engaged: HashSet<String>,
     key: Arc<DeviceKey>,
     endpoint: Option<Endpoint>,
+    /// The account's relay the endpoint follows; None while it uses iroh's public relays.
+    followed_relay: Option<String>,
     /// Whether the client was paused, asleep or suspended, or in the background, where Android
     /// may cut its network without pausing it. The links ask it too.
     away: Away,
@@ -571,6 +573,7 @@ pub fn start(config: Config, sink: EventSink) -> anyhow::Result<Handle> {
         cache,
         key: Arc::new(key),
         endpoint: None,
+        followed_relay: None,
         away: Away::new(),
         reached_at: Instant::now(),
         binding: None,
@@ -932,6 +935,7 @@ impl Core {
                 device_key: self.key.public(),
                 auth_url: self.auth.base_url().to_string(),
                 error: self.account_error.clone(),
+                relay: self.me.relay.clone(),
             },
         });
     }
@@ -969,6 +973,7 @@ impl Core {
                 self.cache.set_account(&me);
                 self.me = me;
                 self.emit_account();
+                self.follow_relay();
                 self.sync_servers();
             }
             Err(error) => {
@@ -1037,6 +1042,7 @@ impl Core {
         self.me = me;
         self.account_error = None;
         self.emit_account();
+        self.follow_relay();
         self.sync_servers();
         self.reply(id, Ok(json!({})));
     }
@@ -1127,6 +1133,17 @@ impl Core {
         self.bind_endpoint();
     }
 
+    /// Has the endpoint use the account's relay, or iroh's public ones when it has none.
+    fn follow_relay(&mut self) {
+        let Some(endpoint) = self.endpoint.clone().filter(|_| !self.config.local_only) else { return };
+        if self.me.relay == self.followed_relay {
+            return;
+        }
+        let from = std::mem::replace(&mut self.followed_relay, self.me.relay.clone());
+        let to = self.me.relay.clone();
+        tokio::spawn(async move { motile_protocol::relay::follow(&endpoint, from.as_deref(), to.as_deref()).await });
+    }
+
     /// Opens a new endpoint once the one there is has let go of the relays. Two endpoints of one
     /// key take the relay from each other.
     fn bind_endpoint(&mut self) {
@@ -1138,10 +1155,10 @@ impl Core {
         // servers: the links show as dialing until the new one is open.
         self.retire_links();
         let (key, inputs, local_only) = (self.key.clone(), self.inputs.clone(), self.config.local_only);
-        let stale = self.endpoint.clone();
+        let (stale, followed) = (self.endpoint.clone(), self.followed_relay.clone());
         tokio::spawn(async move {
             if let Some(stale) = stale {
-                leave_relays(&stale).await;
+                leave_relays(&stale, followed.as_deref()).await;
                 tokio::spawn(async move { stale.close().await });
             }
             let result = bind(&key, local_only).await.map_err(error_text);
@@ -1168,6 +1185,8 @@ impl Core {
                 if let Some(stale) = self.endpoint.replace(endpoint) {
                     tokio::spawn(async move { stale.close().await });
                 }
+                self.followed_relay = None;
+                self.follow_relay();
                 self.connect_servers();
                 self.sync_gateway();
             }
@@ -3248,6 +3267,16 @@ impl Core {
                     let result = auth.me(&key).await.map_err(error_text);
                     let _ = inputs.send(Input::AccountChecked { key: key.public(), result });
                     reply(&sink, id, deleted.map(|_| json!({})));
+                });
+            }
+            Command::SetRelay { url } => {
+                let (auth, key, sink, inputs) =
+                    (self.auth.clone(), self.key.clone(), self.sink.clone(), self.inputs.clone());
+                tokio::spawn(async move {
+                    let set = auth.set_relay(&key, url.as_deref()).await.map_err(error_text);
+                    let result = auth.me(&key).await.map_err(error_text);
+                    let _ = inputs.send(Input::AccountChecked { key: key.public(), result });
+                    reply(&sink, id, set.map(|_| json!({})));
                 });
             }
             Command::WatchGateway { on } => {

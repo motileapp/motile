@@ -169,6 +169,9 @@ async fn run(data_dir: &DataDir, allow_keys: Vec<String>, options: BindOptions) 
     hub.keep_limits_current();
     hub.keep_prices_current(std::env::var("MOTILE_PRICES_URL").unwrap_or_else(|_| pricing::LIST_URL.to_string()));
     let endpoint = bind(&key, &options).await?;
+    if !options.local_only {
+        motile_protocol::relay::keep_following(endpoint.clone(), access.watch_relay());
+    }
     if let Err(error) = hub.serve_gateway(endpoint.clone(), access.watch_gateway(), data_dir.gateway_accounts()).await {
         tracing::warn!("the agents can't reach your gateway: {error:#}");
     }

@@ -61,6 +61,17 @@ pub struct Incoming {
     pub headers: Vec<(String, String)>,
     /// The account the thread is pinned to, which it never leaves.
     pub pin: Option<String>,
+    /// The body comes compressed with zstd.
+    pub compressed: bool,
+}
+
+fn decompressed(body: &[u8]) -> anyhow::Result<Vec<u8>> {
+    use std::io::Read;
+    let mut decoded = Vec::new();
+    let decoder = zstd::stream::read::Decoder::new(body).context("The request's body isn't zstd.")?;
+    decoder.take(MAX_REQUEST as u64 + 1).read_to_end(&mut decoded).context("The request's body isn't zstd.")?;
+    anyhow::ensure!(decoded.len() <= MAX_REQUEST, "The request's body is too large.");
+    Ok(decoded)
 }
 
 impl Incoming {
@@ -87,6 +98,10 @@ pub async fn serve(
     let started = Instant::now();
     let at = now();
     let body = recv.read_to_end(MAX_REQUEST).await.context("The request's body didn't arrive whole.")?;
+    let body = match incoming.compressed {
+        true => decompressed(&body)?,
+        false => body,
+    };
     let parsed: Option<Value> = serde_json::from_slice(&body).ok();
     let model = parsed.as_ref().and_then(|body| body["model"].as_str()).map(String::from);
     let lifetime = cache_lifetime(incoming.agent, &body);

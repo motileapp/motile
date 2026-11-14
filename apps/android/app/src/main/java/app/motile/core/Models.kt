@@ -24,6 +24,8 @@ data class Account(
     val deviceKey: String = "",
     val authURL: String = "",
     val error: String? = null,
+    /** The account's own iroh relay; null while its devices use iroh's public ones. */
+    val relay: String? = null,
 ) {
     constructor(json: JSON) : this(
         signedIn = json.bool("signed_in"),
@@ -33,6 +35,7 @@ data class Account(
         deviceKey = json.string("device_key"),
         authURL = json.string("auth_url"),
         error = json.optionalString("error"),
+        relay = json.optionalString("relay"),
     )
 }
 

@@ -1666,6 +1666,11 @@ class AppStore(private val context: Context) {
         core.send("set_backup", mapOf("bucket" to bucket?.json)) { done(it.coreError?.message) }
     }
 
+    /** Has every device of the account use the relay; null goes back to iroh's public ones. `done` gets the error, or null. */
+    fun setRelay(url: String?, done: (String?) -> Unit) {
+        core.send("set_relay", mapOf("url" to url)) { done(it.coreError?.message) }
+    }
+
     fun removeServer(server: Server) {
         core.send("remove_server", json("server_id" to server.id)) { alert(it) }
     }
