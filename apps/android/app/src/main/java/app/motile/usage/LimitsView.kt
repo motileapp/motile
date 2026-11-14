@@ -21,11 +21,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import app.motile.core.LimitsReport
 import app.motile.platform.Symbol
@@ -39,72 +35,11 @@ import app.motile.theme.Radius
 import app.motile.theme.Surface
 import app.motile.theme.Theme
 import app.motile.theme.at
-import app.motile.ui.AgentIcon
-import app.motile.ui.Card
-import app.motile.ui.Chip
 import app.motile.ui.Icon
 import app.motile.ui.Text
-import app.motile.ui.ThemeDivider
 
 /** Narrower than this, a window puts its bar under its numbers. */
 private val besideWidth = 520.dp
-
-/** How much of their plans the agents' accounts have used: a section for each account, its windows in one card, each with a bar of what was used. */
-@Composable
-fun LimitsView(report: LimitsReport) {
-    val palette = LocalPalette.current
-    BoxWithConstraints(Modifier.fillMaxWidth()) {
-        val beside = maxWidth >= besideWidth
-        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(40.dp)) {
-            if (report.sections.isEmpty() && report.notes.isEmpty()) UsageNote("No agent is installed on these servers.")
-            for (section in report.sections) {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Header(section, beside)
-                    section.note?.let { note ->
-                        Card(Modifier.fillMaxWidth()) {
-                            Text(note, Modifier.fillMaxWidth().padding(16.dp), size = TextSize.Xs, color = palette.mutedForeground)
-                        }
-                    }
-                    if (section.windows.isNotEmpty()) {
-                        Card(Modifier.fillMaxWidth()) {
-                            section.windows.forEachIndexed { index, window ->
-                                if (index > 0) ThemeDivider()
-                                LimitRow(window, beside)
-                            }
-                        }
-                    }
-                }
-            }
-            for (note in report.notes) Text(note, size = TextSize.Xs, color = palette.mutedForeground)
-        }
-    }
-}
-
-/** The agent with the account's plan, and who is signed in beside it, or under it where they don't both fit. */
-@Composable
-private fun Header(section: LimitsReport.Section, beside: Boolean) {
-    val palette = LocalPalette.current
-    val parts = listOfNotNull(section.name, section.account)
-    val account = buildAnnotatedString {
-        parts.forEachIndexed { index, part ->
-            if (index > 0) withStyle(SpanStyle(color = palette.mutedStrongerForeground)) { append(" · ") }
-            append(part)
-        }
-    }
-    val accountText = @Composable { modifier: Modifier ->
-        Text(account, modifier, size = TextSize.Xs, color = palette.mutedForeground, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
-    }
-    Column(Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp, bottom = 2.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            AgentIcon(section.agent, size = iconSize(text = TextSize.Md))
-            Text(section.agent.title, size = TextSize.Md, weight = FontWeight.Medium, color = palette.foreground, maxLines = 1)
-            section.plan?.let { Chip(it) }
-            if (section.gateway) Chip("Gateway", icon = Symbol.Waypoints)
-            if (beside) accountText(Modifier.weight(1f, fill = false))
-        }
-        if (!beside) accountText(Modifier)
-    }
-}
 
 /** A window as the Limits tab draws it, its bar beside its numbers where the row is wide enough. */
 @Composable
@@ -176,7 +111,7 @@ private val LimitsReport.Window.Pace.help: String
         LimitsReport.Window.Pace.Under -> "Room left for the rest of the window"
     }
 
-/** What was used of a window as the part of a bar it fills, and at its end when the window starts over and the resets the account may use. */
+/** What was used of a window as the part of a bar it fills, and at its end when the window starts over. */
 @Composable
 private fun LimitBar(window: LimitsReport.Window, color: Color, modifier: Modifier) {
     val palette = LocalPalette.current
@@ -193,21 +128,7 @@ private fun LimitBar(window: LimitsReport.Window, color: Color, modifier: Modifi
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(window.used, Modifier.weight(1f), style = Theme.uiDigits(TextSize.Xs, FontWeight.SemiBold), color = palette.foreground, maxLines = 1)
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                window.resetsIn?.let { Text(it, Modifier.semantics { contentDescription = "Starts over in $it" }, style = text, color = palette.foreground, maxLines = 1) }
-                if (window.resetsIn != null && window.resetCredits > 0) Text("·", style = text, color = palette.foreground)
-                if (window.resetCredits > 0) {
-                    val help = if (window.resetCredits == 1) "1 reset to use" else "${window.resetCredits} resets to use"
-                    Row(
-                        Modifier.semantics { contentDescription = help },
-                        horizontalArrangement = Arrangement.spacedBy(3.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Icon(Symbol.Ticket, iconSize(text = TextSize.Xs), color = palette.foreground)
-                        Text("${window.resetCredits}", style = text, color = palette.foreground)
-                    }
-                }
-            }
+            window.resetsIn?.let { Text(it, Modifier.semantics { contentDescription = "Starts over in $it" }, style = text, color = palette.foreground, maxLines = 1) }
         }
     }
 }

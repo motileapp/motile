@@ -418,6 +418,13 @@ pub enum Command {
         #[serde(default)]
         servers: Option<Vec<String>>,
     },
+    /// Uses one of an account's limit resets, `reset` being one of its options' ids, as its `target`
+    /// says: a server's account or one of the gateway's. The threads its limit stopped stop waiting:
+    /// those to continue at its reset continue. Answers once it is used.
+    UseLimitReset {
+        target: limits::ResetTarget,
+        reset: String,
+    },
     /// Searches the messages of every connected server's threads for `query`, a little after the
     /// last time it changed. `thread_search` events tell what was found; there is no reply.
     SearchThreads {
@@ -956,6 +963,8 @@ pub struct ServerView {
     pub roomier_accounts: HashMap<String, HashMap<String, String>>,
     /// What each of its agents' accounts has used of its limits, by account id.
     pub account_limits: HashMap<String, Vec<limits::Row>>,
+    /// The limit resets of each of its agents' accounts that holds some, by account id.
+    pub account_resets: HashMap<String, limits::Resets>,
     /// The name of the gateway's account whose limits a Gateway account's are: the one a new thread
     /// would start on, by account id.
     pub next_accounts: HashMap<String, String>,

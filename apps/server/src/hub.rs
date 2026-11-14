@@ -17,7 +17,7 @@ use std::time::{Duration, Instant};
 use anyhow::{Context, bail};
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64;
-use motile_protocol::gateway_wire::GatewayAccount;
+use motile_protocol::gateway_wire::{AccountStatus, GatewayAccount};
 use motile_protocol::wire::{
     AccountSkills, ActionRecord, Activity, Actor, ActorKind, Agent, AgentAccount, AgentLimits, AgentNotice, Approval,
     BackupState, BranchInstructions, CONTINUE_PROMPT, ChangedFile, ContinueSettings, CopiedThread, DiffScope, FileKind,
@@ -49,7 +49,9 @@ use crate::ricrac::Ricrac;
 use crate::sign_in::SignIns;
 use crate::store::{Continuation, Purpose, Session, Store, StoredProject, StoredThread, StoredWorktree, TitleSource};
 use crate::ui_lookups::Lookups;
-use crate::{agent_accounts, drafts, files, gateway, git, github, icons, limits, pacing, pull_requests, title, ui};
+use crate::{
+    agent_accounts, drafts, files, gateway, git, github, icons, limits, pacing, pull_requests, resets, title, ui,
+};
 
 mod children;
 mod threads;
@@ -206,8 +208,9 @@ struct GatewayWay {
     token: String,
     /// Where the Gateway accounts keep their folders.
     folder: PathBuf,
-    /// The gateway's accounts as it last listed them, which Gateway accounts are pinned to.
+    /// The gateway's accounts as it last listed them, which Gateway accounts are pinned to, and when.
     pool: std::sync::Mutex<Vec<GatewayAccount>>,
+    pool_read: std::sync::Mutex<Option<Instant>>,
     /// The slugs of the gateway's MCP servers that are on, as it last listed them, which every agent is
     /// given.
     mcp_servers: std::sync::Mutex<Vec<String>>,
@@ -216,6 +219,10 @@ struct GatewayWay {
 impl GatewayWay {
     fn pool(&self) -> Vec<GatewayAccount> {
         self.pool.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).clone()
+    }
+
+    fn pool_read(&self) -> Option<Instant> {
+        *self.pool_read.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 }
 
@@ -311,6 +318,8 @@ struct Live {
     told_ask: Option<String>,
     /// The agent that started the thread was told it waits for its usage limit to reset.
     told_limit: bool,
+    /// When its usage limit stopped it last.
+    limited_at: Option<Instant>,
     /// How many tool calls of its own the transcript has, once they were counted.
     tools: Option<u64>,
     /// The thread was deleted while this waited for its lock.
@@ -533,6 +542,7 @@ impl Hub {
             token,
             folder,
             pool: std::sync::Mutex::default(),
+            pool_read: std::sync::Mutex::default(),
             mcp_servers: std::sync::Mutex::default(),
         };
         if self.gateway.set(way).is_err() {
@@ -583,6 +593,7 @@ impl Hub {
                     let ids = |pool: &[GatewayAccount]| pool.iter().map(|pooled| pooled.id.clone()).collect::<Vec<_>>();
                     listed_others = ids(&kept) != ids(&pool);
                     *kept = pool;
+                    *way.pool_read.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(Instant::now());
                 }
                 Err(error) => tracing::debug!("couldn't ask the gateway for its accounts: {error:#}"),
             }
@@ -1098,12 +1109,16 @@ impl Hub {
         Ok(())
     }
 
-    /// Continues the threads whose usage limit has reset, looking every `every`.
+    /// Continues the threads whose usage limit has reset, looking every `every`, and reads the limits
+    /// every other time while a thread waits for one of the server's own accounts' limit.
     pub fn keep_limits_continued(self: &Arc<Self>, every: Duration) {
         let hub = self.clone();
         tokio::spawn(async move {
             loop {
                 tokio::time::sleep(every).await;
+                if hub.waits_on_own_account().await {
+                    hub.read_limits(every * 2).await;
+                }
                 for thread_id in hub.limits_reset().await {
                     if let Err(error) = hub.continue_thread(&thread_id, Err(ServerReason::Limit)).await {
                         tracing::warn!(thread_id, "couldn't continue a thread after its usage limit: {error:#}");
@@ -1113,15 +1128,50 @@ impl Hub {
         });
     }
 
-    /// The threads that wait to continue once their usage limit resets, and whose limit has.
+    /// Whether a thread waits for the usage limit of one of the server's own accounts, whose limits
+    /// are then read while it waits.
+    async fn waits_on_own_account(&self) -> bool {
+        let waiting = self
+            .each_thread(|live| {
+                let limited = matches!(live.stored.thread.interruption, Some(Interruption::Limit { .. }));
+                (limited && !self.account_of(&live.stored.thread).gateway).then_some(())
+            })
+            .await;
+        !waiting.is_empty()
+    }
+
+    /// The threads that wait to continue once their usage limit resets, and whose limit has, or whose
+    /// account was refilled before it, as by a reset used elsewhere. The others whose limit has reset
+    /// no longer wait.
     async fn limits_reset(&self) -> Vec<String> {
-        let reset = |live: &Live| match live.stored.thread.interruption {
-            Some(Interruption::Limit { resets_at: Some(at), continues: true }) => at <= now(),
-            _ => false,
-        };
-        let open = |live: &Live| live.stored.thread.archived_at.is_none();
-        self.each_thread(|live| (!live.busy() && reset(live) && open(live)).then(|| live.stored.thread.id.clone()))
-            .await
+        let gateway = self.gateway.get().map(|way| (way.pool(), way.pool_read()));
+        let own = self.limits.lock().await.clone();
+        self.each_thread(|live| {
+            let Some(Interruption::Limit { resets_at, continues }) = live.stored.thread.interruption else {
+                return None;
+            };
+            let lapsed = resets_at.is_some_and(|at| at <= now());
+            let refilled = || {
+                let account = self.account_of(&live.stored.thread);
+                let since =
+                    |read: Option<Instant>| read.zip(live.limited_at).is_some_and(|(read, limited)| read > limited);
+                if account.gateway {
+                    let Some((pool, read)) = &gateway else { return false };
+                    return since(*read) && gateway_refilled(&account, pool);
+                }
+                let Some((read, agents)) = &own else { return false };
+                since(Some(*read)) && own_refilled(&account, agents)
+            };
+            if live.busy() || !(lapsed || refilled()) {
+                return None;
+            }
+            if continues && live.stored.thread.archived_at.is_none() {
+                return Some(live.stored.thread.id.clone());
+            }
+            self.stop_waiting(live);
+            None
+        })
+        .await
     }
 
     /// Wakes the snoozed threads whose time has come, looking every `every`.
@@ -2673,6 +2723,69 @@ impl Hub {
         Message::Limits { agents: self.read_limits(LIMITS_ANSWER_WITHIN).await }
     }
 
+    /// Spends one of the account's limit resets, which ends the wait of its threads its limit stopped.
+    /// What the accounts have used, read again.
+    pub async fn use_limit_reset(self: &Arc<Self>, account_id: &str, reset: &str) -> anyhow::Result<Vec<AgentLimits>> {
+        let account = self.agent_accounts().into_iter().find(|account| account.id == account_id);
+        let account = account.context("There is no such account.")?;
+        if account.gateway {
+            let way = self.gateway.get().context("Your account has no gateway.")?;
+            way.tunnel.use_reset(account.agent, account.pin.clone(), reset).await?;
+            tracing::info!(account = account_id, "used a limit reset");
+            return Ok(self.gateway_limit_reset(account.agent, account.pin.as_deref()).await);
+        }
+        resets::use_own(&account, &self.account_environment(&account), reset).await?;
+        tracing::info!(account = account_id, "used a limit reset");
+        *self.limits.lock().await = None;
+        self.end_limit_waits(|on| on.id == account.id).await;
+        Ok(self.read_limits(LIMITS_ANSWER_WITHIN).await)
+    }
+
+    /// One of the gateway's accounts of `agent` was refilled, `account` or the one its threads of the agent
+    /// start on: the threads on it, and those the gateway places, stop waiting for their limit. What the
+    /// accounts have used, read again.
+    pub async fn gateway_limit_reset(self: &Arc<Self>, agent: Agent, account: Option<&str>) -> Vec<AgentLimits> {
+        self.follow_gateway().await;
+        *self.limits.lock().await = None;
+        self.end_limit_waits(|on| {
+            on.gateway && on.agent == agent && (on.pin.is_none() || on.pin.as_deref() == account)
+        })
+        .await;
+        self.read_limits(LIMITS_ANSWER_WITHIN).await
+    }
+
+    /// Ends the wait of the threads their limit stopped on the accounts that were `refilled`: those to
+    /// continue at its reset continue now, and the others no longer wait.
+    async fn end_limit_waits(self: &Arc<Self>, refilled: impl Fn(&AgentAccount) -> bool) {
+        let continuing = self
+            .each_thread(|live| {
+                let Some(Interruption::Limit { continues, .. }) = live.stored.thread.interruption else { return None };
+                if live.busy() || !refilled(&self.account_of(&live.stored.thread)) {
+                    return None;
+                }
+                if continues && live.stored.thread.archived_at.is_none() {
+                    return Some(live.stored.thread.id.clone());
+                }
+                self.stop_waiting(live);
+                None
+            })
+            .await;
+        for thread_id in continuing {
+            if let Err(error) = self.continue_thread(&thread_id, Err(ServerReason::Limit)).await {
+                tracing::warn!(thread_id, "couldn't continue a thread after a limit reset: {error:#}");
+            }
+        }
+    }
+
+    /// The thread no longer waits for its usage limit.
+    fn stop_waiting(&self, live: &mut Live) {
+        live.stored.thread.interruption = None;
+        if let Err(error) = self.store.save_thread(&live.stored) {
+            tracing::warn!("couldn't keep a thread that no longer waits for its limit: {error:#}");
+        }
+        self.announce(&live.stored.thread);
+    }
+
     /// Reads what the agents' accounts have used of their plans, unless they were read within
     /// `kept_for`. An account that can't be read keeps what it said last time, beside why.
     async fn read_limits(&self, kept_for: Duration) -> Vec<AgentLimits> {
@@ -4082,6 +4195,7 @@ impl Hub {
                 let resets_at = resets_at.or(noted);
                 let continues = self.continue_settings().after_limits && resets_at.is_some_and(|at| at > now());
                 live.stored.thread.interruption = Some(Interruption::Limit { resets_at, continues });
+                live.limited_at = Some(Instant::now());
                 wake(&mut live.stored.thread, true);
                 store.save_thread(&live.stored)?;
                 self.announce(&live.stored.thread);
@@ -4436,6 +4550,7 @@ impl Live {
             mcp_token: None,
             told_ask: None,
             told_limit: false,
+            limited_at: None,
             tools: None,
             deleted: false,
             server_asks: HashMap::new(),
@@ -5524,9 +5639,97 @@ fn news(found: &PullRequestDetail, before: &Seen, now: &Seen) -> Option<String> 
     Some(text.join("\n"))
 }
 
+/// Whether the account a thread waits on reads room in every window again.
+fn own_refilled(account: &AgentAccount, agents: &[AgentLimits]) -> bool {
+    let read = agents.iter().find(|read| read.agent == account.agent && read.account_name == account.name);
+    read.is_some_and(|read| {
+        read.error.is_none()
+            && !read.windows.is_empty()
+            && read.windows.iter().all(|window| window.used_percent < 100.0)
+    })
+}
+
+/// Whether the gateway lists the account a Gateway account's thread waits on as taking requests with
+/// room in every window: the one it is pinned to, or else any of its agent's.
+fn gateway_refilled(account: &AgentAccount, pool: &[GatewayAccount]) -> bool {
+    if !account.gateway {
+        return false;
+    }
+    let ready = |pooled: &&GatewayAccount| {
+        pooled.enabled
+            && pooled.status == AccountStatus::Ready
+            && pooled.windows.iter().all(|window| window.used_percent < 100.0)
+    };
+    let mut on = pool.iter().filter(|pooled| pooled.agent == account.agent);
+    match &account.pin {
+        Some(pin) => on.find(|pooled| &pooled.id == pin).as_ref().is_some_and(ready),
+        None => on.any(|pooled| ready(&pooled)),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_gateway_account_refilled_before_its_reset_ends_the_wait_of_its_threads() {
+        let window = |used_percent| motile_protocol::wire::LimitWindow {
+            label: "Weekly".into(),
+            used_percent,
+            resets_at: None,
+            window_secs: None,
+            warning: false,
+        };
+        let pooled = |id: &str, status: AccountStatus, used: f64| GatewayAccount {
+            id: id.into(),
+            agent: Agent::Claude,
+            name: id.into(),
+            email: None,
+            plan: None,
+            priority: 0,
+            enabled: true,
+            status,
+            windows: vec![window(used)],
+            reset_credits: 0,
+            resets: vec![],
+            threads: 0,
+            next: false,
+        };
+        let folder = std::path::Path::new("/data/gateway");
+        let pinned = agent_accounts::pinned_account(&pooled("motile", AccountStatus::Ready, 0.0), folder);
+        let placed = agent_accounts::gateway_account(Agent::Claude, folder);
+        let resting = AccountStatus::Resting { until: Some(now() + 3600.0) };
+
+        let refilled = [pooled("motile", AccountStatus::Ready, 10.0), pooled("work", resting.clone(), 100.0)];
+        assert!(gateway_refilled(&pinned, &refilled) && gateway_refilled(&placed, &refilled));
+        let still = [pooled("motile", resting.clone(), 100.0), pooled("work", AccountStatus::Ready, 100.0)];
+        assert!(!gateway_refilled(&pinned, &still) && !gateway_refilled(&placed, &still));
+        assert!(!gateway_refilled(&agent_accounts::usual_account(Agent::Claude), &refilled), "not the gateway's");
+    }
+
+    #[test]
+    fn an_own_account_read_with_room_again_ends_the_wait_of_its_threads() {
+        let account = agent_accounts::usual_account(Agent::Codex);
+        let read = |used_percent, error: Option<&str>| AgentLimits {
+            agent: Agent::Codex,
+            account_name: account.name.clone(),
+            account: None,
+            plan: None,
+            windows: vec![motile_protocol::wire::LimitWindow {
+                label: "Weekly".into(),
+                used_percent,
+                resets_at: None,
+                window_secs: None,
+                warning: false,
+            }],
+            resets: vec![],
+            error: error.map(String::from),
+            next_account: None,
+        };
+        assert!(own_refilled(&account, &[read(0.0, None)]));
+        assert!(!own_refilled(&account, &[read(100.0, None)]), "still used up");
+        assert!(!own_refilled(&account, &[read(0.0, Some("Codex didn't answer."))]), "kept from before");
+    }
 
     #[test]
     fn a_new_projects_folder_is_named_after_it() {

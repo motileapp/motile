@@ -29,7 +29,7 @@ use crate::ui::{
     ActionButton, ActionMenu, Chip, CommandBox, CopyButton, InputField, Segmented, Spinner, Switch, Variant, beside,
     card_default, divider_on, icons, logos,
 };
-use crate::usage::limits::{BESIDE_WIDTH, limit_row};
+use crate::usage::limits::{BESIDE_WIDTH, limit_row, resets_row};
 
 type Run = Rc<dyn Fn(&mut Window, &mut App)>;
 
@@ -165,6 +165,11 @@ impl AgentGatewayPage {
             rows.push(
                 div().when(off, |row| row.opacity(c.opacity(Opacity::Disabled))).child(window).into_any_element(),
             );
+        }
+        if let Some(resets) = &account.resets {
+            let resets = crate::store::usage::Resets::from(resets);
+            rows.push(divider_on(Surface::Card, cx).into_any_element());
+            rows.push(resets_row(10_000 + index, &resets, &self.store, |_| {}, cx));
         }
         if let Some(note) = &account.note {
             rows.push(divider_on(Surface::Card, cx).into_any_element());

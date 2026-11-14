@@ -27,6 +27,8 @@ enum Entry {
         danger: bool,
         icon: Option<MenuIcon>,
         tooltip: Option<SharedString>,
+        /// A second line under the label, in a taller row.
+        detail: Option<SharedString>,
         run: Run,
     },
     /// A row that opens another menu beside it.
@@ -70,6 +72,7 @@ impl Menu {
             danger: false,
             icon: None,
             tooltip: None,
+            detail: None,
             run: Rc::new(run),
         }
     }
@@ -93,18 +96,31 @@ impl Menu {
         label: impl Into<SharedString>,
         run: impl Fn(&mut Window, &mut App) + 'static,
     ) -> Self {
-        let Entry::Item { label, enabled, icon, tooltip, run, .. } = Self::entry(label, true, run) else {
+        let Entry::Item { label, enabled, icon, tooltip, detail, run, .. } = Self::entry(label, true, run) else {
             unreachable!()
         };
-        self.push(Entry::Item { label, enabled, checked, danger: false, icon, tooltip, run })
+        self.push(Entry::Item { label, enabled, checked, danger: false, icon, tooltip, detail, run })
     }
 
     /// An item for what can't be taken back, in the danger colour.
     pub fn danger_item(self, label: impl Into<SharedString>, run: impl Fn(&mut Window, &mut App) + 'static) -> Self {
-        let Entry::Item { label, enabled, icon, tooltip, run, .. } = Self::entry(label, true, run) else {
+        let Entry::Item { label, enabled, icon, tooltip, detail, run, .. } = Self::entry(label, true, run) else {
             unreachable!()
         };
-        self.push(Entry::Item { label, enabled, checked: false, danger: true, icon, tooltip, run })
+        self.push(Entry::Item { label, enabled, checked: false, danger: true, icon, tooltip, detail, run })
+    }
+
+    /// An item with a second line under its label that says more of it.
+    pub fn detailed_item(
+        self,
+        enabled: bool,
+        label: impl Into<SharedString>,
+        detail: impl Into<SharedString>,
+        run: impl Fn(&mut Window, &mut App) + 'static,
+    ) -> Self {
+        let Entry::Item { label, icon, tooltip, run, .. } = Self::entry(label, enabled, run) else { unreachable!() };
+        let detail = Some(detail.into());
+        self.push(Entry::Item { label, enabled, checked: false, danger: false, icon, tooltip, detail, run })
     }
 
     /// An item with an image in front, and what the pointer resting on it says.
@@ -123,6 +139,7 @@ impl Menu {
             danger: false,
             icon: Some(icon),
             tooltip,
+            detail: None,
             run: Rc::new(run),
         })
     }
@@ -143,6 +160,7 @@ impl Menu {
             danger: false,
             icon,
             tooltip,
+            detail: None,
             run: Rc::new(run),
         })
     }
@@ -171,6 +189,7 @@ impl Menu {
             danger: true,
             icon: Some(MenuIcon::Symbol(symbol)),
             tooltip: None,
+            detail: None,
             run: Rc::new(run),
         })
     }
@@ -207,7 +226,7 @@ impl Menu {
     /// Opens the menu with its top left corner at `position`, in the window, as a context menu
     /// does: above the point when there is no room under it.
     pub fn show(self, position: Point<Pixels>, window: &mut Window, cx: &mut App) {
-        self.open(position, position.y, false, None, window, cx);
+        self.open(position, position.y, Hang::UnderLeft, None, window, cx);
     }
 
     /// Opens the menu `gap` under the element the anchor tracks, its left edge on the element's,
@@ -215,7 +234,7 @@ impl Menu {
     pub fn show_under(self, anchor: &Anchor, gap: f32, opened: Opened, window: &mut Window, cx: &mut App) {
         let bounds = anchor.bounds();
         let position = point(bounds.origin.x, bounds.bottom() + px(gap));
-        self.open(position, bounds.origin.y - px(gap), false, Some((bounds, opened)), window, cx);
+        self.open(position, bounds.origin.y - px(gap), Hang::UnderLeft, Some((bounds, opened)), window, cx);
     }
 
     /// Opens the menu `gap` under the element the anchor tracks, its right edge on the element's,
@@ -223,14 +242,22 @@ impl Menu {
     pub fn show_under_right(self, anchor: &Anchor, gap: f32, opened: Opened, window: &mut Window, cx: &mut App) {
         let bounds = anchor.bounds();
         let position = point(bounds.right(), bounds.bottom() + px(gap));
-        self.open(position, bounds.origin.y - px(gap), true, Some((bounds, opened)), window, cx);
+        self.open(position, bounds.origin.y - px(gap), Hang::UnderRight, Some((bounds, opened)), window, cx);
+    }
+
+    /// Opens the menu `gap` over the element the anchor tracks, its right edge on the element's, as
+    /// what the composer's buttons open does, or under it when there is no room over it.
+    pub fn show_over_right(self, anchor: &Anchor, gap: f32, opened: Opened, window: &mut Window, cx: &mut App) {
+        let bounds = anchor.bounds();
+        let position = point(bounds.right(), bounds.bottom() + px(gap));
+        self.open(position, bounds.origin.y - px(gap), Hang::OverRight, Some((bounds, opened)), window, cx);
     }
 
     fn open(
         self,
         position: Point<Pixels>,
         above: Pixels,
-        right_aligned: bool,
+        hang: Hang,
         button: Option<(Bounds<Pixels>, Opened)>,
         window: &mut Window,
         cx: &mut App,
@@ -245,7 +272,8 @@ impl Menu {
             menu: Rc::new(self),
             position,
             above,
-            right_aligned,
+            right_aligned: hang != Hang::UnderLeft,
+            upwards: hang == Hang::OverRight,
             focus,
             returns,
             button: button.map(|(bounds, _)| bounds),
@@ -270,7 +298,11 @@ impl Menu {
         let rows: f32 = self
             .entries
             .iter()
-            .map(|entry| if matches!(entry, Entry::Separator) { SEPARATOR_HEIGHT } else { ROW_HEIGHT })
+            .map(|entry| match entry {
+                Entry::Separator => SEPARATOR_HEIGHT,
+                Entry::Item { detail: Some(_), .. } => DETAILED_ROW_HEIGHT,
+                _ => ROW_HEIGHT,
+            })
             .sum();
         rows + 2. * PADDING + 2.
     }
@@ -296,12 +328,23 @@ impl Menu {
     }
 }
 
+/// Where a menu hangs from what opens it: under it, lined up with its left or its right edge, or
+/// over it, lined up with its right edge.
+#[derive(Clone, Copy, PartialEq)]
+enum Hang {
+    UnderLeft,
+    UnderRight,
+    OverRight,
+}
+
 struct Open {
     menu: Rc<Menu>,
     position: Point<Pixels>,
     /// Where the menu's bottom goes when it opens upwards.
     above: Pixels,
     right_aligned: bool,
+    /// It opens upwards when that fits, rather than under.
+    upwards: bool,
     focus: FocusHandle,
     /// What had the keys before the menu opened, which gets them back.
     returns: Option<FocusHandle>,
@@ -541,17 +584,21 @@ const MENU_WIDTH: (f32, f32) = (180., 340.);
 /// The deferred priority of what drops from a control: over the modals too.
 pub const PRIORITY: usize = 100;
 const ROW_HEIGHT: f32 = 28.;
+const DETAILED_ROW_HEIGHT: f32 = 44.;
 const SEPARATOR_HEIGHT: f32 = 9.;
 const PADDING: f32 = 4.;
 /// How far a menu keeps from the window's edges.
 const WINDOW_MARGIN: f32 = 8.;
 
 /// Where the menu's top goes, and how tall it may be: under the point when it fits, else above
-/// where it opens upwards when that fits, else wherever in the window it fits best, scrolling
+/// where it opens upwards when that fits (first, for one that opens upwards), else wherever in the window it fits best, scrolling
 /// when the window is too short for it.
 fn placement(open: &Open, height: f32, window: &Window) -> (Pixels, Pixels) {
     let bottom = crate::window_frame::content_bounds(window).bottom() - px(WINDOW_MARGIN);
     let height = px(height);
+    if open.upwards && open.above - height >= px(WINDOW_MARGIN) {
+        return (open.above - height, height);
+    }
     if open.position.y + height <= bottom {
         return (open.position.y, height);
     }
@@ -837,8 +884,23 @@ fn card(menu: &Menu, level: Level, highlighted: Option<usize>, open_submenu: Opt
                 pick(level, index, window, cx)
             })
             .into_any_element(),
-        Entry::Item { label, enabled, checked, danger, icon, tooltip, .. } => {
+        Entry::Item { label, enabled, checked, danger, icon, tooltip, detail, .. } => {
+            let words = div().flex_1().min_w_0().whitespace_nowrap().overflow_hidden().text_ellipsis();
+            let words = match detail {
+                Some(detail) => div().flex_1().min_w_0().flex().flex_col().child(words.child(label.clone())).child(
+                    div()
+                        .min_w_0()
+                        .whitespace_nowrap()
+                        .overflow_hidden()
+                        .text_ellipsis()
+                        .font_weight(FontWeight::NORMAL)
+                        .text_color(c.muted_foreground)
+                        .child(detail.clone()),
+                ),
+                None => words.child(label.clone()),
+            };
             row(index, highlighted == Some(index) && *enabled)
+                .when(detail.is_some(), |row| row.h(px(DETAILED_ROW_HEIGHT)))
                 .text_color(if *danger { c.destructive } else { c.foreground })
                 .when(!*enabled, |row| row.opacity(c.opacity(Opacity::Disabled)))
                 .when(any_checked, |row| row.child(check_column(*checked)))
@@ -848,9 +910,7 @@ fn card(menu: &Menu, level: Level, highlighted: Option<usize>, open_submenu: Opt
                         MenuIcon::File(path) => crate::ui::logos::icon_file(path.to_string(), IconSize::Sm, cx),
                     }))
                 })
-                .child(
-                    div().flex_1().min_w_0().whitespace_nowrap().overflow_hidden().text_ellipsis().child(label.clone()),
-                )
+                .child(words)
                 .when_some(tooltip.clone(), |row, tooltip| row.tooltip(crate::ui::tooltip(tooltip)))
                 .when(*enabled, |row| {
                     row.on_hover(move |inside, window, cx| hover(level, index, *inside, window, cx))

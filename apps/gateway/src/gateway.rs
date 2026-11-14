@@ -8,8 +8,8 @@ use std::time::Duration;
 
 use anyhow::Context;
 use motile_protocol::gateway_wire::{AccountChange, AccountStatus, Capture, GatewayAccount, GatewayState};
-use motile_protocol::now;
 use motile_protocol::wire::{Agent, AgentLimits};
+use motile_protocol::{now, resets};
 
 use crate::accounts::{Account, Tokens};
 use crate::config::Upstreams;
@@ -39,6 +39,8 @@ pub const CLAUDE_CACHE: f64 = 5.0 * 60.0;
 pub const CLAUDE_LONG_CACHE: f64 = 3600.0;
 const CAPTURE: &str = "capture";
 const ACCOUNT_NAME: &str = "Gateway";
+/// The ChatGPT backend's list of the account's limit resets.
+const CODEX_RESETS: &str = "/wham/rate-limit-reset-credits";
 
 /// What a thread's request asks of `Gateway::choose`.
 pub struct Asked<'a> {
@@ -188,7 +190,7 @@ impl Gateway {
                     tokens: signed.tokens,
                     windows: vec![],
                     read_at: None,
-                    reset_credits: 0,
+                    resets: vec![],
                     created_at: now,
                 };
                 accounts.push(account.clone());
@@ -351,7 +353,7 @@ impl Gateway {
             priority: account.priority,
             windows: &account.windows,
             read_at: account.read_at,
-            reset_credits: account.reset_credits,
+            reset_credits: account.usable_resets(),
             evidence,
         }
     }
@@ -472,8 +474,9 @@ impl Gateway {
                 plan: account.plan,
                 priority: account.priority,
                 enabled: account.enabled,
+                reset_credits: account.resets.iter().map(|reset| reset.left).sum(),
                 windows: account.windows,
-                reset_credits: account.reset_credits,
+                resets: account.resets,
             })
             .collect();
         let (capture, capture_until) = self.capture.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).clone();
@@ -489,33 +492,31 @@ impl Gateway {
         }
     }
 
+    /// The account a new thread of the agent starts on, or the one that rests the shortest while when
+    /// none can take one, and whether one can.
+    fn pool_account(&self, agent: Agent) -> Option<(Account, bool)> {
+        let accounts = self.accounts();
+        let first = self.rank(&accounts, agent, None, None, &[], now()).into_iter().next();
+        if let Some(account) = first.and_then(|id| accounts.iter().find(|account| account.id == id)) {
+            return Some((account.clone(), true));
+        }
+        let usable = accounts.iter().filter(|account| account.agent == agent && account.enabled);
+        usable.min_by(|a, b| rest_end(a).total_cmp(&rest_end(b))).map(|account| (account.clone(), false))
+    }
+
     /// The limits of the account a new thread of the agent starts on, or of the account that rests the
     /// shortest while when none can take one.
     pub fn pool(&self, agent: Agent) -> Option<AgentLimits> {
-        let now = now();
-        let accounts = self.accounts();
-        let first = self.rank(&accounts, agent, None, None, &[], now).into_iter().next();
-        let (account, error) = match first.and_then(|id| accounts.iter().find(|account| account.id == id)) {
-            Some(account) => (account, None),
-            None => {
-                let usable = accounts.iter().filter(|account| account.agent == agent && account.enabled);
-                let resting = usable.min_by(|a, b| rest_end(a).total_cmp(&rest_end(b)))?;
-                (
-                    resting,
-                    Some(format!(
-                        "Every {} account of your gateway is at its limit or signed out.",
-                        agent_title(agent)
-                    )),
-                )
-            }
-        };
+        let (account, ranked) = self.pool_account(agent)?;
+        let error = (!ranked)
+            .then(|| format!("Every {} account of your gateway is at its limit or signed out.", agent_title(agent)));
         Some(AgentLimits {
             agent,
             account_name: ACCOUNT_NAME.to_string(),
             account: account.email.clone(),
             plan: account.plan.clone(),
             windows: account.windows.clone(),
-            reset_credits: account.reset_credits,
+            resets: account.resets.clone(),
             error,
             next_account: Some(account.name.clone()),
         })
@@ -590,30 +591,26 @@ impl Gateway {
         }
     }
 
-    /// Asks the agent's usage page what the account has used.
+    /// Asks the agent's usage page what the account has used, and which limit resets it has.
     pub async fn poll(&self, account: &Account) -> anyhow::Result<()> {
         let Some(tokens) = self.tokens(&account.id).await else { return Ok(()) };
-        let request = match account.agent {
-            Agent::Claude => self
-                .http
-                .get(format!("{}/api/oauth/usage", self.upstreams.anthropic))
-                .header("anthropic-beta", oauth::CLAUDE_OAUTH_BETA),
-            Agent::Codex => self
-                .http
-                .get(format!("{}/wham/usage", self.upstreams.chatgpt))
-                .header("chatgpt-account-id", tokens.chatgpt_account.clone().unwrap_or_default()),
+        let path = match account.agent {
+            Agent::Claude => format!("/api/oauth/usage?{}", resets::CLAUDE_USAGE_QUERY),
+            Agent::Codex => "/wham/usage".to_string(),
         };
-        let response = request.bearer_auth(&tokens.access).timeout(Duration::from_secs(15)).send().await?;
-        if response.status() == reqwest::StatusCode::UNAUTHORIZED {
-            let _ = self.renew(&account.id, &tokens.access).await;
-            anyhow::bail!("its token was refused");
-        }
-        let usage: serde_json::Value = response.error_for_status()?.json().await?;
+        let usage = self.ask(account, &tokens, reqwest::Method::GET, &path, None).await?;
         let now = now();
         match account.agent {
-            Agent::Claude => self.observe(&account.id, &limits::from_claude_usage(&usage), now),
+            Agent::Claude => self.observe(&account.id, &limits::from_claude_usage(&usage, now), now),
             Agent::Codex => {
-                let (reading, plan) = limits::from_codex_usage(&usage);
+                let (mut reading, plan) = limits::from_codex_usage(&usage);
+                if reading.resets.as_ref().is_some_and(|resets| !resets.is_empty()) {
+                    let listed = self.ask(account, &tokens, reqwest::Method::GET, CODEX_RESETS, None).await;
+                    match listed {
+                        Ok(listed) => reading.resets = Some(resets::codex(&listed)),
+                        Err(error) => tracing::debug!(account = account.id, "couldn't list its resets: {error:#}"),
+                    }
+                }
                 self.observe(&account.id, &reading, now);
                 if plan.is_some() {
                     self.change(&account.id, |account| account.plan = plan);
@@ -621,6 +618,85 @@ impl Gateway {
             }
         }
         Ok(())
+    }
+
+    /// Spends one of the account's limit resets, then reads its limits again. One that rested at its
+    /// limit takes threads again.
+    pub async fn use_reset(&self, id: &str, reset: &str) -> anyhow::Result<()> {
+        let account = self.account(id).context("There is no such account.")?;
+        let held = account.resets.iter().find(|held| held.id == reset);
+        anyhow::ensure!(held.is_some_and(|held| held.left > 0), "This account no longer has that reset.");
+        let tokens = self.tokens(id).await.context("Sign in to this account again to use its resets.")?;
+        let request = uuid::Uuid::new_v4().to_string();
+        let used = match account.agent {
+            Agent::Claude => {
+                let organization = id.rsplit('/').next().unwrap_or(id);
+                let path = format!("/api/organizations/{organization}/reset_rate_limits");
+                let body = resets::claude_claim(reset, &request);
+                let answer = self.ask(&account, &tokens, reqwest::Method::POST, &path, Some(body)).await?;
+                resets::claude_claimed(&answer)
+            }
+            Agent::Codex => {
+                let body = resets::codex_consume(reset, &request);
+                let path = format!("{CODEX_RESETS}/consume");
+                let answer = self.ask(&account, &tokens, reqwest::Method::POST, &path, Some(body)).await?;
+                resets::codex_consumed(answer["code"].as_str().unwrap_or_default())
+            }
+        };
+        if let Err(error) = self.poll(&account).await {
+            tracing::debug!(account = id, "couldn't read its limits after a reset: {error:#}");
+        }
+        used.map_err(anyhow::Error::msg)?;
+        tracing::info!(account = id, "used a limit reset");
+        self.change(id, |account| {
+            if matches!(account.status, AccountStatus::Resting { .. }) {
+                account.status = AccountStatus::Ready;
+            }
+        });
+        Ok(())
+    }
+
+    /// The account a server's reset is for: the one its threads are pinned to, or else the one whose
+    /// limits its Gateway account shows.
+    pub fn reset_account(&self, agent: Agent, pinned: Option<&str>) -> Option<String> {
+        match pinned {
+            Some(pinned) => Some(pinned.to_string()),
+            None => self.pool_account(agent).map(|(account, _)| account.id),
+        }
+    }
+
+    /// The agent's backend's JSON answer to a request of the account's.
+    async fn ask(
+        &self,
+        account: &Account,
+        tokens: &Tokens,
+        method: reqwest::Method,
+        path: &str,
+        body: Option<serde_json::Value>,
+    ) -> anyhow::Result<serde_json::Value> {
+        let request = match account.agent {
+            Agent::Claude => self
+                .http
+                .request(method, format!("{}{path}", self.upstreams.anthropic))
+                .header("anthropic-beta", oauth::CLAUDE_OAUTH_BETA),
+            Agent::Codex => self
+                .http
+                .request(method, format!("{}{path}", self.upstreams.chatgpt))
+                .header("chatgpt-account-id", tokens.chatgpt_account.clone().unwrap_or_default()),
+        };
+        let request = match body {
+            Some(body) => request.json(&body),
+            None => request,
+        };
+        let response = request.bearer_auth(&tokens.access).timeout(Duration::from_secs(25)).send().await?;
+        if response.status() == reqwest::StatusCode::UNAUTHORIZED {
+            let _ = self.renew(&account.id, &tokens.access).await;
+            anyhow::bail!("Its token was refused. Try again in a moment.");
+        }
+        if response.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
+            anyhow::bail!("{} is turning requests away for now. Try again in a moment.", agent_title(account.agent));
+        }
+        Ok(response.error_for_status()?.json().await?)
     }
 }
 

@@ -259,14 +259,8 @@ impl Hub {
                     })
                     .collect();
                 let read = limits.iter().find(|read| read.agent == account.agent && read.account_name == account.name);
-                let windows = read.map(|read| {
-                    let window = |window: &motile_protocol::wire::LimitWindow| {
-                        let resets_at = window.resets_at.and_then(|at| chrono::DateTime::from_timestamp(at as i64, 0));
-                        json!({"window": window.label, "used_percent": window.used_percent.round(),
-                               "resets_at": resets_at.map(|at| at.to_rfc3339())})
-                    };
-                    read.windows.iter().map(window).collect::<Vec<_>>()
-                });
+                let windows = read.map(|read| read.windows.iter().map(window_json).collect::<Vec<_>>());
+                let resets: Vec<Value> = read.into_iter().flat_map(|read| &read.resets).map(reset_json).collect();
                 json!({
                     "id": account.id,
                     "name": account.name,
@@ -277,6 +271,7 @@ impl Hub {
                     "installed": self.environment.executable(account.agent).is_some(),
                     "models": models,
                     "limits": windows,
+                    "resets": resets,
                     "gateway": account.gateway,
                     "pinned": account.pin.is_some(),
                 })
@@ -287,6 +282,39 @@ impl Hub {
             true => Ok(json!({ "accounts": accounts, "gateway": GATEWAY_ACCOUNTS })),
             false => Ok(json!({ "accounts": accounts })),
         }
+    }
+
+    /// Spends one of the limit resets of the account `named`, or the caller's, `reset` or the first
+    /// it can use now. What the account has used and the resets it has left, read again.
+    pub async fn use_reset_for(
+        self: &Arc<Self>,
+        caller: &str,
+        named: Option<&str>,
+        reset: Option<&str>,
+    ) -> anyhow::Result<Value> {
+        let own = self.thread(caller).await.context("Your thread is no longer on your server.")?;
+        let account = self.pick_account(&own, named, None)?;
+        let held = |agents: &[motile_protocol::wire::AgentLimits]| {
+            let read = agents.iter().find(|read| read.agent == account.agent && read.account_name == account.name);
+            read.map(|read| read.resets.clone()).unwrap_or_default()
+        };
+        let reset = match reset.map(str::trim).filter(|reset| !reset.is_empty()) {
+            Some(reset) => reset.to_string(),
+            None => {
+                let agents = match self.limits().await {
+                    Message::Limits { agents } => agents,
+                    _ => Vec::new(),
+                };
+                let usable = held(&agents).into_iter().find(|reset| reset.usable && reset.left > 0);
+                let usable = usable.with_context(|| format!("{} has no reset it can use now.", account.name))?;
+                usable.id
+            }
+        };
+        let agents = self.use_limit_reset(&account.id, &reset).await?;
+        let read = agents.iter().find(|read| read.agent == account.agent && read.account_name == account.name);
+        let windows = read.map(|read| read.windows.iter().map(window_json).collect::<Vec<_>>());
+        let left: Vec<Value> = held(&agents).iter().map(reset_json).collect();
+        Ok(json!({"used": true, "account": account.name, "limits": windows, "resets": left}))
     }
 
     /// Starts an agent in a thread of its own for the caller's agent, which goes on meanwhile
@@ -1127,6 +1155,26 @@ pub(super) fn pick_access(own: Access, wanted: Option<&str>) -> anyhow::Result<A
         bail!("An agent you start can't have more access than you, and you have {named}.");
     }
     Ok(access)
+}
+
+fn window_json(window: &motile_protocol::wire::LimitWindow) -> Value {
+    let resets_at = window.resets_at.and_then(|at| chrono::DateTime::from_timestamp(at as i64, 0));
+    json!({"window": window.label, "used_percent": window.used_percent.round(),
+           "resets_at": resets_at.map(|at| at.to_rfc3339())})
+}
+
+fn reset_json(reset: &motile_protocol::wire::LimitReset) -> Value {
+    use motile_protocol::wire::ResetKind;
+    let refills = match &reset.kind {
+        ResetKind::Session => "the session limit".to_string(),
+        ResetKind::Weekly => "the weekly limit".to_string(),
+        ResetKind::Full => "every limit".to_string(),
+        ResetKind::Model { name } => format!("{name}'s weekly allowance"),
+        ResetKind::Other => "some limits".to_string(),
+    };
+    let expires_at = reset.expires_at.and_then(|at| chrono::DateTime::from_timestamp(at as i64, 0));
+    json!({"id": reset.id, "refills": refills, "left": reset.left, "expires_at": expires_at.map(|at| at.to_rfc3339()),
+           "usable_now": reset.usable, "only_at_a_limit": reset.needs_limit})
 }
 
 #[cfg(test)]

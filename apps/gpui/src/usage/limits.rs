@@ -1,20 +1,22 @@
 //! How much of their plans the agents' accounts have used: a section for each account, its windows in
-//! one card, each with a bar of what was used.
+//! one card, each with a bar of what was used, and the limit resets it holds.
 
 use gpui_kit::prelude::*;
 use gpui_kit::*;
 
 use crate::models::agent_name;
-use crate::store::usage::{LimitWindow, LimitsReport, LimitsSection, Pace, Tone};
-use crate::theme::{IconSize, Layer, Opacity, Radius, Surface, TextSize, colors};
-use crate::ui::{Chip, card_default, divider_on, icons, logos, tabular_numbers, tooltip};
+use crate::store::Store;
+use crate::store::usage::{LimitWindow, LimitsReport, LimitsSection, Pace, Resets, Tone};
+use crate::theme::{ControlSize, IconSize, Layer, Opacity, Radius, Surface, TextSize, colors};
+use crate::ui::menu::Menu;
+use crate::ui::{ActionMenu, Chip, Variant, card_default, divider_on, icons, logos, tabular_numbers, tooltip};
 
 /// Narrower than this, a window puts its bar under its numbers.
 pub const BESIDE_WIDTH: f32 = 520.;
 const BAR_HEIGHT: f32 = 28.;
 const NUMBERS_WIDTH: f32 = 168.;
 
-pub fn limits(report: &LimitsReport, width: f32, cx: &App) -> AnyElement {
+pub fn limits(report: &LimitsReport, store: &Entity<Store>, width: f32, cx: &App) -> AnyElement {
     let c = colors(cx);
     let beside = width >= BESIDE_WIDTH;
     div()
@@ -27,13 +29,18 @@ pub fn limits(report: &LimitsReport, width: f32, cx: &App) -> AnyElement {
         .children(report.sections.iter().enumerate().map(|(index, section)| {
             let windows = (!section.windows.is_empty()).then(|| {
                 let last = section.windows.len() - 1;
-                card_default(div().flex().flex_col(), cx).children(section.windows.iter().enumerate().flat_map(
-                    |(place, window)| {
+                let resets = section.resets.as_ref().map(|resets| {
+                    let reload = |store: &mut Store| store.refresh_usage();
+                    let row = resets_row(index, resets, store, reload, cx);
+                    [divider_on(Surface::Card, cx).into_any_element(), row]
+                });
+                card_default(div().flex().flex_col(), cx)
+                    .children(section.windows.iter().enumerate().flat_map(|(place, window)| {
                         let row = limit_row((index, place), window, beside, cx);
                         let divider = (place < last).then(|| divider_on(Surface::Card, cx).into_any_element());
                         std::iter::once(row).chain(divider)
-                    },
-                ))
+                    }))
+                    .children(resets.into_iter().flatten())
             });
             div()
                 .flex()
@@ -161,39 +168,21 @@ pub fn limit_row(id: (usize, usize), window: &LimitWindow, beside: bool, cx: &Ap
 }
 
 /// What was used of a window as the part of a bar it fills, cut by the bar's corners, and at its end
-/// when the window starts over and the resets the account may use.
+/// when the window starts over.
 fn limit_bar(id: (usize, usize), window: &LimitWindow, tone: Hsla, cx: &App) -> Div {
     let c = colors(cx);
     let used = (window.used_percent / 100.).clamp(0., 1.) as f32;
-    let credits = window.reset_credits;
-    let end = div()
-        .flex()
-        .items_center()
-        .gap(px(6.))
-        .text_size(TextSize::Xs)
-        .font_weight(FontWeight::MEDIUM)
-        .when_some(window.resets_in.clone(), |end, resets_in| {
+    let end = div().text_size(TextSize::Xs).font_weight(FontWeight::MEDIUM).when_some(
+        window.resets_in.clone(),
+        |end, resets_in| {
             end.child(
                 div()
                     .id(("resets", id.0 * 100 + id.1))
                     .child(resets_in.clone())
                     .tooltip(tooltip(format!("Starts over in {resets_in}"))),
             )
-        })
-        .when(window.resets_in.is_some() && credits > 0, |end| end.child("·"))
-        .when(credits > 0, |end| {
-            let help = if credits == 1 { "1 reset to use".to_string() } else { format!("{credits} resets to use") };
-            end.child(
-                div()
-                    .id(("credits", id.0 * 100 + id.1))
-                    .flex()
-                    .items_center()
-                    .gap(px(3.))
-                    .child(icons::symbol("ticket", IconSize::Sm))
-                    .child(credits.to_string())
-                    .tooltip(tooltip(help)),
-            )
-        });
+        },
+    );
     div()
         .relative()
         .flex_1()
@@ -259,4 +248,75 @@ fn used_fill(used: f32, color: Hsla) -> Canvas<()> {
     )
     .absolute()
     .size_full()
+}
+
+/// The limit resets an account holds, under its windows: how many over when the first expires, and
+/// the menu that uses one. `used` follows once one is used.
+pub fn resets_row(index: usize, resets: &Resets, store: &Entity<Store>, used: fn(&mut Store), cx: &App) -> AnyElement {
+    let c = colors(cx);
+    let words = div()
+        .flex_1()
+        .min_w_0()
+        .flex()
+        .flex_col()
+        .gap(px(2.))
+        .whitespace_nowrap()
+        .overflow_hidden()
+        .child(
+            div()
+                .text_size(TextSize::Sm)
+                .font_weight(FontWeight::MEDIUM)
+                .text_color(c.foreground)
+                .child(resets.title.clone()),
+        )
+        .when_some(resets.detail.clone(), |words, detail| {
+            words.child(div().text_size(TextSize::Xs).text_ellipsis().text_color(c.muted_foreground).child(detail))
+        });
+    div()
+        .pl(px(16.))
+        .pr(px(12.))
+        .py(px(12.))
+        .flex()
+        .items_center()
+        .gap(px(10.))
+        .child(icons::symbol("ticket", IconSize::Md).text_color(c.foreground))
+        .child(words)
+        .child(
+            reset_menu(index, resets, store, Variant::Outline, None, used, cx)
+                .button(|button| button.size(ControlSize::Large)),
+        )
+        .into_any_element()
+}
+
+/// The menu that uses one of an account's limit resets: each kind with what it refills, how many are
+/// left and when they expire. One that waits for a limit is offered at one: in `thread`, which its
+/// limit stopped.
+pub fn reset_menu(
+    index: usize,
+    resets: &Resets,
+    store: &Entity<Store>,
+    variant: Variant,
+    thread: Option<String>,
+    used: fn(&mut Store),
+    cx: &App,
+) -> ActionMenu {
+    let pending = store.read(cx).using_reset(resets);
+    let (handle, resets) = (store.clone(), resets.clone());
+    let at_limit = thread.is_some();
+    ActionMenu::new(("use-reset", index), "Use Reset", move |_, _| {
+        resets.options.iter().fold(Menu::new(), |menu, option| {
+            let usable = option.usable || (at_limit && option.at_limit);
+            let detail =
+                if usable { option.detail.clone() } else { option.note.clone().unwrap_or(option.detail.clone()) };
+            let (store, resets, picked) = (handle.clone(), resets.clone(), option.id.clone());
+            menu.detailed_item(usable, option.title.clone(), detail, move |_, cx| {
+                let (resets, picked) = (resets.clone(), picked.clone());
+                store.update(cx, |store, cx| {
+                    store.use_limit_reset(&resets, &picked, used);
+                    cx.notify();
+                })
+            })
+        })
+    })
+    .button(|button| button.variant(variant).size(ControlSize::Regular).pending(pending))
 }

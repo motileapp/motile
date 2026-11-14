@@ -268,6 +268,8 @@ struct Server: Equatable, Identifiable {
     let roomierAccounts: [String: [String: String]]
     /// What each agent account has used of its limits, by account id.
     let accountLimits: [String: [LimitsReport.Window]]
+    /// The limit resets of each account that holds some, by account id.
+    let accountResets: [String: LimitResets]
     /// The name of the gateway's account whose limits a Gateway account's are, by account id.
     let nextAccounts: [String: String]
     /// Its agents' accounts' ids, the one a new thread would start on first.
@@ -292,6 +294,7 @@ struct Server: Equatable, Identifiable {
         roomierAccounts = json["roomier_accounts"] as? [String: [String: String]] ?? [:]
         accountLimits = (json["account_limits"] as? [String: [JSON]] ?? [:]).mapValues { $0.map(LimitsReport.Window.init(json:)) }
         nextAccounts = json["next_accounts"] as? [String: String] ?? [:]
+        accountResets = (json["account_resets"] as? [String: JSON] ?? [:]).mapValues(LimitResets.init(json:))
         accountsByRoom = json.strings("accounts_by_room")
         sync = json.object("sync").map(ServerSync.init(json:))
         let info = json.object("info")
@@ -1718,6 +1721,7 @@ struct LimitsReport {
         let note: String?
         /// One of the gateway's accounts, which may be signed in on `servers` too.
         let gateway: Bool
+        let resets: LimitResets?
 
         var id: String { "\(agent.rawValue)/\(name ?? "")/\(account ?? servers.joined(separator: ","))/\(note ?? "")" }
     }
@@ -1738,7 +1742,6 @@ struct LimitsReport {
         let resetsIn: String?
         let pace: Pace?
         let tone: Tone
-        let resetCredits: Int
 
         var id: String { label }
 
@@ -1749,7 +1752,6 @@ struct LimitsReport {
             resetsIn = json.optionalString("resets_in")
             pace = json.optionalString("pace").flatMap(Pace.init)
             tone = Tone(rawValue: json.string("tone")) ?? .success
-            resetCredits = json.int("reset_credits")
         }
     }
 
@@ -1763,9 +1765,68 @@ struct LimitsReport {
                 account: section.optionalString("account"),
                 plan: section.optionalString("plan"), servers: section.strings("servers"),
                 windows: section.objects("windows").map(Window.init(json:)),
-                note: section.optionalString("note"), gateway: section.bool("gateway"))
+                note: section.optionalString("note"), gateway: section.bool("gateway"),
+                resets: section.object("resets").map(LimitResets.init(json:)))
         }
         notes = json.strings("notes")
+    }
+}
+
+/// The limit resets an account holds, one option for each kind, and who uses one: a server for one of
+/// its accounts, or the gateway for one of its own.
+struct LimitResets: Equatable {
+    struct Option: Identifiable, Equatable {
+        let id: String
+        /// "Weekly reset".
+        let title: String
+        /// "Refills the weekly limit · 2 left · expires in 9 days".
+        let detail: String
+        let usable: Bool
+        /// It can only be used at a limit it refills.
+        let atLimit: Bool
+        /// Why it can't be used now.
+        let note: String?
+
+        init(json: JSON) {
+            id = json.string("id")
+            title = json.string("title")
+            detail = json.string("detail")
+            usable = json.bool("usable")
+            atLimit = json.bool("at_limit")
+            note = json.optionalString("note")
+        }
+    }
+
+    enum Target: Equatable {
+        case server(serverID: String, accountID: String)
+        case gateway(accountID: String)
+
+        init(json: JSON) {
+            self = json.string("type") == "gateway"
+                ? .gateway(accountID: json.string("account_id"))
+                : .server(serverID: json.string("server_id"), accountID: json.string("account_id"))
+        }
+
+        var json: JSON {
+            switch self {
+            case .server(let serverID, let accountID): ["type": "server", "server_id": serverID, "account_id": accountID]
+            case .gateway(let accountID): ["type": "gateway", "account_id": accountID]
+            }
+        }
+    }
+
+    /// "2 resets".
+    let title: String
+    /// "First expires in 9 days".
+    let detail: String?
+    let options: [Option]
+    let target: Target
+
+    init(json: JSON) {
+        title = json.string("title")
+        detail = json.optionalString("detail")
+        options = json.objects("options").map(Option.init(json:))
+        target = Target(json: json.object("target") ?? [:])
     }
 }
 

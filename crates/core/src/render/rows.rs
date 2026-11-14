@@ -1664,6 +1664,9 @@ fn describe(call: &ToolCall, cwd: &str, at: f64) -> Tool {
         "mcp__motile__list_accounts" => {
             ("tool", verb("Listing", "Listed"), "the accounts".to_string(), String::new(), String::new())
         }
+        "mcp__motile__use_limit_reset" => {
+            ("tool", verb("Using", "Used"), "a limit reset".to_string(), String::new(), String::new())
+        }
         "mcp__motile__agent_status" => {
             let waits = input["wait"].as_bool().unwrap_or(false);
             let (doing, did) = if waits { ("Waiting for", "Waited for") } else { ("Checking on", "Checked on") };

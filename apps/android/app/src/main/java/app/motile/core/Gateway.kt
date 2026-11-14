@@ -88,6 +88,7 @@ data class GatewayAccount(
     val windows: List<LimitsReport.Window>,
     /** Why there are no windows. */
     val note: String?,
+    val resets: LimitResets?,
     /** "3 threads": the threads on it now. None when none is. */
     val threadsText: String?,
 ) {
@@ -114,6 +115,7 @@ data class GatewayAccount(
             next = json.bool("next"),
             windows = json.objects("windows").map(LimitsReport::Window),
             note = json.optionalString("note"),
+            resets = json.obj("resets")?.let(::LimitResets),
             threadsText = json.optionalString("threads_text"),
         )
     }

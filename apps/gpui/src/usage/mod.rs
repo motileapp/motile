@@ -199,7 +199,7 @@ impl UsageRoute {
             return match &store.usage.limits {
                 Loaded::Loading => loading(),
                 Loaded::Failed(message) => note(message.clone(), cx),
-                Loaded::Ready(report) => limits::limits(report, content_width, cx),
+                Loaded::Ready(report) => limits::limits(report, &self.store, content_width, cx),
             };
         }
         if store.usage_tab() == UsageTab::Activity {

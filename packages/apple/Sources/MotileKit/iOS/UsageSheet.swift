@@ -35,22 +35,28 @@ struct UsageSheet: View {
 
     private func page(_ tab: UsageModel.Tab) -> some View {
         NavigationStack {
-            UsageContent(model: model, shown: tab, margin: Self.margin, top: 4)
-                .refreshable { await model.refreshed() }
-                .dropdowns()
-                .background(Color.themeBackground.ignoresSafeArea())
-                .navigationTitle("Usage")
-                .navigationBarTitleDisplayMode(.inline)
-                .serversSubtitle(picksServers ? model.serversLabel(among: store.usageServers) : nil)
-                .toolbar {
-                    GlassToolbarItem(placement: .topBarLeading) { SheetCloseButton() }
-                    if tab != .limits || picksServers {
-                        GlassToolbarItem(placement: .topBarTrailing) {
-                            if tab != .limits { period }
-                            if picksServers { servers }
-                        }
+            Group {
+                if tab == .limits {
+                    LimitsListIOS(model: model)
+                } else {
+                    UsageContent(model: model, shown: tab, margin: Self.margin, top: 4)
+                        .refreshable { await model.refreshed() }
+                }
+            }
+            .dropdowns()
+            .background(Color.themeBackground.ignoresSafeArea())
+            .navigationTitle("Usage")
+            .navigationBarTitleDisplayMode(.inline)
+            .serversSubtitle(picksServers ? model.serversLabel(among: store.usageServers) : nil)
+            .toolbar {
+                GlassToolbarItem(placement: .topBarLeading) { SheetCloseButton() }
+                if tab != .limits || picksServers {
+                    GlassToolbarItem(placement: .topBarTrailing) {
+                        if tab != .limits { period }
+                        if picksServers { servers }
                     }
                 }
+            }
         }
     }
 

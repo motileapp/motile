@@ -1,12 +1,14 @@
 import SwiftUI
 
 /// How much of their plans the agents' accounts have used: a section for each account, its windows
-/// in one card, each with a bar of what was used.
+/// in one card, each with a bar of what was used, and the limit resets it holds.
 struct LimitsView: View {
     /// Narrower than this, a window puts its bar under its numbers.
     static let besideWidth: CGFloat = 520
 
     let report: LimitsReport
+    /// After a reset was used.
+    var reload: (() -> Void)?
     @State private var width: CGFloat = 0
 
     var body: some View {
@@ -33,6 +35,10 @@ struct LimitsView: View {
                                 if window.id != section.windows.last?.id {
                                     ThemeDivider()
                                 }
+                            }
+                            if let resets = section.resets {
+                                ThemeDivider()
+                                ResetsRow(resets: resets, used: reload)
                             }
                         }
                         .card()
@@ -169,7 +175,7 @@ struct LimitRow: View {
 }
 
 /// What was used of a window as the part of a bar it fills, cut by the bar's corners, and at its end
-/// when the window starts over and the resets the account may use.
+/// when the window starts over.
 private struct LimitBar: View {
     private static let height: CGFloat = 28
 
@@ -208,22 +214,10 @@ private struct LimitBar: View {
     }
 
     @ViewBuilder private var end: some View {
-        HStack(spacing: 6) {
-            if let resetsIn = window.resetsIn {
-                Text(resetsIn)
-                    .tooltip("Starts over in \(resetsIn)")
-            }
-            if window.resetsIn != nil, window.resetCredits > 0 {
-                Text("·")
-            }
-            if window.resetCredits > 0 {
-                HStack(spacing: 3) {
-                    Image(.ticket, size: .sm)
-                    Text("\(window.resetCredits)")
-                }
-                .tooltip(window.resetCredits == 1 ? "1 reset to use" : "\(window.resetCredits) resets to use")
-            }
+        if let resetsIn = window.resetsIn {
+            Text(resetsIn)
+                .font(.ui(.xs, weight: .medium))
+                .tooltip("Starts over in \(resetsIn)")
         }
-        .font(.ui(.xs, weight: .medium))
     }
 }

@@ -30,11 +30,13 @@ import app.motile.ui.ActionButton
 import app.motile.ui.ButtonVariant
 import app.motile.ui.Icon
 import app.motile.ui.Text
+import app.motile.usage.ResetMenu
 import kotlinx.coroutines.delay
 
 /**
  * Why the agent stopped before it finished, above the composer: the usage limit, with when the
- * thread goes on by itself, or a restart of the server. The agent is continued from here.
+ * thread goes on by itself and the account's resets to refill it now, or a restart of the server,
+ * whose agent is continued from here.
  */
 @Composable
 fun InterruptionStrip(interruption: Interruption) {
@@ -61,6 +63,11 @@ fun InterruptionStrip(interruption: Interruption) {
             },
             { Text(detail, size = TextSize.Xs, color = palette.warning, maxLines = 1, overflow = TextOverflow.MiddleEllipsis) },
         )
+        val thread = store.selectedThread
+        val resets = thread?.takeIf { interruption is Interruption.Limit }?.let(store::resets)
+            ?.takeIf { held -> held.options.any { it.usable || it.atLimit } }
+        // As the strip's other controls, filled where a control isn't lit under the pointer.
+        if (thread != null && resets != null) ResetMenu(resets, ButtonVariant.Secondary, ComposerStrip.margin, thread = thread)
         val button = @Composable { title: String, help: String, action: () -> Unit ->
             ActionButton(title, help = help, variant = ButtonVariant.Ghost, margin = ComposerStrip.margin, onClick = action)
         }
@@ -71,8 +78,7 @@ fun InterruptionStrip(interruption: Interruption) {
                 } else {
                     button("Continue at Reset", "Continue the agent once the limit resets") { store.setContinues(true) }
                 }
-            interruption is Interruption.Limit && interruption.resetsAt != null && interruption.continues -> Unit
-            else -> button("Continue", "Have the agent go on where it left off") { store.continueThread() }
+            interruption is Interruption.Restart -> button("Continue", "Have the agent go on where it left off") { store.continueThread() }
         }
     }
 }

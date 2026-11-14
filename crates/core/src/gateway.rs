@@ -360,6 +360,7 @@ pub struct AccountRow {
     pub windows: Vec<Row>,
     /// Why there are no windows.
     pub note: Option<String>,
+    pub resets: Option<limits::Resets>,
     pub threads: u32,
     /// "1 thread", "3 threads": the threads on it now. None when none is.
     pub threads_text: Option<String>,
@@ -470,8 +471,8 @@ fn account_row(account: &GatewayAccount, now: f64, utc_offset_secs: i32) -> Acco
         AccountStatus::Resting { until: Some(_) } => (AccountState::Ready, None),
         AccountStatus::Resting { until: None } => (AccountState::Resting, Some("Resting".to_string())),
     };
-    let windows: Vec<Row> =
-        account.windows.iter().map(|window| limits::row(window, account.reset_credits, now)).collect();
+    let windows: Vec<Row> = account.windows.iter().map(|window| limits::row(window, now)).collect();
+    let target = limits::ResetTarget::Gateway { account_id: account.id.clone() };
     AccountRow {
         id: account.id.clone(),
         agent: account.agent,
@@ -485,6 +486,7 @@ fn account_row(account: &GatewayAccount, now: f64, utc_offset_secs: i32) -> Acco
         enabled: account.enabled,
         next: account.next,
         note: limits::account_note(account, &windows),
+        resets: limits::resets(&account.resets, target, now),
         windows,
         threads: account.threads,
         threads_text: match account.threads {
@@ -805,6 +807,7 @@ mod tests {
             status: AccountStatus::Ready,
             windows: vec![],
             reset_credits: 0,
+            resets: vec![],
             threads: 0,
             next: false,
         }

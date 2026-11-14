@@ -21,6 +21,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/0001_init.sql"),
     include_str!("../migrations/0002_mcp_servers.sql"),
     include_str!("../migrations/0003_tool_permissions.sql"),
+    include_str!("../migrations/0004_resets.sql"),
 ];
 const READINGS_KEPT: f64 = 48.0 * 3600.0;
 const LOG_KEPT: f64 = 30.0 * 86400.0;
@@ -97,7 +98,7 @@ impl Store {
     pub fn accounts(&self, seal: &Seal) -> anyhow::Result<Vec<Account>> {
         let connection = self.connection();
         let mut statement = connection.prepare(
-            "SELECT id, agent, name, email, plan, priority, enabled, status, tokens, windows, read_at, reset_credits,
+            "SELECT id, agent, name, email, plan, priority, enabled, status, tokens, windows, read_at, resets,
                     created_at FROM accounts ORDER BY created_at",
         )?;
         let rows = statement.query_map([], |row| {
@@ -121,10 +122,10 @@ impl Store {
         let tokens = seal.seal(&serde_json::to_vec(&account.tokens)?);
         self.connection().execute(
             "INSERT INTO accounts (id, agent, name, email, plan, priority, enabled, status, tokens, windows, read_at,
-                                 reset_credits, created_at)
+                                 resets, created_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
              ON CONFLICT (id) DO UPDATE SET agent = ?2, name = ?3, email = ?4, plan = ?5, priority = ?6, enabled = ?7,
-                status = ?8, tokens = ?9, windows = ?10, read_at = ?11, reset_credits = ?12",
+                status = ?8, tokens = ?9, windows = ?10, read_at = ?11, resets = ?12",
             params![
                 account.id,
                 agent_name(account.agent),
@@ -137,7 +138,7 @@ impl Store {
                 tokens,
                 serde_json::to_string(&account.windows)?,
                 account.read_at,
-                account.reset_credits,
+                serde_json::to_string(&account.resets)?,
                 account.created_at,
             ],
         )?;
@@ -554,7 +555,7 @@ fn account_row(row: &Row) -> rusqlite::Result<Account> {
         tokens: Tokens::default(),
         windows: serde_json::from_str(&json(9)?).unwrap_or_default(),
         read_at: row.get(10)?,
-        reset_credits: row.get(11)?,
+        resets: serde_json::from_str(&json(11)?).unwrap_or_default(),
         created_at: row.get(12)?,
     })
 }

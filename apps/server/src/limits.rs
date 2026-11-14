@@ -1,6 +1,6 @@
 //! How much of their plans the agents' accounts have used, as their CLIs say: `codex app-server`
 //! answers `account/read` and `account/rateLimits/read`, and Claude Code answers the `initialize`
-//! and `get_usage` control requests. Neither spends tokens.
+//! and `get_usage` control requests. Neither spends tokens. Claude's resets are asked of Claude.
 
 use motile_protocol::gateway_wire::GatewayAccount;
 use motile_protocol::wire::{Agent, AgentAccount, AgentLimits, LimitWindow};
@@ -11,7 +11,7 @@ use crate::agents::environment::Environment;
 
 const SESSION_SECS: u64 = 5 * 3600;
 const WEEK_SECS: u64 = 7 * 86400;
-const CLAUDE_ARGUMENTS: [&str; 3] = ["--settings", r#"{"disableAllHooks":true}"#, "--strict-mcp-config"];
+pub(crate) const CLAUDE_ARGUMENTS: [&str; 3] = ["--settings", r#"{"disableAllHooks":true}"#, "--strict-mcp-config"];
 
 /// What each account of the installed agents has used, each read in its own environment.
 pub async fn read(accounts: Vec<(AgentAccount, Environment)>) -> Vec<AgentLimits> {
@@ -48,7 +48,7 @@ pub fn pooled(account: &AgentAccount, read: anyhow::Result<Option<AgentLimits>>)
         account: None,
         plan: None,
         windows: vec![],
-        reset_credits: 0,
+        resets: vec![],
         error: Some(error),
         next_account: None,
     };
@@ -70,7 +70,7 @@ pub fn pinned(account: &AgentAccount, pooled: Option<&GatewayAccount>) -> AgentL
         account: pooled.email.clone(),
         plan: pooled.plan.clone(),
         windows: pooled.windows.clone(),
-        reset_credits: pooled.reset_credits,
+        resets: pooled.resets.clone(),
         error: None,
         next_account: None,
     });
@@ -80,7 +80,7 @@ pub fn pinned(account: &AgentAccount, pooled: Option<&GatewayAccount>) -> AgentL
         account: None,
         plan: None,
         windows: vec![],
-        reset_credits: 0,
+        resets: vec![],
         error: Some("This account is no longer on your gateway.".to_string()),
         next_account: None,
     })
@@ -100,7 +100,7 @@ async fn read_account(account: &AgentAccount, environment: &Environment) -> Opti
         account: None,
         plan: None,
         windows: vec![],
-        reset_credits: 0,
+        resets: vec![],
         error: Some(motile_protocol::error_text(&error)),
         next_account: None,
     }))
@@ -110,7 +110,11 @@ async fn read_claude(environment: &Environment) -> anyhow::Result<AgentLimits> {
     let answers = ask::claude(environment, &CLAUDE_ARGUMENTS, &["initialize", "get_usage"]).await?;
     let account = answers.get("initialize").cloned().unwrap_or(Ok(Value::Null)).unwrap_or_default();
     let usage = answers.get("get_usage").cloned().unwrap_or_else(|| Err("Claude Code didn't say".to_string()));
-    Ok(claude_limits(&account["account"], usage))
+    let mut limits = claude_limits(&account["account"], usage);
+    if limits.error.is_none() && !limits.windows.is_empty() {
+        limits.resets = crate::resets::claude(environment).await;
+    }
+    Ok(limits)
 }
 
 /// Who is signed in to Claude Code in `environment`, and their plan.
@@ -133,7 +137,7 @@ fn claude_limits(account: &Value, usage: Result<Value, String>) -> AgentLimits {
         account: account["email"].as_str().map(String::from),
         plan: claude_plan(account),
         windows: vec![],
-        reset_credits: 0,
+        resets: vec![],
         error: None,
         next_account: None,
     };
@@ -208,7 +212,7 @@ fn codex_limits(account: &Value, limits: Result<Value, String>) -> AgentLimits {
         account: account["email"].as_str().map(String::from),
         plan,
         windows: vec![],
-        reset_credits: 0,
+        resets: vec![],
         error: None,
         next_account: None,
     };
@@ -224,7 +228,7 @@ fn codex_limits(account: &Value, limits: Result<Value, String>) -> AgentLimits {
         codex => codex,
     };
     read.windows = ["primary", "secondary"].iter().filter_map(|key| codex_window(&snapshot[key])).collect();
-    read.reset_credits = limits["rateLimitResetCredits"]["availableCount"].as_u64().unwrap_or_default() as u32;
+    read.resets = motile_protocol::resets::codex(&limits["rateLimitResetCredits"]);
     read
 }
 
@@ -278,7 +282,7 @@ mod tests {
             account: Some("work@example.com".into()),
             plan: Some("Pro".into()),
             windows: vec![window.clone()],
-            reset_credits: 1,
+            resets: motile_protocol::resets::codex(&json!({"available_count": 1})),
             error: None,
             next_account: None,
         };
@@ -363,7 +367,7 @@ mod tests {
         });
         let limits = codex_limits(&account, Ok(limits));
         assert_eq!(limits.plan.as_deref(), Some("Pro Lite"));
-        assert_eq!(limits.reset_credits, 2);
+        assert_eq!(limits.resets[0].left, 2);
         let windows: Vec<_> =
             limits.windows.iter().map(|window| (window.label.as_str(), window.used_percent)).collect();
         assert_eq!(windows, [("Session", 1.0), ("Weekly", 4.0)]);
@@ -388,7 +392,7 @@ mod tests {
                 })
                 .into_iter()
                 .collect(),
-            reset_credits: 0,
+            resets: vec![],
             error: error.map(String::from),
             next_account: None,
         };

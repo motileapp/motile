@@ -6,6 +6,8 @@
 It signs in any Claude Code account with the code pasted, as the organisation of that name, but a
 code with "wrong" in it, and approves a Codex account at once. Each account reads a session and a weekly
 window, and Messages and Codex's responses answer with a short stream and the headers of a limit.
+Each Claude account holds two weekly resets and a 5-hour one it can only use at its limit, and each
+Codex account one reset; one used empties the windows it refills.
 
 It is two MCPs for connectors too: a tracker at /mcp/tracker, which signs in with OAuth and approves
 at once, and docs at /mcp/docs, which takes any key without "wrong" in it.
@@ -22,6 +24,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 HOUR = 3600
 DAY = 24 * HOUR
 codex_accounts = [0]
+# The resets each account used, by kind, and the windows they refilled.
+resets_used = {}
+refilled = {}
 
 
 def iso(at):
@@ -33,9 +38,34 @@ def jwt(claims):
 
 
 def used(name):
-    """An account's session and weekly use, the same for a name every run."""
+    """An account's session and weekly use, the same for a name every run, until a reset refills them."""
     seed = sum(name.encode())
-    return 10 + seed % 80, 20 + seed * 7 % 70
+    session, weekly = 10 + seed % 80, 20 + seed * 7 % 70
+    windows = refilled.get(name, set())
+    return (0 if "session" in windows else session), (0 if "weekly" in windows else weekly)
+
+
+def claude_grants(name):
+    left = lambda kind, total: max(0, total - resets_used.get(name, {}).get(kind, 0))
+    return [
+        {"id": "weekly", "label": "Weekly reset", "resets_total": 2, "resets_left": left("weekly", 2),
+         "ends_at": iso(time.time() + 9 * DAY), "clears": ["seven_day"], "usable_now": True,
+         "use_requires_limit": False, "type": "weekly"},
+        {"id": "session", "label": "5-hour reset", "resets_total": 1, "resets_left": left("session", 1),
+         "ends_at": iso(time.time() + 23 * DAY), "clears": ["five_hour"], "usable_now": False,
+         "use_requires_limit": True, "type": "session", "unavailable_reason": "needs_limit"},
+    ]
+
+
+def spend(name, kind, windows):
+    resets_used.setdefault(name, {})[kind] = resets_used.get(name, {}).get(kind, 0) + 1
+    refilled.setdefault(name, set()).update(windows)
+
+
+def codex_credits():
+    left = 1 - resets_used.get("codex", {}).get("full", 0)
+    return [{"id": "credit-1", "reset_type": "codex_rate_limits", "status": "available", "granted_at": iso(time.time() - DAY),
+             "expires_at": iso(time.time() + 12 * DAY), "title": "Full reset", "description": None}][:max(left, 0)]
 
 
 TRACKER_TOOLS = [
@@ -138,7 +168,8 @@ class Handler(BaseHTTPRequestHandler):
                 "uuid": org, "organization_type": "claude_max", "rate_limit_tier": "default_claude_max_20x"}})
         if path == "/api/oauth/usage":
             session, weekly = used(self.account())
-            return self.send(200, {"limits": [
+            grants = claude_grants(self.account())
+            return self.send(200, {"cedar_ember": {"eligible": True, "grants": grants, "next_grant_id": "weekly"}, "limits": [
                 {"kind": "session", "group": "session", "percent": session, "resets_at": iso(now + 2.5 * HOUR),
                  "severity": "normal"},
                 {"kind": "weekly", "group": "weekly", "percent": weekly, "resets_at": iso(now + 4 * DAY),
@@ -151,7 +182,9 @@ class Handler(BaseHTTPRequestHandler):
                                    "reset_at": int(now + 3 * HOUR)},
                 "secondary_window": {"used_percent": weekly, "limit_window_seconds": 7 * DAY,
                                      "reset_at": int(now + 3 * DAY)}},
-                "rate_limit_reset_credits": {"available_count": 1}})
+                "rate_limit_reset_credits": {"available_count": len(codex_credits())}})
+        if path == "/backend-api/wham/rate-limit-reset-credits":
+            return self.send(200, {"credits": codex_credits(), "available_count": len(codex_credits())})
         self.send(404, {"error": f"No {path} here."})
 
     def do_POST(self):
@@ -182,6 +215,20 @@ class Handler(BaseHTTPRequestHandler):
                 "access_token": f"claude-{org}-0", "refresh_token": f"refresh-{org}", "expires_in": 8 * HOUR,
                 "account": {"uuid": "account", "email_address": f"{org}@example.com"},
                 "organization": {"uuid": org, "name": org.title()}})
+        if path.startswith("/api/organizations/") and path.endswith("/reset_rate_limits"):
+            grant = json.loads(raw).get("grant_id")
+            found = next((held for held in claude_grants(self.account()) if held["id"] == grant), None)
+            if not found or found["resets_left"] == 0:
+                return self.send(200, {"result": "already_used"})
+            if not found["usable_now"]:
+                return self.send(200, {"result": "not_limited"})
+            spend(self.account(), grant, ["weekly"] if grant == "weekly" else ["session"])
+            return self.send(200, {"result": "reset", "resets_left": found["resets_left"] - 1})
+        if path == "/backend-api/wham/rate-limit-reset-credits/consume":
+            if not codex_credits():
+                return self.send(200, {"code": "no_credit", "windows_reset": 0})
+            spend("codex", "full", ["session", "weekly"])
+            return self.send(200, {"code": "reset", "windows_reset": 2})
         if path == "/api/accounts/deviceauth/usercode":
             return self.send(200, {"device_auth_id": "device", "user_code": "MOTI-LE42", "interval": "1"})
         if path == "/api/accounts/deviceauth/token":

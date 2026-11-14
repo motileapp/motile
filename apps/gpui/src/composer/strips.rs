@@ -19,6 +19,7 @@ use crate::models::{
 };
 use crate::panel::state::PanelTab;
 use crate::store::Store;
+use crate::store::usage::Resets;
 use crate::theme::{self, ControlSize, IconSize, Radius, Surface, TextSize, colors};
 use crate::ui::control::{ControlIcon, ControlLabel};
 use crate::ui::dropdown::{backdrop, drop_from, light, over_content};
@@ -198,7 +199,8 @@ fn agents_button(store: &Entity<Store>, children: &Children, room: f32, window: 
 }
 
 /// Why the agent stopped before it finished: the usage limit, with when the thread goes on by
-/// itself, or a restart of the server. The agent is continued from here.
+/// itself and the account's resets to go on now, or a restart of the server. The agent is
+/// continued from here.
 pub fn interruption_strip(store: &Entity<Store>, interruption: Interruption, cx: &App) -> Div {
     let c = colors(cx);
     let at = now();
@@ -226,11 +228,17 @@ pub fn interruption_strip(store: &Entity<Store>, interruption: Interruption, cx:
                 store.set_continues(true)
             })
         }),
-        Interruption::Limit { resets_at: Some(_), continues: true } => None,
-        _ => Some(button("interruption-continue", "Continue", "Have the agent go on where it left off", |store| {
-            store.continue_thread()
-        })),
+        Interruption::Limit { .. } => None,
+        Interruption::Restart => {
+            Some(button("interruption-continue", "Continue", "Have the agent go on where it left off", |store| {
+                store.continue_thread()
+            }))
+        }
     };
+    let reset = limit_resets(store, interruption, cx).map(|(thread_id, resets)| {
+        let menu = crate::usage::limits::reset_menu(0, &resets, store, Variant::Ghost, Some(thread_id), |_| {}, cx);
+        menu.button(|button| button.surface(Surface::Composer)).margin(margin()).up()
+    });
     let help = format!("{title}. {detail}.");
     strip(true, Some(HEIGHT), cx)
         .child(
@@ -249,7 +257,19 @@ pub fn interruption_strip(store: &Entity<Store>, interruption: Interruption, cx:
                 .child(NarrowFallback::new(title, detail)),
         )
         .child(div().flex_1().min_w(px(8.)))
+        .children(reset)
         .children(action)
+}
+
+/// The open thread, and the resets of its account that can refill the limit that stopped its agent.
+fn limit_resets(store: &Entity<Store>, interruption: Interruption, cx: &App) -> Option<(String, Resets)> {
+    if !matches!(interruption, Interruption::Limit { .. }) {
+        return None;
+    }
+    let store = store.read(cx);
+    let thread = store.selected_thread()?;
+    let resets = store.thread_resets(&thread.server_id, thread.thread.agent, &thread.thread.agent_account)?;
+    resets.options.iter().any(|option| option.usable || option.at_limit).then(|| (thread.thread.id.clone(), resets))
 }
 
 /// The interruption's title and detail where both fit; only the detail, in the warning colour

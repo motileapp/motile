@@ -75,5 +75,9 @@ async fn answer(gateway: &Gateway, command: Manage) -> anyhow::Result<GatewayRep
         Manage::TryTool { id, tool, arguments } => {
             GatewayReply::ToolResult { result: gateway.try_tool(&id, &tool, arguments).await? }
         }
+        Manage::UseReset { id, reset } => {
+            gateway.use_reset(&id, &reset).await?;
+            state(gateway)
+        }
     })
 }

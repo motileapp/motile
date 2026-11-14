@@ -194,11 +194,17 @@ start_stack() {
         started s3 $! "$ROOT/scripts/fake-s3"
     fi
 
+    # Claude Code's login in a folder of its own, which the server reads Claude's resets with from
+    # scripts/fake-upstream, never the Mac's own.
+    mkdir -p "$DEV/claude"
+    [ -f "$DEV/claude/.credentials.json" ] ||
+        echo '{"claudeAiOauth": {"accessToken": "claude-studio-0", "expiresAt": 4102444800000}}' > "$DEV/claude/.credentials.json"
     if ! current server "$BIN/motile"; then
         echo "▸ Starting the server…"
         stop server
         MOTILE_LINEAR_URL="$linear_url" MOTILE_RICRAC_URL="$ricrac_url" MOTILE_DATA_DIR="$DEV/server" MOTILE_CLAUDE_PATH="$ROOT/scripts/fake-agent" MOTILE_CODEX_PATH="$ROOT/scripts/fake-agent" \
             MOTILE_GH_PATH="$ROOT/scripts/fake-gh" FAKE_GH_STATE="$DEV/github.json" FAKE_AGENT_DELAY=0.03 FAKE_AGENT_WATCH="${FAKE_AGENT_WATCH:-6}" \
+            MOTILE_ANTHROPIC_URL="http://127.0.0.1:$UPSTREAM_PORT" CLAUDE_CONFIG_DIR="$DEV/claude" FAKE_AGENT_RESETS_FILE="$DEV/codex-reset" FAKE_AGENT_LIMIT_FILE="$DEV/limited" \
             nohup "$BIN/motile" run --local --port "$SERVER_PORT" > "$DEV/server.log" 2>&1 &
         started server $! "$BIN/motile"
     fi

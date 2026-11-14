@@ -361,7 +361,7 @@ struct UsageContent: View {
         switch model.limits {
         case .loading: loading
         case .failed(let message): UsageNote(text: message)
-        case .ready(let report): LimitsView(report: report)
+        case .ready(let report): LimitsView(report: report) { model.refresh() }
         }
     }
 

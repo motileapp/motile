@@ -82,7 +82,10 @@ told to implement it, "ask an agent" starts an agent, whose work comes as a thre
 "hit the limit" is stopped by the usage limit.
 
 Asked for its login and the limits of its plan (`initialize` and `get_usage` for Claude Code,
-`account/read` and `account/rateLimits/read` for Codex) it answers with made-up ones. Asked for its
+`account/read` and `account/rateLimits/read` for Codex) it answers with made-up ones, the session used
+up while the limit it hit holds (FAKE_AGENT_LIMIT_FILE, or beside FAKE_AGENT_ARGUMENTS_FILE, keeps it). Codex holds one
+limit reset, which `account/rateLimitResetCredit/consume` uses and which refills its windows; with
+FAKE_AGENT_RESETS_FILE that file remembers it was used. Asked for its
 models (`list_models` and `get_settings` for Claude Code, `model/list` and `config/read` for Codex)
 it lists made-up ones, Fable and gpt-6.1-sol with a default effort of their own. Asked for its skills
 (`initialize` for Claude Code, `skills/list` for Codex) it lists the project's, in `.claude/skills`
@@ -162,6 +165,35 @@ if sys.argv[1:3] == ["auth", "login"]:
 arguments_file = os.environ.get("FAKE_AGENT_ARGUMENTS_FILE")
 prompts_file = os.environ.get("FAKE_AGENT_PROMPTS_FILE")
 sessions_file = os.environ.get("FAKE_AGENT_SESSIONS_FILE")
+
+
+def limit_file(agent):
+    """Where the agent keeps until when its limit holds, which FAKE_AGENT_LIMIT_FILE names, or else beside
+    FAKE_AGENT_ARGUMENTS_FILE: its limits read the window used up until then."""
+    kept = os.environ.get("FAKE_AGENT_LIMIT_FILE") or (arguments_file and os.path.join(os.path.dirname(arguments_file), "limited"))
+    return kept and f"{kept}-{agent}"
+
+
+def hold_limit(agent, until):
+    kept = limit_file(agent)
+    if kept:
+        with open(kept, "w") as file:
+            file.write(str(until))
+
+
+def limited(agent):
+    kept = limit_file(agent)
+    try:
+        with open(kept) as file:
+            return float(file.read()) > time.time()
+    except (TypeError, OSError, ValueError):
+        return False
+
+
+def lift_limit(agent):
+    kept = limit_file(agent)
+    if kept and os.path.exists(kept):
+        os.remove(kept)
 
 
 def record(what, file=arguments_file):
@@ -332,13 +364,27 @@ def claude_models():
     ]
 
 
+def codex_reset_used():
+    """Whether Codex's one reset was used, which FAKE_AGENT_RESETS_FILE keeps between its processes."""
+    kept = os.environ.get("FAKE_AGENT_RESETS_FILE")
+    return bool(kept) and os.path.exists(kept)
+
+
+def use_codex_reset():
+    kept = os.environ.get("FAKE_AGENT_RESETS_FILE")
+    if kept:
+        with open(kept, "w") as file:
+            file.write("used")
+
+
 def answer_control(message):
     """Answers what Claude Code is asked about its login and the limits of its plan."""
     subtype = message["request"].get("subtype")
     if subtype == "initialize":
         answer = {"account": {"email": signed_in_email(), "subscriptionType": "Claude Max"}, "commands": claude_commands()}
     elif subtype == "get_usage":
-        limits = [claude_limit("session", 34, 3.5), claude_limit("weekly", 61, 98), claude_limit("weekly", 82, 98, "Fable")]
+        limits = [claude_limit("session", 100 if limited("claude") else 34, 3.5), claude_limit("weekly", 61, 98),
+                  claude_limit("weekly", 82, 98, "Fable")]
         answer = {"subscription_type": "max", "rate_limits_available": True, "rate_limits": {"limits": limits}}
     elif subtype == "list_models":
         answer = {"models": claude_models()}
@@ -1179,6 +1225,7 @@ def refused_for_the_limit():
     """Ends the turn as Claude Code does when the subscription's limit runs out, and says so. On a
     gateway's account it is an API user, which never hears when the limit resets."""
     resets = limit_resets()
+    hold_limit("claude", resets)
     if not on_gateway():
         emit({"type": "rate_limit_event", "rate_limit_info": {"status": "rejected", "rateLimitType": "five_hour",
                                                               "resetsAt": resets, "overageStatus": "rejected"}})
@@ -1401,6 +1448,13 @@ class Codex:
                 emit({"id": message["id"], "result": {"account": account, "requiresOpenaiAuth": True}})
             if method == "account/rateLimits/read":
                 emit({"id": message["id"], "result": self.limits()})
+            if method == "account/rateLimitResetCredit/consume":
+                record({method: params})
+                outcome = "noCredit" if codex_reset_used() else "reset"
+                if outcome == "reset":
+                    use_codex_reset()
+                    lift_limit("codex")
+                emit({"id": message["id"], "result": {"outcome": outcome}})
             if method == "model/list":
                 emit({"id": message["id"], "result": {"data": self.models(), "nextCursor": None}})
             if method == "skills/list":
@@ -1445,15 +1499,23 @@ class Codex:
         self.prompts.put(None)
         self.answers.put(None)
 
-    METHODS = {"initialize", "account/read", "account/rateLimits/read", "model/list", "skills/list", "config/read", "thread/start",
+    METHODS = {"initialize", "account/read", "account/rateLimits/read", "account/rateLimitResetCredit/consume", "model/list",
+               "skills/list", "config/read", "thread/start",
                "thread/resume", "thread/inject_items", "turn/start", "turn/steer", "turn/interrupt"}
 
     def limits(self):
         def window(used, minutes, hours):
             return {"usedPercent": used, "windowDurationMins": minutes, "resetsAt": int(time.time() + hours * 3600)}
 
-        codex = {"limitId": "codex", "primary": window(12, 300, 1.2), "secondary": window(48, 10080, 76)}
-        return {"rateLimits": codex, "rateLimitsByLimitId": {"codex": codex}, "rateLimitResetCredits": {"availableCount": 1}}
+        used = codex_reset_used()
+        codex = {"limitId": "codex", "primary": window(100 if limited("codex") else 0 if used else 12, 300, 1.2),
+                 "secondary": window(0 if used else 48, 10080, 76)}
+        credit = {"id": "credit-1", "resetType": "codexRateLimits", "status": "available",
+                  "grantedAt": int(time.time() - 86400), "expiresAt": int(time.time() + 12 * 86400), "title": None,
+                  "description": None}
+        credits = [] if used else [credit]
+        return {"rateLimits": codex, "rateLimitsByLimitId": {"codex": codex},
+                "rateLimitResetCredits": {"availableCount": len(credits), "credits": credits}}
 
     def models(self):
         efforts = [{"reasoningEffort": effort} for effort in ["low", "medium", "high", "xhigh"]]
@@ -1603,6 +1665,7 @@ class Codex:
     def hit_the_limit(self, params):
         self.command("cat greet.py", "def greet(name):\n")
         window = {"usedPercent": 100, "resetsAt": limit_resets(), "windowDurationMins": 300}
+        hold_limit("codex", window["resetsAt"])
         self.notify("account/rateLimits/updated", rateLimits={"limitId": "codex", "primary": window})
         error = {"message": "You've hit your usage limit.", "codexErrorInfo": "usageLimitExceeded"}
         self.notify("error", threadId=self.thread_id, turnId=self.turn_id(), willRetry=False,

@@ -42,14 +42,8 @@ fun UsageContent(model: UsageModel, modifier: Modifier = Modifier, margin: Dp = 
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             when (model.tab) {
-                UsageModel.Tab.Limits -> {
-                    WatchesGateway()
-                    when (val limits = model.limits) {
-                        Loaded.Loading -> UsageLoading()
-                        is Loaded.Failed -> UsageNote(limits.message)
-                        is Loaded.Ready -> LimitsView(limits.value)
-                    }
-                }
+                // `LimitsList` shows it, as groups of its own.
+                UsageModel.Tab.Limits -> Unit
                 UsageModel.Tab.Activity -> when (val activity = model.activity) {
                     Loaded.Loading -> UsageLoading()
                     is Loaded.Failed -> UsageNote(activity.message)
@@ -78,7 +72,7 @@ fun WatchesGateway() {
 }
 
 @Composable
-private fun UsageLoading() {
+internal fun UsageLoading() {
     Box(Modifier.fillMaxWidth().heightIn(min = 240.dp), contentAlignment = Alignment.Center) {
         Spinner(color = LocalPalette.current.mutedForeground)
     }

@@ -209,13 +209,28 @@ impl Tools {
     }
 
     /// Lists the accounts of your server you can start agents on: other Claude Code logins and
-    /// Codex, with the models each offers and how much of its plan's limits it has used. Yours is
-    /// marked. With a gateway, it lists Gateway, which places agents on the gateway's accounts, and
+    /// Codex, with the models each offers, how much of its plan's limits it has used and the limit
+    /// resets it holds. Yours is marked. With a gateway, it lists Gateway, which places agents on the gateway's accounts, and
     /// each of those accounts too, to pin an agent to.
     #[tool(name = "list_accounts", annotations(title = "List accounts", read_only_hint = true))]
     async fn list_accounts(&self, Extension(parts): Extension<Parts>) -> CallToolResult {
         let accounts = async { self.hub()?.accounts_for(&caller(&parts)?).await };
         answered(accounts.await)
+    }
+
+    /// Spends one of an account's limit resets, refilling its usage limits now. Resets are scarce,
+    /// so only use one if the user allowed it earlier. Otherwise, ask them first.
+    #[tool(name = "use_limit_reset", annotations(title = "Use a limit reset", destructive_hint = true))]
+    async fn use_limit_reset(
+        &self,
+        Extension(parts): Extension<Parts>,
+        Parameters(request): Parameters<UseLimitReset>,
+    ) -> CallToolResult {
+        let used = async {
+            let hub = self.hub()?;
+            hub.use_reset_for(&caller(&parts)?, request.account.as_deref(), request.reset.as_deref()).await
+        };
+        answered(used.await)
     }
 
     /// Starts an agent in a thread of its own on one of your server's accounts, another Claude Code
@@ -429,6 +444,14 @@ impl ServerHandler for Tools {
     fn get_info(&self) -> ServerConfig {
         ServerConfig::new(ServerCapabilities::builder().enable_tools().build())
     }
+}
+
+#[derive(Deserialize, JsonSchema)]
+pub struct UseLimitReset {
+    /// The account whose reset to use, by its name or id from list_accounts. Yours when not given.
+    pub account: Option<String>,
+    /// The reset's id from list_accounts. The first one it can use now when not given.
+    pub reset: Option<String>,
 }
 
 #[derive(Deserialize, JsonSchema)]

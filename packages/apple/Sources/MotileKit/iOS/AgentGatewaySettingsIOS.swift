@@ -4,9 +4,6 @@ import SwiftUI
 /// Settings → Agent Gateway: the account's gateway, the accounts it shares with every server with their
 /// limits, and the way to its requests. The core follows the gateway while the page shows.
 struct AgentGatewaySettings: View {
-    /// How far an inset group's rows stand from the list's sides.
-    private static let listInset: CGFloat = 20
-
     @Environment(AppStore.self) private var store
     @State private var renamed: GatewayAccount?
     @State private var name = ""
@@ -118,24 +115,7 @@ struct AgentGatewaySettings: View {
             }
             .disabled(store.gatewaySignInStarting != nil)
         }
-        if !account.windows.isEmpty {
-            VStack(spacing: 0) {
-                ForEach(account.windows) { window in
-                    if window.id != account.windows.first?.id {
-                        ThemeDivider().padding(.horizontal, LimitRow.inset)
-                    }
-                    LimitRow(window: window, beside: width - 2 * Self.listInset >= LimitsView.besideWidth)
-                }
-            }
-            .opacity(.disabled, when: !account.enabled)
-            .listRowInsets(EdgeInsets())
-            .listRowSeparator(.hidden)
-        }
-        if let note = account.note {
-            Text(note)
-                .font(.footnote)
-                .foregroundStyle(Color.themeMutedForeground)
-        }
+        LimitRowsIOS(windows: account.windows, resets: account.resets, note: account.note, dimmed: !account.enabled, width: width)
     }
 
     /// What is being captured, the ways to capture more, and the way to the log.

@@ -89,7 +89,7 @@ fun UsageSheet() {
                 )
             },
         ) {
-            UsageContent(model, margin = margin, top = 4.dp)
+            if (model.tab == UsageModel.Tab.Limits) LimitsList(model) else UsageContent(model, margin = margin, top = 4.dp)
         }
         UsageTabBar(model)
     }

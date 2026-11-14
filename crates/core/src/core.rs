@@ -1383,6 +1383,78 @@ impl Core {
         });
     }
 
+    /// Uses a limit reset on the server or the gateway its target names. One of the gateway's accounts is
+    /// told to the servers that didn't use it, so that their threads stop waiting for its limit.
+    fn use_limit_reset(&self, id: u64, target: limits::ResetTarget, reset: String) {
+        let (sink, inputs) = (self.sink.clone(), self.inputs.clone());
+        match target {
+            limits::ResetTarget::Gateway { account_id } => {
+                let Some(link) = self.gateway.link.clone() else {
+                    return self.reply(id, Err("Open your gateway's settings first.".to_string()));
+                };
+                let accounts =
+                    self.gateway.state.as_ref().map(|(_, state)| state.accounts.as_slice()).unwrap_or_default();
+                let agent = accounts.iter().find(|account| account.id == account_id).map(|account| account.agent);
+                let told = self.servers_told(None);
+                tokio::spawn(async move {
+                    let answer = match link.manage(Manage::UseReset { id: account_id.clone(), reset }).await {
+                        Ok(GatewayReply::State { state }) => {
+                            let _ = inputs
+                                .send(Input::Gateway { key: link.key.clone(), event: GatewayEvent::State(state) });
+                            Ok(json!({}))
+                        }
+                        Ok(GatewayReply::Error { message }) => Err(message),
+                        Ok(other) => Err(format!("Your gateway gave an unexpected answer: {other:?}")),
+                        Err(error) => Err(error_text(error)),
+                    };
+                    let used = answer.is_ok();
+                    reply(&sink, id, answer);
+                    if let Some(agent) = agent.filter(|_| used) {
+                        tell_gateway_reset(told, agent, Some(account_id), inputs).await;
+                    }
+                });
+            }
+            limits::ResetTarget::Server { server_id, account_id } => {
+                let link = match self.link(&server_id) {
+                    Ok(link) => link,
+                    Err(error) => return self.reply(id, Err(error)),
+                };
+                let server = self.servers.iter().find(|server| server.device.public_key == server_id);
+                let accounts =
+                    server.and_then(|server| server.info.as_ref()).map(|info| info.agent_accounts.as_slice());
+                let account = accounts.unwrap_or_default().iter().find(|account| account.id == account_id);
+                let pooled =
+                    account.filter(|account| account.gateway).map(|account| (account.agent, account.pin.clone()));
+                let told = self.servers_told(Some(&server_id));
+                let request = Request::UseLimitReset { account_id, reset };
+                tokio::spawn(async move {
+                    let answer = match link.request(&request).await {
+                        Ok(Message::Limits { agents }) => {
+                            let _ = inputs.send(keep_limits(&server_id, &agents));
+                            Ok(json!({}))
+                        }
+                        Ok(other) => Err(unexpected(&other)),
+                        Err(error) => Err(error_text(error)),
+                    };
+                    let used = answer.is_ok();
+                    reply(&sink, id, answer);
+                    if let Some((agent, pin)) = pooled.filter(|_| used) {
+                        tell_gateway_reset(told, agent, pin, inputs).await;
+                    }
+                });
+            }
+        }
+    }
+
+    /// The connected servers but `except`, to tell of a reset of the gateway's.
+    fn servers_told(&self, except: Option<&str>) -> Vec<(String, Arc<Link>)> {
+        self.servers
+            .iter()
+            .filter(|server| !server.removed && Some(server.device.public_key.as_str()) != except)
+            .filter_map(|server| Some((server.device.public_key.clone(), server.link.clone()?)))
+            .collect()
+    }
+
     /// The input schema of an MCP server's tool, as the gateway last said it.
     fn mcp_server_tool_schema(&self, mcp_server: &str, tool: &str) -> Option<serde_json::Value> {
         let (_, state) = self.gateway.state.as_ref()?;
@@ -1560,6 +1632,13 @@ impl Core {
                 .info
                 .as_ref()
                 .map(|info| limits::by_account(&info.agent_accounts, &server.limits, now()))
+                .unwrap_or_default(),
+            account_resets: server
+                .info
+                .as_ref()
+                .map(|info| {
+                    limits::resets_by_account(&server.device.public_key, &info.agent_accounts, &server.limits, now())
+                })
                 .unwrap_or_default(),
             next_accounts: server
                 .info
@@ -3958,9 +4037,14 @@ impl Core {
                 let mut notes = Vec::new();
                 let mut reads = Vec::new();
                 let mut proxied: Vec<(String, Agent, String)> = Vec::new();
+                let mut account_ids: HashMap<(String, Agent, String), String> = HashMap::new();
                 for server in chosen {
                     let Some(info) = server.info.as_ref() else { continue };
                     let name = server.device.name.clone();
+                    for account in &info.agent_accounts {
+                        let key = (server.device.public_key.clone(), account.agent, account.name.clone());
+                        account_ids.insert(key, account.id.clone());
+                    }
                     let proxies = info.agent_accounts.iter().filter(|account| account.gateway);
                     proxied.extend(proxies.map(|account| (name.clone(), account.agent, account.name.clone())));
                     if info.protocol < LIMITS_PROTOCOL {
@@ -3970,7 +4054,7 @@ impl Core {
                     let server_id = server.device.public_key.clone();
                     let Some(link) = server.link.clone().filter(|_| !kept) else {
                         let agents = self.limits_read(&server_id).map(|(_, agents)| agents).unwrap_or_default();
-                        reads.extend(agents.into_iter().map(|limits| (name.clone(), limits)));
+                        reads.extend(agents.into_iter().map(|limits| (server_id.clone(), name.clone(), limits)));
                         continue;
                     };
                     asked.spawn(async move { (server_id, name, link.request(&Request::Limits).await) });
@@ -4002,15 +4086,17 @@ impl Core {
                             }
                         };
                         let _ = inputs.send(keep_limits(&server_id, &agents));
-                        reads.extend(agents.into_iter().map(|limits| (server.clone(), limits)));
+                        reads.extend(agents.into_iter().map(|limits| (server_id.clone(), server.clone(), limits)));
                     }
                     let accounts = asked_gateway.await.ok().flatten().unwrap_or(kept_accounts);
                     let mut reads: Vec<limits::Read> = reads
                         .into_iter()
-                        .map(|(server, limits)| {
+                        .map(|(server_id, server, limits)| {
                             let gateway =
                                 proxied.contains(&(server.clone(), limits.agent, limits.account_name.clone()));
-                            limits::Read { server, limits, gateway }
+                            let key = (server_id.clone(), limits.agent, limits.account_name.clone());
+                            let account_id = account_ids.get(&key).cloned();
+                            limits::Read { server_id, server, account_id, limits, gateway }
                         })
                         .collect();
                     reads.sort_by(|a, b| a.server.cmp(&b.server));
@@ -4018,6 +4104,7 @@ impl Core {
                     reply(&sink, id, Ok(json!({ "sections": sections, "notes": notes })));
                 });
             }
+            Command::UseLimitReset { target, reset } => self.use_limit_reset(id, target, reset),
             Command::Markdown { text } => {
                 let sink = self.sink.clone();
                 tokio::task::spawn_blocking(move || {
@@ -4670,6 +4757,26 @@ impl gateway::Naming for Names<'_> {
 
 fn utc_offset_secs() -> i32 {
     chrono::Local::now().offset().local_minus_utc()
+}
+
+/// Tells the servers that one of the gateway's accounts of `agent` was refilled, and keeps what their
+/// accounts have used, read again.
+async fn tell_gateway_reset(
+    servers: Vec<(String, Arc<Link>)>,
+    agent: Agent,
+    account: Option<String>,
+    inputs: tokio::sync::mpsc::UnboundedSender<Input>,
+) {
+    let request = Request::GatewayLimitReset { agent, account };
+    for (server_id, link) in servers {
+        match link.request(&request).await {
+            Ok(Message::Limits { agents }) => {
+                let _ = inputs.send(keep_limits(&server_id, &agents));
+            }
+            Ok(_) => {}
+            Err(error) => tracing::debug!(server = server_id, "couldn't tell a server of a gateway reset: {error:#}"),
+        }
+    }
 }
 
 fn keep_limits(server_id: &str, agents: &[AgentLimits]) -> Input {
