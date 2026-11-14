@@ -103,9 +103,9 @@ struct AgentGatewaySettings: View {
             } trailing: {
                 HStack(spacing: 0) {
                     if gateway.capture.on {
-                        ActionButton("Stop", variant: .outline, size: .large, margin: .beside(trailing: settingsHalfGap)) { store.setGatewayCapture(.off) }
+                        ActionButton("Stop", variant: .outline, size: .large, margin: .beside(trailing: captureHalfGap)) { store.setGatewayCapture(.off) }
                     }
-                    ActionMenu("Capture", variant: .outline, size: .large, margin: .beside(leading: gateway.capture.on ? settingsHalfGap : 0)) {
+                    ActionMenu("Capture", variant: .outline, size: .large, margin: .beside(leading: gateway.capture.on ? captureHalfGap : 0)) {
                         Button("Capture the Next \(GatewayText.captureNext) Requests") { store.setGatewayCapture(.next(GatewayText.captureNext)) }
                         Menu("Capture a Thread") { GatewayCaptureThreads() }
                     }
@@ -115,6 +115,9 @@ struct AgentGatewaySettings: View {
             logCard
         }
     }
+
+    /// Half the room between Stop and Capture, which together match Capture's room to the card's right.
+    private var captureHalfGap: CGFloat { rowOutset(for: ControlSize.large.height) / 2 }
 
     private var logCard: some View {
         VStack(spacing: 0) {
