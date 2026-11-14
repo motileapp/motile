@@ -193,6 +193,8 @@ private class Kept(var parent: String?, var bottom: Dp)
 object TranscriptView {
     /** The room between the last row and the composer, which the bottom padding the transcript is given starts with. */
     val composerGap = 80.dp
+    /** How close under the top bar the composer and what lies on it may come, which is less than [composerGap] so that a tall strip has room before it scrolls. */
+    val overlayGap = 16.dp
     /** The room above the first row, which the rows fade out in. */
     val topFade = 20.dp
     private val jumpButtonGap = 10.dp

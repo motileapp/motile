@@ -24,7 +24,9 @@ use motile_core::link::State;
 use motile_protocol::wire::{Access, Interruption};
 
 use self::picker::ComposerPicker;
-use self::strips::{BranchPicker, agents_strip, context_strip, interruption_strip, monitoring_strip, waiting_strip};
+use self::strips::{
+    BranchPicker, StripRoom, agents_strip, context_strip, interruption_strip, monitoring_strip, waiting_strip,
+};
 use crate::models::{ComposerPickerPart, ThreadInfo, access_label, section_label};
 use crate::store::Store;
 use crate::theme::{self, ControlSize, IconSize, Surface, TextSize, colors};
@@ -118,6 +120,9 @@ pub struct Composer {
     /// How tall the strips above and under the box were last drawn, for the outline that casts
     /// their shadow.
     strips: Rc<Cell<(f32, f32)>>,
+    /// How tall what scrolls in the waiting strip was last drawn, which grows by the room above
+    /// the composer and shrinks by what it lacks.
+    strip_scroll: Rc<Cell<f32>>,
     /// The draft's worktree and its project's git state as last seen, which say when to ask what
     /// the worktree would start at.
     worktree_key: Option<String>,
@@ -159,6 +164,7 @@ impl Composer {
             ticker: None,
             row: Rc::default(),
             strips: Rc::default(),
+            strip_scroll: Rc::default(),
             worktree_key: None,
             project_git: None,
             skills_key: None,
@@ -896,7 +902,12 @@ impl Render for Composer {
         let top_strip: Option<Div> = if unlinked.is_some() {
             None
         } else if let Some(approval) = &approval {
-            Some(waiting_strip(&self.store, approval, count, cx))
+            let room = self.skills.room() - crate::thread::OVERLAY_GAP;
+            let room = StripRoom {
+                max_height: (self.strip_scroll.get() + room).clamp(0., f32::from(window.viewport_size().height)),
+                drawn: self.strip_scroll.clone(),
+            };
+            Some(waiting_strip(&self.store, approval, count, room, cx))
         } else if let Some((text, first, count)) = waiting_children {
             Some(children::children_strip(&self.store, text, &first, count, cx))
         } else if let Some(interruption) = interrupted {

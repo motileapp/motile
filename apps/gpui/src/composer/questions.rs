@@ -7,10 +7,10 @@ use gpui_kit::prelude::*;
 use gpui_kit::*;
 use motile_core::render::rows::{Choice, Waiting};
 
-use crate::composer::strips::waiting_title;
+use crate::composer::strips::{StripRoom, waiting_title};
 use crate::store::Store;
 use crate::theme::{IconSize, Layer, Radius, Surface, TextSize, colors};
-use crate::ui::{ActionButton, Chip, PickMark, Variant, beside, icons};
+use crate::ui::{ActionButton, Chip, FadingScroll, PickMark, Variant, beside, icons};
 
 /// How far past its text an option's light and the room to press it reach.
 const OPTION_REACH: f32 = 8.;
@@ -18,7 +18,7 @@ const OPTION_GAP: f32 = 2.;
 const MARK_GAP: f32 = 10.;
 const OWN_ANSWER_LINES: usize = 3;
 
-pub fn questions(store: &Entity<Store>, approval: &Waiting, cx: &App) -> Div {
+pub fn questions(store: &Entity<Store>, approval: &Waiting, room: StripRoom, cx: &App) -> Div {
     let c = colors(cx);
     let state = store.read(cx);
     let count = approval.questions.len();
@@ -35,35 +35,40 @@ pub fn questions(store: &Entity<Store>, approval: &Waiting, cx: &App) -> Div {
     let typed = state.typed_answer(approval).trim().to_string();
     let (back, refuse, next) = (store.clone(), store.clone(), store.clone());
     let refuse_id = approval.id.clone();
+    let text = div()
+        .px(px(OPTION_REACH))
+        .flex()
+        .flex_col()
+        .gap(px(6.))
+        .child(
+            div()
+                .text_size(TextSize::Sm)
+                .line_height(px(19.))
+                .font_weight(FontWeight::MEDIUM)
+                .text_color(c.foreground)
+                .child(question.text.clone()),
+        )
+        .when(question.multiple, |text| {
+            text.child(div().text_color(c.muted_foreground).child("Choose any that apply"))
+        });
+    let options = div().flex().flex_col().gap(px(OPTION_GAP)).children(options).child(own_answer(
+        store,
+        index,
+        typed,
+        question.multiple,
+        cx,
+    ));
     div()
         .flex()
         .flex_col()
-        .gap(px(12.))
+        .child(waiting_title(title, "message-circle-question-mark", place, cx).text_color(c.warning))
         .child(
-            div()
-                .flex()
-                .flex_col()
-                .gap(px(6.))
-                .child(waiting_title(title, "message-circle-question-mark", place, cx).text_color(c.warning))
-                .child(
-                    div()
-                        .text_size(TextSize::Sm)
-                        .line_height(px(19.))
-                        .font_weight(FontWeight::MEDIUM)
-                        .text_color(c.foreground)
-                        .child(question.text.clone()),
-                )
-                .when(question.multiple, |text| {
-                    text.child(div().text_color(c.muted_foreground).child("Choose any that apply"))
-                }),
+            div().relative().mx(px(-OPTION_REACH)).mt(px(6.)).mb(px(12.)).child(room.measure()).child(
+                FadingScroll::new(SharedString::from(format!("questions-{}", approval.id)), room.max_height)
+                    .fill(c.composer)
+                    .child(div().flex().flex_col().gap(px(12.)).child(text).child(options)),
+            ),
         )
-        .child(div().mx(px(-OPTION_REACH)).flex().flex_col().gap(px(OPTION_GAP)).children(options).child(own_answer(
-            store,
-            index,
-            typed,
-            question.multiple,
-            cx,
-        )))
         .child(
             div()
                 .flex()

@@ -14,29 +14,37 @@ struct QuestionsView: View {
     var body: some View {
         let question = store.question(approval)
         let index = store.questionIndex(approval)
-        VStack(alignment: .leading, spacing: 12) {
-            VStack(alignment: .leading, spacing: 6) {
-                WaitingTitle(
-                    question.header.isEmpty ? approval.title : question.header, symbol: .messageCircleQuestionMark,
-                    place: approval.questions.count > 1 ? "\(index + 1) of \(approval.questions.count)" : nil
-                )
-                .foregroundStyle(Color.themeWarning)
-                Text(question.text)
-                    .font(.ui(.sm, weight: .medium))
-                    .lineSpacing(2)
-                    .fixedSize(horizontal: false, vertical: true)
-                if question.multiple {
-                    Text("Choose any that apply")
-                        .foregroundStyle(Color.themeMutedForeground)
+        VStack(alignment: .leading, spacing: 0) {
+            WaitingTitle(
+                question.header.isEmpty ? approval.title : question.header, symbol: .messageCircleQuestionMark,
+                place: approval.questions.count > 1 ? "\(index + 1) of \(approval.questions.count)" : nil
+            )
+            .foregroundStyle(Color.themeWarning)
+            // Takes only the room the composer leaves, so the composer stays above the keyboard.
+            FadingScroll(maxHeight: .infinity) {
+                VStack(alignment: .leading, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(question.text)
+                            .font(.ui(.sm, weight: .medium))
+                            .lineSpacing(2)
+                            .fixedSize(horizontal: false, vertical: true)
+                        if question.multiple {
+                            Text("Choose any that apply")
+                                .foregroundStyle(Color.themeMutedForeground)
+                        }
+                    }
+                    .padding(.horizontal, Self.optionReach)
+                    VStack(spacing: Self.optionGap) {
+                        ForEach(question.options) { option in
+                            row(option, multiple: question.multiple)
+                        }
+                        ownAnswer(multiple: question.multiple)
+                    }
                 }
-            }
-            VStack(spacing: Self.optionGap) {
-                ForEach(question.options) { option in
-                    row(option, multiple: question.multiple)
-                }
-                ownAnswer(multiple: question.multiple)
             }
             .padding(.horizontal, -Self.optionReach)
+            .padding(.top, 6)
+            .padding(.bottom, 12)
             HStack(spacing: 0) {
                 if index > 0 {
                     ActionButton("Back", icon: .chevronLeft, variant: .ghost, margin: .beside(trailing: 8)) { store.goBack(approval) }

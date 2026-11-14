@@ -41,6 +41,11 @@ pub struct SkillTyping {
 }
 
 impl SkillTyping {
+    /// How far the composer's top was last drawn under the top bar.
+    pub fn room(&self) -> f32 {
+        self.room.get()
+    }
+
     /// Before any skill is put in but the ones picked up to `picked`.
     pub fn after(picked: u64) -> Self {
         Self { picked, room: Rc::new(Cell::new(f32::INFINITY)), ..Self::default() }

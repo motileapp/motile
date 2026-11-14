@@ -75,6 +75,9 @@ final class TranscriptView: FlippedView, RowOwner {
 
     /// The room between the last row and the composer.
     static let composerGap: CGFloat = 80
+    /// How close under the top bar the composer and what lies on it may come, which is less
+    /// than `composerGap` so that a tall strip has room before it scrolls.
+    static let overlayGap: CGFloat = 16
 
     /// Above the composer, which starts `composerGap` into the inset.
     private var jumpButtonY: CGFloat {
