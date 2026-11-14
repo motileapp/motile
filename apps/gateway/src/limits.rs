@@ -1,8 +1,8 @@
 //! How much of their plans the accounts have used, labelled as the server labels its own accounts'
 //! windows so that the clients show them alike. Read from every response: Anthropic's
 //! `anthropic-ratelimit-unified-*` headers, Codex's `x-codex-*` headers and `codex.rate_limits`
-//! events. An account nothing went through for a minute is asked: Claude's `/api/oauth/usage`, the
-//! ChatGPT backend's `/wham/usage`, which list its limit resets too.
+//! events. Every account's usage page is read too, every two minutes and when the Limits tab opens:
+//! Claude's `/api/oauth/usage`, the ChatGPT backend's `/wham/usage`, which list its limit resets too.
 
 use motile_protocol::resets;
 use motile_protocol::wire::{Agent, LimitReset, LimitWindow};
@@ -105,6 +105,20 @@ pub fn from_claude_usage(usage: &Value, now: f64) -> Reading {
         .collect(),
     };
     Reading { windows, resets: Some(resets::claude(&usage["cedar_ember"], now)), whole: true }
+}
+
+/// The windows Claude's answer to a reset says it cleared.
+pub fn claude_cleared(answer: &Value) -> Vec<&'static str> {
+    let cleared = answer["cleared"].as_array().into_iter().flatten().filter_map(Value::as_str);
+    cleared
+        .filter_map(|limit| match limit {
+            "five_hour" => Some("Session"),
+            "seven_day" => Some("Weekly"),
+            "seven_day_opus" => Some("Weekly · Opus"),
+            "seven_day_sonnet" => Some("Weekly · Sonnet"),
+            _ => None,
+        })
+        .collect()
 }
 
 /// A model's own week, which some accounts are told apart from the list they aren't given.
@@ -281,6 +295,13 @@ mod tests {
             .map(|window| (window.label, window.used_percent))
             .collect();
         assert_eq!(windows, [("Session".into(), 90.0), ("Weekly".into(), 0.0), ("Weekly · Fable".to_string(), 12.0)]);
+    }
+
+    #[test]
+    fn a_claude_reset_says_which_windows_it_cleared() {
+        let answer = json!({"result": "reset", "cleared": ["five_hour", "seven_day", "seven_day_overage_included"]});
+        assert_eq!(claude_cleared(&answer), ["Session", "Weekly"]);
+        assert!(claude_cleared(&json!({"result": "reset"})).is_empty());
     }
 
     #[test]

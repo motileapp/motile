@@ -176,9 +176,11 @@ impl Render for Root {
         let error = store.error_message.clone();
         let stopping = store.stopping.clone();
         let ui_confirm = store.ui_confirm.clone();
+        let asked_reset = store.usage.asked_reset.clone();
         let error = crate::ui::modal::presented("error", error, window, cx);
         let stopping = crate::ui::modal::presented("stop", stopping, window, cx);
         let ui_confirm = crate::ui::modal::presented("ui-confirm", ui_confirm, window, cx);
+        let asked_reset = crate::ui::modal::presented("use-reset", asked_reset, window, cx);
         let adding_server = self.connect.clone().filter(|_| !first_server);
         let adding_server = crate::ui::modal::presented("add-server", adding_server, window, cx);
         let custom_snooze = crate::ui::modal::presented("custom-snooze", self.custom_snooze.clone(), window, cx);
@@ -321,6 +323,24 @@ impl Render for Root {
                     })
                 };
                 root.child(confirmation("ui-confirm", shown, close, cx).leaving(leaving))
+            })
+            .when_some(asked_reset, |root, (asked, leaving)| {
+                let (uses, closes) = (self.store.clone(), self.store.clone());
+                let shown = Confirmation::new(asked.option.question.clone())
+                    .message(asked.option.consequence.clone())
+                    .answer(Answer::new("Use Reset", move |_, cx| {
+                        uses.update(cx, |store, cx| {
+                            store.use_limit_reset(&asked.resets, &asked.option.id, asked.used);
+                            cx.notify();
+                        })
+                    }));
+                let close = move |_: &mut Window, cx: &mut App| {
+                    closes.update(cx, |store, cx| {
+                        store.usage.asked_reset = None;
+                        cx.notify();
+                    })
+                };
+                root.child(confirmation("use-reset", shown, close, cx).leaving(leaving))
             })
             .child(crate::ui::modal::Scrim)
             .child(

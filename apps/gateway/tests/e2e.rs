@@ -75,6 +75,8 @@ struct Fake {
     mcp_refuse_renewal: AtomicBool,
     /// Every account's one reset was used.
     reset_used: AtomicBool,
+    /// Claude's usage page fails.
+    usage_down: AtomicBool,
 }
 
 impl Fake {
@@ -147,18 +149,36 @@ async fn claude_profile(headers: HeaderMap) -> Json<Value> {
     }))
 }
 
-async fn claude_usage(State(fake): Shared) -> Json<Value> {
+/// As Claude, which lists and claims resets for Claude Code alone.
+fn from_claude_code(headers: &HeaderMap) -> bool {
+    let header = |name: &str| headers.get(name).and_then(|value| value.to_str().ok()).unwrap_or_default();
+    header("user-agent").starts_with("claude-cli/") && header("x-app") == "cli"
+}
+
+async fn claude_usage(State(fake): Shared, headers: HeaderMap) -> Response {
     fake.polls.fetch_add(1, Ordering::SeqCst);
+    if fake.usage_down.load(Ordering::SeqCst) {
+        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+    }
+    if !from_claude_code(&headers) {
+        return Json(json!({"five_hour": {"utilization": 10.0, "resets_at": null},
+                           "cedar_ember": {"eligible": false, "ineligible_reason": "surface", "grants": []}}))
+        .into_response();
+    }
     let left = u32::from(!fake.reset_used.load(Ordering::SeqCst));
     let grant = json!({"id": "week", "resets_left": left, "usable_now": true, "clears": ["seven_day"]});
     Json(json!({"five_hour": {"utilization": 10.0, "resets_at": null},
                 "cedar_ember": {"eligible": true, "grants": [grant], "next_grant_id": "week"}}))
+    .into_response()
 }
 
 async fn claude_reset(State(fake): Shared, Path(org): Path<String>, headers: HeaderMap, body: Bytes) -> Json<Value> {
     fake.see(&format!("/api/organizations/{org}/reset_rate_limits"), &headers, &body);
+    if !from_claude_code(&headers) {
+        return Json(json!({"result": "ineligible"}));
+    }
     let used = fake.reset_used.swap(true, Ordering::SeqCst);
-    Json(json!({"result": if used { "already_used" } else { "reset" }}))
+    Json(json!({"result": if used { "already_used" } else { "reset" }, "cleared": ["five_hour"]}))
 }
 
 async fn codex_resets(State(fake): Shared) -> Json<Value> {
@@ -1027,6 +1047,30 @@ async fn a_client_uses_a_claude_accounts_reset_once() {
 
     let GatewayReply::Error { message } = harness.manage(used).await else { panic!("a used reset is gone") };
     assert_eq!(message, "This account no longer has that reset.");
+}
+
+#[tokio::test]
+async fn a_client_reads_the_accounts_resets_whenever_it_asks() {
+    let harness = Harness::start().await;
+    let state = harness.sign_in_claude("alpha").await;
+    assert_eq!(harness.account(&state, "alpha").resets.len(), 1);
+
+    harness.fake.reset_used.store(true, Ordering::SeqCst);
+    let GatewayReply::State { state } = harness.manage(Manage::ReadLimits).await else { panic!("the limits are read") };
+    assert!(harness.account(&state, "alpha").resets.is_empty(), "read from Claude again, not kept");
+}
+
+#[tokio::test]
+async fn a_used_reset_shows_what_it_refilled_though_the_usage_page_fails_after() {
+    let harness = Harness::start().await;
+    let state = harness.sign_in_claude("alpha").await;
+    assert_eq!(harness.account(&state, "alpha").windows[0].used_percent, 10.0);
+
+    harness.fake.usage_down.store(true, Ordering::SeqCst);
+    let used = Manage::UseReset { id: harness.account(&state, "alpha").id, reset: "week".into() };
+    let GatewayReply::State { state } = harness.manage(used).await else { panic!("the reset is used") };
+    let session = &harness.account(&state, "alpha").windows[0];
+    assert_eq!((session.label.as_str(), session.used_percent), ("Session", 0.0));
 }
 
 #[tokio::test]

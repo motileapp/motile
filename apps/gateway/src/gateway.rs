@@ -24,8 +24,9 @@ use crate::store::{Captured, Record, Store};
 /// An account's tokens are renewed when they expire within this.
 const RENEW_BEFORE: f64 = 10.0 * 60.0;
 const RENEW_CHECK: Duration = Duration::from_secs(60);
-/// An account nothing was read from for this long is asked for its limits.
-const POLL_AFTER: f64 = 60.0;
+/// How often every account's usage page is read, however busy the account is: responses only carry
+/// some of its windows, and none of its resets.
+const POLL_EVERY: f64 = 120.0;
 const POLL_CHECK: Duration = Duration::from_secs(30);
 const PRICES_EVERY: Duration = Duration::from_secs(86400);
 const TIDY_EVERY: Duration = Duration::from_secs(600);
@@ -65,6 +66,8 @@ pub struct Gateway {
     capture: Mutex<(Capture, Option<f64>)>,
     data_dir: PathBuf,
     pub mcp_servers: McpServers,
+    /// The version of Claude Code whose requests came last, which Claude is told the gateway's own are.
+    claude_code: Mutex<Option<String>>,
 }
 
 impl Gateway {
@@ -102,6 +105,7 @@ impl Gateway {
             capture: Mutex::new(capture),
             data_dir,
             mcp_servers,
+            claude_code: Mutex::default(),
         };
         gateway.pick_threads_up(now());
         Ok(Arc::new(gateway))
@@ -190,6 +194,7 @@ impl Gateway {
                     tokens: signed.tokens,
                     windows: vec![],
                     read_at: None,
+                    polled_at: None,
                     resets: vec![],
                     created_at: now,
                 };
@@ -533,7 +538,7 @@ impl Gateway {
         let gateway = self.clone();
         tokio::spawn(async move {
             loop {
-                gateway.poll_idle().await;
+                gateway.poll_due().await;
                 tokio::time::sleep(POLL_CHECK).await;
             }
         });
@@ -576,19 +581,34 @@ impl Gateway {
         }
     }
 
-    /// Asks the accounts nothing was read from lately for their limits.
-    async fn poll_idle(&self) {
+    /// Reads the usage page of every account whose page wasn't read lately.
+    async fn poll_due(&self) {
         let now = now();
-        let idle = self.accounts().into_iter().filter(|account| {
+        let due = self.accounts().into_iter().filter(|account| {
             account.enabled
                 && account.status != AccountStatus::SignInAgain
-                && account.read_at.is_none_or(|at| now - at > POLL_AFTER)
+                && account.polled_at.is_none_or(|at| now - at >= POLL_EVERY)
         });
-        for account in idle {
+        for account in due {
+            self.change(&account.id, |account| account.polled_at = Some(now));
+            if let Err(error) = self.poll(&account).await {
+                tracing::warn!(account = account.id, "couldn't read an account's limits: {error:#}");
+            }
+        }
+    }
+
+    /// Asks every account's usage page for its limits and resets at once.
+    pub async fn read_limits(&self) {
+        let usable = self
+            .accounts()
+            .into_iter()
+            .filter(|account| account.enabled && account.status != AccountStatus::SignInAgain);
+        let polls = usable.map(|account| async move {
             if let Err(error) = self.poll(&account).await {
                 tracing::debug!(account = account.id, "couldn't read an account's limits: {error:#}");
             }
-        }
+        });
+        futures_util::future::join_all(polls).await;
     }
 
     /// Asks the agent's usage page what the account has used, and which limit resets it has.
@@ -634,26 +654,34 @@ impl Gateway {
                 let path = format!("/api/organizations/{organization}/reset_rate_limits");
                 let body = resets::claude_claim(reset, &request);
                 let answer = self.ask(&account, &tokens, reqwest::Method::POST, &path, Some(body)).await?;
-                resets::claude_claimed(&answer)
+                resets::claude_claimed(&answer).map(|()| Some(limits::claude_cleared(&answer)))
             }
             Agent::Codex => {
                 let body = resets::codex_consume(reset, &request);
                 let path = format!("{CODEX_RESETS}/consume");
                 let answer = self.ask(&account, &tokens, reqwest::Method::POST, &path, Some(body)).await?;
-                resets::codex_consumed(answer["code"].as_str().unwrap_or_default())
+                resets::codex_consumed(answer["code"].as_str().unwrap_or_default()).map(|()| None)
             }
         };
-        if let Err(error) = self.poll(&account).await {
-            tracing::debug!(account = id, "couldn't read its limits after a reset: {error:#}");
+        // What it refilled shows as refilled at once, as Claude Code shows it, whether or not the usage
+        // page can be read right after.
+        if let Ok(cleared) = &used {
+            tracing::info!(account = id, "used a limit reset");
+            self.change(id, |account| {
+                let refilled = account
+                    .windows
+                    .iter_mut()
+                    .filter(|window| cleared.as_ref().is_none_or(|cleared| cleared.contains(&window.label.as_str())));
+                refilled.for_each(|window| window.used_percent = 0.0);
+                if matches!(account.status, AccountStatus::Resting { .. }) {
+                    account.status = AccountStatus::Ready;
+                }
+            });
         }
-        used.map_err(anyhow::Error::msg)?;
-        tracing::info!(account = id, "used a limit reset");
-        self.change(id, |account| {
-            if matches!(account.status, AccountStatus::Resting { .. }) {
-                account.status = AccountStatus::Ready;
-            }
-        });
-        Ok(())
+        if let Err(error) = self.poll(&account).await {
+            tracing::warn!(account = id, "couldn't read its limits after a reset: {error:#}");
+        }
+        used.map(|_| ()).map_err(anyhow::Error::msg)
     }
 
     /// The account a server's reset is for: the one its threads are pinned to, or else the one whose
@@ -663,6 +691,12 @@ impl Gateway {
             Some(pinned) => Some(pinned.to_string()),
             None => self.pool_account(agent).map(|(account, _)| account.id),
         }
+    }
+
+    /// Notes the version of Claude Code that sent a thread's request.
+    pub fn saw_claude_code(&self, user_agent: &str) {
+        let Some(version) = resets::claude_code_version(user_agent) else { return };
+        *self.claude_code.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(version.to_string());
     }
 
     /// The agent's backend's JSON answer to a request of the account's.
@@ -675,10 +709,16 @@ impl Gateway {
         body: Option<serde_json::Value>,
     ) -> anyhow::Result<serde_json::Value> {
         let request = match account.agent {
-            Agent::Claude => self
-                .http
-                .request(method, format!("{}{path}", self.upstreams.anthropic))
-                .header("anthropic-beta", oauth::CLAUDE_OAUTH_BETA),
+            Agent::Claude => {
+                let version = self.claude_code.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).clone();
+                let request = self
+                    .http
+                    .request(method, format!("{}{path}", self.upstreams.anthropic))
+                    .header("anthropic-beta", oauth::CLAUDE_OAUTH_BETA);
+                resets::claude_code_headers(version.as_deref())
+                    .into_iter()
+                    .fold(request, |request, (name, value)| request.header(name, value))
+            }
             Agent::Codex => self
                 .http
                 .request(method, format!("{}{path}", self.upstreams.chatgpt))

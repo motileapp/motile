@@ -120,6 +120,11 @@ class Handler(BaseHTTPRequestHandler):
         token = (self.headers.get("authorization") or "").removeprefix("Bearer ")
         return token.split("-")[1] if token.startswith("claude-") else "codex"
 
+    def from_claude_code(self):
+        """As Claude, which lists and claims resets for Claude Code alone."""
+        agent = self.headers.get("user-agent") or ""
+        return agent.startswith("claude-cli/") and self.headers.get("x-app") == "cli"
+
     def base(self):
         return f"http://{self.headers.get('host')}"
 
@@ -169,7 +174,10 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/oauth/usage":
             session, weekly = used(self.account())
             grants = claude_grants(self.account())
-            return self.send(200, {"cedar_ember": {"eligible": True, "grants": grants, "next_grant_id": "weekly"}, "limits": [
+            resets = {"eligible": True, "grants": grants, "next_grant_id": "weekly"}
+            if not self.from_claude_code():
+                resets = {"eligible": False, "ineligible_reason": "surface", "grants": []}
+            return self.send(200, {"cedar_ember": resets, "limits": [
                 {"kind": "session", "group": "session", "percent": session, "resets_at": iso(now + 2.5 * HOUR),
                  "severity": "normal"},
                 {"kind": "weekly", "group": "weekly", "percent": weekly, "resets_at": iso(now + 4 * DAY),
@@ -216,6 +224,8 @@ class Handler(BaseHTTPRequestHandler):
                 "account": {"uuid": "account", "email_address": f"{org}@example.com"},
                 "organization": {"uuid": org, "name": org.title()}})
         if path.startswith("/api/organizations/") and path.endswith("/reset_rate_limits"):
+            if not self.from_claude_code():
+                return self.send(200, {"result": "ineligible"})
             grant = json.loads(raw).get("grant_id")
             found = next((held for held in claude_grants(self.account()) if held["id"] == grant), None)
             if not found or found["resets_left"] == 0:

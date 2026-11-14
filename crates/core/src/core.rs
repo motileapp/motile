@@ -97,7 +97,7 @@ const SEARCH_DELAY: Duration = Duration::from_millis(120);
 /// How long a search waits for a server.
 const SEARCH_TIMEOUT: Duration = Duration::from_secs(5);
 /// How long the Limits tab waits for the gateway's accounts.
-const GATEWAY_LIMITS_WAIT: Duration = Duration::from_secs(5);
+const GATEWAY_LIMITS_WAIT: Duration = Duration::from_secs(8);
 /// What a server said of its agents' accounts is read again once it is this old.
 const LIMITS_STALE: Duration = Duration::from_secs(5 * 60);
 /// How long the core may take over one input before the log says so.
@@ -1398,6 +1398,18 @@ impl Core {
                     let _ = inputs.send(Input::GatewayAnswered { id, answer });
                 }
                 Err(error) => reply(&sink, id, Err(error_text(error))),
+            }
+        });
+    }
+
+    /// Has the gateway read every account's limits and resets now, for a view of it that opened: it
+    /// shows what was kept until they come.
+    fn read_gateway_limits(&self) {
+        let Some(link) = self.gateway.link.clone() else { return };
+        let inputs = self.inputs.clone();
+        tokio::spawn(async move {
+            if let Ok(GatewayReply::State { state }) = link.manage(Manage::ReadLimits).await {
+                let _ = inputs.send(Input::Gateway { key: link.key.clone(), event: GatewayEvent::State(state) });
             }
         });
     }
@@ -3280,8 +3292,12 @@ impl Core {
                 });
             }
             Command::WatchGateway { on } => {
+                let opened = on && !self.gateway.watching;
                 self.gateway.watching = on;
                 self.sync_gateway();
+                if opened {
+                    self.read_gateway_limits();
+                }
                 self.reply(id, Ok(json!({})));
             }
             Command::AddGateway => {
@@ -4095,8 +4111,16 @@ impl Core {
                 let told = inputs.clone();
                 let asked_gateway = tokio::spawn(async move {
                     let link = gateway_link?;
-                    let answer = tokio::time::timeout(GATEWAY_LIMITS_WAIT, link.manage(Manage::State)).await;
-                    let Ok(Ok(GatewayReply::State { state })) = answer else { return None };
+                    let read = tokio::time::timeout(GATEWAY_LIMITS_WAIT, link.manage(Manage::ReadLimits)).await;
+                    let state = match read {
+                        Ok(Ok(GatewayReply::State { state })) => state,
+                        // A gateway from before `ReadLimits`, or one whose accounts were slow to answer.
+                        _ => {
+                            let kept = tokio::time::timeout(GATEWAY_LIMITS_WAIT, link.manage(Manage::State)).await;
+                            let Ok(Ok(GatewayReply::State { state })) = kept else { return None };
+                            state
+                        }
+                    };
                     let accounts = state.accounts.clone();
                     let _ = told.send(Input::Gateway { key: link.key.clone(), event: GatewayEvent::State(state) });
                     Some(accounts)
