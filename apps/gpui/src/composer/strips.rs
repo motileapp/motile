@@ -336,8 +336,9 @@ pub fn waiting_title(title: String, symbol: &'static str, place: Option<String>,
 
 const PADDING: f32 = 12.;
 const TARGET_INSET: f32 = 10.;
+const TARGET_INSET_VERTICAL: f32 = 6.;
 /// Eight lines of a command, after which it scrolls inside its box.
-const TARGET_HEIGHT: f32 = theme::CODE_LINE_HEIGHT * 8. + TARGET_INSET * 2.;
+const TARGET_HEIGHT: f32 = theme::CODE_LINE_HEIGHT * 8. + TARGET_INSET_VERTICAL * 2.;
 
 /// The tool call the agent waits with, above the composer: it is allowed or refused, and one
 /// that asks questions is answered. The calls behind it wait their turn.
@@ -355,72 +356,60 @@ fn waiting_call(store: &Entity<Store>, approval: &Waiting, count: usize, cx: &Ap
     let (refuse, allow) = (store.clone(), store.clone());
     let (refuse_id, allow_id) = (approval.id.clone(), approval.id.clone());
     let place = (count > 1).then(|| format!("1 of {count}"));
-    let has_target = !approval.target.is_empty();
     div()
+        .p(px(PADDING))
         .flex()
         .flex_col()
+        .gap(px(12.))
         .child(
-            div()
-                .pt(px(PADDING))
-                .px(px(PADDING))
-                .pb(px(if has_target { 8. } else { PADDING }))
-                .flex()
-                .items_center()
-                .gap(px(8.))
-                .child(
-                    waiting_title(approval.title.clone(), icons::tool_symbol(approval.icon), place, cx)
-                        .text_color(c.warning),
-                )
-                .child(div().flex_1().min_w(px(8.)))
-                .child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .child(
-                            ActionButton::new("refuse", approval.refuse)
-                                .small()
-                                .surface(Surface::Composer)
-                                .margin(beside(0., 4.))
-                                .on_click(move |_, _, cx| {
-                                    refuse.update(cx, |store, cx| {
-                                        store.answer(&refuse_id, false, Default::default());
-                                        cx.notify();
-                                    })
-                                }),
-                        )
-                        .child(
-                            ActionButton::new("allow", approval.allow)
-                                .variant(Variant::Warning)
-                                .small()
-                                .surface(Surface::Composer)
-                                .margin(beside(4., 0.))
-                                .on_click(move |_, _, cx| {
-                                    allow.update(cx, |store, cx| {
-                                        store.answer(&allow_id, true, Default::default());
-                                        cx.notify();
-                                    })
-                                }),
-                        ),
-                ),
+            waiting_title(approval.title.clone(), icons::tool_symbol(approval.icon), place, cx).text_color(c.warning),
         )
-        .when(has_target, |call| {
+        .when(!approval.target.is_empty(), |call| {
             call.child(
-                div().px(px(PADDING)).pb(px(PADDING)).child(
-                    div().rounded(px(Radius::MD)).bg(c.border_composer).overflow_hidden().child(
-                        FadingScroll::new(SharedString::from(format!("target-{}", approval.id)), TARGET_HEIGHT)
-                            .padding(TARGET_INSET)
-                            .fill(c.border_composer)
-                            .child(
-                                div()
-                                    .font_family(theme::MONO_FONT)
-                                    .text_size(theme::CODE_SIZE)
-                                    .line_height(px(theme::CODE_LINE_HEIGHT))
-                                    .child(command(&approval.id, &approval.target, &approval.spans, cx)),
-                            ),
-                    ),
+                div().rounded(px(Radius::MD)).bg(c.border_composer).overflow_hidden().child(
+                    FadingScroll::new(SharedString::from(format!("target-{}", approval.id)), TARGET_HEIGHT)
+                        .fill(c.border_composer)
+                        .child(
+                            div()
+                                .px(px(TARGET_INSET))
+                                .py(px(TARGET_INSET_VERTICAL))
+                                .font_family(theme::MONO_FONT)
+                                .text_size(theme::CODE_SIZE)
+                                .line_height(px(theme::CODE_LINE_HEIGHT))
+                                .child(command(&approval.id, &approval.target, &approval.spans, cx)),
+                        ),
                 ),
             )
         })
+        .child(
+            div()
+                .flex()
+                .justify_end()
+                .items_center()
+                .child(
+                    ActionButton::new("refuse", approval.refuse)
+                        .surface(Surface::Composer)
+                        .margin(beside(0., 4.))
+                        .on_click(move |_, _, cx| {
+                            refuse.update(cx, |store, cx| {
+                                store.answer(&refuse_id, false, Default::default());
+                                cx.notify();
+                            })
+                        }),
+                )
+                .child(
+                    ActionButton::new("allow", approval.allow)
+                        .variant(Variant::Warning)
+                        .surface(Surface::Composer)
+                        .margin(beside(4., 0.))
+                        .on_click(move |_, _, cx| {
+                            allow.update(cx, |store, cx| {
+                                store.answer(&allow_id, true, Default::default());
+                                cx.notify();
+                            })
+                        }),
+                ),
+        )
 }
 
 /// The command in the colours the core gave its stretches: their start, their length and the

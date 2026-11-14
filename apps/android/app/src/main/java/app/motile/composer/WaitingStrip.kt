@@ -25,7 +25,6 @@ import app.motile.core.Approval
 import app.motile.platform.Symbol
 import app.motile.theme.TextSize
 import app.motile.theme.iconSize
-import app.motile.theme.ControlSize
 import app.motile.theme.LocalForeground
 import app.motile.theme.Palette
 import app.motile.theme.Radius
@@ -44,6 +43,7 @@ import app.motile.ui.Text
 object WaitingStrip {
     val padding = 12.dp
     internal val targetInset = 10.dp
+    internal val targetInsetVertical = 6.dp
 }
 
 @Composable
@@ -63,35 +63,26 @@ private fun Call(approval: Approval, count: Int) {
     val palette = Theme.colors
     val padding = WaitingStrip.padding
     // Eight lines of a command, after which it scrolls inside its box.
-    val targetHeight = with(LocalDensity.current) { Theme.codeLineHeight.toDp() } * 8 + WaitingStrip.targetInset * 2
-    Column(Modifier.fillMaxWidth()) {
-        Row(
-            Modifier.fillMaxWidth().padding(start = padding, end = padding, top = padding, bottom = if (approval.target.isEmpty()) padding else 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            CompositionLocalProvider(LocalForeground provides palette.warning) {
-                WaitingTitle(approval.title, approval.symbol, if (count > 1) "1 of $count" else null, Modifier.weight(1f))
-            }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                ActionButton(approval.refuseLabel, size = ControlSize.Small, margin = beside(end = 8.dp)) { store.answer(approval, allow = false) }
-                ActionButton(approval.allowLabel, variant = ButtonVariant.Warning, size = ControlSize.Small) { store.answer(approval, allow = true) }
-            }
+    val targetHeight = with(LocalDensity.current) { Theme.codeLineHeight.toDp() } * 8 + WaitingStrip.targetInsetVertical * 2
+    Column(Modifier.fillMaxWidth().padding(padding), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        CompositionLocalProvider(LocalForeground provides palette.warning) {
+            WaitingTitle(approval.title, approval.symbol, if (count > 1) "1 of $count" else null)
         }
         if (approval.target.isNotEmpty()) {
             val typeset = remember(approval, palette) { typesetTarget(approval, palette) }
             FadingScroll(
                 targetHeight,
-                Modifier
-                    .padding(start = padding, end = padding, bottom = padding)
-                    .fillMaxWidth()
-                    .background(palette.borderComposer, RoundedCornerShape(Radius.md)),
+                Modifier.fillMaxWidth().background(palette.borderComposer, RoundedCornerShape(Radius.md)),
             ) {
                 Text(
-                    typeset, Modifier.padding(WaitingStrip.targetInset),
+                    typeset, Modifier.padding(horizontal = WaitingStrip.targetInset, vertical = WaitingStrip.targetInsetVertical),
                     style = Theme.inlineCodeFont.copy(lineHeight = Theme.codeLineHeight), color = palette.foreground,
                 )
             }
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
+            ActionButton(approval.refuseLabel, margin = beside(end = 8.dp)) { store.answer(approval, allow = false) }
+            ActionButton(approval.allowLabel, variant = ButtonVariant.Warning) { store.answer(approval, allow = true) }
         }
     }
 }
