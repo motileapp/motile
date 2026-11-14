@@ -179,10 +179,10 @@ struct SettingsPage: View {
                 EmptyView()
             }
         }
-        relay
         backup
-        removedServers
+        relay
         continuing
+        removedServers
     }
 
     /// The account's own iroh relay, which every device uses in place of iroh's public ones.

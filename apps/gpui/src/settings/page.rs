@@ -402,10 +402,10 @@ impl SettingsPage {
             row(vec![div().ml(px(-large_outset())).child(add).into_any_element()], Vec::new()).into_any_element(),
         );
         let mut groups = vec![group("servers", "Servers", None, true, rows, cx)];
-        groups.push(self.relay(cx));
         groups.extend(self.backup(cx));
-        groups.extend(self.removed_servers(&removed, cx));
+        groups.push(self.relay(cx));
         groups.extend(self.continuing(cx));
+        groups.extend(self.removed_servers(&removed, cx));
         groups
     }
 

@@ -172,8 +172,9 @@ private fun SettingsGroups.servers(
         }
         row { SettingsLink({ navigator.push(SettingsRoute.AddServer) }) { SettingsActionLabel("Add a Server", Symbol.Plus) } }
     }
-    relay(store, editRelay)
     backup(store, editBackup, remove)
+    relay(store, editRelay)
+    continuing(store)
     group("removed-servers", header = "Unlinked") {
         for (server in store.removedServers) row {
             SettingsLink({ navigator.push(SettingsRoute.ServerPage(server.id, removed = true)) }) {
@@ -181,6 +182,10 @@ private fun SettingsGroups.servers(
             }
         }
     }
+}
+
+/** What each server goes on with by itself: threads whose usage limit reset, and threads a restart cut off. */
+private fun SettingsGroups.continuing(store: AppStore) {
     val continuing = store.servers.filter { it.state == Server.State.Connected && store.canChooseRestart(it) }
     if (continuing.isEmpty()) return
     toggles(
