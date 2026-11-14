@@ -66,10 +66,9 @@ fun InterruptionStrip(interruption: Interruption) {
         val thread = store.selectedThread
         val resets = thread?.takeIf { interruption is Interruption.Limit }?.let(store::resets)
             ?.takeIf { held -> held.options.any { it.usable || it.atLimit } }
-        // As the strip's other controls, filled where a control isn't lit under the pointer.
-        if (thread != null && resets != null) ResetMenu(resets, ButtonVariant.Secondary, ComposerStrip.margin, thread = thread)
+        val margin = if (resets == null) ComposerStrip.margin else ComposerStrip.middleMargin
         val button = @Composable { title: String, help: String, action: () -> Unit ->
-            ActionButton(title, help = help, variant = ButtonVariant.Ghost, margin = ComposerStrip.margin, onClick = action)
+            ActionButton(title, help = help, variant = ButtonVariant.Ghost, margin = margin, onClick = action)
         }
         when {
             interruption is Interruption.Limit && interruption.resetsAt != null && interruption.resetsAt > now ->
@@ -80,6 +79,7 @@ fun InterruptionStrip(interruption: Interruption) {
                 }
             interruption is Interruption.Restart -> button("Continue", "Have the agent go on where it left off") { store.continueThread() }
         }
+        if (thread != null && resets != null) ResetMenu(resets, ButtonVariant.Ghost, ComposerStrip.margin, thread = thread)
     }
 }
 
