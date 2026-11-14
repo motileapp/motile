@@ -85,24 +85,26 @@ export function Composer({
             <span className="text-(length:--type-xs) font-semibold text-warning">
               {thread.approval.verb}
             </span>
+          </div>
+          <p className="mt-3 rounded-md bg-border-composer px-2.5 py-1.5 font-mono text-(length:--type-xs) break-words">
+            <Command text={thread.approval.target} />
+          </p>
+          <div className="mt-3 flex justify-end gap-2">
             <button
               type="button"
               onClick={() => onAnswer(false)}
-              className="ml-auto h-6 rounded-sm bg-border-composer px-2 text-(length:--type-xs) font-medium"
+              className="h-8 rounded-md bg-border-composer px-[11px] text-(length:--type-xs) font-medium"
             >
               Refuse
             </button>
             <button
               type="button"
               onClick={() => onAnswer(true)}
-              className="h-6 rounded-sm bg-warning px-2 text-(length:--type-xs) font-medium text-warning-foreground hover:bg-warning/(--opacity-lit)"
+              className="h-8 rounded-md bg-warning px-[11px] text-(length:--type-xs) font-medium text-warning-foreground hover:bg-warning/(--opacity-lit)"
             >
               Allow
             </button>
           </div>
-          <p className="mt-2 rounded-md bg-border-composer p-2.5 font-mono text-(length:--type-xs) break-words">
-            <Command text={thread.approval.target} />
-          </p>
         </Strip>
       )}
       <div className="relative z-10 rounded-2xl border border-border-composer bg-composer">

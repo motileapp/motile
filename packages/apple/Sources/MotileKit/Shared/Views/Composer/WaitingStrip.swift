@@ -9,8 +9,11 @@ struct WaitingStrip: View {
 
     static let padding: CGFloat = 12
     private static let targetInset: CGFloat = 10
+    private static let targetInsetVertical: CGFloat = 6
+    /// Half the room a code line has over its font, which Apple's text puts above the words.
+    private static let targetLift = (Theme.codeLineHeight - (Theme.inlineCodeFont.ascender - Theme.inlineCodeFont.descender)) / 2
     /// Eight lines of a command, after which it scrolls inside its box.
-    private static let targetHeight = Theme.codeLineHeight * 8 + targetInset * 2
+    private static let targetHeight = Theme.codeLineHeight * 8 + targetInsetVertical * 2
 
     var body: some View {
         content
@@ -30,27 +33,25 @@ struct WaitingStrip: View {
     }
 
     private var call: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 8) {
-                WaitingTitle(approval.title, symbol: approval.symbol, place: count > 1 ? "1 of \(count)" : nil)
-                    .foregroundStyle(Color.themeWarning)
-                Spacer(minLength: 8)
-                HStack(spacing: 0) {
-                    ActionButton(approval.refuseLabel, size: .small, margin: .beside(trailing: 4)) { store.answer(approval, allow: false) }
-                    ActionButton(approval.allowLabel, variant: .warning, size: .small, margin: .beside(leading: 4)) { store.answer(approval, allow: true) }
-                }
-            }
-            .padding([.top, .horizontal], Self.padding)
-            .padding(.bottom, approval.target.isEmpty ? Self.padding : 8)
+        VStack(alignment: .leading, spacing: 12) {
+            WaitingTitle(approval.title, symbol: approval.symbol, place: count > 1 ? "1 of \(count)" : nil)
+                .foregroundStyle(Color.themeWarning)
             if !approval.target.isEmpty {
                 FadingScroll(maxHeight: Self.targetHeight) {
                     ProseText(text: approval.typesetTarget)
-                        .padding(Self.targetInset)
+                        .padding(.horizontal, Self.targetInset)
+                        .padding(.top, Self.targetInsetVertical - Self.targetLift)
+                        .padding(.bottom, Self.targetInsetVertical + Self.targetLift)
                 }
-                .background(Color.themeBorderComposer, in: RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
-                .padding([.bottom, .horizontal], Self.padding)
+                .box(in: RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
+            }
+            HStack(spacing: 0) {
+                Spacer()
+                ActionButton(approval.refuseLabel, glass: true, margin: .beside(trailing: 4)) { store.answer(approval, allow: false) }
+                ActionButton(approval.allowLabel, variant: .warning, glass: true, margin: .beside(leading: 4)) { store.answer(approval, allow: true) }
             }
         }
+        .padding(Self.padding)
     }
 }
 

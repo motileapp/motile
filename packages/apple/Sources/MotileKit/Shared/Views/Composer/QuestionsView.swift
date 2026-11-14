@@ -45,7 +45,7 @@ struct QuestionsView: View {
                 ActionButton(approval.refuseLabel, variant: .ghost, margin: .beside(leading: 8, trailing: 4)) {
                     store.answer(approval, allow: false)
                 }
-                ActionButton(store.isLastQuestion(approval) ? approval.allowLabel : "Next", variant: .primary, margin: .beside(leading: 4)) {
+                ActionButton(store.isLastQuestion(approval) ? approval.allowLabel : "Next", variant: .primary, glass: true, margin: .beside(leading: 4)) {
                     store.goOn(approval)
                 }
                 .disabled(!store.canGoOn(approval))

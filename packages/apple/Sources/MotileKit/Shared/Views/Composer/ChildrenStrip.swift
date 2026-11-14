@@ -80,7 +80,7 @@ struct AgentBar: View {
                     .fixedSize()
                     .padding(.trailing, Self.backApart)
             }
-            ActionButton("Go Back", icon: .cornerLeftUp, help: "Back to the thread", variant: .primary, gap: Self.backGap, round: true) { store.rightPanel.showAgents() }
+            ActionButton("Go Back", icon: .cornerLeftUp, help: "Back to the thread", variant: .primary, gap: Self.backGap, round: true, glass: true) { store.rightPanel.showAgents() }
         }
     }
 }
