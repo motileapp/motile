@@ -432,9 +432,13 @@ pub struct Subagent {
     pub progress: Option<String>,
     /// What it reported when it ended.
     pub result: Option<String>,
+    /// How much of its context it takes, as it last said.
     pub tokens: Option<u64>,
     pub tool_uses: Option<u64>,
     pub duration_ms: Option<u64>,
+    /// What it has spent, at the API's prices, when it works in a thread of your server's.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cost_usd: Option<f64>,
     /// Set when it is a workflow, which runs agents of its own.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub workflow: Option<Workflow>,

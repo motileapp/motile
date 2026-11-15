@@ -1128,8 +1128,11 @@ data class AgentInfo(
     val detail: String,
     val startedAt: Double,
     val durationMs: Int?,
+    /** How much of its context it takes. */
     val tokens: Int?,
     val toolUses: Int?,
+    /** What it has spent, when it was started through your server. */
+    val costUSD: Double? = null,
     /** The thread it works in, when it was started through your server. */
     val threadID: String? = null,
     /** The agent it runs as, whose logo it shows, when that is known. */
@@ -1157,6 +1160,7 @@ data class AgentInfo(
         durationMs = json.optionalInt("duration_ms"),
         tokens = json.optionalInt("tokens"),
         toolUses = json.optionalInt("tool_uses"),
+        costUSD = json.optionalDouble("cost_usd"),
         threadID = json.optionalString("thread_id"),
         agent = Agent.of(json.optionalString("agent")),
         model = json.optionalString("model"),
@@ -1167,17 +1171,13 @@ data class AgentInfo(
 
     val working: Boolean get() = status == ToolStatus.Running
 
-    /** "3 tools · 21k tokens", as far as either is known. */
+    /** "3 tools · 21K context", as far as either is known. */
     val usage: String?
         get() {
-            val parts = listOfNotNull(toolUses?.let { "$it ${if (it == 1) "tool" else "tools"}" }, tokens?.let(::tokens))
+            val tools = toolUses?.let { "$it ${if (it == 1) "tool" else "tools"}" }
+            val parts = listOfNotNull(tools, tokens?.let { "${it.toLong().abbreviated} context" })
             return if (parts.isEmpty()) null else parts.joinToString(" · ")
         }
-
-    companion object {
-        /** "820 tokens", "21.4K tokens", "4.57M tokens". */
-        fun tokens(count: Int): String = "${count.toLong().abbreviated} tokens"
-    }
 }
 
 /** How a tool call went. */

@@ -811,10 +811,11 @@ impl AgentViewExt for AgentView {
         self.status == motile_protocol::wire::ToolStatus::Running
     }
 
-    /// "3 tools · 21.4K tokens", as far as either is known.
+    /// "3 tools · 21.4K context", as far as either is known.
     fn usage(&self) -> Option<String> {
         let tools = self.tool_uses.map(|count| format!("{count} {}", if count == 1 { "tool" } else { "tools" }));
-        let parts: Vec<String> = [tools, self.tokens.map(tokens)].into_iter().flatten().collect();
+        let context = self.tokens.map(|count| format!("{} context", crate::format::abbreviated(count)));
+        let parts: Vec<String> = [tools, context].into_iter().flatten().collect();
         (!parts.is_empty()).then(|| parts.join(" · "))
     }
 
@@ -824,16 +825,11 @@ impl AgentViewExt for AgentView {
         (!parts.is_empty()).then(|| parts.join(" · "))
     }
 
-    /// "6.1-Sol · work · 3 tools · 21.4K tokens", as far as each is known.
+    /// "6.1-Sol · work · 3 tools · 21.4K context", as far as each is known.
     fn facts(&self) -> Option<String> {
         let parts: Vec<String> = [self.runs_on(), self.usage()].into_iter().flatten().collect();
         (!parts.is_empty()).then(|| parts.join(" · "))
     }
-}
-
-/// "820 tokens", "21.4K tokens", "4.57M tokens".
-pub fn tokens(count: u64) -> String {
-    format!("{} tokens", crate::format::abbreviated(count))
 }
 
 /// A file attached to a message, as the transcript shows it. An image or a video names the file

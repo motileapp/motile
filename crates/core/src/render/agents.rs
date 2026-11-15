@@ -128,8 +128,12 @@ pub struct AgentView {
     pub started_at: f64,
     /// How long it worked, once it has ended.
     pub duration_ms: Option<u64>,
+    /// How much of its context it takes, as it last said.
     pub tokens: Option<u64>,
     pub tool_uses: Option<u64>,
+    /// What it has spent, at the API's prices, when it works in a thread of your server's.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cost_usd: Option<f64>,
     /// The thread it works in, when it was started through your server: opening it opens that.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub thread_id: Option<String>,
@@ -234,6 +238,7 @@ pub fn starting(item: &Item, call: &ToolCall, threads: &HashMap<String, ThreadSt
         duration_ms: agent.and_then(|agent| agent.duration_ms).filter(|_| !working || state == AgentState::Limited),
         tokens: agent.and_then(|agent| agent.tokens),
         tool_uses: agent.and_then(|agent| agent.tool_uses),
+        cost_usd: agent.and_then(|agent| agent.cost_usd),
         thread_id,
         agent: runs_on.map(|on| on.agent),
         model: runs_on
@@ -307,6 +312,7 @@ pub fn noticed(item: &Item, notice: &AgentNotice) -> AgentView {
         duration_ms: None,
         tokens: None,
         tool_uses: None,
+        cost_usd: None,
         thread_id: Some(notice.thread_id.clone()),
         agent: Some(notice.agent),
         model: None,
@@ -434,6 +440,7 @@ mod tests {
             tokens: Some(2100),
             tool_uses: Some(3),
             duration_ms: Some(30_000),
+            cost_usd: None,
             workflow: None,
             runs_on: None,
             waits: None,

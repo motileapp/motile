@@ -4887,6 +4887,7 @@ impl Live {
                 tokens: update.tokens.or(known.tokens),
                 tool_uses: update.tool_uses.or(known.tool_uses),
                 duration_ms: update.duration_ms.or(known.duration_ms),
+                cost_usd: update.cost_usd.or(known.cost_usd),
                 workflow: update.workflow.or(known.workflow),
                 runs_on: update.runs_on.or(known.runs_on),
                 waits: update.waits,

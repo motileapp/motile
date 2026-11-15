@@ -37,7 +37,7 @@ struct AgentsSurface: View {
         }
     }
 
-    /// "1 waiting · 2 working · 1 done · 48k tokens", leaving out what there is none of, each count
+    /// "1 waiting · 2 working · 1 done · $4.20", leaving out what there is none of, each count
     /// in its state's colour.
     static func summary(of agents: [AgentInfo]) -> Text {
         guard !agents.isEmpty else { return Text(verbatim: "No agents") }
@@ -46,8 +46,8 @@ struct AgentsSurface: View {
             let count = agents.count { $0.state == state }
             return count > 0 ? Text(verbatim: "\(count) \(word)").foregroundStyle(state.color) : nil
         }
-        let spent = agents.compactMap(\.tokens)
-        let total = spent.isEmpty ? [] : [Text(verbatim: AgentInfo.tokens(spent.reduce(0, +)))]
+        let spent = agents.compactMap(\.costUSD)
+        let total = spent.isEmpty ? [] : [Text(verbatim: SpendingView.cost(spent.reduce(0, +)))]
         return Text(dotted: counts + total)
     }
 }
@@ -239,7 +239,7 @@ private struct AgentRow: View {
         }
     }
 
-    /// "6.1-Sol · work · 3 tools · 21k tokens", as far as each is known, with the gateway's symbol
+    /// "6.1-Sol · work · 3 tools · 21K context", as far as each is known, with the gateway's symbol
     /// after the model of one that runs through the gateway.
     @ViewBuilder private var facts: some View {
         let runsOn = [agent.model, agent.account].compactMap { $0 }

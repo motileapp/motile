@@ -4511,6 +4511,10 @@ async fn agents_started_in_the_background_wake_the_agent_that_started_them() {
         assert_eq!(notices.len(), 1, "{read:?}");
         assert!(notices[0].ends_with(&format!("finished. Its reply:\n\n{REVIEW}")), "{}", notices[0]);
     }
+    let spent: HashMap<Agent, Option<f64>> =
+        started_agents(&woken).values().map(|agent| (agent.runs_on.as_ref().unwrap().agent, agent.cost_usd)).collect();
+    assert!(spent[&Agent::Claude].is_some_and(|cost| cost >= 0.0138), "{spent:?}");
+    assert_eq!(spent[&Agent::Codex], None, "no price names the fake Codex's model");
 
     let children: Vec<Thread> = [thread_where(&mut list, |thread| thread.parent.is_some()).await].into();
     assert!(children.iter().all(|child| child.parent.as_ref().unwrap().thread_id == parent));

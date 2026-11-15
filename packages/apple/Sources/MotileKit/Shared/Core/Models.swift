@@ -1185,8 +1185,11 @@ struct AgentInfo: Equatable, Identifiable {
     let detail: String
     let startedAt: Double
     let durationMs: Int?
+    /// How much of its context it takes.
     let tokens: Int?
     let toolUses: Int?
+    /// What it has spent, when it was started through your server.
+    let costUSD: Double?
     /// The thread it works in, when it was started through your server.
     let threadID: String?
     /// The agent it runs as, whose logo it shows, when that is known.
@@ -1215,6 +1218,7 @@ struct AgentInfo: Equatable, Identifiable {
         durationMs = number("duration_ms")
         tokens = number("tokens")
         toolUses = number("tool_uses")
+        costUSD = json.optionalDouble("cost_usd")
         threadID = json.optionalString("thread_id")
         agent = json.optionalString("agent").flatMap(Agent.init(rawValue:))
         model = json.optionalString("model")
@@ -1225,16 +1229,11 @@ struct AgentInfo: Equatable, Identifiable {
 
     var working: Bool { status == .running }
 
-    /// "3 tools · 21k tokens", as far as either is known.
+    /// "3 tools · 21K context", as far as either is known.
     var usage: String? {
         let tools = toolUses.map { "\($0) \($0 == 1 ? "tool" : "tools")" }
-        let parts = [tools, tokens.map(Self.tokens)].compactMap { $0 }
+        let parts = [tools, tokens.map { "\($0.abbreviated) context" }].compactMap { $0 }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
-    }
-
-    /// "820 tokens", "21.4K tokens", "4.57M tokens".
-    static func tokens(_ count: Int) -> String {
-        "\(count.abbreviated) tokens"
     }
 }
 

@@ -637,6 +637,7 @@ mod tests {
             tokens: None,
             tool_uses: None,
             duration_ms: None,
+            cost_usd: None,
             workflow: None,
             runs_on: None,
             waits: None,
