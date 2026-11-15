@@ -664,6 +664,7 @@ extension RowModel {
         case .changes: "changes"
         case .turnEnd: "turn_end"
         case .handoff: "handoff"
+        case .compaction: "compaction"
         case .agent: "agent"
         case .agents: "agents"
         case .queued: "queued"

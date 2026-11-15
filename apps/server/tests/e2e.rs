@@ -569,6 +569,7 @@ async fn a_message_starts_the_skills_the_agent_lists_in_the_project() {
     assert_eq!(
         claude.skills,
         [
+            skill("compact", "Free up context by summarizing the conversation so far", SkillSource::System),
             skill("ship-it", "Commit and open a pull request", SkillSource::Project),
             skill("review", "Review the changes on this branch for bugs", SkillSource::Personal),
             skill("pdf", "Read, fill in and make PDF files", SkillSource::Plugin),
@@ -576,6 +577,10 @@ async fn a_message_starts_the_skills_the_agent_lists_in_the_project() {
     );
     let codex = accounts.iter().find(|listed| listed.account == "codex").unwrap();
     assert_eq!(codex.skills[0].label, "Image Gen");
+    assert_eq!(
+        codex.skills.last().map(|skill| (skill.name.as_str(), skill.source)),
+        Some(("compact", SkillSource::System))
+    );
 
     let text = "First $review it, then $ship-it with $HOME";
     let thread_id = send(&connection, None, Some(new_thread), text).await;
@@ -594,6 +599,57 @@ async fn a_message_starts_the_skills_the_agent_lists_in_the_project() {
         given,
         json!([{"type": "text", "text": "First /review it, then"}, {"type": "text", "text": "/ship-it with $HOME"}])
     );
+}
+
+#[tokio::test]
+async fn compacting_a_thread_shrinks_its_context_in_a_turn_of_its_own() {
+    let cases = [
+        (Agent::Claude, "fixtures/edit-and-run.jsonl", Some(21_438), Some(2_856)),
+        (Agent::Codex, "fixtures/codex-edit-and-run.jsonl", Some(15_040), None),
+    ];
+    for (agent, fixture, before, after) in cases {
+        let harness = Harness::with_sessions(fixture, &[]).await;
+        let connection = harness.connect().await;
+        let new_thread = harness.new_thread(&connection, agent).await.unwrap();
+        let new_thread = Some(new_thread);
+        let request = |thread_id: Option<String>, new_thread: Option<NewThread>| Request::Send {
+            thread_id,
+            new_thread,
+            text: "$compact".to_string(),
+            attachments: Vec::new(),
+            now: true,
+            context: None,
+            message_id: None,
+        };
+        let refused = connection.request(&request(None, new_thread.clone())).await.unwrap();
+        assert!(
+            matches!(&refused, Message::Error { message } if message.contains("nothing to compact")),
+            "{refused:?}"
+        );
+
+        let thread_id = send(&connection, None, new_thread, "Use an f-string in greet.py").await;
+        finished_transcript(&connection, &thread_id).await;
+        let sent = connection.request(&request(Some(thread_id.clone()), None)).await.unwrap();
+        assert!(matches!(sent, Message::Sent { .. }), "{sent:?}");
+        let compacted = |transcript: &Transcript| {
+            transcript.items.iter().any(|item| matches!(item.kind, ItemKind::Compaction { .. }))
+        };
+        let transcript = transcript_once(&connection, &thread_id, compacted).await;
+        let compaction = transcript.items.iter().find_map(|item| match item.kind {
+            ItemKind::Compaction { before, after } => Some((before, after)),
+            _ => None,
+        });
+        assert_eq!(compaction, Some((before, after)), "{agent:?}");
+        let ends = transcript.items.iter().filter(|item| matches!(item.kind, ItemKind::TurnEnd { .. })).count();
+        assert_eq!(ends, 2, "{agent:?}: the compaction ends a turn of its own");
+        match agent {
+            Agent::Claude => {
+                let prompts = std::fs::read_to_string(harness.dir.path().join("prompts.txt")).unwrap();
+                assert_eq!(prompts.lines().last(), Some(r#""/compact""#), "Claude Code is given the bare command");
+            }
+            Agent::Codex => assert_eq!(harness.recorded_requests("thread/compact/start").len(), 1),
+        }
+    }
 }
 
 #[tokio::test]
@@ -4734,6 +4790,18 @@ async fn an_agent_follows_any_thread_and_starts_agents_only_on_accounts_that_exi
     assert!(failed && said.contains("at least the first 8 characters"), "{said}");
     let (said, failed) = call_tool(url, token, "agent_status", json!({"ids": ["nope-nope"]})).await;
     assert!(failed && said.starts_with("Your server has no thread whose id is or starts with nope-nope"), "{said}");
+
+    // How far it got, as Codex last said: its last call read 14,800 tokens and wrote 240.
+    let (said, failed) = call_tool(url, token, "agent_status", json!({"ids": [other]})).await;
+    assert!(!failed, "{said}");
+    let state = &serde_json::from_str::<serde_json::Value>(&said).unwrap()[0];
+    assert_eq!(state["context"], json!({"tokens": 15040, "window": 258400, "percent": 6}));
+    assert!(state["tools"].as_u64().is_some_and(|tools| tools > 0), "{state}");
+    assert!(state["elapsed_seconds"].is_u64() && state.get("activity").is_none(), "{state}");
+    let (said, _) = call_tool(url, token, "list_threads", json!({})).await;
+    let listed: serde_json::Value = serde_json::from_str(&said).unwrap();
+    let listed = listed["threads"].as_array().unwrap().iter().find(|thread| thread["id"] == other).unwrap();
+    assert_eq!((&listed["context"], &listed["tools"]), (&state["context"], &state["tools"]));
     // It follows another's agent, but only the user allows what that one asks, full access or not.
     let approve = json!({"id": child.id, "approval_id": "nope", "allow": true});
     let (said, failed) = call_tool(url, token, "approve_agent", approve).await;
@@ -4769,6 +4837,14 @@ async fn an_agent_follows_any_thread_and_starts_agents_only_on_accounts_that_exi
     assert!(!failed && said.contains(r#""used":true"#), "{said}");
     let used = harness.recorded_requests("account/rateLimitResetCredit/consume");
     assert_eq!(used.last().unwrap()["creditId"], "credit-1", "its own account's reset it can use now");
+
+    let greeter = created["id"].as_str().unwrap();
+    finished_transcript(&connection, greeter).await;
+    let (said, failed) = call_tool(url, token, "compact_agent", json!({"id": greeter})).await;
+    assert!(!failed, "{said}");
+    let compacted =
+        |transcript: &Transcript| transcript.items.iter().any(|item| matches!(item.kind, ItemKind::Compaction { .. }));
+    transcript_once(&connection, greeter, compacted).await;
 }
 
 #[tokio::test]

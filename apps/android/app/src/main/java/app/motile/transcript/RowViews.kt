@@ -118,6 +118,7 @@ fun TranscriptRow(row: RowModel) {
         is RowModel.Kind.Changes -> ChangesRow(row, kind.content)
         is RowModel.Kind.TurnEnd -> TurnEndRow(row, kind.content)
         is RowModel.Kind.Handoff -> HandoffRow(kind.content)
+        is RowModel.Kind.Compaction -> CompactionRow(kind.label)
         RowModel.Kind.Unknown -> {}
     }
 }
@@ -897,6 +898,17 @@ private fun HandoffRow(handoff: HandoffContent) {
         Spacer(Modifier.width(arrowGap))
         End(handoff.to)
         Spacer(Modifier.width(lineGap))
+        Box(Modifier.weight(1f).height(1.dp).background(palette.border))
+    }
+}
+
+/** Where the agent summarized its conversation: a line across, broken by what it shrank its context from and to. */
+@Composable
+private fun CompactionRow(label: String) {
+    val palette = LocalPalette.current
+    Row(Modifier.fillMaxWidth().height(ControlSize.Large.height), verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.weight(1f).height(1.dp).background(palette.border))
+        Text(label, Modifier.padding(horizontal = ControlSize.Regular.padding), style = Theme.smallFont, color = palette.mutedStrongerForeground, maxLines = 1)
         Box(Modifier.weight(1f).height(1.dp).background(palette.border))
     }
 }

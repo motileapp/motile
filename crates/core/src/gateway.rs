@@ -728,7 +728,7 @@ pub(crate) fn latency(ms: u64) -> String {
     }
 }
 
-fn count(n: u64) -> String {
+pub(crate) fn count(n: u64) -> String {
     match n {
         n if n < 1000 => n.to_string(),
         n if n < 10_000 => format!("{:.1}k", n as f64 / 1000.0).replace(".0k", "k"),

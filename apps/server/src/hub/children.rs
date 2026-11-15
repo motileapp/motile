@@ -62,6 +62,32 @@ pub struct ChildState {
     pub limit_resets: Option<String>,
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub wait_timed_out: bool,
+    #[serde(flatten)]
+    pub work: Work,
+}
+
+/// How far the thread's agent has got, as the clients' Agents view shows it.
+#[derive(Serialize, Clone, Default)]
+pub struct Work {
+    /// The tool calls of its own the transcript has.
+    pub tools: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub context: Option<ContextUse>,
+    /// What it is doing now, while it works or waits.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub activity: Option<String>,
+    /// How long it has worked since it started, or worked until its last turn ended.
+    pub elapsed_seconds: u64,
+}
+
+/// How much of its model's context the session the thread resumes takes, as its agent last said.
+#[derive(Serialize, Clone, PartialEq, Debug)]
+pub struct ContextUse {
+    pub tokens: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub window: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub percent: Option<u64>,
 }
 
 #[derive(Serialize, Clone, Copy, PartialEq, Eq, Debug)]
@@ -532,9 +558,9 @@ impl Hub {
             let timed_out = deadline.is_some_and(|deadline| Instant::now() >= deadline);
             let mut seen = Vec::new();
             for id in ids {
-                let live = self.live_or(id, "Your server has no thread with that id.").await?;
+                let mut live = self.live_or(id, "Your server has no thread with that id.").await?;
                 let asked = live.activity.approvals.first().map(|approval| approval.id.clone());
-                seen.push((self.state_of(&live)?, asked, live.told_limit));
+                seen.push((self.state_of(&mut live)?, asked, live.told_limit));
             }
             let settled = seen.iter().all(|(state, ..)| state.status.settled());
             let asking = seen.iter().any(|(state, ..)| matches!(state.status, Status::Asking | Status::NeedsApproval));
@@ -655,7 +681,9 @@ impl Hub {
         Ok(self.child_states(caller, &[id.to_string()], None).await?.remove(0))
     }
 
-    pub(super) fn state_of(&self, live: &Live) -> anyhow::Result<ChildState> {
+    pub(super) fn state_of(&self, live: &mut Live) -> anyhow::Result<ChildState> {
+        let now_doing = live_status(live);
+        let work = self.work_of(live, now_doing)?;
         let thread = &live.stored.thread;
         let account = self.account_of(thread);
         let approval = live.activity.approvals.first();
@@ -672,15 +700,10 @@ impl Hub {
             approval: None,
             limit_resets: None,
             wait_timed_out: false,
+            work,
         };
-        state.status = match approval.map(Approval::ask) {
-            Some(Ask::Question) => Status::Asking,
-            Some(_) => Status::NeedsApproval,
-            None if live.busy() || thread.monitoring => Status::Running,
-            None if live.limited() => {
-                state.limit_resets = limit_resets(thread);
-                Status::WaitingForUsageLimit
-            }
+        state.status = match now_doing {
+            Some(status) => status,
             None => {
                 let items = self.store.last_turn(&thread.id)?;
                 let ended = items.iter().rev().find_map(|item| match &item.kind {
@@ -689,6 +712,7 @@ impl Hub {
                 });
                 state.reply = items.iter().rev().find_map(|item| match &item.kind {
                     ItemKind::Assistant { text } => Some(text.clone()),
+                    ItemKind::Compaction { before, after } => Some(compacted_text(*before, *after)),
                     _ => None,
                 });
                 state.error = items.iter().rev().find_map(|item| match &item.kind {
@@ -704,6 +728,9 @@ impl Hub {
                 }
             }
         };
+        if state.status == Status::WaitingForUsageLimit {
+            state.limit_resets = limit_resets(thread);
+        }
         if state.status == Status::Asking {
             let input: Value =
                 approval.and_then(|approval| serde_json::from_str(&approval.input).ok()).unwrap_or_default();
@@ -746,8 +773,8 @@ impl Hub {
         let Some(parent) = self.slot(child_id).and_then(|slot| slot.parent) else { return Ok(()) };
         let (agent, notice) = {
             let Some(mut child) = self.live(child_id).await else { return Ok(()) };
-            let state = self.state_of(&child)?;
-            let agent = self.subagent_of(&mut child, &state)?;
+            let state = self.state_of(&mut child)?;
+            let agent = self.subagent_of(&child, &state);
             if state.status != Status::WaitingForUsageLimit {
                 child.told_limit = false;
             }
@@ -766,23 +793,17 @@ impl Hub {
         }
     }
 
-    fn subagent_of(&self, live: &mut Live, state: &ChildState) -> anyhow::Result<Subagent> {
-        let tool_uses = live.tool_count(&self.store)?;
+    /// What a thread's agent did and does, as `Work` says it and with the state it is in.
+    pub(super) fn work_of(&self, live: &mut Live, now_doing: Option<Status>) -> anyhow::Result<Work> {
+        let tools = live.tool_count(&self.store)?;
         let thread = &live.stored.thread;
-        let tokens =
-            self.store.session(&thread.id, &self.continuation(thread))?.and_then(|session| session.context_used);
-        let status = match state.status {
-            Status::Finished => ToolStatus::Succeeded,
-            Status::Failed | Status::Stopped => ToolStatus::Failed,
-            _ => ToolStatus::Running,
-        };
-        // What it waits for the clients read from its thread; this says what it is doing.
-        let progress = match state.status {
-            Status::WaitingForUsageLimit if limit_continues(thread) => {
+        let activity = match now_doing {
+            Some(Status::WaitingForUsageLimit) if limit_continues(thread) => {
                 Some("Waiting for its usage limit to reset".to_string())
             }
-            Status::WaitingForUsageLimit => Some("Reached its usage limit".to_string()),
-            Status::Running | Status::NeedsApproval | Status::Asking => {
+            Some(Status::WaitingForUsageLimit) => Some("Reached its usage limit".to_string()),
+            Some(_) if live.activity.compacting => Some("Compacting its context".to_string()),
+            Some(_) => {
                 live.open.values().filter(|item| item.parent.is_none()).max_by_key(|item| item.seq).and_then(|item| {
                     match &item.kind {
                         ItemKind::Tool { call } => Some(doing(call, &thread.cwd)),
@@ -792,18 +813,44 @@ impl Hub {
                     }
                 })
             }
-            _ => None,
+            None => None,
         };
-        let ended = thread.turn_ended_at.unwrap_or_else(now);
-        Ok(Subagent {
+        let working = now_doing.is_some_and(|status| status != Status::WaitingForUsageLimit);
+        Ok(Work {
+            tools,
+            context: self.context_of(thread)?,
+            activity,
+            elapsed_seconds: worked_secs(thread, working) as u64,
+        })
+    }
+
+    fn context_of(&self, thread: &Thread) -> rusqlite::Result<Option<ContextUse>> {
+        let Some(session) = self.store.session(&thread.id, &self.continuation(thread))? else { return Ok(None) };
+        // Without a session to resume, the next turn starts with an empty context.
+        let Some(tokens) = session.session_id.as_ref().and(session.context_used) else { return Ok(None) };
+        let model = thread.model.as_deref().or(session.model.as_deref());
+        let prices = self.prices.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let window = session.context_window.or_else(|| prices.context_window(model?)).filter(|window| *window > 0);
+        Ok(Some(ContextUse { tokens, window, percent: window.map(|window| (tokens * 100 + window / 2) / window) }))
+    }
+
+    fn subagent_of(&self, live: &Live, state: &ChildState) -> Subagent {
+        let thread = &live.stored.thread;
+        let status = match state.status {
+            Status::Finished => ToolStatus::Succeeded,
+            Status::Failed | Status::Stopped => ToolStatus::Failed,
+            _ => ToolStatus::Running,
+        };
+        Subagent {
             kind: None,
             status,
-            progress,
+            // What it waits for the clients read from its thread; this says what it is doing.
+            progress: state.work.activity.clone(),
             result: state.reply.clone().or_else(|| state.error.clone()).filter(|_| state.status.settled()),
-            tokens,
-            tool_uses: Some(tool_uses),
+            tokens: state.work.context.as_ref().map(|context| context.tokens),
+            tool_uses: Some(state.work.tools),
             duration_ms: (state.status.settled() || state.status == Status::WaitingForUsageLimit)
-                .then(|| ((ended - thread.created_at).max(0.0) * 1000.0) as u64),
+                .then(|| (worked_secs(thread, false) * 1000.0) as u64),
             workflow: None,
             runs_on: Some(Box::new(RunsOn {
                 model: state.model.clone().map(|model| self.model_name(thread.agent, &model).unwrap_or(model)),
@@ -817,7 +864,7 @@ impl Hub {
             },
             stopped: state.status == Status::Stopped,
             limited: state.status == Status::WaitingForUsageLimit,
-        })
+        }
     }
 
     /// What the agent that started the thread is to be told of it now, once.
@@ -1110,6 +1157,31 @@ fn limit_resets(thread: &Thread) -> Option<String> {
     let Some(Interruption::Limit { resets_at: Some(at), .. }) = thread.interruption else { return None };
     let at = chrono::DateTime::from_timestamp(at as i64, 0)?;
     Some(at.format("%Y-%m-%d %H:%M UTC").to_string())
+}
+
+/// What the thread's agent is doing now, or `None` once its turn has ended.
+pub(super) fn live_status(live: &Live) -> Option<Status> {
+    match live.activity.approvals.first().map(Approval::ask) {
+        Some(Ask::Question) => Some(Status::Asking),
+        Some(_) => Some(Status::NeedsApproval),
+        None if live.busy() || live.stored.thread.monitoring => Some(Status::Running),
+        None if live.limited() => Some(Status::WaitingForUsageLimit),
+        None => None,
+    }
+}
+
+fn compacted_text(before: Option<u64>, after: Option<u64>) -> String {
+    match (before, after) {
+        (Some(before), Some(after)) => format!("It compacted its context from {before} to {after} tokens."),
+        (Some(before), None) => format!("It compacted its context of {before} tokens."),
+        _ => "It compacted its context.".to_string(),
+    }
+}
+
+/// From the thread's start until now while it works, or until its last turn ended.
+fn worked_secs(thread: &Thread, working: bool) -> f64 {
+    let until = if working { now() } else { thread.turn_ended_at.unwrap_or_else(now) };
+    (until - thread.created_at).max(0.0)
 }
 
 /// Whether the thread goes on by itself once its usage limit resets.

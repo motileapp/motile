@@ -23,6 +23,8 @@ reply made up on the spot instead:
   before each of the two and waits for the answer on stdin. Its reply ends with what it was told
   while it worked.
 - "which color": a turn that asks the user a question and goes on with the answer.
+- "/compact": compacts the conversation as Claude Code does, from 21,438 tokens to 2,856; Codex
+  compacts when asked with `thread/compact/start`.
 - "ask a few questions": a turn that asks three questions at once, one with a recommended option and
   one that takes several, and says what it was told.
 - "plan the hello": a turn that presents a plan and, once that is approved, carries it out.
@@ -1496,12 +1498,17 @@ class Codex:
             if method == "turn/interrupt":
                 emit({"id": message["id"], "result": {}})
                 self.stopping.set()
+            if method == "thread/compact/start":
+                record({method: params})
+                emit({"id": message["id"], "result": {}})
+                self.prompts.put({"compact": True})
         self.prompts.put(None)
         self.answers.put(None)
 
     METHODS = {"initialize", "account/read", "account/rateLimits/read", "account/rateLimitResetCredit/consume", "model/list",
                "skills/list", "config/read", "thread/start",
-               "thread/resume", "thread/inject_items", "turn/start", "turn/steer", "turn/interrupt"}
+               "thread/resume", "thread/inject_items", "turn/start", "turn/steer", "turn/interrupt",
+               "thread/compact/start"}
 
     def limits(self):
         def window(used, minutes, hours):
@@ -1703,7 +1710,19 @@ class Codex:
         "look over": look_over,
     }
 
+    def compact(self):
+        """A compaction runs in a turn of its own, as one item, and leaves the context smaller."""
+        turn = {"id": self.turn_id(), "status": "inProgress", "error": None}
+        self.notify("turn/started", turn=turn)
+        item = {"type": "contextCompaction", "id": f"compaction_{turn['id']}"}
+        self.notify("item/started", threadId=self.thread_id, turnId=turn["id"], item=item)
+        self.pause(0.1)
+        self.notify("item/completed", threadId=self.thread_id, turnId=turn["id"], item=item)
+        self.notify("turn/completed", turn=dict(turn, status="completed"))
+
     def turn(self, params):
+        if params.get("compact"):
+            return self.compact()
         self.turns += 1
         self.told = []
         self.stopping.clear()
@@ -1822,11 +1841,28 @@ def follow_skill(name, arguments):
 prompt_now = [prompt]
 
 
+def compact():
+    """`/compact`, as Claude Code 2.1 runs it: its conversation summarized in a turn of no turns."""
+    Turn("00000000-0000-4000-8000-0000000c0de0")
+    emit({"type": "system", "subtype": "status", "status": "compacting"}, pause=0.1)
+    emit({"type": "system", "subtype": "status", "status": None})
+    metadata = {"trigger": "manual", "pre_tokens": 21438, "post_tokens": 2856}
+    emit({"type": "system", "subtype": "compact_boundary", "compact_metadata": metadata})
+    summary = "This session is being continued from a previous conversation that ran out of context."
+    emit({"type": "user", "uuid": str(uuid.uuid4()), "isReplay": False, "message": {"role": "user", "content": summary}})
+    printed = "<local-command-stdout>Compacted </local-command-stdout>"
+    emit({"type": "user", "uuid": str(uuid.uuid4()), "isReplay": True, "message": {"role": "user", "content": printed}})
+    emit({"type": "result", "subtype": "success", "is_error": False, "num_turns": 0, "result": "",
+          "permission_denials": [], "terminal_reason": "completed"})
+
+
 def answer(prompt):
     prompt_now[0] = prompt
     refusal, gateway_refusal[0] = gateway_refusal[0], None
     if refusal is not None:
         return refused_by_gateway(refusal)
+    if prompt.strip() == "/compact":
+        return compact()
     said = message_of(prompt).lower()
     names = [command["name"] for command in claude_commands() if not command.get("builtin")]
     started = re.search(r"(?:\A|\n\n)/([\w:-]+)[ \t]*(.*)\Z", message_of(prompt), re.S)

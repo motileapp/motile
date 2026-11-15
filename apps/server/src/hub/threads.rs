@@ -10,7 +10,7 @@ use anyhow::{Context, bail};
 use motile_protocol::wire::{Ask, Interruption, Message, NewThread, NewWorktree, Project, Thread, ThreadChange};
 use serde_json::{Value, json};
 
-use super::children::{agent_key, parse_agent, pick_access};
+use super::children::{agent_key, live_status, parse_agent, pick_access};
 use super::{Hub, NewMessage};
 use crate::git;
 use crate::mcp::{
@@ -131,18 +131,22 @@ impl Hub {
         let offset = list.offset.unwrap_or(0);
         let limit = list.limit.unwrap_or(LISTED).clamp(1, MOST_LISTED);
         let projects = self.project_names().await;
-        let listed: Vec<Value> = threads
-            .iter()
-            .skip(offset)
-            .take(limit)
-            .map(|thread| {
-                let mut listed = self.thread_json(thread, &projects);
-                if let Some(excerpt) = excerpts.get(&thread.id) {
-                    listed["excerpt"] = json!(excerpt);
-                }
-                listed
-            })
-            .collect();
+        let mut listed = Vec::new();
+        for thread in threads.iter().skip(offset).take(limit) {
+            let mut json = self.thread_json(thread, &projects);
+            if let Some(excerpt) = excerpts.get(&thread.id) {
+                json["excerpt"] = json!(excerpt);
+            }
+            if let Some(mut live) = self.live(&thread.id).await {
+                let now_doing = live_status(&live);
+                let work = self.work_of(&mut live, now_doing)?;
+                let (Value::Object(json), Value::Object(work)) = (&mut json, serde_json::to_value(work)?) else {
+                    unreachable!("a thread and its work are objects")
+                };
+                json.extend(work);
+            }
+            listed.push(json);
+        }
         let next = (offset + listed.len() < total).then_some(offset + listed.len());
         Ok(json!({"threads": listed, "total": total, "next_offset": next}))
     }

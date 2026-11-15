@@ -714,6 +714,7 @@ final class TranscriptView: FlippedView, RowOwner {
         case is ChangesRowView: "changes"
         case is QueuedRowView: "queued"
         case is HandoffRowView: "handoff"
+        case is CompactionRowView: "compaction"
         case is AgentRowView: "agent"
         case is AgentsRowView: "agents"
         default: "turnEnd"

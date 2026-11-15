@@ -1,6 +1,6 @@
 //! The skills an agent's account can run in a project, as its CLI lists them, which spends no
 //! tokens: Claude Code answers `initialize` with its commands, where its own are `builtin`, and
-//! `codex app-server` answers `skills/list`. A message starts one by its `$name`; Codex reads
+//! `codex app-server` answers `skills/list`, beside which Codex's `compact` is offered. A message starts one by its `$name`; Codex reads
 //! that itself, and Claude Code only runs a command that starts the last part of the message.
 
 use std::path::Path;
@@ -25,7 +25,7 @@ struct ClaudeCommand {
     builtin: bool,
 }
 
-/// What Claude Code lists in `folder` besides its own commands. `None` when it doesn't answer.
+/// What Claude Code lists in `folder`, its own commands as built in. `None` when it doesn't answer.
 pub async fn claude_skills(environment: &Environment, folder: &Path) -> Option<Vec<Skill>> {
     let arguments = ["--strict-mcp-config"];
     let mut answers = ask::claude_in(environment, folder, &arguments, &["initialize"]).await.ok()?;
@@ -34,13 +34,12 @@ pub async fn claude_skills(environment: &Environment, folder: &Path) -> Option<V
     Some(commands.into_iter().filter_map(claude_skill).collect())
 }
 
-/// A command as the composer offers it, by the shortest name it answers to, unless Claude Code
-/// has it built in.
+/// A command as the composer offers it, by the shortest name it answers to.
 fn claude_skill(command: ClaudeCommand) -> Option<Skill> {
-    if command.builtin {
-        return None;
-    }
-    let (description, source) = claude_source(&command.description);
+    let (description, source) = match command.builtin {
+        true => (command.description.trim(), SkillSource::System),
+        false => claude_source(&command.description),
+    };
     let description = description.to_string();
     let name = [command.name].into_iter().chain(command.aliases).min_by_key(String::len)?;
     Some(Skill { label: name.clone(), description, source, name })
@@ -94,7 +93,18 @@ pub async fn codex_skills(environment: &Environment, folder: &Path) -> Option<Ve
     let mut answers = ask::codex(environment, &requests).await.ok()?;
     let listed = answers.remove("skills/list")?.ok()?;
     let skills: Vec<CodexSkill> = serde_json::from_value(listed["data"][0]["skills"].clone()).ok()?;
-    Some(skills.into_iter().filter(|skill| skill.enabled).map(codex_skill).collect())
+    let listed = skills.into_iter().filter(|skill| skill.enabled).map(codex_skill);
+    Some(listed.chain([compact_command()]).collect())
+}
+
+/// Codex lists only its skills; compacting, which the server asks of it, is offered beside them.
+fn compact_command() -> Skill {
+    Skill {
+        name: "compact".to_string(),
+        label: "compact".to_string(),
+        description: "Free up context by summarizing the conversation so far".to_string(),
+        source: SkillSource::System,
+    }
 }
 
 fn codex_skill(skill: CodexSkill) -> Skill {
@@ -196,16 +206,17 @@ mod tests {
         let offered: Vec<_> = commands
             .into_iter()
             .filter_map(claude_skill)
-            .map(|skill| (skill.name, skill.label, skill.description))
+            .map(|skill| (skill.name, skill.description, skill.source))
             .collect();
-        let offer = |name: &str, description: &str| (name.to_string(), name.to_string(), description.to_string());
+        let offer = |name: &str, description: &str, source| (name.to_string(), description.to_string(), source);
         assert_eq!(
             offered,
             [
-                offer("claude-security", "Scan code"),
-                offer("claude-security:scan", "Scan pipeline"),
-                offer("mine", "My own workflow"),
-                offer("docs", "Edit docs"),
+                offer("claude-security", "Scan code", SkillSource::Plugin),
+                offer("claude-security:scan", "Scan pipeline", SkillSource::Plugin),
+                offer("mine", "My own workflow", SkillSource::Plugin),
+                offer("docs", "Edit docs", SkillSource::Plugin),
+                offer("new", "Start over", SkillSource::System),
             ]
         );
     }

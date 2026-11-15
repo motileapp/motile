@@ -98,7 +98,7 @@ class RowView: FlippedView {
             return TextMeasure.height(of: text, width: width - ErrorRowView.textInset) + ErrorRowView.padding
         case .ui(let content):
             return ProgramRowView.height(content, width: width)
-        case .code, .tool, .thinking, .group, .fold, .agent, .agents, .media, .file, .changes, .turnEnd, .handoff, .queued, .unknown:
+        case .code, .tool, .thinking, .group, .fold, .agent, .agents, .media, .file, .changes, .turnEnd, .handoff, .compaction, .queued, .unknown:
             return estimatedHeight(row, width: width)
         }
     }
@@ -134,6 +134,8 @@ class RowView: FlippedView {
             return TurnEndRowView.height
         case .handoff:
             return HandoffRowView.height
+        case .compaction:
+            return CompactionRowView.height
         case .queued(let content):
             let attachments = AttachedFilesView.height(content.attachments, width: width)
             return estimatedTextHeight(content.text.length, width: width * 0.75) + 48 + QueuedRowView.footHeight + attachments
@@ -162,6 +164,7 @@ class RowView: FlippedView {
         case .changes: return ChangesRowView()
         case .turnEnd: return TurnEndRowView()
         case .handoff: return HandoffRowView()
+        case .compaction: return CompactionRowView()
         case .queued: return QueuedRowView()
         case .unknown: return RowView()
         }
@@ -182,6 +185,7 @@ class RowView: FlippedView {
         case .changes: return "changes"
         case .turnEnd: return "turnEnd"
         case .handoff: return "handoff"
+        case .compaction: return "compaction"
         case .queued: return "queued"
         case .unknown: return "unknown"
         }
@@ -1753,6 +1757,42 @@ final class HandoffRowView: RowView {
         TintedSymbol.draw(.arrowRight, size: Self.arrowSize, color: Theme.mutedStrongerForeground, in: arrow)
         x += arrowSide + Self.arrowGap
         drawEnd(content.to, to, toWidth)
+    }
+}
+
+/// Where the agent summarized its conversation: a line across, broken by how far the context shrank.
+final class CompactionRowView: RowView {
+    static let height = ControlSize.large.height
+
+    private static let lineGap = ControlSize.regular.padding
+
+    private var label: String?
+
+    override func configure(_ row: RowModel) {
+        super.configure(row)
+        guard case .compaction(let label) = row.kind else { return }
+        self.label = label
+        redraw()
+    }
+
+    override func layout(width: CGFloat) -> CGFloat { Self.height }
+
+    override func draw(_ dirtyRect: CGRect) {
+        guard let label else { return }
+        let text = NSAttributedString(string: label, attributes: [.font: Theme.smallFont, .foregroundColor: Theme.mutedStrongerForeground])
+        let room = max(0, bounds.width - Self.lineGap * 4)
+        let size = text.size()
+        let width = min(ceil(size.width), room)
+        let height = ceil(size.height)
+        let x = ((bounds.width - width) / 2).rounded()
+
+        Theme.border.setFill()
+        let lineY = (bounds.height / 2).rounded()
+        CGRect(x: 0, y: lineY, width: max(0, x - Self.lineGap), height: 1).fillCurrent()
+        let rightLine = x + width + Self.lineGap
+        CGRect(x: rightLine, y: lineY, width: max(0, bounds.width - rightLine), height: 1).fillCurrent()
+
+        text.drawTruncated(in: CGRect(x: x, y: ((bounds.height - height) / 2).rounded(), width: width, height: height))
     }
 }
 
