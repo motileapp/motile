@@ -108,6 +108,17 @@ class ModelsTest {
     }
 
     @Test
+    fun projectsAreFoundByEveryWordInTheirNameOrPath() {
+        fun project(name: String, path: String) =
+            Project(json("id" to name, "name" to name, "path" to path, "no_project" to false, "key" to name, "created_at" to 0.0), "s")
+        val projects = listOf(project("motile", "/Users/yekta/projects/motile"), project("Notes", "/srv/notes"))
+        assertEquals(projects, projects.matching("  "))
+        assertEquals(listOf("motile"), projects.matching("YEKTA mot").map { it.name })
+        assertEquals(listOf("Notes"), projects.matching("srv notes").map { it.name })
+        assertTrue(projects.matching("motile srv").isEmpty())
+    }
+
+    @Test
     fun aServerReadsItsInfoAndFallsBackToDefaultAccounts() {
         val server = Server(json("id" to "s", "name" to "studio", "state" to "connected", "info" to mapOf("version" to "0.1.2", "protocol" to 25)))
         assertEquals(Server.State.Connected, server.state)

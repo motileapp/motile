@@ -6,12 +6,14 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -34,6 +36,8 @@ import app.motile.core.Preferences
 import app.motile.core.Server
 import app.motile.core.SettingsSection
 import app.motile.core.logDescription
+import app.motile.core.matching
+import app.motile.layout.KeyboardFocus
 import app.motile.core.managesNewThreadsDescription
 import app.motile.core.workingShelfDescription
 import app.motile.core.pullDefaultBranchCaption
@@ -67,6 +71,7 @@ import app.motile.ui.rememberMenuState
 fun SettingsPage(section: SettingsSection) {
     if (section == SettingsSection.AgentGateway) return AgentGatewayPage()
     if (section == SettingsSection.McpGateway) return McpGatewayPage()
+    if (section == SettingsSection.Projects) return ProjectsPage()
     val store = LocalStore.current
     val navigator = LocalSettingsNavigator.current
     var edited by remember { mutableStateOf<EditedAccount?>(null) }
@@ -85,11 +90,10 @@ fun SettingsPage(section: SettingsSection) {
             }
             SettingsSection.Servers -> servers(store, navigator) { removal = it }
             SettingsSection.Accounts -> agentAccounts(store, edit = { server, account -> edited = EditedAccount(server, account) }) { removal = it }
-            SettingsSection.Projects -> projects(store, navigator)
             SettingsSection.TextGeneration -> textGeneration(store, navigator)
             SettingsSection.PullRequests -> pullRequests(store)
             SettingsSection.Integrations -> integrations(store)
-            SettingsSection.AgentGateway, SettingsSection.McpGateway, SettingsSection.Keyboard -> Unit
+            SettingsSection.AgentGateway, SettingsSection.McpGateway, SettingsSection.Projects, SettingsSection.Keyboard -> Unit
         }
     }
     ConfirmsRemoval(removal) { removal = null }
@@ -153,13 +157,13 @@ private fun SettingsGroups.general(
 
 private fun SettingsGroups.servers(store: AppStore, navigator: SettingsNavigator, remove: (Removal) -> Unit) {
     group("servers") {
+        row { SettingsLink({ navigator.push(SettingsRoute.AddServer) }) { SettingsActionLabel("Add a Server", Symbol.Plus) } }
         for (server in store.servers) row {
             SettingsLink({ navigator.push(SettingsRoute.ServerPage(server.id)) }) {
                 val sync = server.sync
                 SettingsItem(server.name, server.settingsDescription, lines = Int.MAX_VALUE, footer = sync?.let { { ServerSyncLine(it) } }) { SettingsTile(Symbol.Server) }
             }
         }
-        row { SettingsLink({ navigator.push(SettingsRoute.AddServer) }) { SettingsActionLabel("Add a Server", Symbol.Plus) } }
     }
     backup(store, navigator, remove)
     relay(store, navigator, remove)
@@ -236,17 +240,17 @@ private fun SettingsGroups.agentAccounts(store: AppStore, edit: (Server, AgentAc
                 return@group
             }
             val installed = Agent.entries.filter { server.agents[it] != null }
+            row {
+                SettingsPressRow({ edit(server, AgentAccount.new(installed.firstOrNull() ?: Agent.Claude)) }, enabled = installed.isNotEmpty()) {
+                    SettingsActionLabel("Add Account", Symbol.Plus)
+                }
+            }
             for (account in server.agentAccounts.filter { it.agent in installed && it.pin == null }) row {
                 AccountRow(
                     account, isDefault = server.isDefault(account),
                     edit = { if (account.gateway) store.openSettings(SettingsSection.AgentGateway) else edit(server, account) },
                     makeDefault = { store.makeAgentAccountDefault(account, server) }, remove = { remove(Removal.OfAccount(account, server)) },
                 )
-            }
-            row {
-                SettingsPressRow({ edit(server, AgentAccount.new(installed.firstOrNull() ?: Agent.Claude)) }, enabled = installed.isNotEmpty()) {
-                    SettingsActionLabel("Add Account", Symbol.Plus)
-                }
             }
         }
     }
@@ -273,17 +277,30 @@ private fun AccountRow(account: AgentAccount, isDefault: Boolean, edit: () -> Un
     }
 }
 
-private fun SettingsGroups.projects(store: AppStore, navigator: SettingsNavigator) {
-    group("projects") {
-        for (project in store.projects) row {
-            SettingsLink({ navigator.push(SettingsRoute.ProjectPage(project.id)) }) {
-                SettingsItem(project.name, project.path, TextOverflow.StartEllipsis) {
-                    Box(Modifier.size(SettingsTile.size.dp), contentAlignment = Alignment.Center) { ProjectIcon(project, size = SettingsTile.symbolSize) }
+/** The projects the search finds, under the row that adds one. */
+@Composable
+private fun ProjectsPage() {
+    val store = LocalStore.current
+    val navigator = LocalSettingsNavigator.current
+    var query by remember { mutableStateOf("") }
+    DisposableEffect(Unit) { onDispose { KeyboardFocus.editable = false } }
+    val found = store.projects.matching(query)
+    Column(Modifier.fillMaxSize()) {
+        SettingsSearchField("Search projects", query, { query = it })
+        SettingsList(Modifier.weight(1f), target = store.settingsTarget, reached = { store.settingsTarget = null }) {
+            group("projects") {
+                row {
+                    SettingsLink({ navigator.push(SettingsRoute.AddProject) }, enabled = store.servers.isNotEmpty()) { SettingsActionLabel("Add a Project", Symbol.Plus) }
+                }
+                for (project in found) row {
+                    SettingsLink({ navigator.push(SettingsRoute.ProjectPage(project.id)) }) {
+                        SettingsItem(project.name, project.path, TextOverflow.StartEllipsis) {
+                            Box(Modifier.size(SettingsTile.size.dp), contentAlignment = Alignment.Center) { ProjectIcon(project, size = SettingsTile.symbolSize) }
+                        }
+                    }
                 }
             }
-        }
-        row {
-            SettingsLink({ navigator.push(SettingsRoute.AddProject) }, enabled = store.servers.isNotEmpty()) { SettingsActionLabel("Add a Project", Symbol.Plus) }
+            if (found.isEmpty() && query.isNotBlank()) group(bare = true) { row { NoSearchResults(query) } }
         }
     }
 }

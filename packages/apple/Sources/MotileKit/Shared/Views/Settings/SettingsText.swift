@@ -33,6 +33,17 @@ extension Server {
     }
 }
 
+extension [Project] {
+    /// The projects every word of the search is found in, by name or path.
+    func matching(_ query: String) -> [Project] {
+        let words = query.split(whereSeparator: \.isWhitespace).map(String.init)
+        guard !words.isEmpty else { return self }
+        return filter { project in
+            words.allSatisfy { project.name.localizedCaseInsensitiveContains($0) || project.path.localizedCaseInsensitiveContains($0) }
+        }
+    }
+}
+
 extension ServerSync {
     /// The line under a server, with when it last synced unless it is copying now.
     func line(now: Double) -> String {

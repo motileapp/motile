@@ -3,6 +3,7 @@
 use std::collections::HashMap;
 use std::rc::Rc;
 
+use gpui_kit::component::input::{InputEvent, InputState};
 use gpui_kit::prelude::*;
 use gpui_kit::*;
 use motile_core::api::{SyncState, SyncView};
@@ -30,8 +31,8 @@ use crate::ui::menu::Menu;
 use crate::ui::modal::{Answer, Confirmation, confirmation, modal, present_sheet, presented};
 use crate::ui::motion::{SPRING, Tween, spring};
 use crate::ui::{
-    ActionButton, ActionMenu, Spinner, Switch, TextArea, Variant, beside, divider_on, icons, logos, text_area_state,
-    tooltip,
+    ActionButton, ActionMenu, InputField, Spinner, Switch, TextArea, Variant, beside, card_default, divider_on, icons,
+    logos, text_area_state, tooltip,
 };
 use crate::updater::UpdateState;
 
@@ -132,6 +133,7 @@ pub struct SettingsPage {
     keybindings: Option<Entity<KeybindingsPage>>,
     agent_gateway: Option<Entity<AgentGatewayPage>>,
     mcp_gateway: Option<Entity<McpGatewayPage>>,
+    project_query: Entity<InputState>,
     scroll: ScrollHandle,
     /// Where the page scrolls on its way to what a search picked.
     scrolling: Option<Tween>,
@@ -141,10 +143,14 @@ pub struct SettingsPage {
 impl SettingsPage {
     pub fn new(store: Entity<Store>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         store.update(cx, |store, _| store.refresh_media_storage());
-        let subscriptions = vec![cx.observe_in(&store, window, |this, _, window, cx| {
-            this.follow_servers(window, cx);
-            cx.notify();
-        })];
+        let project_query = cx.new(|cx| InputState::new(window, cx).placeholder("Search projects"));
+        let subscriptions = vec![
+            cx.observe_in(&store, window, |this, _, window, cx| {
+                this.follow_servers(window, cx);
+                cx.notify();
+            }),
+            cx.subscribe(&project_query, |_, _, _: &InputEvent, cx| cx.notify()),
+        ];
         let mut page = Self {
             store,
             branch_editors: HashMap::new(),
@@ -156,6 +162,7 @@ impl SettingsPage {
             keybindings: None,
             agent_gateway: None,
             mcp_gateway: None,
+            project_query,
             scroll: ScrollHandle::new(),
             scrolling: None,
             _subscriptions: subscriptions,
@@ -395,20 +402,23 @@ impl SettingsPage {
             let leading =
                 footed_label(server.name.clone(), Some(description(server)), Some("server"), Cut::Wraps, sync, cx);
             let trailing = div().flex().items_center().child(status).child(menu).into_any_element();
+            if index > 0 {
+                rows.push(divider_on(Surface::Card, cx).into_any_element());
+            }
             rows.push(spaced_row(row_id, vec![leading], vec![trailing]).into_any_element());
-            rows.push(divider_on(Surface::Card, cx).into_any_element());
         }
         let store = self.store.clone();
-        let add = large("add-server", "Add a Server").symbol("plus").on_click(move |_, _, cx| {
+        let add = add_button("add-server", "Add a Server").on_click(move |_, _, cx| {
             store.update(cx, |store, cx| {
                 store.shows_add_server = true;
                 cx.notify();
             })
         });
-        rows.push(
-            row(vec![div().ml(px(-large_outset())).child(add).into_any_element()], Vec::new()).into_any_element(),
-        );
-        let mut groups = vec![group("servers", "Servers", None, true, rows, cx)];
+        let mut parts = vec![div().flex().child(add).into_any_element()];
+        if !rows.is_empty() {
+            parts.push(card_default(div().flex().flex_col(), cx).children(rows).into_any_element());
+        }
+        let mut groups = vec![group("servers", "Servers", None, false, parts, cx)];
         groups.extend(self.backup(cx));
         groups.push(self.relay(cx));
         groups.extend(self.continuing(cx));
@@ -607,7 +617,7 @@ impl SettingsPage {
             )];
         }
         let cards = servers.iter().enumerate().map(|(index, server)| {
-            crate::ui::card_default(div().flex().flex_col(), cx).children(self.agent_accounts(index, server, cx))
+            card_default(div().flex().flex_col(), cx).children(self.agent_accounts(index, server, cx))
         });
         let cards = vec![div().flex().flex_col().gap(px(24.)).children(cards).into_any_element()];
         let caption =
@@ -626,16 +636,19 @@ impl SettingsPage {
             .child(icons::symbol("server", IconSize::Md))
             .child(div().text_size(TextSize::Sm).font_weight(FontWeight::MEDIUM).child(server.name.clone()))
             .into_any_element();
-        let reason = unavailable.clone().map(|reason| {
-            div().text_size(TextSize::Xs).text_color(c.muted_foreground).child(reason).into_any_element()
-        });
-        let mut rows = vec![row(vec![name], reason.into_iter().collect()).into_any_element()];
-        if unavailable.is_some() {
-            return rows;
+        if let Some(reason) = unavailable {
+            let reason = div().text_size(TextSize::Xs).text_color(c.muted_foreground).child(reason).into_any_element();
+            return vec![row(vec![name], vec![reason]).into_any_element()];
         }
         let installed: Vec<Agent> =
             [Agent::Claude, Agent::Codex].into_iter().filter(|agent| server.agents.contains_key(agent)).collect();
-        rows.push(divider_on(Surface::Card, cx).into_any_element());
+        let first = installed.first().copied().unwrap_or(Agent::Claude);
+        let add = self.edit_account(server, new_account(first), cx);
+        let button = large(("add-account", index), "Add Account")
+            .symbol("plus")
+            .disabled(installed.is_empty())
+            .on_click(move |_, window, cx| add(window, cx));
+        let mut rows = vec![row(vec![name], vec![button.into_any_element()]).into_any_element()];
         let page = cx.weak_entity();
         let accounts =
             server.agent_accounts.iter().filter(|account| installed.contains(&account.agent) && account.pin.is_none());
@@ -665,18 +678,9 @@ impl SettingsPage {
                 logos::agent_icon(account.agent, IconSize::Md, cx).into_any_element(),
                 proxied_label(account.settings_title(), Some(description), account.gateway, cx),
             ];
-            rows.push(row(leading, menu.into_iter().map(IntoElement::into_any_element).collect()).into_any_element());
             rows.push(divider_on(Surface::Card, cx).into_any_element());
+            rows.push(row(leading, menu.into_iter().map(IntoElement::into_any_element).collect()).into_any_element());
         }
-        let first = installed.first().copied().unwrap_or(Agent::Claude);
-        let add = self.edit_account(server, new_account(first), cx);
-        let button = large(("add-account", index), "Add Account")
-            .symbol("plus")
-            .disabled(installed.is_empty())
-            .on_click(move |_, window, cx| add(window, cx));
-        rows.push(
-            row(vec![div().ml(px(-large_outset())).child(button).into_any_element()], Vec::new()).into_any_element(),
-        );
         rows
     }
 
@@ -704,8 +708,15 @@ impl SettingsPage {
     }
 
     fn projects(&self, cx: &mut Context<Self>) -> Vec<AnyElement> {
+        let query = self.project_query.read(cx).value().to_lowercase();
+        let words: Vec<&str> = query.split_whitespace().collect();
         let store = self.store.read(cx);
-        let projects: Vec<Project> = store.projects.iter().filter(|project| store.is_live(project)).cloned().collect();
+        let projects: Vec<Project> = store
+            .projects
+            .iter()
+            .filter(|project| store.is_live(project) && matches_words(project, &words))
+            .cloned()
+            .collect();
         let no_servers = !store.has_live_servers();
         let page = cx.weak_entity();
         let mut rows = Vec::new();
@@ -738,22 +749,41 @@ impl SettingsPage {
                 logos::project_icon(Some(project), IconSize::Md, cx),
                 label(project.name.clone(), Some(project.path.clone()), None, Cut::Start, cx),
             ];
+            if index > 0 {
+                rows.push(divider_on(Surface::Card, cx).into_any_element());
+            }
             rows.push(row(leading, vec![menu.into_any_element()]).into_any_element());
-            rows.push(divider_on(Surface::Card, cx).into_any_element());
         }
         let store = self.store.clone();
         let add =
-            large("add-project", "Add a Project").symbol("plus").disabled(no_servers).on_click(move |_, _, cx| {
-                store.update(cx, |store, cx| {
-                    store.close_settings();
-                    store.add_project();
-                    cx.notify();
-                })
-            });
-        rows.push(
-            row(vec![div().ml(px(-large_outset())).child(add).into_any_element()], Vec::new()).into_any_element(),
-        );
-        vec![group("projects", "Projects", None, true, rows, cx)]
+            ActionButton::new("add-project", "Add a Project").symbol("plus").outline().disabled(no_servers).on_click(
+                move |_, _, cx| {
+                    store.update(cx, |store, cx| {
+                        store.close_settings();
+                        store.add_project();
+                        cx.notify();
+                    })
+                },
+            );
+        let controls = div()
+            .flex()
+            .items_center()
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .mr(px(8.))
+                    .child(InputField::new(&self.project_query).icon("search").clearable(true)),
+            )
+            .child(add)
+            .into_any_element();
+        let mut parts = vec![controls];
+        if !rows.is_empty() {
+            parts.push(card_default(div().flex().flex_col(), cx).children(rows).into_any_element());
+        } else if !words.is_empty() {
+            parts.push(note("No projects found", cx));
+        }
+        vec![group("projects", "Projects", None, false, parts, cx)]
     }
 
     fn open_setup(&mut self, project: Project, window: &mut Window, cx: &mut Context<Self>) {
@@ -1083,6 +1113,17 @@ fn outline(button: ActionButton) -> ActionButton {
 
 fn large(id: impl Into<ElementId>, title: impl Into<SharedString>) -> ActionButton {
     outline(ActionButton::new(id, title))
+}
+
+/// The button above a list's card that adds to it.
+fn add_button(id: impl Into<ElementId>, title: impl Into<SharedString>) -> ActionButton {
+    ActionButton::new(id, title).symbol("plus").variant(Variant::Outline).size(ControlSize::Large)
+}
+
+/// Whether every word of a search is found in the project's name or path.
+fn matches_words(project: &Project, words: &[&str]) -> bool {
+    let text = format!("{} {}", project.name, project.path).to_lowercase();
+    words.iter().all(|word| text.contains(word))
 }
 
 /// A server that is connected and new enough to be told which model writes its text.

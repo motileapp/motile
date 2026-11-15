@@ -43,6 +43,7 @@ import app.motile.core.SettingsSection
 import app.motile.layout.KeyboardFocus
 import app.motile.layout.SIDEBAR_WIDTH
 import app.motile.platform.Symbol
+import app.motile.theme.ControlSize
 import app.motile.theme.LocalPalette
 import app.motile.theme.Surface
 import app.motile.theme.TextSize
@@ -252,11 +253,7 @@ private fun SettingsSections(selected: SettingsSection?, choose: (SettingsSectio
     }
     SettingsScreen("Settings") {
         Column(Modifier.fillMaxSize()) {
-            InputField(
-                "Search", store.settingsQuery, { store.settingsQuery = it },
-                Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(top = 4.dp),
-                icon = Symbol.Search, size = app.motile.theme.ControlSize.Large, clearable = true, focusRequester = focus,
-            )
+            SettingsSearchField("Search", store.settingsQuery, { store.settingsQuery = it }, focus)
             val query = store.settingsQuery
             if (query.isEmpty()) {
                 SettingsList(Modifier.weight(1f)) {
@@ -293,13 +290,7 @@ private fun Results(query: String, modifier: Modifier, choose: (SettingsSection)
     val store = LocalStore.current
     val palette = LocalPalette.current
     val found = remember(query) { SettingsEntry.matching(query) }
-    if (found.isEmpty()) {
-        Column(modifier.fillMaxWidth().padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text("No Results for “$query”", size = TextSize.Xl, weight = FontWeight.SemiBold, align = TextAlign.Center)
-            Text("Check the spelling or try a new search.", size = NOTE_TEXT, color = palette.mutedForeground, align = TextAlign.Center)
-        }
-        return
-    }
+    if (found.isEmpty()) return NoSearchResults(query, modifier)
     SettingsList(modifier) {
         group {
             for (entry in found) row {
@@ -315,5 +306,23 @@ private fun Results(query: String, modifier: Modifier, choose: (SettingsSection)
                 }
             }
         }
+    }
+}
+
+/** A page's search, above its list. */
+@Composable
+fun SettingsSearchField(prompt: String, text: String, onTextChange: (String) -> Unit, focus: FocusRequester? = null) {
+    InputField(
+        prompt, text, onTextChange, Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(top = 4.dp),
+        icon = Symbol.Search, size = ControlSize.Large, clearable = true, focusRequester = focus,
+    )
+}
+
+/** What a search that found nothing says. */
+@Composable
+fun NoSearchResults(query: String, modifier: Modifier = Modifier) {
+    Column(modifier.fillMaxWidth().padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text("No Results for “$query”", size = TextSize.Xl, weight = FontWeight.SemiBold, align = TextAlign.Center)
+        Text("Check the spelling or try a new search.", size = NOTE_TEXT, color = LocalPalette.current.mutedForeground, align = TextAlign.Center)
     }
 }
