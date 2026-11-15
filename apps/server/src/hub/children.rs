@@ -869,6 +869,32 @@ impl Hub {
         })
     }
 
+    /// Shows what each agent spent on the call that started it: agents that ended before calls
+    /// carried a cost lack it, and so do agents on a model the price list has only now priced.
+    pub async fn price_started_agents(&self) {
+        let started: Vec<(String, ThreadParent)> =
+            self.lock_threads().iter().filter_map(|(id, slot)| Some((id.clone(), slot.parent.clone()?))).collect();
+        for (child_id, parent) in started {
+            let Some(tool_id) = parent.tool_id else { continue };
+            if let Err(error) = self.price_started(&child_id, &parent.thread_id, &tool_id).await {
+                tracing::warn!(child_id, "couldn't show what an agent spent: {error:#}");
+            }
+        }
+    }
+
+    async fn price_started(&self, child_id: &str, parent_id: &str, tool_id: &str) -> anyhow::Result<()> {
+        let Some(cost) = self.spent_in(child_id)? else { return Ok(()) };
+        let Some(mut live) = self.live(parent_id).await else { return Ok(()) };
+        live.change_tool(&self.store, tool_id, |call| {
+            let Some(agent) = call.agent.as_mut() else { return false };
+            if agent.cost_usd == Some(cost) {
+                return false;
+            }
+            agent.cost_usd = Some(cost);
+            true
+        })
+    }
+
     /// What the thread's agents have spent at the API's prices, as far as the price list knows.
     fn spent_in(&self, thread_id: &str) -> rusqlite::Result<Option<f64>> {
         let usage = self.store.thread_usage(thread_id)?;

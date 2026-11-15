@@ -1229,10 +1229,10 @@ struct AgentInfo: Equatable, Identifiable {
 
     var working: Bool { status == .running }
 
-    /// "3 tools · 21K context", as far as either is known.
+    /// "3 tools · 21K context · $4.20", as far as each is known.
     var usage: String? {
         let tools = toolUses.map { "\($0) \($0 == 1 ? "tool" : "tools")" }
-        let parts = [tools, tokens.map { "\($0.abbreviated) context" }].compactMap { $0 }
+        let parts = [tools, tokens.map { "\($0.abbreviated) context" }, costUSD.map(SpendingView.cost)].compactMap { $0 }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 }

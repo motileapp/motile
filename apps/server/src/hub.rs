@@ -2623,6 +2623,7 @@ impl Hub {
                     Ok(prices) => hub.set_prices(prices),
                     Err(error) => tracing::warn!("couldn't fetch the price list: {error:#}"),
                 }
+                hub.price_started_agents().await;
                 tokio::time::sleep(wait).await;
             }
         });

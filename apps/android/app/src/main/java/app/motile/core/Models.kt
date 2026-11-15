@@ -2,6 +2,7 @@ package app.motile.core
 
 import android.webkit.MimeTypeMap
 import app.motile.platform.Symbol
+import app.motile.usage.cost
 import java.io.File
 import java.time.Instant
 import java.time.LocalDate
@@ -1171,11 +1172,11 @@ data class AgentInfo(
 
     val working: Boolean get() = status == ToolStatus.Running
 
-    /** "3 tools · 21K context", as far as either is known. */
+    /** "3 tools · 21K context · $4.20", as far as each is known. */
     val usage: String?
         get() {
             val tools = toolUses?.let { "$it ${if (it == 1) "tool" else "tools"}" }
-            val parts = listOfNotNull(tools, tokens?.let { "${it.toLong().abbreviated} context" })
+            val parts = listOfNotNull(tools, tokens?.let { "${it.toLong().abbreviated} context" }, costUSD?.let(::cost))
             return if (parts.isEmpty()) null else parts.joinToString(" · ")
         }
 }
