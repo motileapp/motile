@@ -243,7 +243,7 @@ struct ActivityView: View {
         .chartLegend(.hidden)
         .chartPointing($pointed, starts: report.starts, marks: .bars)
         .chartXAxis {
-            AxisMarks(preset: .aligned, values: .automatic(desiredCount: 5)) { _ in
+            AxisMarks(values: .automatic(desiredCount: 5)) { _ in
                 AxisValueLabel(format: period == .day ? .dateTime.hour() : .dateTime.month(.abbreviated).day())
                     .foregroundStyle(Color.themeMutedForeground)
             }

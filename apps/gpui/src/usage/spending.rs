@@ -257,13 +257,9 @@ impl SpendingView {
                         ),
                     )
                     .child(
-                        div()
-                            .absolute()
-                            .left(px(PLOT_PADDING))
-                            .right(px(PLOT_PADDING))
-                            .top_0()
-                            .bottom_0()
-                            .when_some(pointed, |track, index| {
+                        div().absolute().left(px(PLOT_PADDING)).right(px(PLOT_PADDING)).top_0().bottom_0().when_some(
+                            pointed,
+                            |track, index| {
                                 track.child(
                                     div()
                                         .absolute()
@@ -273,24 +269,17 @@ impl SpendingView {
                                         .w(px(1.))
                                         .bg(c.border),
                                 )
-                            })
-                            .child(div().absolute().left_0().right_0().top_full().h(px(X_GUTTER)).children(
-                                labelled.into_iter().map(|index| {
-                                    div()
-                                        .absolute()
-                                        .left(relative(fraction(index)))
-                                        .ml(px(-30.))
-                                        .w(px(60.))
-                                        .pt(px(4.))
-                                        .flex()
-                                        .justify_center()
-                                        .text_size(CAPTION)
-                                        .text_color(c.muted_foreground)
-                                        .whitespace_nowrap()
-                                        .child(axis_label(report.starts[index], self.period))
-                                }),
-                            )),
+                            },
+                        ),
                     )
+                    .child(time_axis(
+                        labelled
+                            .into_iter()
+                            .map(|index| (fraction(index), axis_label(report.starts[index], self.period)))
+                            .collect(),
+                        PLOT_PADDING,
+                        c.muted_foreground,
+                    ))
                     .on_mouse_move(
                         cx.listener(move |this, event: &MouseMoveEvent, _, cx| {
                             this.point_at(event.position, count, cx)
@@ -686,6 +675,39 @@ pub(super) fn axis_label(start: f64, period: UsagePeriod) -> String {
     if period == UsagePeriod::Day { format::date(start, "j", "%H:00") } else { format::date(start, "MMMd", "%b %-d") }
 }
 
+/// The time axis under a plot: each label centred under its point, `inset` plus its fraction of
+/// the rest of the width, and moved in so that it never runs past the plot's sides.
+pub(super) fn time_axis(labels: Vec<(f32, String)>, inset: f32, color: Hsla) -> Div {
+    let paint = move |bounds: Bounds<Pixels>, _: (), window: &mut Window, cx: &mut App| {
+        let width = f32::from(bounds.size.width);
+        let line_height = window.line_height();
+        for (fraction, label) in &labels {
+            let run = TextRun {
+                len: label.len(),
+                font: crate::transcript::rows::font(crate::theme::UI_FONT, FontWeight::NORMAL, false),
+                color,
+                background_color: None,
+                underline: None,
+                strikethrough: None,
+            };
+            let shaped = window.text_system().shape_line(label.clone().into(), CAPTION.into(), &[run], None);
+            let label_width = f32::from(shaped.width);
+            let center = inset + fraction * (width - 2. * inset);
+            let left = (center - label_width / 2.).clamp(0., (width - label_width).max(0.));
+            let origin = point(bounds.origin.x + px(left), bounds.origin.y + px(4.));
+            let _ = shaped.paint(origin, line_height, TextAlign::Left, None, window, cx);
+        }
+    };
+    div()
+        .absolute()
+        .left_0()
+        .right_0()
+        .top_full()
+        .h(px(X_GUTTER))
+        .text_size(CAPTION)
+        .child(canvas(|_, _, _| {}, paint).size_full())
+}
+
 fn pointed_label(start: f64, period: UsagePeriod) -> String {
     if period == UsagePeriod::Day {
         format::date(start, "EEEj", "%a %H:00")
@@ -694,7 +716,7 @@ fn pointed_label(start: f64, period: UsagePeriod) -> String {
     }
 }
 
-/// The points the time axis is labelled at, where Swift Charts puts its aligned marks for the
+/// The points the time axis is labelled at, where Swift Charts puts its marks for the
 /// period: every six hours or every other day from the first point, or every week or every other
 /// week from the start of the first point's week.
 pub(super) fn axis_ticks(starts: &[f64], period: UsagePeriod) -> Vec<usize> {

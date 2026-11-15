@@ -8,7 +8,9 @@ use motile_core::activity::{duration, number};
 use serde::{Deserialize, Serialize};
 
 use super::placeholder_bar;
-use super::spending::{CAPTION, CHART_HEIGHT, X_GUTTER, Y_GUTTER, axis_label, axis_ticks, caption, dot, ticks};
+use super::spending::{
+    CAPTION, CHART_HEIGHT, X_GUTTER, Y_GUTTER, axis_label, axis_ticks, caption, dot, ticks, time_axis,
+};
 use crate::format;
 use crate::models::ago;
 use crate::store::Store;
@@ -320,7 +322,6 @@ impl ActivityView {
         };
         let tick_count = (top / step).round() as usize;
         let labelled = axis_ticks(&report.starts, self.period);
-        let center = move |index: usize| relative((index as f32 + 0.5) / count.max(1) as f32);
         let pointed = self.pointed.filter(|index| *index < count);
         let dimmed = c.opacity(Opacity::Disabled);
         div()
@@ -367,21 +368,18 @@ impl ActivityView {
                             .size_full(),
                         ),
                     )
-                    .child(div().absolute().left_0().right_0().top_full().h(px(X_GUTTER)).children(
-                        labelled.into_iter().map(|index| {
-                            div()
-                                .absolute()
-                                .left(center(index))
-                                .ml(px(-30.))
-                                .w(px(60.))
-                                .pt(px(4.))
-                                .flex()
-                                .justify_center()
-                                .text_size(CAPTION)
-                                .text_color(c.muted_foreground)
-                                .whitespace_nowrap()
-                                .child(axis_label(report.starts[index], self.period))
-                        }),
+                    .child(time_axis(
+                        labelled
+                            .into_iter()
+                            .map(|index| {
+                                (
+                                    (index as f32 + 0.5) / count.max(1) as f32,
+                                    axis_label(report.starts[index], self.period),
+                                )
+                            })
+                            .collect(),
+                        0.,
+                        c.muted_foreground,
                     ))
                     .on_mouse_move(
                         cx.listener(move |this, event: &MouseMoveEvent, _, cx| {
