@@ -145,8 +145,8 @@ pub fn is_pull_request_news(text: &str) -> bool {
 
 /// The shape of the items a client caches. Raised when items gain something a client of the shape
 /// before would drop as it caches them, so that clients read their threads again. 1: who took each
-/// action.
-pub const ITEMS_FORMAT: u32 = 2;
+/// action. 2: compactions. 3: what each agent spent.
+pub const ITEMS_FORMAT: u32 = 3;
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct Item {
@@ -210,6 +210,7 @@ pub struct Media {
     pub poster: Option<String>,
 }
 
+/// Part of an item: a change a client of the format before would drop raises `ITEMS_FORMAT`.
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ItemKind {
@@ -306,6 +307,7 @@ pub enum NoticeEvent {
 
 /// Who took an action in a thread: sent a message, answered a question, allowed a tool call,
 /// stopped a turn or moved the thread to another agent or account.
+/// Part of an item: a change a client of the format before would drop raises `ITEMS_FORMAT`.
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug, Default)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Actor {
@@ -423,6 +425,7 @@ pub struct ToolCall {
 
 /// An agent the thread's agent started with a tool call, and how far it is. It can go on after
 /// the call has returned.
+/// Part of an item: a change a client of the format before would drop raises `ITEMS_FORMAT`.
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct Subagent {
     /// The kind of agent it was started as, in the agent's own words: "Explore".
@@ -3063,7 +3066,7 @@ mod tests {
         );
         assert_eq!(
             (ITEMS_FORMAT, format!("{:x}", fingerprint(&shape))),
-            (2, "b23a7a8d9265ae6e".to_string()),
+            (3, "1a2e638e67dbdf96".to_string()),
             "An item changed shape. If a client caching it before this change would drop what changed, raise \
              ITEMS_FORMAT. Then write both numbers here."
         );

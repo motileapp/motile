@@ -37,6 +37,7 @@ pub fn now() -> f64 {
 }
 
 /// An error and its causes as sentences a client can show, the first one saying what went wrong.
+#[cfg(feature = "auth-client")]
 pub fn error_text(error: &anyhow::Error) -> String {
     error.chain().map(ToString::to_string).collect::<Vec<_>>().join(" ")
 }
